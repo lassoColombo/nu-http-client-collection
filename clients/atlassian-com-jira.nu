@@ -3,19 +3,20 @@
 # Auth: --token flag or $env.THE_JIRA_CLOUD_PLATFORM_REST_API_TOKEN
 
 const BASE_URL = "https://your-domain.atlassian.net"
-const DEFAULT_AUTH = "bearer"
 
-# Build auth: returns {headers: record, query: string}
+# Build auth: returns {scheme: string, headers: record, query: string, location: string}.
+# `location` is "header" | "query" | "cookie" | "none" and tells dry-run callers
+# where the token went without inspecting headers/query themselves.
 def build-auth [token?: string, auth_scheme?: string]: nothing -> record {
   let token_val = if ($token != null) and ($token | is-not-empty) { $token } else { $env | get -o THE_JIRA_CLOUD_PLATFORM_REST_API_TOKEN | default "" }
   let scheme = ($auth_scheme | default "bearer")
-  if ($scheme == "none") or ($token_val | is-empty) { return {headers: {}, query: ""} }
+  if ($scheme == "none") or ($token_val | is-empty) { return {scheme: $scheme, headers: {}, query: "", location: "none"} }
   match $scheme {
-    "bearer" => { {headers: {Authorization: $"Bearer ($token_val)"}, query: ""} }
-    "basic" => { {headers: {Authorization: $"Basic ($token_val)"}, query: ""} }
-    "basic-credentials" => { {headers: {Authorization: $"Basic ($token_val | encode base64)"}, query: ""} }
-    "none" => { {headers: {}, query: ""} }
-    _ => { {headers: {Authorization: $"Bearer ($token_val)"}, query: ""} }
+    "bearer" => { {scheme: $scheme, headers: {Authorization: $"Bearer ($token_val)"}, query: "", location: "header"} }
+    "basic" => { {scheme: $scheme, headers: {Authorization: $"Basic ($token_val)"}, query: "", location: "header"} }
+    "basic-credentials" => { {scheme: $scheme, headers: {Authorization: $"Basic ($token_val | encode base64)"}, query: "", location: "header"} }
+    "none" => { {scheme: $scheme, headers: {}, query: "", location: "none"} }
+    _ => { {scheme: $scheme, headers: {Authorization: $"Bearer ($token_val)"}, query: "", location: "header"} }
   }
 }
 
@@ -24,8 +25,9 @@ def build-auth [token?: string, auth_scheme?: string]: nothing -> record {
 # ([A-Za-z0-9-._~]) stay literal; everything else gets %XX.
 def serialize-qp [name: string, value: any, style: string]: nothing -> list<string> {
   if ($value == null) { return [] }
-  let n = (encode-path-segment $name)
   let is_list = ($value | describe | str starts-with "list")
+  if $is_list and ($value | is-empty) { return [] }
+  let n = (encode-path-segment $name)
   if ($value | describe | str starts-with "record") { return ($value | transpose k v | each { $"($n)[(encode-path-segment $in.k)]=(encode-path-segment $in.v)" }) }
   if not $is_list { return [$"($n)=(encode-path-segment $value)"] }
   match $style {
@@ -56,22 +58,42 @@ def build-url [base: string, path: string, query?: string]: nothing -> string {
   if ($query != null) and ($query | is-not-empty) { $result | upsert query $query | url join } else { $result | url join }
 }
 
+# Build the dry-run record returned by --dry-run. Shape:
+#   {dry_run: true, method, url, query: <record>, headers, body, content_type, timeout,
+#    auth: {scheme, location}}
+# `meta` carries logical-form data (the query record by spec name, the pre-serialization
+# body) that do-request itself cannot reconstruct from its wire-format args.
+def build-dry-run-record [method: string, url: string, auth: record, content_type: string, timeout: duration, meta?: record]: nothing -> record {
+  let m = ($meta | default {})
+  {
+    dry_run: true
+    method: $method
+    url: $url
+    query: ($m | get -o query | default {})
+    headers: $auth.headers
+    body: ($m | get -o body)
+    content_type: $content_type
+    timeout: $timeout
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+}
+
 # Execute HTTP request with method dispatch
-def do-request [method: string, url: string, auth: record, insecure: bool, raw: bool, dry_run: bool, max_time?: duration, allow_errors?: bool, full?: bool, content_type?: string, body?: any]: nothing -> any {
+def do-request [method: string, url: string, auth: record, insecure: bool, raw: bool, dry_run: bool, max_time?: duration, allow_errors?: bool, full?: bool, content_type?: string, body?: any, dry_run_meta?: record]: nothing -> any {
   let req_url = if ($auth.query | is-not-empty) { if ($url | str contains "?") { $"($url)&($auth.query)" } else { $"($url)?($auth.query)" } } else { $url }
   let timeout = ($max_time | default 30min)
   let ct = ($content_type | default "application/json")
-  if $dry_run { return {method: $method, url: $req_url, headers: $auth.headers, query_string: $auth.query, content_type: $ct, timeout: $timeout, body: $body} }
+  if $dry_run { return (build-dry-run-record $method $req_url $auth $ct $timeout $dry_run_meta) }
   let resp = match $method {
     "get" => { http get --headers $auth.headers --full --allow-errors --max-time $timeout --insecure=$insecure --raw=$raw $req_url }
-    "head" => { http head --headers $auth.headers --max-time $timeout --insecure=$insecure $req_url }
-    "options" => { http options --headers $auth.headers --max-time $timeout --insecure=$insecure $req_url }
+    "head" => { http head --headers $auth.headers --full --allow-errors --max-time $timeout --insecure=$insecure $req_url }
+    "options" => { http options --headers $auth.headers --full --allow-errors --max-time $timeout --insecure=$insecure $req_url }
     "post" => { if ($body | is-empty) { http post --headers $auth.headers --full --allow-errors --max-time $timeout --insecure=$insecure --raw=$raw $req_url "" } else { http post --headers $auth.headers --content-type $ct --full --allow-errors --max-time $timeout --insecure=$insecure --raw=$raw $req_url $body } }
     "put" => { if ($body | is-empty) { http put --headers $auth.headers --full --allow-errors --max-time $timeout --insecure=$insecure --raw=$raw $req_url "" } else { http put --headers $auth.headers --content-type $ct --full --allow-errors --max-time $timeout --insecure=$insecure --raw=$raw $req_url $body } }
     "patch" => { if ($body | is-empty) { http patch --headers $auth.headers --full --allow-errors --max-time $timeout --insecure=$insecure --raw=$raw $req_url "" } else { http patch --headers $auth.headers --content-type $ct --full --allow-errors --max-time $timeout --insecure=$insecure --raw=$raw $req_url $body } }
     "delete" => { if ($body | is-empty) { http delete --headers $auth.headers --full --allow-errors --max-time $timeout --insecure=$insecure --raw=$raw $req_url } else { http delete --headers $auth.headers --content-type $ct --data $body --full --allow-errors --max-time $timeout --insecure=$insecure --raw=$raw $req_url } }
   }
-  if ($method in ["head" "options"]) { return $resp }
+  if ($method == "head") and (not $full) and (not $allow_errors) and $resp.status < 400 { return $resp.headers }
   if $allow_errors { $resp } else if $resp.status >= 400 { error make --unspanned { msg: $"HTTP ($resp.status): ($resp.body)" } } else if $full { {status: $resp.status, headers: $resp.headers, body: $resp.body} } else if $resp.status == 204 { null } else { $resp.body }
 }
 
@@ -188,7 +210,7 @@ export def "rest-3-announcement-banner get" [
   let full_url = (build-url $base "/rest/api/3/announcementBanner")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
 }
 
 # Update announcement banner configuration
@@ -218,7 +240,7 @@ export def "rest-3-announcement-banner update" [
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: {}, body: $req_body}
 }
 
 # Update custom fields
@@ -248,7 +270,7 @@ export def "rest-3-app-field-value update-multiple-custom" [
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: ({"generateChangelog": $generate_changelog} | compact), body: $req_body}
 }
 
 # Get custom field configurations
@@ -276,11 +298,12 @@ export def "rest-3-app-field-context-configuration get-custom" [
 ]: nothing -> record<isLast: bool, maxResults: int, nextPage: string, self: string, startAt: int, total: int, values: table<configuration: any, fieldContextId: string, id: string, schema: any>> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
+  if ($field_id_or_key | is-empty) { error make --unspanned { msg: "path parameter 'fieldIdOrKey' must be non-empty" } }
   let qp = [(serialize-qp "id" $id "multi") (serialize-qp "fieldContextId" $field_context_id "multi") (serialize-qp "issueId" $issue_id "scalar") (serialize-qp "projectKeyOrId" $project_key_or_id "scalar") (serialize-qp "issueTypeId" $issue_type_id "scalar") (serialize-qp "startAt" $start_at "scalar") (serialize-qp "maxResults" $max_results "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({field_id_or_key: (encode-path-segment $field_id_or_key)} | format pattern "/rest/api/3/app/field/{field_id_or_key}/context/configuration") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"id": $id, "fieldContextId": $field_context_id, "issueId": $issue_id, "projectKeyOrId": $project_key_or_id, "issueTypeId": $issue_type_id, "startAt": $start_at, "maxResults": $max_results} | compact), body: null}
 }
 
 # Update custom field configurations
@@ -304,12 +327,13 @@ export def "rest-3-app-field-context-configuration update-custom" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
+  if ($field_id_or_key | is-empty) { error make --unspanned { msg: "path parameter 'fieldIdOrKey' must be non-empty" } }
   let full_url = (build-url $base ({field_id_or_key: (encode-path-segment $field_id_or_key)} | format pattern "/rest/api/3/app/field/{field_id_or_key}/context/configuration"))
   let req_body = {"configurations": $configurations} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: {}, body: $req_body}
 }
 
 # Update custom field value
@@ -334,13 +358,14 @@ export def "rest-3-app-field-value update-custom" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
+  if ($field_id_or_key | is-empty) { error make --unspanned { msg: "path parameter 'fieldIdOrKey' must be non-empty" } }
   let qp = [(serialize-qp "generateChangelog" $generate_changelog "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({field_id_or_key: (encode-path-segment $field_id_or_key)} | format pattern "/rest/api/3/app/field/{field_id_or_key}/value") $qp)
   let req_body = {"updates": $updates} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: ({"generateChangelog": $generate_changelog} | compact), body: $req_body}
 }
 
 # Get application property
@@ -367,7 +392,7 @@ export def "rest-3-application-properties get-property" [
   let full_url = (build-url $base "/rest/api/3/application-properties" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"key": $key, "permissionLevel": $permission_level, "keyFilter": $key_filter} | compact), body: null}
 }
 
 # Get advanced settings
@@ -390,7 +415,7 @@ export def "rest-3-application-properties-advanced-settings get" [
   let full_url = (build-url $base "/rest/api/3/application-properties/advanced-settings")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
 }
 
 # Set application property
@@ -414,12 +439,13 @@ export def "rest-3-application-properties update-property" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
+  if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
   let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/rest/api/3/application-properties/{id}"))
   let req_body = {"id": $body_id, "value": $value} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: {}, body: $req_body}
 }
 
 # Get all application roles
@@ -442,7 +468,7 @@ export def "rest-3-applicationrole get-list-application-roles" [
   let full_url = (build-url $base "/rest/api/3/applicationrole")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
 }
 
 # Get application role
@@ -463,10 +489,11 @@ export def "rest-3-applicationrole get-application-role" [
 ]: nothing -> record<defaultGroups: list<string>, defaultGroupsDetails: table<groupId: string, name: string, self: string>, defined: bool, groupDetails: table<groupId: string, name: string, self: string>, groups: list<string>, hasUnlimitedSeats: bool, key: string, name: string, numberOfSeats: int, platform: bool, remainingSeats: int, selectedByDefault: bool, userCount: int, userCountDescription: string> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
+  if ($key | is-empty) { error make --unspanned { msg: "path parameter 'key' must be non-empty" } }
   let full_url = (build-url $base ({key: (encode-path-segment $key)} | format pattern "/rest/api/3/applicationrole/{key}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
 }
 
 # Get attachment content
@@ -488,11 +515,12 @@ export def "rest-3-attachment-content get" [
 ]: nothing -> record {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
+  if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
   let qp = [(serialize-qp "redirect" $redirect "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/rest/api/3/attachment/content/{id}") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"redirect": $redirect} | compact), body: null}
 }
 
 # Get Jira attachment settings
@@ -515,7 +543,7 @@ export def "rest-3-attachment-meta get" [
   let full_url = (build-url $base "/rest/api/3/attachment/meta")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
 }
 
 # Get attachment thumbnail
@@ -540,11 +568,12 @@ export def "rest-3-attachment-thumbnail get" [
 ]: nothing -> record {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
+  if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
   let qp = [(serialize-qp "redirect" $redirect "scalar") (serialize-qp "fallbackToDefault" $fallback_to_default "scalar") (serialize-qp "width" $width "scalar") (serialize-qp "height" $height "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/rest/api/3/attachment/thumbnail/{id}") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"redirect": $redirect, "fallbackToDefault": $fallback_to_default, "width": $width, "height": $height} | compact), body: null}
 }
 
 # Delete attachment
@@ -565,10 +594,11 @@ export def "rest-3-attachment delete" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
+  if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
   let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/rest/api/3/attachment/{id}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
 }
 
 # Get attachment metadata
@@ -589,10 +619,11 @@ export def "rest-3-attachment get" [
 ]: nothing -> record<author: record<accountId: string, accountType: string, active: bool, applicationRoles: record<callback: record, items: list, max_results: int, pagingCallback: record, size: int>, avatarUrls: record<16x16: string, 24x24: string, 32x32: string, 48x48: string>, displayName: string, emailAddress: string, expand: string, groups: record<callback: record, items: list, max_results: int, pagingCallback: record, size: int>, key: string, locale: string, name: string, self: string, timeZone: string>, content: string, created: string, filename: string, id: int, mimeType: string, properties: record, self: string, size: int, thumbnail: string> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
+  if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
   let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/rest/api/3/attachment/{id}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
 }
 
 # Get all metadata for an expanded attachment
@@ -613,10 +644,11 @@ export def "rest-3-attachment-expand-human get" [
 ]: nothing -> record<entries: table<index: int, label: string, mediaType: string, path: string, size: string>, id: int, mediaType: string, name: string, totalEntryCount: int> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
+  if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
   let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/rest/api/3/attachment/{id}/expand/human"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
 }
 
 # Get contents metadata for an expanded attachment
@@ -637,10 +669,11 @@ export def "rest-3-attachment-expand-raw get-for-machines" [
 ]: nothing -> record<entries: table<abbreviatedName: string, entryIndex: int, mediaType: string, name: string, size: int>, totalEntryCount: int> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
+  if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
   let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/rest/api/3/attachment/{id}/expand/raw"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
 }
 
 # Get audit records
@@ -669,7 +702,7 @@ export def "rest-3-auditing-record get-audit" [
   let full_url = (build-url $base "/rest/api/3/auditing/record" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"offset": $offset, "limit": $limit, "filter": $filter, "from": $qp_from, "to": $qp_to} | compact), body: null}
 }
 
 # Get system avatars by type
@@ -690,10 +723,11 @@ export def "rest-3-avatar-system get-list" [
 ]: nothing -> record<system: table<fileName: string, id: string, isDeletable: bool, isSelected: bool, isSystemAvatar: bool, owner: string, urls: record>> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
+  if ($type | is-empty) { error make --unspanned { msg: "path parameter 'type' must be non-empty" } }
   let full_url = (build-url $base ({type: (encode-path-segment $type)} | format pattern "/rest/api/3/avatar/{type}/system"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
 }
 
 # Get comments by IDs
@@ -722,7 +756,7 @@ export def "rest-3-comment-list get" [
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: ({"expand": $expand} | compact), body: $req_body}
 }
 
 # Get comment property keys
@@ -743,10 +777,11 @@ export def "rest-3-comment-properties get-property-keys" [
 ]: nothing -> record<keys: table<key: string, self: string>> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
+  if ($comment_id | is-empty) { error make --unspanned { msg: "path parameter 'commentId' must be non-empty" } }
   let full_url = (build-url $base ({comment_id: (encode-path-segment $comment_id)} | format pattern "/rest/api/3/comment/{comment_id}/properties"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
 }
 
 # Delete comment property
@@ -768,10 +803,12 @@ export def "rest-3-comment-properties delete-property" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
+  if ($comment_id | is-empty) { error make --unspanned { msg: "path parameter 'commentId' must be non-empty" } }
+  if ($property_key | is-empty) { error make --unspanned { msg: "path parameter 'propertyKey' must be non-empty" } }
   let full_url = (build-url $base ({comment_id: (encode-path-segment $comment_id), property_key: (encode-path-segment $property_key)} | format pattern "/rest/api/3/comment/{comment_id}/properties/{property_key}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
 }
 
 # Get comment property
@@ -793,10 +830,12 @@ export def "rest-3-comment-properties get-property" [
 ]: nothing -> record<key: string, value: any> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
+  if ($comment_id | is-empty) { error make --unspanned { msg: "path parameter 'commentId' must be non-empty" } }
+  if ($property_key | is-empty) { error make --unspanned { msg: "path parameter 'propertyKey' must be non-empty" } }
   let full_url = (build-url $base ({comment_id: (encode-path-segment $comment_id), property_key: (encode-path-segment $property_key)} | format pattern "/rest/api/3/comment/{comment_id}/properties/{property_key}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
 }
 
 # Set comment property
@@ -820,12 +859,14 @@ export def "rest-3-comment-properties update-property" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
+  if ($comment_id | is-empty) { error make --unspanned { msg: "path parameter 'commentId' must be non-empty" } }
+  if ($property_key | is-empty) { error make --unspanned { msg: "path parameter 'propertyKey' must be non-empty" } }
   let full_url = (build-url $base ({comment_id: (encode-path-segment $comment_id), property_key: (encode-path-segment $property_key)} | format pattern "/rest/api/3/comment/{comment_id}/properties/{property_key}"))
   let req_body = $body
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: {}, body: $req_body}
 }
 
 # Create component
@@ -857,7 +898,7 @@ export def "rest-3-component create" [
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: {}, body: $req_body}
 }
 
 # Delete component
@@ -879,11 +920,12 @@ export def "rest-3-component delete" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
+  if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
   let qp = [(serialize-qp "moveIssuesTo" $move_issues_to "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/rest/api/3/component/{id}") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"moveIssuesTo": $move_issues_to} | compact), body: null}
 }
 
 # Get component
@@ -904,10 +946,11 @@ export def "rest-3-component get" [
 ]: nothing -> record<assignee: record<accountId: string, accountType: string, active: bool, applicationRoles: record<callback: record, items: list, max_results: int, pagingCallback: record, size: int>, avatarUrls: record<16x16: string, 24x24: string, 32x32: string, 48x48: string>, displayName: string, emailAddress: string, expand: string, groups: record<callback: record, items: list, max_results: int, pagingCallback: record, size: int>, key: string, locale: string, name: string, self: string, timeZone: string>, assigneeType: string, description: string, id: string, isAssigneeTypeValid: bool, lead: record<accountId: string, accountType: string, active: bool, applicationRoles: record<callback: record, items: list, max_results: int, pagingCallback: record, size: int>, avatarUrls: record<16x16: string, 24x24: string, 32x32: string, 48x48: string>, displayName: string, emailAddress: string, expand: string, groups: record<callback: record, items: list, max_results: int, pagingCallback: record, size: int>, key: string, locale: string, name: string, self: string, timeZone: string>, leadAccountId: string, leadUserName: string, name: string, project: string, projectId: int, realAssignee: record<accountId: string, accountType: string, active: bool, applicationRoles: record<callback: record, items: list, max_results: int, pagingCallback: record, size: int>, avatarUrls: record<16x16: string, 24x24: string, 32x32: string, 48x48: string>, displayName: string, emailAddress: string, expand: string, groups: record<callback: record, items: list, max_results: int, pagingCallback: record, size: int>, key: string, locale: string, name: string, self: string, timeZone: string>, realAssigneeType: string, self: string> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
+  if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
   let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/rest/api/3/component/{id}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
 }
 
 # Update component
@@ -935,12 +978,13 @@ export def "rest-3-component update" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
+  if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
   let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/rest/api/3/component/{id}"))
   let req_body = {"assigneeType": $assignee_type, "description": $description, "leadAccountId": $lead_account_id, "leadUserName": $lead_user_name, "name": $name, "project": $project} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: {}, body: $req_body}
 }
 
 # Get component issues count
@@ -961,10 +1005,11 @@ export def "rest-3-component-related-issue-counts get" [
 ]: nothing -> record<issueCount: int, self: string> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
+  if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
   let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/rest/api/3/component/{id}/relatedIssueCounts"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
 }
 
 # Get global settings
@@ -987,7 +1032,7 @@ export def "rest-3-configuration get" [
   let full_url = (build-url $base "/rest/api/3/configuration")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
 }
 
 # Get selected time tracking provider
@@ -1010,7 +1055,7 @@ export def "rest-3-configuration-timetracking get-selected-time-tracking-impleme
   let full_url = (build-url $base "/rest/api/3/configuration/timetracking")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
 }
 
 # Select time tracking provider
@@ -1038,7 +1083,7 @@ export def "rest-3-configuration-timetracking update-select-time-tracking-implem
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: {}, body: $req_body}
 }
 
 # Get all time tracking providers
@@ -1061,7 +1106,7 @@ export def "rest-3-configuration-timetracking-list get-available-time-tracking-i
   let full_url = (build-url $base "/rest/api/3/configuration/timetracking/list")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
 }
 
 # Get time tracking settings
@@ -1084,7 +1129,7 @@ export def "rest-3-configuration-timetracking-options get-shared-time-tracking" 
   let full_url = (build-url $base "/rest/api/3/configuration/timetracking/options")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
 }
 
 # Set time tracking settings
@@ -1114,7 +1159,7 @@ export def "rest-3-configuration-timetracking-options update-shared-time-trackin
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: {}, body: $req_body}
 }
 
 # Get custom field option
@@ -1135,10 +1180,11 @@ export def "rest-3-custom-field-option get" [
 ]: nothing -> record<self: string, value: string> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
+  if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
   let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/rest/api/3/customFieldOption/{id}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
 }
 
 # Get all dashboards
@@ -1165,7 +1211,7 @@ export def "rest-3-dashboard get-list" [
   let full_url = (build-url $base "/rest/api/3/dashboard" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"filter": $filter, "startAt": $start_at, "maxResults": $max_results} | compact), body: null}
 }
 
 # Create dashboard
@@ -1197,7 +1243,7 @@ export def "rest-3-dashboard create" [
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: {}, body: $req_body}
 }
 
 # Get available gadgets
@@ -1220,7 +1266,7 @@ export def "rest-3-dashboard-gadgets get-list-available" [
   let full_url = (build-url $base "/rest/api/3/dashboard/gadgets")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
 }
 
 # Search for dashboards
@@ -1255,7 +1301,7 @@ export def "rest-3-dashboard-search get-paginated" [
   let full_url = (build-url $base "/rest/api/3/dashboard/search" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"dashboardName": $dashboard_name, "accountId": $account_id, "owner": $owner, "groupname": $groupname, "groupId": $group_id, "projectId": $project_id, "orderBy": $order_by, "startAt": $start_at, "maxResults": $max_results, "status": $status, "expand": $expand} | compact), body: null}
 }
 
 # Get gadgets
@@ -1279,11 +1325,12 @@ export def "rest-3-dashboard-gadget get-list" [
 ]: nothing -> record<gadgets: table<color: string, id: int, moduleKey: string, position: record, title: string, uri: string>> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
+  if ($dashboard_id | is-empty) { error make --unspanned { msg: "path parameter 'dashboardId' must be non-empty" } }
   let qp = [(serialize-qp "moduleKey" $module_key "multi") (serialize-qp "uri" $uri "multi") (serialize-qp "gadgetId" $gadget_id "multi")] | flatten | str join "&"
   let full_url = (build-url $base ({dashboard_id: (encode-path-segment $dashboard_id)} | format pattern "/rest/api/3/dashboard/{dashboard_id}/gadget") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"moduleKey": $module_key, "uri": $uri, "gadgetId": $gadget_id} | compact), body: null}
 }
 
 # Add gadget to dashboard
@@ -1311,12 +1358,13 @@ export def "rest-3-dashboard-gadget create" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
+  if ($dashboard_id | is-empty) { error make --unspanned { msg: "path parameter 'dashboardId' must be non-empty" } }
   let full_url = (build-url $base ({dashboard_id: (encode-path-segment $dashboard_id)} | format pattern "/rest/api/3/dashboard/{dashboard_id}/gadget"))
   let req_body = {"color": $color, "ignoreUriAndModuleKeyValidation": $ignore_uri_and_module_key_validation, "moduleKey": $module_key, "position": $position, "title": $title, "uri": $uri} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: {}, body: $req_body}
 }
 
 # Remove gadget from dashboard
@@ -1338,10 +1386,12 @@ export def "rest-3-dashboard-gadget delete" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
+  if ($dashboard_id | is-empty) { error make --unspanned { msg: "path parameter 'dashboardId' must be non-empty" } }
+  if ($gadget_id | is-empty) { error make --unspanned { msg: "path parameter 'gadgetId' must be non-empty" } }
   let full_url = (build-url $base ({dashboard_id: (encode-path-segment $dashboard_id), gadget_id: (encode-path-segment $gadget_id)} | format pattern "/rest/api/3/dashboard/{dashboard_id}/gadget/{gadget_id}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
 }
 
 # Update gadget on dashboard
@@ -1367,12 +1417,14 @@ export def "rest-3-dashboard-gadget update" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
+  if ($dashboard_id | is-empty) { error make --unspanned { msg: "path parameter 'dashboardId' must be non-empty" } }
+  if ($gadget_id | is-empty) { error make --unspanned { msg: "path parameter 'gadgetId' must be non-empty" } }
   let full_url = (build-url $base ({dashboard_id: (encode-path-segment $dashboard_id), gadget_id: (encode-path-segment $gadget_id)} | format pattern "/rest/api/3/dashboard/{dashboard_id}/gadget/{gadget_id}"))
   let req_body = {"color": $color, "position": $position, "title": $title} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: {}, body: $req_body}
 }
 
 # Get dashboard item property keys
@@ -1394,10 +1446,12 @@ export def "rest-3-dashboard-items-properties get-property-keys" [
 ]: nothing -> record<keys: table<key: string, self: string>> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
+  if ($dashboard_id | is-empty) { error make --unspanned { msg: "path parameter 'dashboardId' must be non-empty" } }
+  if ($item_id | is-empty) { error make --unspanned { msg: "path parameter 'itemId' must be non-empty" } }
   let full_url = (build-url $base ({dashboard_id: (encode-path-segment $dashboard_id), item_id: (encode-path-segment $item_id)} | format pattern "/rest/api/3/dashboard/{dashboard_id}/items/{item_id}/properties"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
 }
 
 # Delete dashboard item property
@@ -1420,10 +1474,13 @@ export def "rest-3-dashboard-items-properties delete-property" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
+  if ($dashboard_id | is-empty) { error make --unspanned { msg: "path parameter 'dashboardId' must be non-empty" } }
+  if ($item_id | is-empty) { error make --unspanned { msg: "path parameter 'itemId' must be non-empty" } }
+  if ($property_key | is-empty) { error make --unspanned { msg: "path parameter 'propertyKey' must be non-empty" } }
   let full_url = (build-url $base ({dashboard_id: (encode-path-segment $dashboard_id), item_id: (encode-path-segment $item_id), property_key: (encode-path-segment $property_key)} | format pattern "/rest/api/3/dashboard/{dashboard_id}/items/{item_id}/properties/{property_key}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
 }
 
 # Get dashboard item property
@@ -1446,10 +1503,13 @@ export def "rest-3-dashboard-items-properties get-property" [
 ]: nothing -> record<key: string, value: any> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
+  if ($dashboard_id | is-empty) { error make --unspanned { msg: "path parameter 'dashboardId' must be non-empty" } }
+  if ($item_id | is-empty) { error make --unspanned { msg: "path parameter 'itemId' must be non-empty" } }
+  if ($property_key | is-empty) { error make --unspanned { msg: "path parameter 'propertyKey' must be non-empty" } }
   let full_url = (build-url $base ({dashboard_id: (encode-path-segment $dashboard_id), item_id: (encode-path-segment $item_id), property_key: (encode-path-segment $property_key)} | format pattern "/rest/api/3/dashboard/{dashboard_id}/items/{item_id}/properties/{property_key}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
 }
 
 # Set dashboard item property
@@ -1474,12 +1534,15 @@ export def "rest-3-dashboard-items-properties update-property" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
+  if ($dashboard_id | is-empty) { error make --unspanned { msg: "path parameter 'dashboardId' must be non-empty" } }
+  if ($item_id | is-empty) { error make --unspanned { msg: "path parameter 'itemId' must be non-empty" } }
+  if ($property_key | is-empty) { error make --unspanned { msg: "path parameter 'propertyKey' must be non-empty" } }
   let full_url = (build-url $base ({dashboard_id: (encode-path-segment $dashboard_id), item_id: (encode-path-segment $item_id), property_key: (encode-path-segment $property_key)} | format pattern "/rest/api/3/dashboard/{dashboard_id}/items/{item_id}/properties/{property_key}"))
   let req_body = $body
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: {}, body: $req_body}
 }
 
 # Delete dashboard
@@ -1500,10 +1563,11 @@ export def "rest-3-dashboard delete" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
+  if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
   let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/rest/api/3/dashboard/{id}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
 }
 
 # Get dashboard
@@ -1524,10 +1588,11 @@ export def "rest-3-dashboard get" [
 ]: nothing -> record<automaticRefreshMs: int, description: string, editPermissions: table<group: record, id: int, project: record, role: record, type: string, user: record>, id: string, isFavourite: bool, isWritable: bool, name: string, owner: record<accountId: string, active: bool, avatarUrls: record<16x16: string, 24x24: string, 32x32: string, 48x48: string>, displayName: string, key: string, name: string, self: string>, popularity: int, rank: int, self: string, sharePermissions: table<group: record, id: int, project: record, role: record, type: string, user: record>, systemDashboard: bool, view: string> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
+  if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
   let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/rest/api/3/dashboard/{id}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
 }
 
 # Update dashboard
@@ -1555,12 +1620,13 @@ export def "rest-3-dashboard update" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
+  if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
   let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/rest/api/3/dashboard/{id}"))
   let req_body = {"description": $description, "editPermissions": $edit_permissions, "name": $name, "sharePermissions": $share_permissions} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: {}, body: $req_body}
 }
 
 # Copy dashboard
@@ -1588,12 +1654,13 @@ export def "rest-3-dashboard-copy copy" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
+  if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
   let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/rest/api/3/dashboard/{id}/copy"))
   let req_body = {"description": $description, "editPermissions": $edit_permissions, "name": $name, "sharePermissions": $share_permissions} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: {}, body: $req_body}
 }
 
 # Get events
@@ -1616,7 +1683,7 @@ export def "rest-3-events get" [
   let full_url = (build-url $base "/rest/api/3/events")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
 }
 
 # Analyse Jira expression
@@ -1646,7 +1713,7 @@ export def "rest-3-expression-analyse create" [
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: ({"check": $check} | compact), body: $req_body}
 }
 
 # Evaluate Jira expression
@@ -1676,7 +1743,7 @@ export def "rest-3-expression-eval create-evaluate-jira" [
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: ({"expand": $expand} | compact), body: $req_body}
 }
 
 # Get fields
@@ -1699,7 +1766,7 @@ export def "rest-3-field get" [
   let full_url = (build-url $base "/rest/api/3/field")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
 }
 
 # Create custom field
@@ -1729,7 +1796,7 @@ export def "rest-3-field create-custom" [
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: {}, body: $req_body}
 }
 
 # Get fields paginated
@@ -1760,7 +1827,7 @@ export def "rest-3-field-search get-paginated" [
   let full_url = (build-url $base "/rest/api/3/field/search" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"startAt": $start_at, "maxResults": $max_results, "type": $type, "id": $id, "query": $query, "orderBy": $order_by, "expand": $expand} | compact), body: null}
 }
 
 # Get fields in trash paginated
@@ -1790,7 +1857,7 @@ export def "rest-3-field-search-trashed get-paginated" [
   let full_url = (build-url $base "/rest/api/3/field/search/trashed" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"startAt": $start_at, "maxResults": $max_results, "id": $id, "query": $query, "expand": $expand, "orderBy": $order_by} | compact), body: null}
 }
 
 # Update custom field
@@ -1815,12 +1882,13 @@ export def "rest-3-field update-custom" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
+  if ($field_id | is-empty) { error make --unspanned { msg: "path parameter 'fieldId' must be non-empty" } }
   let full_url = (build-url $base ({field_id: (encode-path-segment $field_id)} | format pattern "/rest/api/3/field/{field_id}"))
   let req_body = {"description": $description, "name": $name, "searcherKey": $searcher_key} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: {}, body: $req_body}
 }
 
 # Get custom field contexts
@@ -1846,11 +1914,12 @@ export def "rest-3-field-context get" [
 ]: nothing -> record<isLast: bool, maxResults: int, nextPage: string, self: string, startAt: int, total: int, values: table<description: string, id: string, isAnyIssueType: bool, isGlobalContext: bool, name: string>> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
+  if ($field_id | is-empty) { error make --unspanned { msg: "path parameter 'fieldId' must be non-empty" } }
   let qp = [(serialize-qp "isAnyIssueType" $is_any_issue_type "scalar") (serialize-qp "isGlobalContext" $is_global_context "scalar") (serialize-qp "contextId" $context_id "multi") (serialize-qp "startAt" $start_at "scalar") (serialize-qp "maxResults" $max_results "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({field_id: (encode-path-segment $field_id)} | format pattern "/rest/api/3/field/{field_id}/context") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"isAnyIssueType": $is_any_issue_type, "isGlobalContext": $is_global_context, "contextId": $context_id, "startAt": $start_at, "maxResults": $max_results} | compact), body: null}
 }
 
 # Create custom field context
@@ -1876,12 +1945,13 @@ export def "rest-3-field-context create-custom" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
+  if ($field_id | is-empty) { error make --unspanned { msg: "path parameter 'fieldId' must be non-empty" } }
   let full_url = (build-url $base ({field_id: (encode-path-segment $field_id)} | format pattern "/rest/api/3/field/{field_id}/context"))
   let req_body = {"description": $description, "issueTypeIds": $issue_type_ids, "name": $name, "projectIds": $project_ids} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: {}, body: $req_body}
 }
 
 # Get custom field contexts default values
@@ -1905,11 +1975,12 @@ export def "rest-3-field-context-default-value get" [
 ]: nothing -> record<isLast: bool, maxResults: int, nextPage: string, self: string, startAt: int, total: int, values: list<record>> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
+  if ($field_id | is-empty) { error make --unspanned { msg: "path parameter 'fieldId' must be non-empty" } }
   let qp = [(serialize-qp "contextId" $context_id "multi") (serialize-qp "startAt" $start_at "scalar") (serialize-qp "maxResults" $max_results "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({field_id: (encode-path-segment $field_id)} | format pattern "/rest/api/3/field/{field_id}/context/defaultValue") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"contextId": $context_id, "startAt": $start_at, "maxResults": $max_results} | compact), body: null}
 }
 
 # Set custom field contexts default values
@@ -1932,12 +2003,13 @@ export def "rest-3-field-context-default-value update" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
+  if ($field_id | is-empty) { error make --unspanned { msg: "path parameter 'fieldId' must be non-empty" } }
   let full_url = (build-url $base ({field_id: (encode-path-segment $field_id)} | format pattern "/rest/api/3/field/{field_id}/context/defaultValue"))
   let req_body = {"defaultValues": $default_values} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: {}, body: $req_body}
 }
 
 # Get issue types for custom field context
@@ -1961,11 +2033,12 @@ export def "rest-3-field-context-issuetypemapping get-issue-type-mappings" [
 ]: nothing -> record<isLast: bool, maxResults: int, nextPage: string, self: string, startAt: int, total: int, values: table<contextId: string, isAnyIssueType: bool, issueTypeId: string>> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
+  if ($field_id | is-empty) { error make --unspanned { msg: "path parameter 'fieldId' must be non-empty" } }
   let qp = [(serialize-qp "contextId" $context_id "multi") (serialize-qp "startAt" $start_at "scalar") (serialize-qp "maxResults" $max_results "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({field_id: (encode-path-segment $field_id)} | format pattern "/rest/api/3/field/{field_id}/context/issuetypemapping") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"contextId": $context_id, "startAt": $start_at, "maxResults": $max_results} | compact), body: null}
 }
 
 # Get custom field contexts for projects and issue types
@@ -1991,13 +2064,14 @@ export def "rest-3-field-context-mapping get-custom-for-projects-and-issue-types
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
+  if ($field_id | is-empty) { error make --unspanned { msg: "path parameter 'fieldId' must be non-empty" } }
   let qp = [(serialize-qp "startAt" $start_at "scalar") (serialize-qp "maxResults" $max_results "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({field_id: (encode-path-segment $field_id)} | format pattern "/rest/api/3/field/{field_id}/context/mapping") $qp)
   let req_body = {"mappings": $mappings} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: ({"startAt": $start_at, "maxResults": $max_results} | compact), body: $req_body}
 }
 
 # Get project mappings for custom field context
@@ -2021,11 +2095,12 @@ export def "rest-3-field-context-projectmapping get-project-mapping" [
 ]: nothing -> record<isLast: bool, maxResults: int, nextPage: string, self: string, startAt: int, total: int, values: table<contextId: string, isGlobalContext: bool, projectId: string>> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
+  if ($field_id | is-empty) { error make --unspanned { msg: "path parameter 'fieldId' must be non-empty" } }
   let qp = [(serialize-qp "contextId" $context_id "multi") (serialize-qp "startAt" $start_at "scalar") (serialize-qp "maxResults" $max_results "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({field_id: (encode-path-segment $field_id)} | format pattern "/rest/api/3/field/{field_id}/context/projectmapping") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"contextId": $context_id, "startAt": $start_at, "maxResults": $max_results} | compact), body: null}
 }
 
 # Delete custom field context
@@ -2047,10 +2122,12 @@ export def "rest-3-field-context delete-custom" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
+  if ($field_id | is-empty) { error make --unspanned { msg: "path parameter 'fieldId' must be non-empty" } }
+  if ($context_id | is-empty) { error make --unspanned { msg: "path parameter 'contextId' must be non-empty" } }
   let full_url = (build-url $base ({field_id: (encode-path-segment $field_id), context_id: (encode-path-segment $context_id)} | format pattern "/rest/api/3/field/{field_id}/context/{context_id}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
 }
 
 # Update custom field context
@@ -2075,12 +2152,14 @@ export def "rest-3-field-context update-custom" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
+  if ($field_id | is-empty) { error make --unspanned { msg: "path parameter 'fieldId' must be non-empty" } }
+  if ($context_id | is-empty) { error make --unspanned { msg: "path parameter 'contextId' must be non-empty" } }
   let full_url = (build-url $base ({field_id: (encode-path-segment $field_id), context_id: (encode-path-segment $context_id)} | format pattern "/rest/api/3/field/{field_id}/context/{context_id}"))
   let req_body = {"description": $description, "name": $name} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: {}, body: $req_body}
 }
 
 # Add issue types to context
@@ -2104,12 +2183,14 @@ export def "rest-3-field-context-issuetype create-issue-types" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
+  if ($field_id | is-empty) { error make --unspanned { msg: "path parameter 'fieldId' must be non-empty" } }
+  if ($context_id | is-empty) { error make --unspanned { msg: "path parameter 'contextId' must be non-empty" } }
   let full_url = (build-url $base ({field_id: (encode-path-segment $field_id), context_id: (encode-path-segment $context_id)} | format pattern "/rest/api/3/field/{field_id}/context/{context_id}/issuetype"))
   let req_body = {"issueTypeIds": $issue_type_ids} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: {}, body: $req_body}
 }
 
 # Remove issue types from context
@@ -2133,12 +2214,14 @@ export def "rest-3-field-context-issuetype-remove delete-issue-types" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
+  if ($field_id | is-empty) { error make --unspanned { msg: "path parameter 'fieldId' must be non-empty" } }
+  if ($context_id | is-empty) { error make --unspanned { msg: "path parameter 'contextId' must be non-empty" } }
   let full_url = (build-url $base ({field_id: (encode-path-segment $field_id), context_id: (encode-path-segment $context_id)} | format pattern "/rest/api/3/field/{field_id}/context/{context_id}/issuetype/remove"))
   let req_body = {"issueTypeIds": $issue_type_ids} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: {}, body: $req_body}
 }
 
 # Get custom field options (context)
@@ -2164,11 +2247,13 @@ export def "rest-3-field-context-option get" [
 ]: nothing -> record<isLast: bool, maxResults: int, nextPage: string, self: string, startAt: int, total: int, values: table<disabled: bool, id: string, optionId: string, value: string>> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
+  if ($field_id | is-empty) { error make --unspanned { msg: "path parameter 'fieldId' must be non-empty" } }
+  if ($context_id | is-empty) { error make --unspanned { msg: "path parameter 'contextId' must be non-empty" } }
   let qp = [(serialize-qp "optionId" $option_id "scalar") (serialize-qp "onlyOptions" $only_options "scalar") (serialize-qp "startAt" $start_at "scalar") (serialize-qp "maxResults" $max_results "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({field_id: (encode-path-segment $field_id), context_id: (encode-path-segment $context_id)} | format pattern "/rest/api/3/field/{field_id}/context/{context_id}/option") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"optionId": $option_id, "onlyOptions": $only_options, "startAt": $start_at, "maxResults": $max_results} | compact), body: null}
 }
 
 # Create custom field options (context)
@@ -2193,12 +2278,14 @@ export def "rest-3-field-context-option create-custom" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
+  if ($field_id | is-empty) { error make --unspanned { msg: "path parameter 'fieldId' must be non-empty" } }
+  if ($context_id | is-empty) { error make --unspanned { msg: "path parameter 'contextId' must be non-empty" } }
   let full_url = (build-url $base ({field_id: (encode-path-segment $field_id), context_id: (encode-path-segment $context_id)} | format pattern "/rest/api/3/field/{field_id}/context/{context_id}/option"))
   let req_body = {"options": $options} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: {}, body: $req_body}
 }
 
 # Update custom field options (context)
@@ -2223,12 +2310,14 @@ export def "rest-3-field-context-option update-custom" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
+  if ($field_id | is-empty) { error make --unspanned { msg: "path parameter 'fieldId' must be non-empty" } }
+  if ($context_id | is-empty) { error make --unspanned { msg: "path parameter 'contextId' must be non-empty" } }
   let full_url = (build-url $base ({field_id: (encode-path-segment $field_id), context_id: (encode-path-segment $context_id)} | format pattern "/rest/api/3/field/{field_id}/context/{context_id}/option"))
   let req_body = {"options": $options} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: {}, body: $req_body}
 }
 
 # Reorder custom field options (context)
@@ -2254,12 +2343,14 @@ export def "rest-3-field-context-option-move update-reorder-custom" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
+  if ($field_id | is-empty) { error make --unspanned { msg: "path parameter 'fieldId' must be non-empty" } }
+  if ($context_id | is-empty) { error make --unspanned { msg: "path parameter 'contextId' must be non-empty" } }
   let full_url = (build-url $base ({field_id: (encode-path-segment $field_id), context_id: (encode-path-segment $context_id)} | format pattern "/rest/api/3/field/{field_id}/context/{context_id}/option/move"))
   let req_body = {"after": $after, "customFieldOptionIds": $custom_field_option_ids, "position": $position} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: {}, body: $req_body}
 }
 
 # Delete custom field options (context)
@@ -2282,10 +2373,13 @@ export def "rest-3-field-context-option delete-custom" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
+  if ($field_id | is-empty) { error make --unspanned { msg: "path parameter 'fieldId' must be non-empty" } }
+  if ($context_id | is-empty) { error make --unspanned { msg: "path parameter 'contextId' must be non-empty" } }
+  if ($option_id | is-empty) { error make --unspanned { msg: "path parameter 'optionId' must be non-empty" } }
   let full_url = (build-url $base ({field_id: (encode-path-segment $field_id), context_id: (encode-path-segment $context_id), option_id: (encode-path-segment $option_id)} | format pattern "/rest/api/3/field/{field_id}/context/{context_id}/option/{option_id}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
 }
 
 # Assign custom field context to projects
@@ -2309,12 +2403,14 @@ export def "rest-3-field-context-project assign-to-custom" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
+  if ($field_id | is-empty) { error make --unspanned { msg: "path parameter 'fieldId' must be non-empty" } }
+  if ($context_id | is-empty) { error make --unspanned { msg: "path parameter 'contextId' must be non-empty" } }
   let full_url = (build-url $base ({field_id: (encode-path-segment $field_id), context_id: (encode-path-segment $context_id)} | format pattern "/rest/api/3/field/{field_id}/context/{context_id}/project"))
   let req_body = {"projectIds": $project_ids} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: {}, body: $req_body}
 }
 
 # Remove custom field context from projects
@@ -2338,12 +2434,14 @@ export def "rest-3-field-context-project-remove delete-custom" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
+  if ($field_id | is-empty) { error make --unspanned { msg: "path parameter 'fieldId' must be non-empty" } }
+  if ($context_id | is-empty) { error make --unspanned { msg: "path parameter 'contextId' must be non-empty" } }
   let full_url = (build-url $base ({field_id: (encode-path-segment $field_id), context_id: (encode-path-segment $context_id)} | format pattern "/rest/api/3/field/{field_id}/context/{context_id}/project/remove"))
   let req_body = {"projectIds": $project_ids} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: {}, body: $req_body}
 }
 
 # Get contexts for a field
@@ -2368,11 +2466,12 @@ export def "rest-3-field-contexts get-for-deprecated" [
 ]: nothing -> record<isLast: bool, maxResults: int, nextPage: string, self: string, startAt: int, total: int, values: table<id: int, name: string, scope: record>> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
+  if ($field_id | is-empty) { error make --unspanned { msg: "path parameter 'fieldId' must be non-empty" } }
   let qp = [(serialize-qp "startAt" $start_at "scalar") (serialize-qp "maxResults" $max_results "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({field_id: (encode-path-segment $field_id)} | format pattern "/rest/api/3/field/{field_id}/contexts") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"startAt": $start_at, "maxResults": $max_results} | compact), body: null}
 }
 
 # Get screens for a field
@@ -2396,11 +2495,12 @@ export def "rest-3-field-screens get" [
 ]: nothing -> record<isLast: bool, maxResults: int, nextPage: string, self: string, startAt: int, total: int, values: table<description: string, id: int, name: string, scope: record, tab: record>> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
+  if ($field_id | is-empty) { error make --unspanned { msg: "path parameter 'fieldId' must be non-empty" } }
   let qp = [(serialize-qp "startAt" $start_at "scalar") (serialize-qp "maxResults" $max_results "scalar") (serialize-qp "expand" $expand "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({field_id: (encode-path-segment $field_id)} | format pattern "/rest/api/3/field/{field_id}/screens") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"startAt": $start_at, "maxResults": $max_results, "expand": $expand} | compact), body: null}
 }
 
 # Get all issue field options
@@ -2423,11 +2523,12 @@ export def "rest-3-field-option get-list-issue" [
 ]: nothing -> record<isLast: bool, maxResults: int, nextPage: string, self: string, startAt: int, total: int, values: table<config: record, id: int, properties: record, value: string>> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
+  if ($field_key | is-empty) { error make --unspanned { msg: "path parameter 'fieldKey' must be non-empty" } }
   let qp = [(serialize-qp "startAt" $start_at "scalar") (serialize-qp "maxResults" $max_results "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({field_key: (encode-path-segment $field_key)} | format pattern "/rest/api/3/field/{field_key}/option") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"startAt": $start_at, "maxResults": $max_results} | compact), body: null}
 }
 
 # Create issue field option
@@ -2453,12 +2554,13 @@ export def "rest-3-field-option create-issue" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
+  if ($field_key | is-empty) { error make --unspanned { msg: "path parameter 'fieldKey' must be non-empty" } }
   let full_url = (build-url $base ({field_key: (encode-path-segment $field_key)} | format pattern "/rest/api/3/field/{field_key}/option"))
   let req_body = {"config": $config, "properties": $properties, "value": $value} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: {}, body: $req_body}
 }
 
 # Get selectable issue field options
@@ -2482,11 +2584,12 @@ export def "rest-3-field-option-suggestions-edit get-selectable-issue" [
 ]: nothing -> record<isLast: bool, maxResults: int, nextPage: string, self: string, startAt: int, total: int, values: table<config: record, id: int, properties: record, value: string>> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
+  if ($field_key | is-empty) { error make --unspanned { msg: "path parameter 'fieldKey' must be non-empty" } }
   let qp = [(serialize-qp "startAt" $start_at "scalar") (serialize-qp "maxResults" $max_results "scalar") (serialize-qp "projectId" $project_id "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({field_key: (encode-path-segment $field_key)} | format pattern "/rest/api/3/field/{field_key}/option/suggestions/edit") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"startAt": $start_at, "maxResults": $max_results, "projectId": $project_id} | compact), body: null}
 }
 
 # Get visible issue field options
@@ -2510,11 +2613,12 @@ export def "rest-3-field-option-suggestions-search get-visible-issue" [
 ]: nothing -> record<isLast: bool, maxResults: int, nextPage: string, self: string, startAt: int, total: int, values: table<config: record, id: int, properties: record, value: string>> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
+  if ($field_key | is-empty) { error make --unspanned { msg: "path parameter 'fieldKey' must be non-empty" } }
   let qp = [(serialize-qp "startAt" $start_at "scalar") (serialize-qp "maxResults" $max_results "scalar") (serialize-qp "projectId" $project_id "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({field_key: (encode-path-segment $field_key)} | format pattern "/rest/api/3/field/{field_key}/option/suggestions/search") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"startAt": $start_at, "maxResults": $max_results, "projectId": $project_id} | compact), body: null}
 }
 
 # Delete issue field option
@@ -2536,10 +2640,12 @@ export def "rest-3-field-option delete-issue" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
+  if ($field_key | is-empty) { error make --unspanned { msg: "path parameter 'fieldKey' must be non-empty" } }
+  if ($option_id | is-empty) { error make --unspanned { msg: "path parameter 'optionId' must be non-empty" } }
   let full_url = (build-url $base ({field_key: (encode-path-segment $field_key), option_id: (encode-path-segment $option_id)} | format pattern "/rest/api/3/field/{field_key}/option/{option_id}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
 }
 
 # Get issue field option
@@ -2561,10 +2667,12 @@ export def "rest-3-field-option get-issue" [
 ]: nothing -> record<config: record<attributes: list<string>, scope: record<global: record, projects: list, projects2: list>>, id: int, properties: record, value: string> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
+  if ($field_key | is-empty) { error make --unspanned { msg: "path parameter 'fieldKey' must be non-empty" } }
+  if ($option_id | is-empty) { error make --unspanned { msg: "path parameter 'optionId' must be non-empty" } }
   let full_url = (build-url $base ({field_key: (encode-path-segment $field_key), option_id: (encode-path-segment $option_id)} | format pattern "/rest/api/3/field/{field_key}/option/{option_id}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
 }
 
 # Update issue field option
@@ -2592,12 +2700,14 @@ export def "rest-3-field-option update-issue" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
+  if ($field_key | is-empty) { error make --unspanned { msg: "path parameter 'fieldKey' must be non-empty" } }
+  if ($option_id | is-empty) { error make --unspanned { msg: "path parameter 'optionId' must be non-empty" } }
   let full_url = (build-url $base ({field_key: (encode-path-segment $field_key), option_id: (encode-path-segment $option_id)} | format pattern "/rest/api/3/field/{field_key}/option/{option_id}"))
   let req_body = {"config": $config, "id": $id, "properties": $properties, "value": $value} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: {}, body: $req_body}
 }
 
 # Replace issue field option
@@ -2623,11 +2733,13 @@ export def "rest-3-field-option-issue update" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
+  if ($field_key | is-empty) { error make --unspanned { msg: "path parameter 'fieldKey' must be non-empty" } }
+  if ($option_id | is-empty) { error make --unspanned { msg: "path parameter 'optionId' must be non-empty" } }
   let qp = [(serialize-qp "replaceWith" $replace_with "scalar") (serialize-qp "jql" $jql "scalar") (serialize-qp "overrideScreenSecurity" $override_screen_security "scalar") (serialize-qp "overrideEditableFlag" $override_editable_flag "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({field_key: (encode-path-segment $field_key), option_id: (encode-path-segment $option_id)} | format pattern "/rest/api/3/field/{field_key}/option/{option_id}/issue") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"replaceWith": $replace_with, "jql": $jql, "overrideScreenSecurity": $override_screen_security, "overrideEditableFlag": $override_editable_flag} | compact), body: null}
 }
 
 # Delete custom field
@@ -2648,10 +2760,11 @@ export def "rest-3-field delete-custom" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
+  if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
   let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/rest/api/3/field/{id}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
 }
 
 # Restore custom field from trash
@@ -2672,10 +2785,11 @@ export def "rest-3-field-restore create-custom" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
+  if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
   let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/rest/api/3/field/{id}/restore"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
 }
 
 # Move custom field to trash
@@ -2696,10 +2810,11 @@ export def "rest-3-field-trash create-custom" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
+  if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
   let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/rest/api/3/field/{id}/trash"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
 }
 
 # Get all field configurations
@@ -2728,7 +2843,7 @@ export def "rest-3-fieldconfiguration get-list-field-configurations" [
   let full_url = (build-url $base "/rest/api/3/fieldconfiguration" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"startAt": $start_at, "maxResults": $max_results, "id": $id, "isDefault": $is_default, "query": $query} | compact), body: null}
 }
 
 # Create field configuration
@@ -2756,7 +2871,7 @@ export def "rest-3-fieldconfiguration create-field-configuration" [
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: {}, body: $req_body}
 }
 
 # Delete field configuration
@@ -2777,10 +2892,11 @@ export def "rest-3-fieldconfiguration delete-field-configuration" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
+  if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
   let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/rest/api/3/fieldconfiguration/{id}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
 }
 
 # Update field configuration
@@ -2804,12 +2920,13 @@ export def "rest-3-fieldconfiguration update-field-configuration" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
+  if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
   let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/rest/api/3/fieldconfiguration/{id}"))
   let req_body = {"description": $description, "name": $name} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: {}, body: $req_body}
 }
 
 # Get field configuration items
@@ -2832,11 +2949,12 @@ export def "rest-3-fieldconfiguration-fields get-configuration-items" [
 ]: nothing -> record<isLast: bool, maxResults: int, nextPage: string, self: string, startAt: int, total: int, values: table<description: string, id: string, isHidden: bool, isRequired: bool, renderer: string>> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
+  if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
   let qp = [(serialize-qp "startAt" $start_at "scalar") (serialize-qp "maxResults" $max_results "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/rest/api/3/fieldconfiguration/{id}/fields") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"startAt": $start_at, "maxResults": $max_results} | compact), body: null}
 }
 
 # Update field configuration items
@@ -2860,12 +2978,13 @@ export def "rest-3-fieldconfiguration-fields update-configuration-items" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
+  if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
   let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/rest/api/3/fieldconfiguration/{id}/fields"))
   let req_body = {"fieldConfigurationItems": $field_configuration_items} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: {}, body: $req_body}
 }
 
 # Get all field configuration schemes
@@ -2892,7 +3011,7 @@ export def "rest-3-fieldconfigurationscheme get-list-field-configuration-schemes
   let full_url = (build-url $base "/rest/api/3/fieldconfigurationscheme" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"startAt": $start_at, "maxResults": $max_results, "id": $id} | compact), body: null}
 }
 
 # Create field configuration scheme
@@ -2920,7 +3039,7 @@ export def "rest-3-fieldconfigurationscheme create-field-configuration-scheme" [
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: {}, body: $req_body}
 }
 
 # Get field configuration issue type items
@@ -2947,7 +3066,7 @@ export def "rest-3-fieldconfigurationscheme-mapping get-field-configuration-sche
   let full_url = (build-url $base "/rest/api/3/fieldconfigurationscheme/mapping" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"startAt": $start_at, "maxResults": $max_results, "fieldConfigurationSchemeId": $field_configuration_scheme_id} | compact), body: null}
 }
 
 # Get field configuration schemes for projects
@@ -2974,7 +3093,7 @@ export def "rest-3-fieldconfigurationscheme-project get-field-configuration-sche
   let full_url = (build-url $base "/rest/api/3/fieldconfigurationscheme/project" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"startAt": $start_at, "maxResults": $max_results, "projectId": $project_id} | compact), body: null}
 }
 
 # Assign field configuration scheme to project
@@ -3002,7 +3121,7 @@ export def "rest-3-fieldconfigurationscheme-project assign-field-configuration-s
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: {}, body: $req_body}
 }
 
 # Delete field configuration scheme
@@ -3023,10 +3142,11 @@ export def "rest-3-fieldconfigurationscheme delete-field-configuration-scheme" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
+  if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
   let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/rest/api/3/fieldconfigurationscheme/{id}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
 }
 
 # Update field configuration scheme
@@ -3050,12 +3170,13 @@ export def "rest-3-fieldconfigurationscheme update-field-configuration-scheme" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
+  if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
   let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/rest/api/3/fieldconfigurationscheme/{id}"))
   let req_body = {"description": $description, "name": $name} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: {}, body: $req_body}
 }
 
 # Assign issue types to field configurations
@@ -3079,12 +3200,13 @@ export def "rest-3-fieldconfigurationscheme-mapping update-field-configuration-s
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
+  if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
   let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/rest/api/3/fieldconfigurationscheme/{id}/mapping"))
   let req_body = {"mappings": $mappings} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: {}, body: $req_body}
 }
 
 # Remove issue types from field configuration scheme
@@ -3107,12 +3229,13 @@ export def "rest-3-fieldconfigurationscheme-mapping-delete delete-issue-types-fr
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
+  if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
   let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/rest/api/3/fieldconfigurationscheme/{id}/mapping/delete"))
   let req_body = {"issueTypeIds": $issue_type_ids} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: {}, body: $req_body}
 }
 
 # Get filters
@@ -3139,7 +3262,7 @@ export def "rest-3-filter list" [
   let full_url = (build-url $base "/rest/api/3/filter" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"expand": $expand} | compact), body: null}
 }
 
 # Create filter
@@ -3176,7 +3299,7 @@ export def "rest-3-filter create" [
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: ({"expand": $expand, "overrideSharePermissions": $override_share_permissions} | compact), body: $req_body}
 }
 
 # Get default share scope
@@ -3199,7 +3322,7 @@ export def "rest-3-filter-default-share-scope get" [
   let full_url = (build-url $base "/rest/api/3/filter/defaultShareScope")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
 }
 
 # Set default share scope
@@ -3226,7 +3349,7 @@ export def "rest-3-filter-default-share-scope update" [
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: {}, body: $req_body}
 }
 
 # Get favorite filters
@@ -3251,7 +3374,7 @@ export def "rest-3-filter-favourite get" [
   let full_url = (build-url $base "/rest/api/3/filter/favourite" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"expand": $expand} | compact), body: null}
 }
 
 # Get my filters
@@ -3277,7 +3400,7 @@ export def "rest-3-filter-my get" [
   let full_url = (build-url $base "/rest/api/3/filter/my" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"expand": $expand, "includeFavourites": $include_favourites} | compact), body: null}
 }
 
 # Search for filters
@@ -3313,7 +3436,7 @@ export def "rest-3-filter-search get-paginated" [
   let full_url = (build-url $base "/rest/api/3/filter/search" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"filterName": $filter_name, "accountId": $account_id, "owner": $owner, "groupname": $groupname, "groupId": $group_id, "projectId": $project_id, "id": $id, "orderBy": $order_by, "startAt": $start_at, "maxResults": $max_results, "expand": $expand, "overrideSharePermissions": $override_share_permissions} | compact), body: null}
 }
 
 # Delete filter
@@ -3334,10 +3457,11 @@ export def "rest-3-filter delete" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
+  if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
   let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/rest/api/3/filter/{id}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
 }
 
 # Get filter
@@ -3360,11 +3484,12 @@ export def "rest-3-filter get" [
 ]: nothing -> record<description: string, editPermissions: table<group: record, id: int, project: record, role: record, type: string, user: record>, favourite: bool, favouritedCount: int, id: string, jql: string, name: string, owner: record<accountId: string, accountType: string, active: bool, applicationRoles: record<callback: record, items: list, max_results: int, pagingCallback: record, size: int>, avatarUrls: record<16x16: string, 24x24: string, 32x32: string, 48x48: string>, displayName: string, emailAddress: string, expand: string, groups: record<callback: record, items: list, max_results: int, pagingCallback: record, size: int>, key: string, locale: string, name: string, self: string, timeZone: string>, searchUrl: string, self: string, sharePermissions: table<group: record, id: int, project: record, role: record, type: string, user: record>, sharedUsers: record<end_index: int, items: list<record>, max_results: int, size: int, start_index: int>, subscriptions: record<end_index: int, items: list<record>, max_results: int, size: int, start_index: int>, viewUrl: string> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
+  if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
   let qp = [(serialize-qp "expand" $expand "scalar") (serialize-qp "overrideSharePermissions" $override_share_permissions "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/rest/api/3/filter/{id}") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"expand": $expand, "overrideSharePermissions": $override_share_permissions} | compact), body: null}
 }
 
 # Update filter
@@ -3396,13 +3521,14 @@ export def "rest-3-filter update" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
+  if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
   let qp = [(serialize-qp "expand" $expand "scalar") (serialize-qp "overrideSharePermissions" $override_share_permissions "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/rest/api/3/filter/{id}") $qp)
   let req_body = {"description": $description, "editPermissions": $edit_permissions, "favourite": $favourite, "jql": $jql, "name": $name, "sharePermissions": $share_permissions} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: ({"expand": $expand, "overrideSharePermissions": $override_share_permissions} | compact), body: $req_body}
 }
 
 # Reset columns
@@ -3423,10 +3549,11 @@ export def "rest-3-filter-columns reset" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
+  if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
   let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/rest/api/3/filter/{id}/columns"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
 }
 
 # Get columns
@@ -3447,10 +3574,11 @@ export def "rest-3-filter-columns get" [
 ]: nothing -> table<label: string, value: string> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
+  if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
   let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/rest/api/3/filter/{id}/columns"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
 }
 
 # Set columns
@@ -3473,6 +3601,7 @@ export def "rest-3-filter-columns update" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
+  if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
   let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/rest/api/3/filter/{id}/columns"))
   let req_body = $body
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else if (($input | is-not-empty) and ($req_body | is-empty)) { $input } else { $req_body }
@@ -3480,7 +3609,7 @@ export def "rest-3-filter-columns update" [
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let req_body = if ($req_body | describe | str starts-with "record") { $req_body } else { {} }
   let mp = (build-multipart-body $req_body [] $dry_run)
-  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full $mp.content_type $mp.body
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full $mp.content_type $mp.body {query: {}, body: $req_body}
 }
 
 # Remove filter as favorite
@@ -3502,11 +3631,12 @@ export def "rest-3-filter-favourite delete" [
 ]: nothing -> record<description: string, editPermissions: table<group: record, id: int, project: record, role: record, type: string, user: record>, favourite: bool, favouritedCount: int, id: string, jql: string, name: string, owner: record<accountId: string, accountType: string, active: bool, applicationRoles: record<callback: record, items: list, max_results: int, pagingCallback: record, size: int>, avatarUrls: record<16x16: string, 24x24: string, 32x32: string, 48x48: string>, displayName: string, emailAddress: string, expand: string, groups: record<callback: record, items: list, max_results: int, pagingCallback: record, size: int>, key: string, locale: string, name: string, self: string, timeZone: string>, searchUrl: string, self: string, sharePermissions: table<group: record, id: int, project: record, role: record, type: string, user: record>, sharedUsers: record<end_index: int, items: list<record>, max_results: int, size: int, start_index: int>, subscriptions: record<end_index: int, items: list<record>, max_results: int, size: int, start_index: int>, viewUrl: string> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
+  if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
   let qp = [(serialize-qp "expand" $expand "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/rest/api/3/filter/{id}/favourite") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"expand": $expand} | compact), body: null}
 }
 
 # Add filter as favorite
@@ -3528,11 +3658,12 @@ export def "rest-3-filter-favourite update" [
 ]: nothing -> record<description: string, editPermissions: table<group: record, id: int, project: record, role: record, type: string, user: record>, favourite: bool, favouritedCount: int, id: string, jql: string, name: string, owner: record<accountId: string, accountType: string, active: bool, applicationRoles: record<callback: record, items: list, max_results: int, pagingCallback: record, size: int>, avatarUrls: record<16x16: string, 24x24: string, 32x32: string, 48x48: string>, displayName: string, emailAddress: string, expand: string, groups: record<callback: record, items: list, max_results: int, pagingCallback: record, size: int>, key: string, locale: string, name: string, self: string, timeZone: string>, searchUrl: string, self: string, sharePermissions: table<group: record, id: int, project: record, role: record, type: string, user: record>, sharedUsers: record<end_index: int, items: list<record>, max_results: int, size: int, start_index: int>, subscriptions: record<end_index: int, items: list<record>, max_results: int, size: int, start_index: int>, viewUrl: string> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
+  if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
   let qp = [(serialize-qp "expand" $expand "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/rest/api/3/filter/{id}/favourite") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"expand": $expand} | compact), body: null}
 }
 
 # Change filter owner
@@ -3555,12 +3686,13 @@ export def "rest-3-filter-owner update-change" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
+  if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
   let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/rest/api/3/filter/{id}/owner"))
   let req_body = {"accountId": $account_id} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: {}, body: $req_body}
 }
 
 # Get share permissions
@@ -3581,10 +3713,11 @@ export def "rest-3-filter-permission list" [
 ]: nothing -> table<group: record<groupId: string, name: string, self: string>, id: int, project: record<archived: bool, archivedBy: record, archivedDate: string, assigneeType: string, avatarUrls: record, components: list, deleted: bool, deletedBy: record, deletedDate: string, description: string, email: string, expand: string, favourite: bool, id: string, insight: record, isPrivate: bool, issueTypeHierarchy: record, issueTypes: list, key: string, landingPageInfo: record, lead: record, name: string, permissions: record, projectCategory: record, projectTypeKey: string, properties: record, retentionTillDate: string, roles: record, self: string, simplified: bool, style: string, url: string, uuid: string, versions: list>, role: record<actors: list, admin: bool, currentUserRole: bool, default: bool, description: string, id: int, name: string, roleConfigurable: bool, scope: record, self: string, translatedName: string>, type: string, user: record<accountId: string, active: bool, avatarUrls: record, displayName: string, key: string, name: string, self: string>> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
+  if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
   let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/rest/api/3/filter/{id}/permission"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
 }
 
 # Add share permission
@@ -3613,12 +3746,13 @@ export def "rest-3-filter-permission create-share" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
+  if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
   let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/rest/api/3/filter/{id}/permission"))
   let req_body = {"accountId": $account_id, "groupId": $group_id, "groupname": $groupname, "projectId": $project_id, "projectRoleId": $project_role_id, "rights": $rights, "type": $type} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: {}, body: $req_body}
 }
 
 # Delete share permission
@@ -3640,10 +3774,12 @@ export def "rest-3-filter-permission delete-share" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
+  if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
+  if ($permission_id | is-empty) { error make --unspanned { msg: "path parameter 'permissionId' must be non-empty" } }
   let full_url = (build-url $base ({id: (encode-path-segment $id), permission_id: (encode-path-segment $permission_id)} | format pattern "/rest/api/3/filter/{id}/permission/{permission_id}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
 }
 
 # Get share permission
@@ -3665,10 +3801,12 @@ export def "rest-3-filter-permission get-share" [
 ]: nothing -> record<group: record<groupId: string, name: string, self: string>, id: int, project: record<archived: bool, archivedBy: record<accountId: string, accountType: string, active: bool, applicationRoles: record, avatarUrls: record, displayName: string, emailAddress: string, expand: string, groups: record, key: string, locale: string, name: string, self: string, timeZone: string>, archivedDate: string, assigneeType: string, avatarUrls: record<16x16: string, 24x24: string, 32x32: string, 48x48: string>, components: list<record>, deleted: bool, deletedBy: record<accountId: string, accountType: string, active: bool, applicationRoles: record, avatarUrls: record, displayName: string, emailAddress: string, expand: string, groups: record, key: string, locale: string, name: string, self: string, timeZone: string>, deletedDate: string, description: string, email: string, expand: string, favourite: bool, id: string, insight: record<lastIssueUpdateTime: string, totalIssueCount: int>, isPrivate: bool, issueTypeHierarchy: record<baseLevelId: int, levels: list>, issueTypes: list<record>, key: string, landingPageInfo: record<attributes: record, boardId: int, boardName: string, projectKey: string, projectType: string, queueCategory: string, queueId: int, queueName: string, simpleBoard: bool, simplified: bool, url: string>, lead: record<accountId: string, accountType: string, active: bool, applicationRoles: record, avatarUrls: record, displayName: string, emailAddress: string, expand: string, groups: record, key: string, locale: string, name: string, self: string, timeZone: string>, name: string, permissions: record<canEdit: bool>, projectCategory: record<description: string, id: string, name: string, self: string>, projectTypeKey: string, properties: record, retentionTillDate: string, roles: record, self: string, simplified: bool, style: string, url: string, uuid: string, versions: list<record>>, role: record<actors: list<record>, admin: bool, currentUserRole: bool, default: bool, description: string, id: int, name: string, roleConfigurable: bool, scope: record<project: record, type: string>, self: string, translatedName: string>, type: string, user: record<accountId: string, active: bool, avatarUrls: record<16x16: string, 24x24: string, 32x32: string, 48x48: string>, displayName: string, key: string, name: string, self: string>> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
+  if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
+  if ($permission_id | is-empty) { error make --unspanned { msg: "path parameter 'permissionId' must be non-empty" } }
   let full_url = (build-url $base ({id: (encode-path-segment $id), permission_id: (encode-path-segment $permission_id)} | format pattern "/rest/api/3/filter/{id}/permission/{permission_id}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
 }
 
 # Remove group
@@ -3696,7 +3834,7 @@ export def "rest-3-group delete" [
   let full_url = (build-url $base "/rest/api/3/group" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"groupname": $groupname, "groupId": $group_id, "swapGroup": $swap_group, "swapGroupId": $swap_group_id} | compact), body: null}
 }
 
 # Get group
@@ -3725,7 +3863,7 @@ export def "rest-3-group get" [
   let full_url = (build-url $base "/rest/api/3/group" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"groupname": $groupname, "groupId": $group_id, "expand": $expand} | compact), body: null}
 }
 
 # Create group
@@ -3752,7 +3890,7 @@ export def "rest-3-group create" [
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: {}, body: $req_body}
 }
 
 # Bulk get groups
@@ -3782,7 +3920,7 @@ export def "rest-3-group-bulk get" [
   let full_url = (build-url $base "/rest/api/3/group/bulk" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"startAt": $start_at, "maxResults": $max_results, "groupId": $group_id, "groupName": $group_name, "accessType": $access_type, "applicationKey": $application_key} | compact), body: null}
 }
 
 # Get users from group
@@ -3811,7 +3949,7 @@ export def "rest-3-group-member get-users" [
   let full_url = (build-url $base "/rest/api/3/group/member" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"groupname": $groupname, "groupId": $group_id, "includeInactiveUsers": $include_inactive_users, "startAt": $start_at, "maxResults": $max_results} | compact), body: null}
 }
 
 # Remove user from group
@@ -3839,7 +3977,7 @@ export def "rest-3-group-user delete" [
   let full_url = (build-url $base "/rest/api/3/group/user" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"groupname": $groupname, "groupId": $group_id, "username": $username, "accountId": $account_id} | compact), body: null}
 }
 
 # Add user to group
@@ -3870,7 +4008,7 @@ export def "rest-3-group-user create" [
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: ({"groupname": $groupname, "groupId": $group_id} | compact), body: $req_body}
 }
 
 # Find groups
@@ -3901,7 +4039,7 @@ export def "rest-3-groups-picker find" [
   let full_url = (build-url $base "/rest/api/3/groups/picker" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"accountId": $account_id, "query": $query, "exclude": $exclude, "excludeId": $exclude_id, "maxResults": $max_results, "caseInsensitive": $case_insensitive, "userName": $user_name} | compact), body: null}
 }
 
 # Find users and groups
@@ -3934,7 +4072,7 @@ export def "rest-3-groupuserpicker find-users-and-groups" [
   let full_url = (build-url $base "/rest/api/3/groupuserpicker" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"query": $query, "maxResults": $max_results, "showAvatar": $show_avatar, "fieldId": $field_id, "projectId": $project_id, "issueTypeId": $issue_type_id, "avatarSize": $avatar_size, "caseInsensitive": $case_insensitive, "excludeConnectAddons": $exclude_connect_addons} | compact), body: null}
 }
 
 # Get license
@@ -3957,7 +4095,7 @@ export def "rest-3-instance-license get" [
   let full_url = (build-url $base "/rest/api/3/instance/license")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
 }
 
 # Create issue
@@ -3991,7 +4129,7 @@ export def "rest-3-issue create" [
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: ({"updateHistory": $update_history} | compact), body: $req_body}
 }
 
 # Bulk create issue
@@ -4019,7 +4157,7 @@ export def "rest-3-issue-bulk create" [
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: {}, body: $req_body}
 }
 
 # Get create issue metadata
@@ -4048,7 +4186,7 @@ export def "rest-3-issue-createmeta get-create-meta" [
   let full_url = (build-url $base "/rest/api/3/issue/createmeta" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"projectIds": $project_ids, "projectKeys": $project_keys, "issuetypeIds": $issuetype_ids, "issuetypeNames": $issuetype_names, "expand": $expand} | compact), body: null}
 }
 
 # Get issue picker suggestions
@@ -4078,7 +4216,7 @@ export def "rest-3-issue-picker get-resource" [
   let full_url = (build-url $base "/rest/api/3/issue/picker" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"query": $query, "currentJQL": $current_jql, "currentIssueKey": $current_issue_key, "currentProjectId": $current_project_id, "showSubTasks": $show_sub_tasks, "showSubTaskParent": $show_sub_task_parent} | compact), body: null}
 }
 
 # Bulk set issues properties by list
@@ -4106,7 +4244,7 @@ export def "rest-3-issue-properties update-bulk-list" [
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: {}, body: $req_body}
 }
 
 # Bulk set issue properties by issue
@@ -4134,7 +4272,7 @@ export def "rest-3-issue-properties-multi update-bulk" [
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: {}, body: $req_body}
 }
 
 # Bulk delete issue property
@@ -4158,12 +4296,13 @@ export def "rest-3-issue-properties delete-bulk-property" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
+  if ($property_key | is-empty) { error make --unspanned { msg: "path parameter 'propertyKey' must be non-empty" } }
   let full_url = (build-url $base ({property_key: (encode-path-segment $property_key)} | format pattern "/rest/api/3/issue/properties/{property_key}"))
   let req_body = {"currentValue": $current_value, "entityIds": $entity_ids} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: {}, body: $req_body}
 }
 
 # Bulk set issue property
@@ -4188,12 +4327,13 @@ export def "rest-3-issue-properties update-bulk-property" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
+  if ($property_key | is-empty) { error make --unspanned { msg: "path parameter 'propertyKey' must be non-empty" } }
   let full_url = (build-url $base ({property_key: (encode-path-segment $property_key)} | format pattern "/rest/api/3/issue/properties/{property_key}"))
   let req_body = {"expression": $expression, "filter": $filter, "value": $value} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: {}, body: $req_body}
 }
 
 # Get is watching issue bulk
@@ -4220,7 +4360,7 @@ export def "rest-3-issue-watching get-is-bulk" [
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: {}, body: $req_body}
 }
 
 # Delete issue
@@ -4242,11 +4382,12 @@ export def "rest-3-issue delete" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
+  if ($issue_id_or_key | is-empty) { error make --unspanned { msg: "path parameter 'issueIdOrKey' must be non-empty" } }
   let qp = [(serialize-qp "deleteSubtasks" $delete_subtasks "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({issue_id_or_key: (encode-path-segment $issue_id_or_key)} | format pattern "/rest/api/3/issue/{issue_id_or_key}") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"deleteSubtasks": $delete_subtasks} | compact), body: null}
 }
 
 # Get issue
@@ -4272,11 +4413,12 @@ export def "rest-3-issue get" [
 ]: nothing -> record<changelog: record<histories: list<record>, maxResults: int, startAt: int, total: int>, editmeta: record<fields: record>, expand: string, fields: record, fieldsToInclude: record<actuallyIncluded: list<string>, excluded: list<string>, included: list<string>>, id: string, key: string, names: record, operations: record<linkGroups: list<record>>, properties: record, renderedFields: record, schema: record, self: string, transitions: table<expand: string, fields: record, hasScreen: bool, id: string, isAvailable: bool, isConditional: bool, isGlobal: bool, isInitial: bool, looped: bool, name: string, to: record>, versionedRepresentations: record> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
+  if ($issue_id_or_key | is-empty) { error make --unspanned { msg: "path parameter 'issueIdOrKey' must be non-empty" } }
   let qp = [(serialize-qp "fields" $fields "multi") (serialize-qp "fieldsByKeys" $fields_by_keys "scalar") (serialize-qp "expand" $expand "scalar") (serialize-qp "properties" $properties "multi") (serialize-qp "updateHistory" $update_history "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({issue_id_or_key: (encode-path-segment $issue_id_or_key)} | format pattern "/rest/api/3/issue/{issue_id_or_key}") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"fields": $fields, "fieldsByKeys": $fields_by_keys, "expand": $expand, "properties": $properties, "updateHistory": $update_history} | compact), body: null}
 }
 
 # Edit issue
@@ -4307,13 +4449,14 @@ export def "rest-3-issue update-edit" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
+  if ($issue_id_or_key | is-empty) { error make --unspanned { msg: "path parameter 'issueIdOrKey' must be non-empty" } }
   let qp = [(serialize-qp "notifyUsers" $notify_users "scalar") (serialize-qp "overrideScreenSecurity" $override_screen_security "scalar") (serialize-qp "overrideEditableFlag" $override_editable_flag "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({issue_id_or_key: (encode-path-segment $issue_id_or_key)} | format pattern "/rest/api/3/issue/{issue_id_or_key}") $qp)
   let req_body = {"fields": $fields, "historyMetadata": $history_metadata, "properties": $properties, "transition": $transition, "update": $update} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: ({"notifyUsers": $notify_users, "overrideScreenSecurity": $override_screen_security, "overrideEditableFlag": $override_editable_flag} | compact), body: $req_body}
 }
 
 # Assign issue
@@ -4338,12 +4481,13 @@ export def "rest-3-issue-assignee assign" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
+  if ($issue_id_or_key | is-empty) { error make --unspanned { msg: "path parameter 'issueIdOrKey' must be non-empty" } }
   let full_url = (build-url $base ({issue_id_or_key: (encode-path-segment $issue_id_or_key)} | format pattern "/rest/api/3/issue/{issue_id_or_key}/assignee"))
   let req_body = {"accountId": $account_id, "key": $key, "name": $name} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: {}, body: $req_body}
 }
 
 # Add attachment
@@ -4366,6 +4510,7 @@ export def "rest-3-issue-attachments create" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
+  if ($issue_id_or_key | is-empty) { error make --unspanned { msg: "path parameter 'issueIdOrKey' must be non-empty" } }
   let full_url = (build-url $base ({issue_id_or_key: (encode-path-segment $issue_id_or_key)} | format pattern "/rest/api/3/issue/{issue_id_or_key}/attachments"))
   let req_body = $body
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else if (($input | is-not-empty) and ($req_body | is-empty)) { $input } else { $req_body }
@@ -4373,7 +4518,7 @@ export def "rest-3-issue-attachments create" [
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let req_body = if ($req_body | describe | str starts-with "record") { $req_body } else { {} }
   let mp = (build-multipart-body $req_body [] $dry_run)
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full $mp.content_type $mp.body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full $mp.content_type $mp.body {query: {}, body: $req_body}
 }
 
 # Get changelogs
@@ -4396,11 +4541,12 @@ export def "rest-3-issue-changelog get-change-logs" [
 ]: nothing -> record<isLast: bool, maxResults: int, nextPage: string, self: string, startAt: int, total: int, values: table<author: record, created: string, historyMetadata: record, id: string, items: list>> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
+  if ($issue_id_or_key | is-empty) { error make --unspanned { msg: "path parameter 'issueIdOrKey' must be non-empty" } }
   let qp = [(serialize-qp "startAt" $start_at "scalar") (serialize-qp "maxResults" $max_results "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({issue_id_or_key: (encode-path-segment $issue_id_or_key)} | format pattern "/rest/api/3/issue/{issue_id_or_key}/changelog") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"startAt": $start_at, "maxResults": $max_results} | compact), body: null}
 }
 
 # Get changelogs by IDs
@@ -4423,12 +4569,13 @@ export def "rest-3-issue-changelog-list get-change-logs" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
+  if ($issue_id_or_key | is-empty) { error make --unspanned { msg: "path parameter 'issueIdOrKey' must be non-empty" } }
   let full_url = (build-url $base ({issue_id_or_key: (encode-path-segment $issue_id_or_key)} | format pattern "/rest/api/3/issue/{issue_id_or_key}/changelog/list"))
   let req_body = {"changelogIds": $changelog_ids} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: {}, body: $req_body}
 }
 
 # Get comments
@@ -4453,11 +4600,12 @@ export def "rest-3-issue-comment list" [
 ]: nothing -> record<comments: table<author: record, body: any, created: string, id: string, jsdAuthorCanSeeRequest: bool, jsdPublic: bool, properties: list, renderedBody: string, self: string, updateAuthor: record, updated: string, visibility: record>, maxResults: int, startAt: int, total: int> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
+  if ($issue_id_or_key | is-empty) { error make --unspanned { msg: "path parameter 'issueIdOrKey' must be non-empty" } }
   let qp = [(serialize-qp "startAt" $start_at "scalar") (serialize-qp "maxResults" $max_results "scalar") (serialize-qp "orderBy" $order_by "scalar") (serialize-qp "expand" $expand "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({issue_id_or_key: (encode-path-segment $issue_id_or_key)} | format pattern "/rest/api/3/issue/{issue_id_or_key}/comment") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"startAt": $start_at, "maxResults": $max_results, "orderBy": $order_by, "expand": $expand} | compact), body: null}
 }
 
 # Add comment
@@ -4484,13 +4632,14 @@ export def "rest-3-issue-comment create" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
+  if ($issue_id_or_key | is-empty) { error make --unspanned { msg: "path parameter 'issueIdOrKey' must be non-empty" } }
   let qp = [(serialize-qp "expand" $expand "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({issue_id_or_key: (encode-path-segment $issue_id_or_key)} | format pattern "/rest/api/3/issue/{issue_id_or_key}/comment") $qp)
   let req_body = {"body": $body, "properties": $properties, "visibility": $visibility} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: ({"expand": $expand} | compact), body: $req_body}
 }
 
 # Delete comment
@@ -4512,10 +4661,12 @@ export def "rest-3-issue-comment delete" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
+  if ($issue_id_or_key | is-empty) { error make --unspanned { msg: "path parameter 'issueIdOrKey' must be non-empty" } }
+  if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
   let full_url = (build-url $base ({issue_id_or_key: (encode-path-segment $issue_id_or_key), id: (encode-path-segment $id)} | format pattern "/rest/api/3/issue/{issue_id_or_key}/comment/{id}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
 }
 
 # Get comment
@@ -4538,11 +4689,13 @@ export def "rest-3-issue-comment get" [
 ]: nothing -> record<author: record<accountId: string, accountType: string, active: bool, avatarUrls: record<16x16: string, 24x24: string, 32x32: string, 48x48: string>, displayName: string, emailAddress: string, key: string, name: string, self: string, timeZone: string>, body: any, created: string, id: string, jsdAuthorCanSeeRequest: bool, jsdPublic: bool, properties: table<key: string, value: any>, renderedBody: string, self: string, updateAuthor: record<accountId: string, accountType: string, active: bool, avatarUrls: record<16x16: string, 24x24: string, 32x32: string, 48x48: string>, displayName: string, emailAddress: string, key: string, name: string, self: string, timeZone: string>, updated: string, visibility: record<identifier: string, type: string, value: string>> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
+  if ($issue_id_or_key | is-empty) { error make --unspanned { msg: "path parameter 'issueIdOrKey' must be non-empty" } }
+  if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
   let qp = [(serialize-qp "expand" $expand "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({issue_id_or_key: (encode-path-segment $issue_id_or_key), id: (encode-path-segment $id)} | format pattern "/rest/api/3/issue/{issue_id_or_key}/comment/{id}") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"expand": $expand} | compact), body: null}
 }
 
 # Update comment
@@ -4572,13 +4725,15 @@ export def "rest-3-issue-comment update" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
+  if ($issue_id_or_key | is-empty) { error make --unspanned { msg: "path parameter 'issueIdOrKey' must be non-empty" } }
+  if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
   let qp = [(serialize-qp "notifyUsers" $notify_users "scalar") (serialize-qp "overrideEditableFlag" $override_editable_flag "scalar") (serialize-qp "expand" $expand "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({issue_id_or_key: (encode-path-segment $issue_id_or_key), id: (encode-path-segment $id)} | format pattern "/rest/api/3/issue/{issue_id_or_key}/comment/{id}") $qp)
   let req_body = {"body": $body, "properties": $properties, "visibility": $visibility} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: ({"notifyUsers": $notify_users, "overrideEditableFlag": $override_editable_flag, "expand": $expand} | compact), body: $req_body}
 }
 
 # Get edit issue metadata
@@ -4601,11 +4756,12 @@ export def "rest-3-issue-editmeta get-edit-meta" [
 ]: nothing -> record<fields: record> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
+  if ($issue_id_or_key | is-empty) { error make --unspanned { msg: "path parameter 'issueIdOrKey' must be non-empty" } }
   let qp = [(serialize-qp "overrideScreenSecurity" $override_screen_security "scalar") (serialize-qp "overrideEditableFlag" $override_editable_flag "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({issue_id_or_key: (encode-path-segment $issue_id_or_key)} | format pattern "/rest/api/3/issue/{issue_id_or_key}/editmeta") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"overrideScreenSecurity": $override_screen_security, "overrideEditableFlag": $override_editable_flag} | compact), body: null}
 }
 
 # Send notification for issue
@@ -4632,12 +4788,13 @@ export def "rest-3-issue-notify notify" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
+  if ($issue_id_or_key | is-empty) { error make --unspanned { msg: "path parameter 'issueIdOrKey' must be non-empty" } }
   let full_url = (build-url $base ({issue_id_or_key: (encode-path-segment $issue_id_or_key)} | format pattern "/rest/api/3/issue/{issue_id_or_key}/notify"))
   let req_body = {"htmlBody": $html_body, "restrict": $restrict, "subject": $subject, "textBody": $text_body, "to": $body_to} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: {}, body: $req_body}
 }
 
 # Get issue property keys
@@ -4658,10 +4815,11 @@ export def "rest-3-issue-properties get-property-keys" [
 ]: nothing -> record<keys: table<key: string, self: string>> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
+  if ($issue_id_or_key | is-empty) { error make --unspanned { msg: "path parameter 'issueIdOrKey' must be non-empty" } }
   let full_url = (build-url $base ({issue_id_or_key: (encode-path-segment $issue_id_or_key)} | format pattern "/rest/api/3/issue/{issue_id_or_key}/properties"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
 }
 
 # Delete issue property
@@ -4683,10 +4841,12 @@ export def "rest-3-issue-properties delete-property" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
+  if ($issue_id_or_key | is-empty) { error make --unspanned { msg: "path parameter 'issueIdOrKey' must be non-empty" } }
+  if ($property_key | is-empty) { error make --unspanned { msg: "path parameter 'propertyKey' must be non-empty" } }
   let full_url = (build-url $base ({issue_id_or_key: (encode-path-segment $issue_id_or_key), property_key: (encode-path-segment $property_key)} | format pattern "/rest/api/3/issue/{issue_id_or_key}/properties/{property_key}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
 }
 
 # Get issue property
@@ -4708,10 +4868,12 @@ export def "rest-3-issue-properties get-property" [
 ]: nothing -> record<key: string, value: any> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
+  if ($issue_id_or_key | is-empty) { error make --unspanned { msg: "path parameter 'issueIdOrKey' must be non-empty" } }
+  if ($property_key | is-empty) { error make --unspanned { msg: "path parameter 'propertyKey' must be non-empty" } }
   let full_url = (build-url $base ({issue_id_or_key: (encode-path-segment $issue_id_or_key), property_key: (encode-path-segment $property_key)} | format pattern "/rest/api/3/issue/{issue_id_or_key}/properties/{property_key}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
 }
 
 # Set issue property
@@ -4735,12 +4897,14 @@ export def "rest-3-issue-properties update-property" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
+  if ($issue_id_or_key | is-empty) { error make --unspanned { msg: "path parameter 'issueIdOrKey' must be non-empty" } }
+  if ($property_key | is-empty) { error make --unspanned { msg: "path parameter 'propertyKey' must be non-empty" } }
   let full_url = (build-url $base ({issue_id_or_key: (encode-path-segment $issue_id_or_key), property_key: (encode-path-segment $property_key)} | format pattern "/rest/api/3/issue/{issue_id_or_key}/properties/{property_key}"))
   let req_body = $body
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: {}, body: $req_body}
 }
 
 # Delete remote issue link by global ID
@@ -4762,11 +4926,12 @@ export def "rest-3-issue-remotelink delete-remote-link-by-global" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
+  if ($issue_id_or_key | is-empty) { error make --unspanned { msg: "path parameter 'issueIdOrKey' must be non-empty" } }
   let qp = [(serialize-qp "globalId" $global_id "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({issue_id_or_key: (encode-path-segment $issue_id_or_key)} | format pattern "/rest/api/3/issue/{issue_id_or_key}/remotelink") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"globalId": $global_id} | compact), body: null}
 }
 
 # Get remote issue links
@@ -4788,11 +4953,12 @@ export def "rest-3-issue-remotelink get-remote-links" [
 ]: nothing -> record<application: record<name: string, type: string>, globalId: string, id: int, object: record<icon: record<link: string, title: string, url16x16: string>, status: record<icon: record, resolved: bool>, summary: string, title: string, url: string>, relationship: string, self: string> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
+  if ($issue_id_or_key | is-empty) { error make --unspanned { msg: "path parameter 'issueIdOrKey' must be non-empty" } }
   let qp = [(serialize-qp "globalId" $global_id "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({issue_id_or_key: (encode-path-segment $issue_id_or_key)} | format pattern "/rest/api/3/issue/{issue_id_or_key}/remotelink") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"globalId": $global_id} | compact), body: null}
 }
 
 # Create or update remote issue link
@@ -4818,12 +4984,13 @@ export def "rest-3-issue-remotelink create-or-update-remote-link" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
+  if ($issue_id_or_key | is-empty) { error make --unspanned { msg: "path parameter 'issueIdOrKey' must be non-empty" } }
   let full_url = (build-url $base ({issue_id_or_key: (encode-path-segment $issue_id_or_key)} | format pattern "/rest/api/3/issue/{issue_id_or_key}/remotelink"))
   let req_body = {"application": $application, "globalId": $global_id, "object": $object, "relationship": $relationship} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: {}, body: $req_body}
 }
 
 # Delete remote issue link by ID
@@ -4845,10 +5012,12 @@ export def "rest-3-issue-remotelink delete-remote-link" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
+  if ($issue_id_or_key | is-empty) { error make --unspanned { msg: "path parameter 'issueIdOrKey' must be non-empty" } }
+  if ($link_id | is-empty) { error make --unspanned { msg: "path parameter 'linkId' must be non-empty" } }
   let full_url = (build-url $base ({issue_id_or_key: (encode-path-segment $issue_id_or_key), link_id: (encode-path-segment $link_id)} | format pattern "/rest/api/3/issue/{issue_id_or_key}/remotelink/{link_id}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
 }
 
 # Get remote issue link by ID
@@ -4870,10 +5039,12 @@ export def "rest-3-issue-remotelink get-remote-link" [
 ]: nothing -> record<application: record<name: string, type: string>, globalId: string, id: int, object: record<icon: record<link: string, title: string, url16x16: string>, status: record<icon: record, resolved: bool>, summary: string, title: string, url: string>, relationship: string, self: string> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
+  if ($issue_id_or_key | is-empty) { error make --unspanned { msg: "path parameter 'issueIdOrKey' must be non-empty" } }
+  if ($link_id | is-empty) { error make --unspanned { msg: "path parameter 'linkId' must be non-empty" } }
   let full_url = (build-url $base ({issue_id_or_key: (encode-path-segment $issue_id_or_key), link_id: (encode-path-segment $link_id)} | format pattern "/rest/api/3/issue/{issue_id_or_key}/remotelink/{link_id}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
 }
 
 # Update remote issue link by ID
@@ -4900,12 +5071,14 @@ export def "rest-3-issue-remotelink update-remote-link" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
+  if ($issue_id_or_key | is-empty) { error make --unspanned { msg: "path parameter 'issueIdOrKey' must be non-empty" } }
+  if ($link_id | is-empty) { error make --unspanned { msg: "path parameter 'linkId' must be non-empty" } }
   let full_url = (build-url $base ({issue_id_or_key: (encode-path-segment $issue_id_or_key), link_id: (encode-path-segment $link_id)} | format pattern "/rest/api/3/issue/{issue_id_or_key}/remotelink/{link_id}"))
   let req_body = {"application": $application, "globalId": $global_id, "object": $object, "relationship": $relationship} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: {}, body: $req_body}
 }
 
 # Get transitions
@@ -4931,11 +5104,12 @@ export def "rest-3-issue-transitions get" [
 ]: nothing -> record<expand: string, transitions: table<expand: string, fields: record, hasScreen: bool, id: string, isAvailable: bool, isConditional: bool, isGlobal: bool, isInitial: bool, looped: bool, name: string, to: record>> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
+  if ($issue_id_or_key | is-empty) { error make --unspanned { msg: "path parameter 'issueIdOrKey' must be non-empty" } }
   let qp = [(serialize-qp "expand" $expand "scalar") (serialize-qp "transitionId" $transition_id "scalar") (serialize-qp "skipRemoteOnlyCondition" $skip_remote_only_condition "scalar") (serialize-qp "includeUnavailableTransitions" $include_unavailable_transitions "scalar") (serialize-qp "sortByOpsBarAndStatus" $sort_by_ops_bar_and_status "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({issue_id_or_key: (encode-path-segment $issue_id_or_key)} | format pattern "/rest/api/3/issue/{issue_id_or_key}/transitions") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"expand": $expand, "transitionId": $transition_id, "skipRemoteOnlyCondition": $skip_remote_only_condition, "includeUnavailableTransitions": $include_unavailable_transitions, "sortByOpsBarAndStatus": $sort_by_ops_bar_and_status} | compact), body: null}
 }
 
 # Transition issue
@@ -4963,12 +5137,13 @@ export def "rest-3-issue-transitions create-do" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
+  if ($issue_id_or_key | is-empty) { error make --unspanned { msg: "path parameter 'issueIdOrKey' must be non-empty" } }
   let full_url = (build-url $base ({issue_id_or_key: (encode-path-segment $issue_id_or_key)} | format pattern "/rest/api/3/issue/{issue_id_or_key}/transitions"))
   let req_body = {"fields": $fields, "historyMetadata": $history_metadata, "properties": $properties, "transition": $transition, "update": $update} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: {}, body: $req_body}
 }
 
 # Delete vote
@@ -4989,10 +5164,11 @@ export def "rest-3-issue-votes delete" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
+  if ($issue_id_or_key | is-empty) { error make --unspanned { msg: "path parameter 'issueIdOrKey' must be non-empty" } }
   let full_url = (build-url $base ({issue_id_or_key: (encode-path-segment $issue_id_or_key)} | format pattern "/rest/api/3/issue/{issue_id_or_key}/votes"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
 }
 
 # Get votes
@@ -5013,10 +5189,11 @@ export def "rest-3-issue-votes get" [
 ]: nothing -> record<hasVoted: bool, self: string, voters: table<accountId: string, accountType: string, active: bool, applicationRoles: record, avatarUrls: record, displayName: string, emailAddress: string, expand: string, groups: record, key: string, locale: string, name: string, self: string, timeZone: string>, votes: int> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
+  if ($issue_id_or_key | is-empty) { error make --unspanned { msg: "path parameter 'issueIdOrKey' must be non-empty" } }
   let full_url = (build-url $base ({issue_id_or_key: (encode-path-segment $issue_id_or_key)} | format pattern "/rest/api/3/issue/{issue_id_or_key}/votes"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
 }
 
 # Add vote
@@ -5037,10 +5214,11 @@ export def "rest-3-issue-votes create" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
+  if ($issue_id_or_key | is-empty) { error make --unspanned { msg: "path parameter 'issueIdOrKey' must be non-empty" } }
   let full_url = (build-url $base ({issue_id_or_key: (encode-path-segment $issue_id_or_key)} | format pattern "/rest/api/3/issue/{issue_id_or_key}/votes"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
 }
 
 # Delete watcher
@@ -5063,11 +5241,12 @@ export def "rest-3-issue-watchers delete" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
+  if ($issue_id_or_key | is-empty) { error make --unspanned { msg: "path parameter 'issueIdOrKey' must be non-empty" } }
   let qp = [(serialize-qp "username" $username "scalar") (serialize-qp "accountId" $account_id "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({issue_id_or_key: (encode-path-segment $issue_id_or_key)} | format pattern "/rest/api/3/issue/{issue_id_or_key}/watchers") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"username": $username, "accountId": $account_id} | compact), body: null}
 }
 
 # Get issue watchers
@@ -5088,10 +5267,11 @@ export def "rest-3-issue-watchers get" [
 ]: nothing -> record<isWatching: bool, self: string, watchCount: int, watchers: table<accountId: string, accountType: string, active: bool, avatarUrls: record, displayName: string, emailAddress: string, key: string, name: string, self: string, timeZone: string>> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
+  if ($issue_id_or_key | is-empty) { error make --unspanned { msg: "path parameter 'issueIdOrKey' must be non-empty" } }
   let full_url = (build-url $base ({issue_id_or_key: (encode-path-segment $issue_id_or_key)} | format pattern "/rest/api/3/issue/{issue_id_or_key}/watchers"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
 }
 
 # Add watcher
@@ -5114,12 +5294,13 @@ export def "rest-3-issue-watchers create" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
+  if ($issue_id_or_key | is-empty) { error make --unspanned { msg: "path parameter 'issueIdOrKey' must be non-empty" } }
   let full_url = (build-url $base ({issue_id_or_key: (encode-path-segment $issue_id_or_key)} | format pattern "/rest/api/3/issue/{issue_id_or_key}/watchers"))
   let req_body = $body
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else if (($input | is-not-empty) and ($req_body | is-empty)) { $input } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: {}, body: $req_body}
 }
 
 # Get issue worklogs
@@ -5145,11 +5326,12 @@ export def "rest-3-issue-worklog list" [
 ]: nothing -> record<maxResults: int, startAt: int, total: int, worklogs: table<author: record, comment: any, created: string, id: string, issueId: string, properties: list, self: string, started: string, timeSpent: string, timeSpentSeconds: int, updateAuthor: record, updated: string, visibility: record>> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
+  if ($issue_id_or_key | is-empty) { error make --unspanned { msg: "path parameter 'issueIdOrKey' must be non-empty" } }
   let qp = [(serialize-qp "startAt" $start_at "scalar") (serialize-qp "maxResults" $max_results "scalar") (serialize-qp "startedAfter" $started_after "scalar") (serialize-qp "startedBefore" $started_before "scalar") (serialize-qp "expand" $expand "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({issue_id_or_key: (encode-path-segment $issue_id_or_key)} | format pattern "/rest/api/3/issue/{issue_id_or_key}/worklog") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"startAt": $start_at, "maxResults": $max_results, "startedAfter": $started_after, "startedBefore": $started_before, "expand": $expand} | compact), body: null}
 }
 
 # Add worklog
@@ -5184,13 +5366,14 @@ export def "rest-3-issue-worklog create" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
+  if ($issue_id_or_key | is-empty) { error make --unspanned { msg: "path parameter 'issueIdOrKey' must be non-empty" } }
   let qp = [(serialize-qp "notifyUsers" $notify_users "scalar") (serialize-qp "adjustEstimate" $adjust_estimate "scalar") (serialize-qp "newEstimate" $new_estimate "scalar") (serialize-qp "reduceBy" $reduce_by "scalar") (serialize-qp "expand" $expand "scalar") (serialize-qp "overrideEditableFlag" $override_editable_flag "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({issue_id_or_key: (encode-path-segment $issue_id_or_key)} | format pattern "/rest/api/3/issue/{issue_id_or_key}/worklog") $qp)
   let req_body = {"comment": $comment, "properties": $properties, "started": $started, "timeSpent": $time_spent, "timeSpentSeconds": $time_spent_seconds, "visibility": $visibility} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: ({"notifyUsers": $notify_users, "adjustEstimate": $adjust_estimate, "newEstimate": $new_estimate, "reduceBy": $reduce_by, "expand": $expand, "overrideEditableFlag": $override_editable_flag} | compact), body: $req_body}
 }
 
 # Delete worklog
@@ -5217,11 +5400,13 @@ export def "rest-3-issue-worklog delete" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
+  if ($issue_id_or_key | is-empty) { error make --unspanned { msg: "path parameter 'issueIdOrKey' must be non-empty" } }
+  if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
   let qp = [(serialize-qp "notifyUsers" $notify_users "scalar") (serialize-qp "adjustEstimate" $adjust_estimate "scalar") (serialize-qp "newEstimate" $new_estimate "scalar") (serialize-qp "increaseBy" $increase_by "scalar") (serialize-qp "overrideEditableFlag" $override_editable_flag "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({issue_id_or_key: (encode-path-segment $issue_id_or_key), id: (encode-path-segment $id)} | format pattern "/rest/api/3/issue/{issue_id_or_key}/worklog/{id}") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"notifyUsers": $notify_users, "adjustEstimate": $adjust_estimate, "newEstimate": $new_estimate, "increaseBy": $increase_by, "overrideEditableFlag": $override_editable_flag} | compact), body: null}
 }
 
 # Get worklog
@@ -5244,11 +5429,13 @@ export def "rest-3-issue-worklog get" [
 ]: nothing -> record<author: record<accountId: string, accountType: string, active: bool, avatarUrls: record<16x16: string, 24x24: string, 32x32: string, 48x48: string>, displayName: string, emailAddress: string, key: string, name: string, self: string, timeZone: string>, comment: any, created: string, id: string, issueId: string, properties: table<key: string, value: any>, self: string, started: string, timeSpent: string, timeSpentSeconds: int, updateAuthor: record<accountId: string, accountType: string, active: bool, avatarUrls: record<16x16: string, 24x24: string, 32x32: string, 48x48: string>, displayName: string, emailAddress: string, key: string, name: string, self: string, timeZone: string>, updated: string, visibility: record<identifier: string, type: string, value: string>> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
+  if ($issue_id_or_key | is-empty) { error make --unspanned { msg: "path parameter 'issueIdOrKey' must be non-empty" } }
+  if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
   let qp = [(serialize-qp "expand" $expand "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({issue_id_or_key: (encode-path-segment $issue_id_or_key), id: (encode-path-segment $id)} | format pattern "/rest/api/3/issue/{issue_id_or_key}/worklog/{id}") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"expand": $expand} | compact), body: null}
 }
 
 # Update worklog
@@ -5283,13 +5470,15 @@ export def "rest-3-issue-worklog update" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
+  if ($issue_id_or_key | is-empty) { error make --unspanned { msg: "path parameter 'issueIdOrKey' must be non-empty" } }
+  if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
   let qp = [(serialize-qp "notifyUsers" $notify_users "scalar") (serialize-qp "adjustEstimate" $adjust_estimate "scalar") (serialize-qp "newEstimate" $new_estimate "scalar") (serialize-qp "expand" $expand "scalar") (serialize-qp "overrideEditableFlag" $override_editable_flag "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({issue_id_or_key: (encode-path-segment $issue_id_or_key), id: (encode-path-segment $id)} | format pattern "/rest/api/3/issue/{issue_id_or_key}/worklog/{id}") $qp)
   let req_body = {"comment": $comment, "properties": $properties, "started": $started, "timeSpent": $time_spent, "timeSpentSeconds": $time_spent_seconds, "visibility": $visibility} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: ({"notifyUsers": $notify_users, "adjustEstimate": $adjust_estimate, "newEstimate": $new_estimate, "expand": $expand, "overrideEditableFlag": $override_editable_flag} | compact), body: $req_body}
 }
 
 # Get worklog property keys
@@ -5311,10 +5500,12 @@ export def "rest-3-issue-worklog-properties get-property-keys" [
 ]: nothing -> record<keys: table<key: string, self: string>> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
+  if ($issue_id_or_key | is-empty) { error make --unspanned { msg: "path parameter 'issueIdOrKey' must be non-empty" } }
+  if ($worklog_id | is-empty) { error make --unspanned { msg: "path parameter 'worklogId' must be non-empty" } }
   let full_url = (build-url $base ({issue_id_or_key: (encode-path-segment $issue_id_or_key), worklog_id: (encode-path-segment $worklog_id)} | format pattern "/rest/api/3/issue/{issue_id_or_key}/worklog/{worklog_id}/properties"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
 }
 
 # Delete worklog property
@@ -5337,10 +5528,13 @@ export def "rest-3-issue-worklog-properties delete-property" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
+  if ($issue_id_or_key | is-empty) { error make --unspanned { msg: "path parameter 'issueIdOrKey' must be non-empty" } }
+  if ($worklog_id | is-empty) { error make --unspanned { msg: "path parameter 'worklogId' must be non-empty" } }
+  if ($property_key | is-empty) { error make --unspanned { msg: "path parameter 'propertyKey' must be non-empty" } }
   let full_url = (build-url $base ({issue_id_or_key: (encode-path-segment $issue_id_or_key), worklog_id: (encode-path-segment $worklog_id), property_key: (encode-path-segment $property_key)} | format pattern "/rest/api/3/issue/{issue_id_or_key}/worklog/{worklog_id}/properties/{property_key}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
 }
 
 # Get worklog property
@@ -5363,10 +5557,13 @@ export def "rest-3-issue-worklog-properties get-property" [
 ]: nothing -> record<key: string, value: any> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
+  if ($issue_id_or_key | is-empty) { error make --unspanned { msg: "path parameter 'issueIdOrKey' must be non-empty" } }
+  if ($worklog_id | is-empty) { error make --unspanned { msg: "path parameter 'worklogId' must be non-empty" } }
+  if ($property_key | is-empty) { error make --unspanned { msg: "path parameter 'propertyKey' must be non-empty" } }
   let full_url = (build-url $base ({issue_id_or_key: (encode-path-segment $issue_id_or_key), worklog_id: (encode-path-segment $worklog_id), property_key: (encode-path-segment $property_key)} | format pattern "/rest/api/3/issue/{issue_id_or_key}/worklog/{worklog_id}/properties/{property_key}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
 }
 
 # Set worklog property
@@ -5391,12 +5588,15 @@ export def "rest-3-issue-worklog-properties update-property" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
+  if ($issue_id_or_key | is-empty) { error make --unspanned { msg: "path parameter 'issueIdOrKey' must be non-empty" } }
+  if ($worklog_id | is-empty) { error make --unspanned { msg: "path parameter 'worklogId' must be non-empty" } }
+  if ($property_key | is-empty) { error make --unspanned { msg: "path parameter 'propertyKey' must be non-empty" } }
   let full_url = (build-url $base ({issue_id_or_key: (encode-path-segment $issue_id_or_key), worklog_id: (encode-path-segment $worklog_id), property_key: (encode-path-segment $property_key)} | format pattern "/rest/api/3/issue/{issue_id_or_key}/worklog/{worklog_id}/properties/{property_key}"))
   let req_body = $body
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: {}, body: $req_body}
 }
 
 # Create issue link
@@ -5430,7 +5630,7 @@ export def "rest-3-issue-link create" [
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: {}, body: $req_body}
 }
 
 # Delete issue link
@@ -5451,10 +5651,11 @@ export def "rest-3-issue-link delete" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
+  if ($link_id | is-empty) { error make --unspanned { msg: "path parameter 'linkId' must be non-empty" } }
   let full_url = (build-url $base ({link_id: (encode-path-segment $link_id)} | format pattern "/rest/api/3/issueLink/{link_id}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
 }
 
 # Get issue link
@@ -5475,10 +5676,11 @@ export def "rest-3-issue-link get" [
 ]: nothing -> record<id: string, inwardIssue: record<fields: record<assignee: record, issueType: record, issuetype: record, priority: record, status: record, summary: string, timetracking: record>, id: string, key: string, self: string>, outwardIssue: record<fields: record<assignee: record, issueType: record, issuetype: record, priority: record, status: record, summary: string, timetracking: record>, id: string, key: string, self: string>, self: string, type: record<id: string, inward: string, name: string, outward: string, self: string>> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
+  if ($link_id | is-empty) { error make --unspanned { msg: "path parameter 'linkId' must be non-empty" } }
   let full_url = (build-url $base ({link_id: (encode-path-segment $link_id)} | format pattern "/rest/api/3/issueLink/{link_id}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
 }
 
 # Get issue link types
@@ -5501,7 +5703,7 @@ export def "rest-3-issue-link-type list" [
   let full_url = (build-url $base "/rest/api/3/issueLinkType")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
 }
 
 # Create issue link type
@@ -5531,7 +5733,7 @@ export def "rest-3-issue-link-type create" [
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: {}, body: $req_body}
 }
 
 # Delete issue link type
@@ -5552,10 +5754,11 @@ export def "rest-3-issue-link-type delete" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
+  if ($issue_link_type_id | is-empty) { error make --unspanned { msg: "path parameter 'issueLinkTypeId' must be non-empty" } }
   let full_url = (build-url $base ({issue_link_type_id: (encode-path-segment $issue_link_type_id)} | format pattern "/rest/api/3/issueLinkType/{issue_link_type_id}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
 }
 
 # Get issue link type
@@ -5576,10 +5779,11 @@ export def "rest-3-issue-link-type get" [
 ]: nothing -> record<id: string, inward: string, name: string, outward: string, self: string> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
+  if ($issue_link_type_id | is-empty) { error make --unspanned { msg: "path parameter 'issueLinkTypeId' must be non-empty" } }
   let full_url = (build-url $base ({issue_link_type_id: (encode-path-segment $issue_link_type_id)} | format pattern "/rest/api/3/issueLinkType/{issue_link_type_id}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
 }
 
 # Update issue link type
@@ -5605,12 +5809,13 @@ export def "rest-3-issue-link-type update" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
+  if ($issue_link_type_id | is-empty) { error make --unspanned { msg: "path parameter 'issueLinkTypeId' must be non-empty" } }
   let full_url = (build-url $base ({issue_link_type_id: (encode-path-segment $issue_link_type_id)} | format pattern "/rest/api/3/issueLinkType/{issue_link_type_id}"))
   let req_body = {"id": $id, "inward": $inward, "name": $name, "outward": $outward} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: {}, body: $req_body}
 }
 
 # Get issue security schemes
@@ -5633,7 +5838,7 @@ export def "rest-3-issuesecurityschemes get-issue-security-schemes" [
   let full_url = (build-url $base "/rest/api/3/issuesecurityschemes")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
 }
 
 # Get issue security scheme
@@ -5654,10 +5859,11 @@ export def "rest-3-issuesecurityschemes get-issue-security-scheme" [
 ]: nothing -> record<defaultSecurityLevelId: int, description: string, id: int, levels: table<description: string, id: string, isDefault: bool, issueSecuritySchemeId: string, name: string, self: string>, name: string, self: string> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
+  if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
   let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/rest/api/3/issuesecurityschemes/{id}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
 }
 
 # Get issue security level members
@@ -5682,11 +5888,12 @@ export def "rest-3-issuesecurityschemes-members get-issue-security-level" [
 ]: nothing -> record<isLast: bool, maxResults: int, nextPage: string, self: string, startAt: int, total: int, values: table<holder: record, id: int, issueSecurityLevelId: int>> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
+  if ($issue_security_scheme_id | is-empty) { error make --unspanned { msg: "path parameter 'issueSecuritySchemeId' must be non-empty" } }
   let qp = [(serialize-qp "startAt" $start_at "scalar") (serialize-qp "maxResults" $max_results "scalar") (serialize-qp "issueSecurityLevelId" $issue_security_level_id "multi") (serialize-qp "expand" $expand "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({issue_security_scheme_id: (encode-path-segment $issue_security_scheme_id)} | format pattern "/rest/api/3/issuesecurityschemes/{issue_security_scheme_id}/members") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"startAt": $start_at, "maxResults": $max_results, "issueSecurityLevelId": $issue_security_level_id, "expand": $expand} | compact), body: null}
 }
 
 # Get all issue types for user
@@ -5709,7 +5916,7 @@ export def "rest-3-issuetype get-issue-list-types" [
   let full_url = (build-url $base "/rest/api/3/issuetype")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
 }
 
 # Create issue type
@@ -5739,7 +5946,7 @@ export def "rest-3-issuetype create-issue-type" [
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: {}, body: $req_body}
 }
 
 # Get issue types for project
@@ -5765,7 +5972,7 @@ export def "rest-3-issuetype-project get-issue-types" [
   let full_url = (build-url $base "/rest/api/3/issuetype/project" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"projectId": $project_id, "level": $level} | compact), body: null}
 }
 
 # Delete issue type
@@ -5787,11 +5994,12 @@ export def "rest-3-issuetype delete-issue-type" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
+  if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
   let qp = [(serialize-qp "alternativeIssueTypeId" $alternative_issue_type_id "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/rest/api/3/issuetype/{id}") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"alternativeIssueTypeId": $alternative_issue_type_id} | compact), body: null}
 }
 
 # Get issue type
@@ -5812,10 +6020,11 @@ export def "rest-3-issuetype get-issue-type" [
 ]: nothing -> record<avatarId: int, description: string, entityId: string, hierarchyLevel: int, iconUrl: string, id: string, name: string, scope: record<project: record<avatarUrls: record, id: string, key: string, name: string, projectCategory: record, projectTypeKey: string, self: string, simplified: bool>, type: string>, self: string, subtask: bool> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
+  if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
   let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/rest/api/3/issuetype/{id}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
 }
 
 # Update issue type
@@ -5840,12 +6049,13 @@ export def "rest-3-issuetype update-issue-type" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
+  if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
   let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/rest/api/3/issuetype/{id}"))
   let req_body = {"avatarId": $avatar_id, "description": $description, "name": $name} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: {}, body: $req_body}
 }
 
 # Get alternative issue types
@@ -5866,10 +6076,11 @@ export def "rest-3-issuetype-alternatives get-issue-types" [
 ]: nothing -> table<avatarId: int, description: string, entityId: string, hierarchyLevel: int, iconUrl: string, id: string, name: string, scope: record<project: record, type: string>, self: string, subtask: bool> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
+  if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
   let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/rest/api/3/issuetype/{id}/alternatives"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
 }
 
 # Load issue type avatar
@@ -5895,13 +6106,14 @@ export def "rest-3-issuetype-avatar2 create-issue-type-avatar" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
+  if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
   let qp = [(serialize-qp "x" $x "scalar") (serialize-qp "y" $y "scalar") (serialize-qp "size" $size "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/rest/api/3/issuetype/{id}/avatar2") $qp)
   let req_body = $body
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else if (($input | is-not-empty) and ($req_body | is-empty)) { $input } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "*/*" $req_body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "*/*" $req_body {query: ({"x": $x, "y": $y, "size": $size} | compact), body: $req_body}
 }
 
 # Get issue type property keys
@@ -5922,10 +6134,11 @@ export def "rest-3-issuetype-properties get-issue-type-property-keys" [
 ]: nothing -> record<keys: table<key: string, self: string>> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
+  if ($issue_type_id | is-empty) { error make --unspanned { msg: "path parameter 'issueTypeId' must be non-empty" } }
   let full_url = (build-url $base ({issue_type_id: (encode-path-segment $issue_type_id)} | format pattern "/rest/api/3/issuetype/{issue_type_id}/properties"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
 }
 
 # Delete issue type property
@@ -5947,10 +6160,12 @@ export def "rest-3-issuetype-properties delete-issue-type-property" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
+  if ($issue_type_id | is-empty) { error make --unspanned { msg: "path parameter 'issueTypeId' must be non-empty" } }
+  if ($property_key | is-empty) { error make --unspanned { msg: "path parameter 'propertyKey' must be non-empty" } }
   let full_url = (build-url $base ({issue_type_id: (encode-path-segment $issue_type_id), property_key: (encode-path-segment $property_key)} | format pattern "/rest/api/3/issuetype/{issue_type_id}/properties/{property_key}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
 }
 
 # Get issue type property
@@ -5972,10 +6187,12 @@ export def "rest-3-issuetype-properties get-issue-type-property" [
 ]: nothing -> record<key: string, value: any> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
+  if ($issue_type_id | is-empty) { error make --unspanned { msg: "path parameter 'issueTypeId' must be non-empty" } }
+  if ($property_key | is-empty) { error make --unspanned { msg: "path parameter 'propertyKey' must be non-empty" } }
   let full_url = (build-url $base ({issue_type_id: (encode-path-segment $issue_type_id), property_key: (encode-path-segment $property_key)} | format pattern "/rest/api/3/issuetype/{issue_type_id}/properties/{property_key}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
 }
 
 # Set issue type property
@@ -5999,12 +6216,14 @@ export def "rest-3-issuetype-properties update-issue-type-property" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
+  if ($issue_type_id | is-empty) { error make --unspanned { msg: "path parameter 'issueTypeId' must be non-empty" } }
+  if ($property_key | is-empty) { error make --unspanned { msg: "path parameter 'propertyKey' must be non-empty" } }
   let full_url = (build-url $base ({issue_type_id: (encode-path-segment $issue_type_id), property_key: (encode-path-segment $property_key)} | format pattern "/rest/api/3/issuetype/{issue_type_id}/properties/{property_key}"))
   let req_body = $body
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: {}, body: $req_body}
 }
 
 # Get all issue type schemes
@@ -6034,7 +6253,7 @@ export def "rest-3-issuetypescheme get-list-issue-type-schemes" [
   let full_url = (build-url $base "/rest/api/3/issuetypescheme" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"startAt": $start_at, "maxResults": $max_results, "id": $id, "orderBy": $order_by, "expand": $expand, "queryString": $query_string} | compact), body: null}
 }
 
 # Create issue type scheme
@@ -6064,7 +6283,7 @@ export def "rest-3-issuetypescheme create-issue-type-scheme" [
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: {}, body: $req_body}
 }
 
 # Get issue type scheme items
@@ -6091,7 +6310,7 @@ export def "rest-3-issuetypescheme-mapping get-issue-type-schemes" [
   let full_url = (build-url $base "/rest/api/3/issuetypescheme/mapping" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"startAt": $start_at, "maxResults": $max_results, "issueTypeSchemeId": $issue_type_scheme_id} | compact), body: null}
 }
 
 # Get issue type schemes for projects
@@ -6118,7 +6337,7 @@ export def "rest-3-issuetypescheme-project get-issue-type-scheme" [
   let full_url = (build-url $base "/rest/api/3/issuetypescheme/project" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"startAt": $start_at, "maxResults": $max_results, "projectId": $project_id} | compact), body: null}
 }
 
 # Assign issue type scheme to project
@@ -6146,7 +6365,7 @@ export def "rest-3-issuetypescheme-project assign-issue-type-scheme" [
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: {}, body: $req_body}
 }
 
 # Delete issue type scheme
@@ -6167,10 +6386,11 @@ export def "rest-3-issuetypescheme delete-issue-type-scheme" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
+  if ($issue_type_scheme_id | is-empty) { error make --unspanned { msg: "path parameter 'issueTypeSchemeId' must be non-empty" } }
   let full_url = (build-url $base ({issue_type_scheme_id: (encode-path-segment $issue_type_scheme_id)} | format pattern "/rest/api/3/issuetypescheme/{issue_type_scheme_id}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
 }
 
 # Update issue type scheme
@@ -6195,12 +6415,13 @@ export def "rest-3-issuetypescheme update-issue-type-scheme" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
+  if ($issue_type_scheme_id | is-empty) { error make --unspanned { msg: "path parameter 'issueTypeSchemeId' must be non-empty" } }
   let full_url = (build-url $base ({issue_type_scheme_id: (encode-path-segment $issue_type_scheme_id)} | format pattern "/rest/api/3/issuetypescheme/{issue_type_scheme_id}"))
   let req_body = {"defaultIssueTypeId": $default_issue_type_id, "description": $description, "name": $name} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: {}, body: $req_body}
 }
 
 # Add issue types to issue type scheme
@@ -6223,12 +6444,13 @@ export def "rest-3-issuetypescheme-issuetype create-issue-types-to-issue-type-sc
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
+  if ($issue_type_scheme_id | is-empty) { error make --unspanned { msg: "path parameter 'issueTypeSchemeId' must be non-empty" } }
   let full_url = (build-url $base ({issue_type_scheme_id: (encode-path-segment $issue_type_scheme_id)} | format pattern "/rest/api/3/issuetypescheme/{issue_type_scheme_id}/issuetype"))
   let req_body = {"issueTypeIds": $issue_type_ids} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: {}, body: $req_body}
 }
 
 # Change order of issue types
@@ -6253,12 +6475,13 @@ export def "rest-3-issuetypescheme-issuetype-move update-reorder-issue-types-in-
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
+  if ($issue_type_scheme_id | is-empty) { error make --unspanned { msg: "path parameter 'issueTypeSchemeId' must be non-empty" } }
   let full_url = (build-url $base ({issue_type_scheme_id: (encode-path-segment $issue_type_scheme_id)} | format pattern "/rest/api/3/issuetypescheme/{issue_type_scheme_id}/issuetype/move"))
   let req_body = {"after": $after, "issueTypeIds": $issue_type_ids, "position": $position} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: {}, body: $req_body}
 }
 
 # Remove issue type from issue type scheme
@@ -6280,10 +6503,12 @@ export def "rest-3-issuetypescheme-issuetype delete-issue-type-from-issue-type-s
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
+  if ($issue_type_scheme_id | is-empty) { error make --unspanned { msg: "path parameter 'issueTypeSchemeId' must be non-empty" } }
+  if ($issue_type_id | is-empty) { error make --unspanned { msg: "path parameter 'issueTypeId' must be non-empty" } }
   let full_url = (build-url $base ({issue_type_scheme_id: (encode-path-segment $issue_type_scheme_id), issue_type_id: (encode-path-segment $issue_type_id)} | format pattern "/rest/api/3/issuetypescheme/{issue_type_scheme_id}/issuetype/{issue_type_id}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
 }
 
 # Get issue type screen schemes
@@ -6313,7 +6538,7 @@ export def "rest-3-issuetypescreenscheme get-issue-type-screen-schemes" [
   let full_url = (build-url $base "/rest/api/3/issuetypescreenscheme" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"startAt": $start_at, "maxResults": $max_results, "id": $id, "queryString": $query_string, "orderBy": $order_by, "expand": $expand} | compact), body: null}
 }
 
 # Create issue type screen scheme
@@ -6343,7 +6568,7 @@ export def "rest-3-issuetypescreenscheme create-issue-type-screen-scheme" [
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: {}, body: $req_body}
 }
 
 # Get issue type screen scheme items
@@ -6370,7 +6595,7 @@ export def "rest-3-issuetypescreenscheme-mapping get-issue-type-screen-scheme" [
   let full_url = (build-url $base "/rest/api/3/issuetypescreenscheme/mapping" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"startAt": $start_at, "maxResults": $max_results, "issueTypeScreenSchemeId": $issue_type_screen_scheme_id} | compact), body: null}
 }
 
 # Get issue type screen schemes for projects
@@ -6397,7 +6622,7 @@ export def "rest-3-issuetypescreenscheme-project get-issue-type-screen-scheme-as
   let full_url = (build-url $base "/rest/api/3/issuetypescreenscheme/project" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"startAt": $start_at, "maxResults": $max_results, "projectId": $project_id} | compact), body: null}
 }
 
 # Assign issue type screen scheme to project
@@ -6425,7 +6650,7 @@ export def "rest-3-issuetypescreenscheme-project assign-issue-type-screen-scheme
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: {}, body: $req_body}
 }
 
 # Delete issue type screen scheme
@@ -6446,10 +6671,11 @@ export def "rest-3-issuetypescreenscheme delete-issue-type-screen-scheme" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
+  if ($issue_type_screen_scheme_id | is-empty) { error make --unspanned { msg: "path parameter 'issueTypeScreenSchemeId' must be non-empty" } }
   let full_url = (build-url $base ({issue_type_screen_scheme_id: (encode-path-segment $issue_type_screen_scheme_id)} | format pattern "/rest/api/3/issuetypescreenscheme/{issue_type_screen_scheme_id}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
 }
 
 # Update issue type screen scheme
@@ -6473,12 +6699,13 @@ export def "rest-3-issuetypescreenscheme update-issue-type-screen-scheme" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
+  if ($issue_type_screen_scheme_id | is-empty) { error make --unspanned { msg: "path parameter 'issueTypeScreenSchemeId' must be non-empty" } }
   let full_url = (build-url $base ({issue_type_screen_scheme_id: (encode-path-segment $issue_type_screen_scheme_id)} | format pattern "/rest/api/3/issuetypescreenscheme/{issue_type_screen_scheme_id}"))
   let req_body = {"description": $description, "name": $name} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: {}, body: $req_body}
 }
 
 # Append mappings to issue type screen scheme
@@ -6502,12 +6729,13 @@ export def "rest-3-issuetypescreenscheme-mapping create-for-issue-type-screen-sc
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
+  if ($issue_type_screen_scheme_id | is-empty) { error make --unspanned { msg: "path parameter 'issueTypeScreenSchemeId' must be non-empty" } }
   let full_url = (build-url $base ({issue_type_screen_scheme_id: (encode-path-segment $issue_type_screen_scheme_id)} | format pattern "/rest/api/3/issuetypescreenscheme/{issue_type_screen_scheme_id}/mapping"))
   let req_body = {"issueTypeMappings": $issue_type_mappings} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: {}, body: $req_body}
 }
 
 # Update issue type screen scheme default screen scheme
@@ -6530,12 +6758,13 @@ export def "rest-3-issuetypescreenscheme-mapping-default update-screen-scheme" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
+  if ($issue_type_screen_scheme_id | is-empty) { error make --unspanned { msg: "path parameter 'issueTypeScreenSchemeId' must be non-empty" } }
   let full_url = (build-url $base ({issue_type_screen_scheme_id: (encode-path-segment $issue_type_screen_scheme_id)} | format pattern "/rest/api/3/issuetypescreenscheme/{issue_type_screen_scheme_id}/mapping/default"))
   let req_body = {"screenSchemeId": $screen_scheme_id} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: {}, body: $req_body}
 }
 
 # Remove mappings from issue type screen scheme
@@ -6558,12 +6787,13 @@ export def "rest-3-issuetypescreenscheme-mapping-remove delete-from-issue-type-s
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
+  if ($issue_type_screen_scheme_id | is-empty) { error make --unspanned { msg: "path parameter 'issueTypeScreenSchemeId' must be non-empty" } }
   let full_url = (build-url $base ({issue_type_screen_scheme_id: (encode-path-segment $issue_type_screen_scheme_id)} | format pattern "/rest/api/3/issuetypescreenscheme/{issue_type_screen_scheme_id}/mapping/remove"))
   let req_body = {"issueTypeIds": $issue_type_ids} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: {}, body: $req_body}
 }
 
 # Get issue type screen scheme projects
@@ -6587,11 +6817,12 @@ export def "rest-3-issuetypescreenscheme-project get-for-issue-type-screen-schem
 ]: nothing -> record<isLast: bool, maxResults: int, nextPage: string, self: string, startAt: int, total: int, values: table<avatarUrls: record, id: string, key: string, name: string, projectCategory: record, projectTypeKey: string, self: string, simplified: bool>> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
+  if ($issue_type_screen_scheme_id | is-empty) { error make --unspanned { msg: "path parameter 'issueTypeScreenSchemeId' must be non-empty" } }
   let qp = [(serialize-qp "startAt" $start_at "scalar") (serialize-qp "maxResults" $max_results "scalar") (serialize-qp "query" $query "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({issue_type_screen_scheme_id: (encode-path-segment $issue_type_screen_scheme_id)} | format pattern "/rest/api/3/issuetypescreenscheme/{issue_type_screen_scheme_id}/project") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"startAt": $start_at, "maxResults": $max_results, "query": $query} | compact), body: null}
 }
 
 # Get field reference data (GET)
@@ -6614,7 +6845,7 @@ export def "rest-3-jql-autocompletedata get-auto-complete" [
   let full_url = (build-url $base "/rest/api/3/jql/autocompletedata")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
 }
 
 # Get field reference data (POST)
@@ -6642,7 +6873,7 @@ export def "rest-3-jql-autocompletedata get-auto-complete-create" [
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: {}, body: $req_body}
 }
 
 # Get field auto complete suggestions
@@ -6670,7 +6901,7 @@ export def "rest-3-jql-autocompletedata-suggestions get-field-auto-complete-for-
   let full_url = (build-url $base "/rest/api/3/jql/autocompletedata/suggestions" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"fieldName": $field_name, "fieldValue": $field_value, "predicateName": $predicate_name, "predicateValue": $predicate_value} | compact), body: null}
 }
 
 # Get precomputation
@@ -6699,7 +6930,7 @@ export def "rest-3-jql-function-computation get-precomputations" [
   let full_url = (build-url $base "/rest/api/3/jql/function/computation" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"functionKey": $function_key, "startAt": $start_at, "maxResults": $max_results, "orderBy": $order_by, "filter": $filter} | compact), body: null}
 }
 
 # Update precomputations
@@ -6727,7 +6958,7 @@ export def "rest-3-jql-function-computation update-precomputations" [
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: {}, body: $req_body}
 }
 
 # Check issues against JQL
@@ -6755,7 +6986,7 @@ export def "rest-3-jql-match create-issues" [
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: {}, body: $req_body}
 }
 
 # Parse JQL query
@@ -6784,7 +7015,7 @@ export def "rest-3-jql-parse create-queries" [
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: ({"validation": $validation} | compact), body: $req_body}
 }
 
 # Convert user identifiers to account IDs in JQL queries
@@ -6811,7 +7042,7 @@ export def "rest-3-jql-pdcleaner create-migrate-queries" [
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: {}, body: $req_body}
 }
 
 # Sanitize JQL queries
@@ -6839,7 +7070,7 @@ export def "rest-3-jql-sanitize create-sanitise-queries" [
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: {}, body: $req_body}
 }
 
 # Get all labels
@@ -6865,7 +7096,7 @@ export def "rest-3-label get-list" [
   let full_url = (build-url $base "/rest/api/3/label" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"startAt": $start_at, "maxResults": $max_results} | compact), body: null}
 }
 
 # Get approximate license count
@@ -6888,7 +7119,7 @@ export def "rest-3-license-approximate-license-count get" [
   let full_url = (build-url $base "/rest/api/3/license/approximateLicenseCount")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
 }
 
 # Get approximate application license count
@@ -6909,10 +7140,11 @@ export def "rest-3-license-approximate-license-count-product get-application" [
 ]: nothing -> record<key: string, value: string> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
+  if ($application_key | is-empty) { error make --unspanned { msg: "path parameter 'applicationKey' must be non-empty" } }
   let full_url = (build-url $base ({application_key: (encode-path-segment $application_key)} | format pattern "/rest/api/3/license/approximateLicenseCount/product/{application_key}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
 }
 
 # Get my permissions
@@ -6944,7 +7176,7 @@ export def "rest-3-mypermissions get-my-permissions" [
   let full_url = (build-url $base "/rest/api/3/mypermissions" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"projectKey": $project_key, "projectId": $project_id, "issueKey": $issue_key, "issueId": $issue_id, "permissions": $permissions, "projectUuid": $project_uuid, "projectConfigurationUuid": $project_configuration_uuid, "commentId": $comment_id} | compact), body: null}
 }
 
 # Delete preference
@@ -6969,7 +7201,7 @@ export def "rest-3-mypreferences delete-preference" [
   let full_url = (build-url $base "/rest/api/3/mypreferences" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"key": $key} | compact), body: null}
 }
 
 # Get preference
@@ -6994,7 +7226,7 @@ export def "rest-3-mypreferences get-preference" [
   let full_url = (build-url $base "/rest/api/3/mypreferences" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"key": $key} | compact), body: null}
 }
 
 # Set preference
@@ -7023,7 +7255,7 @@ export def "rest-3-mypreferences update-preference" [
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else if (($input | is-not-empty) and ($req_body | is-empty)) { $input } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: ({"key": $key} | compact), body: $req_body}
 }
 
 # Delete locale
@@ -7048,7 +7280,7 @@ export def "rest-3-mypreferences-locale delete" [
   let full_url = (build-url $base "/rest/api/3/mypreferences/locale")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
 }
 
 # Get locale
@@ -7071,7 +7303,7 @@ export def "rest-3-mypreferences-locale get" [
   let full_url = (build-url $base "/rest/api/3/mypreferences/locale")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
 }
 
 # Set locale
@@ -7100,14 +7332,14 @@ export def "rest-3-mypreferences-locale update" [
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: {}, body: $req_body}
 }
 
 # Get current user
 #
 # GET /rest/api/3/myself
 # operationId: getCurrentUser
-export def "rest-3-myself get-get-user" [
+export def "rest-3-myself get-user" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -7125,7 +7357,7 @@ export def "rest-3-myself get-get-user" [
   let full_url = (build-url $base "/rest/api/3/myself" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"expand": $expand} | compact), body: null}
 }
 
 # Get notification schemes paginated
@@ -7155,7 +7387,7 @@ export def "rest-3-notificationscheme get-notification-schemes" [
   let full_url = (build-url $base "/rest/api/3/notificationscheme" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"startAt": $start_at, "maxResults": $max_results, "id": $id, "projectId": $project_id, "onlyDefault": $only_default, "expand": $expand} | compact), body: null}
 }
 
 # Create notification scheme
@@ -7185,7 +7417,7 @@ export def "rest-3-notificationscheme create-notification-scheme" [
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: {}, body: $req_body}
 }
 
 # Get projects using notification schemes paginated
@@ -7213,7 +7445,7 @@ export def "rest-3-notificationscheme-project get-notification-scheme-to-mapping
   let full_url = (build-url $base "/rest/api/3/notificationscheme/project" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"startAt": $start_at, "maxResults": $max_results, "notificationSchemeId": $notification_scheme_id, "projectId": $project_id} | compact), body: null}
 }
 
 # Get notification scheme
@@ -7235,11 +7467,12 @@ export def "rest-3-notificationscheme get-notification-scheme" [
 ]: nothing -> record<description: string, expand: string, id: int, name: string, notificationSchemeEvents: table<event: record, notifications: list>, projects: list<int>, scope: record<project: record<avatarUrls: record, id: string, key: string, name: string, projectCategory: record, projectTypeKey: string, self: string, simplified: bool>, type: string>, self: string> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
+  if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
   let qp = [(serialize-qp "expand" $expand "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/rest/api/3/notificationscheme/{id}") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"expand": $expand} | compact), body: null}
 }
 
 # Update notification scheme
@@ -7263,12 +7496,13 @@ export def "rest-3-notificationscheme update-notification-scheme" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
+  if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
   let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/rest/api/3/notificationscheme/{id}"))
   let req_body = {"description": $description, "name": $name} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: {}, body: $req_body}
 }
 
 # Add notifications to notification scheme
@@ -7292,12 +7526,13 @@ export def "rest-3-notificationscheme-notification create" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
+  if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
   let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/rest/api/3/notificationscheme/{id}/notification"))
   let req_body = {"notificationSchemeEvents": $notification_scheme_events} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: {}, body: $req_body}
 }
 
 # Delete notification scheme
@@ -7318,10 +7553,11 @@ export def "rest-3-notificationscheme delete-notification-scheme" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
+  if ($notification_scheme_id | is-empty) { error make --unspanned { msg: "path parameter 'notificationSchemeId' must be non-empty" } }
   let full_url = (build-url $base ({notification_scheme_id: (encode-path-segment $notification_scheme_id)} | format pattern "/rest/api/3/notificationscheme/{notification_scheme_id}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
 }
 
 # Remove notification from notification scheme
@@ -7343,10 +7579,12 @@ export def "rest-3-notificationscheme-notification delete-from-scheme" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
+  if ($notification_scheme_id | is-empty) { error make --unspanned { msg: "path parameter 'notificationSchemeId' must be non-empty" } }
+  if ($notification_id | is-empty) { error make --unspanned { msg: "path parameter 'notificationId' must be non-empty" } }
   let full_url = (build-url $base ({notification_scheme_id: (encode-path-segment $notification_scheme_id), notification_id: (encode-path-segment $notification_id)} | format pattern "/rest/api/3/notificationscheme/{notification_scheme_id}/notification/{notification_id}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
 }
 
 # Get all permissions
@@ -7369,7 +7607,7 @@ export def "rest-3-permissions get-list" [
   let full_url = (build-url $base "/rest/api/3/permissions")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
 }
 
 # Get bulk permissions
@@ -7399,7 +7637,7 @@ export def "rest-3-permissions-check get-bulk" [
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: {}, body: $req_body}
 }
 
 # Get permitted projects
@@ -7426,7 +7664,7 @@ export def "rest-3-permissions-project get-permitted" [
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: {}, body: $req_body}
 }
 
 # Get all permission schemes
@@ -7451,7 +7689,7 @@ export def "rest-3-permissionscheme get-list-permission-schemes" [
   let full_url = (build-url $base "/rest/api/3/permissionscheme" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"expand": $expand} | compact), body: null}
 }
 
 # Create permission scheme
@@ -7484,7 +7722,7 @@ export def "rest-3-permissionscheme create-permission-scheme" [
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: ({"expand": $expand} | compact), body: $req_body}
 }
 
 # Delete permission scheme
@@ -7505,10 +7743,11 @@ export def "rest-3-permissionscheme delete-permission-scheme" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
+  if ($scheme_id | is-empty) { error make --unspanned { msg: "path parameter 'schemeId' must be non-empty" } }
   let full_url = (build-url $base ({scheme_id: (encode-path-segment $scheme_id)} | format pattern "/rest/api/3/permissionscheme/{scheme_id}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
 }
 
 # Get permission scheme
@@ -7530,11 +7769,12 @@ export def "rest-3-permissionscheme get-permission-scheme" [
 ]: nothing -> record<description: string, expand: string, id: int, name: string, permissions: table<holder: record, id: int, permission: string, self: string>, scope: record<project: record<avatarUrls: record, id: string, key: string, name: string, projectCategory: record, projectTypeKey: string, self: string, simplified: bool>, type: string>, self: string> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
+  if ($scheme_id | is-empty) { error make --unspanned { msg: "path parameter 'schemeId' must be non-empty" } }
   let qp = [(serialize-qp "expand" $expand "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({scheme_id: (encode-path-segment $scheme_id)} | format pattern "/rest/api/3/permissionscheme/{scheme_id}") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"expand": $expand} | compact), body: null}
 }
 
 # Update permission scheme
@@ -7562,13 +7802,14 @@ export def "rest-3-permissionscheme update-permission-scheme" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
+  if ($scheme_id | is-empty) { error make --unspanned { msg: "path parameter 'schemeId' must be non-empty" } }
   let qp = [(serialize-qp "expand" $expand "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({scheme_id: (encode-path-segment $scheme_id)} | format pattern "/rest/api/3/permissionscheme/{scheme_id}") $qp)
   let req_body = {"description": $description, "name": $name, "permissions": $permissions, "scope": $scope} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: ({"expand": $expand} | compact), body: $req_body}
 }
 
 # Get permission scheme grants
@@ -7590,11 +7831,12 @@ export def "rest-3-permissionscheme-permission get-scheme-grants" [
 ]: nothing -> record<expand: string, permissions: table<holder: record, id: int, permission: string, self: string>> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
+  if ($scheme_id | is-empty) { error make --unspanned { msg: "path parameter 'schemeId' must be non-empty" } }
   let qp = [(serialize-qp "expand" $expand "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({scheme_id: (encode-path-segment $scheme_id)} | format pattern "/rest/api/3/permissionscheme/{scheme_id}/permission") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"expand": $expand} | compact), body: null}
 }
 
 # Create permission grant
@@ -7619,13 +7861,14 @@ export def "rest-3-permissionscheme-permission create-grant" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
+  if ($scheme_id | is-empty) { error make --unspanned { msg: "path parameter 'schemeId' must be non-empty" } }
   let qp = [(serialize-qp "expand" $expand "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({scheme_id: (encode-path-segment $scheme_id)} | format pattern "/rest/api/3/permissionscheme/{scheme_id}/permission") $qp)
   let req_body = {"holder": $holder, "permission": $permission} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: ({"expand": $expand} | compact), body: $req_body}
 }
 
 # Delete permission scheme grant
@@ -7647,10 +7890,12 @@ export def "rest-3-permissionscheme-permission delete-scheme-entity" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
+  if ($scheme_id | is-empty) { error make --unspanned { msg: "path parameter 'schemeId' must be non-empty" } }
+  if ($permission_id | is-empty) { error make --unspanned { msg: "path parameter 'permissionId' must be non-empty" } }
   let full_url = (build-url $base ({scheme_id: (encode-path-segment $scheme_id), permission_id: (encode-path-segment $permission_id)} | format pattern "/rest/api/3/permissionscheme/{scheme_id}/permission/{permission_id}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
 }
 
 # Get permission scheme grant
@@ -7673,11 +7918,13 @@ export def "rest-3-permissionscheme-permission get-scheme-grant" [
 ]: nothing -> record<holder: record<expand: string, parameter: string, type: string, value: string>, id: int, permission: string, self: string> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
+  if ($scheme_id | is-empty) { error make --unspanned { msg: "path parameter 'schemeId' must be non-empty" } }
+  if ($permission_id | is-empty) { error make --unspanned { msg: "path parameter 'permissionId' must be non-empty" } }
   let qp = [(serialize-qp "expand" $expand "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({scheme_id: (encode-path-segment $scheme_id), permission_id: (encode-path-segment $permission_id)} | format pattern "/rest/api/3/permissionscheme/{scheme_id}/permission/{permission_id}") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"expand": $expand} | compact), body: null}
 }
 
 # Get priorities
@@ -7702,7 +7949,7 @@ export def "rest-3-priority get-priorities" [
   let full_url = (build-url $base "/rest/api/3/priority")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
 }
 
 # Create priority
@@ -7732,7 +7979,7 @@ export def "rest-3-priority create" [
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: {}, body: $req_body}
 }
 
 # Set default priority
@@ -7759,7 +8006,7 @@ export def "rest-3-priority-default update" [
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: {}, body: $req_body}
 }
 
 # Move priorities
@@ -7788,7 +8035,7 @@ export def "rest-3-priority-move move-priorities" [
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: {}, body: $req_body}
 }
 
 # Search priorities
@@ -7816,7 +8063,7 @@ export def "rest-3-priority-search list-priorities" [
   let full_url = (build-url $base "/rest/api/3/priority/search" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"startAt": $start_at, "maxResults": $max_results, "id": $id, "onlyDefault": $only_default} | compact), body: null}
 }
 
 # Delete priority
@@ -7838,11 +8085,12 @@ export def "rest-3-priority delete" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
+  if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
   let qp = [(serialize-qp "replaceWith" $replace_with "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/rest/api/3/priority/{id}") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"replaceWith": $replace_with} | compact), body: null}
 }
 
 # Get priority
@@ -7863,10 +8111,11 @@ export def "rest-3-priority get" [
 ]: nothing -> record<description: string, iconUrl: string, id: string, isDefault: bool, name: string, self: string, statusColor: string> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
+  if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
   let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/rest/api/3/priority/{id}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
 }
 
 # Update priority
@@ -7892,12 +8141,13 @@ export def "rest-3-priority update" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
+  if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
   let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/rest/api/3/priority/{id}"))
   let req_body = {"description": $description, "iconUrl": $icon_url, "name": $name, "statusColor": $status_color} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: {}, body: $req_body}
 }
 
 # Get all projects
@@ -7926,7 +8176,7 @@ export def "rest-3-project get-list" [
   let full_url = (build-url $base "/rest/api/3/project" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"expand": $expand, "recent": $recent, "properties": $properties} | compact), body: null}
 }
 
 # Create project
@@ -7970,7 +8220,7 @@ export def "rest-3-project create" [
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: {}, body: $req_body}
 }
 
 # Get recent projects
@@ -7996,7 +8246,7 @@ export def "rest-3-project-recent get" [
   let full_url = (build-url $base "/rest/api/3/project/recent" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"expand": $expand, "properties": $properties} | compact), body: null}
 }
 
 # Get projects paginated
@@ -8033,7 +8283,7 @@ export def "rest-3-project-search list" [
   let full_url = (build-url $base "/rest/api/3/project/search" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"startAt": $start_at, "maxResults": $max_results, "orderBy": $order_by, "id": $id, "keys": $keys, "query": $query, "typeKey": $type_key, "categoryId": $category_id, "action": $action, "expand": $expand, "status": $status, "properties": $properties, "propertyQuery": $property_query} | compact), body: null}
 }
 
 # Get all project types
@@ -8056,7 +8306,7 @@ export def "rest-3-project-type get-list" [
   let full_url = (build-url $base "/rest/api/3/project/type")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
 }
 
 # Get licensed project types
@@ -8079,7 +8329,7 @@ export def "rest-3-project-type-accessible get-list" [
   let full_url = (build-url $base "/rest/api/3/project/type/accessible")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
 }
 
 # Get project type by key
@@ -8100,10 +8350,11 @@ export def "rest-3-project-type get-by-key" [
 ]: nothing -> record<color: string, descriptionI18nKey: string, formattedKey: string, icon: string, key: string> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
+  if ($project_type_key | is-empty) { error make --unspanned { msg: "path parameter 'projectTypeKey' must be non-empty" } }
   let full_url = (build-url $base ({project_type_key: (encode-path-segment $project_type_key)} | format pattern "/rest/api/3/project/type/{project_type_key}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
 }
 
 # Get accessible project type by key
@@ -8124,10 +8375,11 @@ export def "rest-3-project-type-accessible get-by-key" [
 ]: nothing -> record<color: string, descriptionI18nKey: string, formattedKey: string, icon: string, key: string> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
+  if ($project_type_key | is-empty) { error make --unspanned { msg: "path parameter 'projectTypeKey' must be non-empty" } }
   let full_url = (build-url $base ({project_type_key: (encode-path-segment $project_type_key)} | format pattern "/rest/api/3/project/type/{project_type_key}/accessible"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
 }
 
 # Delete project
@@ -8149,11 +8401,12 @@ export def "rest-3-project delete" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
+  if ($project_id_or_key | is-empty) { error make --unspanned { msg: "path parameter 'projectIdOrKey' must be non-empty" } }
   let qp = [(serialize-qp "enableUndo" $enable_undo "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({project_id_or_key: (encode-path-segment $project_id_or_key)} | format pattern "/rest/api/3/project/{project_id_or_key}") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"enableUndo": $enable_undo} | compact), body: null}
 }
 
 # Get project
@@ -8176,11 +8429,12 @@ export def "rest-3-project get" [
 ]: nothing -> record<archived: bool, archivedBy: record<accountId: string, accountType: string, active: bool, applicationRoles: record<callback: record, items: list, max_results: int, pagingCallback: record, size: int>, avatarUrls: record<16x16: string, 24x24: string, 32x32: string, 48x48: string>, displayName: string, emailAddress: string, expand: string, groups: record<callback: record, items: list, max_results: int, pagingCallback: record, size: int>, key: string, locale: string, name: string, self: string, timeZone: string>, archivedDate: string, assigneeType: string, avatarUrls: record<16x16: string, 24x24: string, 32x32: string, 48x48: string>, components: table<assignee: record, assigneeType: string, description: string, id: string, isAssigneeTypeValid: bool, lead: record, leadAccountId: string, leadUserName: string, name: string, project: string, projectId: int, realAssignee: record, realAssigneeType: string, self: string>, deleted: bool, deletedBy: record<accountId: string, accountType: string, active: bool, applicationRoles: record<callback: record, items: list, max_results: int, pagingCallback: record, size: int>, avatarUrls: record<16x16: string, 24x24: string, 32x32: string, 48x48: string>, displayName: string, emailAddress: string, expand: string, groups: record<callback: record, items: list, max_results: int, pagingCallback: record, size: int>, key: string, locale: string, name: string, self: string, timeZone: string>, deletedDate: string, description: string, email: string, expand: string, favourite: bool, id: string, insight: record<lastIssueUpdateTime: string, totalIssueCount: int>, isPrivate: bool, issueTypeHierarchy: record<baseLevelId: int, levels: list<record>>, issueTypes: table<avatarId: int, description: string, entityId: string, hierarchyLevel: int, iconUrl: string, id: string, name: string, scope: record, self: string, subtask: bool>, key: string, landingPageInfo: record<attributes: record, boardId: int, boardName: string, projectKey: string, projectType: string, queueCategory: string, queueId: int, queueName: string, simpleBoard: bool, simplified: bool, url: string>, lead: record<accountId: string, accountType: string, active: bool, applicationRoles: record<callback: record, items: list, max_results: int, pagingCallback: record, size: int>, avatarUrls: record<16x16: string, 24x24: string, 32x32: string, 48x48: string>, displayName: string, emailAddress: string, expand: string, groups: record<callback: record, items: list, max_results: int, pagingCallback: record, size: int>, key: string, locale: string, name: string, self: string, timeZone: string>, name: string, permissions: record<canEdit: bool>, projectCategory: record<description: string, id: string, name: string, self: string>, projectTypeKey: string, properties: record, retentionTillDate: string, roles: record, self: string, simplified: bool, style: string, url: string, uuid: string, versions: table<archived: bool, description: string, expand: string, id: string, issuesStatusForFixVersion: record, moveUnfixedIssuesTo: string, name: string, operations: list, overdue: bool, project: string, projectId: int, releaseDate: string, released: bool, self: string, startDate: string, userReleaseDate: string, userStartDate: string>> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
+  if ($project_id_or_key | is-empty) { error make --unspanned { msg: "path parameter 'projectIdOrKey' must be non-empty" } }
   let qp = [(serialize-qp "expand" $expand "scalar") (serialize-qp "properties" $properties "multi")] | flatten | str join "&"
   let full_url = (build-url $base ({project_id_or_key: (encode-path-segment $project_id_or_key)} | format pattern "/rest/api/3/project/{project_id_or_key}") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"expand": $expand, "properties": $properties} | compact), body: null}
 }
 
 # Update project
@@ -8215,13 +8469,14 @@ export def "rest-3-project update" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
+  if ($project_id_or_key | is-empty) { error make --unspanned { msg: "path parameter 'projectIdOrKey' must be non-empty" } }
   let qp = [(serialize-qp "expand" $expand "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({project_id_or_key: (encode-path-segment $project_id_or_key)} | format pattern "/rest/api/3/project/{project_id_or_key}") $qp)
   let req_body = {"assigneeType": $assignee_type, "avatarId": $avatar_id, "categoryId": $category_id, "description": $description, "issueSecurityScheme": $issue_security_scheme, "key": $key, "lead": $lead, "leadAccountId": $lead_account_id, "name": $name, "notificationScheme": $notification_scheme, "permissionScheme": $permission_scheme, "url": $url} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: ({"expand": $expand} | compact), body: $req_body}
 }
 
 # Archive project
@@ -8242,10 +8497,11 @@ export def "rest-3-project-archive archive" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
+  if ($project_id_or_key | is-empty) { error make --unspanned { msg: "path parameter 'projectIdOrKey' must be non-empty" } }
   let full_url = (build-url $base ({project_id_or_key: (encode-path-segment $project_id_or_key)} | format pattern "/rest/api/3/project/{project_id_or_key}/archive"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
 }
 
 # Set project avatar
@@ -8268,12 +8524,13 @@ export def "rest-3-project-avatar update" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
+  if ($project_id_or_key | is-empty) { error make --unspanned { msg: "path parameter 'projectIdOrKey' must be non-empty" } }
   let full_url = (build-url $base ({project_id_or_key: (encode-path-segment $project_id_or_key)} | format pattern "/rest/api/3/project/{project_id_or_key}/avatar"))
   let req_body = {"id": $id} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: {}, body: $req_body}
 }
 
 # Delete project avatar
@@ -8295,10 +8552,12 @@ export def "rest-3-project-avatar delete" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
+  if ($project_id_or_key | is-empty) { error make --unspanned { msg: "path parameter 'projectIdOrKey' must be non-empty" } }
+  if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
   let full_url = (build-url $base ({project_id_or_key: (encode-path-segment $project_id_or_key), id: (encode-path-segment $id)} | format pattern "/rest/api/3/project/{project_id_or_key}/avatar/{id}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
 }
 
 # Load project avatar
@@ -8324,13 +8583,14 @@ export def "rest-3-project-avatar2 create-avatar" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
+  if ($project_id_or_key | is-empty) { error make --unspanned { msg: "path parameter 'projectIdOrKey' must be non-empty" } }
   let qp = [(serialize-qp "x" $x "scalar") (serialize-qp "y" $y "scalar") (serialize-qp "size" $size "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({project_id_or_key: (encode-path-segment $project_id_or_key)} | format pattern "/rest/api/3/project/{project_id_or_key}/avatar2") $qp)
   let req_body = $body
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else if (($input | is-not-empty) and ($req_body | is-empty)) { $input } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "*/*" $req_body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "*/*" $req_body {query: ({"x": $x, "y": $y, "size": $size} | compact), body: $req_body}
 }
 
 # Get all project avatars
@@ -8351,10 +8611,11 @@ export def "rest-3-project-avatars get-list" [
 ]: nothing -> record<custom: table<fileName: string, id: string, isDeletable: bool, isSelected: bool, isSystemAvatar: bool, owner: string, urls: record>, system: table<fileName: string, id: string, isDeletable: bool, isSelected: bool, isSystemAvatar: bool, owner: string, urls: record>> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
+  if ($project_id_or_key | is-empty) { error make --unspanned { msg: "path parameter 'projectIdOrKey' must be non-empty" } }
   let full_url = (build-url $base ({project_id_or_key: (encode-path-segment $project_id_or_key)} | format pattern "/rest/api/3/project/{project_id_or_key}/avatars"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
 }
 
 # Get project components paginated
@@ -8379,11 +8640,12 @@ export def "rest-3-project-component get-paginated" [
 ]: nothing -> record<isLast: bool, maxResults: int, nextPage: string, self: string, startAt: int, total: int, values: table<assignee: record, assigneeType: string, description: string, id: string, isAssigneeTypeValid: bool, issueCount: int, lead: record, name: string, project: string, projectId: int, realAssignee: record, realAssigneeType: string, self: string>> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
+  if ($project_id_or_key | is-empty) { error make --unspanned { msg: "path parameter 'projectIdOrKey' must be non-empty" } }
   let qp = [(serialize-qp "startAt" $start_at "scalar") (serialize-qp "maxResults" $max_results "scalar") (serialize-qp "orderBy" $order_by "scalar") (serialize-qp "query" $query "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({project_id_or_key: (encode-path-segment $project_id_or_key)} | format pattern "/rest/api/3/project/{project_id_or_key}/component") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"startAt": $start_at, "maxResults": $max_results, "orderBy": $order_by, "query": $query} | compact), body: null}
 }
 
 # Get project components
@@ -8404,10 +8666,11 @@ export def "rest-3-project-components get" [
 ]: nothing -> table<assignee: record<accountId: string, accountType: string, active: bool, applicationRoles: record, avatarUrls: record, displayName: string, emailAddress: string, expand: string, groups: record, key: string, locale: string, name: string, self: string, timeZone: string>, assigneeType: string, description: string, id: string, isAssigneeTypeValid: bool, lead: record<accountId: string, accountType: string, active: bool, applicationRoles: record, avatarUrls: record, displayName: string, emailAddress: string, expand: string, groups: record, key: string, locale: string, name: string, self: string, timeZone: string>, leadAccountId: string, leadUserName: string, name: string, project: string, projectId: int, realAssignee: record<accountId: string, accountType: string, active: bool, applicationRoles: record, avatarUrls: record, displayName: string, emailAddress: string, expand: string, groups: record, key: string, locale: string, name: string, self: string, timeZone: string>, realAssigneeType: string, self: string> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
+  if ($project_id_or_key | is-empty) { error make --unspanned { msg: "path parameter 'projectIdOrKey' must be non-empty" } }
   let full_url = (build-url $base ({project_id_or_key: (encode-path-segment $project_id_or_key)} | format pattern "/rest/api/3/project/{project_id_or_key}/components"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
 }
 
 # Delete project asynchronously
@@ -8428,10 +8691,11 @@ export def "rest-3-project-delete delete-asynchronously" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
+  if ($project_id_or_key | is-empty) { error make --unspanned { msg: "path parameter 'projectIdOrKey' must be non-empty" } }
   let full_url = (build-url $base ({project_id_or_key: (encode-path-segment $project_id_or_key)} | format pattern "/rest/api/3/project/{project_id_or_key}/delete"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
 }
 
 # Get project features
@@ -8452,10 +8716,11 @@ export def "rest-3-project-features get" [
 ]: nothing -> record<features: table<feature: string, imageUri: string, localisedDescription: string, localisedName: string, prerequisites: list, projectId: int, state: string, toggleLocked: bool>> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
+  if ($project_id_or_key | is-empty) { error make --unspanned { msg: "path parameter 'projectIdOrKey' must be non-empty" } }
   let full_url = (build-url $base ({project_id_or_key: (encode-path-segment $project_id_or_key)} | format pattern "/rest/api/3/project/{project_id_or_key}/features"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
 }
 
 # Set project feature state
@@ -8479,12 +8744,14 @@ export def "rest-3-project-features update-toggle" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
+  if ($project_id_or_key | is-empty) { error make --unspanned { msg: "path parameter 'projectIdOrKey' must be non-empty" } }
+  if ($feature_key | is-empty) { error make --unspanned { msg: "path parameter 'featureKey' must be non-empty" } }
   let full_url = (build-url $base ({project_id_or_key: (encode-path-segment $project_id_or_key), feature_key: (encode-path-segment $feature_key)} | format pattern "/rest/api/3/project/{project_id_or_key}/features/{feature_key}"))
   let req_body = {"state": $state} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: {}, body: $req_body}
 }
 
 # Get project property keys
@@ -8505,10 +8772,11 @@ export def "rest-3-project-properties get-property-keys" [
 ]: nothing -> record<keys: table<key: string, self: string>> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
+  if ($project_id_or_key | is-empty) { error make --unspanned { msg: "path parameter 'projectIdOrKey' must be non-empty" } }
   let full_url = (build-url $base ({project_id_or_key: (encode-path-segment $project_id_or_key)} | format pattern "/rest/api/3/project/{project_id_or_key}/properties"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
 }
 
 # Delete project property
@@ -8530,10 +8798,12 @@ export def "rest-3-project-properties delete-property" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
+  if ($project_id_or_key | is-empty) { error make --unspanned { msg: "path parameter 'projectIdOrKey' must be non-empty" } }
+  if ($property_key | is-empty) { error make --unspanned { msg: "path parameter 'propertyKey' must be non-empty" } }
   let full_url = (build-url $base ({project_id_or_key: (encode-path-segment $project_id_or_key), property_key: (encode-path-segment $property_key)} | format pattern "/rest/api/3/project/{project_id_or_key}/properties/{property_key}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
 }
 
 # Get project property
@@ -8555,10 +8825,12 @@ export def "rest-3-project-properties get-property" [
 ]: nothing -> record<key: string, value: any> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
+  if ($project_id_or_key | is-empty) { error make --unspanned { msg: "path parameter 'projectIdOrKey' must be non-empty" } }
+  if ($property_key | is-empty) { error make --unspanned { msg: "path parameter 'propertyKey' must be non-empty" } }
   let full_url = (build-url $base ({project_id_or_key: (encode-path-segment $project_id_or_key), property_key: (encode-path-segment $property_key)} | format pattern "/rest/api/3/project/{project_id_or_key}/properties/{property_key}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
 }
 
 # Set project property
@@ -8582,12 +8854,14 @@ export def "rest-3-project-properties update-property" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
+  if ($project_id_or_key | is-empty) { error make --unspanned { msg: "path parameter 'projectIdOrKey' must be non-empty" } }
+  if ($property_key | is-empty) { error make --unspanned { msg: "path parameter 'propertyKey' must be non-empty" } }
   let full_url = (build-url $base ({project_id_or_key: (encode-path-segment $project_id_or_key), property_key: (encode-path-segment $property_key)} | format pattern "/rest/api/3/project/{project_id_or_key}/properties/{property_key}"))
   let req_body = $body
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: {}, body: $req_body}
 }
 
 # Restore deleted or archived project
@@ -8608,10 +8882,11 @@ export def "rest-3-project-restore create" [
 ]: nothing -> record<archived: bool, archivedBy: record<accountId: string, accountType: string, active: bool, applicationRoles: record<callback: record, items: list, max_results: int, pagingCallback: record, size: int>, avatarUrls: record<16x16: string, 24x24: string, 32x32: string, 48x48: string>, displayName: string, emailAddress: string, expand: string, groups: record<callback: record, items: list, max_results: int, pagingCallback: record, size: int>, key: string, locale: string, name: string, self: string, timeZone: string>, archivedDate: string, assigneeType: string, avatarUrls: record<16x16: string, 24x24: string, 32x32: string, 48x48: string>, components: table<assignee: record, assigneeType: string, description: string, id: string, isAssigneeTypeValid: bool, lead: record, leadAccountId: string, leadUserName: string, name: string, project: string, projectId: int, realAssignee: record, realAssigneeType: string, self: string>, deleted: bool, deletedBy: record<accountId: string, accountType: string, active: bool, applicationRoles: record<callback: record, items: list, max_results: int, pagingCallback: record, size: int>, avatarUrls: record<16x16: string, 24x24: string, 32x32: string, 48x48: string>, displayName: string, emailAddress: string, expand: string, groups: record<callback: record, items: list, max_results: int, pagingCallback: record, size: int>, key: string, locale: string, name: string, self: string, timeZone: string>, deletedDate: string, description: string, email: string, expand: string, favourite: bool, id: string, insight: record<lastIssueUpdateTime: string, totalIssueCount: int>, isPrivate: bool, issueTypeHierarchy: record<baseLevelId: int, levels: list<record>>, issueTypes: table<avatarId: int, description: string, entityId: string, hierarchyLevel: int, iconUrl: string, id: string, name: string, scope: record, self: string, subtask: bool>, key: string, landingPageInfo: record<attributes: record, boardId: int, boardName: string, projectKey: string, projectType: string, queueCategory: string, queueId: int, queueName: string, simpleBoard: bool, simplified: bool, url: string>, lead: record<accountId: string, accountType: string, active: bool, applicationRoles: record<callback: record, items: list, max_results: int, pagingCallback: record, size: int>, avatarUrls: record<16x16: string, 24x24: string, 32x32: string, 48x48: string>, displayName: string, emailAddress: string, expand: string, groups: record<callback: record, items: list, max_results: int, pagingCallback: record, size: int>, key: string, locale: string, name: string, self: string, timeZone: string>, name: string, permissions: record<canEdit: bool>, projectCategory: record<description: string, id: string, name: string, self: string>, projectTypeKey: string, properties: record, retentionTillDate: string, roles: record, self: string, simplified: bool, style: string, url: string, uuid: string, versions: table<archived: bool, description: string, expand: string, id: string, issuesStatusForFixVersion: record, moveUnfixedIssuesTo: string, name: string, operations: list, overdue: bool, project: string, projectId: int, releaseDate: string, released: bool, self: string, startDate: string, userReleaseDate: string, userStartDate: string>> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
+  if ($project_id_or_key | is-empty) { error make --unspanned { msg: "path parameter 'projectIdOrKey' must be non-empty" } }
   let full_url = (build-url $base ({project_id_or_key: (encode-path-segment $project_id_or_key)} | format pattern "/rest/api/3/project/{project_id_or_key}/restore"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
 }
 
 # Get project roles for project
@@ -8632,10 +8907,11 @@ export def "rest-3-project-role list" [
 ]: nothing -> record {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
+  if ($project_id_or_key | is-empty) { error make --unspanned { msg: "path parameter 'projectIdOrKey' must be non-empty" } }
   let full_url = (build-url $base ({project_id_or_key: (encode-path-segment $project_id_or_key)} | format pattern "/rest/api/3/project/{project_id_or_key}/role"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
 }
 
 # Delete actors from project role
@@ -8660,11 +8936,13 @@ export def "rest-3-project-role delete-actor" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
+  if ($project_id_or_key | is-empty) { error make --unspanned { msg: "path parameter 'projectIdOrKey' must be non-empty" } }
+  if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
   let qp = [(serialize-qp "user" $user "scalar") (serialize-qp "group" $group "scalar") (serialize-qp "groupId" $group_id "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({project_id_or_key: (encode-path-segment $project_id_or_key), id: (encode-path-segment $id)} | format pattern "/rest/api/3/project/{project_id_or_key}/role/{id}") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"user": $user, "group": $group, "groupId": $group_id} | compact), body: null}
 }
 
 # Get project role for project
@@ -8687,11 +8965,13 @@ export def "rest-3-project-role get" [
 ]: nothing -> record<actors: table<actorGroup: record, actorUser: record, avatarUrl: string, displayName: string, id: int, name: string, type: string>, admin: bool, currentUserRole: bool, default: bool, description: string, id: int, name: string, roleConfigurable: bool, scope: record<project: record<avatarUrls: record, id: string, key: string, name: string, projectCategory: record, projectTypeKey: string, self: string, simplified: bool>, type: string>, self: string, translatedName: string> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
+  if ($project_id_or_key | is-empty) { error make --unspanned { msg: "path parameter 'projectIdOrKey' must be non-empty" } }
+  if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
   let qp = [(serialize-qp "excludeInactiveUsers" $exclude_inactive_users "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({project_id_or_key: (encode-path-segment $project_id_or_key), id: (encode-path-segment $id)} | format pattern "/rest/api/3/project/{project_id_or_key}/role/{id}") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"excludeInactiveUsers": $exclude_inactive_users} | compact), body: null}
 }
 
 # Add actors to project role
@@ -8717,12 +8997,14 @@ export def "rest-3-project-role create-actor-users" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
+  if ($project_id_or_key | is-empty) { error make --unspanned { msg: "path parameter 'projectIdOrKey' must be non-empty" } }
+  if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
   let full_url = (build-url $base ({project_id_or_key: (encode-path-segment $project_id_or_key), id: (encode-path-segment $id)} | format pattern "/rest/api/3/project/{project_id_or_key}/role/{id}"))
   let req_body = {"group": $group, "groupId": $group_id, "user": $user} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: {}, body: $req_body}
 }
 
 # Set actors for project role
@@ -8746,12 +9028,14 @@ export def "rest-3-project-role update-actors" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
+  if ($project_id_or_key | is-empty) { error make --unspanned { msg: "path parameter 'projectIdOrKey' must be non-empty" } }
+  if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
   let full_url = (build-url $base ({project_id_or_key: (encode-path-segment $project_id_or_key), id: (encode-path-segment $id)} | format pattern "/rest/api/3/project/{project_id_or_key}/role/{id}"))
   let req_body = {"categorisedActors": $categorised_actors} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: {}, body: $req_body}
 }
 
 # Get project role details
@@ -8774,11 +9058,12 @@ export def "rest-3-project-roledetails get-role-details" [
 ]: nothing -> table<admin: bool, default: bool, description: string, id: int, name: string, roleConfigurable: bool, scope: record<project: record, type: string>, self: string, translatedName: string> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
+  if ($project_id_or_key | is-empty) { error make --unspanned { msg: "path parameter 'projectIdOrKey' must be non-empty" } }
   let qp = [(serialize-qp "currentMember" $current_member "scalar") (serialize-qp "excludeConnectAddons" $exclude_connect_addons "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({project_id_or_key: (encode-path-segment $project_id_or_key)} | format pattern "/rest/api/3/project/{project_id_or_key}/roledetails") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"currentMember": $current_member, "excludeConnectAddons": $exclude_connect_addons} | compact), body: null}
 }
 
 # Get all statuses for project
@@ -8799,10 +9084,11 @@ export def "rest-3-project-statuses get-list" [
 ]: nothing -> table<id: string, name: string, self: string, statuses: list<record>, subtask: bool> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
+  if ($project_id_or_key | is-empty) { error make --unspanned { msg: "path parameter 'projectIdOrKey' must be non-empty" } }
   let full_url = (build-url $base ({project_id_or_key: (encode-path-segment $project_id_or_key)} | format pattern "/rest/api/3/project/{project_id_or_key}/statuses"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
 }
 
 # Update project type
@@ -8826,10 +9112,12 @@ export def "rest-3-project-type update" [
 ]: nothing -> record<archived: bool, archivedBy: record<accountId: string, accountType: string, active: bool, applicationRoles: record<callback: record, items: list, max_results: int, pagingCallback: record, size: int>, avatarUrls: record<16x16: string, 24x24: string, 32x32: string, 48x48: string>, displayName: string, emailAddress: string, expand: string, groups: record<callback: record, items: list, max_results: int, pagingCallback: record, size: int>, key: string, locale: string, name: string, self: string, timeZone: string>, archivedDate: string, assigneeType: string, avatarUrls: record<16x16: string, 24x24: string, 32x32: string, 48x48: string>, components: table<assignee: record, assigneeType: string, description: string, id: string, isAssigneeTypeValid: bool, lead: record, leadAccountId: string, leadUserName: string, name: string, project: string, projectId: int, realAssignee: record, realAssigneeType: string, self: string>, deleted: bool, deletedBy: record<accountId: string, accountType: string, active: bool, applicationRoles: record<callback: record, items: list, max_results: int, pagingCallback: record, size: int>, avatarUrls: record<16x16: string, 24x24: string, 32x32: string, 48x48: string>, displayName: string, emailAddress: string, expand: string, groups: record<callback: record, items: list, max_results: int, pagingCallback: record, size: int>, key: string, locale: string, name: string, self: string, timeZone: string>, deletedDate: string, description: string, email: string, expand: string, favourite: bool, id: string, insight: record<lastIssueUpdateTime: string, totalIssueCount: int>, isPrivate: bool, issueTypeHierarchy: record<baseLevelId: int, levels: list<record>>, issueTypes: table<avatarId: int, description: string, entityId: string, hierarchyLevel: int, iconUrl: string, id: string, name: string, scope: record, self: string, subtask: bool>, key: string, landingPageInfo: record<attributes: record, boardId: int, boardName: string, projectKey: string, projectType: string, queueCategory: string, queueId: int, queueName: string, simpleBoard: bool, simplified: bool, url: string>, lead: record<accountId: string, accountType: string, active: bool, applicationRoles: record<callback: record, items: list, max_results: int, pagingCallback: record, size: int>, avatarUrls: record<16x16: string, 24x24: string, 32x32: string, 48x48: string>, displayName: string, emailAddress: string, expand: string, groups: record<callback: record, items: list, max_results: int, pagingCallback: record, size: int>, key: string, locale: string, name: string, self: string, timeZone: string>, name: string, permissions: record<canEdit: bool>, projectCategory: record<description: string, id: string, name: string, self: string>, projectTypeKey: string, properties: record, retentionTillDate: string, roles: record, self: string, simplified: bool, style: string, url: string, uuid: string, versions: table<archived: bool, description: string, expand: string, id: string, issuesStatusForFixVersion: record, moveUnfixedIssuesTo: string, name: string, operations: list, overdue: bool, project: string, projectId: int, releaseDate: string, released: bool, self: string, startDate: string, userReleaseDate: string, userStartDate: string>> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
+  if ($project_id_or_key | is-empty) { error make --unspanned { msg: "path parameter 'projectIdOrKey' must be non-empty" } }
+  if ($new_project_type_key | is-empty) { error make --unspanned { msg: "path parameter 'newProjectTypeKey' must be non-empty" } }
   let full_url = (build-url $base ({project_id_or_key: (encode-path-segment $project_id_or_key), new_project_type_key: (encode-path-segment $new_project_type_key)} | format pattern "/rest/api/3/project/{project_id_or_key}/type/{new_project_type_key}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
 }
 
 # Get project versions paginated
@@ -8856,11 +9144,12 @@ export def "rest-3-project-version get-paginated" [
 ]: nothing -> record<isLast: bool, maxResults: int, nextPage: string, self: string, startAt: int, total: int, values: table<archived: bool, description: string, expand: string, id: string, issuesStatusForFixVersion: record, moveUnfixedIssuesTo: string, name: string, operations: list, overdue: bool, project: string, projectId: int, releaseDate: string, released: bool, self: string, startDate: string, userReleaseDate: string, userStartDate: string>> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
+  if ($project_id_or_key | is-empty) { error make --unspanned { msg: "path parameter 'projectIdOrKey' must be non-empty" } }
   let qp = [(serialize-qp "startAt" $start_at "scalar") (serialize-qp "maxResults" $max_results "scalar") (serialize-qp "orderBy" $order_by "scalar") (serialize-qp "query" $query "scalar") (serialize-qp "status" $status "scalar") (serialize-qp "expand" $expand "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({project_id_or_key: (encode-path-segment $project_id_or_key)} | format pattern "/rest/api/3/project/{project_id_or_key}/version") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"startAt": $start_at, "maxResults": $max_results, "orderBy": $order_by, "query": $query, "status": $status, "expand": $expand} | compact), body: null}
 }
 
 # Get project versions
@@ -8882,11 +9171,12 @@ export def "rest-3-project-versions get" [
 ]: nothing -> table<archived: bool, description: string, expand: string, id: string, issuesStatusForFixVersion: record<done: int, inProgress: int, toDo: int, unmapped: int>, moveUnfixedIssuesTo: string, name: string, operations: list<record>, overdue: bool, project: string, projectId: int, releaseDate: string, released: bool, self: string, startDate: string, userReleaseDate: string, userStartDate: string> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
+  if ($project_id_or_key | is-empty) { error make --unspanned { msg: "path parameter 'projectIdOrKey' must be non-empty" } }
   let qp = [(serialize-qp "expand" $expand "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({project_id_or_key: (encode-path-segment $project_id_or_key)} | format pattern "/rest/api/3/project/{project_id_or_key}/versions") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"expand": $expand} | compact), body: null}
 }
 
 # Get project's sender email
@@ -8907,10 +9197,11 @@ export def "rest-3-project-email get" [
 ]: nothing -> record<emailAddress: string, emailAddressStatus: list<string>> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
+  if ($project_id | is-empty) { error make --unspanned { msg: "path parameter 'projectId' must be non-empty" } }
   let full_url = (build-url $base ({project_id: (encode-path-segment $project_id)} | format pattern "/rest/api/3/project/{project_id}/email"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
 }
 
 # Set project's sender email
@@ -8934,12 +9225,13 @@ export def "rest-3-project-email update" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
+  if ($project_id | is-empty) { error make --unspanned { msg: "path parameter 'projectId' must be non-empty" } }
   let full_url = (build-url $base ({project_id: (encode-path-segment $project_id)} | format pattern "/rest/api/3/project/{project_id}/email"))
   let req_body = {"emailAddress": $email_address, "emailAddressStatus": $email_address_status} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: {}, body: $req_body}
 }
 
 # Get project issue type hierarchy
@@ -8962,10 +9254,11 @@ export def "rest-3-project-hierarchy get" [
 ]: nothing -> record<hierarchy: table<entityId: string, issueTypes: list, level: int, name: string>, projectId: int> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
+  if ($project_id | is-empty) { error make --unspanned { msg: "path parameter 'projectId' must be non-empty" } }
   let full_url = (build-url $base ({project_id: (encode-path-segment $project_id)} | format pattern "/rest/api/3/project/{project_id}/hierarchy"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
 }
 
 # Get project issue security scheme
@@ -8986,10 +9279,11 @@ export def "rest-3-project-issuesecuritylevelscheme get-issue-security-scheme" [
 ]: nothing -> record<defaultSecurityLevelId: int, description: string, id: int, levels: table<description: string, id: string, isDefault: bool, issueSecuritySchemeId: string, name: string, self: string>, name: string, self: string> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
+  if ($project_key_or_id | is-empty) { error make --unspanned { msg: "path parameter 'projectKeyOrId' must be non-empty" } }
   let full_url = (build-url $base ({project_key_or_id: (encode-path-segment $project_key_or_id)} | format pattern "/rest/api/3/project/{project_key_or_id}/issuesecuritylevelscheme"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
 }
 
 # Get project notification scheme
@@ -9013,11 +9307,12 @@ export def "rest-3-project-notificationscheme get-notification-scheme" [
 ]: nothing -> record<description: string, expand: string, id: int, name: string, notificationSchemeEvents: table<event: record, notifications: list>, projects: list<int>, scope: record<project: record<avatarUrls: record, id: string, key: string, name: string, projectCategory: record, projectTypeKey: string, self: string, simplified: bool>, type: string>, self: string> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
+  if ($project_key_or_id | is-empty) { error make --unspanned { msg: "path parameter 'projectKeyOrId' must be non-empty" } }
   let qp = [(serialize-qp "expand" $expand "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({project_key_or_id: (encode-path-segment $project_key_or_id)} | format pattern "/rest/api/3/project/{project_key_or_id}/notificationscheme") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"expand": $expand} | compact), body: null}
 }
 
 # Get assigned permission scheme
@@ -9039,11 +9334,12 @@ export def "rest-3-project-permissionscheme get-assigned-permission-scheme" [
 ]: nothing -> record<description: string, expand: string, id: int, name: string, permissions: table<holder: record, id: int, permission: string, self: string>, scope: record<project: record<avatarUrls: record, id: string, key: string, name: string, projectCategory: record, projectTypeKey: string, self: string, simplified: bool>, type: string>, self: string> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
+  if ($project_key_or_id | is-empty) { error make --unspanned { msg: "path parameter 'projectKeyOrId' must be non-empty" } }
   let qp = [(serialize-qp "expand" $expand "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({project_key_or_id: (encode-path-segment $project_key_or_id)} | format pattern "/rest/api/3/project/{project_key_or_id}/permissionscheme") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"expand": $expand} | compact), body: null}
 }
 
 # Assign permission scheme
@@ -9067,13 +9363,14 @@ export def "rest-3-project-permissionscheme assign-permission-scheme" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
+  if ($project_key_or_id | is-empty) { error make --unspanned { msg: "path parameter 'projectKeyOrId' must be non-empty" } }
   let qp = [(serialize-qp "expand" $expand "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({project_key_or_id: (encode-path-segment $project_key_or_id)} | format pattern "/rest/api/3/project/{project_key_or_id}/permissionscheme") $qp)
   let req_body = {"id": $id} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: ({"expand": $expand} | compact), body: $req_body}
 }
 
 # Get project issue security levels
@@ -9094,10 +9391,11 @@ export def "rest-3-project-securitylevel get-security-levels" [
 ]: nothing -> record<levels: table<description: string, id: string, isDefault: bool, issueSecuritySchemeId: string, name: string, self: string>> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
+  if ($project_key_or_id | is-empty) { error make --unspanned { msg: "path parameter 'projectKeyOrId' must be non-empty" } }
   let full_url = (build-url $base ({project_key_or_id: (encode-path-segment $project_key_or_id)} | format pattern "/rest/api/3/project/{project_key_or_id}/securitylevel"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
 }
 
 # Get all project categories
@@ -9120,7 +9418,7 @@ export def "rest-3-project-category get-list-categories" [
   let full_url = (build-url $base "/rest/api/3/projectCategory")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
 }
 
 # Create project category
@@ -9148,7 +9446,7 @@ export def "rest-3-project-category create" [
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: {}, body: $req_body}
 }
 
 # Delete project category
@@ -9169,10 +9467,11 @@ export def "rest-3-project-category delete" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
+  if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
   let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/rest/api/3/projectCategory/{id}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
 }
 
 # Get project category by ID
@@ -9193,10 +9492,11 @@ export def "rest-3-project-category get" [
 ]: nothing -> record<description: string, id: string, name: string, self: string> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
+  if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
   let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/rest/api/3/projectCategory/{id}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
 }
 
 # Update project category
@@ -9220,12 +9520,13 @@ export def "rest-3-project-category update" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
+  if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
   let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/rest/api/3/projectCategory/{id}"))
   let req_body = {"description": $description, "name": $name} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: {}, body: $req_body}
 }
 
 # Validate project key
@@ -9250,7 +9551,7 @@ export def "rest-3-projectvalidate-key validate-project" [
   let full_url = (build-url $base "/rest/api/3/projectvalidate/key" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"key": $key} | compact), body: null}
 }
 
 # Get valid project key
@@ -9275,7 +9576,7 @@ export def "rest-3-projectvalidate-valid-project-key get" [
   let full_url = (build-url $base "/rest/api/3/projectvalidate/validProjectKey" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"key": $key} | compact), body: null}
 }
 
 # Get valid project name
@@ -9300,7 +9601,7 @@ export def "rest-3-projectvalidate-valid-project-name get" [
   let full_url = (build-url $base "/rest/api/3/projectvalidate/validProjectName" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"name": $name} | compact), body: null}
 }
 
 # Get resolutions
@@ -9325,7 +9626,7 @@ export def "rest-3-resolution list" [
   let full_url = (build-url $base "/rest/api/3/resolution")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
 }
 
 # Create resolution
@@ -9353,7 +9654,7 @@ export def "rest-3-resolution create" [
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: {}, body: $req_body}
 }
 
 # Set default resolution
@@ -9380,7 +9681,7 @@ export def "rest-3-resolution-default update" [
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: {}, body: $req_body}
 }
 
 # Move resolutions
@@ -9409,7 +9710,7 @@ export def "rest-3-resolution-move move" [
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: {}, body: $req_body}
 }
 
 # Search resolutions
@@ -9437,7 +9738,7 @@ export def "rest-3-resolution-search list" [
   let full_url = (build-url $base "/rest/api/3/resolution/search" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"startAt": $start_at, "maxResults": $max_results, "id": $id, "onlyDefault": $only_default} | compact), body: null}
 }
 
 # Delete resolution
@@ -9459,11 +9760,12 @@ export def "rest-3-resolution delete" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
+  if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
   let qp = [(serialize-qp "replaceWith" $replace_with "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/rest/api/3/resolution/{id}") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"replaceWith": $replace_with} | compact), body: null}
 }
 
 # Get resolution
@@ -9484,10 +9786,11 @@ export def "rest-3-resolution get" [
 ]: nothing -> record<description: string, id: string, name: string, self: string> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
+  if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
   let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/rest/api/3/resolution/{id}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
 }
 
 # Update resolution
@@ -9511,12 +9814,13 @@ export def "rest-3-resolution update" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
+  if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
   let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/rest/api/3/resolution/{id}"))
   let req_body = {"description": $description, "name": $name} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: {}, body: $req_body}
 }
 
 # Get all project roles
@@ -9539,7 +9843,7 @@ export def "rest-3-role get-list-project" [
   let full_url = (build-url $base "/rest/api/3/role")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
 }
 
 # Create project role
@@ -9567,7 +9871,7 @@ export def "rest-3-role create-project" [
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: {}, body: $req_body}
 }
 
 # Delete project role
@@ -9589,11 +9893,12 @@ export def "rest-3-role delete-project" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
+  if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
   let qp = [(serialize-qp "swap" $swap "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/rest/api/3/role/{id}") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"swap": $swap} | compact), body: null}
 }
 
 # Get project role by ID
@@ -9614,10 +9919,11 @@ export def "rest-3-role get-project" [
 ]: nothing -> record<actors: table<actorGroup: record, actorUser: record, avatarUrl: string, displayName: string, id: int, name: string, type: string>, admin: bool, currentUserRole: bool, default: bool, description: string, id: int, name: string, roleConfigurable: bool, scope: record<project: record<avatarUrls: record, id: string, key: string, name: string, projectCategory: record, projectTypeKey: string, self: string, simplified: bool>, type: string>, self: string, translatedName: string> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
+  if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
   let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/rest/api/3/role/{id}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
 }
 
 # Partial update project role
@@ -9641,12 +9947,13 @@ export def "rest-3-role update-project" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
+  if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
   let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/rest/api/3/role/{id}"))
   let req_body = {"description": $description, "name": $name} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: {}, body: $req_body}
 }
 
 # Fully update project role
@@ -9670,12 +9977,13 @@ export def "rest-3-role update-fully-project" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
+  if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
   let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/rest/api/3/role/{id}"))
   let req_body = {"description": $description, "name": $name} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: {}, body: $req_body}
 }
 
 # Delete default actors from project role
@@ -9699,11 +10007,12 @@ export def "rest-3-role-actors delete-project" [
 ]: nothing -> record<actors: table<actorGroup: record, actorUser: record, avatarUrl: string, displayName: string, id: int, name: string, type: string>, admin: bool, currentUserRole: bool, default: bool, description: string, id: int, name: string, roleConfigurable: bool, scope: record<project: record<avatarUrls: record, id: string, key: string, name: string, projectCategory: record, projectTypeKey: string, self: string, simplified: bool>, type: string>, self: string, translatedName: string> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
+  if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
   let qp = [(serialize-qp "user" $user "scalar") (serialize-qp "groupId" $group_id "scalar") (serialize-qp "group" $group "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/rest/api/3/role/{id}/actors") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"user": $user, "groupId": $group_id, "group": $group} | compact), body: null}
 }
 
 # Get default actors for project role
@@ -9724,10 +10033,11 @@ export def "rest-3-role-actors get-project" [
 ]: nothing -> record<actors: table<actorGroup: record, actorUser: record, avatarUrl: string, displayName: string, id: int, name: string, type: string>, admin: bool, currentUserRole: bool, default: bool, description: string, id: int, name: string, roleConfigurable: bool, scope: record<project: record<avatarUrls: record, id: string, key: string, name: string, projectCategory: record, projectTypeKey: string, self: string, simplified: bool>, type: string>, self: string, translatedName: string> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
+  if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
   let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/rest/api/3/role/{id}/actors"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
 }
 
 # Add default actors to project role
@@ -9752,12 +10062,13 @@ export def "rest-3-role-actors create-project" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
+  if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
   let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/rest/api/3/role/{id}/actors"))
   let req_body = {"group": $group, "groupId": $group_id, "user": $user} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: {}, body: $req_body}
 }
 
 # Get screens
@@ -9787,7 +10098,7 @@ export def "rest-3-screens get" [
   let full_url = (build-url $base "/rest/api/3/screens" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"startAt": $start_at, "maxResults": $max_results, "id": $id, "queryString": $query_string, "scope": $scope, "orderBy": $order_by} | compact), body: null}
 }
 
 # Create screen
@@ -9815,7 +10126,7 @@ export def "rest-3-screens create" [
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: {}, body: $req_body}
 }
 
 # Add field to default screen
@@ -9836,10 +10147,11 @@ export def "rest-3-screens-add-to-default create-field" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
+  if ($field_id | is-empty) { error make --unspanned { msg: "path parameter 'fieldId' must be non-empty" } }
   let full_url = (build-url $base ({field_id: (encode-path-segment $field_id)} | format pattern "/rest/api/3/screens/addToDefault/{field_id}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
 }
 
 # Delete screen
@@ -9860,10 +10172,11 @@ export def "rest-3-screens delete" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
+  if ($screen_id | is-empty) { error make --unspanned { msg: "path parameter 'screenId' must be non-empty" } }
   let full_url = (build-url $base ({screen_id: (encode-path-segment $screen_id)} | format pattern "/rest/api/3/screens/{screen_id}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
 }
 
 # Update screen
@@ -9887,12 +10200,13 @@ export def "rest-3-screens update" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
+  if ($screen_id | is-empty) { error make --unspanned { msg: "path parameter 'screenId' must be non-empty" } }
   let full_url = (build-url $base ({screen_id: (encode-path-segment $screen_id)} | format pattern "/rest/api/3/screens/{screen_id}"))
   let req_body = {"description": $description, "name": $name} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: {}, body: $req_body}
 }
 
 # Get available screen fields
@@ -9913,10 +10227,11 @@ export def "rest-3-screens-available-fields get" [
 ]: nothing -> table<id: string, name: string> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
+  if ($screen_id | is-empty) { error make --unspanned { msg: "path parameter 'screenId' must be non-empty" } }
   let full_url = (build-url $base ({screen_id: (encode-path-segment $screen_id)} | format pattern "/rest/api/3/screens/{screen_id}/availableFields"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
 }
 
 # Get all screen tabs
@@ -9938,11 +10253,12 @@ export def "rest-3-screens-tabs get-list" [
 ]: nothing -> table<id: int, name: string> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
+  if ($screen_id | is-empty) { error make --unspanned { msg: "path parameter 'screenId' must be non-empty" } }
   let qp = [(serialize-qp "projectKey" $project_key "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({screen_id: (encode-path-segment $screen_id)} | format pattern "/rest/api/3/screens/{screen_id}/tabs") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"projectKey": $project_key} | compact), body: null}
 }
 
 # Create screen tab
@@ -9965,12 +10281,13 @@ export def "rest-3-screens-tabs create" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
+  if ($screen_id | is-empty) { error make --unspanned { msg: "path parameter 'screenId' must be non-empty" } }
   let full_url = (build-url $base ({screen_id: (encode-path-segment $screen_id)} | format pattern "/rest/api/3/screens/{screen_id}/tabs"))
   let req_body = {"name": $name} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: {}, body: $req_body}
 }
 
 # Delete screen tab
@@ -9992,10 +10309,12 @@ export def "rest-3-screens-tabs delete" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
+  if ($screen_id | is-empty) { error make --unspanned { msg: "path parameter 'screenId' must be non-empty" } }
+  if ($tab_id | is-empty) { error make --unspanned { msg: "path parameter 'tabId' must be non-empty" } }
   let full_url = (build-url $base ({screen_id: (encode-path-segment $screen_id), tab_id: (encode-path-segment $tab_id)} | format pattern "/rest/api/3/screens/{screen_id}/tabs/{tab_id}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
 }
 
 # Update screen tab
@@ -10019,12 +10338,14 @@ export def "rest-3-screens-tabs rename" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
+  if ($screen_id | is-empty) { error make --unspanned { msg: "path parameter 'screenId' must be non-empty" } }
+  if ($tab_id | is-empty) { error make --unspanned { msg: "path parameter 'tabId' must be non-empty" } }
   let full_url = (build-url $base ({screen_id: (encode-path-segment $screen_id), tab_id: (encode-path-segment $tab_id)} | format pattern "/rest/api/3/screens/{screen_id}/tabs/{tab_id}"))
   let req_body = {"name": $name} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: {}, body: $req_body}
 }
 
 # Get all screen tab fields
@@ -10047,11 +10368,13 @@ export def "rest-3-screens-tabs-fields get-list" [
 ]: nothing -> table<id: string, name: string> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
+  if ($screen_id | is-empty) { error make --unspanned { msg: "path parameter 'screenId' must be non-empty" } }
+  if ($tab_id | is-empty) { error make --unspanned { msg: "path parameter 'tabId' must be non-empty" } }
   let qp = [(serialize-qp "projectKey" $project_key "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({screen_id: (encode-path-segment $screen_id), tab_id: (encode-path-segment $tab_id)} | format pattern "/rest/api/3/screens/{screen_id}/tabs/{tab_id}/fields") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"projectKey": $project_key} | compact), body: null}
 }
 
 # Add screen tab field
@@ -10075,12 +10398,14 @@ export def "rest-3-screens-tabs-fields create" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
+  if ($screen_id | is-empty) { error make --unspanned { msg: "path parameter 'screenId' must be non-empty" } }
+  if ($tab_id | is-empty) { error make --unspanned { msg: "path parameter 'tabId' must be non-empty" } }
   let full_url = (build-url $base ({screen_id: (encode-path-segment $screen_id), tab_id: (encode-path-segment $tab_id)} | format pattern "/rest/api/3/screens/{screen_id}/tabs/{tab_id}/fields"))
   let req_body = {"fieldId": $field_id} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: {}, body: $req_body}
 }
 
 # Remove screen tab field
@@ -10103,10 +10428,13 @@ export def "rest-3-screens-tabs-fields delete" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
+  if ($screen_id | is-empty) { error make --unspanned { msg: "path parameter 'screenId' must be non-empty" } }
+  if ($tab_id | is-empty) { error make --unspanned { msg: "path parameter 'tabId' must be non-empty" } }
+  if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
   let full_url = (build-url $base ({screen_id: (encode-path-segment $screen_id), tab_id: (encode-path-segment $tab_id), id: (encode-path-segment $id)} | format pattern "/rest/api/3/screens/{screen_id}/tabs/{tab_id}/fields/{id}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
 }
 
 # Move screen tab field
@@ -10132,12 +10460,15 @@ export def "rest-3-screens-tabs-fields-move move" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
+  if ($screen_id | is-empty) { error make --unspanned { msg: "path parameter 'screenId' must be non-empty" } }
+  if ($tab_id | is-empty) { error make --unspanned { msg: "path parameter 'tabId' must be non-empty" } }
+  if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
   let full_url = (build-url $base ({screen_id: (encode-path-segment $screen_id), tab_id: (encode-path-segment $tab_id), id: (encode-path-segment $id)} | format pattern "/rest/api/3/screens/{screen_id}/tabs/{tab_id}/fields/{id}/move"))
   let req_body = {"after": $after, "position": $position} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: {}, body: $req_body}
 }
 
 # Move screen tab
@@ -10160,10 +10491,13 @@ export def "rest-3-screens-tabs-move move" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
+  if ($screen_id | is-empty) { error make --unspanned { msg: "path parameter 'screenId' must be non-empty" } }
+  if ($tab_id | is-empty) { error make --unspanned { msg: "path parameter 'tabId' must be non-empty" } }
+  if ($pos | is-empty) { error make --unspanned { msg: "path parameter 'pos' must be non-empty" } }
   let full_url = (build-url $base ({screen_id: (encode-path-segment $screen_id), tab_id: (encode-path-segment $tab_id), pos: (encode-path-segment $pos)} | format pattern "/rest/api/3/screens/{screen_id}/tabs/{tab_id}/move/{pos}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
 }
 
 # Get screen schemes
@@ -10193,7 +10527,7 @@ export def "rest-3-screenscheme get-screen-schemes" [
   let full_url = (build-url $base "/rest/api/3/screenscheme" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"startAt": $start_at, "maxResults": $max_results, "id": $id, "expand": $expand, "queryString": $query_string, "orderBy": $order_by} | compact), body: null}
 }
 
 # Create screen scheme
@@ -10222,7 +10556,7 @@ export def "rest-3-screenscheme create-screen-scheme" [
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: {}, body: $req_body}
 }
 
 # Delete screen scheme
@@ -10243,10 +10577,11 @@ export def "rest-3-screenscheme delete-screen-scheme" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
+  if ($screen_scheme_id | is-empty) { error make --unspanned { msg: "path parameter 'screenSchemeId' must be non-empty" } }
   let full_url = (build-url $base ({screen_scheme_id: (encode-path-segment $screen_scheme_id)} | format pattern "/rest/api/3/screenscheme/{screen_scheme_id}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
 }
 
 # Update screen scheme
@@ -10271,12 +10606,13 @@ export def "rest-3-screenscheme update-screen-scheme" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
+  if ($screen_scheme_id | is-empty) { error make --unspanned { msg: "path parameter 'screenSchemeId' must be non-empty" } }
   let full_url = (build-url $base ({screen_scheme_id: (encode-path-segment $screen_scheme_id)} | format pattern "/rest/api/3/screenscheme/{screen_scheme_id}"))
   let req_body = {"description": $description, "name": $name, "screens": $screens} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: {}, body: $req_body}
 }
 
 # Search for issues using JQL (GET)
@@ -10308,7 +10644,7 @@ export def "rest-3-search list-for-issues-using-jql" [
   let full_url = (build-url $base "/rest/api/3/search" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"jql": $jql, "startAt": $start_at, "maxResults": $max_results, "validateQuery": $validate_query, "fields": $fields, "expand": $expand, "properties": $properties, "fieldsByKeys": $fields_by_keys} | compact), body: null}
 }
 
 # Search for issues using JQL (POST)
@@ -10342,7 +10678,7 @@ export def "rest-3-search create-for-issues-using-jql" [
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: {}, body: $req_body}
 }
 
 # Get issue security level
@@ -10363,10 +10699,11 @@ export def "rest-3-securitylevel get-issue-security-level" [
 ]: nothing -> record<description: string, id: string, isDefault: bool, issueSecuritySchemeId: string, name: string, self: string> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
+  if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
   let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/rest/api/3/securitylevel/{id}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
 }
 
 # Get Jira instance info
@@ -10389,7 +10726,7 @@ export def "rest-3-server-info get" [
   let full_url = (build-url $base "/rest/api/3/serverInfo")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
 }
 
 # Get issue navigator default columns
@@ -10412,7 +10749,7 @@ export def "rest-3-settings-columns get-issue-navigator-default" [
   let full_url = (build-url $base "/rest/api/3/settings/columns")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
 }
 
 # Set issue navigator default columns
@@ -10441,7 +10778,7 @@ export def "rest-3-settings-columns update-issue-navigator-default" [
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let req_body = if ($req_body | describe | str starts-with "record") { $req_body } else { {} }
   let mp = (build-multipart-body $req_body [] $dry_run)
-  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full $mp.content_type $mp.body
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full $mp.content_type $mp.body {query: {}, body: $req_body}
 }
 
 # Get all statuses
@@ -10464,7 +10801,7 @@ export def "rest-3-status get-statuses" [
   let full_url = (build-url $base "/rest/api/3/status")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
 }
 
 # Get status
@@ -10485,10 +10822,11 @@ export def "rest-3-status get" [
 ]: nothing -> record<description: string, iconUrl: string, id: string, name: string, self: string, statusCategory: record<colorName: string, id: int, key: string, name: string, self: string>> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
+  if ($id_or_name | is-empty) { error make --unspanned { msg: "path parameter 'idOrName' must be non-empty" } }
   let full_url = (build-url $base ({id_or_name: (encode-path-segment $id_or_name)} | format pattern "/rest/api/3/status/{id_or_name}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
 }
 
 # Get all status categories
@@ -10511,7 +10849,7 @@ export def "rest-3-statuscategory get-status-categories" [
   let full_url = (build-url $base "/rest/api/3/statuscategory")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
 }
 
 # Get status category
@@ -10532,10 +10870,11 @@ export def "rest-3-statuscategory get-status-category" [
 ]: nothing -> record<colorName: string, id: int, key: string, name: string, self: string> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
+  if ($id_or_key | is-empty) { error make --unspanned { msg: "path parameter 'idOrKey' must be non-empty" } }
   let full_url = (build-url $base ({id_or_key: (encode-path-segment $id_or_key)} | format pattern "/rest/api/3/statuscategory/{id_or_key}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
 }
 
 # Bulk delete Statuses
@@ -10560,7 +10899,7 @@ export def "rest-3-statuses delete" [
   let full_url = (build-url $base "/rest/api/3/statuses" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"id": $id} | compact), body: null}
 }
 
 # Bulk get statuses
@@ -10586,7 +10925,7 @@ export def "rest-3-statuses get" [
   let full_url = (build-url $base "/rest/api/3/statuses" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"expand": $expand, "id": $id} | compact), body: null}
 }
 
 # Bulk create statuses
@@ -10616,7 +10955,7 @@ export def "rest-3-statuses create" [
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: {}, body: $req_body}
 }
 
 # Bulk update statuses
@@ -10644,7 +10983,7 @@ export def "rest-3-statuses update" [
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: {}, body: $req_body}
 }
 
 # Search statuses paginated
@@ -10674,7 +11013,7 @@ export def "rest-3-statuses-search list" [
   let full_url = (build-url $base "/rest/api/3/statuses/search" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"expand": $expand, "projectId": $project_id, "startAt": $start_at, "maxResults": $max_results, "searchString": $search_string, "statusCategory": $status_category} | compact), body: null}
 }
 
 # Get task
@@ -10695,10 +11034,11 @@ export def "rest-3-task get" [
 ]: nothing -> record<description: string, elapsedRuntime: int, finished: int, id: string, lastUpdate: int, message: string, progress: int, result: any, self: string, started: int, status: string, submitted: int, submittedBy: int> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
+  if ($task_id | is-empty) { error make --unspanned { msg: "path parameter 'taskId' must be non-empty" } }
   let full_url = (build-url $base ({task_id: (encode-path-segment $task_id)} | format pattern "/rest/api/3/task/{task_id}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
 }
 
 # Cancel task
@@ -10719,10 +11059,11 @@ export def "rest-3-task-cancel cancel" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
+  if ($task_id | is-empty) { error make --unspanned { msg: "path parameter 'taskId' must be non-empty" } }
   let full_url = (build-url $base ({task_id: (encode-path-segment $task_id)} | format pattern "/rest/api/3/task/{task_id}/cancel"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
 }
 
 # Get UI modifications
@@ -10749,7 +11090,7 @@ export def "rest-3-ui-modifications get" [
   let full_url = (build-url $base "/rest/api/3/uiModifications" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"startAt": $start_at, "maxResults": $max_results, "expand": $expand} | compact), body: null}
 }
 
 # Create UI modification
@@ -10780,7 +11121,7 @@ export def "rest-3-ui-modifications create" [
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: {}, body: $req_body}
 }
 
 # Delete UI modification
@@ -10801,10 +11142,11 @@ export def "rest-3-ui-modifications delete" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
+  if ($ui_modification_id | is-empty) { error make --unspanned { msg: "path parameter 'uiModificationId' must be non-empty" } }
   let full_url = (build-url $base ({ui_modification_id: (encode-path-segment $ui_modification_id)} | format pattern "/rest/api/3/uiModifications/{ui_modification_id}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
 }
 
 # Update UI modification
@@ -10831,12 +11173,13 @@ export def "rest-3-ui-modifications update" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
+  if ($ui_modification_id | is-empty) { error make --unspanned { msg: "path parameter 'uiModificationId' must be non-empty" } }
   let full_url = (build-url $base ({ui_modification_id: (encode-path-segment $ui_modification_id)} | format pattern "/rest/api/3/uiModifications/{ui_modification_id}"))
   let req_body = {"contexts": $contexts, "data": $data, "description": $description, "name": $name} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: {}, body: $req_body}
 }
 
 # Get avatars
@@ -10858,10 +11201,12 @@ export def "rest-3-universal-avatar-type-owner get" [
 ]: nothing -> record<custom: table<fileName: string, id: string, isDeletable: bool, isSelected: bool, isSystemAvatar: bool, owner: string, urls: record>, system: table<fileName: string, id: string, isDeletable: bool, isSelected: bool, isSystemAvatar: bool, owner: string, urls: record>> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
+  if ($type | is-empty) { error make --unspanned { msg: "path parameter 'type' must be non-empty" } }
+  if ($entity_id | is-empty) { error make --unspanned { msg: "path parameter 'entityId' must be non-empty" } }
   let full_url = (build-url $base ({type: (encode-path-segment $type), entity_id: (encode-path-segment $entity_id)} | format pattern "/rest/api/3/universal_avatar/type/{type}/owner/{entity_id}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
 }
 
 # Load avatar
@@ -10888,13 +11233,15 @@ export def "rest-3-universal-avatar-type-owner create-store" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
+  if ($type | is-empty) { error make --unspanned { msg: "path parameter 'type' must be non-empty" } }
+  if ($entity_id | is-empty) { error make --unspanned { msg: "path parameter 'entityId' must be non-empty" } }
   let qp = [(serialize-qp "x" $x "scalar") (serialize-qp "y" $y "scalar") (serialize-qp "size" $size "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({type: (encode-path-segment $type), entity_id: (encode-path-segment $entity_id)} | format pattern "/rest/api/3/universal_avatar/type/{type}/owner/{entity_id}") $qp)
   let req_body = $body
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else if (($input | is-not-empty) and ($req_body | is-empty)) { $input } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "*/*" $req_body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "*/*" $req_body {query: ({"x": $x, "y": $y, "size": $size} | compact), body: $req_body}
 }
 
 # Delete avatar
@@ -10917,10 +11264,13 @@ export def "rest-3-universal-avatar-type-owner-avatar delete" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
+  if ($type | is-empty) { error make --unspanned { msg: "path parameter 'type' must be non-empty" } }
+  if ($owning_object_id | is-empty) { error make --unspanned { msg: "path parameter 'owningObjectId' must be non-empty" } }
+  if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
   let full_url = (build-url $base ({type: (encode-path-segment $type), owning_object_id: (encode-path-segment $owning_object_id), id: (encode-path-segment $id)} | format pattern "/rest/api/3/universal_avatar/type/{type}/owner/{owning_object_id}/avatar/{id}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
 }
 
 # Get avatar image by type
@@ -10944,11 +11294,12 @@ export def "rest-3-universal-avatar-view-type get-image" [
 ]: nothing -> record {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
+  if ($type | is-empty) { error make --unspanned { msg: "path parameter 'type' must be non-empty" } }
   let qp = [(serialize-qp "size" $size "scalar") (serialize-qp "format" $format "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({type: (encode-path-segment $type)} | format pattern "/rest/api/3/universal_avatar/view/type/{type}") $qp)
   let accept_val = ($accept | default "*/*")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"size": $size, "format": $format} | compact), body: null}
 }
 
 # Get avatar image by ID
@@ -10973,11 +11324,13 @@ export def "rest-3-universal-avatar-view-type-avatar get-image" [
 ]: nothing -> record {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
+  if ($type | is-empty) { error make --unspanned { msg: "path parameter 'type' must be non-empty" } }
+  if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
   let qp = [(serialize-qp "size" $size "scalar") (serialize-qp "format" $format "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({type: (encode-path-segment $type), id: (encode-path-segment $id)} | format pattern "/rest/api/3/universal_avatar/view/type/{type}/avatar/{id}") $qp)
   let accept_val = ($accept | default "*/*")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"size": $size, "format": $format} | compact), body: null}
 }
 
 # Get avatar image by owner
@@ -11002,11 +11355,13 @@ export def "rest-3-universal-avatar-view-type-owner get-image" [
 ]: nothing -> record {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
+  if ($type | is-empty) { error make --unspanned { msg: "path parameter 'type' must be non-empty" } }
+  if ($entity_id | is-empty) { error make --unspanned { msg: "path parameter 'entityId' must be non-empty" } }
   let qp = [(serialize-qp "size" $size "scalar") (serialize-qp "format" $format "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({type: (encode-path-segment $type), entity_id: (encode-path-segment $entity_id)} | format pattern "/rest/api/3/universal_avatar/view/type/{type}/owner/{entity_id}") $qp)
   let accept_val = ($accept | default "*/*")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"size": $size, "format": $format} | compact), body: null}
 }
 
 # Delete user
@@ -11033,7 +11388,7 @@ export def "rest-3-user delete" [
   let full_url = (build-url $base "/rest/api/3/user" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"accountId": $account_id, "username": $username, "key": $key} | compact), body: null}
 }
 
 # Get user
@@ -11061,7 +11416,7 @@ export def "rest-3-user get" [
   let full_url = (build-url $base "/rest/api/3/user" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"accountId": $account_id, "username": $username, "key": $key, "expand": $expand} | compact), body: null}
 }
 
 # Create user
@@ -11093,7 +11448,7 @@ export def "rest-3-user create" [
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: {}, body: $req_body}
 }
 
 # Find users assignable to projects
@@ -11123,7 +11478,7 @@ export def "rest-3-user-assignable-multi-project-search find-bulk" [
   let full_url = (build-url $base "/rest/api/3/user/assignable/multiProjectSearch" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"query": $query, "username": $username, "accountId": $account_id, "projectKeys": $project_keys, "startAt": $start_at, "maxResults": $max_results} | compact), body: null}
 }
 
 # Find users assignable to issues
@@ -11157,7 +11512,7 @@ export def "rest-3-user-assignable-search find" [
   let full_url = (build-url $base "/rest/api/3/user/assignable/search" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"query": $query, "sessionId": $session_id, "username": $username, "accountId": $account_id, "project": $project, "issueKey": $issue_key, "startAt": $start_at, "maxResults": $max_results, "actionDescriptorId": $action_descriptor_id, "recommend": $recommend} | compact), body: null}
 }
 
 # Bulk get users
@@ -11186,7 +11541,7 @@ export def "rest-3-user-bulk get" [
   let full_url = (build-url $base "/rest/api/3/user/bulk" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"startAt": $start_at, "maxResults": $max_results, "username": $username, "key": $key, "accountId": $account_id} | compact), body: null}
 }
 
 # Get account IDs for users
@@ -11214,7 +11569,7 @@ export def "rest-3-user-bulk-migration get" [
   let full_url = (build-url $base "/rest/api/3/user/bulk/migration" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"startAt": $start_at, "maxResults": $max_results, "username": $username, "key": $key} | compact), body: null}
 }
 
 # Reset user default columns
@@ -11240,7 +11595,7 @@ export def "rest-3-user-columns reset" [
   let full_url = (build-url $base "/rest/api/3/user/columns" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"accountId": $account_id, "username": $username} | compact), body: null}
 }
 
 # Get user default columns
@@ -11266,7 +11621,7 @@ export def "rest-3-user-columns get-default" [
   let full_url = (build-url $base "/rest/api/3/user/columns" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"accountId": $account_id, "username": $username} | compact), body: null}
 }
 
 # Set user default columns
@@ -11297,7 +11652,7 @@ export def "rest-3-user-columns update" [
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let req_body = if ($req_body | describe | str starts-with "record") { $req_body } else { {} }
   let mp = (build-multipart-body $req_body [] $dry_run)
-  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full $mp.content_type $mp.body
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full $mp.content_type $mp.body {query: ({"accountId": $account_id} | compact), body: $req_body}
 }
 
 # Get user email
@@ -11322,7 +11677,7 @@ export def "rest-3-user-email get" [
   let full_url = (build-url $base "/rest/api/3/user/email" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"accountId": $account_id} | compact), body: null}
 }
 
 # Get user email bulk
@@ -11347,7 +11702,7 @@ export def "rest-3-user-email-bulk get" [
   let full_url = (build-url $base "/rest/api/3/user/email/bulk" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"accountId": $account_id} | compact), body: null}
 }
 
 # Get user groups
@@ -11374,7 +11729,7 @@ export def "rest-3-user-groups get" [
   let full_url = (build-url $base "/rest/api/3/user/groups" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"accountId": $account_id, "username": $username, "key": $key} | compact), body: null}
 }
 
 # Find users with permissions
@@ -11406,7 +11761,7 @@ export def "rest-3-user-permission-search find-with-list" [
   let full_url = (build-url $base "/rest/api/3/user/permission/search" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"query": $query, "username": $username, "accountId": $account_id, "permissions": $permissions, "issueKey": $issue_key, "projectKey": $project_key, "startAt": $start_at, "maxResults": $max_results} | compact), body: null}
 }
 
 # Find users for picker
@@ -11437,7 +11792,7 @@ export def "rest-3-user-picker find" [
   let full_url = (build-url $base "/rest/api/3/user/picker" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"query": $query, "maxResults": $max_results, "showAvatar": $show_avatar, "exclude": $exclude, "excludeAccountIds": $exclude_account_ids, "avatarSize": $avatar_size, "excludeConnectUsers": $exclude_connect_users} | compact), body: null}
 }
 
 # Get user property keys
@@ -11464,7 +11819,7 @@ export def "rest-3-user-properties get-property-keys" [
   let full_url = (build-url $base "/rest/api/3/user/properties" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"accountId": $account_id, "userKey": $user_key, "username": $username} | compact), body: null}
 }
 
 # Delete user property
@@ -11488,11 +11843,12 @@ export def "rest-3-user-properties delete-property" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
+  if ($property_key | is-empty) { error make --unspanned { msg: "path parameter 'propertyKey' must be non-empty" } }
   let qp = [(serialize-qp "accountId" $account_id "scalar") (serialize-qp "userKey" $user_key "scalar") (serialize-qp "username" $username "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({property_key: (encode-path-segment $property_key)} | format pattern "/rest/api/3/user/properties/{property_key}") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"accountId": $account_id, "userKey": $user_key, "username": $username} | compact), body: null}
 }
 
 # Get user property
@@ -11516,11 +11872,12 @@ export def "rest-3-user-properties get-property" [
 ]: nothing -> record<key: string, value: any> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
+  if ($property_key | is-empty) { error make --unspanned { msg: "path parameter 'propertyKey' must be non-empty" } }
   let qp = [(serialize-qp "accountId" $account_id "scalar") (serialize-qp "userKey" $user_key "scalar") (serialize-qp "username" $username "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({property_key: (encode-path-segment $property_key)} | format pattern "/rest/api/3/user/properties/{property_key}") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"accountId": $account_id, "userKey": $user_key, "username": $username} | compact), body: null}
 }
 
 # Set user property
@@ -11546,13 +11903,14 @@ export def "rest-3-user-properties update-property" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
+  if ($property_key | is-empty) { error make --unspanned { msg: "path parameter 'propertyKey' must be non-empty" } }
   let qp = [(serialize-qp "accountId" $account_id "scalar") (serialize-qp "userKey" $user_key "scalar") (serialize-qp "username" $username "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({property_key: (encode-path-segment $property_key)} | format pattern "/rest/api/3/user/properties/{property_key}") $qp)
   let req_body = $body
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: ({"accountId": $account_id, "userKey": $user_key, "username": $username} | compact), body: $req_body}
 }
 
 # Find users
@@ -11582,7 +11940,7 @@ export def "rest-3-user-search find" [
   let full_url = (build-url $base "/rest/api/3/user/search" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"query": $query, "username": $username, "accountId": $account_id, "startAt": $start_at, "maxResults": $max_results, "property": $property} | compact), body: null}
 }
 
 # Find users by query
@@ -11609,7 +11967,7 @@ export def "rest-3-user-search-query find" [
   let full_url = (build-url $base "/rest/api/3/user/search/query" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"query": $query, "startAt": $start_at, "maxResults": $max_results} | compact), body: null}
 }
 
 # Find user keys by query
@@ -11636,7 +11994,7 @@ export def "rest-3-user-search-query-key find" [
   let full_url = (build-url $base "/rest/api/3/user/search/query/key" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"query": $query, "startAt": $start_at, "maxResults": $max_results} | compact), body: null}
 }
 
 # Find users with browse permission
@@ -11667,7 +12025,7 @@ export def "rest-3-user-viewissue-search find-with-browse-permission" [
   let full_url = (build-url $base "/rest/api/3/user/viewissue/search" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"query": $query, "username": $username, "accountId": $account_id, "issueKey": $issue_key, "projectKey": $project_key, "startAt": $start_at, "maxResults": $max_results} | compact), body: null}
 }
 
 # Get all users default
@@ -11693,7 +12051,7 @@ export def "rest-3-users get-list-default" [
   let full_url = (build-url $base "/rest/api/3/users" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"startAt": $start_at, "maxResults": $max_results} | compact), body: null}
 }
 
 # Get all users
@@ -11719,7 +12077,7 @@ export def "rest-3-users-search get-list" [
   let full_url = (build-url $base "/rest/api/3/users/search" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"startAt": $start_at, "maxResults": $max_results} | compact), body: null}
 }
 
 # Create version
@@ -11756,7 +12114,7 @@ export def "rest-3-version create" [
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: {}, body: $req_body}
 }
 
 # Delete version
@@ -11781,11 +12139,12 @@ export def "rest-3-version delete" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
+  if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
   let qp = [(serialize-qp "moveFixIssuesTo" $move_fix_issues_to "scalar") (serialize-qp "moveAffectedIssuesTo" $move_affected_issues_to "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/rest/api/3/version/{id}") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"moveFixIssuesTo": $move_fix_issues_to, "moveAffectedIssuesTo": $move_affected_issues_to} | compact), body: null}
 }
 
 # Get version
@@ -11807,11 +12166,12 @@ export def "rest-3-version get" [
 ]: nothing -> record<archived: bool, description: string, expand: string, id: string, issuesStatusForFixVersion: record<done: int, inProgress: int, toDo: int, unmapped: int>, moveUnfixedIssuesTo: string, name: string, operations: table<href: string, iconClass: string, id: string, label: string, styleClass: string, title: string, weight: int>, overdue: bool, project: string, projectId: int, releaseDate: string, released: bool, self: string, startDate: string, userReleaseDate: string, userStartDate: string> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
+  if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
   let qp = [(serialize-qp "expand" $expand "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/rest/api/3/version/{id}") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"expand": $expand} | compact), body: null}
 }
 
 # Update version
@@ -11844,12 +12204,13 @@ export def "rest-3-version update" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
+  if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
   let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/rest/api/3/version/{id}"))
   let req_body = {"archived": $archived, "description": $description, "expand": $expand, "moveUnfixedIssuesTo": $move_unfixed_issues_to, "name": $name, "project": $project, "projectId": $project_id, "releaseDate": $release_date, "released": $released, "startDate": $start_date} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: {}, body: $req_body}
 }
 
 # Merge versions
@@ -11871,10 +12232,12 @@ export def "rest-3-version-mergeto update-merge" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
+  if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
+  if ($move_issues_to | is-empty) { error make --unspanned { msg: "path parameter 'moveIssuesTo' must be non-empty" } }
   let full_url = (build-url $base ({id: (encode-path-segment $id), move_issues_to: (encode-path-segment $move_issues_to)} | format pattern "/rest/api/3/version/{id}/mergeto/{move_issues_to}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
 }
 
 # Move version
@@ -11898,12 +12261,13 @@ export def "rest-3-version-move move" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
+  if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
   let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/rest/api/3/version/{id}/move"))
   let req_body = {"after": $after, "position": $position} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: {}, body: $req_body}
 }
 
 # Get version's related issues count
@@ -11924,10 +12288,11 @@ export def "rest-3-version-related-issue-counts get" [
 ]: nothing -> record<customFieldUsage: table<customFieldId: int, fieldName: string, issueCountWithVersionInCustomField: int>, issueCountWithCustomFieldsShowingVersion: int, issuesAffectedCount: int, issuesFixedCount: int, self: string> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
+  if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
   let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/rest/api/3/version/{id}/relatedIssueCounts"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
 }
 
 # Delete and replace version
@@ -11953,12 +12318,13 @@ export def "rest-3-version-remove-and-swap delete-update" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
+  if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
   let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/rest/api/3/version/{id}/removeAndSwap"))
   let req_body = {"customFieldReplacementList": $custom_field_replacement_list, "moveAffectedIssuesTo": $move_affected_issues_to, "moveFixIssuesTo": $move_fix_issues_to} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: {}, body: $req_body}
 }
 
 # Get version's unresolved issues count
@@ -11979,10 +12345,11 @@ export def "rest-3-version-unresolved-issue-count get" [
 ]: nothing -> record<issuesCount: int, issuesUnresolvedCount: int, self: string> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
+  if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
   let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/rest/api/3/version/{id}/unresolvedIssueCount"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
 }
 
 # Delete webhooks by ID
@@ -12009,7 +12376,7 @@ export def "rest-3-webhook delete" [
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: {}, body: $req_body}
 }
 
 # Get dynamic webhooks for app
@@ -12035,7 +12402,7 @@ export def "rest-3-webhook get-dynamic-for-app" [
   let full_url = (build-url $base "/rest/api/3/webhook" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"startAt": $start_at, "maxResults": $max_results} | compact), body: null}
 }
 
 # Register dynamic webhooks
@@ -12064,7 +12431,7 @@ export def "rest-3-webhook create-dynamic" [
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: {}, body: $req_body}
 }
 
 # Get failed webhooks
@@ -12090,7 +12457,7 @@ export def "rest-3-webhook-failed get" [
   let full_url = (build-url $base "/rest/api/3/webhook/failed" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"maxResults": $max_results, "after": $after} | compact), body: null}
 }
 
 # Extend webhook life
@@ -12117,7 +12484,7 @@ export def "rest-3-webhook-refresh refresh" [
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: {}, body: $req_body}
 }
 
 # Get all workflows
@@ -12144,7 +12511,7 @@ export def "rest-3-workflow get-list" [
   let full_url = (build-url $base "/rest/api/3/workflow" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"workflowName": $workflow_name} | compact), body: null}
 }
 
 # Create workflow
@@ -12176,7 +12543,7 @@ export def "rest-3-workflow create" [
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: {}, body: $req_body}
 }
 
 # Get workflow transition rule configurations
@@ -12208,7 +12575,7 @@ export def "rest-3-workflow-rule-config get-transition-configurations" [
   let full_url = (build-url $base "/rest/api/3/workflow/rule/config" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"startAt": $start_at, "maxResults": $max_results, "types": $types, "keys": $keys, "workflowNames": $workflow_names, "withTags": $with_tags, "draft": $draft, "expand": $expand} | compact), body: null}
 }
 
 # Update workflow transition rule configurations
@@ -12236,7 +12603,7 @@ export def "rest-3-workflow-rule-config update-transition-configurations" [
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: {}, body: $req_body}
 }
 
 # Delete workflow transition rule configurations
@@ -12264,7 +12631,7 @@ export def "rest-3-workflow-rule-config-delete delete-transition-configurations"
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: {}, body: $req_body}
 }
 
 # Get workflows paginated
@@ -12295,7 +12662,7 @@ export def "rest-3-workflow-search get-paginated" [
   let full_url = (build-url $base "/rest/api/3/workflow/search" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"startAt": $start_at, "maxResults": $max_results, "workflowName": $workflow_name, "expand": $expand, "queryString": $query_string, "orderBy": $order_by, "isActive": $is_active} | compact), body: null}
 }
 
 # Delete workflow transition property
@@ -12319,11 +12686,12 @@ export def "rest-3-workflow-transitions-properties delete-property" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
+  if ($transition_id | is-empty) { error make --unspanned { msg: "path parameter 'transitionId' must be non-empty" } }
   let qp = [(serialize-qp "key" $key "scalar") (serialize-qp "workflowName" $workflow_name "scalar") (serialize-qp "workflowMode" $workflow_mode "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({transition_id: (encode-path-segment $transition_id)} | format pattern "/rest/api/3/workflow/transitions/{transition_id}/properties") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"key": $key, "workflowName": $workflow_name, "workflowMode": $workflow_mode} | compact), body: null}
 }
 
 # Get workflow transition properties
@@ -12348,11 +12716,12 @@ export def "rest-3-workflow-transitions-properties get" [
 ]: nothing -> record<id: string, key: string, value: string> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
+  if ($transition_id | is-empty) { error make --unspanned { msg: "path parameter 'transitionId' must be non-empty" } }
   let qp = [(serialize-qp "includeReservedKeys" $include_reserved_keys "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "workflowName" $workflow_name "scalar") (serialize-qp "workflowMode" $workflow_mode "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({transition_id: (encode-path-segment $transition_id)} | format pattern "/rest/api/3/workflow/transitions/{transition_id}/properties") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"includeReservedKeys": $include_reserved_keys, "key": $key, "workflowName": $workflow_name, "workflowMode": $workflow_mode} | compact), body: null}
 }
 
 # Create workflow transition property
@@ -12378,13 +12747,14 @@ export def "rest-3-workflow-transitions-properties create-property" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
+  if ($transition_id | is-empty) { error make --unspanned { msg: "path parameter 'transitionId' must be non-empty" } }
   let qp = [(serialize-qp "key" $key "scalar") (serialize-qp "workflowName" $workflow_name "scalar") (serialize-qp "workflowMode" $workflow_mode "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({transition_id: (encode-path-segment $transition_id)} | format pattern "/rest/api/3/workflow/transitions/{transition_id}/properties") $qp)
   let req_body = {"value": $value} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: ({"key": $key, "workflowName": $workflow_name, "workflowMode": $workflow_mode} | compact), body: $req_body}
 }
 
 # Update workflow transition property
@@ -12410,13 +12780,14 @@ export def "rest-3-workflow-transitions-properties update-property" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
+  if ($transition_id | is-empty) { error make --unspanned { msg: "path parameter 'transitionId' must be non-empty" } }
   let qp = [(serialize-qp "key" $key "scalar") (serialize-qp "workflowName" $workflow_name "scalar") (serialize-qp "workflowMode" $workflow_mode "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({transition_id: (encode-path-segment $transition_id)} | format pattern "/rest/api/3/workflow/transitions/{transition_id}/properties") $qp)
   let req_body = {"value": $value} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: ({"key": $key, "workflowName": $workflow_name, "workflowMode": $workflow_mode} | compact), body: $req_body}
 }
 
 # Delete inactive workflow
@@ -12437,10 +12808,11 @@ export def "rest-3-workflow delete-inactive" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
+  if ($entity_id | is-empty) { error make --unspanned { msg: "path parameter 'entityId' must be non-empty" } }
   let full_url = (build-url $base ({entity_id: (encode-path-segment $entity_id)} | format pattern "/rest/api/3/workflow/{entity_id}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
 }
 
 # Get all workflow schemes
@@ -12466,7 +12838,7 @@ export def "rest-3-workflowscheme get-list-workflow-schemes" [
   let full_url = (build-url $base "/rest/api/3/workflowscheme" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"startAt": $start_at, "maxResults": $max_results} | compact), body: null}
 }
 
 # Create workflow scheme
@@ -12497,7 +12869,7 @@ export def "rest-3-workflowscheme create-workflow-scheme" [
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: {}, body: $req_body}
 }
 
 # Get workflow scheme project associations
@@ -12522,7 +12894,7 @@ export def "rest-3-workflowscheme-project get-workflow-scheme-associations" [
   let full_url = (build-url $base "/rest/api/3/workflowscheme/project" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"projectId": $project_id} | compact), body: null}
 }
 
 # Assign workflow scheme to project
@@ -12550,7 +12922,7 @@ export def "rest-3-workflowscheme-project assign-scheme" [
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: {}, body: $req_body}
 }
 
 # Delete workflow scheme
@@ -12571,10 +12943,11 @@ export def "rest-3-workflowscheme delete-workflow-scheme" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
+  if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
   let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/rest/api/3/workflowscheme/{id}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
 }
 
 # Get workflow scheme
@@ -12596,11 +12969,12 @@ export def "rest-3-workflowscheme get-workflow-scheme" [
 ]: nothing -> record<defaultWorkflow: string, description: string, draft: bool, id: int, issueTypeMappings: record, issueTypes: record, lastModified: string, lastModifiedUser: record<accountId: string, accountType: string, active: bool, applicationRoles: record<callback: record, items: list, max_results: int, pagingCallback: record, size: int>, avatarUrls: record<16x16: string, 24x24: string, 32x32: string, 48x48: string>, displayName: string, emailAddress: string, expand: string, groups: record<callback: record, items: list, max_results: int, pagingCallback: record, size: int>, key: string, locale: string, name: string, self: string, timeZone: string>, name: string, originalDefaultWorkflow: string, originalIssueTypeMappings: record, self: string, updateDraftIfNeeded: bool> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
+  if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
   let qp = [(serialize-qp "returnDraftIfExists" $return_draft_if_exists "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/rest/api/3/workflowscheme/{id}") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"returnDraftIfExists": $return_draft_if_exists} | compact), body: null}
 }
 
 # Update workflow scheme
@@ -12627,12 +13001,13 @@ export def "rest-3-workflowscheme update-workflow-scheme" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
+  if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
   let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/rest/api/3/workflowscheme/{id}"))
   let req_body = {"defaultWorkflow": $default_workflow, "description": $description, "issueTypeMappings": $issue_type_mappings, "name": $name, "updateDraftIfNeeded": $update_draft_if_needed} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: {}, body: $req_body}
 }
 
 # Create draft workflow scheme
@@ -12653,10 +13028,11 @@ export def "rest-3-workflowscheme-createdraft create-workflow-scheme-draft-from-
 ]: nothing -> record<defaultWorkflow: string, description: string, draft: bool, id: int, issueTypeMappings: record, issueTypes: record, lastModified: string, lastModifiedUser: record<accountId: string, accountType: string, active: bool, applicationRoles: record<callback: record, items: list, max_results: int, pagingCallback: record, size: int>, avatarUrls: record<16x16: string, 24x24: string, 32x32: string, 48x48: string>, displayName: string, emailAddress: string, expand: string, groups: record<callback: record, items: list, max_results: int, pagingCallback: record, size: int>, key: string, locale: string, name: string, self: string, timeZone: string>, name: string, originalDefaultWorkflow: string, originalIssueTypeMappings: record, self: string, updateDraftIfNeeded: bool> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
+  if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
   let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/rest/api/3/workflowscheme/{id}/createdraft"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
 }
 
 # Delete default workflow
@@ -12678,11 +13054,12 @@ export def "rest-3-workflowscheme-default delete-workflow" [
 ]: nothing -> record<defaultWorkflow: string, description: string, draft: bool, id: int, issueTypeMappings: record, issueTypes: record, lastModified: string, lastModifiedUser: record<accountId: string, accountType: string, active: bool, applicationRoles: record<callback: record, items: list, max_results: int, pagingCallback: record, size: int>, avatarUrls: record<16x16: string, 24x24: string, 32x32: string, 48x48: string>, displayName: string, emailAddress: string, expand: string, groups: record<callback: record, items: list, max_results: int, pagingCallback: record, size: int>, key: string, locale: string, name: string, self: string, timeZone: string>, name: string, originalDefaultWorkflow: string, originalIssueTypeMappings: record, self: string, updateDraftIfNeeded: bool> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
+  if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
   let qp = [(serialize-qp "updateDraftIfNeeded" $update_draft_if_needed "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/rest/api/3/workflowscheme/{id}/default") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"updateDraftIfNeeded": $update_draft_if_needed} | compact), body: null}
 }
 
 # Get default workflow
@@ -12704,11 +13081,12 @@ export def "rest-3-workflowscheme-default get-workflow" [
 ]: nothing -> record<updateDraftIfNeeded: bool, workflow: string> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
+  if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
   let qp = [(serialize-qp "returnDraftIfExists" $return_draft_if_exists "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/rest/api/3/workflowscheme/{id}/default") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"returnDraftIfExists": $return_draft_if_exists} | compact), body: null}
 }
 
 # Update default workflow
@@ -12732,12 +13110,13 @@ export def "rest-3-workflowscheme-default update-workflow" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
+  if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
   let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/rest/api/3/workflowscheme/{id}/default"))
   let req_body = {"updateDraftIfNeeded": $update_draft_if_needed, "workflow": $workflow} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: {}, body: $req_body}
 }
 
 # Delete draft workflow scheme
@@ -12758,10 +13137,11 @@ export def "rest-3-workflowscheme-draft delete-workflow-scheme" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
+  if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
   let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/rest/api/3/workflowscheme/{id}/draft"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
 }
 
 # Get draft workflow scheme
@@ -12782,10 +13162,11 @@ export def "rest-3-workflowscheme-draft get-workflow-scheme" [
 ]: nothing -> record<defaultWorkflow: string, description: string, draft: bool, id: int, issueTypeMappings: record, issueTypes: record, lastModified: string, lastModifiedUser: record<accountId: string, accountType: string, active: bool, applicationRoles: record<callback: record, items: list, max_results: int, pagingCallback: record, size: int>, avatarUrls: record<16x16: string, 24x24: string, 32x32: string, 48x48: string>, displayName: string, emailAddress: string, expand: string, groups: record<callback: record, items: list, max_results: int, pagingCallback: record, size: int>, key: string, locale: string, name: string, self: string, timeZone: string>, name: string, originalDefaultWorkflow: string, originalIssueTypeMappings: record, self: string, updateDraftIfNeeded: bool> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
+  if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
   let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/rest/api/3/workflowscheme/{id}/draft"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
 }
 
 # Update draft workflow scheme
@@ -12812,12 +13193,13 @@ export def "rest-3-workflowscheme-draft update-workflow-scheme" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
+  if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
   let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/rest/api/3/workflowscheme/{id}/draft"))
   let req_body = {"defaultWorkflow": $default_workflow, "description": $description, "issueTypeMappings": $issue_type_mappings, "name": $name, "updateDraftIfNeeded": $update_draft_if_needed} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: {}, body: $req_body}
 }
 
 # Delete draft default workflow
@@ -12838,10 +13220,11 @@ export def "rest-3-workflowscheme-draft-default delete-workflow" [
 ]: nothing -> record<defaultWorkflow: string, description: string, draft: bool, id: int, issueTypeMappings: record, issueTypes: record, lastModified: string, lastModifiedUser: record<accountId: string, accountType: string, active: bool, applicationRoles: record<callback: record, items: list, max_results: int, pagingCallback: record, size: int>, avatarUrls: record<16x16: string, 24x24: string, 32x32: string, 48x48: string>, displayName: string, emailAddress: string, expand: string, groups: record<callback: record, items: list, max_results: int, pagingCallback: record, size: int>, key: string, locale: string, name: string, self: string, timeZone: string>, name: string, originalDefaultWorkflow: string, originalIssueTypeMappings: record, self: string, updateDraftIfNeeded: bool> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
+  if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
   let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/rest/api/3/workflowscheme/{id}/draft/default"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
 }
 
 # Get draft default workflow
@@ -12862,10 +13245,11 @@ export def "rest-3-workflowscheme-draft-default get-workflow" [
 ]: nothing -> record<updateDraftIfNeeded: bool, workflow: string> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
+  if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
   let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/rest/api/3/workflowscheme/{id}/draft/default"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
 }
 
 # Update draft default workflow
@@ -12889,12 +13273,13 @@ export def "rest-3-workflowscheme-draft-default update-workflow" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
+  if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
   let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/rest/api/3/workflowscheme/{id}/draft/default"))
   let req_body = {"updateDraftIfNeeded": $update_draft_if_needed, "workflow": $workflow} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: {}, body: $req_body}
 }
 
 # Delete workflow for issue type in draft workflow scheme
@@ -12916,10 +13301,12 @@ export def "rest-3-workflowscheme-draft-issuetype delete-workflow-scheme-issue-t
 ]: nothing -> record<defaultWorkflow: string, description: string, draft: bool, id: int, issueTypeMappings: record, issueTypes: record, lastModified: string, lastModifiedUser: record<accountId: string, accountType: string, active: bool, applicationRoles: record<callback: record, items: list, max_results: int, pagingCallback: record, size: int>, avatarUrls: record<16x16: string, 24x24: string, 32x32: string, 48x48: string>, displayName: string, emailAddress: string, expand: string, groups: record<callback: record, items: list, max_results: int, pagingCallback: record, size: int>, key: string, locale: string, name: string, self: string, timeZone: string>, name: string, originalDefaultWorkflow: string, originalIssueTypeMappings: record, self: string, updateDraftIfNeeded: bool> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
+  if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
+  if ($issue_type | is-empty) { error make --unspanned { msg: "path parameter 'issueType' must be non-empty" } }
   let full_url = (build-url $base ({id: (encode-path-segment $id), issue_type: (encode-path-segment $issue_type)} | format pattern "/rest/api/3/workflowscheme/{id}/draft/issuetype/{issue_type}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
 }
 
 # Get workflow for issue type in draft workflow scheme
@@ -12941,10 +13328,12 @@ export def "rest-3-workflowscheme-draft-issuetype get-workflow-scheme-issue-type
 ]: nothing -> record<issueType: string, updateDraftIfNeeded: bool, workflow: string> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
+  if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
+  if ($issue_type | is-empty) { error make --unspanned { msg: "path parameter 'issueType' must be non-empty" } }
   let full_url = (build-url $base ({id: (encode-path-segment $id), issue_type: (encode-path-segment $issue_type)} | format pattern "/rest/api/3/workflowscheme/{id}/draft/issuetype/{issue_type}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
 }
 
 # Set workflow for issue type in draft workflow scheme
@@ -12970,12 +13359,14 @@ export def "rest-3-workflowscheme-draft-issuetype update-workflow-scheme-issue-t
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
+  if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
+  if ($issue_type | is-empty) { error make --unspanned { msg: "path parameter 'issueType' must be non-empty" } }
   let full_url = (build-url $base ({id: (encode-path-segment $id), issue_type: (encode-path-segment $issue_type)} | format pattern "/rest/api/3/workflowscheme/{id}/draft/issuetype/{issue_type}"))
   let req_body = {"issueType": $body_issue_type, "updateDraftIfNeeded": $update_draft_if_needed, "workflow": $workflow} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: {}, body: $req_body}
 }
 
 # Publish draft workflow scheme
@@ -13000,13 +13391,14 @@ export def "rest-3-workflowscheme-draft-publish publish-workflow-scheme" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
+  if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
   let qp = [(serialize-qp "validateOnly" $validate_only "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/rest/api/3/workflowscheme/{id}/draft/publish") $qp)
   let req_body = {"statusMappings": $status_mappings} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: ({"validateOnly": $validate_only} | compact), body: $req_body}
 }
 
 # Delete issue types for workflow in draft workflow scheme
@@ -13028,11 +13420,12 @@ export def "rest-3-workflowscheme-draft-workflow delete-mapping" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
+  if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
   let qp = [(serialize-qp "workflowName" $workflow_name "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/rest/api/3/workflowscheme/{id}/draft/workflow") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"workflowName": $workflow_name} | compact), body: null}
 }
 
 # Get issue types for workflows in draft workflow scheme
@@ -13054,11 +13447,12 @@ export def "rest-3-workflowscheme-draft-workflow get" [
 ]: nothing -> record<defaultMapping: bool, issueTypes: list<string>, updateDraftIfNeeded: bool, workflow: string> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
+  if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
   let qp = [(serialize-qp "workflowName" $workflow_name "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/rest/api/3/workflowscheme/{id}/draft/workflow") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"workflowName": $workflow_name} | compact), body: null}
 }
 
 # Set issue types for workflow in workflow scheme
@@ -13085,13 +13479,14 @@ export def "rest-3-workflowscheme-draft-workflow update-mapping" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
+  if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
   let qp = [(serialize-qp "workflowName" $workflow_name "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/rest/api/3/workflowscheme/{id}/draft/workflow") $qp)
   let req_body = {"defaultMapping": $default_mapping, "issueTypes": $issue_types, "updateDraftIfNeeded": $update_draft_if_needed, "workflow": $workflow} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: ({"workflowName": $workflow_name} | compact), body: $req_body}
 }
 
 # Delete workflow for issue type in workflow scheme
@@ -13114,11 +13509,13 @@ export def "rest-3-workflowscheme-issuetype delete-workflow-scheme-issue-type" [
 ]: nothing -> record<defaultWorkflow: string, description: string, draft: bool, id: int, issueTypeMappings: record, issueTypes: record, lastModified: string, lastModifiedUser: record<accountId: string, accountType: string, active: bool, applicationRoles: record<callback: record, items: list, max_results: int, pagingCallback: record, size: int>, avatarUrls: record<16x16: string, 24x24: string, 32x32: string, 48x48: string>, displayName: string, emailAddress: string, expand: string, groups: record<callback: record, items: list, max_results: int, pagingCallback: record, size: int>, key: string, locale: string, name: string, self: string, timeZone: string>, name: string, originalDefaultWorkflow: string, originalIssueTypeMappings: record, self: string, updateDraftIfNeeded: bool> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
+  if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
+  if ($issue_type | is-empty) { error make --unspanned { msg: "path parameter 'issueType' must be non-empty" } }
   let qp = [(serialize-qp "updateDraftIfNeeded" $update_draft_if_needed "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({id: (encode-path-segment $id), issue_type: (encode-path-segment $issue_type)} | format pattern "/rest/api/3/workflowscheme/{id}/issuetype/{issue_type}") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"updateDraftIfNeeded": $update_draft_if_needed} | compact), body: null}
 }
 
 # Get workflow for issue type in workflow scheme
@@ -13141,11 +13538,13 @@ export def "rest-3-workflowscheme-issuetype get-workflow-scheme-issue-type" [
 ]: nothing -> record<issueType: string, updateDraftIfNeeded: bool, workflow: string> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
+  if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
+  if ($issue_type | is-empty) { error make --unspanned { msg: "path parameter 'issueType' must be non-empty" } }
   let qp = [(serialize-qp "returnDraftIfExists" $return_draft_if_exists "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({id: (encode-path-segment $id), issue_type: (encode-path-segment $issue_type)} | format pattern "/rest/api/3/workflowscheme/{id}/issuetype/{issue_type}") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"returnDraftIfExists": $return_draft_if_exists} | compact), body: null}
 }
 
 # Set workflow for issue type in workflow scheme
@@ -13171,12 +13570,14 @@ export def "rest-3-workflowscheme-issuetype update-workflow-scheme-issue-type" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
+  if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
+  if ($issue_type | is-empty) { error make --unspanned { msg: "path parameter 'issueType' must be non-empty" } }
   let full_url = (build-url $base ({id: (encode-path-segment $id), issue_type: (encode-path-segment $issue_type)} | format pattern "/rest/api/3/workflowscheme/{id}/issuetype/{issue_type}"))
   let req_body = {"issueType": $body_issue_type, "updateDraftIfNeeded": $update_draft_if_needed, "workflow": $workflow} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: {}, body: $req_body}
 }
 
 # Delete issue types for workflow in workflow scheme
@@ -13199,11 +13600,12 @@ export def "rest-3-workflowscheme-workflow delete-mapping" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
+  if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
   let qp = [(serialize-qp "workflowName" $workflow_name "scalar") (serialize-qp "updateDraftIfNeeded" $update_draft_if_needed "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/rest/api/3/workflowscheme/{id}/workflow") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"workflowName": $workflow_name, "updateDraftIfNeeded": $update_draft_if_needed} | compact), body: null}
 }
 
 # Get issue types for workflows in workflow scheme
@@ -13226,11 +13628,12 @@ export def "rest-3-workflowscheme-workflow get" [
 ]: nothing -> record<defaultMapping: bool, issueTypes: list<string>, updateDraftIfNeeded: bool, workflow: string> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
+  if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
   let qp = [(serialize-qp "workflowName" $workflow_name "scalar") (serialize-qp "returnDraftIfExists" $return_draft_if_exists "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/rest/api/3/workflowscheme/{id}/workflow") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"workflowName": $workflow_name, "returnDraftIfExists": $return_draft_if_exists} | compact), body: null}
 }
 
 # Set issue types for workflow in workflow scheme
@@ -13257,13 +13660,14 @@ export def "rest-3-workflowscheme-workflow update-mapping" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
+  if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
   let qp = [(serialize-qp "workflowName" $workflow_name "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/rest/api/3/workflowscheme/{id}/workflow") $qp)
   let req_body = {"defaultMapping": $default_mapping, "issueTypes": $issue_types, "updateDraftIfNeeded": $update_draft_if_needed, "workflow": $workflow} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: ({"workflowName": $workflow_name} | compact), body: $req_body}
 }
 
 # Get IDs of deleted worklogs
@@ -13288,7 +13692,7 @@ export def "rest-3-worklog-deleted get-of-since" [
   let full_url = (build-url $base "/rest/api/3/worklog/deleted" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"since": $since} | compact), body: null}
 }
 
 # Get worklogs
@@ -13317,7 +13721,7 @@ export def "rest-3-worklog-list get" [
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: ({"expand": $expand} | compact), body: $req_body}
 }
 
 # Get IDs of updated worklogs
@@ -13343,14 +13747,14 @@ export def "rest-3-worklog-updated get-of-modified-since" [
   let full_url = (build-url $base "/rest/api/3/worklog/updated" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"since": $since, "expand": $expand} | compact), body: null}
 }
 
 # Get app properties
 #
 # GET /rest/atlassian-connect/1/addons/{addonKey}/properties
 # operationId: AddonPropertiesResource.getAddonProperties_get
-export def "rest-atlassian-connect-1-addons-properties get-get" [
+export def "rest-atlassian-connect-1-addons-properties get" [
   addon_key: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -13364,17 +13768,18 @@ export def "rest-atlassian-connect-1-addons-properties get-get" [
 ]: nothing -> record<keys: table<key: string, self: string>> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
+  if ($addon_key | is-empty) { error make --unspanned { msg: "path parameter 'addonKey' must be non-empty" } }
   let full_url = (build-url $base ({addon_key: (encode-path-segment $addon_key)} | format pattern "/rest/atlassian-connect/1/addons/{addon_key}/properties"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
 }
 
 # Delete app property
 #
 # DELETE /rest/atlassian-connect/1/addons/{addonKey}/properties/{propertyKey}
 # operationId: AddonPropertiesResource.deleteAddonProperty_delete
-export def "rest-atlassian-connect-1-addons-properties delete-property-delete" [
+export def "rest-atlassian-connect-1-addons-properties delete-property" [
   addon_key: string
   property_key: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -13389,17 +13794,19 @@ export def "rest-atlassian-connect-1-addons-properties delete-property-delete" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($addon_key | is-empty) { error make --unspanned { msg: "path parameter 'addonKey' must be non-empty" } }
+  if ($property_key | is-empty) { error make --unspanned { msg: "path parameter 'propertyKey' must be non-empty" } }
   let full_url = (build-url $base ({addon_key: (encode-path-segment $addon_key), property_key: (encode-path-segment $property_key)} | format pattern "/rest/atlassian-connect/1/addons/{addon_key}/properties/{property_key}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
 }
 
 # Get app property
 #
 # GET /rest/atlassian-connect/1/addons/{addonKey}/properties/{propertyKey}
 # operationId: AddonPropertiesResource.getAddonProperty_get
-export def "rest-atlassian-connect-1-addons-properties get-property-get" [
+export def "rest-atlassian-connect-1-addons-properties get-property" [
   addon_key: string
   property_key: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -13414,17 +13821,19 @@ export def "rest-atlassian-connect-1-addons-properties get-property-get" [
 ]: nothing -> record<key: string, value: any> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
+  if ($addon_key | is-empty) { error make --unspanned { msg: "path parameter 'addonKey' must be non-empty" } }
+  if ($property_key | is-empty) { error make --unspanned { msg: "path parameter 'propertyKey' must be non-empty" } }
   let full_url = (build-url $base ({addon_key: (encode-path-segment $addon_key), property_key: (encode-path-segment $property_key)} | format pattern "/rest/atlassian-connect/1/addons/{addon_key}/properties/{property_key}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
 }
 
 # Set app property
 #
 # PUT /rest/atlassian-connect/1/addons/{addonKey}/properties/{propertyKey}
 # operationId: AddonPropertiesResource.putAddonProperty_put
-export def "rest-atlassian-connect-1-addons-properties update-property-update" [
+export def "rest-atlassian-connect-1-addons-properties update-property" [
   addon_key: string
   property_key: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -13441,19 +13850,21 @@ export def "rest-atlassian-connect-1-addons-properties update-property-update" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($addon_key | is-empty) { error make --unspanned { msg: "path parameter 'addonKey' must be non-empty" } }
+  if ($property_key | is-empty) { error make --unspanned { msg: "path parameter 'propertyKey' must be non-empty" } }
   let full_url = (build-url $base ({addon_key: (encode-path-segment $addon_key), property_key: (encode-path-segment $property_key)} | format pattern "/rest/atlassian-connect/1/addons/{addon_key}/properties/{property_key}"))
   let req_body = $body
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: {}, body: $req_body}
 }
 
 # Remove modules
 #
 # DELETE /rest/atlassian-connect/1/app/module/dynamic
 # operationId: DynamicModulesResource.removeModules_delete
-export def "rest-atlassian-connect-1-app-module-dynamic delete-delete" [
+export def "rest-atlassian-connect-1-app-module-dynamic delete" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -13471,14 +13882,14 @@ export def "rest-atlassian-connect-1-app-module-dynamic delete-delete" [
   let full_url = (build-url $base "/rest/atlassian-connect/1/app/module/dynamic" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"moduleKey": $module_key} | compact), body: null}
 }
 
 # Get modules
 #
 # GET /rest/atlassian-connect/1/app/module/dynamic
 # operationId: DynamicModulesResource.getModules_get
-export def "rest-atlassian-connect-1-app-module-dynamic get-get" [
+export def "rest-atlassian-connect-1-app-module-dynamic get" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -13494,14 +13905,14 @@ export def "rest-atlassian-connect-1-app-module-dynamic get-get" [
   let full_url = (build-url $base "/rest/atlassian-connect/1/app/module/dynamic")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
 }
 
 # Register modules
 #
 # POST /rest/atlassian-connect/1/app/module/dynamic
 # operationId: DynamicModulesResource.registerModules_post
-export def "rest-atlassian-connect-1-app-module-dynamic create-create" [
+export def "rest-atlassian-connect-1-app-module-dynamic create" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -13521,7 +13932,7 @@ export def "rest-atlassian-connect-1-app-module-dynamic create-create" [
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: {}, body: $req_body}
 }
 
 # Bulk update custom field value
@@ -13529,7 +13940,7 @@ export def "rest-atlassian-connect-1-app-module-dynamic create-create" [
 # PUT /rest/atlassian-connect/1/migration/field
 # operationId: AppIssueFieldValueUpdateResource.updateIssueFields_put
 # --updateValueList item shape: {_type: "StringIssueField"|"NumberIssueField"|"RichTextIssueField"|"SingleSelectIssueField"|"MultiSelectIssueField"|"TextIssueField", fieldID: int, issueID: int, number?: float, optionID?: string, richText?: string, string?: string, text?: string}
-export def "rest-atlassian-connect-1-migration-field update-issue-update" [
+export def "rest-atlassian-connect-1-migration-field update-issue" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -13552,14 +13963,14 @@ export def "rest-atlassian-connect-1-migration-field update-issue-update" [
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"Atlassian-Transfer-Id": $atlassian_transfer_id} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: {}, body: $req_body}
 }
 
 # Bulk update entity properties
 #
 # PUT /rest/atlassian-connect/1/migration/properties/{entityType}
 # operationId: MigrationResource.updateEntityPropertiesValue_put
-export def "rest-atlassian-connect-1-migration-properties update-entity-value-update" [
+export def "rest-atlassian-connect-1-migration-properties update-entity-value" [
   entity_type: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -13576,6 +13987,7 @@ export def "rest-atlassian-connect-1-migration-properties update-entity-value-up
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($entity_type | is-empty) { error make --unspanned { msg: "path parameter 'entityType' must be non-empty" } }
   let full_url = (build-url $base ({entity_type: (encode-path-segment $entity_type)} | format pattern "/rest/atlassian-connect/1/migration/properties/{entity_type}"))
   let req_body = $body
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else if (($input | is-not-empty) and ($req_body | is-empty)) { $input } else { $req_body }
@@ -13583,7 +13995,7 @@ export def "rest-atlassian-connect-1-migration-properties update-entity-value-up
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"Atlassian-Transfer-Id": $atlassian_transfer_id} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: {}, body: $req_body}
 }
 
 # Get workflow transition rule configurations
@@ -13615,5 +14027,5 @@ export def "rest-atlassian-connect-1-migration-workflow-rule-search create" [
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"Atlassian-Transfer-Id": $atlassian_transfer_id} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: {}, body: $req_body}
 }

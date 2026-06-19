@@ -3,17 +3,18 @@
 # Auth: --token flag or $env.DISPLAY_VIDEO_360_API_TOKEN
 
 const BASE_URL = "https://displayvideo.googleapis.com"
-const DEFAULT_AUTH = "bearer"
 
-# Build auth: returns {headers: record, query: string}
+# Build auth: returns {scheme: string, headers: record, query: string, location: string}.
+# `location` is "header" | "query" | "cookie" | "none" and tells dry-run callers
+# where the token went without inspecting headers/query themselves.
 def build-auth [token?: string, auth_scheme?: string]: nothing -> record {
   let token_val = if ($token != null) and ($token | is-not-empty) { $token } else { $env | get -o DISPLAY_VIDEO_360_API_TOKEN | default "" }
   let scheme = ($auth_scheme | default "bearer")
-  if ($scheme == "none") or ($token_val | is-empty) { return {headers: {}, query: ""} }
+  if ($scheme == "none") or ($token_val | is-empty) { return {scheme: $scheme, headers: {}, query: "", location: "none"} }
   match $scheme {
-    "bearer" => { {headers: {Authorization: $"Bearer ($token_val)"}, query: ""} }
-    "none" => { {headers: {}, query: ""} }
-    _ => { {headers: {Authorization: $"Bearer ($token_val)"}, query: ""} }
+    "bearer" => { {scheme: $scheme, headers: {Authorization: $"Bearer ($token_val)"}, query: "", location: "header"} }
+    "none" => { {scheme: $scheme, headers: {}, query: "", location: "none"} }
+    _ => { {scheme: $scheme, headers: {Authorization: $"Bearer ($token_val)"}, query: "", location: "header"} }
   }
 }
 
@@ -22,8 +23,9 @@ def build-auth [token?: string, auth_scheme?: string]: nothing -> record {
 # ([A-Za-z0-9-._~]) stay literal; everything else gets %XX.
 def serialize-qp [name: string, value: any, style: string]: nothing -> list<string> {
   if ($value == null) { return [] }
-  let n = (encode-path-segment $name)
   let is_list = ($value | describe | str starts-with "list")
+  if $is_list and ($value | is-empty) { return [] }
+  let n = (encode-path-segment $name)
   if ($value | describe | str starts-with "record") { return ($value | transpose k v | each { $"($n)[(encode-path-segment $in.k)]=(encode-path-segment $in.v)" }) }
   if not $is_list { return [$"($n)=(encode-path-segment $value)"] }
   match $style {
@@ -54,22 +56,42 @@ def build-url [base: string, path: string, query?: string]: nothing -> string {
   if ($query != null) and ($query | is-not-empty) { $result | upsert query $query | url join } else { $result | url join }
 }
 
+# Build the dry-run record returned by --dry-run. Shape:
+#   {dry_run: true, method, url, query: <record>, headers, body, content_type, timeout,
+#    auth: {scheme, location}}
+# `meta` carries logical-form data (the query record by spec name, the pre-serialization
+# body) that do-request itself cannot reconstruct from its wire-format args.
+def build-dry-run-record [method: string, url: string, auth: record, content_type: string, timeout: duration, meta?: record]: nothing -> record {
+  let m = ($meta | default {})
+  {
+    dry_run: true
+    method: $method
+    url: $url
+    query: ($m | get -o query | default {})
+    headers: $auth.headers
+    body: ($m | get -o body)
+    content_type: $content_type
+    timeout: $timeout
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+}
+
 # Execute HTTP request with method dispatch
-def do-request [method: string, url: string, auth: record, insecure: bool, raw: bool, dry_run: bool, max_time?: duration, allow_errors?: bool, full?: bool, content_type?: string, body?: any]: nothing -> any {
+def do-request [method: string, url: string, auth: record, insecure: bool, raw: bool, dry_run: bool, max_time?: duration, allow_errors?: bool, full?: bool, content_type?: string, body?: any, dry_run_meta?: record]: nothing -> any {
   let req_url = if ($auth.query | is-not-empty) { if ($url | str contains "?") { $"($url)&($auth.query)" } else { $"($url)?($auth.query)" } } else { $url }
   let timeout = ($max_time | default 30min)
   let ct = ($content_type | default "application/json")
-  if $dry_run { return {method: $method, url: $req_url, headers: $auth.headers, query_string: $auth.query, content_type: $ct, timeout: $timeout, body: $body} }
+  if $dry_run { return (build-dry-run-record $method $req_url $auth $ct $timeout $dry_run_meta) }
   let resp = match $method {
     "get" => { http get --headers $auth.headers --full --allow-errors --max-time $timeout --insecure=$insecure --raw=$raw $req_url }
-    "head" => { http head --headers $auth.headers --max-time $timeout --insecure=$insecure $req_url }
-    "options" => { http options --headers $auth.headers --max-time $timeout --insecure=$insecure $req_url }
+    "head" => { http head --headers $auth.headers --full --allow-errors --max-time $timeout --insecure=$insecure $req_url }
+    "options" => { http options --headers $auth.headers --full --allow-errors --max-time $timeout --insecure=$insecure $req_url }
     "post" => { if ($body | is-empty) { http post --headers $auth.headers --full --allow-errors --max-time $timeout --insecure=$insecure --raw=$raw $req_url "" } else { http post --headers $auth.headers --content-type $ct --full --allow-errors --max-time $timeout --insecure=$insecure --raw=$raw $req_url $body } }
     "put" => { if ($body | is-empty) { http put --headers $auth.headers --full --allow-errors --max-time $timeout --insecure=$insecure --raw=$raw $req_url "" } else { http put --headers $auth.headers --content-type $ct --full --allow-errors --max-time $timeout --insecure=$insecure --raw=$raw $req_url $body } }
     "patch" => { if ($body | is-empty) { http patch --headers $auth.headers --full --allow-errors --max-time $timeout --insecure=$insecure --raw=$raw $req_url "" } else { http patch --headers $auth.headers --content-type $ct --full --allow-errors --max-time $timeout --insecure=$insecure --raw=$raw $req_url $body } }
     "delete" => { if ($body | is-empty) { http delete --headers $auth.headers --full --allow-errors --max-time $timeout --insecure=$insecure --raw=$raw $req_url } else { http delete --headers $auth.headers --content-type $ct --data $body --full --allow-errors --max-time $timeout --insecure=$insecure --raw=$raw $req_url } }
   }
-  if ($method in ["head" "options"]) { return $resp }
+  if ($method == "head") and (not $full) and (not $allow_errors) and $resp.status < 400 { return $resp.headers }
   if $allow_errors { $resp } else if $resp.status >= 400 { error make --unspanned { msg: $"HTTP ($resp.status): ($resp.body)" } } else if $full { {status: $resp.status, headers: $resp.headers, body: $resp.body} } else if $resp.status == 204 { null } else { $resp.body }
 }
 
@@ -149,11 +171,12 @@ export def "download get" [
 ]: nothing -> record<resourceName: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($resource_name | is-empty) { error make --unspanned { msg: "path parameter 'resourceName' must be non-empty" } }
   let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({resource_name: (encode-path-segment $resource_name)} | format pattern "/download/{resource_name}") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"$.xgafv": $xgafv, "access_token": $access_token, "alt": $alt, "callback": $callback, "fields": $fields, "key": $key, "oauth_token": $oauth_token, "prettyPrint": $pretty_print, "quotaUser": $quota_user, "upload_protocol": $upload_protocol, "uploadType": $upload_type} | compact), body: null}
 }
 
 # Uploads media. Upload is supported on the URI `/upload/media/{resource_name=**}?upload_type=media.` **Note**: Upload requests will not be successful without including `upload_type=media` query string.
@@ -187,13 +210,14 @@ export def "media upload" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($resource_name | is-empty) { error make --unspanned { msg: "path parameter 'resourceName' must be non-empty" } }
   let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({resource_name: (encode-path-segment $resource_name)} | format pattern "/media/{resource_name}") $qp)
   let req_body = $body
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else if (($input | is-not-empty) and ($req_body | is-empty)) { $input } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/octet-stream" $req_body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/octet-stream" $req_body {query: ({"$.xgafv": $xgafv, "access_token": $access_token, "alt": $alt, "callback": $callback, "fields": $fields, "key": $key, "oauth_token": $oauth_token, "prettyPrint": $pretty_print, "quotaUser": $quota_user, "upload_protocol": $upload_protocol, "uploadType": $upload_type} | compact), body: $req_body}
 }
 
 # Lists advertisers that are accessible to the current user. The order is defined by the order_by parameter. A single partner_id is required. Cross-partner listing is not supported.
@@ -233,7 +257,7 @@ export def "advertisers list" [
   let full_url = (build-url $base "/v2/advertisers" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"$.xgafv": $xgafv, "access_token": $access_token, "alt": $alt, "callback": $callback, "fields": $fields, "key": $key, "oauth_token": $oauth_token, "prettyPrint": $pretty_print, "quotaUser": $quota_user, "upload_protocol": $upload_protocol, "uploadType": $upload_type, "filter": $filter, "orderBy": $order_by, "pageSize": $page_size, "pageToken": $page_token, "partnerId": $partner_id} | compact), body: null}
 }
 
 # Creates a new advertiser. Returns the newly created advertiser if successful. This method can take up to 180 seconds to complete.
@@ -289,7 +313,7 @@ export def "advertisers create" [
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: ({"$.xgafv": $xgafv, "access_token": $access_token, "alt": $alt, "callback": $callback, "fields": $fields, "key": $key, "oauth_token": $oauth_token, "prettyPrint": $pretty_print, "quotaUser": $quota_user, "upload_protocol": $upload_protocol, "uploadType": $upload_type} | compact), body: $req_body}
 }
 
 # Deletes an advertiser. Deleting an advertiser will delete all of its child resources, for example, campaigns, insertion orders and line items. A deleted advertiser cannot be recovered.
@@ -321,11 +345,12 @@ export def "advertisers delete" [
 ]: nothing -> record {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($advertiser_id | is-empty) { error make --unspanned { msg: "path parameter 'advertiserId' must be non-empty" } }
   let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({advertiser_id: (encode-path-segment $advertiser_id)} | format pattern "/v2/advertisers/{advertiser_id}") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"$.xgafv": $xgafv, "access_token": $access_token, "alt": $alt, "callback": $callback, "fields": $fields, "key": $key, "oauth_token": $oauth_token, "prettyPrint": $pretty_print, "quotaUser": $quota_user, "upload_protocol": $upload_protocol, "uploadType": $upload_type} | compact), body: null}
 }
 
 # Gets an advertiser.
@@ -357,11 +382,12 @@ export def "advertisers get" [
 ]: nothing -> record<adServerConfig: record<cmHybridConfig: record<cmAccountId: string, cmFloodlightConfigId: string, cmFloodlightLinkingAuthorized: bool, cmSyncableSiteIds: list, dv360ToCmCostReportingEnabled: bool, dv360ToCmDataSharingEnabled: bool>, thirdPartyOnlyConfig: record<pixelOrderIdReportingEnabled: bool>>, advertiserId: string, billingConfig: record<billingProfileId: string>, creativeConfig: record<dynamicCreativeEnabled: bool, iasClientId: string, obaComplianceDisabled: bool, videoCreativeDataSharingAuthorized: bool>, dataAccessConfig: record<sdfConfig: record<overridePartnerSdfConfig: bool, sdfConfig: record>>, displayName: string, entityStatus: string, generalConfig: record<currencyCode: string, domainUrl: string, timeZone: string>, integrationDetails: record<details: string, integrationCode: string>, name: string, partnerId: string, prismaEnabled: bool, servingConfig: record<exemptTvFromViewabilityTargeting: bool>, updateTime: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($advertiser_id | is-empty) { error make --unspanned { msg: "path parameter 'advertiserId' must be non-empty" } }
   let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({advertiser_id: (encode-path-segment $advertiser_id)} | format pattern "/v2/advertisers/{advertiser_id}") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"$.xgafv": $xgafv, "access_token": $access_token, "alt": $alt, "callback": $callback, "fields": $fields, "key": $key, "oauth_token": $oauth_token, "prettyPrint": $pretty_print, "quotaUser": $quota_user, "upload_protocol": $upload_protocol, "uploadType": $upload_type} | compact), body: null}
 }
 
 # Updates an existing advertiser. Returns the updated advertiser if successful.
@@ -413,13 +439,14 @@ export def "advertisers update" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($advertiser_id | is-empty) { error make --unspanned { msg: "path parameter 'advertiserId' must be non-empty" } }
   let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar") (serialize-qp "updateMask" $update_mask "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({advertiser_id: (encode-path-segment $advertiser_id)} | format pattern "/v2/advertisers/{advertiser_id}") $qp)
   let req_body = {"adServerConfig": $ad_server_config, "billingConfig": $billing_config, "creativeConfig": $creative_config, "dataAccessConfig": $data_access_config, "displayName": $display_name, "entityStatus": $entity_status, "generalConfig": $general_config, "integrationDetails": $integration_details, "partnerId": $partner_id, "prismaEnabled": $prisma_enabled, "servingConfig": $serving_config} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "patch" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body
+  do-request "patch" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: ({"$.xgafv": $xgafv, "access_token": $access_token, "alt": $alt, "callback": $callback, "fields": $fields, "key": $key, "oauth_token": $oauth_token, "prettyPrint": $pretty_print, "quotaUser": $quota_user, "upload_protocol": $upload_protocol, "uploadType": $upload_type, "updateMask": $update_mask} | compact), body: $req_body}
 }
 
 # Uploads an asset. Returns the ID of the newly uploaded asset if successful. The asset file size should be no more than 10 MB for images, 200 MB for ZIP files, and 1 GB for videos. Must be used within the [multipart media upload process](/display-video/api/guides/how-tos/upload#multipart). Examples using provided client libraries can be found in our [Creating Creatives guide](/display-video/api/guides/creating-creatives/overview#upload_an_asset).
@@ -453,13 +480,14 @@ export def "advertisers-assets upload" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($advertiser_id | is-empty) { error make --unspanned { msg: "path parameter 'advertiserId' must be non-empty" } }
   let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({advertiser_id: (encode-path-segment $advertiser_id)} | format pattern "/v2/advertisers/{advertiser_id}/assets") $qp)
   let req_body = $body
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else if (($input | is-not-empty) and ($req_body | is-empty)) { $input } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/octet-stream" $req_body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/octet-stream" $req_body {query: ({"$.xgafv": $xgafv, "access_token": $access_token, "alt": $alt, "callback": $callback, "fields": $fields, "key": $key, "oauth_token": $oauth_token, "prettyPrint": $pretty_print, "quotaUser": $quota_user, "upload_protocol": $upload_protocol, "uploadType": $upload_type} | compact), body: $req_body}
 }
 
 # Lists campaigns in an advertiser. The order is defined by the order_by parameter. If a filter by entity_status is not specified, campaigns with `ENTITY_STATUS_ARCHIVED` will not be included in the results.
@@ -495,11 +523,12 @@ export def "advertisers-campaigns list" [
 ]: nothing -> record<campaigns: table<advertiserId: string, campaignBudgets: list, campaignFlight: record, campaignGoal: record, campaignId: string, displayName: string, entityStatus: string, frequencyCap: record, name: string, updateTime: string>, nextPageToken: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($advertiser_id | is-empty) { error make --unspanned { msg: "path parameter 'advertiserId' must be non-empty" } }
   let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar") (serialize-qp "filter" $filter "scalar") (serialize-qp "orderBy" $order_by "scalar") (serialize-qp "pageSize" $page_size "scalar") (serialize-qp "pageToken" $page_token "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({advertiser_id: (encode-path-segment $advertiser_id)} | format pattern "/v2/advertisers/{advertiser_id}/campaigns") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"$.xgafv": $xgafv, "access_token": $access_token, "alt": $alt, "callback": $callback, "fields": $fields, "key": $key, "oauth_token": $oauth_token, "prettyPrint": $pretty_print, "quotaUser": $quota_user, "upload_protocol": $upload_protocol, "uploadType": $upload_type, "filter": $filter, "orderBy": $order_by, "pageSize": $page_size, "pageToken": $page_token} | compact), body: null}
 }
 
 # Creates a new campaign. Returns the newly created campaign if successful.
@@ -542,13 +571,14 @@ export def "advertisers-campaigns create" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($advertiser_id | is-empty) { error make --unspanned { msg: "path parameter 'advertiserId' must be non-empty" } }
   let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({advertiser_id: (encode-path-segment $advertiser_id)} | format pattern "/v2/advertisers/{advertiser_id}/campaigns") $qp)
   let req_body = {"campaignBudgets": $campaign_budgets, "campaignFlight": $campaign_flight, "campaignGoal": $campaign_goal, "displayName": $display_name, "entityStatus": $entity_status, "frequencyCap": $frequency_cap} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: ({"$.xgafv": $xgafv, "access_token": $access_token, "alt": $alt, "callback": $callback, "fields": $fields, "key": $key, "oauth_token": $oauth_token, "prettyPrint": $pretty_print, "quotaUser": $quota_user, "upload_protocol": $upload_protocol, "uploadType": $upload_type} | compact), body: $req_body}
 }
 
 # Permanently deletes a campaign. A deleted campaign cannot be recovered. The campaign should be archived first, i.e. set entity_status to `ENTITY_STATUS_ARCHIVED`, to be able to delete it.
@@ -581,11 +611,13 @@ export def "advertisers-campaigns delete" [
 ]: nothing -> record {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($advertiser_id | is-empty) { error make --unspanned { msg: "path parameter 'advertiserId' must be non-empty" } }
+  if ($campaign_id | is-empty) { error make --unspanned { msg: "path parameter 'campaignId' must be non-empty" } }
   let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({advertiser_id: (encode-path-segment $advertiser_id), campaign_id: (encode-path-segment $campaign_id)} | format pattern "/v2/advertisers/{advertiser_id}/campaigns/{campaign_id}") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"$.xgafv": $xgafv, "access_token": $access_token, "alt": $alt, "callback": $callback, "fields": $fields, "key": $key, "oauth_token": $oauth_token, "prettyPrint": $pretty_print, "quotaUser": $quota_user, "upload_protocol": $upload_protocol, "uploadType": $upload_type} | compact), body: null}
 }
 
 # Gets a campaign.
@@ -618,11 +650,13 @@ export def "advertisers-campaigns get" [
 ]: nothing -> record<advertiserId: string, campaignBudgets: table<budgetAmountMicros: string, budgetId: string, budgetUnit: string, dateRange: record, displayName: string, externalBudgetId: string, externalBudgetSource: string, invoiceGroupingId: string, prismaConfig: record>, campaignFlight: record<plannedDates: record<endDate: record, startDate: record>, plannedSpendAmountMicros: string>, campaignGoal: record<campaignGoalType: string, performanceGoal: record<performanceGoalAmountMicros: string, performanceGoalPercentageMicros: string, performanceGoalString: string, performanceGoalType: string>>, campaignId: string, displayName: string, entityStatus: string, frequencyCap: record<maxImpressions: int, maxViews: int, timeUnit: string, timeUnitCount: int, unlimited: bool>, name: string, updateTime: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($advertiser_id | is-empty) { error make --unspanned { msg: "path parameter 'advertiserId' must be non-empty" } }
+  if ($campaign_id | is-empty) { error make --unspanned { msg: "path parameter 'campaignId' must be non-empty" } }
   let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({advertiser_id: (encode-path-segment $advertiser_id), campaign_id: (encode-path-segment $campaign_id)} | format pattern "/v2/advertisers/{advertiser_id}/campaigns/{campaign_id}") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"$.xgafv": $xgafv, "access_token": $access_token, "alt": $alt, "callback": $callback, "fields": $fields, "key": $key, "oauth_token": $oauth_token, "prettyPrint": $pretty_print, "quotaUser": $quota_user, "upload_protocol": $upload_protocol, "uploadType": $upload_type} | compact), body: null}
 }
 
 # Updates an existing campaign. Returns the updated campaign if successful.
@@ -667,13 +701,15 @@ export def "advertisers-campaigns update" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($advertiser_id | is-empty) { error make --unspanned { msg: "path parameter 'advertiserId' must be non-empty" } }
+  if ($campaign_id | is-empty) { error make --unspanned { msg: "path parameter 'campaignId' must be non-empty" } }
   let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar") (serialize-qp "updateMask" $update_mask "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({advertiser_id: (encode-path-segment $advertiser_id), campaign_id: (encode-path-segment $campaign_id)} | format pattern "/v2/advertisers/{advertiser_id}/campaigns/{campaign_id}") $qp)
   let req_body = {"campaignBudgets": $campaign_budgets, "campaignFlight": $campaign_flight, "campaignGoal": $campaign_goal, "displayName": $display_name, "entityStatus": $entity_status, "frequencyCap": $frequency_cap} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "patch" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body
+  do-request "patch" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: ({"$.xgafv": $xgafv, "access_token": $access_token, "alt": $alt, "callback": $callback, "fields": $fields, "key": $key, "oauth_token": $oauth_token, "prettyPrint": $pretty_print, "quotaUser": $quota_user, "upload_protocol": $upload_protocol, "uploadType": $upload_type, "updateMask": $update_mask} | compact), body: $req_body}
 }
 
 # Lists the targeting options assigned to a campaign for a specified targeting type.
@@ -711,11 +747,14 @@ export def "advertisers-campaigns-targeting-types-assigned-targeting-options lis
 ]: nothing -> record<assignedTargetingOptions: table<ageRangeDetails: record, appCategoryDetails: record, appDetails: record, assignedTargetingOptionId: string, assignedTargetingOptionIdAlias: string, audienceGroupDetails: record, audioContentTypeDetails: record, authorizedSellerStatusDetails: record, browserDetails: record, businessChainDetails: record, carrierAndIspDetails: record, categoryDetails: record, channelDetails: record, contentDurationDetails: record, contentGenreDetails: record, contentInstreamPositionDetails: record, contentOutstreamPositionDetails: record, contentStreamTypeDetails: record, dayAndTimeDetails: record, deviceMakeModelDetails: record, deviceTypeDetails: record, digitalContentLabelExclusionDetails: record, environmentDetails: record, exchangeDetails: record, genderDetails: record, geoRegionDetails: record, householdIncomeDetails: record, inheritance: string, inventorySourceDetails: record, inventorySourceGroupDetails: record, keywordDetails: record, languageDetails: record, name: string, nativeContentPositionDetails: record, negativeKeywordListDetails: record, omidDetails: record, onScreenPositionDetails: record, operatingSystemDetails: record, parentalStatusDetails: record, poiDetails: record, proximityLocationListDetails: record, regionalLocationListDetails: record, sensitiveCategoryExclusionDetails: record, sessionPositionDetails: record, subExchangeDetails: record, targetingType: string, thirdPartyVerifierDetails: record, urlDetails: record, userRewardedContentDetails: record, videoPlayerSizeDetails: record, viewabilityDetails: record, youtubeChannelDetails: record, youtubeVideoDetails: record>, nextPageToken: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($advertiser_id | is-empty) { error make --unspanned { msg: "path parameter 'advertiserId' must be non-empty" } }
+  if ($campaign_id | is-empty) { error make --unspanned { msg: "path parameter 'campaignId' must be non-empty" } }
+  if ($targeting_type | is-empty) { error make --unspanned { msg: "path parameter 'targetingType' must be non-empty" } }
   let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar") (serialize-qp "filter" $filter "scalar") (serialize-qp "orderBy" $order_by "scalar") (serialize-qp "pageSize" $page_size "scalar") (serialize-qp "pageToken" $page_token "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({advertiser_id: (encode-path-segment $advertiser_id), campaign_id: (encode-path-segment $campaign_id), targeting_type: (encode-path-segment $targeting_type)} | format pattern "/v2/advertisers/{advertiser_id}/campaigns/{campaign_id}/targetingTypes/{targeting_type}/assignedTargetingOptions") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"$.xgafv": $xgafv, "access_token": $access_token, "alt": $alt, "callback": $callback, "fields": $fields, "key": $key, "oauth_token": $oauth_token, "prettyPrint": $pretty_print, "quotaUser": $quota_user, "upload_protocol": $upload_protocol, "uploadType": $upload_type, "filter": $filter, "orderBy": $order_by, "pageSize": $page_size, "pageToken": $page_token} | compact), body: null}
 }
 
 # Gets a single targeting option assigned to a campaign.
@@ -750,11 +789,15 @@ export def "advertisers-campaigns-targeting-types-assigned-targeting-options get
 ]: nothing -> record<ageRangeDetails: record<ageRange: string>, appCategoryDetails: record<displayName: string, negative: bool, targetingOptionId: string>, appDetails: record<appId: string, appPlatform: string, displayName: string, negative: bool>, assignedTargetingOptionId: string, assignedTargetingOptionIdAlias: string, audienceGroupDetails: record<excludedFirstAndThirdPartyAudienceGroup: record<settings: list>, excludedGoogleAudienceGroup: record<settings: list>, includedCombinedAudienceGroup: record<settings: list>, includedCustomListGroup: record<settings: list>, includedFirstAndThirdPartyAudienceGroups: list<record>, includedGoogleAudienceGroup: record<settings: list>>, audioContentTypeDetails: record<audioContentType: string>, authorizedSellerStatusDetails: record<authorizedSellerStatus: string, targetingOptionId: string>, browserDetails: record<displayName: string, negative: bool, targetingOptionId: string>, businessChainDetails: record<displayName: string, proximityRadiusAmount: float, proximityRadiusUnit: string, targetingOptionId: string>, carrierAndIspDetails: record<displayName: string, negative: bool, targetingOptionId: string>, categoryDetails: record<displayName: string, negative: bool, targetingOptionId: string>, channelDetails: record<channelId: string, negative: bool>, contentDurationDetails: record<contentDuration: string, targetingOptionId: string>, contentGenreDetails: record<displayName: string, negative: bool, targetingOptionId: string>, contentInstreamPositionDetails: record<adType: string, contentInstreamPosition: string>, contentOutstreamPositionDetails: record<adType: string, contentOutstreamPosition: string>, contentStreamTypeDetails: record<contentStreamType: string, targetingOptionId: string>, dayAndTimeDetails: record<dayOfWeek: string, endHour: int, startHour: int, timeZoneResolution: string>, deviceMakeModelDetails: record<displayName: string, negative: bool, targetingOptionId: string>, deviceTypeDetails: record<deviceType: string, youtubeAndPartnersBidMultiplier: float>, digitalContentLabelExclusionDetails: record<excludedContentRatingTier: string>, environmentDetails: record<environment: string>, exchangeDetails: record<exchange: string>, genderDetails: record<gender: string>, geoRegionDetails: record<displayName: string, geoRegionType: string, negative: bool, targetingOptionId: string>, householdIncomeDetails: record<householdIncome: string>, inheritance: string, inventorySourceDetails: record<inventorySourceId: string>, inventorySourceGroupDetails: record<inventorySourceGroupId: string>, keywordDetails: record<keyword: string, negative: bool>, languageDetails: record<displayName: string, negative: bool, targetingOptionId: string>, name: string, nativeContentPositionDetails: record<contentPosition: string>, negativeKeywordListDetails: record<negativeKeywordListId: string>, omidDetails: record<omid: string>, onScreenPositionDetails: record<adType: string, onScreenPosition: string, targetingOptionId: string>, operatingSystemDetails: record<displayName: string, negative: bool, targetingOptionId: string>, parentalStatusDetails: record<parentalStatus: string>, poiDetails: record<displayName: string, latitude: float, longitude: float, proximityRadiusAmount: float, proximityRadiusUnit: string, targetingOptionId: string>, proximityLocationListDetails: record<proximityLocationListId: string, proximityRadius: float, proximityRadiusUnit: string>, regionalLocationListDetails: record<negative: bool, regionalLocationListId: string>, sensitiveCategoryExclusionDetails: record<excludedSensitiveCategory: string>, sessionPositionDetails: record<sessionPosition: string>, subExchangeDetails: record<targetingOptionId: string>, targetingType: string, thirdPartyVerifierDetails: record<adloox: record<excludedAdlooxCategories: list>, doubleVerify: record<appStarRating: record, avoidedAgeRatings: list, brandSafetyCategories: record, customSegmentId: string, displayViewability: record, fraudInvalidTraffic: record, videoViewability: record>, integralAdScience: record<customSegmentId: list, displayViewability: string, excludeUnrateable: bool, excludedAdFraudRisk: string, excludedAdultRisk: string, excludedAlcoholRisk: string, excludedDrugsRisk: string, excludedGamblingRisk: string, excludedHateSpeechRisk: string, excludedIllegalDownloadsRisk: string, excludedOffensiveLanguageRisk: string, excludedViolenceRisk: string, traqScoreOption: string, videoViewability: string>>, urlDetails: record<negative: bool, url: string>, userRewardedContentDetails: record<targetingOptionId: string, userRewardedContent: string>, videoPlayerSizeDetails: record<videoPlayerSize: string>, viewabilityDetails: record<viewability: string>, youtubeChannelDetails: record<channelId: string, negative: bool>, youtubeVideoDetails: record<negative: bool, videoId: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($advertiser_id | is-empty) { error make --unspanned { msg: "path parameter 'advertiserId' must be non-empty" } }
+  if ($campaign_id | is-empty) { error make --unspanned { msg: "path parameter 'campaignId' must be non-empty" } }
+  if ($targeting_type | is-empty) { error make --unspanned { msg: "path parameter 'targetingType' must be non-empty" } }
+  if ($assigned_targeting_option_id | is-empty) { error make --unspanned { msg: "path parameter 'assignedTargetingOptionId' must be non-empty" } }
   let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({advertiser_id: (encode-path-segment $advertiser_id), campaign_id: (encode-path-segment $campaign_id), targeting_type: (encode-path-segment $targeting_type), assigned_targeting_option_id: (encode-path-segment $assigned_targeting_option_id)} | format pattern "/v2/advertisers/{advertiser_id}/campaigns/{campaign_id}/targetingTypes/{targeting_type}/assignedTargetingOptions/{assigned_targeting_option_id}") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"$.xgafv": $xgafv, "access_token": $access_token, "alt": $alt, "callback": $callback, "fields": $fields, "key": $key, "oauth_token": $oauth_token, "prettyPrint": $pretty_print, "quotaUser": $quota_user, "upload_protocol": $upload_protocol, "uploadType": $upload_type} | compact), body: null}
 }
 
 # Lists assigned targeting options of a campaign across targeting types.
@@ -791,11 +834,13 @@ export def "advertisers-campaigns list-assigned-targeting-options" [
 ]: nothing -> record<assignedTargetingOptions: table<ageRangeDetails: record, appCategoryDetails: record, appDetails: record, assignedTargetingOptionId: string, assignedTargetingOptionIdAlias: string, audienceGroupDetails: record, audioContentTypeDetails: record, authorizedSellerStatusDetails: record, browserDetails: record, businessChainDetails: record, carrierAndIspDetails: record, categoryDetails: record, channelDetails: record, contentDurationDetails: record, contentGenreDetails: record, contentInstreamPositionDetails: record, contentOutstreamPositionDetails: record, contentStreamTypeDetails: record, dayAndTimeDetails: record, deviceMakeModelDetails: record, deviceTypeDetails: record, digitalContentLabelExclusionDetails: record, environmentDetails: record, exchangeDetails: record, genderDetails: record, geoRegionDetails: record, householdIncomeDetails: record, inheritance: string, inventorySourceDetails: record, inventorySourceGroupDetails: record, keywordDetails: record, languageDetails: record, name: string, nativeContentPositionDetails: record, negativeKeywordListDetails: record, omidDetails: record, onScreenPositionDetails: record, operatingSystemDetails: record, parentalStatusDetails: record, poiDetails: record, proximityLocationListDetails: record, regionalLocationListDetails: record, sensitiveCategoryExclusionDetails: record, sessionPositionDetails: record, subExchangeDetails: record, targetingType: string, thirdPartyVerifierDetails: record, urlDetails: record, userRewardedContentDetails: record, videoPlayerSizeDetails: record, viewabilityDetails: record, youtubeChannelDetails: record, youtubeVideoDetails: record>, nextPageToken: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($advertiser_id | is-empty) { error make --unspanned { msg: "path parameter 'advertiserId' must be non-empty" } }
+  if ($campaign_id | is-empty) { error make --unspanned { msg: "path parameter 'campaignId' must be non-empty" } }
   let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar") (serialize-qp "filter" $filter "scalar") (serialize-qp "orderBy" $order_by "scalar") (serialize-qp "pageSize" $page_size "scalar") (serialize-qp "pageToken" $page_token "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({advertiser_id: (encode-path-segment $advertiser_id), campaign_id: (encode-path-segment $campaign_id)} | format pattern "/v2/advertisers/{advertiser_id}/campaigns/{campaign_id}:listAssignedTargetingOptions") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"$.xgafv": $xgafv, "access_token": $access_token, "alt": $alt, "callback": $callback, "fields": $fields, "key": $key, "oauth_token": $oauth_token, "prettyPrint": $pretty_print, "quotaUser": $quota_user, "upload_protocol": $upload_protocol, "uploadType": $upload_type, "filter": $filter, "orderBy": $order_by, "pageSize": $page_size, "pageToken": $page_token} | compact), body: null}
 }
 
 # Lists channels for a partner or advertiser.
@@ -832,11 +877,12 @@ export def "advertisers-channels list" [
 ]: nothing -> record<channels: table<advertiserId: string, channelId: string, displayName: string, name: string, negativelyTargetedLineItemCount: string, partnerId: string, positivelyTargetedLineItemCount: string>, nextPageToken: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($advertiser_id | is-empty) { error make --unspanned { msg: "path parameter 'advertiserId' must be non-empty" } }
   let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar") (serialize-qp "filter" $filter "scalar") (serialize-qp "orderBy" $order_by "scalar") (serialize-qp "pageSize" $page_size "scalar") (serialize-qp "pageToken" $page_token "scalar") (serialize-qp "partnerId" $partner_id "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({advertiser_id: (encode-path-segment $advertiser_id)} | format pattern "/v2/advertisers/{advertiser_id}/channels") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"$.xgafv": $xgafv, "access_token": $access_token, "alt": $alt, "callback": $callback, "fields": $fields, "key": $key, "oauth_token": $oauth_token, "prettyPrint": $pretty_print, "quotaUser": $quota_user, "upload_protocol": $upload_protocol, "uploadType": $upload_type, "filter": $filter, "orderBy": $order_by, "pageSize": $page_size, "pageToken": $page_token, "partnerId": $partner_id} | compact), body: null}
 }
 
 # Creates a new channel. Returns the newly created channel if successful.
@@ -868,18 +914,19 @@ export def "advertisers-channels create" [
   --partner-id: string # The ID of the partner that owns the created channel.
   --body-advertiser-id: string # The ID of the advertiser that owns the channel. (format: int64)
   --display-name: string # Required. The display name of the channel. Must be UTF-8 encoded with a maximum length of 240 bytes.
-  --partner-id: string # The ID of the partner that owns the channel. (format: int64)
+  --partner-id-body: string # The ID of the partner that owns the channel. (format: int64) (body field)
 ]: any -> record<advertiserId: string, channelId: string, displayName: string, name: string, negativelyTargetedLineItemCount: string, partnerId: string, positivelyTargetedLineItemCount: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($advertiser_id | is-empty) { error make --unspanned { msg: "path parameter 'advertiserId' must be non-empty" } }
   let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar") (serialize-qp "partnerId" $partner_id "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({advertiser_id: (encode-path-segment $advertiser_id)} | format pattern "/v2/advertisers/{advertiser_id}/channels") $qp)
-  let req_body = {"advertiserId": $body_advertiser_id, "displayName": $display_name, "partnerId": $partner_id} | compact
+  let req_body = {"advertiserId": $body_advertiser_id, "displayName": $display_name, "partnerId": $partner_id_body} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: ({"$.xgafv": $xgafv, "access_token": $access_token, "alt": $alt, "callback": $callback, "fields": $fields, "key": $key, "oauth_token": $oauth_token, "prettyPrint": $pretty_print, "quotaUser": $quota_user, "upload_protocol": $upload_protocol, "uploadType": $upload_type, "partnerId": $partner_id} | compact), body: $req_body}
 }
 
 # Updates a channel. Returns the updated channel if successful.
@@ -913,18 +960,20 @@ export def "advertisers-channels update" [
   --update-mask: string # Required. The mask to control which fields to update.
   --body-advertiser-id: string # The ID of the advertiser that owns the channel. (format: int64)
   --display-name: string # Required. The display name of the channel. Must be UTF-8 encoded with a maximum length of 240 bytes.
-  --partner-id: string # The ID of the partner that owns the channel. (format: int64)
+  --partner-id-body: string # The ID of the partner that owns the channel. (format: int64) (body field)
 ]: any -> record<advertiserId: string, channelId: string, displayName: string, name: string, negativelyTargetedLineItemCount: string, partnerId: string, positivelyTargetedLineItemCount: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($advertiser_id | is-empty) { error make --unspanned { msg: "path parameter 'advertiserId' must be non-empty" } }
+  if ($channel_id | is-empty) { error make --unspanned { msg: "path parameter 'channelId' must be non-empty" } }
   let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar") (serialize-qp "partnerId" $partner_id "scalar") (serialize-qp "updateMask" $update_mask "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({advertiser_id: (encode-path-segment $advertiser_id), channel_id: (encode-path-segment $channel_id)} | format pattern "/v2/advertisers/{advertiser_id}/channels/{channel_id}") $qp)
-  let req_body = {"advertiserId": $body_advertiser_id, "displayName": $display_name, "partnerId": $partner_id} | compact
+  let req_body = {"advertiserId": $body_advertiser_id, "displayName": $display_name, "partnerId": $partner_id_body} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "patch" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body
+  do-request "patch" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: ({"$.xgafv": $xgafv, "access_token": $access_token, "alt": $alt, "callback": $callback, "fields": $fields, "key": $key, "oauth_token": $oauth_token, "prettyPrint": $pretty_print, "quotaUser": $quota_user, "upload_protocol": $upload_protocol, "uploadType": $upload_type, "partnerId": $partner_id, "updateMask": $update_mask} | compact), body: $req_body}
 }
 
 # Lists sites in a channel.
@@ -962,11 +1011,13 @@ export def "advertisers-channels-sites list" [
 ]: nothing -> record<nextPageToken: string, sites: table<name: string, urlOrAppId: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($advertiser_id | is-empty) { error make --unspanned { msg: "path parameter 'advertiserId' must be non-empty" } }
+  if ($channel_id | is-empty) { error make --unspanned { msg: "path parameter 'channelId' must be non-empty" } }
   let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar") (serialize-qp "filter" $filter "scalar") (serialize-qp "orderBy" $order_by "scalar") (serialize-qp "pageSize" $page_size "scalar") (serialize-qp "pageToken" $page_token "scalar") (serialize-qp "partnerId" $partner_id "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({advertiser_id: (encode-path-segment $advertiser_id), channel_id: (encode-path-segment $channel_id)} | format pattern "/v2/advertisers/{advertiser_id}/channels/{channel_id}/sites") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"$.xgafv": $xgafv, "access_token": $access_token, "alt": $alt, "callback": $callback, "fields": $fields, "key": $key, "oauth_token": $oauth_token, "prettyPrint": $pretty_print, "quotaUser": $quota_user, "upload_protocol": $upload_protocol, "uploadType": $upload_type, "filter": $filter, "orderBy": $order_by, "pageSize": $page_size, "pageToken": $page_token, "partnerId": $partner_id} | compact), body: null}
 }
 
 # Deletes a site from a channel.
@@ -1001,11 +1052,14 @@ export def "advertisers-channels-sites delete" [
 ]: nothing -> record {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($advertiser_id | is-empty) { error make --unspanned { msg: "path parameter 'advertiserId' must be non-empty" } }
+  if ($channel_id | is-empty) { error make --unspanned { msg: "path parameter 'channelId' must be non-empty" } }
+  if ($url_or_app_id | is-empty) { error make --unspanned { msg: "path parameter 'urlOrAppId' must be non-empty" } }
   let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar") (serialize-qp "partnerId" $partner_id "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({advertiser_id: (encode-path-segment $advertiser_id), channel_id: (encode-path-segment $channel_id), url_or_app_id: (encode-path-segment $url_or_app_id)} | format pattern "/v2/advertisers/{advertiser_id}/channels/{channel_id}/sites/{url_or_app_id}") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"$.xgafv": $xgafv, "access_token": $access_token, "alt": $alt, "callback": $callback, "fields": $fields, "key": $key, "oauth_token": $oauth_token, "prettyPrint": $pretty_print, "quotaUser": $quota_user, "upload_protocol": $upload_protocol, "uploadType": $upload_type, "partnerId": $partner_id} | compact), body: null}
 }
 
 # Bulk edits sites under a single channel. The operation will delete the sites provided in BulkEditSitesRequest.deleted_sites and then create the sites provided in BulkEditSitesRequest.created_sites.
@@ -1044,13 +1098,15 @@ export def "advertisers-channels-sites-bulk-edit create" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($advertiser_id | is-empty) { error make --unspanned { msg: "path parameter 'advertiserId' must be non-empty" } }
+  if ($channel_id | is-empty) { error make --unspanned { msg: "path parameter 'channelId' must be non-empty" } }
   let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({advertiser_id: (encode-path-segment $advertiser_id), channel_id: (encode-path-segment $channel_id)} | format pattern "/v2/advertisers/{advertiser_id}/channels/{channel_id}/sites:bulkEdit") $qp)
   let req_body = {"advertiserId": $body_advertiser_id, "createdSites": $created_sites, "deletedSites": $deleted_sites, "partnerId": $partner_id} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: ({"$.xgafv": $xgafv, "access_token": $access_token, "alt": $alt, "callback": $callback, "fields": $fields, "key": $key, "oauth_token": $oauth_token, "prettyPrint": $pretty_print, "quotaUser": $quota_user, "upload_protocol": $upload_protocol, "uploadType": $upload_type} | compact), body: $req_body}
 }
 
 # Replaces all of the sites under a single channel. The operation will replace the sites under a channel with the sites provided in ReplaceSitesRequest.new_sites.
@@ -1088,13 +1144,15 @@ export def "advertisers-channels-sites-replace update" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($advertiser_id | is-empty) { error make --unspanned { msg: "path parameter 'advertiserId' must be non-empty" } }
+  if ($channel_id | is-empty) { error make --unspanned { msg: "path parameter 'channelId' must be non-empty" } }
   let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({advertiser_id: (encode-path-segment $advertiser_id), channel_id: (encode-path-segment $channel_id)} | format pattern "/v2/advertisers/{advertiser_id}/channels/{channel_id}/sites:replace") $qp)
   let req_body = {"advertiserId": $body_advertiser_id, "newSites": $new_sites, "partnerId": $partner_id} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: ({"$.xgafv": $xgafv, "access_token": $access_token, "alt": $alt, "callback": $callback, "fields": $fields, "key": $key, "oauth_token": $oauth_token, "prettyPrint": $pretty_print, "quotaUser": $quota_user, "upload_protocol": $upload_protocol, "uploadType": $upload_type} | compact), body: $req_body}
 }
 
 # Lists creatives in an advertiser. The order is defined by the order_by parameter. If a filter by entity_status is not specified, creatives with `ENTITY_STATUS_ARCHIVED` will not be included in the results.
@@ -1130,11 +1188,12 @@ export def "advertisers-creatives list" [
 ]: nothing -> record<creatives: table<additionalDimensions: list, advertiserId: string, appendedTag: string, assets: list, cmPlacementId: string, cmTrackingAd: record, companionCreativeIds: list, counterEvents: list, createTime: string, creativeAttributes: list, creativeId: string, creativeType: string, dimensions: record, displayName: string, dynamic: bool, entityStatus: string, exitEvents: list, expandOnHover: bool, expandingDirection: string, hostingSource: string, html5Video: bool, iasCampaignMonitoring: bool, integrationCode: string, jsTrackerUrl: string, lineItemIds: list, mediaDuration: string, mp3Audio: bool, name: string, notes: string, obaIcon: record, oggAudio: bool, progressOffset: record, requireHtml5: bool, requireMraid: bool, requirePingForAttribution: bool, reviewStatus: record, skipOffset: record, skippable: bool, thirdPartyTag: string, thirdPartyUrls: list, timerEvents: list, trackerUrls: list, transcodes: list, universalAdId: record, updateTime: string, vastTagUrl: string, vpaid: bool>, nextPageToken: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($advertiser_id | is-empty) { error make --unspanned { msg: "path parameter 'advertiserId' must be non-empty" } }
   let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar") (serialize-qp "filter" $filter "scalar") (serialize-qp "orderBy" $order_by "scalar") (serialize-qp "pageSize" $page_size "scalar") (serialize-qp "pageToken" $page_token "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({advertiser_id: (encode-path-segment $advertiser_id)} | format pattern "/v2/advertisers/{advertiser_id}/creatives") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"$.xgafv": $xgafv, "access_token": $access_token, "alt": $alt, "callback": $callback, "fields": $fields, "key": $key, "oauth_token": $oauth_token, "prettyPrint": $pretty_print, "quotaUser": $quota_user, "upload_protocol": $upload_protocol, "uploadType": $upload_type, "filter": $filter, "orderBy": $order_by, "pageSize": $page_size, "pageToken": $page_token} | compact), body: null}
 }
 
 # Creates a new creative. Returns the newly created creative if successful.
@@ -1213,13 +1272,14 @@ export def "advertisers-creatives create" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($advertiser_id | is-empty) { error make --unspanned { msg: "path parameter 'advertiserId' must be non-empty" } }
   let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({advertiser_id: (encode-path-segment $advertiser_id)} | format pattern "/v2/advertisers/{advertiser_id}/creatives") $qp)
   let req_body = {"additionalDimensions": $additional_dimensions, "appendedTag": $appended_tag, "assets": $assets, "cmTrackingAd": $cm_tracking_ad, "companionCreativeIds": $companion_creative_ids, "counterEvents": $counter_events, "creativeType": $creative_type, "dimensions": $dimensions, "displayName": $display_name, "entityStatus": $entity_status, "exitEvents": $exit_events, "expandOnHover": $expand_on_hover, "expandingDirection": $expanding_direction, "hostingSource": $hosting_source, "iasCampaignMonitoring": $ias_campaign_monitoring, "integrationCode": $integration_code, "jsTrackerUrl": $js_tracker_url, "notes": $notes, "obaIcon": $oba_icon, "progressOffset": $progress_offset, "requireHtml5": $require_html5, "requireMraid": $require_mraid, "requirePingForAttribution": $require_ping_for_attribution, "reviewStatus": $review_status, "skipOffset": $skip_offset, "skippable": $skippable, "thirdPartyTag": $third_party_tag, "thirdPartyUrls": $third_party_urls, "timerEvents": $timer_events, "trackerUrls": $tracker_urls, "universalAdId": $universal_ad_id, "vastTagUrl": $vast_tag_url} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: ({"$.xgafv": $xgafv, "access_token": $access_token, "alt": $alt, "callback": $callback, "fields": $fields, "key": $key, "oauth_token": $oauth_token, "prettyPrint": $pretty_print, "quotaUser": $quota_user, "upload_protocol": $upload_protocol, "uploadType": $upload_type} | compact), body: $req_body}
 }
 
 # Deletes a creative. Returns error code `NOT_FOUND` if the creative does not exist. The creative should be archived first, i.e. set entity_status to `ENTITY_STATUS_ARCHIVED`, before it can be deleted.
@@ -1252,11 +1312,13 @@ export def "advertisers-creatives delete" [
 ]: nothing -> record {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($advertiser_id | is-empty) { error make --unspanned { msg: "path parameter 'advertiserId' must be non-empty" } }
+  if ($creative_id | is-empty) { error make --unspanned { msg: "path parameter 'creativeId' must be non-empty" } }
   let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({advertiser_id: (encode-path-segment $advertiser_id), creative_id: (encode-path-segment $creative_id)} | format pattern "/v2/advertisers/{advertiser_id}/creatives/{creative_id}") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"$.xgafv": $xgafv, "access_token": $access_token, "alt": $alt, "callback": $callback, "fields": $fields, "key": $key, "oauth_token": $oauth_token, "prettyPrint": $pretty_print, "quotaUser": $quota_user, "upload_protocol": $upload_protocol, "uploadType": $upload_type} | compact), body: null}
 }
 
 # Gets a creative.
@@ -1289,11 +1351,13 @@ export def "advertisers-creatives get" [
 ]: nothing -> record<additionalDimensions: table<heightPixels: int, widthPixels: int>, advertiserId: string, appendedTag: string, assets: table<asset: record, role: string>, cmPlacementId: string, cmTrackingAd: record<cmAdId: string, cmCreativeId: string, cmPlacementId: string>, companionCreativeIds: list<string>, counterEvents: table<name: string, reportingName: string>, createTime: string, creativeAttributes: list<string>, creativeId: string, creativeType: string, dimensions: record<heightPixels: int, widthPixels: int>, displayName: string, dynamic: bool, entityStatus: string, exitEvents: table<name: string, reportingName: string, type: string, url: string>, expandOnHover: bool, expandingDirection: string, hostingSource: string, html5Video: bool, iasCampaignMonitoring: bool, integrationCode: string, jsTrackerUrl: string, lineItemIds: list<string>, mediaDuration: string, mp3Audio: bool, name: string, notes: string, obaIcon: record<clickTrackingUrl: string, dimensions: record<heightPixels: int, widthPixels: int>, landingPageUrl: string, position: string, program: string, resourceMimeType: string, resourceUrl: string, viewTrackingUrl: string>, oggAudio: bool, progressOffset: record<percentage: string, seconds: string>, requireHtml5: bool, requireMraid: bool, requirePingForAttribution: bool, reviewStatus: record<approvalStatus: string, contentAndPolicyReviewStatus: string, creativeAndLandingPageReviewStatus: string, exchangeReviewStatuses: list<record>, publisherReviewStatuses: list<record>>, skipOffset: record<percentage: string, seconds: string>, skippable: bool, thirdPartyTag: string, thirdPartyUrls: table<type: string, url: string>, timerEvents: table<name: string, reportingName: string>, trackerUrls: list<string>, transcodes: table<audioBitRateKbps: string, audioSampleRateHz: string, bitRateKbps: string, dimensions: record, fileSizeBytes: string, frameRate: float, mimeType: string, name: string, transcoded: bool>, universalAdId: record<id: string, registry: string>, updateTime: string, vastTagUrl: string, vpaid: bool> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($advertiser_id | is-empty) { error make --unspanned { msg: "path parameter 'advertiserId' must be non-empty" } }
+  if ($creative_id | is-empty) { error make --unspanned { msg: "path parameter 'creativeId' must be non-empty" } }
   let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({advertiser_id: (encode-path-segment $advertiser_id), creative_id: (encode-path-segment $creative_id)} | format pattern "/v2/advertisers/{advertiser_id}/creatives/{creative_id}") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"$.xgafv": $xgafv, "access_token": $access_token, "alt": $alt, "callback": $callback, "fields": $fields, "key": $key, "oauth_token": $oauth_token, "prettyPrint": $pretty_print, "quotaUser": $quota_user, "upload_protocol": $upload_protocol, "uploadType": $upload_type} | compact), body: null}
 }
 
 # Updates an existing creative. Returns the updated creative if successful.
@@ -1374,13 +1438,15 @@ export def "advertisers-creatives update" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($advertiser_id | is-empty) { error make --unspanned { msg: "path parameter 'advertiserId' must be non-empty" } }
+  if ($creative_id | is-empty) { error make --unspanned { msg: "path parameter 'creativeId' must be non-empty" } }
   let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar") (serialize-qp "updateMask" $update_mask "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({advertiser_id: (encode-path-segment $advertiser_id), creative_id: (encode-path-segment $creative_id)} | format pattern "/v2/advertisers/{advertiser_id}/creatives/{creative_id}") $qp)
   let req_body = {"additionalDimensions": $additional_dimensions, "appendedTag": $appended_tag, "assets": $assets, "cmTrackingAd": $cm_tracking_ad, "companionCreativeIds": $companion_creative_ids, "counterEvents": $counter_events, "creativeType": $creative_type, "dimensions": $dimensions, "displayName": $display_name, "entityStatus": $entity_status, "exitEvents": $exit_events, "expandOnHover": $expand_on_hover, "expandingDirection": $expanding_direction, "hostingSource": $hosting_source, "iasCampaignMonitoring": $ias_campaign_monitoring, "integrationCode": $integration_code, "jsTrackerUrl": $js_tracker_url, "notes": $notes, "obaIcon": $oba_icon, "progressOffset": $progress_offset, "requireHtml5": $require_html5, "requireMraid": $require_mraid, "requirePingForAttribution": $require_ping_for_attribution, "reviewStatus": $review_status, "skipOffset": $skip_offset, "skippable": $skippable, "thirdPartyTag": $third_party_tag, "thirdPartyUrls": $third_party_urls, "timerEvents": $timer_events, "trackerUrls": $tracker_urls, "universalAdId": $universal_ad_id, "vastTagUrl": $vast_tag_url} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "patch" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body
+  do-request "patch" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: ({"$.xgafv": $xgafv, "access_token": $access_token, "alt": $alt, "callback": $callback, "fields": $fields, "key": $key, "oauth_token": $oauth_token, "prettyPrint": $pretty_print, "quotaUser": $quota_user, "upload_protocol": $upload_protocol, "uploadType": $upload_type, "updateMask": $update_mask} | compact), body: $req_body}
 }
 
 # Lists insertion orders in an advertiser. The order is defined by the order_by parameter. If a filter by entity_status is not specified, insertion orders with `ENTITY_STATUS_ARCHIVED` will not be included in the results.
@@ -1416,11 +1482,12 @@ export def "advertisers-insertion-orders list" [
 ]: nothing -> record<insertionOrders: table<advertiserId: string, bidStrategy: record, billableOutcome: string, budget: record, campaignId: string, displayName: string, entityStatus: string, frequencyCap: record, insertionOrderId: string, insertionOrderType: string, integrationDetails: record, name: string, pacing: record, partnerCosts: list, performanceGoal: record, reservationType: string, updateTime: string>, nextPageToken: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($advertiser_id | is-empty) { error make --unspanned { msg: "path parameter 'advertiserId' must be non-empty" } }
   let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar") (serialize-qp "filter" $filter "scalar") (serialize-qp "orderBy" $order_by "scalar") (serialize-qp "pageSize" $page_size "scalar") (serialize-qp "pageToken" $page_token "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({advertiser_id: (encode-path-segment $advertiser_id)} | format pattern "/v2/advertisers/{advertiser_id}/insertionOrders") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"$.xgafv": $xgafv, "access_token": $access_token, "alt": $alt, "callback": $callback, "fields": $fields, "key": $key, "oauth_token": $oauth_token, "prettyPrint": $pretty_print, "quotaUser": $quota_user, "upload_protocol": $upload_protocol, "uploadType": $upload_type, "filter": $filter, "orderBy": $order_by, "pageSize": $page_size, "pageToken": $page_token} | compact), body: null}
 }
 
 # Creates a new insertion order. Returns the newly created insertion order if successful.
@@ -1472,13 +1539,14 @@ export def "advertisers-insertion-orders create" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($advertiser_id | is-empty) { error make --unspanned { msg: "path parameter 'advertiserId' must be non-empty" } }
   let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({advertiser_id: (encode-path-segment $advertiser_id)} | format pattern "/v2/advertisers/{advertiser_id}/insertionOrders") $qp)
   let req_body = {"bidStrategy": $bid_strategy, "billableOutcome": $billable_outcome, "budget": $budget, "campaignId": $campaign_id, "displayName": $display_name, "entityStatus": $entity_status, "frequencyCap": $frequency_cap, "insertionOrderType": $insertion_order_type, "integrationDetails": $integration_details, "pacing": $pacing, "partnerCosts": $partner_costs, "performanceGoal": $performance_goal} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: ({"$.xgafv": $xgafv, "access_token": $access_token, "alt": $alt, "callback": $callback, "fields": $fields, "key": $key, "oauth_token": $oauth_token, "prettyPrint": $pretty_print, "quotaUser": $quota_user, "upload_protocol": $upload_protocol, "uploadType": $upload_type} | compact), body: $req_body}
 }
 
 # Deletes an insertion order. Returns error code `NOT_FOUND` if the insertion order does not exist. The insertion order should be archived first, i.e. set entity_status to `ENTITY_STATUS_ARCHIVED`, to be able to delete it.
@@ -1511,11 +1579,13 @@ export def "advertisers-insertion-orders delete" [
 ]: nothing -> record {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($advertiser_id | is-empty) { error make --unspanned { msg: "path parameter 'advertiserId' must be non-empty" } }
+  if ($insertion_order_id | is-empty) { error make --unspanned { msg: "path parameter 'insertionOrderId' must be non-empty" } }
   let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({advertiser_id: (encode-path-segment $advertiser_id), insertion_order_id: (encode-path-segment $insertion_order_id)} | format pattern "/v2/advertisers/{advertiser_id}/insertionOrders/{insertion_order_id}") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"$.xgafv": $xgafv, "access_token": $access_token, "alt": $alt, "callback": $callback, "fields": $fields, "key": $key, "oauth_token": $oauth_token, "prettyPrint": $pretty_print, "quotaUser": $quota_user, "upload_protocol": $upload_protocol, "uploadType": $upload_type} | compact), body: null}
 }
 
 # Gets an insertion order. Returns error code `NOT_FOUND` if the insertion order does not exist.
@@ -1548,11 +1618,13 @@ export def "advertisers-insertion-orders get" [
 ]: nothing -> record<advertiserId: string, bidStrategy: record<fixedBid: record<bidAmountMicros: string>, maximizeSpendAutoBid: record<customBiddingAlgorithmId: string, maxAverageCpmBidAmountMicros: string, performanceGoalType: string, raiseBidForDeals: bool>, performanceGoalAutoBid: record<customBiddingAlgorithmId: string, maxAverageCpmBidAmountMicros: string, performanceGoalAmountMicros: string, performanceGoalType: string>>, billableOutcome: string, budget: record<automationType: string, budgetSegments: list<record>, budgetUnit: string>, campaignId: string, displayName: string, entityStatus: string, frequencyCap: record<maxImpressions: int, maxViews: int, timeUnit: string, timeUnitCount: int, unlimited: bool>, insertionOrderId: string, insertionOrderType: string, integrationDetails: record<details: string, integrationCode: string>, name: string, pacing: record<dailyMaxImpressions: string, dailyMaxMicros: string, pacingPeriod: string, pacingType: string>, partnerCosts: table<costType: string, feeAmount: string, feePercentageMillis: string, feeType: string, invoiceType: string>, performanceGoal: record<performanceGoalAmountMicros: string, performanceGoalPercentageMicros: string, performanceGoalString: string, performanceGoalType: string>, reservationType: string, updateTime: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($advertiser_id | is-empty) { error make --unspanned { msg: "path parameter 'advertiserId' must be non-empty" } }
+  if ($insertion_order_id | is-empty) { error make --unspanned { msg: "path parameter 'insertionOrderId' must be non-empty" } }
   let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({advertiser_id: (encode-path-segment $advertiser_id), insertion_order_id: (encode-path-segment $insertion_order_id)} | format pattern "/v2/advertisers/{advertiser_id}/insertionOrders/{insertion_order_id}") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"$.xgafv": $xgafv, "access_token": $access_token, "alt": $alt, "callback": $callback, "fields": $fields, "key": $key, "oauth_token": $oauth_token, "prettyPrint": $pretty_print, "quotaUser": $quota_user, "upload_protocol": $upload_protocol, "uploadType": $upload_type} | compact), body: null}
 }
 
 # Updates an existing insertion order. Returns the updated insertion order if successful.
@@ -1606,13 +1678,15 @@ export def "advertisers-insertion-orders update" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($advertiser_id | is-empty) { error make --unspanned { msg: "path parameter 'advertiserId' must be non-empty" } }
+  if ($insertion_order_id | is-empty) { error make --unspanned { msg: "path parameter 'insertionOrderId' must be non-empty" } }
   let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar") (serialize-qp "updateMask" $update_mask "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({advertiser_id: (encode-path-segment $advertiser_id), insertion_order_id: (encode-path-segment $insertion_order_id)} | format pattern "/v2/advertisers/{advertiser_id}/insertionOrders/{insertion_order_id}") $qp)
   let req_body = {"bidStrategy": $bid_strategy, "billableOutcome": $billable_outcome, "budget": $budget, "campaignId": $campaign_id, "displayName": $display_name, "entityStatus": $entity_status, "frequencyCap": $frequency_cap, "insertionOrderType": $insertion_order_type, "integrationDetails": $integration_details, "pacing": $pacing, "partnerCosts": $partner_costs, "performanceGoal": $performance_goal} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "patch" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body
+  do-request "patch" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: ({"$.xgafv": $xgafv, "access_token": $access_token, "alt": $alt, "callback": $callback, "fields": $fields, "key": $key, "oauth_token": $oauth_token, "prettyPrint": $pretty_print, "quotaUser": $quota_user, "upload_protocol": $upload_protocol, "uploadType": $upload_type, "updateMask": $update_mask} | compact), body: $req_body}
 }
 
 # Lists the targeting options assigned to an insertion order.
@@ -1650,11 +1724,14 @@ export def "advertisers-insertion-orders-targeting-types-assigned-targeting-opti
 ]: nothing -> record<assignedTargetingOptions: table<ageRangeDetails: record, appCategoryDetails: record, appDetails: record, assignedTargetingOptionId: string, assignedTargetingOptionIdAlias: string, audienceGroupDetails: record, audioContentTypeDetails: record, authorizedSellerStatusDetails: record, browserDetails: record, businessChainDetails: record, carrierAndIspDetails: record, categoryDetails: record, channelDetails: record, contentDurationDetails: record, contentGenreDetails: record, contentInstreamPositionDetails: record, contentOutstreamPositionDetails: record, contentStreamTypeDetails: record, dayAndTimeDetails: record, deviceMakeModelDetails: record, deviceTypeDetails: record, digitalContentLabelExclusionDetails: record, environmentDetails: record, exchangeDetails: record, genderDetails: record, geoRegionDetails: record, householdIncomeDetails: record, inheritance: string, inventorySourceDetails: record, inventorySourceGroupDetails: record, keywordDetails: record, languageDetails: record, name: string, nativeContentPositionDetails: record, negativeKeywordListDetails: record, omidDetails: record, onScreenPositionDetails: record, operatingSystemDetails: record, parentalStatusDetails: record, poiDetails: record, proximityLocationListDetails: record, regionalLocationListDetails: record, sensitiveCategoryExclusionDetails: record, sessionPositionDetails: record, subExchangeDetails: record, targetingType: string, thirdPartyVerifierDetails: record, urlDetails: record, userRewardedContentDetails: record, videoPlayerSizeDetails: record, viewabilityDetails: record, youtubeChannelDetails: record, youtubeVideoDetails: record>, nextPageToken: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($advertiser_id | is-empty) { error make --unspanned { msg: "path parameter 'advertiserId' must be non-empty" } }
+  if ($insertion_order_id | is-empty) { error make --unspanned { msg: "path parameter 'insertionOrderId' must be non-empty" } }
+  if ($targeting_type | is-empty) { error make --unspanned { msg: "path parameter 'targetingType' must be non-empty" } }
   let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar") (serialize-qp "filter" $filter "scalar") (serialize-qp "orderBy" $order_by "scalar") (serialize-qp "pageSize" $page_size "scalar") (serialize-qp "pageToken" $page_token "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({advertiser_id: (encode-path-segment $advertiser_id), insertion_order_id: (encode-path-segment $insertion_order_id), targeting_type: (encode-path-segment $targeting_type)} | format pattern "/v2/advertisers/{advertiser_id}/insertionOrders/{insertion_order_id}/targetingTypes/{targeting_type}/assignedTargetingOptions") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"$.xgafv": $xgafv, "access_token": $access_token, "alt": $alt, "callback": $callback, "fields": $fields, "key": $key, "oauth_token": $oauth_token, "prettyPrint": $pretty_print, "quotaUser": $quota_user, "upload_protocol": $upload_protocol, "uploadType": $upload_type, "filter": $filter, "orderBy": $order_by, "pageSize": $page_size, "pageToken": $page_token} | compact), body: null}
 }
 
 # Assigns a targeting option to an insertion order. Returns the assigned targeting option if successful. Supported targeting types: * `TARGETING_TYPE_AGE_RANGE` * `TARGETING_TYPE_BROWSER` * `TARGETING_TYPE_CATEGORY` * `TARGETING_TYPE_CHANNEL` * `TARGETING_TYPE_DEVICE_MAKE_MODEL` * `TARGETING_TYPE_DIGITAL_CONTENT_LABEL_EXCLUSION` * `TARGETING_TYPE_ENVIRONMENT` * `TARGETING_TYPE_GENDER` * `TARGETING_TYPE_KEYWORD` * `TARGETING_TYPE_LANGUAGE` * `TARGETING_TYPE_NEGATIVE_KEYWORD_LIST` * `TARGETING_TYPE_OPERATING_SYSTEM` * `TARGETING_TYPE_PARENTAL_STATUS` * `TARGETING_TYPE_SENSITIVE_CATEGORY_EXCLUSION` * `TARGETING_TYPE_VIEWABILITY`
@@ -1785,13 +1862,16 @@ export def "advertisers-insertion-orders-targeting-types-assigned-targeting-opti
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($advertiser_id | is-empty) { error make --unspanned { msg: "path parameter 'advertiserId' must be non-empty" } }
+  if ($insertion_order_id | is-empty) { error make --unspanned { msg: "path parameter 'insertionOrderId' must be non-empty" } }
+  if ($targeting_type | is-empty) { error make --unspanned { msg: "path parameter 'targetingType' must be non-empty" } }
   let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({advertiser_id: (encode-path-segment $advertiser_id), insertion_order_id: (encode-path-segment $insertion_order_id), targeting_type: (encode-path-segment $targeting_type)} | format pattern "/v2/advertisers/{advertiser_id}/insertionOrders/{insertion_order_id}/targetingTypes/{targeting_type}/assignedTargetingOptions") $qp)
   let req_body = {"ageRangeDetails": $age_range_details, "appCategoryDetails": $app_category_details, "appDetails": $app_details, "audienceGroupDetails": $audience_group_details, "audioContentTypeDetails": $audio_content_type_details, "authorizedSellerStatusDetails": $authorized_seller_status_details, "browserDetails": $browser_details, "businessChainDetails": $business_chain_details, "carrierAndIspDetails": $carrier_and_isp_details, "categoryDetails": $category_details, "channelDetails": $channel_details, "contentDurationDetails": $content_duration_details, "contentGenreDetails": $content_genre_details, "contentInstreamPositionDetails": $content_instream_position_details, "contentOutstreamPositionDetails": $content_outstream_position_details, "contentStreamTypeDetails": $content_stream_type_details, "dayAndTimeDetails": $day_and_time_details, "deviceMakeModelDetails": $device_make_model_details, "deviceTypeDetails": $device_type_details, "digitalContentLabelExclusionDetails": $digital_content_label_exclusion_details, "environmentDetails": $environment_details, "exchangeDetails": $exchange_details, "genderDetails": $gender_details, "geoRegionDetails": $geo_region_details, "householdIncomeDetails": $household_income_details, "inventorySourceDetails": $inventory_source_details, "inventorySourceGroupDetails": $inventory_source_group_details, "keywordDetails": $keyword_details, "languageDetails": $language_details, "nativeContentPositionDetails": $native_content_position_details, "negativeKeywordListDetails": $negative_keyword_list_details, "omidDetails": $omid_details, "onScreenPositionDetails": $on_screen_position_details, "operatingSystemDetails": $operating_system_details, "parentalStatusDetails": $parental_status_details, "poiDetails": $poi_details, "proximityLocationListDetails": $proximity_location_list_details, "regionalLocationListDetails": $regional_location_list_details, "sensitiveCategoryExclusionDetails": $sensitive_category_exclusion_details, "sessionPositionDetails": $session_position_details, "subExchangeDetails": $sub_exchange_details, "thirdPartyVerifierDetails": $third_party_verifier_details, "urlDetails": $url_details, "userRewardedContentDetails": $user_rewarded_content_details, "videoPlayerSizeDetails": $video_player_size_details, "viewabilityDetails": $viewability_details, "youtubeChannelDetails": $youtube_channel_details, "youtubeVideoDetails": $youtube_video_details} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: ({"$.xgafv": $xgafv, "access_token": $access_token, "alt": $alt, "callback": $callback, "fields": $fields, "key": $key, "oauth_token": $oauth_token, "prettyPrint": $pretty_print, "quotaUser": $quota_user, "upload_protocol": $upload_protocol, "uploadType": $upload_type} | compact), body: $req_body}
 }
 
 # Deletes an assigned targeting option from an insertion order. Supported targeting types: * `TARGETING_TYPE_AGE_RANGE` * `TARGETING_TYPE_BROWSER` * `TARGETING_TYPE_CATEGORY` * `TARGETING_TYPE_CHANNEL` * `TARGETING_TYPE_DEVICE_MAKE_MODEL` * `TARGETING_TYPE_DIGITAL_CONTENT_LABEL_EXCLUSION` * `TARGETING_TYPE_ENVIRONMENT` * `TARGETING_TYPE_GENDER` * `TARGETING_TYPE_KEYWORD` * `TARGETING_TYPE_LANGUAGE` * `TARGETING_TYPE_NEGATIVE_KEYWORD_LIST` * `TARGETING_TYPE_OPERATING_SYSTEM` * `TARGETING_TYPE_PARENTAL_STATUS` * `TARGETING_TYPE_SENSITIVE_CATEGORY_EXCLUSION` * `TARGETING_TYPE_VIEWABILITY`
@@ -1826,11 +1906,15 @@ export def "advertisers-insertion-orders-targeting-types-assigned-targeting-opti
 ]: nothing -> record {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($advertiser_id | is-empty) { error make --unspanned { msg: "path parameter 'advertiserId' must be non-empty" } }
+  if ($insertion_order_id | is-empty) { error make --unspanned { msg: "path parameter 'insertionOrderId' must be non-empty" } }
+  if ($targeting_type | is-empty) { error make --unspanned { msg: "path parameter 'targetingType' must be non-empty" } }
+  if ($assigned_targeting_option_id | is-empty) { error make --unspanned { msg: "path parameter 'assignedTargetingOptionId' must be non-empty" } }
   let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({advertiser_id: (encode-path-segment $advertiser_id), insertion_order_id: (encode-path-segment $insertion_order_id), targeting_type: (encode-path-segment $targeting_type), assigned_targeting_option_id: (encode-path-segment $assigned_targeting_option_id)} | format pattern "/v2/advertisers/{advertiser_id}/insertionOrders/{insertion_order_id}/targetingTypes/{targeting_type}/assignedTargetingOptions/{assigned_targeting_option_id}") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"$.xgafv": $xgafv, "access_token": $access_token, "alt": $alt, "callback": $callback, "fields": $fields, "key": $key, "oauth_token": $oauth_token, "prettyPrint": $pretty_print, "quotaUser": $quota_user, "upload_protocol": $upload_protocol, "uploadType": $upload_type} | compact), body: null}
 }
 
 # Gets a single targeting option assigned to an insertion order.
@@ -1865,11 +1949,15 @@ export def "advertisers-insertion-orders-targeting-types-assigned-targeting-opti
 ]: nothing -> record<ageRangeDetails: record<ageRange: string>, appCategoryDetails: record<displayName: string, negative: bool, targetingOptionId: string>, appDetails: record<appId: string, appPlatform: string, displayName: string, negative: bool>, assignedTargetingOptionId: string, assignedTargetingOptionIdAlias: string, audienceGroupDetails: record<excludedFirstAndThirdPartyAudienceGroup: record<settings: list>, excludedGoogleAudienceGroup: record<settings: list>, includedCombinedAudienceGroup: record<settings: list>, includedCustomListGroup: record<settings: list>, includedFirstAndThirdPartyAudienceGroups: list<record>, includedGoogleAudienceGroup: record<settings: list>>, audioContentTypeDetails: record<audioContentType: string>, authorizedSellerStatusDetails: record<authorizedSellerStatus: string, targetingOptionId: string>, browserDetails: record<displayName: string, negative: bool, targetingOptionId: string>, businessChainDetails: record<displayName: string, proximityRadiusAmount: float, proximityRadiusUnit: string, targetingOptionId: string>, carrierAndIspDetails: record<displayName: string, negative: bool, targetingOptionId: string>, categoryDetails: record<displayName: string, negative: bool, targetingOptionId: string>, channelDetails: record<channelId: string, negative: bool>, contentDurationDetails: record<contentDuration: string, targetingOptionId: string>, contentGenreDetails: record<displayName: string, negative: bool, targetingOptionId: string>, contentInstreamPositionDetails: record<adType: string, contentInstreamPosition: string>, contentOutstreamPositionDetails: record<adType: string, contentOutstreamPosition: string>, contentStreamTypeDetails: record<contentStreamType: string, targetingOptionId: string>, dayAndTimeDetails: record<dayOfWeek: string, endHour: int, startHour: int, timeZoneResolution: string>, deviceMakeModelDetails: record<displayName: string, negative: bool, targetingOptionId: string>, deviceTypeDetails: record<deviceType: string, youtubeAndPartnersBidMultiplier: float>, digitalContentLabelExclusionDetails: record<excludedContentRatingTier: string>, environmentDetails: record<environment: string>, exchangeDetails: record<exchange: string>, genderDetails: record<gender: string>, geoRegionDetails: record<displayName: string, geoRegionType: string, negative: bool, targetingOptionId: string>, householdIncomeDetails: record<householdIncome: string>, inheritance: string, inventorySourceDetails: record<inventorySourceId: string>, inventorySourceGroupDetails: record<inventorySourceGroupId: string>, keywordDetails: record<keyword: string, negative: bool>, languageDetails: record<displayName: string, negative: bool, targetingOptionId: string>, name: string, nativeContentPositionDetails: record<contentPosition: string>, negativeKeywordListDetails: record<negativeKeywordListId: string>, omidDetails: record<omid: string>, onScreenPositionDetails: record<adType: string, onScreenPosition: string, targetingOptionId: string>, operatingSystemDetails: record<displayName: string, negative: bool, targetingOptionId: string>, parentalStatusDetails: record<parentalStatus: string>, poiDetails: record<displayName: string, latitude: float, longitude: float, proximityRadiusAmount: float, proximityRadiusUnit: string, targetingOptionId: string>, proximityLocationListDetails: record<proximityLocationListId: string, proximityRadius: float, proximityRadiusUnit: string>, regionalLocationListDetails: record<negative: bool, regionalLocationListId: string>, sensitiveCategoryExclusionDetails: record<excludedSensitiveCategory: string>, sessionPositionDetails: record<sessionPosition: string>, subExchangeDetails: record<targetingOptionId: string>, targetingType: string, thirdPartyVerifierDetails: record<adloox: record<excludedAdlooxCategories: list>, doubleVerify: record<appStarRating: record, avoidedAgeRatings: list, brandSafetyCategories: record, customSegmentId: string, displayViewability: record, fraudInvalidTraffic: record, videoViewability: record>, integralAdScience: record<customSegmentId: list, displayViewability: string, excludeUnrateable: bool, excludedAdFraudRisk: string, excludedAdultRisk: string, excludedAlcoholRisk: string, excludedDrugsRisk: string, excludedGamblingRisk: string, excludedHateSpeechRisk: string, excludedIllegalDownloadsRisk: string, excludedOffensiveLanguageRisk: string, excludedViolenceRisk: string, traqScoreOption: string, videoViewability: string>>, urlDetails: record<negative: bool, url: string>, userRewardedContentDetails: record<targetingOptionId: string, userRewardedContent: string>, videoPlayerSizeDetails: record<videoPlayerSize: string>, viewabilityDetails: record<viewability: string>, youtubeChannelDetails: record<channelId: string, negative: bool>, youtubeVideoDetails: record<negative: bool, videoId: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($advertiser_id | is-empty) { error make --unspanned { msg: "path parameter 'advertiserId' must be non-empty" } }
+  if ($insertion_order_id | is-empty) { error make --unspanned { msg: "path parameter 'insertionOrderId' must be non-empty" } }
+  if ($targeting_type | is-empty) { error make --unspanned { msg: "path parameter 'targetingType' must be non-empty" } }
+  if ($assigned_targeting_option_id | is-empty) { error make --unspanned { msg: "path parameter 'assignedTargetingOptionId' must be non-empty" } }
   let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({advertiser_id: (encode-path-segment $advertiser_id), insertion_order_id: (encode-path-segment $insertion_order_id), targeting_type: (encode-path-segment $targeting_type), assigned_targeting_option_id: (encode-path-segment $assigned_targeting_option_id)} | format pattern "/v2/advertisers/{advertiser_id}/insertionOrders/{insertion_order_id}/targetingTypes/{targeting_type}/assignedTargetingOptions/{assigned_targeting_option_id}") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"$.xgafv": $xgafv, "access_token": $access_token, "alt": $alt, "callback": $callback, "fields": $fields, "key": $key, "oauth_token": $oauth_token, "prettyPrint": $pretty_print, "quotaUser": $quota_user, "upload_protocol": $upload_protocol, "uploadType": $upload_type} | compact), body: null}
 }
 
 # Lists assigned targeting options of an insertion order across targeting types.
@@ -1906,11 +1994,13 @@ export def "advertisers-insertion-orders list-assigned-targeting-options" [
 ]: nothing -> record<assignedTargetingOptions: table<ageRangeDetails: record, appCategoryDetails: record, appDetails: record, assignedTargetingOptionId: string, assignedTargetingOptionIdAlias: string, audienceGroupDetails: record, audioContentTypeDetails: record, authorizedSellerStatusDetails: record, browserDetails: record, businessChainDetails: record, carrierAndIspDetails: record, categoryDetails: record, channelDetails: record, contentDurationDetails: record, contentGenreDetails: record, contentInstreamPositionDetails: record, contentOutstreamPositionDetails: record, contentStreamTypeDetails: record, dayAndTimeDetails: record, deviceMakeModelDetails: record, deviceTypeDetails: record, digitalContentLabelExclusionDetails: record, environmentDetails: record, exchangeDetails: record, genderDetails: record, geoRegionDetails: record, householdIncomeDetails: record, inheritance: string, inventorySourceDetails: record, inventorySourceGroupDetails: record, keywordDetails: record, languageDetails: record, name: string, nativeContentPositionDetails: record, negativeKeywordListDetails: record, omidDetails: record, onScreenPositionDetails: record, operatingSystemDetails: record, parentalStatusDetails: record, poiDetails: record, proximityLocationListDetails: record, regionalLocationListDetails: record, sensitiveCategoryExclusionDetails: record, sessionPositionDetails: record, subExchangeDetails: record, targetingType: string, thirdPartyVerifierDetails: record, urlDetails: record, userRewardedContentDetails: record, videoPlayerSizeDetails: record, viewabilityDetails: record, youtubeChannelDetails: record, youtubeVideoDetails: record>, nextPageToken: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($advertiser_id | is-empty) { error make --unspanned { msg: "path parameter 'advertiserId' must be non-empty" } }
+  if ($insertion_order_id | is-empty) { error make --unspanned { msg: "path parameter 'insertionOrderId' must be non-empty" } }
   let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar") (serialize-qp "filter" $filter "scalar") (serialize-qp "orderBy" $order_by "scalar") (serialize-qp "pageSize" $page_size "scalar") (serialize-qp "pageToken" $page_token "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({advertiser_id: (encode-path-segment $advertiser_id), insertion_order_id: (encode-path-segment $insertion_order_id)} | format pattern "/v2/advertisers/{advertiser_id}/insertionOrders/{insertion_order_id}:listAssignedTargetingOptions") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"$.xgafv": $xgafv, "access_token": $access_token, "alt": $alt, "callback": $callback, "fields": $fields, "key": $key, "oauth_token": $oauth_token, "prettyPrint": $pretty_print, "quotaUser": $quota_user, "upload_protocol": $upload_protocol, "uploadType": $upload_type, "filter": $filter, "orderBy": $order_by, "pageSize": $page_size, "pageToken": $page_token} | compact), body: null}
 }
 
 # Lists invoices posted for an advertiser in a given month. Invoices generated by billing profiles with a "Partner" invoice level are not retrievable through this method.
@@ -1946,11 +2036,12 @@ export def "advertisers-invoices list" [
 ]: nothing -> record<invoices: table<budgetInvoiceGroupingId: string, budgetSummaries: list, correctedInvoiceId: string, currencyCode: string, displayName: string, dueDate: record, invoiceId: string, invoiceType: string, issueDate: record, name: string, nonBudgetMicros: string, paymentsAccountId: string, paymentsProfileId: string, pdfUrl: string, purchaseOrderNumber: string, replacedInvoiceIds: list, serviceDateRange: record, subtotalAmountMicros: string, totalAmountMicros: string, totalTaxAmountMicros: string>, nextPageToken: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($advertiser_id | is-empty) { error make --unspanned { msg: "path parameter 'advertiserId' must be non-empty" } }
   let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar") (serialize-qp "issueMonth" $issue_month "scalar") (serialize-qp "loiSapinInvoiceType" $loi_sapin_invoice_type "scalar") (serialize-qp "pageSize" $page_size "scalar") (serialize-qp "pageToken" $page_token "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({advertiser_id: (encode-path-segment $advertiser_id)} | format pattern "/v2/advertisers/{advertiser_id}/invoices") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"$.xgafv": $xgafv, "access_token": $access_token, "alt": $alt, "callback": $callback, "fields": $fields, "key": $key, "oauth_token": $oauth_token, "prettyPrint": $pretty_print, "quotaUser": $quota_user, "upload_protocol": $upload_protocol, "uploadType": $upload_type, "issueMonth": $issue_month, "loiSapinInvoiceType": $loi_sapin_invoice_type, "pageSize": $page_size, "pageToken": $page_token} | compact), body: null}
 }
 
 # Retrieves the invoice currency used by an advertiser in a given month.
@@ -1983,11 +2074,12 @@ export def "advertisers-invoices-lookup-invoice-currency get" [
 ]: nothing -> record<currencyCode: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($advertiser_id | is-empty) { error make --unspanned { msg: "path parameter 'advertiserId' must be non-empty" } }
   let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar") (serialize-qp "invoiceMonth" $invoice_month "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({advertiser_id: (encode-path-segment $advertiser_id)} | format pattern "/v2/advertisers/{advertiser_id}/invoices:lookupInvoiceCurrency") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"$.xgafv": $xgafv, "access_token": $access_token, "alt": $alt, "callback": $callback, "fields": $fields, "key": $key, "oauth_token": $oauth_token, "prettyPrint": $pretty_print, "quotaUser": $quota_user, "upload_protocol": $upload_protocol, "uploadType": $upload_type, "invoiceMonth": $invoice_month} | compact), body: null}
 }
 
 # Lists line items in an advertiser. The order is defined by the order_by parameter. If a filter by entity_status is not specified, line items with `ENTITY_STATUS_ARCHIVED` will not be included in the results.
@@ -2023,11 +2115,12 @@ export def "advertisers-line-items list" [
 ]: nothing -> record<lineItems: table<advertiserId: string, bidStrategy: record, budget: record, campaignId: string, conversionCounting: record, creativeIds: list, displayName: string, entityStatus: string, excludeNewExchanges: bool, flight: record, frequencyCap: record, insertionOrderId: string, integrationDetails: record, lineItemId: string, lineItemType: string, mobileApp: record, name: string, pacing: record, partnerCosts: list, partnerRevenueModel: record, reservationType: string, targetingExpansion: record, updateTime: string, warningMessages: list, youtubeAndPartnersSettings: record>, nextPageToken: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($advertiser_id | is-empty) { error make --unspanned { msg: "path parameter 'advertiserId' must be non-empty" } }
   let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar") (serialize-qp "filter" $filter "scalar") (serialize-qp "orderBy" $order_by "scalar") (serialize-qp "pageSize" $page_size "scalar") (serialize-qp "pageToken" $page_token "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({advertiser_id: (encode-path-segment $advertiser_id)} | format pattern "/v2/advertisers/{advertiser_id}/lineItems") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"$.xgafv": $xgafv, "access_token": $access_token, "alt": $alt, "callback": $callback, "fields": $fields, "key": $key, "oauth_token": $oauth_token, "prettyPrint": $pretty_print, "quotaUser": $quota_user, "upload_protocol": $upload_protocol, "uploadType": $upload_type, "filter": $filter, "orderBy": $order_by, "pageSize": $page_size, "pageToken": $page_token} | compact), body: null}
 }
 
 # Creates a new line item. Returns the newly created line item if successful.
@@ -2090,13 +2183,14 @@ export def "advertisers-line-items create" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($advertiser_id | is-empty) { error make --unspanned { msg: "path parameter 'advertiserId' must be non-empty" } }
   let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({advertiser_id: (encode-path-segment $advertiser_id)} | format pattern "/v2/advertisers/{advertiser_id}/lineItems") $qp)
   let req_body = {"bidStrategy": $bid_strategy, "budget": $budget, "conversionCounting": $conversion_counting, "creativeIds": $creative_ids, "displayName": $display_name, "entityStatus": $entity_status, "excludeNewExchanges": $exclude_new_exchanges, "flight": $flight, "frequencyCap": $frequency_cap, "insertionOrderId": $insertion_order_id, "integrationDetails": $integration_details, "lineItemType": $line_item_type, "mobileApp": $mobile_app, "pacing": $pacing, "partnerCosts": $partner_costs, "partnerRevenueModel": $partner_revenue_model, "targetingExpansion": $targeting_expansion, "youtubeAndPartnersSettings": $youtube_and_partners_settings} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: ({"$.xgafv": $xgafv, "access_token": $access_token, "alt": $alt, "callback": $callback, "fields": $fields, "key": $key, "oauth_token": $oauth_token, "prettyPrint": $pretty_print, "quotaUser": $quota_user, "upload_protocol": $upload_protocol, "uploadType": $upload_type} | compact), body: $req_body}
 }
 
 # Deletes a line item. Returns error code `NOT_FOUND` if the line item does not exist. The line item should be archived first, i.e. set entity_status to `ENTITY_STATUS_ARCHIVED`, to be able to delete it.
@@ -2129,11 +2223,13 @@ export def "advertisers-line-items delete" [
 ]: nothing -> record {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($advertiser_id | is-empty) { error make --unspanned { msg: "path parameter 'advertiserId' must be non-empty" } }
+  if ($line_item_id | is-empty) { error make --unspanned { msg: "path parameter 'lineItemId' must be non-empty" } }
   let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({advertiser_id: (encode-path-segment $advertiser_id), line_item_id: (encode-path-segment $line_item_id)} | format pattern "/v2/advertisers/{advertiser_id}/lineItems/{line_item_id}") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"$.xgafv": $xgafv, "access_token": $access_token, "alt": $alt, "callback": $callback, "fields": $fields, "key": $key, "oauth_token": $oauth_token, "prettyPrint": $pretty_print, "quotaUser": $quota_user, "upload_protocol": $upload_protocol, "uploadType": $upload_type} | compact), body: null}
 }
 
 # Gets a line item.
@@ -2166,11 +2262,13 @@ export def "advertisers-line-items get" [
 ]: nothing -> record<advertiserId: string, bidStrategy: record<fixedBid: record<bidAmountMicros: string>, maximizeSpendAutoBid: record<customBiddingAlgorithmId: string, maxAverageCpmBidAmountMicros: string, performanceGoalType: string, raiseBidForDeals: bool>, performanceGoalAutoBid: record<customBiddingAlgorithmId: string, maxAverageCpmBidAmountMicros: string, performanceGoalAmountMicros: string, performanceGoalType: string>>, budget: record<budgetAllocationType: string, budgetUnit: string, maxAmount: string>, campaignId: string, conversionCounting: record<floodlightActivityConfigs: list<record>, postViewCountPercentageMillis: string>, creativeIds: list<string>, displayName: string, entityStatus: string, excludeNewExchanges: bool, flight: record<dateRange: record<endDate: record, startDate: record>, flightDateType: string>, frequencyCap: record<maxImpressions: int, maxViews: int, timeUnit: string, timeUnitCount: int, unlimited: bool>, insertionOrderId: string, integrationDetails: record<details: string, integrationCode: string>, lineItemId: string, lineItemType: string, mobileApp: record<appId: string, displayName: string, platform: string, publisher: string>, name: string, pacing: record<dailyMaxImpressions: string, dailyMaxMicros: string, pacingPeriod: string, pacingType: string>, partnerCosts: table<costType: string, feeAmount: string, feePercentageMillis: string, feeType: string, invoiceType: string>, partnerRevenueModel: record<markupAmount: string, markupType: string>, reservationType: string, targetingExpansion: record<excludeFirstPartyAudience: bool, targetingExpansionLevel: string>, updateTime: string, warningMessages: list<string>, youtubeAndPartnersSettings: record<biddingStrategy: record<adGroupEffectiveTargetCpaSource: string, adGroupEffectiveTargetCpaValue: string, type: string, value: string>, contentCategory: string, inventorySourceSettings: record<includeYoutubeSearch: bool, includeYoutubeVideoPartners: bool, includeYoutubeVideos: bool>, leadFormId: string, linkedMerchantId: string, relatedVideoIds: list<string>, targetFrequency: record<targetCount: string, timeUnit: string, timeUnitCount: int>, thirdPartyMeasurementSettings: record<brandLiftVendorConfigs: list, brandSafetyVendorConfigs: list, reachVendorConfigs: list, viewabilityVendorConfigs: list>, videoAdSequenceSettings: record<minimumDuration: string, steps: list>, viewFrequencyCap: record<maxImpressions: int, maxViews: int, timeUnit: string, timeUnitCount: int, unlimited: bool>>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($advertiser_id | is-empty) { error make --unspanned { msg: "path parameter 'advertiserId' must be non-empty" } }
+  if ($line_item_id | is-empty) { error make --unspanned { msg: "path parameter 'lineItemId' must be non-empty" } }
   let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({advertiser_id: (encode-path-segment $advertiser_id), line_item_id: (encode-path-segment $line_item_id)} | format pattern "/v2/advertisers/{advertiser_id}/lineItems/{line_item_id}") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"$.xgafv": $xgafv, "access_token": $access_token, "alt": $alt, "callback": $callback, "fields": $fields, "key": $key, "oauth_token": $oauth_token, "prettyPrint": $pretty_print, "quotaUser": $quota_user, "upload_protocol": $upload_protocol, "uploadType": $upload_type} | compact), body: null}
 }
 
 # Updates an existing line item. Returns the updated line item if successful. Requests to this endpoint cannot be made concurrently with the following requests updating the same line item: * BulkEditAssignedTargetingOptions * BulkUpdateLineItems * CreateLineItemAssignedTargetingOption * DeleteLineItemAssignedTargetingOption
@@ -2235,13 +2333,15 @@ export def "advertisers-line-items update" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($advertiser_id | is-empty) { error make --unspanned { msg: "path parameter 'advertiserId' must be non-empty" } }
+  if ($line_item_id | is-empty) { error make --unspanned { msg: "path parameter 'lineItemId' must be non-empty" } }
   let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar") (serialize-qp "updateMask" $update_mask "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({advertiser_id: (encode-path-segment $advertiser_id), line_item_id: (encode-path-segment $line_item_id)} | format pattern "/v2/advertisers/{advertiser_id}/lineItems/{line_item_id}") $qp)
   let req_body = {"bidStrategy": $bid_strategy, "budget": $budget, "conversionCounting": $conversion_counting, "creativeIds": $creative_ids, "displayName": $display_name, "entityStatus": $entity_status, "excludeNewExchanges": $exclude_new_exchanges, "flight": $flight, "frequencyCap": $frequency_cap, "insertionOrderId": $insertion_order_id, "integrationDetails": $integration_details, "lineItemType": $line_item_type, "mobileApp": $mobile_app, "pacing": $pacing, "partnerCosts": $partner_costs, "partnerRevenueModel": $partner_revenue_model, "targetingExpansion": $targeting_expansion, "youtubeAndPartnersSettings": $youtube_and_partners_settings} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "patch" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body
+  do-request "patch" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: ({"$.xgafv": $xgafv, "access_token": $access_token, "alt": $alt, "callback": $callback, "fields": $fields, "key": $key, "oauth_token": $oauth_token, "prettyPrint": $pretty_print, "quotaUser": $quota_user, "upload_protocol": $upload_protocol, "uploadType": $upload_type, "updateMask": $update_mask} | compact), body: $req_body}
 }
 
 # Lists the targeting options assigned to a line item.
@@ -2279,11 +2379,14 @@ export def "advertisers-line-items-targeting-types-assigned-targeting-options li
 ]: nothing -> record<assignedTargetingOptions: table<ageRangeDetails: record, appCategoryDetails: record, appDetails: record, assignedTargetingOptionId: string, assignedTargetingOptionIdAlias: string, audienceGroupDetails: record, audioContentTypeDetails: record, authorizedSellerStatusDetails: record, browserDetails: record, businessChainDetails: record, carrierAndIspDetails: record, categoryDetails: record, channelDetails: record, contentDurationDetails: record, contentGenreDetails: record, contentInstreamPositionDetails: record, contentOutstreamPositionDetails: record, contentStreamTypeDetails: record, dayAndTimeDetails: record, deviceMakeModelDetails: record, deviceTypeDetails: record, digitalContentLabelExclusionDetails: record, environmentDetails: record, exchangeDetails: record, genderDetails: record, geoRegionDetails: record, householdIncomeDetails: record, inheritance: string, inventorySourceDetails: record, inventorySourceGroupDetails: record, keywordDetails: record, languageDetails: record, name: string, nativeContentPositionDetails: record, negativeKeywordListDetails: record, omidDetails: record, onScreenPositionDetails: record, operatingSystemDetails: record, parentalStatusDetails: record, poiDetails: record, proximityLocationListDetails: record, regionalLocationListDetails: record, sensitiveCategoryExclusionDetails: record, sessionPositionDetails: record, subExchangeDetails: record, targetingType: string, thirdPartyVerifierDetails: record, urlDetails: record, userRewardedContentDetails: record, videoPlayerSizeDetails: record, viewabilityDetails: record, youtubeChannelDetails: record, youtubeVideoDetails: record>, nextPageToken: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($advertiser_id | is-empty) { error make --unspanned { msg: "path parameter 'advertiserId' must be non-empty" } }
+  if ($line_item_id | is-empty) { error make --unspanned { msg: "path parameter 'lineItemId' must be non-empty" } }
+  if ($targeting_type | is-empty) { error make --unspanned { msg: "path parameter 'targetingType' must be non-empty" } }
   let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar") (serialize-qp "filter" $filter "scalar") (serialize-qp "orderBy" $order_by "scalar") (serialize-qp "pageSize" $page_size "scalar") (serialize-qp "pageToken" $page_token "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({advertiser_id: (encode-path-segment $advertiser_id), line_item_id: (encode-path-segment $line_item_id), targeting_type: (encode-path-segment $targeting_type)} | format pattern "/v2/advertisers/{advertiser_id}/lineItems/{line_item_id}/targetingTypes/{targeting_type}/assignedTargetingOptions") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"$.xgafv": $xgafv, "access_token": $access_token, "alt": $alt, "callback": $callback, "fields": $fields, "key": $key, "oauth_token": $oauth_token, "prettyPrint": $pretty_print, "quotaUser": $quota_user, "upload_protocol": $upload_protocol, "uploadType": $upload_type, "filter": $filter, "orderBy": $order_by, "pageSize": $page_size, "pageToken": $page_token} | compact), body: null}
 }
 
 # Assigns a targeting option to a line item. Returns the assigned targeting option if successful. Requests to this endpoint cannot be made concurrently with the following requests updating the same line item: * BulkEditAssignedTargetingOptions * BulkUpdate * UpdateLineItem * DeleteLineItemAssignedTargetingOption
@@ -2414,13 +2517,16 @@ export def "advertisers-line-items-targeting-types-assigned-targeting-options cr
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($advertiser_id | is-empty) { error make --unspanned { msg: "path parameter 'advertiserId' must be non-empty" } }
+  if ($line_item_id | is-empty) { error make --unspanned { msg: "path parameter 'lineItemId' must be non-empty" } }
+  if ($targeting_type | is-empty) { error make --unspanned { msg: "path parameter 'targetingType' must be non-empty" } }
   let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({advertiser_id: (encode-path-segment $advertiser_id), line_item_id: (encode-path-segment $line_item_id), targeting_type: (encode-path-segment $targeting_type)} | format pattern "/v2/advertisers/{advertiser_id}/lineItems/{line_item_id}/targetingTypes/{targeting_type}/assignedTargetingOptions") $qp)
   let req_body = {"ageRangeDetails": $age_range_details, "appCategoryDetails": $app_category_details, "appDetails": $app_details, "audienceGroupDetails": $audience_group_details, "audioContentTypeDetails": $audio_content_type_details, "authorizedSellerStatusDetails": $authorized_seller_status_details, "browserDetails": $browser_details, "businessChainDetails": $business_chain_details, "carrierAndIspDetails": $carrier_and_isp_details, "categoryDetails": $category_details, "channelDetails": $channel_details, "contentDurationDetails": $content_duration_details, "contentGenreDetails": $content_genre_details, "contentInstreamPositionDetails": $content_instream_position_details, "contentOutstreamPositionDetails": $content_outstream_position_details, "contentStreamTypeDetails": $content_stream_type_details, "dayAndTimeDetails": $day_and_time_details, "deviceMakeModelDetails": $device_make_model_details, "deviceTypeDetails": $device_type_details, "digitalContentLabelExclusionDetails": $digital_content_label_exclusion_details, "environmentDetails": $environment_details, "exchangeDetails": $exchange_details, "genderDetails": $gender_details, "geoRegionDetails": $geo_region_details, "householdIncomeDetails": $household_income_details, "inventorySourceDetails": $inventory_source_details, "inventorySourceGroupDetails": $inventory_source_group_details, "keywordDetails": $keyword_details, "languageDetails": $language_details, "nativeContentPositionDetails": $native_content_position_details, "negativeKeywordListDetails": $negative_keyword_list_details, "omidDetails": $omid_details, "onScreenPositionDetails": $on_screen_position_details, "operatingSystemDetails": $operating_system_details, "parentalStatusDetails": $parental_status_details, "poiDetails": $poi_details, "proximityLocationListDetails": $proximity_location_list_details, "regionalLocationListDetails": $regional_location_list_details, "sensitiveCategoryExclusionDetails": $sensitive_category_exclusion_details, "sessionPositionDetails": $session_position_details, "subExchangeDetails": $sub_exchange_details, "thirdPartyVerifierDetails": $third_party_verifier_details, "urlDetails": $url_details, "userRewardedContentDetails": $user_rewarded_content_details, "videoPlayerSizeDetails": $video_player_size_details, "viewabilityDetails": $viewability_details, "youtubeChannelDetails": $youtube_channel_details, "youtubeVideoDetails": $youtube_video_details} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: ({"$.xgafv": $xgafv, "access_token": $access_token, "alt": $alt, "callback": $callback, "fields": $fields, "key": $key, "oauth_token": $oauth_token, "prettyPrint": $pretty_print, "quotaUser": $quota_user, "upload_protocol": $upload_protocol, "uploadType": $upload_type} | compact), body: $req_body}
 }
 
 # Deletes an assigned targeting option from a line item. Requests to this endpoint cannot be made concurrently with the following requests updating the same line item: * BulkEditAssignedTargetingOptions * BulkUpdate * UpdateLineItem * CreateLineItemAssignedTargetingOption
@@ -2455,11 +2561,15 @@ export def "advertisers-line-items-targeting-types-assigned-targeting-options de
 ]: nothing -> record {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($advertiser_id | is-empty) { error make --unspanned { msg: "path parameter 'advertiserId' must be non-empty" } }
+  if ($line_item_id | is-empty) { error make --unspanned { msg: "path parameter 'lineItemId' must be non-empty" } }
+  if ($targeting_type | is-empty) { error make --unspanned { msg: "path parameter 'targetingType' must be non-empty" } }
+  if ($assigned_targeting_option_id | is-empty) { error make --unspanned { msg: "path parameter 'assignedTargetingOptionId' must be non-empty" } }
   let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({advertiser_id: (encode-path-segment $advertiser_id), line_item_id: (encode-path-segment $line_item_id), targeting_type: (encode-path-segment $targeting_type), assigned_targeting_option_id: (encode-path-segment $assigned_targeting_option_id)} | format pattern "/v2/advertisers/{advertiser_id}/lineItems/{line_item_id}/targetingTypes/{targeting_type}/assignedTargetingOptions/{assigned_targeting_option_id}") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"$.xgafv": $xgafv, "access_token": $access_token, "alt": $alt, "callback": $callback, "fields": $fields, "key": $key, "oauth_token": $oauth_token, "prettyPrint": $pretty_print, "quotaUser": $quota_user, "upload_protocol": $upload_protocol, "uploadType": $upload_type} | compact), body: null}
 }
 
 # Gets a single targeting option assigned to a line item.
@@ -2494,11 +2604,15 @@ export def "advertisers-line-items-targeting-types-assigned-targeting-options ge
 ]: nothing -> record<ageRangeDetails: record<ageRange: string>, appCategoryDetails: record<displayName: string, negative: bool, targetingOptionId: string>, appDetails: record<appId: string, appPlatform: string, displayName: string, negative: bool>, assignedTargetingOptionId: string, assignedTargetingOptionIdAlias: string, audienceGroupDetails: record<excludedFirstAndThirdPartyAudienceGroup: record<settings: list>, excludedGoogleAudienceGroup: record<settings: list>, includedCombinedAudienceGroup: record<settings: list>, includedCustomListGroup: record<settings: list>, includedFirstAndThirdPartyAudienceGroups: list<record>, includedGoogleAudienceGroup: record<settings: list>>, audioContentTypeDetails: record<audioContentType: string>, authorizedSellerStatusDetails: record<authorizedSellerStatus: string, targetingOptionId: string>, browserDetails: record<displayName: string, negative: bool, targetingOptionId: string>, businessChainDetails: record<displayName: string, proximityRadiusAmount: float, proximityRadiusUnit: string, targetingOptionId: string>, carrierAndIspDetails: record<displayName: string, negative: bool, targetingOptionId: string>, categoryDetails: record<displayName: string, negative: bool, targetingOptionId: string>, channelDetails: record<channelId: string, negative: bool>, contentDurationDetails: record<contentDuration: string, targetingOptionId: string>, contentGenreDetails: record<displayName: string, negative: bool, targetingOptionId: string>, contentInstreamPositionDetails: record<adType: string, contentInstreamPosition: string>, contentOutstreamPositionDetails: record<adType: string, contentOutstreamPosition: string>, contentStreamTypeDetails: record<contentStreamType: string, targetingOptionId: string>, dayAndTimeDetails: record<dayOfWeek: string, endHour: int, startHour: int, timeZoneResolution: string>, deviceMakeModelDetails: record<displayName: string, negative: bool, targetingOptionId: string>, deviceTypeDetails: record<deviceType: string, youtubeAndPartnersBidMultiplier: float>, digitalContentLabelExclusionDetails: record<excludedContentRatingTier: string>, environmentDetails: record<environment: string>, exchangeDetails: record<exchange: string>, genderDetails: record<gender: string>, geoRegionDetails: record<displayName: string, geoRegionType: string, negative: bool, targetingOptionId: string>, householdIncomeDetails: record<householdIncome: string>, inheritance: string, inventorySourceDetails: record<inventorySourceId: string>, inventorySourceGroupDetails: record<inventorySourceGroupId: string>, keywordDetails: record<keyword: string, negative: bool>, languageDetails: record<displayName: string, negative: bool, targetingOptionId: string>, name: string, nativeContentPositionDetails: record<contentPosition: string>, negativeKeywordListDetails: record<negativeKeywordListId: string>, omidDetails: record<omid: string>, onScreenPositionDetails: record<adType: string, onScreenPosition: string, targetingOptionId: string>, operatingSystemDetails: record<displayName: string, negative: bool, targetingOptionId: string>, parentalStatusDetails: record<parentalStatus: string>, poiDetails: record<displayName: string, latitude: float, longitude: float, proximityRadiusAmount: float, proximityRadiusUnit: string, targetingOptionId: string>, proximityLocationListDetails: record<proximityLocationListId: string, proximityRadius: float, proximityRadiusUnit: string>, regionalLocationListDetails: record<negative: bool, regionalLocationListId: string>, sensitiveCategoryExclusionDetails: record<excludedSensitiveCategory: string>, sessionPositionDetails: record<sessionPosition: string>, subExchangeDetails: record<targetingOptionId: string>, targetingType: string, thirdPartyVerifierDetails: record<adloox: record<excludedAdlooxCategories: list>, doubleVerify: record<appStarRating: record, avoidedAgeRatings: list, brandSafetyCategories: record, customSegmentId: string, displayViewability: record, fraudInvalidTraffic: record, videoViewability: record>, integralAdScience: record<customSegmentId: list, displayViewability: string, excludeUnrateable: bool, excludedAdFraudRisk: string, excludedAdultRisk: string, excludedAlcoholRisk: string, excludedDrugsRisk: string, excludedGamblingRisk: string, excludedHateSpeechRisk: string, excludedIllegalDownloadsRisk: string, excludedOffensiveLanguageRisk: string, excludedViolenceRisk: string, traqScoreOption: string, videoViewability: string>>, urlDetails: record<negative: bool, url: string>, userRewardedContentDetails: record<targetingOptionId: string, userRewardedContent: string>, videoPlayerSizeDetails: record<videoPlayerSize: string>, viewabilityDetails: record<viewability: string>, youtubeChannelDetails: record<channelId: string, negative: bool>, youtubeVideoDetails: record<negative: bool, videoId: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($advertiser_id | is-empty) { error make --unspanned { msg: "path parameter 'advertiserId' must be non-empty" } }
+  if ($line_item_id | is-empty) { error make --unspanned { msg: "path parameter 'lineItemId' must be non-empty" } }
+  if ($targeting_type | is-empty) { error make --unspanned { msg: "path parameter 'targetingType' must be non-empty" } }
+  if ($assigned_targeting_option_id | is-empty) { error make --unspanned { msg: "path parameter 'assignedTargetingOptionId' must be non-empty" } }
   let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({advertiser_id: (encode-path-segment $advertiser_id), line_item_id: (encode-path-segment $line_item_id), targeting_type: (encode-path-segment $targeting_type), assigned_targeting_option_id: (encode-path-segment $assigned_targeting_option_id)} | format pattern "/v2/advertisers/{advertiser_id}/lineItems/{line_item_id}/targetingTypes/{targeting_type}/assignedTargetingOptions/{assigned_targeting_option_id}") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"$.xgafv": $xgafv, "access_token": $access_token, "alt": $alt, "callback": $callback, "fields": $fields, "key": $key, "oauth_token": $oauth_token, "prettyPrint": $pretty_print, "quotaUser": $quota_user, "upload_protocol": $upload_protocol, "uploadType": $upload_type} | compact), body: null}
 }
 
 # Duplicates a line item. Returns the ID of the created line item if successful.
@@ -2533,13 +2647,15 @@ export def "advertisers-line-items create-duplicate" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($advertiser_id | is-empty) { error make --unspanned { msg: "path parameter 'advertiserId' must be non-empty" } }
+  if ($line_item_id | is-empty) { error make --unspanned { msg: "path parameter 'lineItemId' must be non-empty" } }
   let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({advertiser_id: (encode-path-segment $advertiser_id), line_item_id: (encode-path-segment $line_item_id)} | format pattern "/v2/advertisers/{advertiser_id}/lineItems/{line_item_id}:duplicate") $qp)
   let req_body = {"targetDisplayName": $target_display_name} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: ({"$.xgafv": $xgafv, "access_token": $access_token, "alt": $alt, "callback": $callback, "fields": $fields, "key": $key, "oauth_token": $oauth_token, "prettyPrint": $pretty_print, "quotaUser": $quota_user, "upload_protocol": $upload_protocol, "uploadType": $upload_type} | compact), body: $req_body}
 }
 
 # Bulk edits targeting options under multiple line items. The operation will delete the assigned targeting options provided in BulkEditAssignedTargetingOptionsRequest.delete_requests and then create the assigned targeting options provided in BulkEditAssignedTargetingOptionsRequest.create_requests. Requests to this endpoint cannot be made concurrently with the following requests updating the same line item: * BulkUpdate * UpdateLineItem * CreateLineItemAssignedTargetingOption * DeleteLineItemAssignedTargetingOption
@@ -2577,13 +2693,14 @@ export def "advertisers-line-items-bulk-edit-assigned-targeting-options create" 
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($advertiser_id | is-empty) { error make --unspanned { msg: "path parameter 'advertiserId' must be non-empty" } }
   let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({advertiser_id: (encode-path-segment $advertiser_id)} | format pattern "/v2/advertisers/{advertiser_id}/lineItems:bulkEditAssignedTargetingOptions") $qp)
   let req_body = {"createRequests": $create_requests, "deleteRequests": $delete_requests, "lineItemIds": $line_item_ids} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: ({"$.xgafv": $xgafv, "access_token": $access_token, "alt": $alt, "callback": $callback, "fields": $fields, "key": $key, "oauth_token": $oauth_token, "prettyPrint": $pretty_print, "quotaUser": $quota_user, "upload_protocol": $upload_protocol, "uploadType": $upload_type} | compact), body: $req_body}
 }
 
 # Lists assigned targeting options for multiple line items across targeting types.
@@ -2620,11 +2737,12 @@ export def "advertisers-line-items-bulk-list-assigned-targeting-options list" [
 ]: nothing -> record<lineItemAssignedTargetingOptions: table<assignedTargetingOption: record, lineItemId: string>, nextPageToken: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($advertiser_id | is-empty) { error make --unspanned { msg: "path parameter 'advertiserId' must be non-empty" } }
   let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar") (serialize-qp "filter" $filter "scalar") (serialize-qp "lineItemIds" $line_item_ids "multi") (serialize-qp "orderBy" $order_by "scalar") (serialize-qp "pageSize" $page_size "scalar") (serialize-qp "pageToken" $page_token "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({advertiser_id: (encode-path-segment $advertiser_id)} | format pattern "/v2/advertisers/{advertiser_id}/lineItems:bulkListAssignedTargetingOptions") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"$.xgafv": $xgafv, "access_token": $access_token, "alt": $alt, "callback": $callback, "fields": $fields, "key": $key, "oauth_token": $oauth_token, "prettyPrint": $pretty_print, "quotaUser": $quota_user, "upload_protocol": $upload_protocol, "uploadType": $upload_type, "filter": $filter, "lineItemIds": $line_item_ids, "orderBy": $order_by, "pageSize": $page_size, "pageToken": $page_token} | compact), body: null}
 }
 
 # Updates multiple line items. Requests to this endpoint cannot be made concurrently with the following requests updating the same line item: * BulkEditAssignedTargetingOptions * UpdateLineItem * CreateLineItemAssignedTargetingOption * DeleteLineItemAssignedTargetingOption
@@ -2661,13 +2779,14 @@ export def "advertisers-line-items-bulk-update update" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($advertiser_id | is-empty) { error make --unspanned { msg: "path parameter 'advertiserId' must be non-empty" } }
   let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({advertiser_id: (encode-path-segment $advertiser_id)} | format pattern "/v2/advertisers/{advertiser_id}/lineItems:bulkUpdate") $qp)
   let req_body = {"lineItemIds": $line_item_ids, "targetLineItem": $target_line_item, "updateMask": $update_mask} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: ({"$.xgafv": $xgafv, "access_token": $access_token, "alt": $alt, "callback": $callback, "fields": $fields, "key": $key, "oauth_token": $oauth_token, "prettyPrint": $pretty_print, "quotaUser": $quota_user, "upload_protocol": $upload_protocol, "uploadType": $upload_type} | compact), body: $req_body}
 }
 
 # Creates a new line item with settings (including targeting) inherited from the insertion order and an `ENTITY_STATUS_DRAFT` entity_status. Returns the newly created line item if successful. There are default values based on the three fields: * The insertion order's insertion_order_type * The insertion order's automation_type * The given line_item_type
@@ -2705,13 +2824,14 @@ export def "advertisers-line-items-generate-default generate" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($advertiser_id | is-empty) { error make --unspanned { msg: "path parameter 'advertiserId' must be non-empty" } }
   let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({advertiser_id: (encode-path-segment $advertiser_id)} | format pattern "/v2/advertisers/{advertiser_id}/lineItems:generateDefault") $qp)
   let req_body = {"displayName": $display_name, "insertionOrderId": $insertion_order_id, "lineItemType": $line_item_type, "mobileApp": $mobile_app} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: ({"$.xgafv": $xgafv, "access_token": $access_token, "alt": $alt, "callback": $callback, "fields": $fields, "key": $key, "oauth_token": $oauth_token, "prettyPrint": $pretty_print, "quotaUser": $quota_user, "upload_protocol": $upload_protocol, "uploadType": $upload_type} | compact), body: $req_body}
 }
 
 # Lists location lists based on a given advertiser id.
@@ -2747,11 +2867,12 @@ export def "advertisers-location-lists list" [
 ]: nothing -> record<locationLists: table<advertiserId: string, displayName: string, locationListId: string, locationType: string, name: string>, nextPageToken: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($advertiser_id | is-empty) { error make --unspanned { msg: "path parameter 'advertiserId' must be non-empty" } }
   let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar") (serialize-qp "filter" $filter "scalar") (serialize-qp "orderBy" $order_by "scalar") (serialize-qp "pageSize" $page_size "scalar") (serialize-qp "pageToken" $page_token "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({advertiser_id: (encode-path-segment $advertiser_id)} | format pattern "/v2/advertisers/{advertiser_id}/locationLists") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"$.xgafv": $xgafv, "access_token": $access_token, "alt": $alt, "callback": $callback, "fields": $fields, "key": $key, "oauth_token": $oauth_token, "prettyPrint": $pretty_print, "quotaUser": $quota_user, "upload_protocol": $upload_protocol, "uploadType": $upload_type, "filter": $filter, "orderBy": $order_by, "pageSize": $page_size, "pageToken": $page_token} | compact), body: null}
 }
 
 # Creates a new location list. Returns the newly created location list if successful.
@@ -2787,13 +2908,14 @@ export def "advertisers-location-lists create" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($advertiser_id | is-empty) { error make --unspanned { msg: "path parameter 'advertiserId' must be non-empty" } }
   let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({advertiser_id: (encode-path-segment $advertiser_id)} | format pattern "/v2/advertisers/{advertiser_id}/locationLists") $qp)
   let req_body = {"advertiserId": $body_advertiser_id, "displayName": $display_name, "locationType": $location_type} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: ({"$.xgafv": $xgafv, "access_token": $access_token, "alt": $alt, "callback": $callback, "fields": $fields, "key": $key, "oauth_token": $oauth_token, "prettyPrint": $pretty_print, "quotaUser": $quota_user, "upload_protocol": $upload_protocol, "uploadType": $upload_type} | compact), body: $req_body}
 }
 
 # Updates a location list. Returns the updated location list if successful.
@@ -2831,13 +2953,15 @@ export def "advertisers-location-lists update" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($advertiser_id | is-empty) { error make --unspanned { msg: "path parameter 'advertiserId' must be non-empty" } }
+  if ($location_list_id | is-empty) { error make --unspanned { msg: "path parameter 'locationListId' must be non-empty" } }
   let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar") (serialize-qp "updateMask" $update_mask "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({advertiser_id: (encode-path-segment $advertiser_id), location_list_id: (encode-path-segment $location_list_id)} | format pattern "/v2/advertisers/{advertiser_id}/locationLists/{location_list_id}") $qp)
   let req_body = {"advertiserId": $body_advertiser_id, "displayName": $display_name, "locationType": $location_type} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "patch" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body
+  do-request "patch" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: ({"$.xgafv": $xgafv, "access_token": $access_token, "alt": $alt, "callback": $callback, "fields": $fields, "key": $key, "oauth_token": $oauth_token, "prettyPrint": $pretty_print, "quotaUser": $quota_user, "upload_protocol": $upload_protocol, "uploadType": $upload_type, "updateMask": $update_mask} | compact), body: $req_body}
 }
 
 # Lists locations assigned to a location list.
@@ -2874,11 +2998,13 @@ export def "advertisers-location-lists-assigned-locations list" [
 ]: nothing -> record<assignedLocations: table<assignedLocationId: string, name: string, targetingOptionId: string>, nextPageToken: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($advertiser_id | is-empty) { error make --unspanned { msg: "path parameter 'advertiserId' must be non-empty" } }
+  if ($location_list_id | is-empty) { error make --unspanned { msg: "path parameter 'locationListId' must be non-empty" } }
   let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar") (serialize-qp "filter" $filter "scalar") (serialize-qp "orderBy" $order_by "scalar") (serialize-qp "pageSize" $page_size "scalar") (serialize-qp "pageToken" $page_token "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({advertiser_id: (encode-path-segment $advertiser_id), location_list_id: (encode-path-segment $location_list_id)} | format pattern "/v2/advertisers/{advertiser_id}/locationLists/{location_list_id}/assignedLocations") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"$.xgafv": $xgafv, "access_token": $access_token, "alt": $alt, "callback": $callback, "fields": $fields, "key": $key, "oauth_token": $oauth_token, "prettyPrint": $pretty_print, "quotaUser": $quota_user, "upload_protocol": $upload_protocol, "uploadType": $upload_type, "filter": $filter, "orderBy": $order_by, "pageSize": $page_size, "pageToken": $page_token} | compact), body: null}
 }
 
 # Creates an assignment between a location and a location list.
@@ -2913,13 +3039,15 @@ export def "advertisers-location-lists-assigned-locations create" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($advertiser_id | is-empty) { error make --unspanned { msg: "path parameter 'advertiserId' must be non-empty" } }
+  if ($location_list_id | is-empty) { error make --unspanned { msg: "path parameter 'locationListId' must be non-empty" } }
   let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({advertiser_id: (encode-path-segment $advertiser_id), location_list_id: (encode-path-segment $location_list_id)} | format pattern "/v2/advertisers/{advertiser_id}/locationLists/{location_list_id}/assignedLocations") $qp)
   let req_body = {"targetingOptionId": $targeting_option_id} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: ({"$.xgafv": $xgafv, "access_token": $access_token, "alt": $alt, "callback": $callback, "fields": $fields, "key": $key, "oauth_token": $oauth_token, "prettyPrint": $pretty_print, "quotaUser": $quota_user, "upload_protocol": $upload_protocol, "uploadType": $upload_type} | compact), body: $req_body}
 }
 
 # Deletes the assignment between a location and a location list.
@@ -2953,11 +3081,14 @@ export def "advertisers-location-lists-assigned-locations delete" [
 ]: nothing -> record {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($advertiser_id | is-empty) { error make --unspanned { msg: "path parameter 'advertiserId' must be non-empty" } }
+  if ($location_list_id | is-empty) { error make --unspanned { msg: "path parameter 'locationListId' must be non-empty" } }
+  if ($assigned_location_id | is-empty) { error make --unspanned { msg: "path parameter 'assignedLocationId' must be non-empty" } }
   let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({advertiser_id: (encode-path-segment $advertiser_id), location_list_id: (encode-path-segment $location_list_id), assigned_location_id: (encode-path-segment $assigned_location_id)} | format pattern "/v2/advertisers/{advertiser_id}/locationLists/{location_list_id}/assignedLocations/{assigned_location_id}") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"$.xgafv": $xgafv, "access_token": $access_token, "alt": $alt, "callback": $callback, "fields": $fields, "key": $key, "oauth_token": $oauth_token, "prettyPrint": $pretty_print, "quotaUser": $quota_user, "upload_protocol": $upload_protocol, "uploadType": $upload_type} | compact), body: null}
 }
 
 # Bulk edits multiple assignments between locations and a single location list. The operation will delete the assigned locations provided in BulkEditAssignedLocationsRequest.deleted_assigned_locations and then create the assigned locations provided in BulkEditAssignedLocationsRequest.created_assigned_locations.
@@ -2994,13 +3125,15 @@ export def "advertisers-location-lists-assigned-locations-bulk-edit create" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($advertiser_id | is-empty) { error make --unspanned { msg: "path parameter 'advertiserId' must be non-empty" } }
+  if ($location_list_id | is-empty) { error make --unspanned { msg: "path parameter 'locationListId' must be non-empty" } }
   let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({advertiser_id: (encode-path-segment $advertiser_id), location_list_id: (encode-path-segment $location_list_id)} | format pattern "/v2/advertisers/{advertiser_id}/locationLists/{location_list_id}/assignedLocations:bulkEdit") $qp)
   let req_body = {"createdAssignedLocations": $created_assigned_locations, "deletedAssignedLocations": $deleted_assigned_locations} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: ({"$.xgafv": $xgafv, "access_token": $access_token, "alt": $alt, "callback": $callback, "fields": $fields, "key": $key, "oauth_token": $oauth_token, "prettyPrint": $pretty_print, "quotaUser": $quota_user, "upload_protocol": $upload_protocol, "uploadType": $upload_type} | compact), body: $req_body}
 }
 
 # Lists manual triggers that are accessible to the current user for a given advertiser ID. The order is defined by the order_by parameter. A single advertiser_id is required.
@@ -3036,11 +3169,12 @@ export def "advertisers-manual-triggers list" [
 ]: nothing -> record<manualTriggers: table<activationDurationMinutes: string, advertiserId: string, displayName: string, latestActivationTime: string, name: string, state: string, triggerId: string>, nextPageToken: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($advertiser_id | is-empty) { error make --unspanned { msg: "path parameter 'advertiserId' must be non-empty" } }
   let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar") (serialize-qp "filter" $filter "scalar") (serialize-qp "orderBy" $order_by "scalar") (serialize-qp "pageSize" $page_size "scalar") (serialize-qp "pageToken" $page_token "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({advertiser_id: (encode-path-segment $advertiser_id)} | format pattern "/v2/advertisers/{advertiser_id}/manualTriggers") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"$.xgafv": $xgafv, "access_token": $access_token, "alt": $alt, "callback": $callback, "fields": $fields, "key": $key, "oauth_token": $oauth_token, "prettyPrint": $pretty_print, "quotaUser": $quota_user, "upload_protocol": $upload_protocol, "uploadType": $upload_type, "filter": $filter, "orderBy": $order_by, "pageSize": $page_size, "pageToken": $page_token} | compact), body: null}
 }
 
 # Creates a new manual trigger. Returns the newly created manual trigger if successful.
@@ -3076,13 +3210,14 @@ export def "advertisers-manual-triggers create" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($advertiser_id | is-empty) { error make --unspanned { msg: "path parameter 'advertiserId' must be non-empty" } }
   let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({advertiser_id: (encode-path-segment $advertiser_id)} | format pattern "/v2/advertisers/{advertiser_id}/manualTriggers") $qp)
   let req_body = {"activationDurationMinutes": $activation_duration_minutes, "advertiserId": $body_advertiser_id, "displayName": $display_name} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: ({"$.xgafv": $xgafv, "access_token": $access_token, "alt": $alt, "callback": $callback, "fields": $fields, "key": $key, "oauth_token": $oauth_token, "prettyPrint": $pretty_print, "quotaUser": $quota_user, "upload_protocol": $upload_protocol, "uploadType": $upload_type} | compact), body: $req_body}
 }
 
 # Gets a manual trigger.
@@ -3115,11 +3250,13 @@ export def "advertisers-manual-triggers get" [
 ]: nothing -> record<activationDurationMinutes: string, advertiserId: string, displayName: string, latestActivationTime: string, name: string, state: string, triggerId: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($advertiser_id | is-empty) { error make --unspanned { msg: "path parameter 'advertiserId' must be non-empty" } }
+  if ($trigger_id | is-empty) { error make --unspanned { msg: "path parameter 'triggerId' must be non-empty" } }
   let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({advertiser_id: (encode-path-segment $advertiser_id), trigger_id: (encode-path-segment $trigger_id)} | format pattern "/v2/advertisers/{advertiser_id}/manualTriggers/{trigger_id}") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"$.xgafv": $xgafv, "access_token": $access_token, "alt": $alt, "callback": $callback, "fields": $fields, "key": $key, "oauth_token": $oauth_token, "prettyPrint": $pretty_print, "quotaUser": $quota_user, "upload_protocol": $upload_protocol, "uploadType": $upload_type} | compact), body: null}
 }
 
 # Updates a manual trigger. Returns the updated manual trigger if successful.
@@ -3157,13 +3294,15 @@ export def "advertisers-manual-triggers update" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($advertiser_id | is-empty) { error make --unspanned { msg: "path parameter 'advertiserId' must be non-empty" } }
+  if ($trigger_id | is-empty) { error make --unspanned { msg: "path parameter 'triggerId' must be non-empty" } }
   let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar") (serialize-qp "updateMask" $update_mask "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({advertiser_id: (encode-path-segment $advertiser_id), trigger_id: (encode-path-segment $trigger_id)} | format pattern "/v2/advertisers/{advertiser_id}/manualTriggers/{trigger_id}") $qp)
   let req_body = {"activationDurationMinutes": $activation_duration_minutes, "advertiserId": $body_advertiser_id, "displayName": $display_name} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "patch" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body
+  do-request "patch" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: ({"$.xgafv": $xgafv, "access_token": $access_token, "alt": $alt, "callback": $callback, "fields": $fields, "key": $key, "oauth_token": $oauth_token, "prettyPrint": $pretty_print, "quotaUser": $quota_user, "upload_protocol": $upload_protocol, "uploadType": $upload_type, "updateMask": $update_mask} | compact), body: $req_body}
 }
 
 # Activates a manual trigger. Each activation of the manual trigger must be at least 5 minutes apart, otherwise an error will be returned.
@@ -3198,13 +3337,15 @@ export def "advertisers-manual-triggers create-activate" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($advertiser_id | is-empty) { error make --unspanned { msg: "path parameter 'advertiserId' must be non-empty" } }
+  if ($trigger_id | is-empty) { error make --unspanned { msg: "path parameter 'triggerId' must be non-empty" } }
   let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({advertiser_id: (encode-path-segment $advertiser_id), trigger_id: (encode-path-segment $trigger_id)} | format pattern "/v2/advertisers/{advertiser_id}/manualTriggers/{trigger_id}:activate") $qp)
   let req_body = $body
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: ({"$.xgafv": $xgafv, "access_token": $access_token, "alt": $alt, "callback": $callback, "fields": $fields, "key": $key, "oauth_token": $oauth_token, "prettyPrint": $pretty_print, "quotaUser": $quota_user, "upload_protocol": $upload_protocol, "uploadType": $upload_type} | compact), body: $req_body}
 }
 
 # Deactivates a manual trigger.
@@ -3239,13 +3380,15 @@ export def "advertisers-manual-triggers create-deactivate" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($advertiser_id | is-empty) { error make --unspanned { msg: "path parameter 'advertiserId' must be non-empty" } }
+  if ($trigger_id | is-empty) { error make --unspanned { msg: "path parameter 'triggerId' must be non-empty" } }
   let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({advertiser_id: (encode-path-segment $advertiser_id), trigger_id: (encode-path-segment $trigger_id)} | format pattern "/v2/advertisers/{advertiser_id}/manualTriggers/{trigger_id}:deactivate") $qp)
   let req_body = $body
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: ({"$.xgafv": $xgafv, "access_token": $access_token, "alt": $alt, "callback": $callback, "fields": $fields, "key": $key, "oauth_token": $oauth_token, "prettyPrint": $pretty_print, "quotaUser": $quota_user, "upload_protocol": $upload_protocol, "uploadType": $upload_type} | compact), body: $req_body}
 }
 
 # Lists negative keyword lists based on a given advertiser id.
@@ -3279,11 +3422,12 @@ export def "advertisers-negative-keyword-lists list" [
 ]: nothing -> record<negativeKeywordLists: table<advertiserId: string, displayName: string, name: string, negativeKeywordListId: string, targetedLineItemCount: string>, nextPageToken: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($advertiser_id | is-empty) { error make --unspanned { msg: "path parameter 'advertiserId' must be non-empty" } }
   let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar") (serialize-qp "pageSize" $page_size "scalar") (serialize-qp "pageToken" $page_token "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({advertiser_id: (encode-path-segment $advertiser_id)} | format pattern "/v2/advertisers/{advertiser_id}/negativeKeywordLists") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"$.xgafv": $xgafv, "access_token": $access_token, "alt": $alt, "callback": $callback, "fields": $fields, "key": $key, "oauth_token": $oauth_token, "prettyPrint": $pretty_print, "quotaUser": $quota_user, "upload_protocol": $upload_protocol, "uploadType": $upload_type, "pageSize": $page_size, "pageToken": $page_token} | compact), body: null}
 }
 
 # Creates a new negative keyword list. Returns the newly created negative keyword list if successful.
@@ -3317,13 +3461,14 @@ export def "advertisers-negative-keyword-lists create" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($advertiser_id | is-empty) { error make --unspanned { msg: "path parameter 'advertiserId' must be non-empty" } }
   let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({advertiser_id: (encode-path-segment $advertiser_id)} | format pattern "/v2/advertisers/{advertiser_id}/negativeKeywordLists") $qp)
   let req_body = {"displayName": $display_name} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: ({"$.xgafv": $xgafv, "access_token": $access_token, "alt": $alt, "callback": $callback, "fields": $fields, "key": $key, "oauth_token": $oauth_token, "prettyPrint": $pretty_print, "quotaUser": $quota_user, "upload_protocol": $upload_protocol, "uploadType": $upload_type} | compact), body: $req_body}
 }
 
 # Updates a negative keyword list. Returns the updated negative keyword list if successful.
@@ -3359,13 +3504,15 @@ export def "advertisers-negative-keyword-lists update" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($advertiser_id | is-empty) { error make --unspanned { msg: "path parameter 'advertiserId' must be non-empty" } }
+  if ($negative_keyword_list_id | is-empty) { error make --unspanned { msg: "path parameter 'negativeKeywordListId' must be non-empty" } }
   let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar") (serialize-qp "updateMask" $update_mask "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({advertiser_id: (encode-path-segment $advertiser_id), negative_keyword_list_id: (encode-path-segment $negative_keyword_list_id)} | format pattern "/v2/advertisers/{advertiser_id}/negativeKeywordLists/{negative_keyword_list_id}") $qp)
   let req_body = {"displayName": $display_name} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "patch" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body
+  do-request "patch" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: ({"$.xgafv": $xgafv, "access_token": $access_token, "alt": $alt, "callback": $callback, "fields": $fields, "key": $key, "oauth_token": $oauth_token, "prettyPrint": $pretty_print, "quotaUser": $quota_user, "upload_protocol": $upload_protocol, "uploadType": $upload_type, "updateMask": $update_mask} | compact), body: $req_body}
 }
 
 # Lists negative keywords in a negative keyword list.
@@ -3402,11 +3549,13 @@ export def "advertisers-negative-keyword-lists-negative-keywords list" [
 ]: nothing -> record<negativeKeywords: table<keywordValue: string, name: string>, nextPageToken: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($advertiser_id | is-empty) { error make --unspanned { msg: "path parameter 'advertiserId' must be non-empty" } }
+  if ($negative_keyword_list_id | is-empty) { error make --unspanned { msg: "path parameter 'negativeKeywordListId' must be non-empty" } }
   let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar") (serialize-qp "filter" $filter "scalar") (serialize-qp "orderBy" $order_by "scalar") (serialize-qp "pageSize" $page_size "scalar") (serialize-qp "pageToken" $page_token "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({advertiser_id: (encode-path-segment $advertiser_id), negative_keyword_list_id: (encode-path-segment $negative_keyword_list_id)} | format pattern "/v2/advertisers/{advertiser_id}/negativeKeywordLists/{negative_keyword_list_id}/negativeKeywords") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"$.xgafv": $xgafv, "access_token": $access_token, "alt": $alt, "callback": $callback, "fields": $fields, "key": $key, "oauth_token": $oauth_token, "prettyPrint": $pretty_print, "quotaUser": $quota_user, "upload_protocol": $upload_protocol, "uploadType": $upload_type, "filter": $filter, "orderBy": $order_by, "pageSize": $page_size, "pageToken": $page_token} | compact), body: null}
 }
 
 # Deletes a negative keyword from a negative keyword list.
@@ -3440,11 +3589,14 @@ export def "advertisers-negative-keyword-lists-negative-keywords delete" [
 ]: nothing -> record {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($advertiser_id | is-empty) { error make --unspanned { msg: "path parameter 'advertiserId' must be non-empty" } }
+  if ($negative_keyword_list_id | is-empty) { error make --unspanned { msg: "path parameter 'negativeKeywordListId' must be non-empty" } }
+  if ($keyword_value | is-empty) { error make --unspanned { msg: "path parameter 'keywordValue' must be non-empty" } }
   let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({advertiser_id: (encode-path-segment $advertiser_id), negative_keyword_list_id: (encode-path-segment $negative_keyword_list_id), keyword_value: (encode-path-segment $keyword_value)} | format pattern "/v2/advertisers/{advertiser_id}/negativeKeywordLists/{negative_keyword_list_id}/negativeKeywords/{keyword_value}") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"$.xgafv": $xgafv, "access_token": $access_token, "alt": $alt, "callback": $callback, "fields": $fields, "key": $key, "oauth_token": $oauth_token, "prettyPrint": $pretty_print, "quotaUser": $quota_user, "upload_protocol": $upload_protocol, "uploadType": $upload_type} | compact), body: null}
 }
 
 # Bulk edits negative keywords in a single negative keyword list. The operation will delete the negative keywords provided in BulkEditNegativeKeywordsRequest.deleted_negative_keywords and then create the negative keywords provided in BulkEditNegativeKeywordsRequest.created_negative_keywords. This operation is guaranteed to be atomic and will never result in a partial success or partial failure.
@@ -3481,13 +3633,15 @@ export def "advertisers-negative-keyword-lists-negative-keywords-bulk-edit creat
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($advertiser_id | is-empty) { error make --unspanned { msg: "path parameter 'advertiserId' must be non-empty" } }
+  if ($negative_keyword_list_id | is-empty) { error make --unspanned { msg: "path parameter 'negativeKeywordListId' must be non-empty" } }
   let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({advertiser_id: (encode-path-segment $advertiser_id), negative_keyword_list_id: (encode-path-segment $negative_keyword_list_id)} | format pattern "/v2/advertisers/{advertiser_id}/negativeKeywordLists/{negative_keyword_list_id}/negativeKeywords:bulkEdit") $qp)
   let req_body = {"createdNegativeKeywords": $created_negative_keywords, "deletedNegativeKeywords": $deleted_negative_keywords} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: ({"$.xgafv": $xgafv, "access_token": $access_token, "alt": $alt, "callback": $callback, "fields": $fields, "key": $key, "oauth_token": $oauth_token, "prettyPrint": $pretty_print, "quotaUser": $quota_user, "upload_protocol": $upload_protocol, "uploadType": $upload_type} | compact), body: $req_body}
 }
 
 # Replaces all negative keywords in a single negative keyword list. The operation will replace the keywords in a negative keyword list with keywords provided in ReplaceNegativeKeywordsRequest.new_negative_keywords.
@@ -3523,13 +3677,15 @@ export def "advertisers-negative-keyword-lists-negative-keywords-replace update"
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($advertiser_id | is-empty) { error make --unspanned { msg: "path parameter 'advertiserId' must be non-empty" } }
+  if ($negative_keyword_list_id | is-empty) { error make --unspanned { msg: "path parameter 'negativeKeywordListId' must be non-empty" } }
   let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({advertiser_id: (encode-path-segment $advertiser_id), negative_keyword_list_id: (encode-path-segment $negative_keyword_list_id)} | format pattern "/v2/advertisers/{advertiser_id}/negativeKeywordLists/{negative_keyword_list_id}/negativeKeywords:replace") $qp)
   let req_body = {"newNegativeKeywords": $new_negative_keywords} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: ({"$.xgafv": $xgafv, "access_token": $access_token, "alt": $alt, "callback": $callback, "fields": $fields, "key": $key, "oauth_token": $oauth_token, "prettyPrint": $pretty_print, "quotaUser": $quota_user, "upload_protocol": $upload_protocol, "uploadType": $upload_type} | compact), body: $req_body}
 }
 
 # Lists the targeting options assigned to an advertiser.
@@ -3566,11 +3722,13 @@ export def "advertisers-targeting-types-assigned-targeting-options list" [
 ]: nothing -> record<assignedTargetingOptions: table<ageRangeDetails: record, appCategoryDetails: record, appDetails: record, assignedTargetingOptionId: string, assignedTargetingOptionIdAlias: string, audienceGroupDetails: record, audioContentTypeDetails: record, authorizedSellerStatusDetails: record, browserDetails: record, businessChainDetails: record, carrierAndIspDetails: record, categoryDetails: record, channelDetails: record, contentDurationDetails: record, contentGenreDetails: record, contentInstreamPositionDetails: record, contentOutstreamPositionDetails: record, contentStreamTypeDetails: record, dayAndTimeDetails: record, deviceMakeModelDetails: record, deviceTypeDetails: record, digitalContentLabelExclusionDetails: record, environmentDetails: record, exchangeDetails: record, genderDetails: record, geoRegionDetails: record, householdIncomeDetails: record, inheritance: string, inventorySourceDetails: record, inventorySourceGroupDetails: record, keywordDetails: record, languageDetails: record, name: string, nativeContentPositionDetails: record, negativeKeywordListDetails: record, omidDetails: record, onScreenPositionDetails: record, operatingSystemDetails: record, parentalStatusDetails: record, poiDetails: record, proximityLocationListDetails: record, regionalLocationListDetails: record, sensitiveCategoryExclusionDetails: record, sessionPositionDetails: record, subExchangeDetails: record, targetingType: string, thirdPartyVerifierDetails: record, urlDetails: record, userRewardedContentDetails: record, videoPlayerSizeDetails: record, viewabilityDetails: record, youtubeChannelDetails: record, youtubeVideoDetails: record>, nextPageToken: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($advertiser_id | is-empty) { error make --unspanned { msg: "path parameter 'advertiserId' must be non-empty" } }
+  if ($targeting_type | is-empty) { error make --unspanned { msg: "path parameter 'targetingType' must be non-empty" } }
   let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar") (serialize-qp "filter" $filter "scalar") (serialize-qp "orderBy" $order_by "scalar") (serialize-qp "pageSize" $page_size "scalar") (serialize-qp "pageToken" $page_token "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({advertiser_id: (encode-path-segment $advertiser_id), targeting_type: (encode-path-segment $targeting_type)} | format pattern "/v2/advertisers/{advertiser_id}/targetingTypes/{targeting_type}/assignedTargetingOptions") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"$.xgafv": $xgafv, "access_token": $access_token, "alt": $alt, "callback": $callback, "fields": $fields, "key": $key, "oauth_token": $oauth_token, "prettyPrint": $pretty_print, "quotaUser": $quota_user, "upload_protocol": $upload_protocol, "uploadType": $upload_type, "filter": $filter, "orderBy": $order_by, "pageSize": $page_size, "pageToken": $page_token} | compact), body: null}
 }
 
 # Assigns a targeting option to an advertiser. Returns the assigned targeting option if successful.
@@ -3700,13 +3858,15 @@ export def "advertisers-targeting-types-assigned-targeting-options create" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($advertiser_id | is-empty) { error make --unspanned { msg: "path parameter 'advertiserId' must be non-empty" } }
+  if ($targeting_type | is-empty) { error make --unspanned { msg: "path parameter 'targetingType' must be non-empty" } }
   let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({advertiser_id: (encode-path-segment $advertiser_id), targeting_type: (encode-path-segment $targeting_type)} | format pattern "/v2/advertisers/{advertiser_id}/targetingTypes/{targeting_type}/assignedTargetingOptions") $qp)
   let req_body = {"ageRangeDetails": $age_range_details, "appCategoryDetails": $app_category_details, "appDetails": $app_details, "audienceGroupDetails": $audience_group_details, "audioContentTypeDetails": $audio_content_type_details, "authorizedSellerStatusDetails": $authorized_seller_status_details, "browserDetails": $browser_details, "businessChainDetails": $business_chain_details, "carrierAndIspDetails": $carrier_and_isp_details, "categoryDetails": $category_details, "channelDetails": $channel_details, "contentDurationDetails": $content_duration_details, "contentGenreDetails": $content_genre_details, "contentInstreamPositionDetails": $content_instream_position_details, "contentOutstreamPositionDetails": $content_outstream_position_details, "contentStreamTypeDetails": $content_stream_type_details, "dayAndTimeDetails": $day_and_time_details, "deviceMakeModelDetails": $device_make_model_details, "deviceTypeDetails": $device_type_details, "digitalContentLabelExclusionDetails": $digital_content_label_exclusion_details, "environmentDetails": $environment_details, "exchangeDetails": $exchange_details, "genderDetails": $gender_details, "geoRegionDetails": $geo_region_details, "householdIncomeDetails": $household_income_details, "inventorySourceDetails": $inventory_source_details, "inventorySourceGroupDetails": $inventory_source_group_details, "keywordDetails": $keyword_details, "languageDetails": $language_details, "nativeContentPositionDetails": $native_content_position_details, "negativeKeywordListDetails": $negative_keyword_list_details, "omidDetails": $omid_details, "onScreenPositionDetails": $on_screen_position_details, "operatingSystemDetails": $operating_system_details, "parentalStatusDetails": $parental_status_details, "poiDetails": $poi_details, "proximityLocationListDetails": $proximity_location_list_details, "regionalLocationListDetails": $regional_location_list_details, "sensitiveCategoryExclusionDetails": $sensitive_category_exclusion_details, "sessionPositionDetails": $session_position_details, "subExchangeDetails": $sub_exchange_details, "thirdPartyVerifierDetails": $third_party_verifier_details, "urlDetails": $url_details, "userRewardedContentDetails": $user_rewarded_content_details, "videoPlayerSizeDetails": $video_player_size_details, "viewabilityDetails": $viewability_details, "youtubeChannelDetails": $youtube_channel_details, "youtubeVideoDetails": $youtube_video_details} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: ({"$.xgafv": $xgafv, "access_token": $access_token, "alt": $alt, "callback": $callback, "fields": $fields, "key": $key, "oauth_token": $oauth_token, "prettyPrint": $pretty_print, "quotaUser": $quota_user, "upload_protocol": $upload_protocol, "uploadType": $upload_type} | compact), body: $req_body}
 }
 
 # Deletes an assigned targeting option from an advertiser.
@@ -3740,11 +3900,14 @@ export def "advertisers-targeting-types-assigned-targeting-options delete" [
 ]: nothing -> record {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($advertiser_id | is-empty) { error make --unspanned { msg: "path parameter 'advertiserId' must be non-empty" } }
+  if ($targeting_type | is-empty) { error make --unspanned { msg: "path parameter 'targetingType' must be non-empty" } }
+  if ($assigned_targeting_option_id | is-empty) { error make --unspanned { msg: "path parameter 'assignedTargetingOptionId' must be non-empty" } }
   let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({advertiser_id: (encode-path-segment $advertiser_id), targeting_type: (encode-path-segment $targeting_type), assigned_targeting_option_id: (encode-path-segment $assigned_targeting_option_id)} | format pattern "/v2/advertisers/{advertiser_id}/targetingTypes/{targeting_type}/assignedTargetingOptions/{assigned_targeting_option_id}") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"$.xgafv": $xgafv, "access_token": $access_token, "alt": $alt, "callback": $callback, "fields": $fields, "key": $key, "oauth_token": $oauth_token, "prettyPrint": $pretty_print, "quotaUser": $quota_user, "upload_protocol": $upload_protocol, "uploadType": $upload_type} | compact), body: null}
 }
 
 # Gets a single targeting option assigned to an advertiser.
@@ -3778,11 +3941,14 @@ export def "advertisers-targeting-types-assigned-targeting-options get" [
 ]: nothing -> record<ageRangeDetails: record<ageRange: string>, appCategoryDetails: record<displayName: string, negative: bool, targetingOptionId: string>, appDetails: record<appId: string, appPlatform: string, displayName: string, negative: bool>, assignedTargetingOptionId: string, assignedTargetingOptionIdAlias: string, audienceGroupDetails: record<excludedFirstAndThirdPartyAudienceGroup: record<settings: list>, excludedGoogleAudienceGroup: record<settings: list>, includedCombinedAudienceGroup: record<settings: list>, includedCustomListGroup: record<settings: list>, includedFirstAndThirdPartyAudienceGroups: list<record>, includedGoogleAudienceGroup: record<settings: list>>, audioContentTypeDetails: record<audioContentType: string>, authorizedSellerStatusDetails: record<authorizedSellerStatus: string, targetingOptionId: string>, browserDetails: record<displayName: string, negative: bool, targetingOptionId: string>, businessChainDetails: record<displayName: string, proximityRadiusAmount: float, proximityRadiusUnit: string, targetingOptionId: string>, carrierAndIspDetails: record<displayName: string, negative: bool, targetingOptionId: string>, categoryDetails: record<displayName: string, negative: bool, targetingOptionId: string>, channelDetails: record<channelId: string, negative: bool>, contentDurationDetails: record<contentDuration: string, targetingOptionId: string>, contentGenreDetails: record<displayName: string, negative: bool, targetingOptionId: string>, contentInstreamPositionDetails: record<adType: string, contentInstreamPosition: string>, contentOutstreamPositionDetails: record<adType: string, contentOutstreamPosition: string>, contentStreamTypeDetails: record<contentStreamType: string, targetingOptionId: string>, dayAndTimeDetails: record<dayOfWeek: string, endHour: int, startHour: int, timeZoneResolution: string>, deviceMakeModelDetails: record<displayName: string, negative: bool, targetingOptionId: string>, deviceTypeDetails: record<deviceType: string, youtubeAndPartnersBidMultiplier: float>, digitalContentLabelExclusionDetails: record<excludedContentRatingTier: string>, environmentDetails: record<environment: string>, exchangeDetails: record<exchange: string>, genderDetails: record<gender: string>, geoRegionDetails: record<displayName: string, geoRegionType: string, negative: bool, targetingOptionId: string>, householdIncomeDetails: record<householdIncome: string>, inheritance: string, inventorySourceDetails: record<inventorySourceId: string>, inventorySourceGroupDetails: record<inventorySourceGroupId: string>, keywordDetails: record<keyword: string, negative: bool>, languageDetails: record<displayName: string, negative: bool, targetingOptionId: string>, name: string, nativeContentPositionDetails: record<contentPosition: string>, negativeKeywordListDetails: record<negativeKeywordListId: string>, omidDetails: record<omid: string>, onScreenPositionDetails: record<adType: string, onScreenPosition: string, targetingOptionId: string>, operatingSystemDetails: record<displayName: string, negative: bool, targetingOptionId: string>, parentalStatusDetails: record<parentalStatus: string>, poiDetails: record<displayName: string, latitude: float, longitude: float, proximityRadiusAmount: float, proximityRadiusUnit: string, targetingOptionId: string>, proximityLocationListDetails: record<proximityLocationListId: string, proximityRadius: float, proximityRadiusUnit: string>, regionalLocationListDetails: record<negative: bool, regionalLocationListId: string>, sensitiveCategoryExclusionDetails: record<excludedSensitiveCategory: string>, sessionPositionDetails: record<sessionPosition: string>, subExchangeDetails: record<targetingOptionId: string>, targetingType: string, thirdPartyVerifierDetails: record<adloox: record<excludedAdlooxCategories: list>, doubleVerify: record<appStarRating: record, avoidedAgeRatings: list, brandSafetyCategories: record, customSegmentId: string, displayViewability: record, fraudInvalidTraffic: record, videoViewability: record>, integralAdScience: record<customSegmentId: list, displayViewability: string, excludeUnrateable: bool, excludedAdFraudRisk: string, excludedAdultRisk: string, excludedAlcoholRisk: string, excludedDrugsRisk: string, excludedGamblingRisk: string, excludedHateSpeechRisk: string, excludedIllegalDownloadsRisk: string, excludedOffensiveLanguageRisk: string, excludedViolenceRisk: string, traqScoreOption: string, videoViewability: string>>, urlDetails: record<negative: bool, url: string>, userRewardedContentDetails: record<targetingOptionId: string, userRewardedContent: string>, videoPlayerSizeDetails: record<videoPlayerSize: string>, viewabilityDetails: record<viewability: string>, youtubeChannelDetails: record<channelId: string, negative: bool>, youtubeVideoDetails: record<negative: bool, videoId: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($advertiser_id | is-empty) { error make --unspanned { msg: "path parameter 'advertiserId' must be non-empty" } }
+  if ($targeting_type | is-empty) { error make --unspanned { msg: "path parameter 'targetingType' must be non-empty" } }
+  if ($assigned_targeting_option_id | is-empty) { error make --unspanned { msg: "path parameter 'assignedTargetingOptionId' must be non-empty" } }
   let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({advertiser_id: (encode-path-segment $advertiser_id), targeting_type: (encode-path-segment $targeting_type), assigned_targeting_option_id: (encode-path-segment $assigned_targeting_option_id)} | format pattern "/v2/advertisers/{advertiser_id}/targetingTypes/{targeting_type}/assignedTargetingOptions/{assigned_targeting_option_id}") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"$.xgafv": $xgafv, "access_token": $access_token, "alt": $alt, "callback": $callback, "fields": $fields, "key": $key, "oauth_token": $oauth_token, "prettyPrint": $pretty_print, "quotaUser": $quota_user, "upload_protocol": $upload_protocol, "uploadType": $upload_type} | compact), body: null}
 }
 
 # Lists YouTube ad group ads.
@@ -3818,11 +3984,12 @@ export def "advertisers-youtube-ad-group-ads list" [
 ]: nothing -> record<nextPageToken: string, youtubeAdGroupAds: table<adGroupAdId: string, adGroupId: string, adUrls: list, advertiserId: string, audioAd: record, bumperAd: record, displayName: string, displayVideoSourceAd: record, entityStatus: string, inStreamAd: record, mastheadAd: record, name: string, nonSkippableAd: record, videoDiscoverAd: record, videoPerformanceAd: record>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($advertiser_id | is-empty) { error make --unspanned { msg: "path parameter 'advertiserId' must be non-empty" } }
   let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar") (serialize-qp "filter" $filter "scalar") (serialize-qp "orderBy" $order_by "scalar") (serialize-qp "pageSize" $page_size "scalar") (serialize-qp "pageToken" $page_token "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({advertiser_id: (encode-path-segment $advertiser_id)} | format pattern "/v2/advertisers/{advertiser_id}/youtubeAdGroupAds") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"$.xgafv": $xgafv, "access_token": $access_token, "alt": $alt, "callback": $callback, "fields": $fields, "key": $key, "oauth_token": $oauth_token, "prettyPrint": $pretty_print, "quotaUser": $quota_user, "upload_protocol": $upload_protocol, "uploadType": $upload_type, "filter": $filter, "orderBy": $order_by, "pageSize": $page_size, "pageToken": $page_token} | compact), body: null}
 }
 
 # Gets a YouTube ad group ad.
@@ -3855,11 +4022,13 @@ export def "advertisers-youtube-ad-group-ads get" [
 ]: nothing -> record<adGroupAdId: string, adGroupId: string, adUrls: table<type: string, url: string>, advertiserId: string, audioAd: record<displayUrl: string, finalUrl: string, trackingUrl: string, video: record<id: string, unavailableReason: string>>, bumperAd: record<commonInStreamAttribute: record<actionButtonLabel: string, actionHeadline: string, companionBanner: record, displayUrl: string, finalUrl: string, trackingUrl: string, video: record>>, displayName: string, displayVideoSourceAd: record<creativeId: string>, entityStatus: string, inStreamAd: record<commonInStreamAttribute: record<actionButtonLabel: string, actionHeadline: string, companionBanner: record, displayUrl: string, finalUrl: string, trackingUrl: string, video: record>, customParameters: record>, mastheadAd: record<autoplayVideoDuration: string, autoplayVideoStartMillisecond: string, callToActionButtonLabel: string, callToActionFinalUrl: string, callToActionTrackingUrl: string, companionYoutubeVideos: list<record>, description: string, headline: string, showChannelArt: bool, video: record<id: string, unavailableReason: string>, videoAspectRatio: string>, name: string, nonSkippableAd: record<commonInStreamAttribute: record<actionButtonLabel: string, actionHeadline: string, companionBanner: record, displayUrl: string, finalUrl: string, trackingUrl: string, video: record>, customParameters: record>, videoDiscoverAd: record<description1: string, description2: string, headline: string, thumbnail: string, video: record<id: string, unavailableReason: string>>, videoPerformanceAd: record<actionButtonLabels: list<string>, companionBanners: list<record>, customParameters: record, descriptions: list<string>, displayUrlBreadcrumb1: string, displayUrlBreadcrumb2: string, domain: string, finalUrl: string, headlines: list<string>, longHeadlines: list<string>, trackingUrl: string, videos: list<record>>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($advertiser_id | is-empty) { error make --unspanned { msg: "path parameter 'advertiserId' must be non-empty" } }
+  if ($youtube_ad_group_ad_id | is-empty) { error make --unspanned { msg: "path parameter 'youtubeAdGroupAdId' must be non-empty" } }
   let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({advertiser_id: (encode-path-segment $advertiser_id), youtube_ad_group_ad_id: (encode-path-segment $youtube_ad_group_ad_id)} | format pattern "/v2/advertisers/{advertiser_id}/youtubeAdGroupAds/{youtube_ad_group_ad_id}") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"$.xgafv": $xgafv, "access_token": $access_token, "alt": $alt, "callback": $callback, "fields": $fields, "key": $key, "oauth_token": $oauth_token, "prettyPrint": $pretty_print, "quotaUser": $quota_user, "upload_protocol": $upload_protocol, "uploadType": $upload_type} | compact), body: null}
 }
 
 # Lists YouTube ad groups.
@@ -3895,11 +4064,12 @@ export def "advertisers-youtube-ad-groups list" [
 ]: nothing -> record<nextPageToken: string, youtubeAdGroups: table<adGroupFormat: string, adGroupId: string, advertiserId: string, biddingStrategy: record, displayName: string, entityStatus: string, lineItemId: string, name: string, productFeedData: record, targetingExpansion: record, youtubeAdIds: list>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($advertiser_id | is-empty) { error make --unspanned { msg: "path parameter 'advertiserId' must be non-empty" } }
   let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar") (serialize-qp "filter" $filter "scalar") (serialize-qp "orderBy" $order_by "scalar") (serialize-qp "pageSize" $page_size "scalar") (serialize-qp "pageToken" $page_token "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({advertiser_id: (encode-path-segment $advertiser_id)} | format pattern "/v2/advertisers/{advertiser_id}/youtubeAdGroups") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"$.xgafv": $xgafv, "access_token": $access_token, "alt": $alt, "callback": $callback, "fields": $fields, "key": $key, "oauth_token": $oauth_token, "prettyPrint": $pretty_print, "quotaUser": $quota_user, "upload_protocol": $upload_protocol, "uploadType": $upload_type, "filter": $filter, "orderBy": $order_by, "pageSize": $page_size, "pageToken": $page_token} | compact), body: null}
 }
 
 # Gets a YouTube ad group.
@@ -3932,11 +4102,13 @@ export def "advertisers-youtube-ad-groups get" [
 ]: nothing -> record<adGroupFormat: string, adGroupId: string, advertiserId: string, biddingStrategy: record<adGroupEffectiveTargetCpaSource: string, adGroupEffectiveTargetCpaValue: string, type: string, value: string>, displayName: string, entityStatus: string, lineItemId: string, name: string, productFeedData: record<isFeedDisabled: bool, productMatchDimensions: list<record>, productMatchType: string>, targetingExpansion: record<excludeFirstPartyAudience: bool, targetingExpansionLevel: string>, youtubeAdIds: list<string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($advertiser_id | is-empty) { error make --unspanned { msg: "path parameter 'advertiserId' must be non-empty" } }
+  if ($youtube_ad_group_id | is-empty) { error make --unspanned { msg: "path parameter 'youtubeAdGroupId' must be non-empty" } }
   let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({advertiser_id: (encode-path-segment $advertiser_id), youtube_ad_group_id: (encode-path-segment $youtube_ad_group_id)} | format pattern "/v2/advertisers/{advertiser_id}/youtubeAdGroups/{youtube_ad_group_id}") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"$.xgafv": $xgafv, "access_token": $access_token, "alt": $alt, "callback": $callback, "fields": $fields, "key": $key, "oauth_token": $oauth_token, "prettyPrint": $pretty_print, "quotaUser": $quota_user, "upload_protocol": $upload_protocol, "uploadType": $upload_type} | compact), body: null}
 }
 
 # Lists the targeting options assigned to a YouTube ad group. Inherited assigned targeting options are not included.
@@ -3974,11 +4146,14 @@ export def "advertisers-youtube-ad-groups-targeting-types-assigned-targeting-opt
 ]: nothing -> record<assignedTargetingOptions: table<ageRangeDetails: record, appCategoryDetails: record, appDetails: record, assignedTargetingOptionId: string, assignedTargetingOptionIdAlias: string, audienceGroupDetails: record, audioContentTypeDetails: record, authorizedSellerStatusDetails: record, browserDetails: record, businessChainDetails: record, carrierAndIspDetails: record, categoryDetails: record, channelDetails: record, contentDurationDetails: record, contentGenreDetails: record, contentInstreamPositionDetails: record, contentOutstreamPositionDetails: record, contentStreamTypeDetails: record, dayAndTimeDetails: record, deviceMakeModelDetails: record, deviceTypeDetails: record, digitalContentLabelExclusionDetails: record, environmentDetails: record, exchangeDetails: record, genderDetails: record, geoRegionDetails: record, householdIncomeDetails: record, inheritance: string, inventorySourceDetails: record, inventorySourceGroupDetails: record, keywordDetails: record, languageDetails: record, name: string, nativeContentPositionDetails: record, negativeKeywordListDetails: record, omidDetails: record, onScreenPositionDetails: record, operatingSystemDetails: record, parentalStatusDetails: record, poiDetails: record, proximityLocationListDetails: record, regionalLocationListDetails: record, sensitiveCategoryExclusionDetails: record, sessionPositionDetails: record, subExchangeDetails: record, targetingType: string, thirdPartyVerifierDetails: record, urlDetails: record, userRewardedContentDetails: record, videoPlayerSizeDetails: record, viewabilityDetails: record, youtubeChannelDetails: record, youtubeVideoDetails: record>, nextPageToken: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($advertiser_id | is-empty) { error make --unspanned { msg: "path parameter 'advertiserId' must be non-empty" } }
+  if ($youtube_ad_group_id | is-empty) { error make --unspanned { msg: "path parameter 'youtubeAdGroupId' must be non-empty" } }
+  if ($targeting_type | is-empty) { error make --unspanned { msg: "path parameter 'targetingType' must be non-empty" } }
   let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar") (serialize-qp "filter" $filter "scalar") (serialize-qp "orderBy" $order_by "scalar") (serialize-qp "pageSize" $page_size "scalar") (serialize-qp "pageToken" $page_token "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({advertiser_id: (encode-path-segment $advertiser_id), youtube_ad_group_id: (encode-path-segment $youtube_ad_group_id), targeting_type: (encode-path-segment $targeting_type)} | format pattern "/v2/advertisers/{advertiser_id}/youtubeAdGroups/{youtube_ad_group_id}/targetingTypes/{targeting_type}/assignedTargetingOptions") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"$.xgafv": $xgafv, "access_token": $access_token, "alt": $alt, "callback": $callback, "fields": $fields, "key": $key, "oauth_token": $oauth_token, "prettyPrint": $pretty_print, "quotaUser": $quota_user, "upload_protocol": $upload_protocol, "uploadType": $upload_type, "filter": $filter, "orderBy": $order_by, "pageSize": $page_size, "pageToken": $page_token} | compact), body: null}
 }
 
 # Gets a single targeting option assigned to a YouTube ad group. Inherited assigned targeting options are not included.
@@ -4013,11 +4188,15 @@ export def "advertisers-youtube-ad-groups-targeting-types-assigned-targeting-opt
 ]: nothing -> record<ageRangeDetails: record<ageRange: string>, appCategoryDetails: record<displayName: string, negative: bool, targetingOptionId: string>, appDetails: record<appId: string, appPlatform: string, displayName: string, negative: bool>, assignedTargetingOptionId: string, assignedTargetingOptionIdAlias: string, audienceGroupDetails: record<excludedFirstAndThirdPartyAudienceGroup: record<settings: list>, excludedGoogleAudienceGroup: record<settings: list>, includedCombinedAudienceGroup: record<settings: list>, includedCustomListGroup: record<settings: list>, includedFirstAndThirdPartyAudienceGroups: list<record>, includedGoogleAudienceGroup: record<settings: list>>, audioContentTypeDetails: record<audioContentType: string>, authorizedSellerStatusDetails: record<authorizedSellerStatus: string, targetingOptionId: string>, browserDetails: record<displayName: string, negative: bool, targetingOptionId: string>, businessChainDetails: record<displayName: string, proximityRadiusAmount: float, proximityRadiusUnit: string, targetingOptionId: string>, carrierAndIspDetails: record<displayName: string, negative: bool, targetingOptionId: string>, categoryDetails: record<displayName: string, negative: bool, targetingOptionId: string>, channelDetails: record<channelId: string, negative: bool>, contentDurationDetails: record<contentDuration: string, targetingOptionId: string>, contentGenreDetails: record<displayName: string, negative: bool, targetingOptionId: string>, contentInstreamPositionDetails: record<adType: string, contentInstreamPosition: string>, contentOutstreamPositionDetails: record<adType: string, contentOutstreamPosition: string>, contentStreamTypeDetails: record<contentStreamType: string, targetingOptionId: string>, dayAndTimeDetails: record<dayOfWeek: string, endHour: int, startHour: int, timeZoneResolution: string>, deviceMakeModelDetails: record<displayName: string, negative: bool, targetingOptionId: string>, deviceTypeDetails: record<deviceType: string, youtubeAndPartnersBidMultiplier: float>, digitalContentLabelExclusionDetails: record<excludedContentRatingTier: string>, environmentDetails: record<environment: string>, exchangeDetails: record<exchange: string>, genderDetails: record<gender: string>, geoRegionDetails: record<displayName: string, geoRegionType: string, negative: bool, targetingOptionId: string>, householdIncomeDetails: record<householdIncome: string>, inheritance: string, inventorySourceDetails: record<inventorySourceId: string>, inventorySourceGroupDetails: record<inventorySourceGroupId: string>, keywordDetails: record<keyword: string, negative: bool>, languageDetails: record<displayName: string, negative: bool, targetingOptionId: string>, name: string, nativeContentPositionDetails: record<contentPosition: string>, negativeKeywordListDetails: record<negativeKeywordListId: string>, omidDetails: record<omid: string>, onScreenPositionDetails: record<adType: string, onScreenPosition: string, targetingOptionId: string>, operatingSystemDetails: record<displayName: string, negative: bool, targetingOptionId: string>, parentalStatusDetails: record<parentalStatus: string>, poiDetails: record<displayName: string, latitude: float, longitude: float, proximityRadiusAmount: float, proximityRadiusUnit: string, targetingOptionId: string>, proximityLocationListDetails: record<proximityLocationListId: string, proximityRadius: float, proximityRadiusUnit: string>, regionalLocationListDetails: record<negative: bool, regionalLocationListId: string>, sensitiveCategoryExclusionDetails: record<excludedSensitiveCategory: string>, sessionPositionDetails: record<sessionPosition: string>, subExchangeDetails: record<targetingOptionId: string>, targetingType: string, thirdPartyVerifierDetails: record<adloox: record<excludedAdlooxCategories: list>, doubleVerify: record<appStarRating: record, avoidedAgeRatings: list, brandSafetyCategories: record, customSegmentId: string, displayViewability: record, fraudInvalidTraffic: record, videoViewability: record>, integralAdScience: record<customSegmentId: list, displayViewability: string, excludeUnrateable: bool, excludedAdFraudRisk: string, excludedAdultRisk: string, excludedAlcoholRisk: string, excludedDrugsRisk: string, excludedGamblingRisk: string, excludedHateSpeechRisk: string, excludedIllegalDownloadsRisk: string, excludedOffensiveLanguageRisk: string, excludedViolenceRisk: string, traqScoreOption: string, videoViewability: string>>, urlDetails: record<negative: bool, url: string>, userRewardedContentDetails: record<targetingOptionId: string, userRewardedContent: string>, videoPlayerSizeDetails: record<videoPlayerSize: string>, viewabilityDetails: record<viewability: string>, youtubeChannelDetails: record<channelId: string, negative: bool>, youtubeVideoDetails: record<negative: bool, videoId: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($advertiser_id | is-empty) { error make --unspanned { msg: "path parameter 'advertiserId' must be non-empty" } }
+  if ($youtube_ad_group_id | is-empty) { error make --unspanned { msg: "path parameter 'youtubeAdGroupId' must be non-empty" } }
+  if ($targeting_type | is-empty) { error make --unspanned { msg: "path parameter 'targetingType' must be non-empty" } }
+  if ($assigned_targeting_option_id | is-empty) { error make --unspanned { msg: "path parameter 'assignedTargetingOptionId' must be non-empty" } }
   let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({advertiser_id: (encode-path-segment $advertiser_id), youtube_ad_group_id: (encode-path-segment $youtube_ad_group_id), targeting_type: (encode-path-segment $targeting_type), assigned_targeting_option_id: (encode-path-segment $assigned_targeting_option_id)} | format pattern "/v2/advertisers/{advertiser_id}/youtubeAdGroups/{youtube_ad_group_id}/targetingTypes/{targeting_type}/assignedTargetingOptions/{assigned_targeting_option_id}") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"$.xgafv": $xgafv, "access_token": $access_token, "alt": $alt, "callback": $callback, "fields": $fields, "key": $key, "oauth_token": $oauth_token, "prettyPrint": $pretty_print, "quotaUser": $quota_user, "upload_protocol": $upload_protocol, "uploadType": $upload_type} | compact), body: null}
 }
 
 # Lists assigned targeting options for multiple YouTube ad groups across targeting types. Inherieted assigned targeting options are not included.
@@ -4054,11 +4233,12 @@ export def "advertisers-youtube-ad-groups-bulk-list-ad-group-assigned-targeting-
 ]: nothing -> record<nextPageToken: string, youtubeAdGroupAssignedTargetingOptions: table<assignedTargetingOption: record, youtubeAdGroupId: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($advertiser_id | is-empty) { error make --unspanned { msg: "path parameter 'advertiserId' must be non-empty" } }
   let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar") (serialize-qp "filter" $filter "scalar") (serialize-qp "orderBy" $order_by "scalar") (serialize-qp "pageSize" $page_size "scalar") (serialize-qp "pageToken" $page_token "scalar") (serialize-qp "youtubeAdGroupIds" $youtube_ad_group_ids "multi")] | flatten | str join "&"
   let full_url = (build-url $base ({advertiser_id: (encode-path-segment $advertiser_id)} | format pattern "/v2/advertisers/{advertiser_id}/youtubeAdGroups:bulkListAdGroupAssignedTargetingOptions") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"$.xgafv": $xgafv, "access_token": $access_token, "alt": $alt, "callback": $callback, "fields": $fields, "key": $key, "oauth_token": $oauth_token, "prettyPrint": $pretty_print, "quotaUser": $quota_user, "upload_protocol": $upload_protocol, "uploadType": $upload_type, "filter": $filter, "orderBy": $order_by, "pageSize": $page_size, "pageToken": $page_token, "youtubeAdGroupIds": $youtube_ad_group_ids} | compact), body: null}
 }
 
 # Audits an advertiser. Returns the counts of used entities per resource type under the advertiser provided. Used entities count towards their respective resource limit. See https://support.google.com/displayvideo/answer/6071450.
@@ -4091,11 +4271,12 @@ export def "advertisers get-audit" [
 ]: nothing -> record<adGroupCriteriaCount: string, campaignCriteriaCount: string, channelsCount: string, negativeKeywordListsCount: string, negativelyTargetedChannelsCount: string, usedCampaignsCount: string, usedInsertionOrdersCount: string, usedLineItemsCount: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($advertiser_id | is-empty) { error make --unspanned { msg: "path parameter 'advertiserId' must be non-empty" } }
   let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar") (serialize-qp "readMask" $read_mask "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({advertiser_id: (encode-path-segment $advertiser_id)} | format pattern "/v2/advertisers/{advertiser_id}:audit") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"$.xgafv": $xgafv, "access_token": $access_token, "alt": $alt, "callback": $callback, "fields": $fields, "key": $key, "oauth_token": $oauth_token, "prettyPrint": $pretty_print, "quotaUser": $quota_user, "upload_protocol": $upload_protocol, "uploadType": $upload_type, "readMask": $read_mask} | compact), body: null}
 }
 
 # Edits targeting options under a single advertiser. The operation will delete the assigned targeting options provided in BulkEditAdvertiserAssignedTargetingOptionsRequest.delete_requests and then create the assigned targeting options provided in BulkEditAdvertiserAssignedTargetingOptionsRequest.create_requests .
@@ -4132,13 +4313,14 @@ export def "advertisers create-edit-assigned-targeting-options" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($advertiser_id | is-empty) { error make --unspanned { msg: "path parameter 'advertiserId' must be non-empty" } }
   let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({advertiser_id: (encode-path-segment $advertiser_id)} | format pattern "/v2/advertisers/{advertiser_id}:editAssignedTargetingOptions") $qp)
   let req_body = {"createRequests": $create_requests, "deleteRequests": $delete_requests} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: ({"$.xgafv": $xgafv, "access_token": $access_token, "alt": $alt, "callback": $callback, "fields": $fields, "key": $key, "oauth_token": $oauth_token, "prettyPrint": $pretty_print, "quotaUser": $quota_user, "upload_protocol": $upload_protocol, "uploadType": $upload_type} | compact), body: $req_body}
 }
 
 # Lists assigned targeting options of an advertiser across targeting types.
@@ -4174,11 +4356,12 @@ export def "advertisers list-assigned-targeting-options" [
 ]: nothing -> record<assignedTargetingOptions: table<ageRangeDetails: record, appCategoryDetails: record, appDetails: record, assignedTargetingOptionId: string, assignedTargetingOptionIdAlias: string, audienceGroupDetails: record, audioContentTypeDetails: record, authorizedSellerStatusDetails: record, browserDetails: record, businessChainDetails: record, carrierAndIspDetails: record, categoryDetails: record, channelDetails: record, contentDurationDetails: record, contentGenreDetails: record, contentInstreamPositionDetails: record, contentOutstreamPositionDetails: record, contentStreamTypeDetails: record, dayAndTimeDetails: record, deviceMakeModelDetails: record, deviceTypeDetails: record, digitalContentLabelExclusionDetails: record, environmentDetails: record, exchangeDetails: record, genderDetails: record, geoRegionDetails: record, householdIncomeDetails: record, inheritance: string, inventorySourceDetails: record, inventorySourceGroupDetails: record, keywordDetails: record, languageDetails: record, name: string, nativeContentPositionDetails: record, negativeKeywordListDetails: record, omidDetails: record, onScreenPositionDetails: record, operatingSystemDetails: record, parentalStatusDetails: record, poiDetails: record, proximityLocationListDetails: record, regionalLocationListDetails: record, sensitiveCategoryExclusionDetails: record, sessionPositionDetails: record, subExchangeDetails: record, targetingType: string, thirdPartyVerifierDetails: record, urlDetails: record, userRewardedContentDetails: record, videoPlayerSizeDetails: record, viewabilityDetails: record, youtubeChannelDetails: record, youtubeVideoDetails: record>, nextPageToken: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($advertiser_id | is-empty) { error make --unspanned { msg: "path parameter 'advertiserId' must be non-empty" } }
   let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar") (serialize-qp "filter" $filter "scalar") (serialize-qp "orderBy" $order_by "scalar") (serialize-qp "pageSize" $page_size "scalar") (serialize-qp "pageToken" $page_token "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({advertiser_id: (encode-path-segment $advertiser_id)} | format pattern "/v2/advertisers/{advertiser_id}:listAssignedTargetingOptions") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"$.xgafv": $xgafv, "access_token": $access_token, "alt": $alt, "callback": $callback, "fields": $fields, "key": $key, "oauth_token": $oauth_token, "prettyPrint": $pretty_print, "quotaUser": $quota_user, "upload_protocol": $upload_protocol, "uploadType": $upload_type, "filter": $filter, "orderBy": $order_by, "pageSize": $page_size, "pageToken": $page_token} | compact), body: null}
 }
 
 # Lists combined audiences. The order is defined by the order_by parameter.
@@ -4219,7 +4402,7 @@ export def "combined-audiences list" [
   let full_url = (build-url $base "/v2/combinedAudiences" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"$.xgafv": $xgafv, "access_token": $access_token, "alt": $alt, "callback": $callback, "fields": $fields, "key": $key, "oauth_token": $oauth_token, "prettyPrint": $pretty_print, "quotaUser": $quota_user, "upload_protocol": $upload_protocol, "uploadType": $upload_type, "advertiserId": $advertiser_id, "filter": $filter, "orderBy": $order_by, "pageSize": $page_size, "pageToken": $page_token, "partnerId": $partner_id} | compact), body: null}
 }
 
 # Gets a combined audience.
@@ -4253,11 +4436,12 @@ export def "combined-audiences get" [
 ]: nothing -> record<combinedAudienceId: string, displayName: string, name: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($combined_audience_id | is-empty) { error make --unspanned { msg: "path parameter 'combinedAudienceId' must be non-empty" } }
   let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar") (serialize-qp "advertiserId" $advertiser_id "scalar") (serialize-qp "partnerId" $partner_id "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({combined_audience_id: (encode-path-segment $combined_audience_id)} | format pattern "/v2/combinedAudiences/{combined_audience_id}") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"$.xgafv": $xgafv, "access_token": $access_token, "alt": $alt, "callback": $callback, "fields": $fields, "key": $key, "oauth_token": $oauth_token, "prettyPrint": $pretty_print, "quotaUser": $quota_user, "upload_protocol": $upload_protocol, "uploadType": $upload_type, "advertiserId": $advertiser_id, "partnerId": $partner_id} | compact), body: null}
 }
 
 # Lists custom bidding algorithms that are accessible to the current user and can be used in bidding stratgies. The order is defined by the order_by parameter.
@@ -4298,7 +4482,7 @@ export def "custom-bidding-algorithms list" [
   let full_url = (build-url $base "/v2/customBiddingAlgorithms" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"$.xgafv": $xgafv, "access_token": $access_token, "alt": $alt, "callback": $callback, "fields": $fields, "key": $key, "oauth_token": $oauth_token, "prettyPrint": $pretty_print, "quotaUser": $quota_user, "upload_protocol": $upload_protocol, "uploadType": $upload_type, "advertiserId": $advertiser_id, "filter": $filter, "orderBy": $order_by, "pageSize": $page_size, "pageToken": $page_token, "partnerId": $partner_id} | compact), body: null}
 }
 
 # Creates a new custom bidding algorithm. Returns the newly created custom bidding algorithm if successful.
@@ -4343,7 +4527,7 @@ export def "custom-bidding-algorithms create" [
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: ({"$.xgafv": $xgafv, "access_token": $access_token, "alt": $alt, "callback": $callback, "fields": $fields, "key": $key, "oauth_token": $oauth_token, "prettyPrint": $pretty_print, "quotaUser": $quota_user, "upload_protocol": $upload_protocol, "uploadType": $upload_type} | compact), body: $req_body}
 }
 
 # Gets a custom bidding algorithm.
@@ -4377,11 +4561,12 @@ export def "custom-bidding-algorithms get" [
 ]: nothing -> record<advertiserId: string, customBiddingAlgorithmId: string, customBiddingAlgorithmType: string, displayName: string, entityStatus: string, modelDetails: table<advertiserId: string, readinessState: string, suspensionState: string>, name: string, partnerId: string, sharedAdvertiserIds: list<string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($custom_bidding_algorithm_id | is-empty) { error make --unspanned { msg: "path parameter 'customBiddingAlgorithmId' must be non-empty" } }
   let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar") (serialize-qp "advertiserId" $advertiser_id "scalar") (serialize-qp "partnerId" $partner_id "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({custom_bidding_algorithm_id: (encode-path-segment $custom_bidding_algorithm_id)} | format pattern "/v2/customBiddingAlgorithms/{custom_bidding_algorithm_id}") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"$.xgafv": $xgafv, "access_token": $access_token, "alt": $alt, "callback": $callback, "fields": $fields, "key": $key, "oauth_token": $oauth_token, "prettyPrint": $pretty_print, "quotaUser": $quota_user, "upload_protocol": $upload_protocol, "uploadType": $upload_type, "advertiserId": $advertiser_id, "partnerId": $partner_id} | compact), body: null}
 }
 
 # Updates an existing custom bidding algorithm. Returns the updated custom bidding algorithm if successful.
@@ -4422,13 +4607,14 @@ export def "custom-bidding-algorithms update" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($custom_bidding_algorithm_id | is-empty) { error make --unspanned { msg: "path parameter 'customBiddingAlgorithmId' must be non-empty" } }
   let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar") (serialize-qp "updateMask" $update_mask "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({custom_bidding_algorithm_id: (encode-path-segment $custom_bidding_algorithm_id)} | format pattern "/v2/customBiddingAlgorithms/{custom_bidding_algorithm_id}") $qp)
   let req_body = {"advertiserId": $advertiser_id, "customBiddingAlgorithmType": $custom_bidding_algorithm_type, "displayName": $display_name, "entityStatus": $entity_status, "partnerId": $partner_id, "sharedAdvertiserIds": $shared_advertiser_ids} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "patch" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body
+  do-request "patch" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: ({"$.xgafv": $xgafv, "access_token": $access_token, "alt": $alt, "callback": $callback, "fields": $fields, "key": $key, "oauth_token": $oauth_token, "prettyPrint": $pretty_print, "quotaUser": $quota_user, "upload_protocol": $upload_protocol, "uploadType": $upload_type, "updateMask": $update_mask} | compact), body: $req_body}
 }
 
 # Lists custom bidding scripts that belong to the given algorithm. The order is defined by the order_by parameter.
@@ -4465,11 +4651,12 @@ export def "custom-bidding-algorithms-scripts list" [
 ]: nothing -> record<customBiddingScripts: table<active: bool, createTime: string, customBiddingAlgorithmId: string, customBiddingScriptId: string, errors: list, name: string, script: record, state: string>, nextPageToken: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($custom_bidding_algorithm_id | is-empty) { error make --unspanned { msg: "path parameter 'customBiddingAlgorithmId' must be non-empty" } }
   let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar") (serialize-qp "advertiserId" $advertiser_id "scalar") (serialize-qp "orderBy" $order_by "scalar") (serialize-qp "pageSize" $page_size "scalar") (serialize-qp "pageToken" $page_token "scalar") (serialize-qp "partnerId" $partner_id "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({custom_bidding_algorithm_id: (encode-path-segment $custom_bidding_algorithm_id)} | format pattern "/v2/customBiddingAlgorithms/{custom_bidding_algorithm_id}/scripts") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"$.xgafv": $xgafv, "access_token": $access_token, "alt": $alt, "callback": $callback, "fields": $fields, "key": $key, "oauth_token": $oauth_token, "prettyPrint": $pretty_print, "quotaUser": $quota_user, "upload_protocol": $upload_protocol, "uploadType": $upload_type, "advertiserId": $advertiser_id, "orderBy": $order_by, "pageSize": $page_size, "pageToken": $page_token, "partnerId": $partner_id} | compact), body: null}
 }
 
 # Creates a new custom bidding script. Returns the newly created script if successful.
@@ -4507,13 +4694,14 @@ export def "custom-bidding-algorithms-scripts create" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($custom_bidding_algorithm_id | is-empty) { error make --unspanned { msg: "path parameter 'customBiddingAlgorithmId' must be non-empty" } }
   let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar") (serialize-qp "advertiserId" $advertiser_id "scalar") (serialize-qp "partnerId" $partner_id "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({custom_bidding_algorithm_id: (encode-path-segment $custom_bidding_algorithm_id)} | format pattern "/v2/customBiddingAlgorithms/{custom_bidding_algorithm_id}/scripts") $qp)
   let req_body = {"script": $script} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: ({"$.xgafv": $xgafv, "access_token": $access_token, "alt": $alt, "callback": $callback, "fields": $fields, "key": $key, "oauth_token": $oauth_token, "prettyPrint": $pretty_print, "quotaUser": $quota_user, "upload_protocol": $upload_protocol, "uploadType": $upload_type, "advertiserId": $advertiser_id, "partnerId": $partner_id} | compact), body: $req_body}
 }
 
 # Gets a custom bidding script.
@@ -4548,11 +4736,13 @@ export def "custom-bidding-algorithms-scripts get" [
 ]: nothing -> record<active: bool, createTime: string, customBiddingAlgorithmId: string, customBiddingScriptId: string, errors: table<column: string, errorCode: string, errorMessage: string, line: string>, name: string, script: record<resourceName: string>, state: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($custom_bidding_algorithm_id | is-empty) { error make --unspanned { msg: "path parameter 'customBiddingAlgorithmId' must be non-empty" } }
+  if ($custom_bidding_script_id | is-empty) { error make --unspanned { msg: "path parameter 'customBiddingScriptId' must be non-empty" } }
   let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar") (serialize-qp "advertiserId" $advertiser_id "scalar") (serialize-qp "partnerId" $partner_id "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({custom_bidding_algorithm_id: (encode-path-segment $custom_bidding_algorithm_id), custom_bidding_script_id: (encode-path-segment $custom_bidding_script_id)} | format pattern "/v2/customBiddingAlgorithms/{custom_bidding_algorithm_id}/scripts/{custom_bidding_script_id}") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"$.xgafv": $xgafv, "access_token": $access_token, "alt": $alt, "callback": $callback, "fields": $fields, "key": $key, "oauth_token": $oauth_token, "prettyPrint": $pretty_print, "quotaUser": $quota_user, "upload_protocol": $upload_protocol, "uploadType": $upload_type, "advertiserId": $advertiser_id, "partnerId": $partner_id} | compact), body: null}
 }
 
 # Creates a custom bidding script reference object for a script file. The resulting reference object provides a resource path to which the script file should be uploaded. This reference object should be included in when creating a new custom bidding script object.
@@ -4586,11 +4776,12 @@ export def "custom-bidding-algorithms upload-script" [
 ]: nothing -> record<resourceName: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($custom_bidding_algorithm_id | is-empty) { error make --unspanned { msg: "path parameter 'customBiddingAlgorithmId' must be non-empty" } }
   let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar") (serialize-qp "advertiserId" $advertiser_id "scalar") (serialize-qp "partnerId" $partner_id "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({custom_bidding_algorithm_id: (encode-path-segment $custom_bidding_algorithm_id)} | format pattern "/v2/customBiddingAlgorithms/{custom_bidding_algorithm_id}:uploadScript") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"$.xgafv": $xgafv, "access_token": $access_token, "alt": $alt, "callback": $callback, "fields": $fields, "key": $key, "oauth_token": $oauth_token, "prettyPrint": $pretty_print, "quotaUser": $quota_user, "upload_protocol": $upload_protocol, "uploadType": $upload_type, "advertiserId": $advertiser_id, "partnerId": $partner_id} | compact), body: null}
 }
 
 # Lists custom lists. The order is defined by the order_by parameter.
@@ -4630,7 +4821,7 @@ export def "custom-lists list" [
   let full_url = (build-url $base "/v2/customLists" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"$.xgafv": $xgafv, "access_token": $access_token, "alt": $alt, "callback": $callback, "fields": $fields, "key": $key, "oauth_token": $oauth_token, "prettyPrint": $pretty_print, "quotaUser": $quota_user, "upload_protocol": $upload_protocol, "uploadType": $upload_type, "advertiserId": $advertiser_id, "filter": $filter, "orderBy": $order_by, "pageSize": $page_size, "pageToken": $page_token} | compact), body: null}
 }
 
 # Gets a custom list.
@@ -4663,11 +4854,12 @@ export def "custom-lists get" [
 ]: nothing -> record<customListId: string, displayName: string, name: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($custom_list_id | is-empty) { error make --unspanned { msg: "path parameter 'customListId' must be non-empty" } }
   let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar") (serialize-qp "advertiserId" $advertiser_id "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({custom_list_id: (encode-path-segment $custom_list_id)} | format pattern "/v2/customLists/{custom_list_id}") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"$.xgafv": $xgafv, "access_token": $access_token, "alt": $alt, "callback": $callback, "fields": $fields, "key": $key, "oauth_token": $oauth_token, "prettyPrint": $pretty_print, "quotaUser": $quota_user, "upload_protocol": $upload_protocol, "uploadType": $upload_type, "advertiserId": $advertiser_id} | compact), body: null}
 }
 
 # Lists first and third party audiences. The order is defined by the order_by parameter.
@@ -4708,7 +4900,7 @@ export def "first-and-third-party-audiences list" [
   let full_url = (build-url $base "/v2/firstAndThirdPartyAudiences" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"$.xgafv": $xgafv, "access_token": $access_token, "alt": $alt, "callback": $callback, "fields": $fields, "key": $key, "oauth_token": $oauth_token, "prettyPrint": $pretty_print, "quotaUser": $quota_user, "upload_protocol": $upload_protocol, "uploadType": $upload_type, "advertiserId": $advertiser_id, "filter": $filter, "orderBy": $order_by, "pageSize": $page_size, "pageToken": $page_token, "partnerId": $partner_id} | compact), body: null}
 }
 
 # Creates a FirstAndThirdPartyAudience. Only supported for the following audience_type: * `CUSTOMER_MATCH_CONTACT_INFO` * `CUSTOMER_MATCH_DEVICE_ID`
@@ -4757,7 +4949,7 @@ export def "first-and-third-party-audiences create" [
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: ({"$.xgafv": $xgafv, "access_token": $access_token, "alt": $alt, "callback": $callback, "fields": $fields, "key": $key, "oauth_token": $oauth_token, "prettyPrint": $pretty_print, "quotaUser": $quota_user, "upload_protocol": $upload_protocol, "uploadType": $upload_type, "advertiserId": $advertiser_id} | compact), body: $req_body}
 }
 
 # Gets a first and third party audience.
@@ -4791,11 +4983,12 @@ export def "first-and-third-party-audiences get" [
 ]: nothing -> record<activeDisplayAudienceSize: string, appId: string, audienceSource: string, audienceType: string, contactInfoList: record<contactInfos: list<record>>, description: string, displayAudienceSize: string, displayDesktopAudienceSize: string, displayMobileAppAudienceSize: string, displayMobileWebAudienceSize: string, displayName: string, firstAndThirdPartyAudienceId: string, firstAndThirdPartyAudienceType: string, gmailAudienceSize: string, membershipDurationDays: string, mobileDeviceIdList: record<mobileDeviceIds: list<string>>, name: string, youtubeAudienceSize: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($first_and_third_party_audience_id | is-empty) { error make --unspanned { msg: "path parameter 'firstAndThirdPartyAudienceId' must be non-empty" } }
   let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar") (serialize-qp "advertiserId" $advertiser_id "scalar") (serialize-qp "partnerId" $partner_id "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({first_and_third_party_audience_id: (encode-path-segment $first_and_third_party_audience_id)} | format pattern "/v2/firstAndThirdPartyAudiences/{first_and_third_party_audience_id}") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"$.xgafv": $xgafv, "access_token": $access_token, "alt": $alt, "callback": $callback, "fields": $fields, "key": $key, "oauth_token": $oauth_token, "prettyPrint": $pretty_print, "quotaUser": $quota_user, "upload_protocol": $upload_protocol, "uploadType": $upload_type, "advertiserId": $advertiser_id, "partnerId": $partner_id} | compact), body: null}
 }
 
 # Updates an existing FirstAndThirdPartyAudience. Only supported for the following audience_type: * `CUSTOMER_MATCH_CONTACT_INFO` * `CUSTOMER_MATCH_DEVICE_ID`
@@ -4840,13 +5033,14 @@ export def "first-and-third-party-audiences update" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($first_and_third_party_audience_id | is-empty) { error make --unspanned { msg: "path parameter 'firstAndThirdPartyAudienceId' must be non-empty" } }
   let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar") (serialize-qp "advertiserId" $advertiser_id "scalar") (serialize-qp "updateMask" $update_mask "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({first_and_third_party_audience_id: (encode-path-segment $first_and_third_party_audience_id)} | format pattern "/v2/firstAndThirdPartyAudiences/{first_and_third_party_audience_id}") $qp)
   let req_body = {"appId": $app_id, "audienceType": $audience_type, "contactInfoList": $contact_info_list, "description": $description, "displayName": $display_name, "firstAndThirdPartyAudienceType": $first_and_third_party_audience_type, "membershipDurationDays": $membership_duration_days, "mobileDeviceIdList": $mobile_device_id_list} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "patch" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body
+  do-request "patch" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: ({"$.xgafv": $xgafv, "access_token": $access_token, "alt": $alt, "callback": $callback, "fields": $fields, "key": $key, "oauth_token": $oauth_token, "prettyPrint": $pretty_print, "quotaUser": $quota_user, "upload_protocol": $upload_protocol, "uploadType": $upload_type, "advertiserId": $advertiser_id, "updateMask": $update_mask} | compact), body: $req_body}
 }
 
 # Updates the member list of a Customer Match audience. Only supported for the following audience_type: * `CUSTOMER_MATCH_CONTACT_INFO` * `CUSTOMER_MATCH_DEVICE_ID`
@@ -4884,13 +5078,14 @@ export def "first-and-third-party-audiences create-edit-customer-match-members" 
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($first_and_third_party_audience_id | is-empty) { error make --unspanned { msg: "path parameter 'firstAndThirdPartyAudienceId' must be non-empty" } }
   let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({first_and_third_party_audience_id: (encode-path-segment $first_and_third_party_audience_id)} | format pattern "/v2/firstAndThirdPartyAudiences/{first_and_third_party_audience_id}:editCustomerMatchMembers") $qp)
   let req_body = {"addedContactInfoList": $added_contact_info_list, "addedMobileDeviceIdList": $added_mobile_device_id_list, "advertiserId": $advertiser_id} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: ({"$.xgafv": $xgafv, "access_token": $access_token, "alt": $alt, "callback": $callback, "fields": $fields, "key": $key, "oauth_token": $oauth_token, "prettyPrint": $pretty_print, "quotaUser": $quota_user, "upload_protocol": $upload_protocol, "uploadType": $upload_type} | compact), body: $req_body}
 }
 
 # Gets a Floodlight group.
@@ -4923,11 +5118,12 @@ export def "floodlight-groups get" [
 ]: nothing -> record<activeViewConfig: record<displayName: string, minimumDuration: string, minimumQuartile: string, minimumViewability: string, minimumVolume: string>, customVariables: record, displayName: string, floodlightGroupId: string, lookbackWindow: record<clickDays: int, impressionDays: int>, name: string, webTagType: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($floodlight_group_id | is-empty) { error make --unspanned { msg: "path parameter 'floodlightGroupId' must be non-empty" } }
   let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar") (serialize-qp "partnerId" $partner_id "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({floodlight_group_id: (encode-path-segment $floodlight_group_id)} | format pattern "/v2/floodlightGroups/{floodlight_group_id}") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"$.xgafv": $xgafv, "access_token": $access_token, "alt": $alt, "callback": $callback, "fields": $fields, "key": $key, "oauth_token": $oauth_token, "prettyPrint": $pretty_print, "quotaUser": $quota_user, "upload_protocol": $upload_protocol, "uploadType": $upload_type, "partnerId": $partner_id} | compact), body: null}
 }
 
 # Lists Google audiences. The order is defined by the order_by parameter.
@@ -4968,7 +5164,7 @@ export def "google-audiences list" [
   let full_url = (build-url $base "/v2/googleAudiences" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"$.xgafv": $xgafv, "access_token": $access_token, "alt": $alt, "callback": $callback, "fields": $fields, "key": $key, "oauth_token": $oauth_token, "prettyPrint": $pretty_print, "quotaUser": $quota_user, "upload_protocol": $upload_protocol, "uploadType": $upload_type, "advertiserId": $advertiser_id, "filter": $filter, "orderBy": $order_by, "pageSize": $page_size, "pageToken": $page_token, "partnerId": $partner_id} | compact), body: null}
 }
 
 # Gets a Google audience.
@@ -5002,11 +5198,12 @@ export def "google-audiences get" [
 ]: nothing -> record<displayName: string, googleAudienceId: string, googleAudienceType: string, name: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($google_audience_id | is-empty) { error make --unspanned { msg: "path parameter 'googleAudienceId' must be non-empty" } }
   let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar") (serialize-qp "advertiserId" $advertiser_id "scalar") (serialize-qp "partnerId" $partner_id "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({google_audience_id: (encode-path-segment $google_audience_id)} | format pattern "/v2/googleAudiences/{google_audience_id}") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"$.xgafv": $xgafv, "access_token": $access_token, "alt": $alt, "callback": $callback, "fields": $fields, "key": $key, "oauth_token": $oauth_token, "prettyPrint": $pretty_print, "quotaUser": $quota_user, "upload_protocol": $upload_protocol, "uploadType": $upload_type, "advertiserId": $advertiser_id, "partnerId": $partner_id} | compact), body: null}
 }
 
 # Lists guaranteed orders that are accessible to the current user. The order is defined by the order_by parameter. If a filter by entity_status is not specified, guaranteed orders with entity status `ENTITY_STATUS_ARCHIVED` will not be included in the results.
@@ -5047,7 +5244,7 @@ export def "guaranteed-orders list" [
   let full_url = (build-url $base "/v2/guaranteedOrders" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"$.xgafv": $xgafv, "access_token": $access_token, "alt": $alt, "callback": $callback, "fields": $fields, "key": $key, "oauth_token": $oauth_token, "prettyPrint": $pretty_print, "quotaUser": $quota_user, "upload_protocol": $upload_protocol, "uploadType": $upload_type, "advertiserId": $advertiser_id, "filter": $filter, "orderBy": $order_by, "pageSize": $page_size, "pageToken": $page_token, "partnerId": $partner_id} | compact), body: null}
 }
 
 # Creates a new guaranteed order. Returns the newly created guaranteed order if successful.
@@ -5097,7 +5294,7 @@ export def "guaranteed-orders create" [
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: ({"$.xgafv": $xgafv, "access_token": $access_token, "alt": $alt, "callback": $callback, "fields": $fields, "key": $key, "oauth_token": $oauth_token, "prettyPrint": $pretty_print, "quotaUser": $quota_user, "upload_protocol": $upload_protocol, "uploadType": $upload_type, "advertiserId": $advertiser_id, "partnerId": $partner_id} | compact), body: $req_body}
 }
 
 # Gets a guaranteed order.
@@ -5131,11 +5328,12 @@ export def "guaranteed-orders get" [
 ]: nothing -> record<defaultAdvertiserId: string, defaultCampaignId: string, displayName: string, exchange: string, guaranteedOrderId: string, legacyGuaranteedOrderId: string, name: string, publisherName: string, readAccessInherited: bool, readAdvertiserIds: list<string>, readWriteAdvertiserId: string, readWritePartnerId: string, status: record<configStatus: string, entityPauseReason: string, entityStatus: string>, updateTime: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($guaranteed_order_id | is-empty) { error make --unspanned { msg: "path parameter 'guaranteedOrderId' must be non-empty" } }
   let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar") (serialize-qp "advertiserId" $advertiser_id "scalar") (serialize-qp "partnerId" $partner_id "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({guaranteed_order_id: (encode-path-segment $guaranteed_order_id)} | format pattern "/v2/guaranteedOrders/{guaranteed_order_id}") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"$.xgafv": $xgafv, "access_token": $access_token, "alt": $alt, "callback": $callback, "fields": $fields, "key": $key, "oauth_token": $oauth_token, "prettyPrint": $pretty_print, "quotaUser": $quota_user, "upload_protocol": $upload_protocol, "uploadType": $upload_type, "advertiserId": $advertiser_id, "partnerId": $partner_id} | compact), body: null}
 }
 
 # Updates an existing guaranteed order. Returns the updated guaranteed order if successful.
@@ -5181,13 +5379,14 @@ export def "guaranteed-orders update" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($guaranteed_order_id | is-empty) { error make --unspanned { msg: "path parameter 'guaranteedOrderId' must be non-empty" } }
   let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar") (serialize-qp "advertiserId" $advertiser_id "scalar") (serialize-qp "partnerId" $partner_id "scalar") (serialize-qp "updateMask" $update_mask "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({guaranteed_order_id: (encode-path-segment $guaranteed_order_id)} | format pattern "/v2/guaranteedOrders/{guaranteed_order_id}") $qp)
   let req_body = {"defaultCampaignId": $default_campaign_id, "displayName": $display_name, "exchange": $exchange, "publisherName": $publisher_name, "readAccessInherited": $read_access_inherited, "readAdvertiserIds": $read_advertiser_ids, "readWriteAdvertiserId": $read_write_advertiser_id, "readWritePartnerId": $read_write_partner_id, "status": $status} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "patch" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body
+  do-request "patch" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: ({"$.xgafv": $xgafv, "access_token": $access_token, "alt": $alt, "callback": $callback, "fields": $fields, "key": $key, "oauth_token": $oauth_token, "prettyPrint": $pretty_print, "quotaUser": $quota_user, "upload_protocol": $upload_protocol, "uploadType": $upload_type, "advertiserId": $advertiser_id, "partnerId": $partner_id, "updateMask": $update_mask} | compact), body: $req_body}
 }
 
 # Edits read advertisers of a guaranteed order.
@@ -5224,13 +5423,14 @@ export def "guaranteed-orders get-edit-accessors" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($guaranteed_order_id | is-empty) { error make --unspanned { msg: "path parameter 'guaranteedOrderId' must be non-empty" } }
   let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({guaranteed_order_id: (encode-path-segment $guaranteed_order_id)} | format pattern "/v2/guaranteedOrders/{guaranteed_order_id}:editGuaranteedOrderReadAccessors") $qp)
   let req_body = {"addedAdvertisers": $added_advertisers, "partnerId": $partner_id, "readAccessInherited": $read_access_inherited, "removedAdvertisers": $removed_advertisers} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: ({"$.xgafv": $xgafv, "access_token": $access_token, "alt": $alt, "callback": $callback, "fields": $fields, "key": $key, "oauth_token": $oauth_token, "prettyPrint": $pretty_print, "quotaUser": $quota_user, "upload_protocol": $upload_protocol, "uploadType": $upload_type} | compact), body: $req_body}
 }
 
 # Lists inventory source groups that are accessible to the current user. The order is defined by the order_by parameter.
@@ -5271,7 +5471,7 @@ export def "inventory-source-groups list" [
   let full_url = (build-url $base "/v2/inventorySourceGroups" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"$.xgafv": $xgafv, "access_token": $access_token, "alt": $alt, "callback": $callback, "fields": $fields, "key": $key, "oauth_token": $oauth_token, "prettyPrint": $pretty_print, "quotaUser": $quota_user, "upload_protocol": $upload_protocol, "uploadType": $upload_type, "advertiserId": $advertiser_id, "filter": $filter, "orderBy": $order_by, "pageSize": $page_size, "pageToken": $page_token, "partnerId": $partner_id} | compact), body: null}
 }
 
 # Creates a new inventory source group. Returns the newly created inventory source group if successful.
@@ -5312,7 +5512,7 @@ export def "inventory-source-groups create" [
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: ({"$.xgafv": $xgafv, "access_token": $access_token, "alt": $alt, "callback": $callback, "fields": $fields, "key": $key, "oauth_token": $oauth_token, "prettyPrint": $pretty_print, "quotaUser": $quota_user, "upload_protocol": $upload_protocol, "uploadType": $upload_type, "advertiserId": $advertiser_id, "partnerId": $partner_id} | compact), body: $req_body}
 }
 
 # Deletes an inventory source group.
@@ -5346,11 +5546,12 @@ export def "inventory-source-groups delete" [
 ]: nothing -> record {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($inventory_source_group_id | is-empty) { error make --unspanned { msg: "path parameter 'inventorySourceGroupId' must be non-empty" } }
   let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar") (serialize-qp "advertiserId" $advertiser_id "scalar") (serialize-qp "partnerId" $partner_id "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({inventory_source_group_id: (encode-path-segment $inventory_source_group_id)} | format pattern "/v2/inventorySourceGroups/{inventory_source_group_id}") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"$.xgafv": $xgafv, "access_token": $access_token, "alt": $alt, "callback": $callback, "fields": $fields, "key": $key, "oauth_token": $oauth_token, "prettyPrint": $pretty_print, "quotaUser": $quota_user, "upload_protocol": $upload_protocol, "uploadType": $upload_type, "advertiserId": $advertiser_id, "partnerId": $partner_id} | compact), body: null}
 }
 
 # Gets an inventory source group.
@@ -5384,11 +5585,12 @@ export def "inventory-source-groups get" [
 ]: nothing -> record<displayName: string, inventorySourceGroupId: string, name: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($inventory_source_group_id | is-empty) { error make --unspanned { msg: "path parameter 'inventorySourceGroupId' must be non-empty" } }
   let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar") (serialize-qp "advertiserId" $advertiser_id "scalar") (serialize-qp "partnerId" $partner_id "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({inventory_source_group_id: (encode-path-segment $inventory_source_group_id)} | format pattern "/v2/inventorySourceGroups/{inventory_source_group_id}") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"$.xgafv": $xgafv, "access_token": $access_token, "alt": $alt, "callback": $callback, "fields": $fields, "key": $key, "oauth_token": $oauth_token, "prettyPrint": $pretty_print, "quotaUser": $quota_user, "upload_protocol": $upload_protocol, "uploadType": $upload_type, "advertiserId": $advertiser_id, "partnerId": $partner_id} | compact), body: null}
 }
 
 # Lists inventory sources assigned to an inventory source group.
@@ -5426,11 +5628,12 @@ export def "inventory-source-groups-assigned-inventory-sources list" [
 ]: nothing -> record<assignedInventorySources: table<assignedInventorySourceId: string, inventorySourceId: string, name: string>, nextPageToken: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($inventory_source_group_id | is-empty) { error make --unspanned { msg: "path parameter 'inventorySourceGroupId' must be non-empty" } }
   let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar") (serialize-qp "advertiserId" $advertiser_id "scalar") (serialize-qp "filter" $filter "scalar") (serialize-qp "orderBy" $order_by "scalar") (serialize-qp "pageSize" $page_size "scalar") (serialize-qp "pageToken" $page_token "scalar") (serialize-qp "partnerId" $partner_id "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({inventory_source_group_id: (encode-path-segment $inventory_source_group_id)} | format pattern "/v2/inventorySourceGroups/{inventory_source_group_id}/assignedInventorySources") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"$.xgafv": $xgafv, "access_token": $access_token, "alt": $alt, "callback": $callback, "fields": $fields, "key": $key, "oauth_token": $oauth_token, "prettyPrint": $pretty_print, "quotaUser": $quota_user, "upload_protocol": $upload_protocol, "uploadType": $upload_type, "advertiserId": $advertiser_id, "filter": $filter, "orderBy": $order_by, "pageSize": $page_size, "pageToken": $page_token, "partnerId": $partner_id} | compact), body: null}
 }
 
 # Creates an assignment between an inventory source and an inventory source group.
@@ -5466,13 +5669,14 @@ export def "inventory-source-groups-assigned-inventory-sources create" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($inventory_source_group_id | is-empty) { error make --unspanned { msg: "path parameter 'inventorySourceGroupId' must be non-empty" } }
   let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar") (serialize-qp "advertiserId" $advertiser_id "scalar") (serialize-qp "partnerId" $partner_id "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({inventory_source_group_id: (encode-path-segment $inventory_source_group_id)} | format pattern "/v2/inventorySourceGroups/{inventory_source_group_id}/assignedInventorySources") $qp)
   let req_body = {"inventorySourceId": $inventory_source_id} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: ({"$.xgafv": $xgafv, "access_token": $access_token, "alt": $alt, "callback": $callback, "fields": $fields, "key": $key, "oauth_token": $oauth_token, "prettyPrint": $pretty_print, "quotaUser": $quota_user, "upload_protocol": $upload_protocol, "uploadType": $upload_type, "advertiserId": $advertiser_id, "partnerId": $partner_id} | compact), body: $req_body}
 }
 
 # Deletes the assignment between an inventory source and an inventory source group.
@@ -5507,11 +5711,13 @@ export def "inventory-source-groups-assigned-inventory-sources delete" [
 ]: nothing -> record {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($inventory_source_group_id | is-empty) { error make --unspanned { msg: "path parameter 'inventorySourceGroupId' must be non-empty" } }
+  if ($assigned_inventory_source_id | is-empty) { error make --unspanned { msg: "path parameter 'assignedInventorySourceId' must be non-empty" } }
   let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar") (serialize-qp "advertiserId" $advertiser_id "scalar") (serialize-qp "partnerId" $partner_id "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({inventory_source_group_id: (encode-path-segment $inventory_source_group_id), assigned_inventory_source_id: (encode-path-segment $assigned_inventory_source_id)} | format pattern "/v2/inventorySourceGroups/{inventory_source_group_id}/assignedInventorySources/{assigned_inventory_source_id}") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"$.xgafv": $xgafv, "access_token": $access_token, "alt": $alt, "callback": $callback, "fields": $fields, "key": $key, "oauth_token": $oauth_token, "prettyPrint": $pretty_print, "quotaUser": $quota_user, "upload_protocol": $upload_protocol, "uploadType": $upload_type, "advertiserId": $advertiser_id, "partnerId": $partner_id} | compact), body: null}
 }
 
 # Bulk edits multiple assignments between inventory sources and a single inventory source group. The operation will delete the assigned inventory sources provided in BulkEditAssignedInventorySourcesRequest.deleted_assigned_inventory_sources and then create the assigned inventory sources provided in BulkEditAssignedInventorySourcesRequest.created_assigned_inventory_sources.
@@ -5549,13 +5755,14 @@ export def "inventory-source-groups-assigned-inventory-sources-bulk-edit create"
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($inventory_source_group_id | is-empty) { error make --unspanned { msg: "path parameter 'inventorySourceGroupId' must be non-empty" } }
   let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({inventory_source_group_id: (encode-path-segment $inventory_source_group_id)} | format pattern "/v2/inventorySourceGroups/{inventory_source_group_id}/assignedInventorySources:bulkEdit") $qp)
   let req_body = {"advertiserId": $advertiser_id, "createdAssignedInventorySources": $created_assigned_inventory_sources, "deletedAssignedInventorySources": $deleted_assigned_inventory_sources, "partnerId": $partner_id} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: ({"$.xgafv": $xgafv, "access_token": $access_token, "alt": $alt, "callback": $callback, "fields": $fields, "key": $key, "oauth_token": $oauth_token, "prettyPrint": $pretty_print, "quotaUser": $quota_user, "upload_protocol": $upload_protocol, "uploadType": $upload_type} | compact), body: $req_body}
 }
 
 # Lists inventory sources that are accessible to the current user. The order is defined by the order_by parameter. If a filter by entity_status is not specified, inventory sources with entity status `ENTITY_STATUS_ARCHIVED` will not be included in the results.
@@ -5596,7 +5803,7 @@ export def "inventory-sources list" [
   let full_url = (build-url $base "/v2/inventorySources" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"$.xgafv": $xgafv, "access_token": $access_token, "alt": $alt, "callback": $callback, "fields": $fields, "key": $key, "oauth_token": $oauth_token, "prettyPrint": $pretty_print, "quotaUser": $quota_user, "upload_protocol": $upload_protocol, "uploadType": $upload_type, "advertiserId": $advertiser_id, "filter": $filter, "orderBy": $order_by, "pageSize": $page_size, "pageToken": $page_token, "partnerId": $partner_id} | compact), body: null}
 }
 
 # Creates a new inventory source. Returns the newly created inventory source if successful.
@@ -5655,7 +5862,7 @@ export def "inventory-sources create" [
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: ({"$.xgafv": $xgafv, "access_token": $access_token, "alt": $alt, "callback": $callback, "fields": $fields, "key": $key, "oauth_token": $oauth_token, "prettyPrint": $pretty_print, "quotaUser": $quota_user, "upload_protocol": $upload_protocol, "uploadType": $upload_type, "advertiserId": $advertiser_id, "partnerId": $partner_id} | compact), body: $req_body}
 }
 
 # Gets an inventory source.
@@ -5688,11 +5895,12 @@ export def "inventory-sources get" [
 ]: nothing -> record<commitment: string, creativeConfigs: table<creativeType: string, displayCreativeConfig: record, videoCreativeConfig: record>, dealId: string, deliveryMethod: string, displayName: string, exchange: string, guaranteedOrderId: string, inventorySourceId: string, inventorySourceProductType: string, inventorySourceType: string, name: string, publisherName: string, rateDetails: record<inventorySourceRateType: string, minimumSpend: record<currencyCode: string, nanos: int, units: string>, rate: record<currencyCode: string, nanos: int, units: string>, unitsPurchased: string>, readAdvertiserIds: list<string>, readPartnerIds: list<string>, readWriteAccessors: record<advertisers: record<advertiserIds: list>, partner: record<partnerId: string>>, status: record<configStatus: string, entityPauseReason: string, entityStatus: string, sellerPauseReason: string, sellerStatus: string>, subSitePropertyId: string, timeRange: record<endTime: string, startTime: string>, updateTime: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($inventory_source_id | is-empty) { error make --unspanned { msg: "path parameter 'inventorySourceId' must be non-empty" } }
   let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar") (serialize-qp "partnerId" $partner_id "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({inventory_source_id: (encode-path-segment $inventory_source_id)} | format pattern "/v2/inventorySources/{inventory_source_id}") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"$.xgafv": $xgafv, "access_token": $access_token, "alt": $alt, "callback": $callback, "fields": $fields, "key": $key, "oauth_token": $oauth_token, "prettyPrint": $pretty_print, "quotaUser": $quota_user, "upload_protocol": $upload_protocol, "uploadType": $upload_type, "partnerId": $partner_id} | compact), body: null}
 }
 
 # Updates an existing inventory source. Returns the updated inventory source if successful.
@@ -5747,13 +5955,14 @@ export def "inventory-sources update" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($inventory_source_id | is-empty) { error make --unspanned { msg: "path parameter 'inventorySourceId' must be non-empty" } }
   let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar") (serialize-qp "advertiserId" $advertiser_id "scalar") (serialize-qp "partnerId" $partner_id "scalar") (serialize-qp "updateMask" $update_mask "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({inventory_source_id: (encode-path-segment $inventory_source_id)} | format pattern "/v2/inventorySources/{inventory_source_id}") $qp)
   let req_body = {"commitment": $commitment, "creativeConfigs": $creative_configs, "dealId": $deal_id, "deliveryMethod": $delivery_method, "displayName": $display_name, "exchange": $exchange, "guaranteedOrderId": $guaranteed_order_id, "inventorySourceType": $inventory_source_type, "publisherName": $publisher_name, "rateDetails": $rate_details, "readWriteAccessors": $read_write_accessors, "status": $status, "subSitePropertyId": $sub_site_property_id, "timeRange": $time_range} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "patch" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body
+  do-request "patch" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: ({"$.xgafv": $xgafv, "access_token": $access_token, "alt": $alt, "callback": $callback, "fields": $fields, "key": $key, "oauth_token": $oauth_token, "prettyPrint": $pretty_print, "quotaUser": $quota_user, "upload_protocol": $upload_protocol, "uploadType": $upload_type, "advertiserId": $advertiser_id, "partnerId": $partner_id, "updateMask": $update_mask} | compact), body: $req_body}
 }
 
 # Edits read/write accessors of an inventory source. Returns the updated read_write_accessors for the inventory source.
@@ -5790,13 +5999,14 @@ export def "inventory-sources get-edit-write-accessors" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($inventory_source_id | is-empty) { error make --unspanned { msg: "path parameter 'inventorySourceId' must be non-empty" } }
   let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({inventory_source_id: (encode-path-segment $inventory_source_id)} | format pattern "/v2/inventorySources/{inventory_source_id}:editInventorySourceReadWriteAccessors") $qp)
   let req_body = {"advertisersUpdate": $advertisers_update, "assignPartner": $assign_partner, "partnerId": $partner_id} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: ({"$.xgafv": $xgafv, "access_token": $access_token, "alt": $alt, "callback": $callback, "fields": $fields, "key": $key, "oauth_token": $oauth_token, "prettyPrint": $pretty_print, "quotaUser": $quota_user, "upload_protocol": $upload_protocol, "uploadType": $upload_type} | compact), body: $req_body}
 }
 
 # Lists partners that are accessible to the current user. The order is defined by the order_by parameter.
@@ -5835,7 +6045,7 @@ export def "partners list" [
   let full_url = (build-url $base "/v2/partners" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"$.xgafv": $xgafv, "access_token": $access_token, "alt": $alt, "callback": $callback, "fields": $fields, "key": $key, "oauth_token": $oauth_token, "prettyPrint": $pretty_print, "quotaUser": $quota_user, "upload_protocol": $upload_protocol, "uploadType": $upload_type, "filter": $filter, "orderBy": $order_by, "pageSize": $page_size, "pageToken": $page_token} | compact), body: null}
 }
 
 # Gets a partner.
@@ -5867,11 +6077,12 @@ export def "partners get" [
 ]: nothing -> record<adServerConfig: record<measurementConfig: record<dv360ToCmCostReportingEnabled: bool, dv360ToCmDataSharingEnabled: bool>>, dataAccessConfig: record<sdfConfig: record<adminEmail: string, version: string>>, displayName: string, entityStatus: string, exchangeConfig: record<enabledExchanges: list<record>>, generalConfig: record<currencyCode: string, timeZone: string>, name: string, partnerId: string, updateTime: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($partner_id | is-empty) { error make --unspanned { msg: "path parameter 'partnerId' must be non-empty" } }
   let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({partner_id: (encode-path-segment $partner_id)} | format pattern "/v2/partners/{partner_id}") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"$.xgafv": $xgafv, "access_token": $access_token, "alt": $alt, "callback": $callback, "fields": $fields, "key": $key, "oauth_token": $oauth_token, "prettyPrint": $pretty_print, "quotaUser": $quota_user, "upload_protocol": $upload_protocol, "uploadType": $upload_type} | compact), body: null}
 }
 
 # Lists channels for a partner or advertiser.
@@ -5908,11 +6119,12 @@ export def "partners-channels list" [
 ]: nothing -> record<channels: table<advertiserId: string, channelId: string, displayName: string, name: string, negativelyTargetedLineItemCount: string, partnerId: string, positivelyTargetedLineItemCount: string>, nextPageToken: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($partner_id | is-empty) { error make --unspanned { msg: "path parameter 'partnerId' must be non-empty" } }
   let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar") (serialize-qp "advertiserId" $advertiser_id "scalar") (serialize-qp "filter" $filter "scalar") (serialize-qp "orderBy" $order_by "scalar") (serialize-qp "pageSize" $page_size "scalar") (serialize-qp "pageToken" $page_token "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({partner_id: (encode-path-segment $partner_id)} | format pattern "/v2/partners/{partner_id}/channels") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"$.xgafv": $xgafv, "access_token": $access_token, "alt": $alt, "callback": $callback, "fields": $fields, "key": $key, "oauth_token": $oauth_token, "prettyPrint": $pretty_print, "quotaUser": $quota_user, "upload_protocol": $upload_protocol, "uploadType": $upload_type, "advertiserId": $advertiser_id, "filter": $filter, "orderBy": $order_by, "pageSize": $page_size, "pageToken": $page_token} | compact), body: null}
 }
 
 # Creates a new channel. Returns the newly created channel if successful.
@@ -5942,20 +6154,21 @@ export def "partners-channels create" [
   --upload-protocol: string # Upload protocol for media (e.g. "raw", "multipart").
   --upload-type: string # Legacy upload protocol for media (e.g. "media", "multipart").
   --advertiser-id: string # The ID of the advertiser that owns the created channel.
-  --advertiser-id: string # The ID of the advertiser that owns the channel. (format: int64)
+  --advertiser-id-body: string # The ID of the advertiser that owns the channel. (format: int64) (body field)
   --display-name: string # Required. The display name of the channel. Must be UTF-8 encoded with a maximum length of 240 bytes.
   --body-partner-id: string # The ID of the partner that owns the channel. (format: int64)
 ]: any -> record<advertiserId: string, channelId: string, displayName: string, name: string, negativelyTargetedLineItemCount: string, partnerId: string, positivelyTargetedLineItemCount: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($partner_id | is-empty) { error make --unspanned { msg: "path parameter 'partnerId' must be non-empty" } }
   let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar") (serialize-qp "advertiserId" $advertiser_id "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({partner_id: (encode-path-segment $partner_id)} | format pattern "/v2/partners/{partner_id}/channels") $qp)
-  let req_body = {"advertiserId": $advertiser_id, "displayName": $display_name, "partnerId": $body_partner_id} | compact
+  let req_body = {"advertiserId": $advertiser_id_body, "displayName": $display_name, "partnerId": $body_partner_id} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: ({"$.xgafv": $xgafv, "access_token": $access_token, "alt": $alt, "callback": $callback, "fields": $fields, "key": $key, "oauth_token": $oauth_token, "prettyPrint": $pretty_print, "quotaUser": $quota_user, "upload_protocol": $upload_protocol, "uploadType": $upload_type, "advertiserId": $advertiser_id} | compact), body: $req_body}
 }
 
 # Updates a channel. Returns the updated channel if successful.
@@ -5987,20 +6200,22 @@ export def "partners-channels update" [
   --upload-type: string # Legacy upload protocol for media (e.g. "media", "multipart").
   --advertiser-id: string # The ID of the advertiser that owns the created channel.
   --update-mask: string # Required. The mask to control which fields to update.
-  --advertiser-id: string # The ID of the advertiser that owns the channel. (format: int64)
+  --advertiser-id-body: string # The ID of the advertiser that owns the channel. (format: int64) (body field)
   --display-name: string # Required. The display name of the channel. Must be UTF-8 encoded with a maximum length of 240 bytes.
   --body-partner-id: string # The ID of the partner that owns the channel. (format: int64)
 ]: any -> record<advertiserId: string, channelId: string, displayName: string, name: string, negativelyTargetedLineItemCount: string, partnerId: string, positivelyTargetedLineItemCount: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($partner_id | is-empty) { error make --unspanned { msg: "path parameter 'partnerId' must be non-empty" } }
+  if ($channel_id | is-empty) { error make --unspanned { msg: "path parameter 'channelId' must be non-empty" } }
   let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar") (serialize-qp "advertiserId" $advertiser_id "scalar") (serialize-qp "updateMask" $update_mask "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({partner_id: (encode-path-segment $partner_id), channel_id: (encode-path-segment $channel_id)} | format pattern "/v2/partners/{partner_id}/channels/{channel_id}") $qp)
-  let req_body = {"advertiserId": $advertiser_id, "displayName": $display_name, "partnerId": $body_partner_id} | compact
+  let req_body = {"advertiserId": $advertiser_id_body, "displayName": $display_name, "partnerId": $body_partner_id} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "patch" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body
+  do-request "patch" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: ({"$.xgafv": $xgafv, "access_token": $access_token, "alt": $alt, "callback": $callback, "fields": $fields, "key": $key, "oauth_token": $oauth_token, "prettyPrint": $pretty_print, "quotaUser": $quota_user, "upload_protocol": $upload_protocol, "uploadType": $upload_type, "advertiserId": $advertiser_id, "updateMask": $update_mask} | compact), body: $req_body}
 }
 
 # Lists sites in a channel.
@@ -6038,11 +6253,13 @@ export def "partners-channels-sites list" [
 ]: nothing -> record<nextPageToken: string, sites: table<name: string, urlOrAppId: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($partner_id | is-empty) { error make --unspanned { msg: "path parameter 'partnerId' must be non-empty" } }
+  if ($channel_id | is-empty) { error make --unspanned { msg: "path parameter 'channelId' must be non-empty" } }
   let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar") (serialize-qp "advertiserId" $advertiser_id "scalar") (serialize-qp "filter" $filter "scalar") (serialize-qp "orderBy" $order_by "scalar") (serialize-qp "pageSize" $page_size "scalar") (serialize-qp "pageToken" $page_token "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({partner_id: (encode-path-segment $partner_id), channel_id: (encode-path-segment $channel_id)} | format pattern "/v2/partners/{partner_id}/channels/{channel_id}/sites") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"$.xgafv": $xgafv, "access_token": $access_token, "alt": $alt, "callback": $callback, "fields": $fields, "key": $key, "oauth_token": $oauth_token, "prettyPrint": $pretty_print, "quotaUser": $quota_user, "upload_protocol": $upload_protocol, "uploadType": $upload_type, "advertiserId": $advertiser_id, "filter": $filter, "orderBy": $order_by, "pageSize": $page_size, "pageToken": $page_token} | compact), body: null}
 }
 
 # Deletes a site from a channel.
@@ -6077,11 +6294,14 @@ export def "partners-channels-sites delete" [
 ]: nothing -> record {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($partner_id | is-empty) { error make --unspanned { msg: "path parameter 'partnerId' must be non-empty" } }
+  if ($channel_id | is-empty) { error make --unspanned { msg: "path parameter 'channelId' must be non-empty" } }
+  if ($url_or_app_id | is-empty) { error make --unspanned { msg: "path parameter 'urlOrAppId' must be non-empty" } }
   let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar") (serialize-qp "advertiserId" $advertiser_id "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({partner_id: (encode-path-segment $partner_id), channel_id: (encode-path-segment $channel_id), url_or_app_id: (encode-path-segment $url_or_app_id)} | format pattern "/v2/partners/{partner_id}/channels/{channel_id}/sites/{url_or_app_id}") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"$.xgafv": $xgafv, "access_token": $access_token, "alt": $alt, "callback": $callback, "fields": $fields, "key": $key, "oauth_token": $oauth_token, "prettyPrint": $pretty_print, "quotaUser": $quota_user, "upload_protocol": $upload_protocol, "uploadType": $upload_type, "advertiserId": $advertiser_id} | compact), body: null}
 }
 
 # Bulk edits sites under a single channel. The operation will delete the sites provided in BulkEditSitesRequest.deleted_sites and then create the sites provided in BulkEditSitesRequest.created_sites.
@@ -6120,13 +6340,15 @@ export def "partners-channels-sites-bulk-edit create" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($partner_id | is-empty) { error make --unspanned { msg: "path parameter 'partnerId' must be non-empty" } }
+  if ($channel_id | is-empty) { error make --unspanned { msg: "path parameter 'channelId' must be non-empty" } }
   let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({partner_id: (encode-path-segment $partner_id), channel_id: (encode-path-segment $channel_id)} | format pattern "/v2/partners/{partner_id}/channels/{channel_id}/sites:bulkEdit") $qp)
   let req_body = {"advertiserId": $advertiser_id, "createdSites": $created_sites, "deletedSites": $deleted_sites, "partnerId": $body_partner_id} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: ({"$.xgafv": $xgafv, "access_token": $access_token, "alt": $alt, "callback": $callback, "fields": $fields, "key": $key, "oauth_token": $oauth_token, "prettyPrint": $pretty_print, "quotaUser": $quota_user, "upload_protocol": $upload_protocol, "uploadType": $upload_type} | compact), body: $req_body}
 }
 
 # Replaces all of the sites under a single channel. The operation will replace the sites under a channel with the sites provided in ReplaceSitesRequest.new_sites.
@@ -6164,13 +6386,15 @@ export def "partners-channels-sites-replace update" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($partner_id | is-empty) { error make --unspanned { msg: "path parameter 'partnerId' must be non-empty" } }
+  if ($channel_id | is-empty) { error make --unspanned { msg: "path parameter 'channelId' must be non-empty" } }
   let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({partner_id: (encode-path-segment $partner_id), channel_id: (encode-path-segment $channel_id)} | format pattern "/v2/partners/{partner_id}/channels/{channel_id}/sites:replace") $qp)
   let req_body = {"advertiserId": $advertiser_id, "newSites": $new_sites, "partnerId": $body_partner_id} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: ({"$.xgafv": $xgafv, "access_token": $access_token, "alt": $alt, "callback": $callback, "fields": $fields, "key": $key, "oauth_token": $oauth_token, "prettyPrint": $pretty_print, "quotaUser": $quota_user, "upload_protocol": $upload_protocol, "uploadType": $upload_type} | compact), body: $req_body}
 }
 
 # Lists the targeting options assigned to a partner.
@@ -6207,11 +6431,13 @@ export def "partners-targeting-types-assigned-targeting-options list" [
 ]: nothing -> record<assignedTargetingOptions: table<ageRangeDetails: record, appCategoryDetails: record, appDetails: record, assignedTargetingOptionId: string, assignedTargetingOptionIdAlias: string, audienceGroupDetails: record, audioContentTypeDetails: record, authorizedSellerStatusDetails: record, browserDetails: record, businessChainDetails: record, carrierAndIspDetails: record, categoryDetails: record, channelDetails: record, contentDurationDetails: record, contentGenreDetails: record, contentInstreamPositionDetails: record, contentOutstreamPositionDetails: record, contentStreamTypeDetails: record, dayAndTimeDetails: record, deviceMakeModelDetails: record, deviceTypeDetails: record, digitalContentLabelExclusionDetails: record, environmentDetails: record, exchangeDetails: record, genderDetails: record, geoRegionDetails: record, householdIncomeDetails: record, inheritance: string, inventorySourceDetails: record, inventorySourceGroupDetails: record, keywordDetails: record, languageDetails: record, name: string, nativeContentPositionDetails: record, negativeKeywordListDetails: record, omidDetails: record, onScreenPositionDetails: record, operatingSystemDetails: record, parentalStatusDetails: record, poiDetails: record, proximityLocationListDetails: record, regionalLocationListDetails: record, sensitiveCategoryExclusionDetails: record, sessionPositionDetails: record, subExchangeDetails: record, targetingType: string, thirdPartyVerifierDetails: record, urlDetails: record, userRewardedContentDetails: record, videoPlayerSizeDetails: record, viewabilityDetails: record, youtubeChannelDetails: record, youtubeVideoDetails: record>, nextPageToken: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($partner_id | is-empty) { error make --unspanned { msg: "path parameter 'partnerId' must be non-empty" } }
+  if ($targeting_type | is-empty) { error make --unspanned { msg: "path parameter 'targetingType' must be non-empty" } }
   let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar") (serialize-qp "filter" $filter "scalar") (serialize-qp "orderBy" $order_by "scalar") (serialize-qp "pageSize" $page_size "scalar") (serialize-qp "pageToken" $page_token "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({partner_id: (encode-path-segment $partner_id), targeting_type: (encode-path-segment $targeting_type)} | format pattern "/v2/partners/{partner_id}/targetingTypes/{targeting_type}/assignedTargetingOptions") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"$.xgafv": $xgafv, "access_token": $access_token, "alt": $alt, "callback": $callback, "fields": $fields, "key": $key, "oauth_token": $oauth_token, "prettyPrint": $pretty_print, "quotaUser": $quota_user, "upload_protocol": $upload_protocol, "uploadType": $upload_type, "filter": $filter, "orderBy": $order_by, "pageSize": $page_size, "pageToken": $page_token} | compact), body: null}
 }
 
 # Assigns a targeting option to a partner. Returns the assigned targeting option if successful.
@@ -6341,13 +6567,15 @@ export def "partners-targeting-types-assigned-targeting-options create" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($partner_id | is-empty) { error make --unspanned { msg: "path parameter 'partnerId' must be non-empty" } }
+  if ($targeting_type | is-empty) { error make --unspanned { msg: "path parameter 'targetingType' must be non-empty" } }
   let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({partner_id: (encode-path-segment $partner_id), targeting_type: (encode-path-segment $targeting_type)} | format pattern "/v2/partners/{partner_id}/targetingTypes/{targeting_type}/assignedTargetingOptions") $qp)
   let req_body = {"ageRangeDetails": $age_range_details, "appCategoryDetails": $app_category_details, "appDetails": $app_details, "audienceGroupDetails": $audience_group_details, "audioContentTypeDetails": $audio_content_type_details, "authorizedSellerStatusDetails": $authorized_seller_status_details, "browserDetails": $browser_details, "businessChainDetails": $business_chain_details, "carrierAndIspDetails": $carrier_and_isp_details, "categoryDetails": $category_details, "channelDetails": $channel_details, "contentDurationDetails": $content_duration_details, "contentGenreDetails": $content_genre_details, "contentInstreamPositionDetails": $content_instream_position_details, "contentOutstreamPositionDetails": $content_outstream_position_details, "contentStreamTypeDetails": $content_stream_type_details, "dayAndTimeDetails": $day_and_time_details, "deviceMakeModelDetails": $device_make_model_details, "deviceTypeDetails": $device_type_details, "digitalContentLabelExclusionDetails": $digital_content_label_exclusion_details, "environmentDetails": $environment_details, "exchangeDetails": $exchange_details, "genderDetails": $gender_details, "geoRegionDetails": $geo_region_details, "householdIncomeDetails": $household_income_details, "inventorySourceDetails": $inventory_source_details, "inventorySourceGroupDetails": $inventory_source_group_details, "keywordDetails": $keyword_details, "languageDetails": $language_details, "nativeContentPositionDetails": $native_content_position_details, "negativeKeywordListDetails": $negative_keyword_list_details, "omidDetails": $omid_details, "onScreenPositionDetails": $on_screen_position_details, "operatingSystemDetails": $operating_system_details, "parentalStatusDetails": $parental_status_details, "poiDetails": $poi_details, "proximityLocationListDetails": $proximity_location_list_details, "regionalLocationListDetails": $regional_location_list_details, "sensitiveCategoryExclusionDetails": $sensitive_category_exclusion_details, "sessionPositionDetails": $session_position_details, "subExchangeDetails": $sub_exchange_details, "thirdPartyVerifierDetails": $third_party_verifier_details, "urlDetails": $url_details, "userRewardedContentDetails": $user_rewarded_content_details, "videoPlayerSizeDetails": $video_player_size_details, "viewabilityDetails": $viewability_details, "youtubeChannelDetails": $youtube_channel_details, "youtubeVideoDetails": $youtube_video_details} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: ({"$.xgafv": $xgafv, "access_token": $access_token, "alt": $alt, "callback": $callback, "fields": $fields, "key": $key, "oauth_token": $oauth_token, "prettyPrint": $pretty_print, "quotaUser": $quota_user, "upload_protocol": $upload_protocol, "uploadType": $upload_type} | compact), body: $req_body}
 }
 
 # Deletes an assigned targeting option from a partner.
@@ -6381,11 +6609,14 @@ export def "partners-targeting-types-assigned-targeting-options delete" [
 ]: nothing -> record {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($partner_id | is-empty) { error make --unspanned { msg: "path parameter 'partnerId' must be non-empty" } }
+  if ($targeting_type | is-empty) { error make --unspanned { msg: "path parameter 'targetingType' must be non-empty" } }
+  if ($assigned_targeting_option_id | is-empty) { error make --unspanned { msg: "path parameter 'assignedTargetingOptionId' must be non-empty" } }
   let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({partner_id: (encode-path-segment $partner_id), targeting_type: (encode-path-segment $targeting_type), assigned_targeting_option_id: (encode-path-segment $assigned_targeting_option_id)} | format pattern "/v2/partners/{partner_id}/targetingTypes/{targeting_type}/assignedTargetingOptions/{assigned_targeting_option_id}") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"$.xgafv": $xgafv, "access_token": $access_token, "alt": $alt, "callback": $callback, "fields": $fields, "key": $key, "oauth_token": $oauth_token, "prettyPrint": $pretty_print, "quotaUser": $quota_user, "upload_protocol": $upload_protocol, "uploadType": $upload_type} | compact), body: null}
 }
 
 # Gets a single targeting option assigned to a partner.
@@ -6419,11 +6650,14 @@ export def "partners-targeting-types-assigned-targeting-options get" [
 ]: nothing -> record<ageRangeDetails: record<ageRange: string>, appCategoryDetails: record<displayName: string, negative: bool, targetingOptionId: string>, appDetails: record<appId: string, appPlatform: string, displayName: string, negative: bool>, assignedTargetingOptionId: string, assignedTargetingOptionIdAlias: string, audienceGroupDetails: record<excludedFirstAndThirdPartyAudienceGroup: record<settings: list>, excludedGoogleAudienceGroup: record<settings: list>, includedCombinedAudienceGroup: record<settings: list>, includedCustomListGroup: record<settings: list>, includedFirstAndThirdPartyAudienceGroups: list<record>, includedGoogleAudienceGroup: record<settings: list>>, audioContentTypeDetails: record<audioContentType: string>, authorizedSellerStatusDetails: record<authorizedSellerStatus: string, targetingOptionId: string>, browserDetails: record<displayName: string, negative: bool, targetingOptionId: string>, businessChainDetails: record<displayName: string, proximityRadiusAmount: float, proximityRadiusUnit: string, targetingOptionId: string>, carrierAndIspDetails: record<displayName: string, negative: bool, targetingOptionId: string>, categoryDetails: record<displayName: string, negative: bool, targetingOptionId: string>, channelDetails: record<channelId: string, negative: bool>, contentDurationDetails: record<contentDuration: string, targetingOptionId: string>, contentGenreDetails: record<displayName: string, negative: bool, targetingOptionId: string>, contentInstreamPositionDetails: record<adType: string, contentInstreamPosition: string>, contentOutstreamPositionDetails: record<adType: string, contentOutstreamPosition: string>, contentStreamTypeDetails: record<contentStreamType: string, targetingOptionId: string>, dayAndTimeDetails: record<dayOfWeek: string, endHour: int, startHour: int, timeZoneResolution: string>, deviceMakeModelDetails: record<displayName: string, negative: bool, targetingOptionId: string>, deviceTypeDetails: record<deviceType: string, youtubeAndPartnersBidMultiplier: float>, digitalContentLabelExclusionDetails: record<excludedContentRatingTier: string>, environmentDetails: record<environment: string>, exchangeDetails: record<exchange: string>, genderDetails: record<gender: string>, geoRegionDetails: record<displayName: string, geoRegionType: string, negative: bool, targetingOptionId: string>, householdIncomeDetails: record<householdIncome: string>, inheritance: string, inventorySourceDetails: record<inventorySourceId: string>, inventorySourceGroupDetails: record<inventorySourceGroupId: string>, keywordDetails: record<keyword: string, negative: bool>, languageDetails: record<displayName: string, negative: bool, targetingOptionId: string>, name: string, nativeContentPositionDetails: record<contentPosition: string>, negativeKeywordListDetails: record<negativeKeywordListId: string>, omidDetails: record<omid: string>, onScreenPositionDetails: record<adType: string, onScreenPosition: string, targetingOptionId: string>, operatingSystemDetails: record<displayName: string, negative: bool, targetingOptionId: string>, parentalStatusDetails: record<parentalStatus: string>, poiDetails: record<displayName: string, latitude: float, longitude: float, proximityRadiusAmount: float, proximityRadiusUnit: string, targetingOptionId: string>, proximityLocationListDetails: record<proximityLocationListId: string, proximityRadius: float, proximityRadiusUnit: string>, regionalLocationListDetails: record<negative: bool, regionalLocationListId: string>, sensitiveCategoryExclusionDetails: record<excludedSensitiveCategory: string>, sessionPositionDetails: record<sessionPosition: string>, subExchangeDetails: record<targetingOptionId: string>, targetingType: string, thirdPartyVerifierDetails: record<adloox: record<excludedAdlooxCategories: list>, doubleVerify: record<appStarRating: record, avoidedAgeRatings: list, brandSafetyCategories: record, customSegmentId: string, displayViewability: record, fraudInvalidTraffic: record, videoViewability: record>, integralAdScience: record<customSegmentId: list, displayViewability: string, excludeUnrateable: bool, excludedAdFraudRisk: string, excludedAdultRisk: string, excludedAlcoholRisk: string, excludedDrugsRisk: string, excludedGamblingRisk: string, excludedHateSpeechRisk: string, excludedIllegalDownloadsRisk: string, excludedOffensiveLanguageRisk: string, excludedViolenceRisk: string, traqScoreOption: string, videoViewability: string>>, urlDetails: record<negative: bool, url: string>, userRewardedContentDetails: record<targetingOptionId: string, userRewardedContent: string>, videoPlayerSizeDetails: record<videoPlayerSize: string>, viewabilityDetails: record<viewability: string>, youtubeChannelDetails: record<channelId: string, negative: bool>, youtubeVideoDetails: record<negative: bool, videoId: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($partner_id | is-empty) { error make --unspanned { msg: "path parameter 'partnerId' must be non-empty" } }
+  if ($targeting_type | is-empty) { error make --unspanned { msg: "path parameter 'targetingType' must be non-empty" } }
+  if ($assigned_targeting_option_id | is-empty) { error make --unspanned { msg: "path parameter 'assignedTargetingOptionId' must be non-empty" } }
   let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({partner_id: (encode-path-segment $partner_id), targeting_type: (encode-path-segment $targeting_type), assigned_targeting_option_id: (encode-path-segment $assigned_targeting_option_id)} | format pattern "/v2/partners/{partner_id}/targetingTypes/{targeting_type}/assignedTargetingOptions/{assigned_targeting_option_id}") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"$.xgafv": $xgafv, "access_token": $access_token, "alt": $alt, "callback": $callback, "fields": $fields, "key": $key, "oauth_token": $oauth_token, "prettyPrint": $pretty_print, "quotaUser": $quota_user, "upload_protocol": $upload_protocol, "uploadType": $upload_type} | compact), body: null}
 }
 
 # Edits targeting options under a single partner. The operation will delete the assigned targeting options provided in BulkEditPartnerAssignedTargetingOptionsRequest.deleteRequests and then create the assigned targeting options provided in BulkEditPartnerAssignedTargetingOptionsRequest.createRequests .
@@ -6460,13 +6694,14 @@ export def "partners create-edit-assigned-targeting-options" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($partner_id | is-empty) { error make --unspanned { msg: "path parameter 'partnerId' must be non-empty" } }
   let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({partner_id: (encode-path-segment $partner_id)} | format pattern "/v2/partners/{partner_id}:editAssignedTargetingOptions") $qp)
   let req_body = {"createRequests": $create_requests, "deleteRequests": $delete_requests} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: ({"$.xgafv": $xgafv, "access_token": $access_token, "alt": $alt, "callback": $callback, "fields": $fields, "key": $key, "oauth_token": $oauth_token, "prettyPrint": $pretty_print, "quotaUser": $quota_user, "upload_protocol": $upload_protocol, "uploadType": $upload_type} | compact), body: $req_body}
 }
 
 # Creates an SDF Download Task. Returns an Operation. An SDF Download Task is a long-running, asynchronous operation. The metadata type of this operation is SdfDownloadTaskMetadata. If the request is successful, the response type of the operation is SdfDownloadTask. The response will not include the download files, which must be retrieved with media.download. The state of operation can be retrieved with sdfdownloadtask.operations.get. Any errors can be found in the error.message. Note that error.details is expected to be empty.
@@ -6513,7 +6748,7 @@ export def "sdfdownloadtasks create" [
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: ({"$.xgafv": $xgafv, "access_token": $access_token, "alt": $alt, "callback": $callback, "fields": $fields, "key": $key, "oauth_token": $oauth_token, "prettyPrint": $pretty_print, "quotaUser": $quota_user, "upload_protocol": $upload_protocol, "uploadType": $upload_type} | compact), body: $req_body}
 }
 
 # Lists targeting options of a given type.
@@ -6550,11 +6785,12 @@ export def "targeting-types-targeting-options list" [
 ]: nothing -> record<nextPageToken: string, targetingOptions: table<ageRangeDetails: record, appCategoryDetails: record, audioContentTypeDetails: record, authorizedSellerStatusDetails: record, browserDetails: record, businessChainDetails: record, carrierAndIspDetails: record, categoryDetails: record, contentDurationDetails: record, contentGenreDetails: record, contentInstreamPositionDetails: record, contentOutstreamPositionDetails: record, contentStreamTypeDetails: record, deviceMakeModelDetails: record, deviceTypeDetails: record, digitalContentLabelDetails: record, environmentDetails: record, exchangeDetails: record, genderDetails: record, geoRegionDetails: record, householdIncomeDetails: record, languageDetails: record, name: string, nativeContentPositionDetails: record, omidDetails: record, onScreenPositionDetails: record, operatingSystemDetails: record, parentalStatusDetails: record, poiDetails: record, sensitiveCategoryDetails: record, subExchangeDetails: record, targetingOptionId: string, targetingType: string, userRewardedContentDetails: record, videoPlayerSizeDetails: record, viewabilityDetails: record>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($targeting_type | is-empty) { error make --unspanned { msg: "path parameter 'targetingType' must be non-empty" } }
   let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar") (serialize-qp "advertiserId" $advertiser_id "scalar") (serialize-qp "filter" $filter "scalar") (serialize-qp "orderBy" $order_by "scalar") (serialize-qp "pageSize" $page_size "scalar") (serialize-qp "pageToken" $page_token "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({targeting_type: (encode-path-segment $targeting_type)} | format pattern "/v2/targetingTypes/{targeting_type}/targetingOptions") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"$.xgafv": $xgafv, "access_token": $access_token, "alt": $alt, "callback": $callback, "fields": $fields, "key": $key, "oauth_token": $oauth_token, "prettyPrint": $pretty_print, "quotaUser": $quota_user, "upload_protocol": $upload_protocol, "uploadType": $upload_type, "advertiserId": $advertiser_id, "filter": $filter, "orderBy": $order_by, "pageSize": $page_size, "pageToken": $page_token} | compact), body: null}
 }
 
 # Gets a single targeting option.
@@ -6588,11 +6824,13 @@ export def "targeting-types-targeting-options get" [
 ]: nothing -> record<ageRangeDetails: record<ageRange: string>, appCategoryDetails: record<displayName: string>, audioContentTypeDetails: record<audioContentType: string>, authorizedSellerStatusDetails: record<authorizedSellerStatus: string>, browserDetails: record<displayName: string>, businessChainDetails: record<businessChain: string, geoRegion: string, geoRegionType: string>, carrierAndIspDetails: record<displayName: string, type: string>, categoryDetails: record<displayName: string>, contentDurationDetails: record<contentDuration: string>, contentGenreDetails: record<displayName: string>, contentInstreamPositionDetails: record<contentInstreamPosition: string>, contentOutstreamPositionDetails: record<contentOutstreamPosition: string>, contentStreamTypeDetails: record<contentStreamType: string>, deviceMakeModelDetails: record<displayName: string>, deviceTypeDetails: record<deviceType: string>, digitalContentLabelDetails: record<contentRatingTier: string>, environmentDetails: record<environment: string>, exchangeDetails: record<exchange: string>, genderDetails: record<gender: string>, geoRegionDetails: record<displayName: string, geoRegionType: string>, householdIncomeDetails: record<householdIncome: string>, languageDetails: record<displayName: string>, name: string, nativeContentPositionDetails: record<contentPosition: string>, omidDetails: record<omid: string>, onScreenPositionDetails: record<onScreenPosition: string>, operatingSystemDetails: record<displayName: string>, parentalStatusDetails: record<parentalStatus: string>, poiDetails: record<displayName: string, latitude: float, longitude: float>, sensitiveCategoryDetails: record<sensitiveCategory: string>, subExchangeDetails: record<displayName: string>, targetingOptionId: string, targetingType: string, userRewardedContentDetails: record<userRewardedContent: string>, videoPlayerSizeDetails: record<videoPlayerSize: string>, viewabilityDetails: record<viewability: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($targeting_type | is-empty) { error make --unspanned { msg: "path parameter 'targetingType' must be non-empty" } }
+  if ($targeting_option_id | is-empty) { error make --unspanned { msg: "path parameter 'targetingOptionId' must be non-empty" } }
   let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar") (serialize-qp "advertiserId" $advertiser_id "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({targeting_type: (encode-path-segment $targeting_type), targeting_option_id: (encode-path-segment $targeting_option_id)} | format pattern "/v2/targetingTypes/{targeting_type}/targetingOptions/{targeting_option_id}") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"$.xgafv": $xgafv, "access_token": $access_token, "alt": $alt, "callback": $callback, "fields": $fields, "key": $key, "oauth_token": $oauth_token, "prettyPrint": $pretty_print, "quotaUser": $quota_user, "upload_protocol": $upload_protocol, "uploadType": $upload_type, "advertiserId": $advertiser_id} | compact), body: null}
 }
 
 # Searches for targeting options of a given type based on the given search terms.
@@ -6634,13 +6872,14 @@ export def "targeting-types-targeting-options-search list" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($targeting_type | is-empty) { error make --unspanned { msg: "path parameter 'targetingType' must be non-empty" } }
   let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({targeting_type: (encode-path-segment $targeting_type)} | format pattern "/v2/targetingTypes/{targeting_type}/targetingOptions:search") $qp)
   let req_body = {"advertiserId": $advertiser_id, "businessChainSearchTerms": $business_chain_search_terms, "geoRegionSearchTerms": $geo_region_search_terms, "pageSize": $page_size, "pageToken": $page_token, "poiSearchTerms": $poi_search_terms} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: ({"$.xgafv": $xgafv, "access_token": $access_token, "alt": $alt, "callback": $callback, "fields": $fields, "key": $key, "oauth_token": $oauth_token, "prettyPrint": $pretty_print, "quotaUser": $quota_user, "upload_protocol": $upload_protocol, "uploadType": $upload_type} | compact), body: $req_body}
 }
 
 # Lists users that are accessible to the current user. If two users have user roles on the same partner or advertiser, they can access each other.
@@ -6679,7 +6918,7 @@ export def "users list" [
   let full_url = (build-url $base "/v2/users" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"$.xgafv": $xgafv, "access_token": $access_token, "alt": $alt, "callback": $callback, "fields": $fields, "key": $key, "oauth_token": $oauth_token, "prettyPrint": $pretty_print, "quotaUser": $quota_user, "upload_protocol": $upload_protocol, "uploadType": $upload_type, "filter": $filter, "orderBy": $order_by, "pageSize": $page_size, "pageToken": $page_token} | compact), body: null}
 }
 
 # Creates a new user. Returns the newly created user if successful.
@@ -6721,7 +6960,7 @@ export def "users create" [
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: ({"$.xgafv": $xgafv, "access_token": $access_token, "alt": $alt, "callback": $callback, "fields": $fields, "key": $key, "oauth_token": $oauth_token, "prettyPrint": $pretty_print, "quotaUser": $quota_user, "upload_protocol": $upload_protocol, "uploadType": $upload_type} | compact), body: $req_body}
 }
 
 # Deletes a user.
@@ -6753,11 +6992,12 @@ export def "users delete" [
 ]: nothing -> record {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($user_id | is-empty) { error make --unspanned { msg: "path parameter 'userId' must be non-empty" } }
   let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({user_id: (encode-path-segment $user_id)} | format pattern "/v2/users/{user_id}") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"$.xgafv": $xgafv, "access_token": $access_token, "alt": $alt, "callback": $callback, "fields": $fields, "key": $key, "oauth_token": $oauth_token, "prettyPrint": $pretty_print, "quotaUser": $quota_user, "upload_protocol": $upload_protocol, "uploadType": $upload_type} | compact), body: null}
 }
 
 # Gets a user.
@@ -6789,11 +7029,12 @@ export def "users get" [
 ]: nothing -> record<assignedUserRoles: table<advertiserId: string, assignedUserRoleId: string, partnerId: string, userRole: string>, displayName: string, email: string, name: string, userId: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($user_id | is-empty) { error make --unspanned { msg: "path parameter 'userId' must be non-empty" } }
   let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({user_id: (encode-path-segment $user_id)} | format pattern "/v2/users/{user_id}") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"$.xgafv": $xgafv, "access_token": $access_token, "alt": $alt, "callback": $callback, "fields": $fields, "key": $key, "oauth_token": $oauth_token, "prettyPrint": $pretty_print, "quotaUser": $quota_user, "upload_protocol": $upload_protocol, "uploadType": $upload_type} | compact), body: null}
 }
 
 # Updates an existing user. Returns the updated user if successful.
@@ -6831,13 +7072,14 @@ export def "users update" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($user_id | is-empty) { error make --unspanned { msg: "path parameter 'userId' must be non-empty" } }
   let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar") (serialize-qp "updateMask" $update_mask "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({user_id: (encode-path-segment $user_id)} | format pattern "/v2/users/{user_id}") $qp)
   let req_body = {"assignedUserRoles": $assigned_user_roles, "displayName": $display_name, "email": $email} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "patch" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body
+  do-request "patch" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: ({"$.xgafv": $xgafv, "access_token": $access_token, "alt": $alt, "callback": $callback, "fields": $fields, "key": $key, "oauth_token": $oauth_token, "prettyPrint": $pretty_print, "quotaUser": $quota_user, "upload_protocol": $upload_protocol, "uploadType": $upload_type, "updateMask": $update_mask} | compact), body: $req_body}
 }
 
 # Bulk edits user roles for a user. The operation will delete the assigned user roles provided in BulkEditAssignedUserRolesRequest.deletedAssignedUserRoles and then assign the user roles provided in BulkEditAssignedUserRolesRequest.createdAssignedUserRoles.
@@ -6873,13 +7115,14 @@ export def "users create-bulk-edit-assigned-roles" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($user_id | is-empty) { error make --unspanned { msg: "path parameter 'userId' must be non-empty" } }
   let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({user_id: (encode-path-segment $user_id)} | format pattern "/v2/users/{user_id}:bulkEditAssignedUserRoles") $qp)
   let req_body = {"createdAssignedUserRoles": $created_assigned_user_roles, "deletedAssignedUserRoles": $deleted_assigned_user_roles} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: ({"$.xgafv": $xgafv, "access_token": $access_token, "alt": $alt, "callback": $callback, "fields": $fields, "key": $key, "oauth_token": $oauth_token, "prettyPrint": $pretty_print, "quotaUser": $quota_user, "upload_protocol": $upload_protocol, "uploadType": $upload_type} | compact), body: $req_body}
 }
 
 # Gets the latest state of an asynchronous SDF download task operation. Clients should poll this method at intervals of 30 seconds.
@@ -6911,9 +7154,10 @@ export def "sdfdownloadtasks get" [
 ]: nothing -> record<done: bool, error: record<code: int, details: list<record>, message: string>, metadata: record, name: string, response: record> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($name | is-empty) { error make --unspanned { msg: "path parameter 'name' must be non-empty" } }
   let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({name: (encode-path-segment $name)} | format pattern "/v2/{name}") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"$.xgafv": $xgafv, "access_token": $access_token, "alt": $alt, "callback": $callback, "fields": $fields, "key": $key, "oauth_token": $oauth_token, "prettyPrint": $pretty_print, "quotaUser": $quota_user, "upload_protocol": $upload_protocol, "uploadType": $upload_type} | compact), body: null}
 }

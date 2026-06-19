@@ -3,17 +3,18 @@
 # Auth: --token flag or $env.LOGISTICS_API_TOKEN
 
 const BASE_URL = "https://api.ebay.com/sell/logistics/v1_beta"
-const DEFAULT_AUTH = "bearer"
 
-# Build auth: returns {headers: record, query: string}
+# Build auth: returns {scheme: string, headers: record, query: string, location: string}.
+# `location` is "header" | "query" | "cookie" | "none" and tells dry-run callers
+# where the token went without inspecting headers/query themselves.
 def build-auth [token?: string, auth_scheme?: string]: nothing -> record {
   let token_val = if ($token != null) and ($token | is-not-empty) { $token } else { $env | get -o LOGISTICS_API_TOKEN | default "" }
   let scheme = ($auth_scheme | default "bearer")
-  if ($scheme == "none") or ($token_val | is-empty) { return {headers: {}, query: ""} }
+  if ($scheme == "none") or ($token_val | is-empty) { return {scheme: $scheme, headers: {}, query: "", location: "none"} }
   match $scheme {
-    "bearer" => { {headers: {Authorization: $"Bearer ($token_val)"}, query: ""} }
-    "none" => { {headers: {}, query: ""} }
-    _ => { {headers: {Authorization: $"Bearer ($token_val)"}, query: ""} }
+    "bearer" => { {scheme: $scheme, headers: {Authorization: $"Bearer ($token_val)"}, query: "", location: "header"} }
+    "none" => { {scheme: $scheme, headers: {}, query: "", location: "none"} }
+    _ => { {scheme: $scheme, headers: {Authorization: $"Bearer ($token_val)"}, query: "", location: "header"} }
   }
 }
 
@@ -22,8 +23,9 @@ def build-auth [token?: string, auth_scheme?: string]: nothing -> record {
 # ([A-Za-z0-9-._~]) stay literal; everything else gets %XX.
 def serialize-qp [name: string, value: any, style: string]: nothing -> list<string> {
   if ($value == null) { return [] }
-  let n = (encode-path-segment $name)
   let is_list = ($value | describe | str starts-with "list")
+  if $is_list and ($value | is-empty) { return [] }
+  let n = (encode-path-segment $name)
   if ($value | describe | str starts-with "record") { return ($value | transpose k v | each { $"($n)[(encode-path-segment $in.k)]=(encode-path-segment $in.v)" }) }
   if not $is_list { return [$"($n)=(encode-path-segment $value)"] }
   match $style {
@@ -54,22 +56,42 @@ def build-url [base: string, path: string, query?: string]: nothing -> string {
   if ($query != null) and ($query | is-not-empty) { $result | upsert query $query | url join } else { $result | url join }
 }
 
+# Build the dry-run record returned by --dry-run. Shape:
+#   {dry_run: true, method, url, query: <record>, headers, body, content_type, timeout,
+#    auth: {scheme, location}}
+# `meta` carries logical-form data (the query record by spec name, the pre-serialization
+# body) that do-request itself cannot reconstruct from its wire-format args.
+def build-dry-run-record [method: string, url: string, auth: record, content_type: string, timeout: duration, meta?: record]: nothing -> record {
+  let m = ($meta | default {})
+  {
+    dry_run: true
+    method: $method
+    url: $url
+    query: ($m | get -o query | default {})
+    headers: $auth.headers
+    body: ($m | get -o body)
+    content_type: $content_type
+    timeout: $timeout
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+}
+
 # Execute HTTP request with method dispatch
-def do-request [method: string, url: string, auth: record, insecure: bool, raw: bool, dry_run: bool, max_time?: duration, allow_errors?: bool, full?: bool, content_type?: string, body?: any]: nothing -> any {
+def do-request [method: string, url: string, auth: record, insecure: bool, raw: bool, dry_run: bool, max_time?: duration, allow_errors?: bool, full?: bool, content_type?: string, body?: any, dry_run_meta?: record]: nothing -> any {
   let req_url = if ($auth.query | is-not-empty) { if ($url | str contains "?") { $"($url)&($auth.query)" } else { $"($url)?($auth.query)" } } else { $url }
   let timeout = ($max_time | default 30min)
   let ct = ($content_type | default "application/json")
-  if $dry_run { return {method: $method, url: $req_url, headers: $auth.headers, query_string: $auth.query, content_type: $ct, timeout: $timeout, body: $body} }
+  if $dry_run { return (build-dry-run-record $method $req_url $auth $ct $timeout $dry_run_meta) }
   let resp = match $method {
     "get" => { http get --headers $auth.headers --full --allow-errors --max-time $timeout --insecure=$insecure --raw=$raw $req_url }
-    "head" => { http head --headers $auth.headers --max-time $timeout --insecure=$insecure $req_url }
-    "options" => { http options --headers $auth.headers --max-time $timeout --insecure=$insecure $req_url }
+    "head" => { http head --headers $auth.headers --full --allow-errors --max-time $timeout --insecure=$insecure $req_url }
+    "options" => { http options --headers $auth.headers --full --allow-errors --max-time $timeout --insecure=$insecure $req_url }
     "post" => { if ($body | is-empty) { http post --headers $auth.headers --full --allow-errors --max-time $timeout --insecure=$insecure --raw=$raw $req_url "" } else { http post --headers $auth.headers --content-type $ct --full --allow-errors --max-time $timeout --insecure=$insecure --raw=$raw $req_url $body } }
     "put" => { if ($body | is-empty) { http put --headers $auth.headers --full --allow-errors --max-time $timeout --insecure=$insecure --raw=$raw $req_url "" } else { http put --headers $auth.headers --content-type $ct --full --allow-errors --max-time $timeout --insecure=$insecure --raw=$raw $req_url $body } }
     "patch" => { if ($body | is-empty) { http patch --headers $auth.headers --full --allow-errors --max-time $timeout --insecure=$insecure --raw=$raw $req_url "" } else { http patch --headers $auth.headers --content-type $ct --full --allow-errors --max-time $timeout --insecure=$insecure --raw=$raw $req_url $body } }
     "delete" => { if ($body | is-empty) { http delete --headers $auth.headers --full --allow-errors --max-time $timeout --insecure=$insecure --raw=$raw $req_url } else { http delete --headers $auth.headers --content-type $ct --data $body --full --allow-errors --max-time $timeout --insecure=$insecure --raw=$raw $req_url } }
   }
-  if ($method in ["head" "options"]) { return $resp }
+  if ($method == "head") and (not $full) and (not $allow_errors) and $resp.status < 400 { return $resp.headers }
   if $allow_errors { $resp } else if $resp.status >= 400 { error make --unspanned { msg: $"HTTP ($resp.status): ($resp.body)" } } else if $full { {status: $resp.status, headers: $resp.headers, body: $resp.body} } else if $resp.status == 204 { null } else { $resp.body }
 }
 
@@ -131,7 +153,7 @@ export def "shipment-create-from-shipping-quote create" [
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: {}, body: $req_body}
 }
 
 # This method retrieves the shipment details for the specified shipment ID. Call createFromShippingQuote to generate a shipment ID.
@@ -152,10 +174,11 @@ export def "shipment get" [
 ]: nothing -> record<cancellation: record<cancellationRequestedDate: string, cancellationStatus: string>, creationDate: string, labelCustomMessage: string, labelDownloadUrl: string, labelSize: string, orders: table<channel: string, orderId: string>, packageSpecification: record<dimensions: record<height: string, length: string, unit: string, width: string>, weight: record<unit: string, value: string>>, rate: record<additionalOptions: list<record>, baseShippingCost: record<currency: string, value: string>, destinationTimeZone: string, maxEstimatedDeliveryDate: string, minEstimatedDeliveryDate: string, pickupNetworks: list<string>, pickupSlotId: string, pickupType: string, rateId: string, shippingCarrierCode: string, shippingCarrierName: string, shippingQuoteId: string, shippingServiceCode: string, shippingServiceName: string, totalShippingCost: record<currency: string, value: string>>, returnTo: record<companyName: string, contactAddress: record<addressLine1: string, addressLine2: string, city: string, countryCode: string, county: string, postalCode: string, stateOrProvince: string>, fullName: string, primaryPhone: record<phoneNumber: string>>, shipFrom: record<companyName: string, contactAddress: record<addressLine1: string, addressLine2: string, city: string, countryCode: string, county: string, postalCode: string, stateOrProvince: string>, fullName: string, primaryPhone: record<phoneNumber: string>>, shipTo: record<companyName: string, contactAddress: record<addressLine1: string, addressLine2: string, city: string, countryCode: string, county: string, postalCode: string, stateOrProvince: string>, fullName: string, primaryPhone: record<phoneNumber: string>>, shipmentId: string, shipmentTrackingNumber: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($shipment_id | is-empty) { error make --unspanned { msg: "path parameter 'shipmentId' must be non-empty" } }
   let full_url = (build-url $base ({shipment_id: (encode-path-segment $shipment_id)} | format pattern "/shipment/{shipment_id}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
 }
 
 # This method cancels the shipment associated with the specified shipment ID and the associated shipping label is deleted. When you cancel a shipment, the totalShippingCost of the canceled shipment is refunded to the account established by the user's billing agreement. Note that you cannot cancel a shipment if you have used the associated shipping label.
@@ -176,10 +199,11 @@ export def "shipment-cancel cancel" [
 ]: nothing -> record<cancellation: record<cancellationRequestedDate: string, cancellationStatus: string>, creationDate: string, labelCustomMessage: string, labelDownloadUrl: string, labelSize: string, orders: table<channel: string, orderId: string>, packageSpecification: record<dimensions: record<height: string, length: string, unit: string, width: string>, weight: record<unit: string, value: string>>, rate: record<additionalOptions: list<record>, baseShippingCost: record<currency: string, value: string>, destinationTimeZone: string, maxEstimatedDeliveryDate: string, minEstimatedDeliveryDate: string, pickupNetworks: list<string>, pickupSlotId: string, pickupType: string, rateId: string, shippingCarrierCode: string, shippingCarrierName: string, shippingQuoteId: string, shippingServiceCode: string, shippingServiceName: string, totalShippingCost: record<currency: string, value: string>>, returnTo: record<companyName: string, contactAddress: record<addressLine1: string, addressLine2: string, city: string, countryCode: string, county: string, postalCode: string, stateOrProvince: string>, fullName: string, primaryPhone: record<phoneNumber: string>>, shipFrom: record<companyName: string, contactAddress: record<addressLine1: string, addressLine2: string, city: string, countryCode: string, county: string, postalCode: string, stateOrProvince: string>, fullName: string, primaryPhone: record<phoneNumber: string>>, shipTo: record<companyName: string, contactAddress: record<addressLine1: string, addressLine2: string, city: string, countryCode: string, county: string, postalCode: string, stateOrProvince: string>, fullName: string, primaryPhone: record<phoneNumber: string>>, shipmentId: string, shipmentTrackingNumber: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($shipment_id | is-empty) { error make --unspanned { msg: "path parameter 'shipmentId' must be non-empty" } }
   let full_url = (build-url $base ({shipment_id: (encode-path-segment $shipment_id)} | format pattern "/shipment/{shipment_id}/cancel"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
 }
 
 # This method returns the shipping label file that was generated for the shipmentId value specified in the request. Call createFromShippingQuote to generate a shipment ID. Use the Accept HTTP header to specify the format of the returned file. The default file format is a PDF file.
@@ -200,10 +224,11 @@ export def "shipment-download-label-file download" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($shipment_id | is-empty) { error make --unspanned { msg: "path parameter 'shipmentId' must be non-empty" } }
   let full_url = (build-url $base ({shipment_id: (encode-path-segment $shipment_id)} | format pattern "/shipment/{shipment_id}/download_label_file"))
   let accept_val = "application/pdf"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
 }
 
 # The createShippingQuote method returns a shipping quote that contains a list of live "rates." Each rate represents an offer made by a shipping carrier for a specific service and each offer has a live quote for the base service cost. Rates have a time window in which they are "live," and rates expire when their purchase window ends. If offered by the carrier, rates can include shipping options (and their associated prices), and users can add any offered shipping option to the base service should they desire. Also, depending on the services required, rates can also include pickup and delivery windows. Each rate is for a single package and is based on the following information: The shipping origin The shipping destination The package size (weight and dimensions) Rates are identified by a unique eBay-assigned rateId and rates are based on price points, pickup and delivery time frames, and other user requirements. Because each rate offered must be compliant with the eBay shipping program, all rates reflect eBay-negotiated prices. The various rates returned in a shipping quote offer the user a choice from which they can choose a shipping service that best fits their needs. Select the rate for your shipment and using the associated rateId, call createFromShippingQuote to create a shipment and generate a shipping label that you can use to ship the package.
@@ -240,7 +265,7 @@ export def "shipping-quote create" [
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"X-EBAY-C-MARKETPLACE-ID": $x_ebay_c_marketplace_id} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: {}, body: $req_body}
 }
 
 # This method retrieves the complete details of the shipping quote associated with the specified shippingQuoteId value. A "shipping quote" pertains to a single specific package and contains a set of shipping "rates" that quote the cost to ship the package by different shipping carriers and services. The quotes are based on the package's origin, destination, and size. Call createShippingQuote to create a shippingQuoteId.
@@ -261,8 +286,9 @@ export def "shipping-quote get" [
 ]: nothing -> record<creationDate: string, expirationDate: string, orders: table<channel: string, orderId: string>, packageSpecification: record<dimensions: record<height: string, length: string, unit: string, width: string>, weight: record<unit: string, value: string>>, rates: table<additionalOptions: list, baseShippingCost: record, destinationTimeZone: string, maxEstimatedDeliveryDate: string, minEstimatedDeliveryDate: string, pickupNetworks: list, pickupSlots: list, pickupType: string, rateId: string, rateRecommendation: list, shippingCarrierCode: string, shippingCarrierName: string, shippingServiceCode: string, shippingServiceName: string>, shipFrom: record<companyName: string, contactAddress: record<addressLine1: string, addressLine2: string, city: string, countryCode: string, county: string, postalCode: string, stateOrProvince: string>, fullName: string, primaryPhone: record<phoneNumber: string>>, shipTo: record<companyName: string, contactAddress: record<addressLine1: string, addressLine2: string, city: string, countryCode: string, county: string, postalCode: string, stateOrProvince: string>, fullName: string, primaryPhone: record<phoneNumber: string>>, shippingQuoteId: string, warnings: table<category: string, domain: string, errorId: int, inputRefIds: list, longMessage: string, message: string, outputRefIds: list, parameters: list, subdomain: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($shipping_quote_id | is-empty) { error make --unspanned { msg: "path parameter 'shippingQuoteId' must be non-empty" } }
   let full_url = (build-url $base ({shipping_quote_id: (encode-path-segment $shipping_quote_id)} | format pattern "/shipping_quote/{shipping_quote_id}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
 }

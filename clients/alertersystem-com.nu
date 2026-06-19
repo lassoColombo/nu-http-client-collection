@@ -3,17 +3,18 @@
 # Auth: --token flag or $env.ALERTER_SYSTEM_API_TOKEN
 
 const BASE_URL = "http://localhost"
-const DEFAULT_AUTH = "bearer"
 
-# Build auth: returns {headers: record, query: string}
+# Build auth: returns {scheme: string, headers: record, query: string, location: string}.
+# `location` is "header" | "query" | "cookie" | "none" and tells dry-run callers
+# where the token went without inspecting headers/query themselves.
 def build-auth [token?: string, auth_scheme?: string]: nothing -> record {
   let token_val = if ($token != null) and ($token | is-not-empty) { $token } else { $env | get -o ALERTER_SYSTEM_API_TOKEN | default "" }
   let scheme = ($auth_scheme | default "bearer")
-  if ($scheme == "none") or ($token_val | is-empty) { return {headers: {}, query: ""} }
+  if ($scheme == "none") or ($token_val | is-empty) { return {scheme: $scheme, headers: {}, query: "", location: "none"} }
   match $scheme {
-    "bearer" => { {headers: {Authorization: $"Bearer ($token_val)"}, query: ""} }
-    "none" => { {headers: {}, query: ""} }
-    _ => { {headers: {Authorization: $"Bearer ($token_val)"}, query: ""} }
+    "bearer" => { {scheme: $scheme, headers: {Authorization: $"Bearer ($token_val)"}, query: "", location: "header"} }
+    "none" => { {scheme: $scheme, headers: {}, query: "", location: "none"} }
+    _ => { {scheme: $scheme, headers: {Authorization: $"Bearer ($token_val)"}, query: "", location: "header"} }
   }
 }
 
@@ -22,8 +23,9 @@ def build-auth [token?: string, auth_scheme?: string]: nothing -> record {
 # ([A-Za-z0-9-._~]) stay literal; everything else gets %XX.
 def serialize-qp [name: string, value: any, style: string]: nothing -> list<string> {
   if ($value == null) { return [] }
-  let n = (encode-path-segment $name)
   let is_list = ($value | describe | str starts-with "list")
+  if $is_list and ($value | is-empty) { return [] }
+  let n = (encode-path-segment $name)
   if ($value | describe | str starts-with "record") { return ($value | transpose k v | each { $"($n)[(encode-path-segment $in.k)]=(encode-path-segment $in.v)" }) }
   if not $is_list { return [$"($n)=(encode-path-segment $value)"] }
   match $style {
@@ -54,22 +56,42 @@ def build-url [base: string, path: string, query?: string]: nothing -> string {
   if ($query != null) and ($query | is-not-empty) { $result | upsert query $query | url join } else { $result | url join }
 }
 
+# Build the dry-run record returned by --dry-run. Shape:
+#   {dry_run: true, method, url, query: <record>, headers, body, content_type, timeout,
+#    auth: {scheme, location}}
+# `meta` carries logical-form data (the query record by spec name, the pre-serialization
+# body) that do-request itself cannot reconstruct from its wire-format args.
+def build-dry-run-record [method: string, url: string, auth: record, content_type: string, timeout: duration, meta?: record]: nothing -> record {
+  let m = ($meta | default {})
+  {
+    dry_run: true
+    method: $method
+    url: $url
+    query: ($m | get -o query | default {})
+    headers: $auth.headers
+    body: ($m | get -o body)
+    content_type: $content_type
+    timeout: $timeout
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+}
+
 # Execute HTTP request with method dispatch
-def do-request [method: string, url: string, auth: record, insecure: bool, raw: bool, dry_run: bool, max_time?: duration, allow_errors?: bool, full?: bool, content_type?: string, body?: any]: nothing -> any {
+def do-request [method: string, url: string, auth: record, insecure: bool, raw: bool, dry_run: bool, max_time?: duration, allow_errors?: bool, full?: bool, content_type?: string, body?: any, dry_run_meta?: record]: nothing -> any {
   let req_url = if ($auth.query | is-not-empty) { if ($url | str contains "?") { $"($url)&($auth.query)" } else { $"($url)?($auth.query)" } } else { $url }
   let timeout = ($max_time | default 30min)
   let ct = ($content_type | default "application/json")
-  if $dry_run { return {method: $method, url: $req_url, headers: $auth.headers, query_string: $auth.query, content_type: $ct, timeout: $timeout, body: $body} }
+  if $dry_run { return (build-dry-run-record $method $req_url $auth $ct $timeout $dry_run_meta) }
   let resp = match $method {
     "get" => { http get --headers $auth.headers --full --allow-errors --max-time $timeout --insecure=$insecure --raw=$raw $req_url }
-    "head" => { http head --headers $auth.headers --max-time $timeout --insecure=$insecure $req_url }
-    "options" => { http options --headers $auth.headers --max-time $timeout --insecure=$insecure $req_url }
+    "head" => { http head --headers $auth.headers --full --allow-errors --max-time $timeout --insecure=$insecure $req_url }
+    "options" => { http options --headers $auth.headers --full --allow-errors --max-time $timeout --insecure=$insecure $req_url }
     "post" => { if ($body | is-empty) { http post --headers $auth.headers --full --allow-errors --max-time $timeout --insecure=$insecure --raw=$raw $req_url "" } else { http post --headers $auth.headers --content-type $ct --full --allow-errors --max-time $timeout --insecure=$insecure --raw=$raw $req_url $body } }
     "put" => { if ($body | is-empty) { http put --headers $auth.headers --full --allow-errors --max-time $timeout --insecure=$insecure --raw=$raw $req_url "" } else { http put --headers $auth.headers --content-type $ct --full --allow-errors --max-time $timeout --insecure=$insecure --raw=$raw $req_url $body } }
     "patch" => { if ($body | is-empty) { http patch --headers $auth.headers --full --allow-errors --max-time $timeout --insecure=$insecure --raw=$raw $req_url "" } else { http patch --headers $auth.headers --content-type $ct --full --allow-errors --max-time $timeout --insecure=$insecure --raw=$raw $req_url $body } }
     "delete" => { if ($body | is-empty) { http delete --headers $auth.headers --full --allow-errors --max-time $timeout --insecure=$insecure --raw=$raw $req_url } else { http delete --headers $auth.headers --content-type $ct --data $body --full --allow-errors --max-time $timeout --insecure=$insecure --raw=$raw $req_url } }
   }
-  if ($method in ["head" "options"]) { return $resp }
+  if ($method == "head") and (not $full) and (not $allow_errors) and $resp.status < 400 { return $resp.headers }
   if $allow_errors { $resp } else if $resp.status >= 400 { error make --unspanned { msg: $"HTTP ($resp.status): ($resp.body)" } } else if $full { {status: $resp.status, headers: $resp.headers, body: $resp.body} } else if $resp.status == 204 { null } else { $resp.body }
 }
 
@@ -147,24 +169,24 @@ export def "alert-log get-collection" [
   --accept: string@accept-completer # Response content type
   --page: int # The collection page number (default: 1, allows empty value)
   --data-segment-code: string # allows empty value
-  --data-segment-code: list<string> # allows empty value
+  --data-segment-code-list: list<string> # allows empty value (array variant)
   --monitor: string # allows empty value
-  --monitor: list<string> # allows empty value
+  --monitor-list: list<string> # allows empty value (array variant)
   --alert-service: string # allows empty value
-  --alert-service: list<string> # allows empty value
+  --alert-service-list: list<string> # allows empty value (array variant)
   --alert-log-status-code: string # allows empty value
-  --alert-log-status-code: list<string> # allows empty value
+  --alert-log-status-code-list: list<string> # allows empty value (array variant)
   --partition: string # allows empty value
-  --partition: list<string> # allows empty value
+  --partition-list: list<string> # allows empty value (array variant)
   --properties: list<string> # allows empty value
 ]: nothing -> table<alertLogErrorMessage: string, alertLogMessageId: string, alertLogStatusCode: string, alertService: string, createdAt: string, dataSegmentCode: string, id: string, monitor: string, partition: string, ping: string, resourceOwner: string, webhookResponseBody: string, webhookResponseHeaders: list<string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "page" $page "scalar") (serialize-qp "dataSegmentCode" $data_segment_code "scalar") (serialize-qp "dataSegmentCode[]" $data_segment_code "multi") (serialize-qp "monitor" $monitor "scalar") (serialize-qp "monitor[]" $monitor "multi") (serialize-qp "alertService" $alert_service "scalar") (serialize-qp "alertService[]" $alert_service "multi") (serialize-qp "alertLogStatusCode" $alert_log_status_code "scalar") (serialize-qp "alertLogStatusCode[]" $alert_log_status_code "multi") (serialize-qp "partition" $partition "scalar") (serialize-qp "partition[]" $partition "multi") (serialize-qp "properties[]" $properties "multi")] | flatten | str join "&"
+  let qp = [(serialize-qp "page" $page "scalar") (serialize-qp "dataSegmentCode" $data_segment_code "scalar") (serialize-qp "dataSegmentCode[]" $data_segment_code_list "multi") (serialize-qp "monitor" $monitor "scalar") (serialize-qp "monitor[]" $monitor_list "multi") (serialize-qp "alertService" $alert_service "scalar") (serialize-qp "alertService[]" $alert_service_list "multi") (serialize-qp "alertLogStatusCode" $alert_log_status_code "scalar") (serialize-qp "alertLogStatusCode[]" $alert_log_status_code_list "multi") (serialize-qp "partition" $partition "scalar") (serialize-qp "partition[]" $partition_list "multi") (serialize-qp "properties[]" $properties "multi")] | flatten | str join "&"
   let full_url = (build-url $base "/api/alert-log" $qp)
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"page": $page, "dataSegmentCode": $data_segment_code, "dataSegmentCode[]": $data_segment_code_list, "monitor": $monitor, "monitor[]": $monitor_list, "alertService": $alert_service, "alertService[]": $alert_service_list, "alertLogStatusCode": $alert_log_status_code, "alertLogStatusCode[]": $alert_log_status_code_list, "partition": $partition, "partition[]": $partition_list, "properties[]": $properties} | compact), body: null}
 }
 
 # Retrieves the collection of AlertLogStatusCode resources.
@@ -191,7 +213,7 @@ export def "alert-log-status-code get-collection" [
   let full_url = (build-url $base "/api/alert-log-status-code" $qp)
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"page": $page, "properties[]": $properties} | compact), body: null}
 }
 
 # Retrieves a AlertLogStatusCode resource.
@@ -213,10 +235,11 @@ export def "alert-log-status-code get" [
 ]: nothing -> record<id: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
   let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/api/alert-log-status-code/{id}"))
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
 }
 
 # Retrieves a AlertLog resource.
@@ -238,10 +261,11 @@ export def "alert-log get" [
 ]: nothing -> record<alertLogErrorMessage: string, alertLogMessageId: string, alertLogStatusCode: string, alertService: string, createdAt: string, dataSegmentCode: string, id: string, monitor: string, partition: string, ping: string, resourceOwner: string, webhookResponseBody: string, webhookResponseHeaders: list<string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
   let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/api/alert-log/{id}"))
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
 }
 
 # Retrieves the collection of AlertService resources.
@@ -261,18 +285,18 @@ export def "alert-service get-collection" [
   --accept: string@accept-completer # Response content type
   --page: int # The collection page number (default: 1, allows empty value)
   --data-segment-code: string # allows empty value
-  --data-segment-code: list<string> # allows empty value
+  --data-segment-code-list: list<string> # allows empty value (array variant)
   --partition: string # allows empty value
-  --partition: list<string> # allows empty value
+  --partition-list: list<string> # allows empty value (array variant)
   --properties: list<string> # allows empty value
 ]: nothing -> table<alertServiceName: string, alertServiceNotes: string, alertServiceTransportCode: string, createdAt: string, creditsPerTransportAlert: int, dataSegmentCode: string, id: string, mediaObjects: list<string>, partition: string, recipientEmailAddress: string, recipientPhoneNumber: string, resourceOwner: string, transportAlerta: string, transportAllMySms: string, transportAmazonSns: string, transportBandwidth: string, transportChatwork: string, transportClickSend: string, transportClickatell: string, transportContactEveryone: string, transportDiscord: string, transportEmail: string, transportEngagespot: string, transportEsendex: string, transportExpo: string, transportFirebase: string, transportFortySixElks: string, transportFreeMobile: string, transportFreshdesk: string, transportGatewayApi: string, transportGitter: string, transportGoogleChat: string, transportGotify: string, transportHelpScout: string, transportInfobip: string, transportIqsms: string, transportKazInfoTeh: string, transportLightSms: string, transportLineNotify: string, transportLinkedIn: string, transportMailjet: string, transportMastodon: string, transportMattermost: string, transportMercure: string, transportMessageBird: string, transportMessageMedia: string, transportMicrosoftTeams: string, transportMobyt: string, transportOctopush: string, transportOneSignal: string, transportOpsgenie: string, transportOrangeSms: string, transportOvhCloud: string, transportPagerDuty: string, transportPagerTree: string, transportPlivo: string, transportPushbullet: string, transportPushover: string, transportPushy: string, transportRingCentral: string, transportRocketChat: string, transportSendberry: string, transportSendinblue: string, transportSimpleTextin: string, transportSinch: string, transportSlack: string, transportSms77: string, transportSmsBiuras: string, transportSmsFactor: string, transportSmsapi: string, transportSmsc: string, transportSmsmode: string, transportSpotHit: string, transportTelegram: string, transportTelnyx: string, transportTermii: string, transportTrello: string, transportTurboSms: string, transportTwilio: string, transportTwitter: string, transportVonage: string, transportWebhook: string, transportYunpian: string, transportZendesk: string, transportZulip: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "page" $page "scalar") (serialize-qp "dataSegmentCode" $data_segment_code "scalar") (serialize-qp "dataSegmentCode[]" $data_segment_code "multi") (serialize-qp "partition" $partition "scalar") (serialize-qp "partition[]" $partition "multi") (serialize-qp "properties[]" $properties "multi")] | flatten | str join "&"
+  let qp = [(serialize-qp "page" $page "scalar") (serialize-qp "dataSegmentCode" $data_segment_code "scalar") (serialize-qp "dataSegmentCode[]" $data_segment_code_list "multi") (serialize-qp "partition" $partition "scalar") (serialize-qp "partition[]" $partition_list "multi") (serialize-qp "properties[]" $properties "multi")] | flatten | str join "&"
   let full_url = (build-url $base "/api/alert-service" $qp)
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"page": $page, "dataSegmentCode": $data_segment_code, "dataSegmentCode[]": $data_segment_code_list, "partition": $partition, "partition[]": $partition_list, "properties[]": $properties} | compact), body: null}
 }
 
 # Creates a AlertService resource.
@@ -380,7 +404,7 @@ export def "alert-service create" [
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: {}, body: $req_body}
 }
 
 # Retrieves the collection of AlertServiceTransportCode resources.
@@ -407,7 +431,7 @@ export def "alert-service-transport-code get-collection" [
   let full_url = (build-url $base "/api/alert-service-transport-code" $qp)
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"page": $page, "properties[]": $properties} | compact), body: null}
 }
 
 # Retrieves a AlertServiceTransportCode resource.
@@ -429,10 +453,11 @@ export def "alert-service-transport-code get" [
 ]: nothing -> record<codeName: string, id: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
   let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/api/alert-service-transport-code/{id}"))
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
 }
 
 # Removes the AlertService resource.
@@ -453,10 +478,11 @@ export def "alert-service delete" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
   let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/api/alert-service/{id}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
 }
 
 # Retrieves a AlertService resource.
@@ -478,10 +504,11 @@ export def "alert-service get" [
 ]: nothing -> record<alertServiceName: string, alertServiceNotes: string, alertServiceTransportCode: string, createdAt: string, creditsPerTransportAlert: int, dataSegmentCode: string, id: string, mediaObjects: list<string>, partition: string, recipientEmailAddress: string, recipientPhoneNumber: string, resourceOwner: string, transportAlerta: string, transportAllMySms: string, transportAmazonSns: string, transportBandwidth: string, transportChatwork: string, transportClickSend: string, transportClickatell: string, transportContactEveryone: string, transportDiscord: string, transportEmail: string, transportEngagespot: string, transportEsendex: string, transportExpo: string, transportFirebase: string, transportFortySixElks: string, transportFreeMobile: string, transportFreshdesk: string, transportGatewayApi: string, transportGitter: string, transportGoogleChat: string, transportGotify: string, transportHelpScout: string, transportInfobip: string, transportIqsms: string, transportKazInfoTeh: string, transportLightSms: string, transportLineNotify: string, transportLinkedIn: string, transportMailjet: string, transportMastodon: string, transportMattermost: string, transportMercure: string, transportMessageBird: string, transportMessageMedia: string, transportMicrosoftTeams: string, transportMobyt: string, transportOctopush: string, transportOneSignal: string, transportOpsgenie: string, transportOrangeSms: string, transportOvhCloud: string, transportPagerDuty: string, transportPagerTree: string, transportPlivo: string, transportPushbullet: string, transportPushover: string, transportPushy: string, transportRingCentral: string, transportRocketChat: string, transportSendberry: string, transportSendinblue: string, transportSimpleTextin: string, transportSinch: string, transportSlack: string, transportSms77: string, transportSmsBiuras: string, transportSmsFactor: string, transportSmsapi: string, transportSmsc: string, transportSmsmode: string, transportSpotHit: string, transportTelegram: string, transportTelnyx: string, transportTermii: string, transportTrello: string, transportTurboSms: string, transportTwilio: string, transportTwitter: string, transportVonage: string, transportWebhook: string, transportYunpian: string, transportZendesk: string, transportZulip: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
   let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/api/alert-service/{id}"))
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
 }
 
 # Replaces the AlertService resource.
@@ -583,12 +610,13 @@ export def "alert-service update" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
   let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/api/alert-service/{id}"))
   let req_body = {"alertServiceName": $alert_service_name, "alertServiceNotes": $alert_service_notes, "dataSegmentCode": $data_segment_code, "mediaObjects": $media_objects, "recipientEmailAddress": $recipient_email_address, "recipientPhoneNumber": $recipient_phone_number, "transportAlerta": $transport_alerta, "transportAllMySms": $transport_all_my_sms, "transportAmazonSns": $transport_amazon_sns, "transportBandwidth": $transport_bandwidth, "transportChatwork": $transport_chatwork, "transportClickSend": $transport_click_send, "transportClickatell": $transport_clickatell, "transportContactEveryone": $transport_contact_everyone, "transportDiscord": $transport_discord, "transportEmail": $transport_email, "transportEngagespot": $transport_engagespot, "transportEsendex": $transport_esendex, "transportExpo": $transport_expo, "transportFirebase": $transport_firebase, "transportFortySixElks": $transport_forty_six_elks, "transportFreeMobile": $transport_free_mobile, "transportFreshdesk": $transport_freshdesk, "transportGatewayApi": $transport_gateway_api, "transportGitter": $transport_gitter, "transportGoogleChat": $transport_google_chat, "transportGotify": $transport_gotify, "transportHelpScout": $transport_help_scout, "transportInfobip": $transport_infobip, "transportIqsms": $transport_iqsms, "transportKazInfoTeh": $transport_kaz_info_teh, "transportLightSms": $transport_light_sms, "transportLineNotify": $transport_line_notify, "transportLinkedIn": $transport_linked_in, "transportMailjet": $transport_mailjet, "transportMastodon": $transport_mastodon, "transportMattermost": $transport_mattermost, "transportMercure": $transport_mercure, "transportMessageBird": $transport_message_bird, "transportMessageMedia": $transport_message_media, "transportMicrosoftTeams": $transport_microsoft_teams, "transportMobyt": $transport_mobyt, "transportOctopush": $transport_octopush, "transportOneSignal": $transport_one_signal, "transportOpsgenie": $transport_opsgenie, "transportOrangeSms": $transport_orange_sms, "transportOvhCloud": $transport_ovh_cloud, "transportPagerDuty": $transport_pager_duty, "transportPagerTree": $transport_pager_tree, "transportPlivo": $transport_plivo, "transportPushbullet": $transport_pushbullet, "transportPushover": $transport_pushover, "transportPushy": $transport_pushy, "transportRingCentral": $transport_ring_central, "transportRocketChat": $transport_rocket_chat, "transportSendberry": $transport_sendberry, "transportSendinblue": $transport_sendinblue, "transportSimpleTextin": $transport_simple_textin, "transportSinch": $transport_sinch, "transportSlack": $transport_slack, "transportSms77": $transport_sms77, "transportSmsBiuras": $transport_sms_biuras, "transportSmsFactor": $transport_sms_factor, "transportSmsapi": $transport_smsapi, "transportSmsc": $transport_smsc, "transportSmsmode": $transport_smsmode, "transportSpotHit": $transport_spot_hit, "transportTelegram": $transport_telegram, "transportTelnyx": $transport_telnyx, "transportTermii": $transport_termii, "transportTrello": $transport_trello, "transportTurboSms": $transport_turbo_sms, "transportTwilio": $transport_twilio, "transportTwitter": $transport_twitter, "transportVonage": $transport_vonage, "transportWebhook": $transport_webhook, "transportYunpian": $transport_yunpian, "transportZendesk": $transport_zendesk, "transportZulip": $transport_zulip} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: {}, body: $req_body}
 }
 
 # Retrieves the collection of CreditsConsumption resources.
@@ -615,7 +643,7 @@ export def "credits-consumption get-collection" [
   let full_url = (build-url $base "/api/credits-consumption" $qp)
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"page": $page, "properties[]": $properties} | compact), body: null}
 }
 
 # Retrieves a CreditsConsumption resource.
@@ -637,10 +665,11 @@ export def "credits-consumption get" [
 ]: nothing -> record<createdAt: string, creditsConsumptionEventCode: string, creditsConsumptionNotes: string, creditsEventId: string, creditsEventIri: string, creditsUsed: string, id: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
   let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/api/credits-consumption/{id}"))
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
 }
 
 # Retrieves the collection of HttpMethodCode resources.
@@ -667,7 +696,7 @@ export def "http-method-code get-collection" [
   let full_url = (build-url $base "/api/http-method-code" $qp)
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"page": $page, "properties[]": $properties} | compact), body: null}
 }
 
 # Retrieves a HttpMethodCode resource.
@@ -689,10 +718,11 @@ export def "http-method-code get" [
 ]: nothing -> record<codeName: string, id: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
   let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/api/http-method-code/{id}"))
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
 }
 
 # Retrieves the collection of MediaObject resources.
@@ -712,18 +742,18 @@ export def "media-object get-collection" [
   --accept: string@accept-completer # Response content type
   --page: int # The collection page number (default: 1, allows empty value)
   --data-segment-code: string # allows empty value
-  --data-segment-code: list<string> # allows empty value
+  --data-segment-code-list: list<string> # allows empty value (array variant)
   --partition: string # allows empty value
-  --partition: list<string> # allows empty value
+  --partition-list: list<string> # allows empty value (array variant)
   --properties: list<string> # allows empty value
 ]: nothing -> table<contentUrl: string, createdAt: string, dataSegmentCode: string, fileSize: int, id: string, keywords: string, mimeType: string, originalName: string, partition: string, resourceOwner: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "page" $page "scalar") (serialize-qp "dataSegmentCode" $data_segment_code "scalar") (serialize-qp "dataSegmentCode[]" $data_segment_code "multi") (serialize-qp "partition" $partition "scalar") (serialize-qp "partition[]" $partition "multi") (serialize-qp "properties[]" $properties "multi")] | flatten | str join "&"
+  let qp = [(serialize-qp "page" $page "scalar") (serialize-qp "dataSegmentCode" $data_segment_code "scalar") (serialize-qp "dataSegmentCode[]" $data_segment_code_list "multi") (serialize-qp "partition" $partition "scalar") (serialize-qp "partition[]" $partition_list "multi") (serialize-qp "properties[]" $properties "multi")] | flatten | str join "&"
   let full_url = (build-url $base "/api/media-object" $qp)
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"page": $page, "dataSegmentCode": $data_segment_code, "dataSegmentCode[]": $data_segment_code_list, "partition": $partition, "partition[]": $partition_list, "properties[]": $properties} | compact), body: null}
 }
 
 # Creates a MediaObject resource.
@@ -756,7 +786,7 @@ export def "media-object create" [
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let req_body = if ($req_body | describe | str starts-with "record") { $req_body } else { {} }
   let mp = (build-multipart-body $req_body ["file"] $dry_run)
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full $mp.content_type $mp.body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full $mp.content_type $mp.body {query: {}, body: $req_body}
 }
 
 # Removes the MediaObject resource.
@@ -777,10 +807,11 @@ export def "media-object delete" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
   let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/api/media-object/{id}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
 }
 
 # Retrieves a MediaObject resource.
@@ -802,10 +833,11 @@ export def "media-object get" [
 ]: nothing -> record<contentUrl: string, createdAt: string, dataSegmentCode: string, fileSize: int, id: string, keywords: string, mimeType: string, originalName: string, partition: string, resourceOwner: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
   let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/api/media-object/{id}"))
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
 }
 
 # Retrieves the collection of Monitor resources.
@@ -825,18 +857,18 @@ export def "monitor get-collection" [
   --accept: string@accept-completer # Response content type
   --page: int # The collection page number (default: 1, allows empty value)
   --data-segment-code: string # allows empty value
-  --data-segment-code: list<string> # allows empty value
+  --data-segment-code-list: list<string> # allows empty value (array variant)
   --partition: string # allows empty value
-  --partition: list<string> # allows empty value
+  --partition-list: list<string> # allows empty value (array variant)
   --properties: list<string> # allows empty value
 ]: nothing -> table<alertPayloadExtended: string, alertPayloadShort: string, alertServices: list<string>, allowUnauthenticatedPings: bool, contentCheckMustNotExist: bool, contentCheckText: string, contentCheckUrl: string, contentCheckXpathFilter: string, createdAt: string, dataSegmentCode: string, graceSeconds: int, humanizedInterval: string, id: string, internalMonitorName: string, intervalDays: int, intervalHours: int, intervalMinutes: int, intervalMonths: int, intervalSeconds: int, intervalYears: int, isMonitorPaused: bool, lastPingAt: string, monitorName: string, monitorNotes: string, monitorStatusCode: string, monitorTypeCode: string, nextPingAt: string, partition: string, pingSecret: string, publicDescription: string, resourceOwner: string, startMonitorAt: string, startMonitorAtUtc: string, systemMessages: list<string>, timezoneCode: string, webResponseSecondsLimit: int, webResponseUrl: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "page" $page "scalar") (serialize-qp "dataSegmentCode" $data_segment_code "scalar") (serialize-qp "dataSegmentCode[]" $data_segment_code "multi") (serialize-qp "partition" $partition "scalar") (serialize-qp "partition[]" $partition "multi") (serialize-qp "properties[]" $properties "multi")] | flatten | str join "&"
+  let qp = [(serialize-qp "page" $page "scalar") (serialize-qp "dataSegmentCode" $data_segment_code "scalar") (serialize-qp "dataSegmentCode[]" $data_segment_code_list "multi") (serialize-qp "partition" $partition "scalar") (serialize-qp "partition[]" $partition_list "multi") (serialize-qp "properties[]" $properties "multi")] | flatten | str join "&"
   let full_url = (build-url $base "/api/monitor" $qp)
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"page": $page, "dataSegmentCode": $data_segment_code, "dataSegmentCode[]": $data_segment_code_list, "partition": $partition, "partition[]": $partition_list, "properties[]": $properties} | compact), body: null}
 }
 
 # Creates a Monitor resource.
@@ -889,7 +921,7 @@ export def "monitor create" [
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: {}, body: $req_body}
 }
 
 # Retrieves the collection of MonitorStatusCode resources.
@@ -916,7 +948,7 @@ export def "monitor-status-code get-collection" [
   let full_url = (build-url $base "/api/monitor-status-code" $qp)
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"page": $page, "properties[]": $properties} | compact), body: null}
 }
 
 # Retrieves a MonitorStatusCode resource.
@@ -938,10 +970,11 @@ export def "monitor-status-code get" [
 ]: nothing -> record<codeDescription: string, id: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
   let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/api/monitor-status-code/{id}"))
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
 }
 
 # Retrieves the collection of MonitorStatusLog resources.
@@ -961,22 +994,22 @@ export def "monitor-status-log get-collection" [
   --accept: string@accept-completer # Response content type
   --page: int # The collection page number (default: 1, allows empty value)
   --data-segment-code: string # allows empty value
-  --data-segment-code: list<string> # allows empty value
+  --data-segment-code-list: list<string> # allows empty value (array variant)
   --monitor: string # allows empty value
-  --monitor: list<string> # allows empty value
+  --monitor-list: list<string> # allows empty value (array variant)
   --monitor-status-code: string # allows empty value
-  --monitor-status-code: list<string> # allows empty value
+  --monitor-status-code-list: list<string> # allows empty value (array variant)
   --partition: string # allows empty value
-  --partition: list<string> # allows empty value
+  --partition-list: list<string> # allows empty value (array variant)
   --properties: list<string> # allows empty value
 ]: nothing -> table<createdAt: string, dataSegmentCode: string, id: string, monitor: string, monitorStatusCode: string, partition: string, ping: string, resourceOwner: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "page" $page "scalar") (serialize-qp "dataSegmentCode" $data_segment_code "scalar") (serialize-qp "dataSegmentCode[]" $data_segment_code "multi") (serialize-qp "monitor" $monitor "scalar") (serialize-qp "monitor[]" $monitor "multi") (serialize-qp "monitorStatusCode" $monitor_status_code "scalar") (serialize-qp "monitorStatusCode[]" $monitor_status_code "multi") (serialize-qp "partition" $partition "scalar") (serialize-qp "partition[]" $partition "multi") (serialize-qp "properties[]" $properties "multi")] | flatten | str join "&"
+  let qp = [(serialize-qp "page" $page "scalar") (serialize-qp "dataSegmentCode" $data_segment_code "scalar") (serialize-qp "dataSegmentCode[]" $data_segment_code_list "multi") (serialize-qp "monitor" $monitor "scalar") (serialize-qp "monitor[]" $monitor_list "multi") (serialize-qp "monitorStatusCode" $monitor_status_code "scalar") (serialize-qp "monitorStatusCode[]" $monitor_status_code_list "multi") (serialize-qp "partition" $partition "scalar") (serialize-qp "partition[]" $partition_list "multi") (serialize-qp "properties[]" $properties "multi")] | flatten | str join "&"
   let full_url = (build-url $base "/api/monitor-status-log" $qp)
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"page": $page, "dataSegmentCode": $data_segment_code, "dataSegmentCode[]": $data_segment_code_list, "monitor": $monitor, "monitor[]": $monitor_list, "monitorStatusCode": $monitor_status_code, "monitorStatusCode[]": $monitor_status_code_list, "partition": $partition, "partition[]": $partition_list, "properties[]": $properties} | compact), body: null}
 }
 
 # Retrieves a MonitorStatusLog resource.
@@ -998,10 +1031,11 @@ export def "monitor-status-log get" [
 ]: nothing -> record<createdAt: string, dataSegmentCode: string, id: string, monitor: string, monitorStatusCode: string, partition: string, ping: string, resourceOwner: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
   let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/api/monitor-status-log/{id}"))
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
 }
 
 # Retrieves the collection of MonitorTypeCode resources.
@@ -1028,7 +1062,7 @@ export def "monitor-type-code get-collection" [
   let full_url = (build-url $base "/api/monitor-type-code" $qp)
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"page": $page, "properties[]": $properties} | compact), body: null}
 }
 
 # Retrieves a MonitorTypeCode resource.
@@ -1050,10 +1084,11 @@ export def "monitor-type-code get" [
 ]: nothing -> record<codeDescription: string, codeDescriptionExpanded: string, id: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
   let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/api/monitor-type-code/{id}"))
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
 }
 
 # Removes the Monitor resource.
@@ -1074,10 +1109,11 @@ export def "monitor delete" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
   let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/api/monitor/{id}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
 }
 
 # Retrieves a Monitor resource.
@@ -1099,10 +1135,11 @@ export def "monitor get" [
 ]: nothing -> record<alertPayloadExtended: string, alertPayloadShort: string, alertServices: list<string>, allowUnauthenticatedPings: bool, contentCheckMustNotExist: bool, contentCheckText: string, contentCheckUrl: string, contentCheckXpathFilter: string, createdAt: string, dataSegmentCode: string, graceSeconds: int, humanizedInterval: string, id: string, internalMonitorName: string, intervalDays: int, intervalHours: int, intervalMinutes: int, intervalMonths: int, intervalSeconds: int, intervalYears: int, isMonitorPaused: bool, lastPingAt: string, monitorName: string, monitorNotes: string, monitorStatusCode: string, monitorTypeCode: string, nextPingAt: string, partition: string, pingSecret: string, publicDescription: string, resourceOwner: string, startMonitorAt: string, startMonitorAtUtc: string, systemMessages: list<string>, timezoneCode: string, webResponseSecondsLimit: int, webResponseUrl: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
   let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/api/monitor/{id}"))
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
 }
 
 # Replaces the Monitor resource.
@@ -1149,12 +1186,13 @@ export def "monitor update" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
   let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/api/monitor/{id}"))
   let req_body = {"alertPayloadExtended": $alert_payload_extended, "alertPayloadShort": $alert_payload_short, "alertServices": $alert_services, "allowUnauthenticatedPings": $allow_unauthenticated_pings, "contentCheckMustNotExist": $content_check_must_not_exist, "contentCheckText": $content_check_text, "contentCheckUrl": $content_check_url, "contentCheckXpathFilter": $content_check_xpath_filter, "dataSegmentCode": $data_segment_code, "graceSeconds": $grace_seconds, "intervalDays": $interval_days, "intervalHours": $interval_hours, "intervalMinutes": $interval_minutes, "intervalMonths": $interval_months, "intervalSeconds": $interval_seconds, "intervalYears": $interval_years, "isMonitorPaused": $is_monitor_paused, "monitorName": $monitor_name, "monitorNotes": $monitor_notes, "publicDescription": $public_description, "startMonitorAt": $start_monitor_at, "timezoneCode": $timezone_code, "webResponseSecondsLimit": $web_response_seconds_limit, "webResponseUrl": $web_response_url} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: {}, body: $req_body}
 }
 
 # Retrieves the collection of Partition resources.
@@ -1174,16 +1212,16 @@ export def "partition get-collection" [
   --accept: string@accept-completer # Response content type
   --page: int # The collection page number (default: 1, allows empty value)
   --data-segment-code: string # allows empty value
-  --data-segment-code: list<string> # allows empty value
+  --data-segment-code-list: list<string> # allows empty value (array variant)
   --properties: list<string> # allows empty value
 ]: nothing -> table<alertServices: list<string>, createdAt: string, dataSegmentCode: string, id: string, monitors: list<string>, partitionName: string, partitionNotes: string, resourceOwner: string, teamInvitations: list<string>, teamMembers: list<string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "page" $page "scalar") (serialize-qp "dataSegmentCode" $data_segment_code "scalar") (serialize-qp "dataSegmentCode[]" $data_segment_code "multi") (serialize-qp "properties[]" $properties "multi")] | flatten | str join "&"
+  let qp = [(serialize-qp "page" $page "scalar") (serialize-qp "dataSegmentCode" $data_segment_code "scalar") (serialize-qp "dataSegmentCode[]" $data_segment_code_list "multi") (serialize-qp "properties[]" $properties "multi")] | flatten | str join "&"
   let full_url = (build-url $base "/api/partition" $qp)
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"page": $page, "dataSegmentCode": $data_segment_code, "dataSegmentCode[]": $data_segment_code_list, "properties[]": $properties} | compact), body: null}
 }
 
 # Creates a Partition resource.
@@ -1213,7 +1251,7 @@ export def "partition create" [
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: {}, body: $req_body}
 }
 
 # Removes the Partition resource.
@@ -1234,10 +1272,11 @@ export def "partition delete" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
   let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/api/partition/{id}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
 }
 
 # Retrieves a Partition resource.
@@ -1259,10 +1298,11 @@ export def "partition get" [
 ]: nothing -> record<alertServices: list<string>, createdAt: string, dataSegmentCode: string, id: string, monitors: list<string>, partitionName: string, partitionNotes: string, resourceOwner: string, teamInvitations: list<string>, teamMembers: list<string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
   let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/api/partition/{id}"))
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
 }
 
 # Replaces the Partition resource.
@@ -1288,12 +1328,13 @@ export def "partition update" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
   let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/api/partition/{id}"))
   let req_body = {"dataSegmentCode": $data_segment_code, "partitionName": $partition_name, "partitionNotes": $partition_notes} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: {}, body: $req_body}
 }
 
 # Retrieves the collection of Ping resources.
@@ -1313,20 +1354,20 @@ export def "ping get-collection" [
   --accept: string@accept-completer # Response content type
   --page: int # The collection page number (default: 1, allows empty value)
   --data-segment-code: string # allows empty value
-  --data-segment-code: list<string> # allows empty value
+  --data-segment-code-list: list<string> # allows empty value (array variant)
   --monitor: string # allows empty value
-  --monitor: list<string> # allows empty value
+  --monitor-list: list<string> # allows empty value (array variant)
   --partition: string # allows empty value
-  --partition: list<string> # allows empty value
+  --partition-list: list<string> # allows empty value (array variant)
   --properties: list<string> # allows empty value
 ]: nothing -> table<alertLogs: list<string>, createdAt: string, dataSegmentCode: string, expectNextPingAt: string, expectNextPingAtEpoch: int, id: string, ipAddress: string, monitor: string, monitorStatusLog: string, partition: string, pingCustomCode: string, pingCustomPayload: string, pingMethodCode: string, resourceOwner: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "page" $page "scalar") (serialize-qp "dataSegmentCode" $data_segment_code "scalar") (serialize-qp "dataSegmentCode[]" $data_segment_code "multi") (serialize-qp "monitor" $monitor "scalar") (serialize-qp "monitor[]" $monitor "multi") (serialize-qp "partition" $partition "scalar") (serialize-qp "partition[]" $partition "multi") (serialize-qp "properties[]" $properties "multi")] | flatten | str join "&"
+  let qp = [(serialize-qp "page" $page "scalar") (serialize-qp "dataSegmentCode" $data_segment_code "scalar") (serialize-qp "dataSegmentCode[]" $data_segment_code_list "multi") (serialize-qp "monitor" $monitor "scalar") (serialize-qp "monitor[]" $monitor_list "multi") (serialize-qp "partition" $partition "scalar") (serialize-qp "partition[]" $partition_list "multi") (serialize-qp "properties[]" $properties "multi")] | flatten | str join "&"
   let full_url = (build-url $base "/api/ping" $qp)
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"page": $page, "dataSegmentCode": $data_segment_code, "dataSegmentCode[]": $data_segment_code_list, "monitor": $monitor, "monitor[]": $monitor_list, "partition": $partition, "partition[]": $partition_list, "properties[]": $properties} | compact), body: null}
 }
 
 # Creates a Ping resource.
@@ -1358,7 +1399,7 @@ export def "ping create" [
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: {}, body: $req_body}
 }
 
 # Retrieves the collection of PingMethodCode resources.
@@ -1385,7 +1426,7 @@ export def "ping-method-code get-collection" [
   let full_url = (build-url $base "/api/ping-method-code" $qp)
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"page": $page, "properties[]": $properties} | compact), body: null}
 }
 
 # Retrieves a PingMethodCode resource.
@@ -1407,10 +1448,11 @@ export def "ping-method-code get" [
 ]: nothing -> record<codeName: string, id: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
   let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/api/ping-method-code/{id}"))
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
 }
 
 # Retrieves a Ping resource.
@@ -1432,10 +1474,11 @@ export def "ping get" [
 ]: nothing -> record<alertLogs: list<string>, createdAt: string, dataSegmentCode: string, expectNextPingAt: string, expectNextPingAtEpoch: int, id: string, ipAddress: string, monitor: string, monitorStatusLog: string, partition: string, pingCustomCode: string, pingCustomPayload: string, pingMethodCode: string, resourceOwner: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
   let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/api/ping/{id}"))
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
 }
 
 # Retrieves the collection of TeamInvitation resources.
@@ -1455,20 +1498,20 @@ export def "team-invitation get-collection" [
   --accept: string@accept-completer # Response content type
   --page: int # The collection page number (default: 1, allows empty value)
   --data-segment-code: string # allows empty value
-  --data-segment-code: list<string> # allows empty value
+  --data-segment-code-list: list<string> # allows empty value (array variant)
   --partition: string # allows empty value
-  --partition: list<string> # allows empty value
+  --partition-list: list<string> # allows empty value (array variant)
   --invitee-email: string # allows empty value
-  --invitee-email: list<string> # allows empty value
+  --invitee-email-list: list<string> # allows empty value (array variant)
   --properties: list<string> # allows empty value
 ]: nothing -> table<createdAt: string, dataSegmentCode: string, id: string, inviteeEmail: string, inviteeFirstName: string, inviteeLastName: string, partition: string, resourceOwner: string, statusAt: string, teamInvitationStatus: string, teamMemberRoleCode: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "page" $page "scalar") (serialize-qp "dataSegmentCode" $data_segment_code "scalar") (serialize-qp "dataSegmentCode[]" $data_segment_code "multi") (serialize-qp "partition" $partition "scalar") (serialize-qp "partition[]" $partition "multi") (serialize-qp "inviteeEmail" $invitee_email "scalar") (serialize-qp "inviteeEmail[]" $invitee_email "multi") (serialize-qp "properties[]" $properties "multi")] | flatten | str join "&"
+  let qp = [(serialize-qp "page" $page "scalar") (serialize-qp "dataSegmentCode" $data_segment_code "scalar") (serialize-qp "dataSegmentCode[]" $data_segment_code_list "multi") (serialize-qp "partition" $partition "scalar") (serialize-qp "partition[]" $partition_list "multi") (serialize-qp "inviteeEmail" $invitee_email "scalar") (serialize-qp "inviteeEmail[]" $invitee_email_list "multi") (serialize-qp "properties[]" $properties "multi")] | flatten | str join "&"
   let full_url = (build-url $base "/api/team-invitation" $qp)
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"page": $page, "dataSegmentCode": $data_segment_code, "dataSegmentCode[]": $data_segment_code_list, "partition": $partition, "partition[]": $partition_list, "inviteeEmail": $invitee_email, "inviteeEmail[]": $invitee_email_list, "properties[]": $properties} | compact), body: null}
 }
 
 # Creates a TeamInvitation resource.
@@ -1501,7 +1544,7 @@ export def "team-invitation create" [
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: {}, body: $req_body}
 }
 
 # Removes the TeamInvitation resource.
@@ -1522,10 +1565,11 @@ export def "team-invitation delete" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
   let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/api/team-invitation/{id}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
 }
 
 # Retrieves a TeamInvitation resource.
@@ -1547,10 +1591,11 @@ export def "team-invitation get" [
 ]: nothing -> record<createdAt: string, dataSegmentCode: string, id: string, inviteeEmail: string, inviteeFirstName: string, inviteeLastName: string, partition: string, resourceOwner: string, statusAt: string, teamInvitationStatus: string, teamMemberRoleCode: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
   let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/api/team-invitation/{id}"))
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
 }
 
 # Retrieves the collection of TeamMember resources.
@@ -1570,20 +1615,20 @@ export def "team-member get-collection" [
   --accept: string@accept-completer # Response content type
   --page: int # The collection page number (default: 1, allows empty value)
   --data-segment-code: string # allows empty value
-  --data-segment-code: list<string> # allows empty value
+  --data-segment-code-list: list<string> # allows empty value (array variant)
   --partition: string # allows empty value
-  --partition: list<string> # allows empty value
+  --partition-list: list<string> # allows empty value (array variant)
   --user-account: string # allows empty value
-  --user-account: list<string> # allows empty value
+  --user-account-list: list<string> # allows empty value (array variant)
   --properties: list<string> # allows empty value
 ]: nothing -> table<createdAt: string, dataSegmentCode: string, id: string, partition: string, resourceOwner: string, teamMemberRoleCode: string, userAccount: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "page" $page "scalar") (serialize-qp "dataSegmentCode" $data_segment_code "scalar") (serialize-qp "dataSegmentCode[]" $data_segment_code "multi") (serialize-qp "partition" $partition "scalar") (serialize-qp "partition[]" $partition "multi") (serialize-qp "userAccount" $user_account "scalar") (serialize-qp "userAccount[]" $user_account "multi") (serialize-qp "properties[]" $properties "multi")] | flatten | str join "&"
+  let qp = [(serialize-qp "page" $page "scalar") (serialize-qp "dataSegmentCode" $data_segment_code "scalar") (serialize-qp "dataSegmentCode[]" $data_segment_code_list "multi") (serialize-qp "partition" $partition "scalar") (serialize-qp "partition[]" $partition_list "multi") (serialize-qp "userAccount" $user_account "scalar") (serialize-qp "userAccount[]" $user_account_list "multi") (serialize-qp "properties[]" $properties "multi")] | flatten | str join "&"
   let full_url = (build-url $base "/api/team-member" $qp)
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"page": $page, "dataSegmentCode": $data_segment_code, "dataSegmentCode[]": $data_segment_code_list, "partition": $partition, "partition[]": $partition_list, "userAccount": $user_account, "userAccount[]": $user_account_list, "properties[]": $properties} | compact), body: null}
 }
 
 # Retrieves the collection of TeamMemberRoleCode resources.
@@ -1610,7 +1655,7 @@ export def "team-member-role-code get-collection" [
   let full_url = (build-url $base "/api/team-member-role-code" $qp)
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"page": $page, "properties[]": $properties} | compact), body: null}
 }
 
 # Retrieves a TeamMemberRoleCode resource.
@@ -1632,10 +1677,11 @@ export def "team-member-role-code get" [
 ]: nothing -> record<codeDescription: string, id: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
   let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/api/team-member-role-code/{id}"))
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
 }
 
 # Removes the TeamMember resource.
@@ -1656,10 +1702,11 @@ export def "team-member delete" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
   let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/api/team-member/{id}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
 }
 
 # Retrieves a TeamMember resource.
@@ -1681,10 +1728,11 @@ export def "team-member get" [
 ]: nothing -> record<createdAt: string, dataSegmentCode: string, id: string, partition: string, resourceOwner: string, teamMemberRoleCode: string, userAccount: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
   let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/api/team-member/{id}"))
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
 }
 
 # Replaces the TeamMember resource.
@@ -1709,12 +1757,13 @@ export def "team-member update" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
   let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/api/team-member/{id}"))
   let req_body = {"dataSegmentCode": $data_segment_code, "teamMemberRoleCode": $team_member_role_code} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: {}, body: $req_body}
 }
 
 # Retrieves the collection of TimezoneCode resources.
@@ -1741,7 +1790,7 @@ export def "timezone-code get-collection" [
   let full_url = (build-url $base "/api/timezone-code" $qp)
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"page": $page, "properties[]": $properties} | compact), body: null}
 }
 
 # Retrieves a TimezoneCode resource.
@@ -1763,10 +1812,11 @@ export def "timezone-code get" [
 ]: nothing -> record<codeName: string, id: string, offsetFromUtc: float, timezoneDateString: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
   let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/api/timezone-code/{id}"))
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
 }
 
 # Retrieves the collection of TransportAlerta resources.
@@ -1786,18 +1836,18 @@ export def "transport-alerta get-collection" [
   --accept: string@accept-completer # Response content type
   --page: int # The collection page number (default: 1, allows empty value)
   --data-segment-code: string # allows empty value
-  --data-segment-code: list<string> # allows empty value
+  --data-segment-code-list: list<string> # allows empty value (array variant)
   --partition: string # allows empty value
-  --partition: list<string> # allows empty value
+  --partition-list: list<string> # allows empty value (array variant)
   --properties: list<string> # allows empty value
 ]: nothing -> table<alertaApiKey: string, alertaCorrelate: string, alertaEnvironment: string, alertaEvent: string, alertaGroup: string, alertaHost: string, alertaOrigin: string, alertaResource: string, alertaService: string, alertaSeverity: string, alertaStatus: string, alertaTags: string, alertaType: string, createdAt: string, dataSegmentCode: string, id: string, partition: string, resourceOwner: string, transportName: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "page" $page "scalar") (serialize-qp "dataSegmentCode" $data_segment_code "scalar") (serialize-qp "dataSegmentCode[]" $data_segment_code "multi") (serialize-qp "partition" $partition "scalar") (serialize-qp "partition[]" $partition "multi") (serialize-qp "properties[]" $properties "multi")] | flatten | str join "&"
+  let qp = [(serialize-qp "page" $page "scalar") (serialize-qp "dataSegmentCode" $data_segment_code "scalar") (serialize-qp "dataSegmentCode[]" $data_segment_code_list "multi") (serialize-qp "partition" $partition "scalar") (serialize-qp "partition[]" $partition_list "multi") (serialize-qp "properties[]" $properties "multi")] | flatten | str join "&"
   let full_url = (build-url $base "/api/transport-alerta" $qp)
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"page": $page, "dataSegmentCode": $data_segment_code, "dataSegmentCode[]": $data_segment_code_list, "partition": $partition, "partition[]": $partition_list, "properties[]": $properties} | compact), body: null}
 }
 
 # Creates a TransportAlerta resource.
@@ -1840,7 +1890,7 @@ export def "transport-alerta create" [
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: {}, body: $req_body}
 }
 
 # Removes the TransportAlerta resource.
@@ -1861,10 +1911,11 @@ export def "transport-alerta delete" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
   let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/api/transport-alerta/{id}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
 }
 
 # Retrieves a TransportAlerta resource.
@@ -1886,10 +1937,11 @@ export def "transport-alerta get" [
 ]: nothing -> record<alertaApiKey: string, alertaCorrelate: string, alertaEnvironment: string, alertaEvent: string, alertaGroup: string, alertaHost: string, alertaOrigin: string, alertaResource: string, alertaService: string, alertaSeverity: string, alertaStatus: string, alertaTags: string, alertaType: string, createdAt: string, dataSegmentCode: string, id: string, partition: string, resourceOwner: string, transportName: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
   let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/api/transport-alerta/{id}"))
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
 }
 
 # Replaces the TransportAlerta resource.
@@ -1927,12 +1979,13 @@ export def "transport-alerta update" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
   let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/api/transport-alerta/{id}"))
   let req_body = {"alertaApiKey": $alerta_api_key, "alertaCorrelate": $alerta_correlate, "alertaEnvironment": $alerta_environment, "alertaEvent": $alerta_event, "alertaGroup": $alerta_group, "alertaHost": $alerta_host, "alertaOrigin": $alerta_origin, "alertaResource": $alerta_resource, "alertaService": $alerta_service, "alertaSeverity": $alerta_severity, "alertaStatus": $alerta_status, "alertaTags": $alerta_tags, "alertaType": $alerta_type, "dataSegmentCode": $data_segment_code, "transportName": $transport_name} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: {}, body: $req_body}
 }
 
 # Retrieves the collection of TransportAllMySms resources.
@@ -1952,18 +2005,18 @@ export def "transport-all-my-sms get-collection" [
   --accept: string@accept-completer # Response content type
   --page: int # The collection page number (default: 1, allows empty value)
   --data-segment-code: string # allows empty value
-  --data-segment-code: list<string> # allows empty value
+  --data-segment-code-list: list<string> # allows empty value (array variant)
   --partition: string # allows empty value
-  --partition: list<string> # allows empty value
+  --partition-list: list<string> # allows empty value (array variant)
   --properties: list<string> # allows empty value
 ]: nothing -> table<allMySmsApiKey: string, allMySmsFrom: string, allMySmsLogin: string, createdAt: string, dataSegmentCode: string, id: string, partition: string, resourceOwner: string, transportName: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "page" $page "scalar") (serialize-qp "dataSegmentCode" $data_segment_code "scalar") (serialize-qp "dataSegmentCode[]" $data_segment_code "multi") (serialize-qp "partition" $partition "scalar") (serialize-qp "partition[]" $partition "multi") (serialize-qp "properties[]" $properties "multi")] | flatten | str join "&"
+  let qp = [(serialize-qp "page" $page "scalar") (serialize-qp "dataSegmentCode" $data_segment_code "scalar") (serialize-qp "dataSegmentCode[]" $data_segment_code_list "multi") (serialize-qp "partition" $partition "scalar") (serialize-qp "partition[]" $partition_list "multi") (serialize-qp "properties[]" $properties "multi")] | flatten | str join "&"
   let full_url = (build-url $base "/api/transport-all-my-sms" $qp)
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"page": $page, "dataSegmentCode": $data_segment_code, "dataSegmentCode[]": $data_segment_code_list, "partition": $partition, "partition[]": $partition_list, "properties[]": $properties} | compact), body: null}
 }
 
 # Creates a TransportAllMySms resource.
@@ -1996,7 +2049,7 @@ export def "transport-all-my-sms create" [
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: {}, body: $req_body}
 }
 
 # Removes the TransportAllMySms resource.
@@ -2017,10 +2070,11 @@ export def "transport-all-my-sms delete" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
   let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/api/transport-all-my-sms/{id}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
 }
 
 # Retrieves a TransportAllMySms resource.
@@ -2042,10 +2096,11 @@ export def "transport-all-my-sms get" [
 ]: nothing -> record<allMySmsApiKey: string, allMySmsFrom: string, allMySmsLogin: string, createdAt: string, dataSegmentCode: string, id: string, partition: string, resourceOwner: string, transportName: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
   let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/api/transport-all-my-sms/{id}"))
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
 }
 
 # Replaces the TransportAllMySms resource.
@@ -2073,12 +2128,13 @@ export def "transport-all-my-sms update" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
   let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/api/transport-all-my-sms/{id}"))
   let req_body = {"allMySmsApiKey": $all_my_sms_api_key, "allMySmsFrom": $all_my_sms_from, "allMySmsLogin": $all_my_sms_login, "dataSegmentCode": $data_segment_code, "transportName": $transport_name} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: {}, body: $req_body}
 }
 
 # Retrieves the collection of TransportAmazonSns resources.
@@ -2098,18 +2154,18 @@ export def "transport-amazon-sns get-collection" [
   --accept: string@accept-completer # Response content type
   --page: int # The collection page number (default: 1, allows empty value)
   --data-segment-code: string # allows empty value
-  --data-segment-code: list<string> # allows empty value
+  --data-segment-code-list: list<string> # allows empty value (array variant)
   --partition: string # allows empty value
-  --partition: list<string> # allows empty value
+  --partition-list: list<string> # allows empty value (array variant)
   --properties: list<string> # allows empty value
 ]: nothing -> table<amazonSnsAccessKey: string, amazonSnsRegion: string, amazonSnsSecretKey: string, createdAt: string, dataSegmentCode: string, id: string, partition: string, resourceOwner: string, transportName: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "page" $page "scalar") (serialize-qp "dataSegmentCode" $data_segment_code "scalar") (serialize-qp "dataSegmentCode[]" $data_segment_code "multi") (serialize-qp "partition" $partition "scalar") (serialize-qp "partition[]" $partition "multi") (serialize-qp "properties[]" $properties "multi")] | flatten | str join "&"
+  let qp = [(serialize-qp "page" $page "scalar") (serialize-qp "dataSegmentCode" $data_segment_code "scalar") (serialize-qp "dataSegmentCode[]" $data_segment_code_list "multi") (serialize-qp "partition" $partition "scalar") (serialize-qp "partition[]" $partition_list "multi") (serialize-qp "properties[]" $properties "multi")] | flatten | str join "&"
   let full_url = (build-url $base "/api/transport-amazon-sns" $qp)
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"page": $page, "dataSegmentCode": $data_segment_code, "dataSegmentCode[]": $data_segment_code_list, "partition": $partition, "partition[]": $partition_list, "properties[]": $properties} | compact), body: null}
 }
 
 # Creates a TransportAmazonSns resource.
@@ -2142,7 +2198,7 @@ export def "transport-amazon-sns create" [
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: {}, body: $req_body}
 }
 
 # Removes the TransportAmazonSns resource.
@@ -2163,10 +2219,11 @@ export def "transport-amazon-sns delete" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
   let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/api/transport-amazon-sns/{id}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
 }
 
 # Retrieves a TransportAmazonSns resource.
@@ -2188,10 +2245,11 @@ export def "transport-amazon-sns get" [
 ]: nothing -> record<amazonSnsAccessKey: string, amazonSnsRegion: string, amazonSnsSecretKey: string, createdAt: string, dataSegmentCode: string, id: string, partition: string, resourceOwner: string, transportName: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
   let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/api/transport-amazon-sns/{id}"))
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
 }
 
 # Replaces the TransportAmazonSns resource.
@@ -2219,12 +2277,13 @@ export def "transport-amazon-sns update" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
   let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/api/transport-amazon-sns/{id}"))
   let req_body = {"amazonSnsAccessKey": $amazon_sns_access_key, "amazonSnsRegion": $amazon_sns_region, "amazonSnsSecretKey": $amazon_sns_secret_key, "dataSegmentCode": $data_segment_code, "transportName": $transport_name} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: {}, body: $req_body}
 }
 
 # Retrieves the collection of TransportBandwidth resources.
@@ -2244,18 +2303,18 @@ export def "transport-bandwidth get-collection" [
   --accept: string@accept-completer # Response content type
   --page: int # The collection page number (default: 1, allows empty value)
   --data-segment-code: string # allows empty value
-  --data-segment-code: list<string> # allows empty value
+  --data-segment-code-list: list<string> # allows empty value (array variant)
   --partition: string # allows empty value
-  --partition: list<string> # allows empty value
+  --partition-list: list<string> # allows empty value (array variant)
   --properties: list<string> # allows empty value
 ]: nothing -> table<bandwidthAccountId: string, bandwidthApplicationId: string, bandwidthFrom: string, bandwidthPassword: string, bandwidthUsername: string, createdAt: string, dataSegmentCode: string, id: string, partition: string, resourceOwner: string, transportName: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "page" $page "scalar") (serialize-qp "dataSegmentCode" $data_segment_code "scalar") (serialize-qp "dataSegmentCode[]" $data_segment_code "multi") (serialize-qp "partition" $partition "scalar") (serialize-qp "partition[]" $partition "multi") (serialize-qp "properties[]" $properties "multi")] | flatten | str join "&"
+  let qp = [(serialize-qp "page" $page "scalar") (serialize-qp "dataSegmentCode" $data_segment_code "scalar") (serialize-qp "dataSegmentCode[]" $data_segment_code_list "multi") (serialize-qp "partition" $partition "scalar") (serialize-qp "partition[]" $partition_list "multi") (serialize-qp "properties[]" $properties "multi")] | flatten | str join "&"
   let full_url = (build-url $base "/api/transport-bandwidth" $qp)
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"page": $page, "dataSegmentCode": $data_segment_code, "dataSegmentCode[]": $data_segment_code_list, "partition": $partition, "partition[]": $partition_list, "properties[]": $properties} | compact), body: null}
 }
 
 # Creates a TransportBandwidth resource.
@@ -2290,7 +2349,7 @@ export def "transport-bandwidth create" [
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: {}, body: $req_body}
 }
 
 # Removes the TransportBandwidth resource.
@@ -2311,10 +2370,11 @@ export def "transport-bandwidth delete" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
   let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/api/transport-bandwidth/{id}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
 }
 
 # Retrieves a TransportBandwidth resource.
@@ -2336,10 +2396,11 @@ export def "transport-bandwidth get" [
 ]: nothing -> record<bandwidthAccountId: string, bandwidthApplicationId: string, bandwidthFrom: string, bandwidthPassword: string, bandwidthUsername: string, createdAt: string, dataSegmentCode: string, id: string, partition: string, resourceOwner: string, transportName: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
   let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/api/transport-bandwidth/{id}"))
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
 }
 
 # Replaces the TransportBandwidth resource.
@@ -2369,12 +2430,13 @@ export def "transport-bandwidth update" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
   let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/api/transport-bandwidth/{id}"))
   let req_body = {"bandwidthAccountId": $bandwidth_account_id, "bandwidthApplicationId": $bandwidth_application_id, "bandwidthFrom": $bandwidth_from, "bandwidthPassword": $bandwidth_password, "bandwidthUsername": $bandwidth_username, "dataSegmentCode": $data_segment_code, "transportName": $transport_name} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: {}, body: $req_body}
 }
 
 # Retrieves the collection of TransportChatwork resources.
@@ -2394,18 +2456,18 @@ export def "transport-chatwork get-collection" [
   --accept: string@accept-completer # Response content type
   --page: int # The collection page number (default: 1, allows empty value)
   --data-segment-code: string # allows empty value
-  --data-segment-code: list<string> # allows empty value
+  --data-segment-code-list: list<string> # allows empty value (array variant)
   --partition: string # allows empty value
-  --partition: list<string> # allows empty value
+  --partition-list: list<string> # allows empty value (array variant)
   --properties: list<string> # allows empty value
 ]: nothing -> table<chatworkApiToken: string, chatworkRoomId: string, createdAt: string, dataSegmentCode: string, id: string, partition: string, resourceOwner: string, transportName: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "page" $page "scalar") (serialize-qp "dataSegmentCode" $data_segment_code "scalar") (serialize-qp "dataSegmentCode[]" $data_segment_code "multi") (serialize-qp "partition" $partition "scalar") (serialize-qp "partition[]" $partition "multi") (serialize-qp "properties[]" $properties "multi")] | flatten | str join "&"
+  let qp = [(serialize-qp "page" $page "scalar") (serialize-qp "dataSegmentCode" $data_segment_code "scalar") (serialize-qp "dataSegmentCode[]" $data_segment_code_list "multi") (serialize-qp "partition" $partition "scalar") (serialize-qp "partition[]" $partition_list "multi") (serialize-qp "properties[]" $properties "multi")] | flatten | str join "&"
   let full_url = (build-url $base "/api/transport-chatwork" $qp)
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"page": $page, "dataSegmentCode": $data_segment_code, "dataSegmentCode[]": $data_segment_code_list, "partition": $partition, "partition[]": $partition_list, "properties[]": $properties} | compact), body: null}
 }
 
 # Creates a TransportChatwork resource.
@@ -2437,7 +2499,7 @@ export def "transport-chatwork create" [
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: {}, body: $req_body}
 }
 
 # Removes the TransportChatwork resource.
@@ -2458,10 +2520,11 @@ export def "transport-chatwork delete" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
   let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/api/transport-chatwork/{id}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
 }
 
 # Retrieves a TransportChatwork resource.
@@ -2483,10 +2546,11 @@ export def "transport-chatwork get" [
 ]: nothing -> record<chatworkApiToken: string, chatworkRoomId: string, createdAt: string, dataSegmentCode: string, id: string, partition: string, resourceOwner: string, transportName: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
   let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/api/transport-chatwork/{id}"))
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
 }
 
 # Replaces the TransportChatwork resource.
@@ -2513,12 +2577,13 @@ export def "transport-chatwork update" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
   let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/api/transport-chatwork/{id}"))
   let req_body = {"chatworkApiToken": $chatwork_api_token, "chatworkRoomId": $chatwork_room_id, "dataSegmentCode": $data_segment_code, "transportName": $transport_name} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: {}, body: $req_body}
 }
 
 # Retrieves the collection of TransportClickSend resources.
@@ -2538,18 +2603,18 @@ export def "transport-click-send get-collection" [
   --accept: string@accept-completer # Response content type
   --page: int # The collection page number (default: 1, allows empty value)
   --data-segment-code: string # allows empty value
-  --data-segment-code: list<string> # allows empty value
+  --data-segment-code-list: list<string> # allows empty value (array variant)
   --partition: string # allows empty value
-  --partition: list<string> # allows empty value
+  --partition-list: list<string> # allows empty value (array variant)
   --properties: list<string> # allows empty value
 ]: nothing -> table<clickSendApiKey: string, clickSendApiUsername: string, clickSendFrom: string, clickSendFromEmail: string, clickSendListId: string, clickSendSource: string, createdAt: string, dataSegmentCode: string, id: string, partition: string, resourceOwner: string, transportName: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "page" $page "scalar") (serialize-qp "dataSegmentCode" $data_segment_code "scalar") (serialize-qp "dataSegmentCode[]" $data_segment_code "multi") (serialize-qp "partition" $partition "scalar") (serialize-qp "partition[]" $partition "multi") (serialize-qp "properties[]" $properties "multi")] | flatten | str join "&"
+  let qp = [(serialize-qp "page" $page "scalar") (serialize-qp "dataSegmentCode" $data_segment_code "scalar") (serialize-qp "dataSegmentCode[]" $data_segment_code_list "multi") (serialize-qp "partition" $partition "scalar") (serialize-qp "partition[]" $partition_list "multi") (serialize-qp "properties[]" $properties "multi")] | flatten | str join "&"
   let full_url = (build-url $base "/api/transport-click-send" $qp)
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"page": $page, "dataSegmentCode": $data_segment_code, "dataSegmentCode[]": $data_segment_code_list, "partition": $partition, "partition[]": $partition_list, "properties[]": $properties} | compact), body: null}
 }
 
 # Creates a TransportClickSend resource.
@@ -2585,7 +2650,7 @@ export def "transport-click-send create" [
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: {}, body: $req_body}
 }
 
 # Removes the TransportClickSend resource.
@@ -2606,10 +2671,11 @@ export def "transport-click-send delete" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
   let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/api/transport-click-send/{id}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
 }
 
 # Retrieves a TransportClickSend resource.
@@ -2631,10 +2697,11 @@ export def "transport-click-send get" [
 ]: nothing -> record<clickSendApiKey: string, clickSendApiUsername: string, clickSendFrom: string, clickSendFromEmail: string, clickSendListId: string, clickSendSource: string, createdAt: string, dataSegmentCode: string, id: string, partition: string, resourceOwner: string, transportName: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
   let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/api/transport-click-send/{id}"))
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
 }
 
 # Replaces the TransportClickSend resource.
@@ -2665,12 +2732,13 @@ export def "transport-click-send update" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
   let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/api/transport-click-send/{id}"))
   let req_body = {"clickSendApiKey": $click_send_api_key, "clickSendApiUsername": $click_send_api_username, "clickSendFrom": $click_send_from, "clickSendFromEmail": $click_send_from_email, "clickSendListId": $click_send_list_id, "clickSendSource": $click_send_source, "dataSegmentCode": $data_segment_code, "transportName": $transport_name} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: {}, body: $req_body}
 }
 
 # Retrieves the collection of TransportClickatell resources.
@@ -2690,18 +2758,18 @@ export def "transport-clickatell get-collection" [
   --accept: string@accept-completer # Response content type
   --page: int # The collection page number (default: 1, allows empty value)
   --data-segment-code: string # allows empty value
-  --data-segment-code: list<string> # allows empty value
+  --data-segment-code-list: list<string> # allows empty value (array variant)
   --partition: string # allows empty value
-  --partition: list<string> # allows empty value
+  --partition-list: list<string> # allows empty value (array variant)
   --properties: list<string> # allows empty value
 ]: nothing -> table<clickatellAccessToken: string, clickatellFrom: string, createdAt: string, dataSegmentCode: string, id: string, partition: string, resourceOwner: string, transportName: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "page" $page "scalar") (serialize-qp "dataSegmentCode" $data_segment_code "scalar") (serialize-qp "dataSegmentCode[]" $data_segment_code "multi") (serialize-qp "partition" $partition "scalar") (serialize-qp "partition[]" $partition "multi") (serialize-qp "properties[]" $properties "multi")] | flatten | str join "&"
+  let qp = [(serialize-qp "page" $page "scalar") (serialize-qp "dataSegmentCode" $data_segment_code "scalar") (serialize-qp "dataSegmentCode[]" $data_segment_code_list "multi") (serialize-qp "partition" $partition "scalar") (serialize-qp "partition[]" $partition_list "multi") (serialize-qp "properties[]" $properties "multi")] | flatten | str join "&"
   let full_url = (build-url $base "/api/transport-clickatell" $qp)
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"page": $page, "dataSegmentCode": $data_segment_code, "dataSegmentCode[]": $data_segment_code_list, "partition": $partition, "partition[]": $partition_list, "properties[]": $properties} | compact), body: null}
 }
 
 # Creates a TransportClickatell resource.
@@ -2733,7 +2801,7 @@ export def "transport-clickatell create" [
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: {}, body: $req_body}
 }
 
 # Removes the TransportClickatell resource.
@@ -2754,10 +2822,11 @@ export def "transport-clickatell delete" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
   let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/api/transport-clickatell/{id}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
 }
 
 # Retrieves a TransportClickatell resource.
@@ -2779,10 +2848,11 @@ export def "transport-clickatell get" [
 ]: nothing -> record<clickatellAccessToken: string, clickatellFrom: string, createdAt: string, dataSegmentCode: string, id: string, partition: string, resourceOwner: string, transportName: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
   let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/api/transport-clickatell/{id}"))
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
 }
 
 # Replaces the TransportClickatell resource.
@@ -2809,12 +2879,13 @@ export def "transport-clickatell update" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
   let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/api/transport-clickatell/{id}"))
   let req_body = {"clickatellAccessToken": $clickatell_access_token, "clickatellFrom": $clickatell_from, "dataSegmentCode": $data_segment_code, "transportName": $transport_name} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: {}, body: $req_body}
 }
 
 # Retrieves the collection of TransportContactEveryone resources.
@@ -2834,18 +2905,18 @@ export def "transport-contact-everyone get-collection" [
   --accept: string@accept-completer # Response content type
   --page: int # The collection page number (default: 1, allows empty value)
   --data-segment-code: string # allows empty value
-  --data-segment-code: list<string> # allows empty value
+  --data-segment-code-list: list<string> # allows empty value (array variant)
   --partition: string # allows empty value
-  --partition: list<string> # allows empty value
+  --partition-list: list<string> # allows empty value (array variant)
   --properties: list<string> # allows empty value
 ]: nothing -> table<contactEveryoneCategory: string, contactEveryoneDiffusionName: string, contactEveryoneToken: string, createdAt: string, dataSegmentCode: string, id: string, partition: string, resourceOwner: string, transportName: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "page" $page "scalar") (serialize-qp "dataSegmentCode" $data_segment_code "scalar") (serialize-qp "dataSegmentCode[]" $data_segment_code "multi") (serialize-qp "partition" $partition "scalar") (serialize-qp "partition[]" $partition "multi") (serialize-qp "properties[]" $properties "multi")] | flatten | str join "&"
+  let qp = [(serialize-qp "page" $page "scalar") (serialize-qp "dataSegmentCode" $data_segment_code "scalar") (serialize-qp "dataSegmentCode[]" $data_segment_code_list "multi") (serialize-qp "partition" $partition "scalar") (serialize-qp "partition[]" $partition_list "multi") (serialize-qp "properties[]" $properties "multi")] | flatten | str join "&"
   let full_url = (build-url $base "/api/transport-contact-everyone" $qp)
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"page": $page, "dataSegmentCode": $data_segment_code, "dataSegmentCode[]": $data_segment_code_list, "partition": $partition, "partition[]": $partition_list, "properties[]": $properties} | compact), body: null}
 }
 
 # Creates a TransportContactEveryone resource.
@@ -2878,7 +2949,7 @@ export def "transport-contact-everyone create" [
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: {}, body: $req_body}
 }
 
 # Removes the TransportContactEveryone resource.
@@ -2899,10 +2970,11 @@ export def "transport-contact-everyone delete" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
   let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/api/transport-contact-everyone/{id}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
 }
 
 # Retrieves a TransportContactEveryone resource.
@@ -2924,10 +2996,11 @@ export def "transport-contact-everyone get" [
 ]: nothing -> record<contactEveryoneCategory: string, contactEveryoneDiffusionName: string, contactEveryoneToken: string, createdAt: string, dataSegmentCode: string, id: string, partition: string, resourceOwner: string, transportName: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
   let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/api/transport-contact-everyone/{id}"))
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
 }
 
 # Replaces the TransportContactEveryone resource.
@@ -2955,12 +3028,13 @@ export def "transport-contact-everyone update" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
   let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/api/transport-contact-everyone/{id}"))
   let req_body = {"contactEveryoneCategory": $contact_everyone_category, "contactEveryoneDiffusionName": $contact_everyone_diffusion_name, "contactEveryoneToken": $contact_everyone_token, "dataSegmentCode": $data_segment_code, "transportName": $transport_name} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: {}, body: $req_body}
 }
 
 # Retrieves the collection of TransportDiscord resources.
@@ -2980,18 +3054,18 @@ export def "transport-discord get-collection" [
   --accept: string@accept-completer # Response content type
   --page: int # The collection page number (default: 1, allows empty value)
   --data-segment-code: string # allows empty value
-  --data-segment-code: list<string> # allows empty value
+  --data-segment-code-list: list<string> # allows empty value (array variant)
   --partition: string # allows empty value
-  --partition: list<string> # allows empty value
+  --partition-list: list<string> # allows empty value (array variant)
   --properties: list<string> # allows empty value
 ]: nothing -> table<createdAt: string, dataSegmentCode: string, discordToken: string, discordWebhookId: string, id: string, partition: string, resourceOwner: string, transportName: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "page" $page "scalar") (serialize-qp "dataSegmentCode" $data_segment_code "scalar") (serialize-qp "dataSegmentCode[]" $data_segment_code "multi") (serialize-qp "partition" $partition "scalar") (serialize-qp "partition[]" $partition "multi") (serialize-qp "properties[]" $properties "multi")] | flatten | str join "&"
+  let qp = [(serialize-qp "page" $page "scalar") (serialize-qp "dataSegmentCode" $data_segment_code "scalar") (serialize-qp "dataSegmentCode[]" $data_segment_code_list "multi") (serialize-qp "partition" $partition "scalar") (serialize-qp "partition[]" $partition_list "multi") (serialize-qp "properties[]" $properties "multi")] | flatten | str join "&"
   let full_url = (build-url $base "/api/transport-discord" $qp)
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"page": $page, "dataSegmentCode": $data_segment_code, "dataSegmentCode[]": $data_segment_code_list, "partition": $partition, "partition[]": $partition_list, "properties[]": $properties} | compact), body: null}
 }
 
 # Creates a TransportDiscord resource.
@@ -3023,7 +3097,7 @@ export def "transport-discord create" [
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: {}, body: $req_body}
 }
 
 # Removes the TransportDiscord resource.
@@ -3044,10 +3118,11 @@ export def "transport-discord delete" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
   let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/api/transport-discord/{id}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
 }
 
 # Retrieves a TransportDiscord resource.
@@ -3069,10 +3144,11 @@ export def "transport-discord get" [
 ]: nothing -> record<createdAt: string, dataSegmentCode: string, discordToken: string, discordWebhookId: string, id: string, partition: string, resourceOwner: string, transportName: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
   let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/api/transport-discord/{id}"))
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
 }
 
 # Replaces the TransportDiscord resource.
@@ -3099,12 +3175,13 @@ export def "transport-discord update" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
   let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/api/transport-discord/{id}"))
   let req_body = {"dataSegmentCode": $data_segment_code, "discordToken": $discord_token, "discordWebhookId": $discord_webhook_id, "transportName": $transport_name} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: {}, body: $req_body}
 }
 
 # Retrieves the collection of TransportEmail resources.
@@ -3124,18 +3201,18 @@ export def "transport-email get-collection" [
   --accept: string@accept-completer # Response content type
   --page: int # The collection page number (default: 1, allows empty value)
   --data-segment-code: string # allows empty value
-  --data-segment-code: list<string> # allows empty value
+  --data-segment-code-list: list<string> # allows empty value (array variant)
   --partition: string # allows empty value
-  --partition: list<string> # allows empty value
+  --partition-list: list<string> # allows empty value (array variant)
   --properties: list<string> # allows empty value
 ]: nothing -> table<createdAt: string, dataSegmentCode: string, emailFromAddress: string, emailFromName: string, emailPassword: string, emailPort: int, emailServer: string, emailUsername: string, id: string, partition: string, resourceOwner: string, transportName: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "page" $page "scalar") (serialize-qp "dataSegmentCode" $data_segment_code "scalar") (serialize-qp "dataSegmentCode[]" $data_segment_code "multi") (serialize-qp "partition" $partition "scalar") (serialize-qp "partition[]" $partition "multi") (serialize-qp "properties[]" $properties "multi")] | flatten | str join "&"
+  let qp = [(serialize-qp "page" $page "scalar") (serialize-qp "dataSegmentCode" $data_segment_code "scalar") (serialize-qp "dataSegmentCode[]" $data_segment_code_list "multi") (serialize-qp "partition" $partition "scalar") (serialize-qp "partition[]" $partition_list "multi") (serialize-qp "properties[]" $properties "multi")] | flatten | str join "&"
   let full_url = (build-url $base "/api/transport-email" $qp)
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"page": $page, "dataSegmentCode": $data_segment_code, "dataSegmentCode[]": $data_segment_code_list, "partition": $partition, "partition[]": $partition_list, "properties[]": $properties} | compact), body: null}
 }
 
 # Creates a TransportEmail resource.
@@ -3171,7 +3248,7 @@ export def "transport-email create" [
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: {}, body: $req_body}
 }
 
 # Removes the TransportEmail resource.
@@ -3192,10 +3269,11 @@ export def "transport-email delete" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
   let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/api/transport-email/{id}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
 }
 
 # Retrieves a TransportEmail resource.
@@ -3217,10 +3295,11 @@ export def "transport-email get" [
 ]: nothing -> record<createdAt: string, dataSegmentCode: string, emailFromAddress: string, emailFromName: string, emailPassword: string, emailPort: int, emailServer: string, emailUsername: string, id: string, partition: string, resourceOwner: string, transportName: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
   let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/api/transport-email/{id}"))
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
 }
 
 # Replaces the TransportEmail resource.
@@ -3251,12 +3330,13 @@ export def "transport-email update" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
   let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/api/transport-email/{id}"))
   let req_body = {"dataSegmentCode": $data_segment_code, "emailFromAddress": $email_from_address, "emailFromName": $email_from_name, "emailPassword": $email_password, "emailPort": $email_port, "emailServer": $email_server, "emailUsername": $email_username, "transportName": $transport_name} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: {}, body: $req_body}
 }
 
 # Retrieves the collection of TransportEngagespot resources.
@@ -3276,18 +3356,18 @@ export def "transport-engagespot get-collection" [
   --accept: string@accept-completer # Response content type
   --page: int # The collection page number (default: 1, allows empty value)
   --data-segment-code: string # allows empty value
-  --data-segment-code: list<string> # allows empty value
+  --data-segment-code-list: list<string> # allows empty value (array variant)
   --partition: string # allows empty value
-  --partition: list<string> # allows empty value
+  --partition-list: list<string> # allows empty value (array variant)
   --properties: list<string> # allows empty value
 ]: nothing -> table<createdAt: string, dataSegmentCode: string, engagespotApiKey: string, engagespotCampaignName: string, id: string, partition: string, resourceOwner: string, transportName: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "page" $page "scalar") (serialize-qp "dataSegmentCode" $data_segment_code "scalar") (serialize-qp "dataSegmentCode[]" $data_segment_code "multi") (serialize-qp "partition" $partition "scalar") (serialize-qp "partition[]" $partition "multi") (serialize-qp "properties[]" $properties "multi")] | flatten | str join "&"
+  let qp = [(serialize-qp "page" $page "scalar") (serialize-qp "dataSegmentCode" $data_segment_code "scalar") (serialize-qp "dataSegmentCode[]" $data_segment_code_list "multi") (serialize-qp "partition" $partition "scalar") (serialize-qp "partition[]" $partition_list "multi") (serialize-qp "properties[]" $properties "multi")] | flatten | str join "&"
   let full_url = (build-url $base "/api/transport-engagespot" $qp)
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"page": $page, "dataSegmentCode": $data_segment_code, "dataSegmentCode[]": $data_segment_code_list, "partition": $partition, "partition[]": $partition_list, "properties[]": $properties} | compact), body: null}
 }
 
 # Creates a TransportEngagespot resource.
@@ -3319,7 +3399,7 @@ export def "transport-engagespot create" [
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: {}, body: $req_body}
 }
 
 # Removes the TransportEngagespot resource.
@@ -3340,10 +3420,11 @@ export def "transport-engagespot delete" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
   let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/api/transport-engagespot/{id}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
 }
 
 # Retrieves a TransportEngagespot resource.
@@ -3365,10 +3446,11 @@ export def "transport-engagespot get" [
 ]: nothing -> record<createdAt: string, dataSegmentCode: string, engagespotApiKey: string, engagespotCampaignName: string, id: string, partition: string, resourceOwner: string, transportName: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
   let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/api/transport-engagespot/{id}"))
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
 }
 
 # Replaces the TransportEngagespot resource.
@@ -3395,12 +3477,13 @@ export def "transport-engagespot update" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
   let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/api/transport-engagespot/{id}"))
   let req_body = {"dataSegmentCode": $data_segment_code, "engagespotApiKey": $engagespot_api_key, "engagespotCampaignName": $engagespot_campaign_name, "transportName": $transport_name} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: {}, body: $req_body}
 }
 
 # Retrieves the collection of TransportEsendex resources.
@@ -3420,18 +3503,18 @@ export def "transport-esendex get-collection" [
   --accept: string@accept-completer # Response content type
   --page: int # The collection page number (default: 1, allows empty value)
   --data-segment-code: string # allows empty value
-  --data-segment-code: list<string> # allows empty value
+  --data-segment-code-list: list<string> # allows empty value (array variant)
   --partition: string # allows empty value
-  --partition: list<string> # allows empty value
+  --partition-list: list<string> # allows empty value (array variant)
   --properties: list<string> # allows empty value
 ]: nothing -> table<createdAt: string, dataSegmentCode: string, esendexAccountReference: string, esendexFrom: string, esendexPassword: string, esendexUsername: string, id: string, partition: string, resourceOwner: string, transportName: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "page" $page "scalar") (serialize-qp "dataSegmentCode" $data_segment_code "scalar") (serialize-qp "dataSegmentCode[]" $data_segment_code "multi") (serialize-qp "partition" $partition "scalar") (serialize-qp "partition[]" $partition "multi") (serialize-qp "properties[]" $properties "multi")] | flatten | str join "&"
+  let qp = [(serialize-qp "page" $page "scalar") (serialize-qp "dataSegmentCode" $data_segment_code "scalar") (serialize-qp "dataSegmentCode[]" $data_segment_code_list "multi") (serialize-qp "partition" $partition "scalar") (serialize-qp "partition[]" $partition_list "multi") (serialize-qp "properties[]" $properties "multi")] | flatten | str join "&"
   let full_url = (build-url $base "/api/transport-esendex" $qp)
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"page": $page, "dataSegmentCode": $data_segment_code, "dataSegmentCode[]": $data_segment_code_list, "partition": $partition, "partition[]": $partition_list, "properties[]": $properties} | compact), body: null}
 }
 
 # Creates a TransportEsendex resource.
@@ -3465,7 +3548,7 @@ export def "transport-esendex create" [
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: {}, body: $req_body}
 }
 
 # Removes the TransportEsendex resource.
@@ -3486,10 +3569,11 @@ export def "transport-esendex delete" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
   let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/api/transport-esendex/{id}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
 }
 
 # Retrieves a TransportEsendex resource.
@@ -3511,10 +3595,11 @@ export def "transport-esendex get" [
 ]: nothing -> record<createdAt: string, dataSegmentCode: string, esendexAccountReference: string, esendexFrom: string, esendexPassword: string, esendexUsername: string, id: string, partition: string, resourceOwner: string, transportName: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
   let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/api/transport-esendex/{id}"))
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
 }
 
 # Replaces the TransportEsendex resource.
@@ -3543,12 +3628,13 @@ export def "transport-esendex update" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
   let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/api/transport-esendex/{id}"))
   let req_body = {"dataSegmentCode": $data_segment_code, "esendexAccountReference": $esendex_account_reference, "esendexFrom": $esendex_from, "esendexPassword": $esendex_password, "esendexUsername": $esendex_username, "transportName": $transport_name} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: {}, body: $req_body}
 }
 
 # Retrieves the collection of TransportExpo resources.
@@ -3568,18 +3654,18 @@ export def "transport-expo get-collection" [
   --accept: string@accept-completer # Response content type
   --page: int # The collection page number (default: 1, allows empty value)
   --data-segment-code: string # allows empty value
-  --data-segment-code: list<string> # allows empty value
+  --data-segment-code-list: list<string> # allows empty value (array variant)
   --partition: string # allows empty value
-  --partition: list<string> # allows empty value
+  --partition-list: list<string> # allows empty value (array variant)
   --properties: list<string> # allows empty value
 ]: nothing -> table<createdAt: string, dataSegmentCode: string, expoToken: string, id: string, partition: string, resourceOwner: string, transportName: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "page" $page "scalar") (serialize-qp "dataSegmentCode" $data_segment_code "scalar") (serialize-qp "dataSegmentCode[]" $data_segment_code "multi") (serialize-qp "partition" $partition "scalar") (serialize-qp "partition[]" $partition "multi") (serialize-qp "properties[]" $properties "multi")] | flatten | str join "&"
+  let qp = [(serialize-qp "page" $page "scalar") (serialize-qp "dataSegmentCode" $data_segment_code "scalar") (serialize-qp "dataSegmentCode[]" $data_segment_code_list "multi") (serialize-qp "partition" $partition "scalar") (serialize-qp "partition[]" $partition_list "multi") (serialize-qp "properties[]" $properties "multi")] | flatten | str join "&"
   let full_url = (build-url $base "/api/transport-expo" $qp)
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"page": $page, "dataSegmentCode": $data_segment_code, "dataSegmentCode[]": $data_segment_code_list, "partition": $partition, "partition[]": $partition_list, "properties[]": $properties} | compact), body: null}
 }
 
 # Creates a TransportExpo resource.
@@ -3610,7 +3696,7 @@ export def "transport-expo create" [
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: {}, body: $req_body}
 }
 
 # Removes the TransportExpo resource.
@@ -3631,10 +3717,11 @@ export def "transport-expo delete" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
   let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/api/transport-expo/{id}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
 }
 
 # Retrieves a TransportExpo resource.
@@ -3656,10 +3743,11 @@ export def "transport-expo get" [
 ]: nothing -> record<createdAt: string, dataSegmentCode: string, expoToken: string, id: string, partition: string, resourceOwner: string, transportName: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
   let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/api/transport-expo/{id}"))
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
 }
 
 # Replaces the TransportExpo resource.
@@ -3685,12 +3773,13 @@ export def "transport-expo update" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
   let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/api/transport-expo/{id}"))
   let req_body = {"dataSegmentCode": $data_segment_code, "expoToken": $expo_token, "transportName": $transport_name} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: {}, body: $req_body}
 }
 
 # Retrieves the collection of TransportFirebase resources.
@@ -3710,18 +3799,18 @@ export def "transport-firebase get-collection" [
   --accept: string@accept-completer # Response content type
   --page: int # The collection page number (default: 1, allows empty value)
   --data-segment-code: string # allows empty value
-  --data-segment-code: list<string> # allows empty value
+  --data-segment-code-list: list<string> # allows empty value (array variant)
   --partition: string # allows empty value
-  --partition: list<string> # allows empty value
+  --partition-list: list<string> # allows empty value (array variant)
   --properties: list<string> # allows empty value
 ]: nothing -> table<createdAt: string, dataSegmentCode: string, firebasePassword: string, firebaseUsername: string, id: string, partition: string, resourceOwner: string, transportName: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "page" $page "scalar") (serialize-qp "dataSegmentCode" $data_segment_code "scalar") (serialize-qp "dataSegmentCode[]" $data_segment_code "multi") (serialize-qp "partition" $partition "scalar") (serialize-qp "partition[]" $partition "multi") (serialize-qp "properties[]" $properties "multi")] | flatten | str join "&"
+  let qp = [(serialize-qp "page" $page "scalar") (serialize-qp "dataSegmentCode" $data_segment_code "scalar") (serialize-qp "dataSegmentCode[]" $data_segment_code_list "multi") (serialize-qp "partition" $partition "scalar") (serialize-qp "partition[]" $partition_list "multi") (serialize-qp "properties[]" $properties "multi")] | flatten | str join "&"
   let full_url = (build-url $base "/api/transport-firebase" $qp)
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"page": $page, "dataSegmentCode": $data_segment_code, "dataSegmentCode[]": $data_segment_code_list, "partition": $partition, "partition[]": $partition_list, "properties[]": $properties} | compact), body: null}
 }
 
 # Creates a TransportFirebase resource.
@@ -3753,7 +3842,7 @@ export def "transport-firebase create" [
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: {}, body: $req_body}
 }
 
 # Removes the TransportFirebase resource.
@@ -3774,10 +3863,11 @@ export def "transport-firebase delete" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
   let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/api/transport-firebase/{id}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
 }
 
 # Retrieves a TransportFirebase resource.
@@ -3799,10 +3889,11 @@ export def "transport-firebase get" [
 ]: nothing -> record<createdAt: string, dataSegmentCode: string, firebasePassword: string, firebaseUsername: string, id: string, partition: string, resourceOwner: string, transportName: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
   let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/api/transport-firebase/{id}"))
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
 }
 
 # Replaces the TransportFirebase resource.
@@ -3829,12 +3920,13 @@ export def "transport-firebase update" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
   let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/api/transport-firebase/{id}"))
   let req_body = {"dataSegmentCode": $data_segment_code, "firebasePassword": $firebase_password, "firebaseUsername": $firebase_username, "transportName": $transport_name} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: {}, body: $req_body}
 }
 
 # Retrieves the collection of TransportFortySixElks resources.
@@ -3854,18 +3946,18 @@ export def "transport-forty-six-elks get-collection" [
   --accept: string@accept-completer # Response content type
   --page: int # The collection page number (default: 1, allows empty value)
   --data-segment-code: string # allows empty value
-  --data-segment-code: list<string> # allows empty value
+  --data-segment-code-list: list<string> # allows empty value (array variant)
   --partition: string # allows empty value
-  --partition: list<string> # allows empty value
+  --partition-list: list<string> # allows empty value (array variant)
   --properties: list<string> # allows empty value
 ]: nothing -> table<createdAt: string, dataSegmentCode: string, fortySixElksApiPassword: string, fortySixElksApiUsername: string, fortySixElksFrom: string, id: string, partition: string, resourceOwner: string, transportName: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "page" $page "scalar") (serialize-qp "dataSegmentCode" $data_segment_code "scalar") (serialize-qp "dataSegmentCode[]" $data_segment_code "multi") (serialize-qp "partition" $partition "scalar") (serialize-qp "partition[]" $partition "multi") (serialize-qp "properties[]" $properties "multi")] | flatten | str join "&"
+  let qp = [(serialize-qp "page" $page "scalar") (serialize-qp "dataSegmentCode" $data_segment_code "scalar") (serialize-qp "dataSegmentCode[]" $data_segment_code_list "multi") (serialize-qp "partition" $partition "scalar") (serialize-qp "partition[]" $partition_list "multi") (serialize-qp "properties[]" $properties "multi")] | flatten | str join "&"
   let full_url = (build-url $base "/api/transport-forty-six-elks" $qp)
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"page": $page, "dataSegmentCode": $data_segment_code, "dataSegmentCode[]": $data_segment_code_list, "partition": $partition, "partition[]": $partition_list, "properties[]": $properties} | compact), body: null}
 }
 
 # Creates a TransportFortySixElks resource.
@@ -3898,7 +3990,7 @@ export def "transport-forty-six-elks create" [
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: {}, body: $req_body}
 }
 
 # Removes the TransportFortySixElks resource.
@@ -3919,10 +4011,11 @@ export def "transport-forty-six-elks delete" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
   let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/api/transport-forty-six-elks/{id}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
 }
 
 # Retrieves a TransportFortySixElks resource.
@@ -3944,10 +4037,11 @@ export def "transport-forty-six-elks get" [
 ]: nothing -> record<createdAt: string, dataSegmentCode: string, fortySixElksApiPassword: string, fortySixElksApiUsername: string, fortySixElksFrom: string, id: string, partition: string, resourceOwner: string, transportName: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
   let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/api/transport-forty-six-elks/{id}"))
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
 }
 
 # Replaces the TransportFortySixElks resource.
@@ -3975,12 +4069,13 @@ export def "transport-forty-six-elks update" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
   let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/api/transport-forty-six-elks/{id}"))
   let req_body = {"dataSegmentCode": $data_segment_code, "fortySixElksApiPassword": $forty_six_elks_api_password, "fortySixElksApiUsername": $forty_six_elks_api_username, "fortySixElksFrom": $forty_six_elks_from, "transportName": $transport_name} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: {}, body: $req_body}
 }
 
 # Retrieves the collection of TransportFreeMobile resources.
@@ -4000,18 +4095,18 @@ export def "transport-free-mobile get-collection" [
   --accept: string@accept-completer # Response content type
   --page: int # The collection page number (default: 1, allows empty value)
   --data-segment-code: string # allows empty value
-  --data-segment-code: list<string> # allows empty value
+  --data-segment-code-list: list<string> # allows empty value (array variant)
   --partition: string # allows empty value
-  --partition: list<string> # allows empty value
+  --partition-list: list<string> # allows empty value (array variant)
   --properties: list<string> # allows empty value
 ]: nothing -> table<createdAt: string, dataSegmentCode: string, freeMobileApiKey: string, freeMobileLogin: string, freeMobilePhone: string, id: string, partition: string, resourceOwner: string, transportName: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "page" $page "scalar") (serialize-qp "dataSegmentCode" $data_segment_code "scalar") (serialize-qp "dataSegmentCode[]" $data_segment_code "multi") (serialize-qp "partition" $partition "scalar") (serialize-qp "partition[]" $partition "multi") (serialize-qp "properties[]" $properties "multi")] | flatten | str join "&"
+  let qp = [(serialize-qp "page" $page "scalar") (serialize-qp "dataSegmentCode" $data_segment_code "scalar") (serialize-qp "dataSegmentCode[]" $data_segment_code_list "multi") (serialize-qp "partition" $partition "scalar") (serialize-qp "partition[]" $partition_list "multi") (serialize-qp "properties[]" $properties "multi")] | flatten | str join "&"
   let full_url = (build-url $base "/api/transport-free-mobile" $qp)
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"page": $page, "dataSegmentCode": $data_segment_code, "dataSegmentCode[]": $data_segment_code_list, "partition": $partition, "partition[]": $partition_list, "properties[]": $properties} | compact), body: null}
 }
 
 # Creates a TransportFreeMobile resource.
@@ -4044,7 +4139,7 @@ export def "transport-free-mobile create" [
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: {}, body: $req_body}
 }
 
 # Removes the TransportFreeMobile resource.
@@ -4065,10 +4160,11 @@ export def "transport-free-mobile delete" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
   let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/api/transport-free-mobile/{id}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
 }
 
 # Retrieves a TransportFreeMobile resource.
@@ -4090,10 +4186,11 @@ export def "transport-free-mobile get" [
 ]: nothing -> record<createdAt: string, dataSegmentCode: string, freeMobileApiKey: string, freeMobileLogin: string, freeMobilePhone: string, id: string, partition: string, resourceOwner: string, transportName: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
   let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/api/transport-free-mobile/{id}"))
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
 }
 
 # Replaces the TransportFreeMobile resource.
@@ -4121,12 +4218,13 @@ export def "transport-free-mobile update" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
   let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/api/transport-free-mobile/{id}"))
   let req_body = {"dataSegmentCode": $data_segment_code, "freeMobileApiKey": $free_mobile_api_key, "freeMobileLogin": $free_mobile_login, "freeMobilePhone": $free_mobile_phone, "transportName": $transport_name} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: {}, body: $req_body}
 }
 
 # Retrieves the collection of TransportFreshdesk resources.
@@ -4146,18 +4244,18 @@ export def "transport-freshdesk get-collection" [
   --accept: string@accept-completer # Response content type
   --page: int # The collection page number (default: 1, allows empty value)
   --data-segment-code: string # allows empty value
-  --data-segment-code: list<string> # allows empty value
+  --data-segment-code-list: list<string> # allows empty value (array variant)
   --partition: string # allows empty value
-  --partition: list<string> # allows empty value
+  --partition-list: list<string> # allows empty value (array variant)
   --properties: list<string> # allows empty value
 ]: nothing -> table<createdAt: string, dataSegmentCode: string, freshdeskApiKey: string, freshdeskEmail: string, freshdeskHost: string, freshdeskPriority: string, freshdeskType: string, id: string, partition: string, resourceOwner: string, transportName: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "page" $page "scalar") (serialize-qp "dataSegmentCode" $data_segment_code "scalar") (serialize-qp "dataSegmentCode[]" $data_segment_code "multi") (serialize-qp "partition" $partition "scalar") (serialize-qp "partition[]" $partition "multi") (serialize-qp "properties[]" $properties "multi")] | flatten | str join "&"
+  let qp = [(serialize-qp "page" $page "scalar") (serialize-qp "dataSegmentCode" $data_segment_code "scalar") (serialize-qp "dataSegmentCode[]" $data_segment_code_list "multi") (serialize-qp "partition" $partition "scalar") (serialize-qp "partition[]" $partition_list "multi") (serialize-qp "properties[]" $properties "multi")] | flatten | str join "&"
   let full_url = (build-url $base "/api/transport-freshdesk" $qp)
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"page": $page, "dataSegmentCode": $data_segment_code, "dataSegmentCode[]": $data_segment_code_list, "partition": $partition, "partition[]": $partition_list, "properties[]": $properties} | compact), body: null}
 }
 
 # Creates a TransportFreshdesk resource.
@@ -4192,7 +4290,7 @@ export def "transport-freshdesk create" [
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: {}, body: $req_body}
 }
 
 # Removes the TransportFreshdesk resource.
@@ -4213,10 +4311,11 @@ export def "transport-freshdesk delete" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
   let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/api/transport-freshdesk/{id}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
 }
 
 # Retrieves a TransportFreshdesk resource.
@@ -4238,10 +4337,11 @@ export def "transport-freshdesk get" [
 ]: nothing -> record<createdAt: string, dataSegmentCode: string, freshdeskApiKey: string, freshdeskEmail: string, freshdeskHost: string, freshdeskPriority: string, freshdeskType: string, id: string, partition: string, resourceOwner: string, transportName: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
   let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/api/transport-freshdesk/{id}"))
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
 }
 
 # Replaces the TransportFreshdesk resource.
@@ -4271,12 +4371,13 @@ export def "transport-freshdesk update" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
   let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/api/transport-freshdesk/{id}"))
   let req_body = {"dataSegmentCode": $data_segment_code, "freshdeskApiKey": $freshdesk_api_key, "freshdeskEmail": $freshdesk_email, "freshdeskHost": $freshdesk_host, "freshdeskPriority": $freshdesk_priority, "freshdeskType": $freshdesk_type, "transportName": $transport_name} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: {}, body: $req_body}
 }
 
 # Retrieves the collection of TransportGatewayApi resources.
@@ -4296,18 +4397,18 @@ export def "transport-gateway-api get-collection" [
   --accept: string@accept-completer # Response content type
   --page: int # The collection page number (default: 1, allows empty value)
   --data-segment-code: string # allows empty value
-  --data-segment-code: list<string> # allows empty value
+  --data-segment-code-list: list<string> # allows empty value (array variant)
   --partition: string # allows empty value
-  --partition: list<string> # allows empty value
+  --partition-list: list<string> # allows empty value (array variant)
   --properties: list<string> # allows empty value
 ]: nothing -> table<createdAt: string, dataSegmentCode: string, gatewayApiFrom: string, gatewayApiToken: string, id: string, partition: string, resourceOwner: string, transportName: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "page" $page "scalar") (serialize-qp "dataSegmentCode" $data_segment_code "scalar") (serialize-qp "dataSegmentCode[]" $data_segment_code "multi") (serialize-qp "partition" $partition "scalar") (serialize-qp "partition[]" $partition "multi") (serialize-qp "properties[]" $properties "multi")] | flatten | str join "&"
+  let qp = [(serialize-qp "page" $page "scalar") (serialize-qp "dataSegmentCode" $data_segment_code "scalar") (serialize-qp "dataSegmentCode[]" $data_segment_code_list "multi") (serialize-qp "partition" $partition "scalar") (serialize-qp "partition[]" $partition_list "multi") (serialize-qp "properties[]" $properties "multi")] | flatten | str join "&"
   let full_url = (build-url $base "/api/transport-gateway-api" $qp)
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"page": $page, "dataSegmentCode": $data_segment_code, "dataSegmentCode[]": $data_segment_code_list, "partition": $partition, "partition[]": $partition_list, "properties[]": $properties} | compact), body: null}
 }
 
 # Creates a TransportGatewayApi resource.
@@ -4339,7 +4440,7 @@ export def "transport-gateway-api create" [
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: {}, body: $req_body}
 }
 
 # Removes the TransportGatewayApi resource.
@@ -4360,10 +4461,11 @@ export def "transport-gateway-api delete" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
   let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/api/transport-gateway-api/{id}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
 }
 
 # Retrieves a TransportGatewayApi resource.
@@ -4385,10 +4487,11 @@ export def "transport-gateway-api get" [
 ]: nothing -> record<createdAt: string, dataSegmentCode: string, gatewayApiFrom: string, gatewayApiToken: string, id: string, partition: string, resourceOwner: string, transportName: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
   let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/api/transport-gateway-api/{id}"))
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
 }
 
 # Replaces the TransportGatewayApi resource.
@@ -4415,12 +4518,13 @@ export def "transport-gateway-api update" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
   let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/api/transport-gateway-api/{id}"))
   let req_body = {"dataSegmentCode": $data_segment_code, "gatewayApiFrom": $gateway_api_from, "gatewayApiToken": $gateway_api_token, "transportName": $transport_name} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: {}, body: $req_body}
 }
 
 # Retrieves the collection of TransportGitter resources.
@@ -4440,18 +4544,18 @@ export def "transport-gitter get-collection" [
   --accept: string@accept-completer # Response content type
   --page: int # The collection page number (default: 1, allows empty value)
   --data-segment-code: string # allows empty value
-  --data-segment-code: list<string> # allows empty value
+  --data-segment-code-list: list<string> # allows empty value (array variant)
   --partition: string # allows empty value
-  --partition: list<string> # allows empty value
+  --partition-list: list<string> # allows empty value (array variant)
   --properties: list<string> # allows empty value
 ]: nothing -> table<createdAt: string, dataSegmentCode: string, gitterRoomId: string, gitterToken: string, id: string, partition: string, resourceOwner: string, transportName: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "page" $page "scalar") (serialize-qp "dataSegmentCode" $data_segment_code "scalar") (serialize-qp "dataSegmentCode[]" $data_segment_code "multi") (serialize-qp "partition" $partition "scalar") (serialize-qp "partition[]" $partition "multi") (serialize-qp "properties[]" $properties "multi")] | flatten | str join "&"
+  let qp = [(serialize-qp "page" $page "scalar") (serialize-qp "dataSegmentCode" $data_segment_code "scalar") (serialize-qp "dataSegmentCode[]" $data_segment_code_list "multi") (serialize-qp "partition" $partition "scalar") (serialize-qp "partition[]" $partition_list "multi") (serialize-qp "properties[]" $properties "multi")] | flatten | str join "&"
   let full_url = (build-url $base "/api/transport-gitter" $qp)
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"page": $page, "dataSegmentCode": $data_segment_code, "dataSegmentCode[]": $data_segment_code_list, "partition": $partition, "partition[]": $partition_list, "properties[]": $properties} | compact), body: null}
 }
 
 # Creates a TransportGitter resource.
@@ -4483,7 +4587,7 @@ export def "transport-gitter create" [
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: {}, body: $req_body}
 }
 
 # Removes the TransportGitter resource.
@@ -4504,10 +4608,11 @@ export def "transport-gitter delete" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
   let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/api/transport-gitter/{id}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
 }
 
 # Retrieves a TransportGitter resource.
@@ -4529,10 +4634,11 @@ export def "transport-gitter get" [
 ]: nothing -> record<createdAt: string, dataSegmentCode: string, gitterRoomId: string, gitterToken: string, id: string, partition: string, resourceOwner: string, transportName: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
   let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/api/transport-gitter/{id}"))
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
 }
 
 # Replaces the TransportGitter resource.
@@ -4559,12 +4665,13 @@ export def "transport-gitter update" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
   let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/api/transport-gitter/{id}"))
   let req_body = {"dataSegmentCode": $data_segment_code, "gitterRoomId": $gitter_room_id, "gitterToken": $gitter_token, "transportName": $transport_name} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: {}, body: $req_body}
 }
 
 # Retrieves the collection of TransportGoogleChat resources.
@@ -4584,18 +4691,18 @@ export def "transport-google-chat get-collection" [
   --accept: string@accept-completer # Response content type
   --page: int # The collection page number (default: 1, allows empty value)
   --data-segment-code: string # allows empty value
-  --data-segment-code: list<string> # allows empty value
+  --data-segment-code-list: list<string> # allows empty value (array variant)
   --partition: string # allows empty value
-  --partition: list<string> # allows empty value
+  --partition-list: list<string> # allows empty value (array variant)
   --properties: list<string> # allows empty value
 ]: nothing -> table<createdAt: string, dataSegmentCode: string, googleChatAccessKey: string, googleChatAccessToken: string, googleChatSpace: string, googleChatThreadKey: string, id: string, partition: string, resourceOwner: string, transportName: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "page" $page "scalar") (serialize-qp "dataSegmentCode" $data_segment_code "scalar") (serialize-qp "dataSegmentCode[]" $data_segment_code "multi") (serialize-qp "partition" $partition "scalar") (serialize-qp "partition[]" $partition "multi") (serialize-qp "properties[]" $properties "multi")] | flatten | str join "&"
+  let qp = [(serialize-qp "page" $page "scalar") (serialize-qp "dataSegmentCode" $data_segment_code "scalar") (serialize-qp "dataSegmentCode[]" $data_segment_code_list "multi") (serialize-qp "partition" $partition "scalar") (serialize-qp "partition[]" $partition_list "multi") (serialize-qp "properties[]" $properties "multi")] | flatten | str join "&"
   let full_url = (build-url $base "/api/transport-google-chat" $qp)
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"page": $page, "dataSegmentCode": $data_segment_code, "dataSegmentCode[]": $data_segment_code_list, "partition": $partition, "partition[]": $partition_list, "properties[]": $properties} | compact), body: null}
 }
 
 # Creates a TransportGoogleChat resource.
@@ -4629,7 +4736,7 @@ export def "transport-google-chat create" [
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: {}, body: $req_body}
 }
 
 # Removes the TransportGoogleChat resource.
@@ -4650,10 +4757,11 @@ export def "transport-google-chat delete" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
   let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/api/transport-google-chat/{id}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
 }
 
 # Retrieves a TransportGoogleChat resource.
@@ -4675,10 +4783,11 @@ export def "transport-google-chat get" [
 ]: nothing -> record<createdAt: string, dataSegmentCode: string, googleChatAccessKey: string, googleChatAccessToken: string, googleChatSpace: string, googleChatThreadKey: string, id: string, partition: string, resourceOwner: string, transportName: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
   let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/api/transport-google-chat/{id}"))
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
 }
 
 # Replaces the TransportGoogleChat resource.
@@ -4707,12 +4816,13 @@ export def "transport-google-chat update" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
   let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/api/transport-google-chat/{id}"))
   let req_body = {"dataSegmentCode": $data_segment_code, "googleChatAccessKey": $google_chat_access_key, "googleChatAccessToken": $google_chat_access_token, "googleChatSpace": $google_chat_space, "googleChatThreadKey": $google_chat_thread_key, "transportName": $transport_name} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: {}, body: $req_body}
 }
 
 # Retrieves the collection of TransportGotify resources.
@@ -4732,18 +4842,18 @@ export def "transport-gotify get-collection" [
   --accept: string@accept-completer # Response content type
   --page: int # The collection page number (default: 1, allows empty value)
   --data-segment-code: string # allows empty value
-  --data-segment-code: list<string> # allows empty value
+  --data-segment-code-list: list<string> # allows empty value (array variant)
   --partition: string # allows empty value
-  --partition: list<string> # allows empty value
+  --partition-list: list<string> # allows empty value (array variant)
   --properties: list<string> # allows empty value
 ]: nothing -> table<createdAt: string, dataSegmentCode: string, gotifyApiUrl: string, gotifyAppToken: string, gotifyPriority: string, id: string, partition: string, resourceOwner: string, transportName: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "page" $page "scalar") (serialize-qp "dataSegmentCode" $data_segment_code "scalar") (serialize-qp "dataSegmentCode[]" $data_segment_code "multi") (serialize-qp "partition" $partition "scalar") (serialize-qp "partition[]" $partition "multi") (serialize-qp "properties[]" $properties "multi")] | flatten | str join "&"
+  let qp = [(serialize-qp "page" $page "scalar") (serialize-qp "dataSegmentCode" $data_segment_code "scalar") (serialize-qp "dataSegmentCode[]" $data_segment_code_list "multi") (serialize-qp "partition" $partition "scalar") (serialize-qp "partition[]" $partition_list "multi") (serialize-qp "properties[]" $properties "multi")] | flatten | str join "&"
   let full_url = (build-url $base "/api/transport-gotify" $qp)
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"page": $page, "dataSegmentCode": $data_segment_code, "dataSegmentCode[]": $data_segment_code_list, "partition": $partition, "partition[]": $partition_list, "properties[]": $properties} | compact), body: null}
 }
 
 # Creates a TransportGotify resource.
@@ -4776,7 +4886,7 @@ export def "transport-gotify create" [
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: {}, body: $req_body}
 }
 
 # Removes the TransportGotify resource.
@@ -4797,10 +4907,11 @@ export def "transport-gotify delete" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
   let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/api/transport-gotify/{id}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
 }
 
 # Retrieves a TransportGotify resource.
@@ -4822,10 +4933,11 @@ export def "transport-gotify get" [
 ]: nothing -> record<createdAt: string, dataSegmentCode: string, gotifyApiUrl: string, gotifyAppToken: string, gotifyPriority: string, id: string, partition: string, resourceOwner: string, transportName: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
   let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/api/transport-gotify/{id}"))
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
 }
 
 # Replaces the TransportGotify resource.
@@ -4853,12 +4965,13 @@ export def "transport-gotify update" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
   let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/api/transport-gotify/{id}"))
   let req_body = {"dataSegmentCode": $data_segment_code, "gotifyApiUrl": $gotify_api_url, "gotifyAppToken": $gotify_app_token, "gotifyPriority": $gotify_priority, "transportName": $transport_name} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: {}, body: $req_body}
 }
 
 # Retrieves the collection of TransportHelpScout resources.
@@ -4878,18 +4991,18 @@ export def "transport-help-scout get-collection" [
   --accept: string@accept-completer # Response content type
   --page: int # The collection page number (default: 1, allows empty value)
   --data-segment-code: string # allows empty value
-  --data-segment-code: list<string> # allows empty value
+  --data-segment-code-list: list<string> # allows empty value (array variant)
   --partition: string # allows empty value
-  --partition: list<string> # allows empty value
+  --partition-list: list<string> # allows empty value (array variant)
   --properties: list<string> # allows empty value
 ]: nothing -> table<createdAt: string, dataSegmentCode: string, helpScoutCustomerEmail: string, helpScoutMailboxId: int, helpScoutOauthToken: string, id: string, partition: string, resourceOwner: string, transportName: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "page" $page "scalar") (serialize-qp "dataSegmentCode" $data_segment_code "scalar") (serialize-qp "dataSegmentCode[]" $data_segment_code "multi") (serialize-qp "partition" $partition "scalar") (serialize-qp "partition[]" $partition "multi") (serialize-qp "properties[]" $properties "multi")] | flatten | str join "&"
+  let qp = [(serialize-qp "page" $page "scalar") (serialize-qp "dataSegmentCode" $data_segment_code "scalar") (serialize-qp "dataSegmentCode[]" $data_segment_code_list "multi") (serialize-qp "partition" $partition "scalar") (serialize-qp "partition[]" $partition_list "multi") (serialize-qp "properties[]" $properties "multi")] | flatten | str join "&"
   let full_url = (build-url $base "/api/transport-help-scout" $qp)
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"page": $page, "dataSegmentCode": $data_segment_code, "dataSegmentCode[]": $data_segment_code_list, "partition": $partition, "partition[]": $partition_list, "properties[]": $properties} | compact), body: null}
 }
 
 # Creates a TransportHelpScout resource.
@@ -4922,7 +5035,7 @@ export def "transport-help-scout create" [
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: {}, body: $req_body}
 }
 
 # Removes the TransportHelpScout resource.
@@ -4943,10 +5056,11 @@ export def "transport-help-scout delete" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
   let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/api/transport-help-scout/{id}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
 }
 
 # Retrieves a TransportHelpScout resource.
@@ -4968,10 +5082,11 @@ export def "transport-help-scout get" [
 ]: nothing -> record<createdAt: string, dataSegmentCode: string, helpScoutCustomerEmail: string, helpScoutMailboxId: int, helpScoutOauthToken: string, id: string, partition: string, resourceOwner: string, transportName: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
   let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/api/transport-help-scout/{id}"))
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
 }
 
 # Replaces the TransportHelpScout resource.
@@ -4999,12 +5114,13 @@ export def "transport-help-scout update" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
   let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/api/transport-help-scout/{id}"))
   let req_body = {"dataSegmentCode": $data_segment_code, "helpScoutCustomerEmail": $help_scout_customer_email, "helpScoutMailboxId": $help_scout_mailbox_id, "helpScoutOauthToken": $help_scout_oauth_token, "transportName": $transport_name} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: {}, body: $req_body}
 }
 
 # Retrieves the collection of TransportInfobip resources.
@@ -5024,18 +5140,18 @@ export def "transport-infobip get-collection" [
   --accept: string@accept-completer # Response content type
   --page: int # The collection page number (default: 1, allows empty value)
   --data-segment-code: string # allows empty value
-  --data-segment-code: list<string> # allows empty value
+  --data-segment-code-list: list<string> # allows empty value (array variant)
   --partition: string # allows empty value
-  --partition: list<string> # allows empty value
+  --partition-list: list<string> # allows empty value (array variant)
   --properties: list<string> # allows empty value
 ]: nothing -> table<createdAt: string, dataSegmentCode: string, id: string, infobipAuthToken: string, infobipFrom: string, infobipHost: string, partition: string, resourceOwner: string, transportName: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "page" $page "scalar") (serialize-qp "dataSegmentCode" $data_segment_code "scalar") (serialize-qp "dataSegmentCode[]" $data_segment_code "multi") (serialize-qp "partition" $partition "scalar") (serialize-qp "partition[]" $partition "multi") (serialize-qp "properties[]" $properties "multi")] | flatten | str join "&"
+  let qp = [(serialize-qp "page" $page "scalar") (serialize-qp "dataSegmentCode" $data_segment_code "scalar") (serialize-qp "dataSegmentCode[]" $data_segment_code_list "multi") (serialize-qp "partition" $partition "scalar") (serialize-qp "partition[]" $partition_list "multi") (serialize-qp "properties[]" $properties "multi")] | flatten | str join "&"
   let full_url = (build-url $base "/api/transport-infobip" $qp)
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"page": $page, "dataSegmentCode": $data_segment_code, "dataSegmentCode[]": $data_segment_code_list, "partition": $partition, "partition[]": $partition_list, "properties[]": $properties} | compact), body: null}
 }
 
 # Creates a TransportInfobip resource.
@@ -5068,7 +5184,7 @@ export def "transport-infobip create" [
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: {}, body: $req_body}
 }
 
 # Removes the TransportInfobip resource.
@@ -5089,10 +5205,11 @@ export def "transport-infobip delete" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
   let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/api/transport-infobip/{id}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
 }
 
 # Retrieves a TransportInfobip resource.
@@ -5114,10 +5231,11 @@ export def "transport-infobip get" [
 ]: nothing -> record<createdAt: string, dataSegmentCode: string, id: string, infobipAuthToken: string, infobipFrom: string, infobipHost: string, partition: string, resourceOwner: string, transportName: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
   let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/api/transport-infobip/{id}"))
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
 }
 
 # Replaces the TransportInfobip resource.
@@ -5145,12 +5263,13 @@ export def "transport-infobip update" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
   let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/api/transport-infobip/{id}"))
   let req_body = {"dataSegmentCode": $data_segment_code, "infobipAuthToken": $infobip_auth_token, "infobipFrom": $infobip_from, "infobipHost": $infobip_host, "transportName": $transport_name} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: {}, body: $req_body}
 }
 
 # Retrieves the collection of TransportIqsms resources.
@@ -5170,18 +5289,18 @@ export def "transport-iqsms get-collection" [
   --accept: string@accept-completer # Response content type
   --page: int # The collection page number (default: 1, allows empty value)
   --data-segment-code: string # allows empty value
-  --data-segment-code: list<string> # allows empty value
+  --data-segment-code-list: list<string> # allows empty value (array variant)
   --partition: string # allows empty value
-  --partition: list<string> # allows empty value
+  --partition-list: list<string> # allows empty value (array variant)
   --properties: list<string> # allows empty value
 ]: nothing -> table<createdAt: string, dataSegmentCode: string, id: string, iqsmsFrom: string, iqsmsLogin: string, iqsmsPassword: string, partition: string, resourceOwner: string, transportName: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "page" $page "scalar") (serialize-qp "dataSegmentCode" $data_segment_code "scalar") (serialize-qp "dataSegmentCode[]" $data_segment_code "multi") (serialize-qp "partition" $partition "scalar") (serialize-qp "partition[]" $partition "multi") (serialize-qp "properties[]" $properties "multi")] | flatten | str join "&"
+  let qp = [(serialize-qp "page" $page "scalar") (serialize-qp "dataSegmentCode" $data_segment_code "scalar") (serialize-qp "dataSegmentCode[]" $data_segment_code_list "multi") (serialize-qp "partition" $partition "scalar") (serialize-qp "partition[]" $partition_list "multi") (serialize-qp "properties[]" $properties "multi")] | flatten | str join "&"
   let full_url = (build-url $base "/api/transport-iqsms" $qp)
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"page": $page, "dataSegmentCode": $data_segment_code, "dataSegmentCode[]": $data_segment_code_list, "partition": $partition, "partition[]": $partition_list, "properties[]": $properties} | compact), body: null}
 }
 
 # Creates a TransportIqsms resource.
@@ -5214,7 +5333,7 @@ export def "transport-iqsms create" [
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: {}, body: $req_body}
 }
 
 # Removes the TransportIqsms resource.
@@ -5235,10 +5354,11 @@ export def "transport-iqsms delete" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
   let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/api/transport-iqsms/{id}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
 }
 
 # Retrieves a TransportIqsms resource.
@@ -5260,10 +5380,11 @@ export def "transport-iqsms get" [
 ]: nothing -> record<createdAt: string, dataSegmentCode: string, id: string, iqsmsFrom: string, iqsmsLogin: string, iqsmsPassword: string, partition: string, resourceOwner: string, transportName: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
   let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/api/transport-iqsms/{id}"))
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
 }
 
 # Replaces the TransportIqsms resource.
@@ -5291,12 +5412,13 @@ export def "transport-iqsms update" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
   let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/api/transport-iqsms/{id}"))
   let req_body = {"dataSegmentCode": $data_segment_code, "iqsmsFrom": $iqsms_from, "iqsmsLogin": $iqsms_login, "iqsmsPassword": $iqsms_password, "transportName": $transport_name} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: {}, body: $req_body}
 }
 
 # Retrieves the collection of TransportKazInfoTeh resources.
@@ -5316,18 +5438,18 @@ export def "transport-kaz-info-teh get-collection" [
   --accept: string@accept-completer # Response content type
   --page: int # The collection page number (default: 1, allows empty value)
   --data-segment-code: string # allows empty value
-  --data-segment-code: list<string> # allows empty value
+  --data-segment-code-list: list<string> # allows empty value (array variant)
   --partition: string # allows empty value
-  --partition: list<string> # allows empty value
+  --partition-list: list<string> # allows empty value (array variant)
   --properties: list<string> # allows empty value
 ]: nothing -> table<createdAt: string, dataSegmentCode: string, id: string, kazInfoTehFrom: string, kazInfoTehPassword: string, kazInfoTehUsername: string, partition: string, resourceOwner: string, transportName: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "page" $page "scalar") (serialize-qp "dataSegmentCode" $data_segment_code "scalar") (serialize-qp "dataSegmentCode[]" $data_segment_code "multi") (serialize-qp "partition" $partition "scalar") (serialize-qp "partition[]" $partition "multi") (serialize-qp "properties[]" $properties "multi")] | flatten | str join "&"
+  let qp = [(serialize-qp "page" $page "scalar") (serialize-qp "dataSegmentCode" $data_segment_code "scalar") (serialize-qp "dataSegmentCode[]" $data_segment_code_list "multi") (serialize-qp "partition" $partition "scalar") (serialize-qp "partition[]" $partition_list "multi") (serialize-qp "properties[]" $properties "multi")] | flatten | str join "&"
   let full_url = (build-url $base "/api/transport-kaz-info-teh" $qp)
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"page": $page, "dataSegmentCode": $data_segment_code, "dataSegmentCode[]": $data_segment_code_list, "partition": $partition, "partition[]": $partition_list, "properties[]": $properties} | compact), body: null}
 }
 
 # Creates a TransportKazInfoTeh resource.
@@ -5360,7 +5482,7 @@ export def "transport-kaz-info-teh create" [
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: {}, body: $req_body}
 }
 
 # Removes the TransportKazInfoTeh resource.
@@ -5381,10 +5503,11 @@ export def "transport-kaz-info-teh delete" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
   let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/api/transport-kaz-info-teh/{id}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
 }
 
 # Retrieves a TransportKazInfoTeh resource.
@@ -5406,10 +5529,11 @@ export def "transport-kaz-info-teh get" [
 ]: nothing -> record<createdAt: string, dataSegmentCode: string, id: string, kazInfoTehFrom: string, kazInfoTehPassword: string, kazInfoTehUsername: string, partition: string, resourceOwner: string, transportName: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
   let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/api/transport-kaz-info-teh/{id}"))
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
 }
 
 # Replaces the TransportKazInfoTeh resource.
@@ -5437,12 +5561,13 @@ export def "transport-kaz-info-teh update" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
   let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/api/transport-kaz-info-teh/{id}"))
   let req_body = {"dataSegmentCode": $data_segment_code, "kazInfoTehFrom": $kaz_info_teh_from, "kazInfoTehPassword": $kaz_info_teh_password, "kazInfoTehUsername": $kaz_info_teh_username, "transportName": $transport_name} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: {}, body: $req_body}
 }
 
 # Retrieves the collection of TransportLightSms resources.
@@ -5462,18 +5587,18 @@ export def "transport-light-sms get-collection" [
   --accept: string@accept-completer # Response content type
   --page: int # The collection page number (default: 1, allows empty value)
   --data-segment-code: string # allows empty value
-  --data-segment-code: list<string> # allows empty value
+  --data-segment-code-list: list<string> # allows empty value (array variant)
   --partition: string # allows empty value
-  --partition: list<string> # allows empty value
+  --partition-list: list<string> # allows empty value (array variant)
   --properties: list<string> # allows empty value
 ]: nothing -> table<createdAt: string, dataSegmentCode: string, id: string, lightSmsLogin: string, lightSmsPhone: string, lightSmsToken: string, partition: string, resourceOwner: string, transportName: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "page" $page "scalar") (serialize-qp "dataSegmentCode" $data_segment_code "scalar") (serialize-qp "dataSegmentCode[]" $data_segment_code "multi") (serialize-qp "partition" $partition "scalar") (serialize-qp "partition[]" $partition "multi") (serialize-qp "properties[]" $properties "multi")] | flatten | str join "&"
+  let qp = [(serialize-qp "page" $page "scalar") (serialize-qp "dataSegmentCode" $data_segment_code "scalar") (serialize-qp "dataSegmentCode[]" $data_segment_code_list "multi") (serialize-qp "partition" $partition "scalar") (serialize-qp "partition[]" $partition_list "multi") (serialize-qp "properties[]" $properties "multi")] | flatten | str join "&"
   let full_url = (build-url $base "/api/transport-light-sms" $qp)
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"page": $page, "dataSegmentCode": $data_segment_code, "dataSegmentCode[]": $data_segment_code_list, "partition": $partition, "partition[]": $partition_list, "properties[]": $properties} | compact), body: null}
 }
 
 # Creates a TransportLightSms resource.
@@ -5506,7 +5631,7 @@ export def "transport-light-sms create" [
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: {}, body: $req_body}
 }
 
 # Removes the TransportLightSms resource.
@@ -5527,10 +5652,11 @@ export def "transport-light-sms delete" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
   let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/api/transport-light-sms/{id}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
 }
 
 # Retrieves a TransportLightSms resource.
@@ -5552,10 +5678,11 @@ export def "transport-light-sms get" [
 ]: nothing -> record<createdAt: string, dataSegmentCode: string, id: string, lightSmsLogin: string, lightSmsPhone: string, lightSmsToken: string, partition: string, resourceOwner: string, transportName: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
   let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/api/transport-light-sms/{id}"))
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
 }
 
 # Replaces the TransportLightSms resource.
@@ -5583,12 +5710,13 @@ export def "transport-light-sms update" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
   let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/api/transport-light-sms/{id}"))
   let req_body = {"dataSegmentCode": $data_segment_code, "lightSmsLogin": $light_sms_login, "lightSmsPhone": $light_sms_phone, "lightSmsToken": $light_sms_token, "transportName": $transport_name} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: {}, body: $req_body}
 }
 
 # Retrieves the collection of TransportLineNotify resources.
@@ -5608,18 +5736,18 @@ export def "transport-line-notify get-collection" [
   --accept: string@accept-completer # Response content type
   --page: int # The collection page number (default: 1, allows empty value)
   --data-segment-code: string # allows empty value
-  --data-segment-code: list<string> # allows empty value
+  --data-segment-code-list: list<string> # allows empty value (array variant)
   --partition: string # allows empty value
-  --partition: list<string> # allows empty value
+  --partition-list: list<string> # allows empty value (array variant)
   --properties: list<string> # allows empty value
 ]: nothing -> table<createdAt: string, dataSegmentCode: string, id: string, lineNotifyAccessToken: string, lineNotifyStickerId: string, lineNotifyStickerPackageId: string, partition: string, resourceOwner: string, transportName: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "page" $page "scalar") (serialize-qp "dataSegmentCode" $data_segment_code "scalar") (serialize-qp "dataSegmentCode[]" $data_segment_code "multi") (serialize-qp "partition" $partition "scalar") (serialize-qp "partition[]" $partition "multi") (serialize-qp "properties[]" $properties "multi")] | flatten | str join "&"
+  let qp = [(serialize-qp "page" $page "scalar") (serialize-qp "dataSegmentCode" $data_segment_code "scalar") (serialize-qp "dataSegmentCode[]" $data_segment_code_list "multi") (serialize-qp "partition" $partition "scalar") (serialize-qp "partition[]" $partition_list "multi") (serialize-qp "properties[]" $properties "multi")] | flatten | str join "&"
   let full_url = (build-url $base "/api/transport-line-notify" $qp)
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"page": $page, "dataSegmentCode": $data_segment_code, "dataSegmentCode[]": $data_segment_code_list, "partition": $partition, "partition[]": $partition_list, "properties[]": $properties} | compact), body: null}
 }
 
 # Creates a TransportLineNotify resource.
@@ -5652,7 +5780,7 @@ export def "transport-line-notify create" [
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: {}, body: $req_body}
 }
 
 # Removes the TransportLineNotify resource.
@@ -5673,10 +5801,11 @@ export def "transport-line-notify delete" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
   let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/api/transport-line-notify/{id}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
 }
 
 # Retrieves a TransportLineNotify resource.
@@ -5698,10 +5827,11 @@ export def "transport-line-notify get" [
 ]: nothing -> record<createdAt: string, dataSegmentCode: string, id: string, lineNotifyAccessToken: string, lineNotifyStickerId: string, lineNotifyStickerPackageId: string, partition: string, resourceOwner: string, transportName: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
   let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/api/transport-line-notify/{id}"))
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
 }
 
 # Replaces the TransportLineNotify resource.
@@ -5729,12 +5859,13 @@ export def "transport-line-notify update" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
   let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/api/transport-line-notify/{id}"))
   let req_body = {"dataSegmentCode": $data_segment_code, "lineNotifyAccessToken": $line_notify_access_token, "lineNotifyStickerId": $line_notify_sticker_id, "lineNotifyStickerPackageId": $line_notify_sticker_package_id, "transportName": $transport_name} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: {}, body: $req_body}
 }
 
 # Retrieves the collection of TransportLinkedIn resources.
@@ -5754,18 +5885,18 @@ export def "transport-linked-in get-collection" [
   --accept: string@accept-completer # Response content type
   --page: int # The collection page number (default: 1, allows empty value)
   --data-segment-code: string # allows empty value
-  --data-segment-code: list<string> # allows empty value
+  --data-segment-code-list: list<string> # allows empty value (array variant)
   --partition: string # allows empty value
-  --partition: list<string> # allows empty value
+  --partition-list: list<string> # allows empty value (array variant)
   --properties: list<string> # allows empty value
 ]: nothing -> table<createdAt: string, dataSegmentCode: string, id: string, linkedInToken: string, linkedInUserId: string, partition: string, resourceOwner: string, transportName: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "page" $page "scalar") (serialize-qp "dataSegmentCode" $data_segment_code "scalar") (serialize-qp "dataSegmentCode[]" $data_segment_code "multi") (serialize-qp "partition" $partition "scalar") (serialize-qp "partition[]" $partition "multi") (serialize-qp "properties[]" $properties "multi")] | flatten | str join "&"
+  let qp = [(serialize-qp "page" $page "scalar") (serialize-qp "dataSegmentCode" $data_segment_code "scalar") (serialize-qp "dataSegmentCode[]" $data_segment_code_list "multi") (serialize-qp "partition" $partition "scalar") (serialize-qp "partition[]" $partition_list "multi") (serialize-qp "properties[]" $properties "multi")] | flatten | str join "&"
   let full_url = (build-url $base "/api/transport-linked-in" $qp)
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"page": $page, "dataSegmentCode": $data_segment_code, "dataSegmentCode[]": $data_segment_code_list, "partition": $partition, "partition[]": $partition_list, "properties[]": $properties} | compact), body: null}
 }
 
 # Creates a TransportLinkedIn resource.
@@ -5797,7 +5928,7 @@ export def "transport-linked-in create" [
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: {}, body: $req_body}
 }
 
 # Removes the TransportLinkedIn resource.
@@ -5818,10 +5949,11 @@ export def "transport-linked-in delete" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
   let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/api/transport-linked-in/{id}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
 }
 
 # Retrieves a TransportLinkedIn resource.
@@ -5843,10 +5975,11 @@ export def "transport-linked-in get" [
 ]: nothing -> record<createdAt: string, dataSegmentCode: string, id: string, linkedInToken: string, linkedInUserId: string, partition: string, resourceOwner: string, transportName: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
   let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/api/transport-linked-in/{id}"))
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
 }
 
 # Replaces the TransportLinkedIn resource.
@@ -5873,12 +6006,13 @@ export def "transport-linked-in update" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
   let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/api/transport-linked-in/{id}"))
   let req_body = {"dataSegmentCode": $data_segment_code, "linkedInToken": $linked_in_token, "linkedInUserId": $linked_in_user_id, "transportName": $transport_name} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: {}, body: $req_body}
 }
 
 # Retrieves the collection of TransportMailjet resources.
@@ -5898,18 +6032,18 @@ export def "transport-mailjet get-collection" [
   --accept: string@accept-completer # Response content type
   --page: int # The collection page number (default: 1, allows empty value)
   --data-segment-code: string # allows empty value
-  --data-segment-code: list<string> # allows empty value
+  --data-segment-code-list: list<string> # allows empty value (array variant)
   --partition: string # allows empty value
-  --partition: list<string> # allows empty value
+  --partition-list: list<string> # allows empty value (array variant)
   --properties: list<string> # allows empty value
 ]: nothing -> table<createdAt: string, dataSegmentCode: string, id: string, mailjetFrom: string, mailjetToken: string, partition: string, resourceOwner: string, transportName: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "page" $page "scalar") (serialize-qp "dataSegmentCode" $data_segment_code "scalar") (serialize-qp "dataSegmentCode[]" $data_segment_code "multi") (serialize-qp "partition" $partition "scalar") (serialize-qp "partition[]" $partition "multi") (serialize-qp "properties[]" $properties "multi")] | flatten | str join "&"
+  let qp = [(serialize-qp "page" $page "scalar") (serialize-qp "dataSegmentCode" $data_segment_code "scalar") (serialize-qp "dataSegmentCode[]" $data_segment_code_list "multi") (serialize-qp "partition" $partition "scalar") (serialize-qp "partition[]" $partition_list "multi") (serialize-qp "properties[]" $properties "multi")] | flatten | str join "&"
   let full_url = (build-url $base "/api/transport-mailjet" $qp)
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"page": $page, "dataSegmentCode": $data_segment_code, "dataSegmentCode[]": $data_segment_code_list, "partition": $partition, "partition[]": $partition_list, "properties[]": $properties} | compact), body: null}
 }
 
 # Creates a TransportMailjet resource.
@@ -5941,7 +6075,7 @@ export def "transport-mailjet create" [
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: {}, body: $req_body}
 }
 
 # Removes the TransportMailjet resource.
@@ -5962,10 +6096,11 @@ export def "transport-mailjet delete" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
   let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/api/transport-mailjet/{id}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
 }
 
 # Retrieves a TransportMailjet resource.
@@ -5987,10 +6122,11 @@ export def "transport-mailjet get" [
 ]: nothing -> record<createdAt: string, dataSegmentCode: string, id: string, mailjetFrom: string, mailjetToken: string, partition: string, resourceOwner: string, transportName: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
   let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/api/transport-mailjet/{id}"))
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
 }
 
 # Replaces the TransportMailjet resource.
@@ -6017,12 +6153,13 @@ export def "transport-mailjet update" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
   let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/api/transport-mailjet/{id}"))
   let req_body = {"dataSegmentCode": $data_segment_code, "mailjetFrom": $mailjet_from, "mailjetToken": $mailjet_token, "transportName": $transport_name} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: {}, body: $req_body}
 }
 
 # Retrieves the collection of TransportMastodon resources.
@@ -6042,18 +6179,18 @@ export def "transport-mastodon get-collection" [
   --accept: string@accept-completer # Response content type
   --page: int # The collection page number (default: 1, allows empty value)
   --data-segment-code: string # allows empty value
-  --data-segment-code: list<string> # allows empty value
+  --data-segment-code-list: list<string> # allows empty value (array variant)
   --partition: string # allows empty value
-  --partition: list<string> # allows empty value
+  --partition-list: list<string> # allows empty value (array variant)
   --properties: list<string> # allows empty value
 ]: nothing -> table<createdAt: string, dataSegmentCode: string, id: string, mastodonAccessToken: string, mastodonHost: string, partition: string, resourceOwner: string, transportName: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "page" $page "scalar") (serialize-qp "dataSegmentCode" $data_segment_code "scalar") (serialize-qp "dataSegmentCode[]" $data_segment_code "multi") (serialize-qp "partition" $partition "scalar") (serialize-qp "partition[]" $partition "multi") (serialize-qp "properties[]" $properties "multi")] | flatten | str join "&"
+  let qp = [(serialize-qp "page" $page "scalar") (serialize-qp "dataSegmentCode" $data_segment_code "scalar") (serialize-qp "dataSegmentCode[]" $data_segment_code_list "multi") (serialize-qp "partition" $partition "scalar") (serialize-qp "partition[]" $partition_list "multi") (serialize-qp "properties[]" $properties "multi")] | flatten | str join "&"
   let full_url = (build-url $base "/api/transport-mastodon" $qp)
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"page": $page, "dataSegmentCode": $data_segment_code, "dataSegmentCode[]": $data_segment_code_list, "partition": $partition, "partition[]": $partition_list, "properties[]": $properties} | compact), body: null}
 }
 
 # Creates a TransportMastodon resource.
@@ -6085,7 +6222,7 @@ export def "transport-mastodon create" [
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: {}, body: $req_body}
 }
 
 # Removes the TransportMastodon resource.
@@ -6106,10 +6243,11 @@ export def "transport-mastodon delete" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
   let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/api/transport-mastodon/{id}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
 }
 
 # Retrieves a TransportMastodon resource.
@@ -6131,10 +6269,11 @@ export def "transport-mastodon get" [
 ]: nothing -> record<createdAt: string, dataSegmentCode: string, id: string, mastodonAccessToken: string, mastodonHost: string, partition: string, resourceOwner: string, transportName: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
   let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/api/transport-mastodon/{id}"))
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
 }
 
 # Replaces the TransportMastodon resource.
@@ -6161,12 +6300,13 @@ export def "transport-mastodon update" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
   let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/api/transport-mastodon/{id}"))
   let req_body = {"dataSegmentCode": $data_segment_code, "mastodonAccessToken": $mastodon_access_token, "mastodonHost": $mastodon_host, "transportName": $transport_name} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: {}, body: $req_body}
 }
 
 # Retrieves the collection of TransportMattermost resources.
@@ -6186,18 +6326,18 @@ export def "transport-mattermost get-collection" [
   --accept: string@accept-completer # Response content type
   --page: int # The collection page number (default: 1, allows empty value)
   --data-segment-code: string # allows empty value
-  --data-segment-code: list<string> # allows empty value
+  --data-segment-code-list: list<string> # allows empty value (array variant)
   --partition: string # allows empty value
-  --partition: list<string> # allows empty value
+  --partition-list: list<string> # allows empty value (array variant)
   --properties: list<string> # allows empty value
 ]: nothing -> table<createdAt: string, dataSegmentCode: string, id: string, mattermostAccessToken: string, mattermostChannel: string, mattermostHost: string, mattermostPath: string, partition: string, resourceOwner: string, transportName: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "page" $page "scalar") (serialize-qp "dataSegmentCode" $data_segment_code "scalar") (serialize-qp "dataSegmentCode[]" $data_segment_code "multi") (serialize-qp "partition" $partition "scalar") (serialize-qp "partition[]" $partition "multi") (serialize-qp "properties[]" $properties "multi")] | flatten | str join "&"
+  let qp = [(serialize-qp "page" $page "scalar") (serialize-qp "dataSegmentCode" $data_segment_code "scalar") (serialize-qp "dataSegmentCode[]" $data_segment_code_list "multi") (serialize-qp "partition" $partition "scalar") (serialize-qp "partition[]" $partition_list "multi") (serialize-qp "properties[]" $properties "multi")] | flatten | str join "&"
   let full_url = (build-url $base "/api/transport-mattermost" $qp)
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"page": $page, "dataSegmentCode": $data_segment_code, "dataSegmentCode[]": $data_segment_code_list, "partition": $partition, "partition[]": $partition_list, "properties[]": $properties} | compact), body: null}
 }
 
 # Creates a TransportMattermost resource.
@@ -6231,7 +6371,7 @@ export def "transport-mattermost create" [
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: {}, body: $req_body}
 }
 
 # Removes the TransportMattermost resource.
@@ -6252,10 +6392,11 @@ export def "transport-mattermost delete" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
   let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/api/transport-mattermost/{id}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
 }
 
 # Retrieves a TransportMattermost resource.
@@ -6277,10 +6418,11 @@ export def "transport-mattermost get" [
 ]: nothing -> record<createdAt: string, dataSegmentCode: string, id: string, mattermostAccessToken: string, mattermostChannel: string, mattermostHost: string, mattermostPath: string, partition: string, resourceOwner: string, transportName: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
   let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/api/transport-mattermost/{id}"))
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
 }
 
 # Replaces the TransportMattermost resource.
@@ -6309,12 +6451,13 @@ export def "transport-mattermost update" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
   let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/api/transport-mattermost/{id}"))
   let req_body = {"dataSegmentCode": $data_segment_code, "mattermostAccessToken": $mattermost_access_token, "mattermostChannel": $mattermost_channel, "mattermostHost": $mattermost_host, "mattermostPath": $mattermost_path, "transportName": $transport_name} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: {}, body: $req_body}
 }
 
 # Retrieves the collection of TransportMercure resources.
@@ -6334,18 +6477,18 @@ export def "transport-mercure get-collection" [
   --accept: string@accept-completer # Response content type
   --page: int # The collection page number (default: 1, allows empty value)
   --data-segment-code: string # allows empty value
-  --data-segment-code: list<string> # allows empty value
+  --data-segment-code-list: list<string> # allows empty value (array variant)
   --partition: string # allows empty value
-  --partition: list<string> # allows empty value
+  --partition-list: list<string> # allows empty value (array variant)
   --properties: list<string> # allows empty value
 ]: nothing -> table<createdAt: string, dataSegmentCode: string, id: string, mercureHubJwtToken: string, mercureHubUrl: string, mercureTopic: string, partition: string, resourceOwner: string, transportName: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "page" $page "scalar") (serialize-qp "dataSegmentCode" $data_segment_code "scalar") (serialize-qp "dataSegmentCode[]" $data_segment_code "multi") (serialize-qp "partition" $partition "scalar") (serialize-qp "partition[]" $partition "multi") (serialize-qp "properties[]" $properties "multi")] | flatten | str join "&"
+  let qp = [(serialize-qp "page" $page "scalar") (serialize-qp "dataSegmentCode" $data_segment_code "scalar") (serialize-qp "dataSegmentCode[]" $data_segment_code_list "multi") (serialize-qp "partition" $partition "scalar") (serialize-qp "partition[]" $partition_list "multi") (serialize-qp "properties[]" $properties "multi")] | flatten | str join "&"
   let full_url = (build-url $base "/api/transport-mercure" $qp)
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"page": $page, "dataSegmentCode": $data_segment_code, "dataSegmentCode[]": $data_segment_code_list, "partition": $partition, "partition[]": $partition_list, "properties[]": $properties} | compact), body: null}
 }
 
 # Creates a TransportMercure resource.
@@ -6378,7 +6521,7 @@ export def "transport-mercure create" [
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: {}, body: $req_body}
 }
 
 # Removes the TransportMercure resource.
@@ -6399,10 +6542,11 @@ export def "transport-mercure delete" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
   let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/api/transport-mercure/{id}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
 }
 
 # Retrieves a TransportMercure resource.
@@ -6424,10 +6568,11 @@ export def "transport-mercure get" [
 ]: nothing -> record<createdAt: string, dataSegmentCode: string, id: string, mercureHubJwtToken: string, mercureHubUrl: string, mercureTopic: string, partition: string, resourceOwner: string, transportName: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
   let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/api/transport-mercure/{id}"))
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
 }
 
 # Replaces the TransportMercure resource.
@@ -6455,12 +6600,13 @@ export def "transport-mercure update" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
   let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/api/transport-mercure/{id}"))
   let req_body = {"dataSegmentCode": $data_segment_code, "mercureHubJwtToken": $mercure_hub_jwt_token, "mercureHubUrl": $mercure_hub_url, "mercureTopic": $mercure_topic, "transportName": $transport_name} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: {}, body: $req_body}
 }
 
 # Retrieves the collection of TransportMessageBird resources.
@@ -6480,18 +6626,18 @@ export def "transport-message-bird get-collection" [
   --accept: string@accept-completer # Response content type
   --page: int # The collection page number (default: 1, allows empty value)
   --data-segment-code: string # allows empty value
-  --data-segment-code: list<string> # allows empty value
+  --data-segment-code-list: list<string> # allows empty value (array variant)
   --partition: string # allows empty value
-  --partition: list<string> # allows empty value
+  --partition-list: list<string> # allows empty value (array variant)
   --properties: list<string> # allows empty value
 ]: nothing -> table<createdAt: string, dataSegmentCode: string, id: string, messageBirdFrom: string, messageBirdToken: string, partition: string, resourceOwner: string, transportName: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "page" $page "scalar") (serialize-qp "dataSegmentCode" $data_segment_code "scalar") (serialize-qp "dataSegmentCode[]" $data_segment_code "multi") (serialize-qp "partition" $partition "scalar") (serialize-qp "partition[]" $partition "multi") (serialize-qp "properties[]" $properties "multi")] | flatten | str join "&"
+  let qp = [(serialize-qp "page" $page "scalar") (serialize-qp "dataSegmentCode" $data_segment_code "scalar") (serialize-qp "dataSegmentCode[]" $data_segment_code_list "multi") (serialize-qp "partition" $partition "scalar") (serialize-qp "partition[]" $partition_list "multi") (serialize-qp "properties[]" $properties "multi")] | flatten | str join "&"
   let full_url = (build-url $base "/api/transport-message-bird" $qp)
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"page": $page, "dataSegmentCode": $data_segment_code, "dataSegmentCode[]": $data_segment_code_list, "partition": $partition, "partition[]": $partition_list, "properties[]": $properties} | compact), body: null}
 }
 
 # Creates a TransportMessageBird resource.
@@ -6523,7 +6669,7 @@ export def "transport-message-bird create" [
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: {}, body: $req_body}
 }
 
 # Removes the TransportMessageBird resource.
@@ -6544,10 +6690,11 @@ export def "transport-message-bird delete" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
   let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/api/transport-message-bird/{id}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
 }
 
 # Retrieves a TransportMessageBird resource.
@@ -6569,10 +6716,11 @@ export def "transport-message-bird get" [
 ]: nothing -> record<createdAt: string, dataSegmentCode: string, id: string, messageBirdFrom: string, messageBirdToken: string, partition: string, resourceOwner: string, transportName: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
   let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/api/transport-message-bird/{id}"))
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
 }
 
 # Replaces the TransportMessageBird resource.
@@ -6599,12 +6747,13 @@ export def "transport-message-bird update" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
   let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/api/transport-message-bird/{id}"))
   let req_body = {"dataSegmentCode": $data_segment_code, "messageBirdFrom": $message_bird_from, "messageBirdToken": $message_bird_token, "transportName": $transport_name} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: {}, body: $req_body}
 }
 
 # Retrieves the collection of TransportMessageMedia resources.
@@ -6624,18 +6773,18 @@ export def "transport-message-media get-collection" [
   --accept: string@accept-completer # Response content type
   --page: int # The collection page number (default: 1, allows empty value)
   --data-segment-code: string # allows empty value
-  --data-segment-code: list<string> # allows empty value
+  --data-segment-code-list: list<string> # allows empty value (array variant)
   --partition: string # allows empty value
-  --partition: list<string> # allows empty value
+  --partition-list: list<string> # allows empty value (array variant)
   --properties: list<string> # allows empty value
 ]: nothing -> table<createdAt: string, dataSegmentCode: string, id: string, messageMediaApiKey: string, messageMediaApiSecret: string, messageMediaFrom: string, partition: string, resourceOwner: string, transportName: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "page" $page "scalar") (serialize-qp "dataSegmentCode" $data_segment_code "scalar") (serialize-qp "dataSegmentCode[]" $data_segment_code "multi") (serialize-qp "partition" $partition "scalar") (serialize-qp "partition[]" $partition "multi") (serialize-qp "properties[]" $properties "multi")] | flatten | str join "&"
+  let qp = [(serialize-qp "page" $page "scalar") (serialize-qp "dataSegmentCode" $data_segment_code "scalar") (serialize-qp "dataSegmentCode[]" $data_segment_code_list "multi") (serialize-qp "partition" $partition "scalar") (serialize-qp "partition[]" $partition_list "multi") (serialize-qp "properties[]" $properties "multi")] | flatten | str join "&"
   let full_url = (build-url $base "/api/transport-message-media" $qp)
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"page": $page, "dataSegmentCode": $data_segment_code, "dataSegmentCode[]": $data_segment_code_list, "partition": $partition, "partition[]": $partition_list, "properties[]": $properties} | compact), body: null}
 }
 
 # Creates a TransportMessageMedia resource.
@@ -6668,7 +6817,7 @@ export def "transport-message-media create" [
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: {}, body: $req_body}
 }
 
 # Removes the TransportMessageMedia resource.
@@ -6689,10 +6838,11 @@ export def "transport-message-media delete" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
   let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/api/transport-message-media/{id}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
 }
 
 # Retrieves a TransportMessageMedia resource.
@@ -6714,10 +6864,11 @@ export def "transport-message-media get" [
 ]: nothing -> record<createdAt: string, dataSegmentCode: string, id: string, messageMediaApiKey: string, messageMediaApiSecret: string, messageMediaFrom: string, partition: string, resourceOwner: string, transportName: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
   let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/api/transport-message-media/{id}"))
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
 }
 
 # Replaces the TransportMessageMedia resource.
@@ -6745,12 +6896,13 @@ export def "transport-message-media update" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
   let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/api/transport-message-media/{id}"))
   let req_body = {"dataSegmentCode": $data_segment_code, "messageMediaApiKey": $message_media_api_key, "messageMediaApiSecret": $message_media_api_secret, "messageMediaFrom": $message_media_from, "transportName": $transport_name} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: {}, body: $req_body}
 }
 
 # Retrieves the collection of TransportMicrosoftTeams resources.
@@ -6770,18 +6922,18 @@ export def "transport-microsoft-teams get-collection" [
   --accept: string@accept-completer # Response content type
   --page: int # The collection page number (default: 1, allows empty value)
   --data-segment-code: string # allows empty value
-  --data-segment-code: list<string> # allows empty value
+  --data-segment-code-list: list<string> # allows empty value (array variant)
   --partition: string # allows empty value
-  --partition: list<string> # allows empty value
+  --partition-list: list<string> # allows empty value (array variant)
   --properties: list<string> # allows empty value
 ]: nothing -> table<createdAt: string, dataSegmentCode: string, id: string, microsoftTeamsPath: string, partition: string, resourceOwner: string, transportName: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "page" $page "scalar") (serialize-qp "dataSegmentCode" $data_segment_code "scalar") (serialize-qp "dataSegmentCode[]" $data_segment_code "multi") (serialize-qp "partition" $partition "scalar") (serialize-qp "partition[]" $partition "multi") (serialize-qp "properties[]" $properties "multi")] | flatten | str join "&"
+  let qp = [(serialize-qp "page" $page "scalar") (serialize-qp "dataSegmentCode" $data_segment_code "scalar") (serialize-qp "dataSegmentCode[]" $data_segment_code_list "multi") (serialize-qp "partition" $partition "scalar") (serialize-qp "partition[]" $partition_list "multi") (serialize-qp "properties[]" $properties "multi")] | flatten | str join "&"
   let full_url = (build-url $base "/api/transport-microsoft-teams" $qp)
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"page": $page, "dataSegmentCode": $data_segment_code, "dataSegmentCode[]": $data_segment_code_list, "partition": $partition, "partition[]": $partition_list, "properties[]": $properties} | compact), body: null}
 }
 
 # Creates a TransportMicrosoftTeams resource.
@@ -6812,7 +6964,7 @@ export def "transport-microsoft-teams create" [
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: {}, body: $req_body}
 }
 
 # Removes the TransportMicrosoftTeams resource.
@@ -6833,10 +6985,11 @@ export def "transport-microsoft-teams delete" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
   let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/api/transport-microsoft-teams/{id}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
 }
 
 # Retrieves a TransportMicrosoftTeams resource.
@@ -6858,10 +7011,11 @@ export def "transport-microsoft-teams get" [
 ]: nothing -> record<createdAt: string, dataSegmentCode: string, id: string, microsoftTeamsPath: string, partition: string, resourceOwner: string, transportName: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
   let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/api/transport-microsoft-teams/{id}"))
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
 }
 
 # Replaces the TransportMicrosoftTeams resource.
@@ -6887,12 +7041,13 @@ export def "transport-microsoft-teams update" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
   let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/api/transport-microsoft-teams/{id}"))
   let req_body = {"dataSegmentCode": $data_segment_code, "microsoftTeamsPath": $microsoft_teams_path, "transportName": $transport_name} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: {}, body: $req_body}
 }
 
 # Retrieves the collection of TransportMobyt resources.
@@ -6912,18 +7067,18 @@ export def "transport-mobyt get-collection" [
   --accept: string@accept-completer # Response content type
   --page: int # The collection page number (default: 1, allows empty value)
   --data-segment-code: string # allows empty value
-  --data-segment-code: list<string> # allows empty value
+  --data-segment-code-list: list<string> # allows empty value (array variant)
   --partition: string # allows empty value
-  --partition: list<string> # allows empty value
+  --partition-list: list<string> # allows empty value (array variant)
   --properties: list<string> # allows empty value
 ]: nothing -> table<createdAt: string, dataSegmentCode: string, id: string, mobytAccessToken: string, mobytFrom: string, mobytTypeQuality: string, mobytUserKey: string, partition: string, resourceOwner: string, transportName: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "page" $page "scalar") (serialize-qp "dataSegmentCode" $data_segment_code "scalar") (serialize-qp "dataSegmentCode[]" $data_segment_code "multi") (serialize-qp "partition" $partition "scalar") (serialize-qp "partition[]" $partition "multi") (serialize-qp "properties[]" $properties "multi")] | flatten | str join "&"
+  let qp = [(serialize-qp "page" $page "scalar") (serialize-qp "dataSegmentCode" $data_segment_code "scalar") (serialize-qp "dataSegmentCode[]" $data_segment_code_list "multi") (serialize-qp "partition" $partition "scalar") (serialize-qp "partition[]" $partition_list "multi") (serialize-qp "properties[]" $properties "multi")] | flatten | str join "&"
   let full_url = (build-url $base "/api/transport-mobyt" $qp)
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"page": $page, "dataSegmentCode": $data_segment_code, "dataSegmentCode[]": $data_segment_code_list, "partition": $partition, "partition[]": $partition_list, "properties[]": $properties} | compact), body: null}
 }
 
 # Creates a TransportMobyt resource.
@@ -6957,7 +7112,7 @@ export def "transport-mobyt create" [
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: {}, body: $req_body}
 }
 
 # Removes the TransportMobyt resource.
@@ -6978,10 +7133,11 @@ export def "transport-mobyt delete" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
   let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/api/transport-mobyt/{id}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
 }
 
 # Retrieves a TransportMobyt resource.
@@ -7003,10 +7159,11 @@ export def "transport-mobyt get" [
 ]: nothing -> record<createdAt: string, dataSegmentCode: string, id: string, mobytAccessToken: string, mobytFrom: string, mobytTypeQuality: string, mobytUserKey: string, partition: string, resourceOwner: string, transportName: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
   let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/api/transport-mobyt/{id}"))
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
 }
 
 # Replaces the TransportMobyt resource.
@@ -7035,12 +7192,13 @@ export def "transport-mobyt update" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
   let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/api/transport-mobyt/{id}"))
   let req_body = {"dataSegmentCode": $data_segment_code, "mobytAccessToken": $mobyt_access_token, "mobytFrom": $mobyt_from, "mobytTypeQuality": $mobyt_type_quality, "mobytUserKey": $mobyt_user_key, "transportName": $transport_name} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: {}, body: $req_body}
 }
 
 # Retrieves the collection of TransportOctopush resources.
@@ -7060,18 +7218,18 @@ export def "transport-octopush get-collection" [
   --accept: string@accept-completer # Response content type
   --page: int # The collection page number (default: 1, allows empty value)
   --data-segment-code: string # allows empty value
-  --data-segment-code: list<string> # allows empty value
+  --data-segment-code-list: list<string> # allows empty value (array variant)
   --partition: string # allows empty value
-  --partition: list<string> # allows empty value
+  --partition-list: list<string> # allows empty value (array variant)
   --properties: list<string> # allows empty value
 ]: nothing -> table<createdAt: string, dataSegmentCode: string, id: string, octopushApiKey: string, octopushFrom: string, octopushType: string, octopushUserLogin: string, partition: string, resourceOwner: string, transportName: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "page" $page "scalar") (serialize-qp "dataSegmentCode" $data_segment_code "scalar") (serialize-qp "dataSegmentCode[]" $data_segment_code "multi") (serialize-qp "partition" $partition "scalar") (serialize-qp "partition[]" $partition "multi") (serialize-qp "properties[]" $properties "multi")] | flatten | str join "&"
+  let qp = [(serialize-qp "page" $page "scalar") (serialize-qp "dataSegmentCode" $data_segment_code "scalar") (serialize-qp "dataSegmentCode[]" $data_segment_code_list "multi") (serialize-qp "partition" $partition "scalar") (serialize-qp "partition[]" $partition_list "multi") (serialize-qp "properties[]" $properties "multi")] | flatten | str join "&"
   let full_url = (build-url $base "/api/transport-octopush" $qp)
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"page": $page, "dataSegmentCode": $data_segment_code, "dataSegmentCode[]": $data_segment_code_list, "partition": $partition, "partition[]": $partition_list, "properties[]": $properties} | compact), body: null}
 }
 
 # Creates a TransportOctopush resource.
@@ -7105,7 +7263,7 @@ export def "transport-octopush create" [
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: {}, body: $req_body}
 }
 
 # Removes the TransportOctopush resource.
@@ -7126,10 +7284,11 @@ export def "transport-octopush delete" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
   let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/api/transport-octopush/{id}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
 }
 
 # Retrieves a TransportOctopush resource.
@@ -7151,10 +7310,11 @@ export def "transport-octopush get" [
 ]: nothing -> record<createdAt: string, dataSegmentCode: string, id: string, octopushApiKey: string, octopushFrom: string, octopushType: string, octopushUserLogin: string, partition: string, resourceOwner: string, transportName: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
   let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/api/transport-octopush/{id}"))
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
 }
 
 # Replaces the TransportOctopush resource.
@@ -7183,12 +7343,13 @@ export def "transport-octopush update" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
   let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/api/transport-octopush/{id}"))
   let req_body = {"dataSegmentCode": $data_segment_code, "octopushApiKey": $octopush_api_key, "octopushFrom": $octopush_from, "octopushType": $octopush_type, "octopushUserLogin": $octopush_user_login, "transportName": $transport_name} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: {}, body: $req_body}
 }
 
 # Retrieves the collection of TransportOneSignal resources.
@@ -7208,18 +7369,18 @@ export def "transport-one-signal get-collection" [
   --accept: string@accept-completer # Response content type
   --page: int # The collection page number (default: 1, allows empty value)
   --data-segment-code: string # allows empty value
-  --data-segment-code: list<string> # allows empty value
+  --data-segment-code-list: list<string> # allows empty value (array variant)
   --partition: string # allows empty value
-  --partition: list<string> # allows empty value
+  --partition-list: list<string> # allows empty value (array variant)
   --properties: list<string> # allows empty value
 ]: nothing -> table<createdAt: string, dataSegmentCode: string, id: string, oneSignalApiKey: string, oneSignalAppId: string, oneSignalDefaultRecipientId: string, partition: string, resourceOwner: string, transportName: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "page" $page "scalar") (serialize-qp "dataSegmentCode" $data_segment_code "scalar") (serialize-qp "dataSegmentCode[]" $data_segment_code "multi") (serialize-qp "partition" $partition "scalar") (serialize-qp "partition[]" $partition "multi") (serialize-qp "properties[]" $properties "multi")] | flatten | str join "&"
+  let qp = [(serialize-qp "page" $page "scalar") (serialize-qp "dataSegmentCode" $data_segment_code "scalar") (serialize-qp "dataSegmentCode[]" $data_segment_code_list "multi") (serialize-qp "partition" $partition "scalar") (serialize-qp "partition[]" $partition_list "multi") (serialize-qp "properties[]" $properties "multi")] | flatten | str join "&"
   let full_url = (build-url $base "/api/transport-one-signal" $qp)
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"page": $page, "dataSegmentCode": $data_segment_code, "dataSegmentCode[]": $data_segment_code_list, "partition": $partition, "partition[]": $partition_list, "properties[]": $properties} | compact), body: null}
 }
 
 # Creates a TransportOneSignal resource.
@@ -7252,7 +7413,7 @@ export def "transport-one-signal create" [
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: {}, body: $req_body}
 }
 
 # Removes the TransportOneSignal resource.
@@ -7273,10 +7434,11 @@ export def "transport-one-signal delete" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
   let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/api/transport-one-signal/{id}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
 }
 
 # Retrieves a TransportOneSignal resource.
@@ -7298,10 +7460,11 @@ export def "transport-one-signal get" [
 ]: nothing -> record<createdAt: string, dataSegmentCode: string, id: string, oneSignalApiKey: string, oneSignalAppId: string, oneSignalDefaultRecipientId: string, partition: string, resourceOwner: string, transportName: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
   let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/api/transport-one-signal/{id}"))
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
 }
 
 # Replaces the TransportOneSignal resource.
@@ -7329,12 +7492,13 @@ export def "transport-one-signal update" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
   let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/api/transport-one-signal/{id}"))
   let req_body = {"dataSegmentCode": $data_segment_code, "oneSignalApiKey": $one_signal_api_key, "oneSignalAppId": $one_signal_app_id, "oneSignalDefaultRecipientId": $one_signal_default_recipient_id, "transportName": $transport_name} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: {}, body: $req_body}
 }
 
 # Retrieves the collection of TransportOpsgenie resources.
@@ -7354,18 +7518,18 @@ export def "transport-opsgenie get-collection" [
   --accept: string@accept-completer # Response content type
   --page: int # The collection page number (default: 1, allows empty value)
   --data-segment-code: string # allows empty value
-  --data-segment-code: list<string> # allows empty value
+  --data-segment-code-list: list<string> # allows empty value (array variant)
   --partition: string # allows empty value
-  --partition: list<string> # allows empty value
+  --partition-list: list<string> # allows empty value (array variant)
   --properties: list<string> # allows empty value
 ]: nothing -> table<createdAt: string, dataSegmentCode: string, id: string, opsgenieAlias: string, opsgenieApiKey: string, opsgenieEntity: string, opsgenieNote: string, opsgeniePriority: string, opsgenieUser: string, partition: string, resourceOwner: string, transportName: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "page" $page "scalar") (serialize-qp "dataSegmentCode" $data_segment_code "scalar") (serialize-qp "dataSegmentCode[]" $data_segment_code "multi") (serialize-qp "partition" $partition "scalar") (serialize-qp "partition[]" $partition "multi") (serialize-qp "properties[]" $properties "multi")] | flatten | str join "&"
+  let qp = [(serialize-qp "page" $page "scalar") (serialize-qp "dataSegmentCode" $data_segment_code "scalar") (serialize-qp "dataSegmentCode[]" $data_segment_code_list "multi") (serialize-qp "partition" $partition "scalar") (serialize-qp "partition[]" $partition_list "multi") (serialize-qp "properties[]" $properties "multi")] | flatten | str join "&"
   let full_url = (build-url $base "/api/transport-opsgenie" $qp)
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"page": $page, "dataSegmentCode": $data_segment_code, "dataSegmentCode[]": $data_segment_code_list, "partition": $partition, "partition[]": $partition_list, "properties[]": $properties} | compact), body: null}
 }
 
 # Creates a TransportOpsgenie resource.
@@ -7401,7 +7565,7 @@ export def "transport-opsgenie create" [
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: {}, body: $req_body}
 }
 
 # Removes the TransportOpsgenie resource.
@@ -7422,10 +7586,11 @@ export def "transport-opsgenie delete" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
   let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/api/transport-opsgenie/{id}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
 }
 
 # Retrieves a TransportOpsgenie resource.
@@ -7447,10 +7612,11 @@ export def "transport-opsgenie get" [
 ]: nothing -> record<createdAt: string, dataSegmentCode: string, id: string, opsgenieAlias: string, opsgenieApiKey: string, opsgenieEntity: string, opsgenieNote: string, opsgeniePriority: string, opsgenieUser: string, partition: string, resourceOwner: string, transportName: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
   let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/api/transport-opsgenie/{id}"))
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
 }
 
 # Replaces the TransportOpsgenie resource.
@@ -7481,12 +7647,13 @@ export def "transport-opsgenie update" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
   let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/api/transport-opsgenie/{id}"))
   let req_body = {"dataSegmentCode": $data_segment_code, "opsgenieAlias": $opsgenie_alias, "opsgenieApiKey": $opsgenie_api_key, "opsgenieEntity": $opsgenie_entity, "opsgenieNote": $opsgenie_note, "opsgeniePriority": $opsgenie_priority, "opsgenieUser": $opsgenie_user, "transportName": $transport_name} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: {}, body: $req_body}
 }
 
 # Retrieves the collection of TransportOrangeSms resources.
@@ -7506,18 +7673,18 @@ export def "transport-orange-sms get-collection" [
   --accept: string@accept-completer # Response content type
   --page: int # The collection page number (default: 1, allows empty value)
   --data-segment-code: string # allows empty value
-  --data-segment-code: list<string> # allows empty value
+  --data-segment-code-list: list<string> # allows empty value (array variant)
   --partition: string # allows empty value
-  --partition: list<string> # allows empty value
+  --partition-list: list<string> # allows empty value (array variant)
   --properties: list<string> # allows empty value
 ]: nothing -> table<createdAt: string, dataSegmentCode: string, id: string, orangeSmsClientId: string, orangeSmsClientSecret: string, orangeSmsFrom: string, orangeSmsSenderName: string, partition: string, resourceOwner: string, transportName: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "page" $page "scalar") (serialize-qp "dataSegmentCode" $data_segment_code "scalar") (serialize-qp "dataSegmentCode[]" $data_segment_code "multi") (serialize-qp "partition" $partition "scalar") (serialize-qp "partition[]" $partition "multi") (serialize-qp "properties[]" $properties "multi")] | flatten | str join "&"
+  let qp = [(serialize-qp "page" $page "scalar") (serialize-qp "dataSegmentCode" $data_segment_code "scalar") (serialize-qp "dataSegmentCode[]" $data_segment_code_list "multi") (serialize-qp "partition" $partition "scalar") (serialize-qp "partition[]" $partition_list "multi") (serialize-qp "properties[]" $properties "multi")] | flatten | str join "&"
   let full_url = (build-url $base "/api/transport-orange-sms" $qp)
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"page": $page, "dataSegmentCode": $data_segment_code, "dataSegmentCode[]": $data_segment_code_list, "partition": $partition, "partition[]": $partition_list, "properties[]": $properties} | compact), body: null}
 }
 
 # Creates a TransportOrangeSms resource.
@@ -7551,7 +7718,7 @@ export def "transport-orange-sms create" [
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: {}, body: $req_body}
 }
 
 # Removes the TransportOrangeSms resource.
@@ -7572,10 +7739,11 @@ export def "transport-orange-sms delete" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
   let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/api/transport-orange-sms/{id}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
 }
 
 # Retrieves a TransportOrangeSms resource.
@@ -7597,10 +7765,11 @@ export def "transport-orange-sms get" [
 ]: nothing -> record<createdAt: string, dataSegmentCode: string, id: string, orangeSmsClientId: string, orangeSmsClientSecret: string, orangeSmsFrom: string, orangeSmsSenderName: string, partition: string, resourceOwner: string, transportName: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
   let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/api/transport-orange-sms/{id}"))
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
 }
 
 # Replaces the TransportOrangeSms resource.
@@ -7629,12 +7798,13 @@ export def "transport-orange-sms update" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
   let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/api/transport-orange-sms/{id}"))
   let req_body = {"dataSegmentCode": $data_segment_code, "orangeSmsClientId": $orange_sms_client_id, "orangeSmsClientSecret": $orange_sms_client_secret, "orangeSmsFrom": $orange_sms_from, "orangeSmsSenderName": $orange_sms_sender_name, "transportName": $transport_name} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: {}, body: $req_body}
 }
 
 # Retrieves the collection of TransportOvhCloud resources.
@@ -7654,18 +7824,18 @@ export def "transport-ovh-cloud get-collection" [
   --accept: string@accept-completer # Response content type
   --page: int # The collection page number (default: 1, allows empty value)
   --data-segment-code: string # allows empty value
-  --data-segment-code: list<string> # allows empty value
+  --data-segment-code-list: list<string> # allows empty value (array variant)
   --partition: string # allows empty value
-  --partition: list<string> # allows empty value
+  --partition-list: list<string> # allows empty value (array variant)
   --properties: list<string> # allows empty value
 ]: nothing -> table<createdAt: string, dataSegmentCode: string, id: string, ovhCloudApplicationKey: string, ovhCloudApplicationSecret: string, ovhCloudConsumerKey: string, ovhCloudSender: string, ovhCloudServiceName: string, partition: string, resourceOwner: string, transportName: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "page" $page "scalar") (serialize-qp "dataSegmentCode" $data_segment_code "scalar") (serialize-qp "dataSegmentCode[]" $data_segment_code "multi") (serialize-qp "partition" $partition "scalar") (serialize-qp "partition[]" $partition "multi") (serialize-qp "properties[]" $properties "multi")] | flatten | str join "&"
+  let qp = [(serialize-qp "page" $page "scalar") (serialize-qp "dataSegmentCode" $data_segment_code "scalar") (serialize-qp "dataSegmentCode[]" $data_segment_code_list "multi") (serialize-qp "partition" $partition "scalar") (serialize-qp "partition[]" $partition_list "multi") (serialize-qp "properties[]" $properties "multi")] | flatten | str join "&"
   let full_url = (build-url $base "/api/transport-ovh-cloud" $qp)
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"page": $page, "dataSegmentCode": $data_segment_code, "dataSegmentCode[]": $data_segment_code_list, "partition": $partition, "partition[]": $partition_list, "properties[]": $properties} | compact), body: null}
 }
 
 # Creates a TransportOvhCloud resource.
@@ -7700,7 +7870,7 @@ export def "transport-ovh-cloud create" [
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: {}, body: $req_body}
 }
 
 # Removes the TransportOvhCloud resource.
@@ -7721,10 +7891,11 @@ export def "transport-ovh-cloud delete" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
   let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/api/transport-ovh-cloud/{id}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
 }
 
 # Retrieves a TransportOvhCloud resource.
@@ -7746,10 +7917,11 @@ export def "transport-ovh-cloud get" [
 ]: nothing -> record<createdAt: string, dataSegmentCode: string, id: string, ovhCloudApplicationKey: string, ovhCloudApplicationSecret: string, ovhCloudConsumerKey: string, ovhCloudSender: string, ovhCloudServiceName: string, partition: string, resourceOwner: string, transportName: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
   let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/api/transport-ovh-cloud/{id}"))
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
 }
 
 # Replaces the TransportOvhCloud resource.
@@ -7779,12 +7951,13 @@ export def "transport-ovh-cloud update" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
   let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/api/transport-ovh-cloud/{id}"))
   let req_body = {"dataSegmentCode": $data_segment_code, "ovhCloudApplicationKey": $ovh_cloud_application_key, "ovhCloudApplicationSecret": $ovh_cloud_application_secret, "ovhCloudConsumerKey": $ovh_cloud_consumer_key, "ovhCloudSender": $ovh_cloud_sender, "ovhCloudServiceName": $ovh_cloud_service_name, "transportName": $transport_name} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: {}, body: $req_body}
 }
 
 # Retrieves the collection of TransportPagerDuty resources.
@@ -7804,18 +7977,18 @@ export def "transport-pager-duty get-collection" [
   --accept: string@accept-completer # Response content type
   --page: int # The collection page number (default: 1, allows empty value)
   --data-segment-code: string # allows empty value
-  --data-segment-code: list<string> # allows empty value
+  --data-segment-code-list: list<string> # allows empty value (array variant)
   --partition: string # allows empty value
-  --partition: list<string> # allows empty value
+  --partition-list: list<string> # allows empty value (array variant)
   --properties: list<string> # allows empty value
 ]: nothing -> table<createdAt: string, dataSegmentCode: string, id: string, pagerDutyApiToken: string, pagerDutyDedupKey: string, pagerDutyEventAction: string, pagerDutyPayloadClass: string, pagerDutyPayloadComponent: string, pagerDutyPayloadGroup: string, pagerDutyPayloadSeverity: string, pagerDutyPayloadSource: string, pagerDutyRoutingKey: string, partition: string, resourceOwner: string, transportName: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "page" $page "scalar") (serialize-qp "dataSegmentCode" $data_segment_code "scalar") (serialize-qp "dataSegmentCode[]" $data_segment_code "multi") (serialize-qp "partition" $partition "scalar") (serialize-qp "partition[]" $partition "multi") (serialize-qp "properties[]" $properties "multi")] | flatten | str join "&"
+  let qp = [(serialize-qp "page" $page "scalar") (serialize-qp "dataSegmentCode" $data_segment_code "scalar") (serialize-qp "dataSegmentCode[]" $data_segment_code_list "multi") (serialize-qp "partition" $partition "scalar") (serialize-qp "partition[]" $partition_list "multi") (serialize-qp "properties[]" $properties "multi")] | flatten | str join "&"
   let full_url = (build-url $base "/api/transport-pager-duty" $qp)
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"page": $page, "dataSegmentCode": $data_segment_code, "dataSegmentCode[]": $data_segment_code_list, "partition": $partition, "partition[]": $partition_list, "properties[]": $properties} | compact), body: null}
 }
 
 # Creates a TransportPagerDuty resource.
@@ -7854,7 +8027,7 @@ export def "transport-pager-duty create" [
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: {}, body: $req_body}
 }
 
 # Removes the TransportPagerDuty resource.
@@ -7875,10 +8048,11 @@ export def "transport-pager-duty delete" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
   let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/api/transport-pager-duty/{id}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
 }
 
 # Retrieves a TransportPagerDuty resource.
@@ -7900,10 +8074,11 @@ export def "transport-pager-duty get" [
 ]: nothing -> record<createdAt: string, dataSegmentCode: string, id: string, pagerDutyApiToken: string, pagerDutyDedupKey: string, pagerDutyEventAction: string, pagerDutyPayloadClass: string, pagerDutyPayloadComponent: string, pagerDutyPayloadGroup: string, pagerDutyPayloadSeverity: string, pagerDutyPayloadSource: string, pagerDutyRoutingKey: string, partition: string, resourceOwner: string, transportName: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
   let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/api/transport-pager-duty/{id}"))
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
 }
 
 # Replaces the TransportPagerDuty resource.
@@ -7937,12 +8112,13 @@ export def "transport-pager-duty update" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
   let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/api/transport-pager-duty/{id}"))
   let req_body = {"dataSegmentCode": $data_segment_code, "pagerDutyApiToken": $pager_duty_api_token, "pagerDutyDedupKey": $pager_duty_dedup_key, "pagerDutyEventAction": $pager_duty_event_action, "pagerDutyPayloadClass": $pager_duty_payload_class, "pagerDutyPayloadComponent": $pager_duty_payload_component, "pagerDutyPayloadGroup": $pager_duty_payload_group, "pagerDutyPayloadSeverity": $pager_duty_payload_severity, "pagerDutyPayloadSource": $pager_duty_payload_source, "pagerDutyRoutingKey": $pager_duty_routing_key, "transportName": $transport_name} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: {}, body: $req_body}
 }
 
 # Retrieves the collection of TransportPagerTree resources.
@@ -7962,18 +8138,18 @@ export def "transport-pager-tree get-collection" [
   --accept: string@accept-completer # Response content type
   --page: int # The collection page number (default: 1, allows empty value)
   --data-segment-code: string # allows empty value
-  --data-segment-code: list<string> # allows empty value
+  --data-segment-code-list: list<string> # allows empty value (array variant)
   --partition: string # allows empty value
-  --partition: list<string> # allows empty value
+  --partition-list: list<string> # allows empty value (array variant)
   --properties: list<string> # allows empty value
 ]: nothing -> table<createdAt: string, dataSegmentCode: string, id: string, pagerTreeAccessToken: string, pagerTreeAccountUserId: string, pagerTreeRouterId: string, pagerTreeTeamId: string, pagerTreeUrgency: string, partition: string, resourceOwner: string, transportName: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "page" $page "scalar") (serialize-qp "dataSegmentCode" $data_segment_code "scalar") (serialize-qp "dataSegmentCode[]" $data_segment_code "multi") (serialize-qp "partition" $partition "scalar") (serialize-qp "partition[]" $partition "multi") (serialize-qp "properties[]" $properties "multi")] | flatten | str join "&"
+  let qp = [(serialize-qp "page" $page "scalar") (serialize-qp "dataSegmentCode" $data_segment_code "scalar") (serialize-qp "dataSegmentCode[]" $data_segment_code_list "multi") (serialize-qp "partition" $partition "scalar") (serialize-qp "partition[]" $partition_list "multi") (serialize-qp "properties[]" $properties "multi")] | flatten | str join "&"
   let full_url = (build-url $base "/api/transport-pager-tree" $qp)
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"page": $page, "dataSegmentCode": $data_segment_code, "dataSegmentCode[]": $data_segment_code_list, "partition": $partition, "partition[]": $partition_list, "properties[]": $properties} | compact), body: null}
 }
 
 # Creates a TransportPagerTree resource.
@@ -8008,7 +8184,7 @@ export def "transport-pager-tree create" [
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: {}, body: $req_body}
 }
 
 # Removes the TransportPagerTree resource.
@@ -8029,10 +8205,11 @@ export def "transport-pager-tree delete" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
   let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/api/transport-pager-tree/{id}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
 }
 
 # Retrieves a TransportPagerTree resource.
@@ -8054,10 +8231,11 @@ export def "transport-pager-tree get" [
 ]: nothing -> record<createdAt: string, dataSegmentCode: string, id: string, pagerTreeAccessToken: string, pagerTreeAccountUserId: string, pagerTreeRouterId: string, pagerTreeTeamId: string, pagerTreeUrgency: string, partition: string, resourceOwner: string, transportName: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
   let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/api/transport-pager-tree/{id}"))
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
 }
 
 # Replaces the TransportPagerTree resource.
@@ -8087,12 +8265,13 @@ export def "transport-pager-tree update" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
   let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/api/transport-pager-tree/{id}"))
   let req_body = {"dataSegmentCode": $data_segment_code, "pagerTreeAccessToken": $pager_tree_access_token, "pagerTreeAccountUserId": $pager_tree_account_user_id, "pagerTreeRouterId": $pager_tree_router_id, "pagerTreeTeamId": $pager_tree_team_id, "pagerTreeUrgency": $pager_tree_urgency, "transportName": $transport_name} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: {}, body: $req_body}
 }
 
 # Retrieves the collection of TransportPlivo resources.
@@ -8112,18 +8291,18 @@ export def "transport-plivo get-collection" [
   --accept: string@accept-completer # Response content type
   --page: int # The collection page number (default: 1, allows empty value)
   --data-segment-code: string # allows empty value
-  --data-segment-code: list<string> # allows empty value
+  --data-segment-code-list: list<string> # allows empty value (array variant)
   --partition: string # allows empty value
-  --partition: list<string> # allows empty value
+  --partition-list: list<string> # allows empty value (array variant)
   --properties: list<string> # allows empty value
 ]: nothing -> table<createdAt: string, dataSegmentCode: string, id: string, partition: string, plivoAuthId: string, plivoAuthToken: string, plivoFrom: string, resourceOwner: string, transportName: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "page" $page "scalar") (serialize-qp "dataSegmentCode" $data_segment_code "scalar") (serialize-qp "dataSegmentCode[]" $data_segment_code "multi") (serialize-qp "partition" $partition "scalar") (serialize-qp "partition[]" $partition "multi") (serialize-qp "properties[]" $properties "multi")] | flatten | str join "&"
+  let qp = [(serialize-qp "page" $page "scalar") (serialize-qp "dataSegmentCode" $data_segment_code "scalar") (serialize-qp "dataSegmentCode[]" $data_segment_code_list "multi") (serialize-qp "partition" $partition "scalar") (serialize-qp "partition[]" $partition_list "multi") (serialize-qp "properties[]" $properties "multi")] | flatten | str join "&"
   let full_url = (build-url $base "/api/transport-plivo" $qp)
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"page": $page, "dataSegmentCode": $data_segment_code, "dataSegmentCode[]": $data_segment_code_list, "partition": $partition, "partition[]": $partition_list, "properties[]": $properties} | compact), body: null}
 }
 
 # Creates a TransportPlivo resource.
@@ -8156,7 +8335,7 @@ export def "transport-plivo create" [
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: {}, body: $req_body}
 }
 
 # Removes the TransportPlivo resource.
@@ -8177,10 +8356,11 @@ export def "transport-plivo delete" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
   let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/api/transport-plivo/{id}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
 }
 
 # Retrieves a TransportPlivo resource.
@@ -8202,10 +8382,11 @@ export def "transport-plivo get" [
 ]: nothing -> record<createdAt: string, dataSegmentCode: string, id: string, partition: string, plivoAuthId: string, plivoAuthToken: string, plivoFrom: string, resourceOwner: string, transportName: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
   let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/api/transport-plivo/{id}"))
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
 }
 
 # Replaces the TransportPlivo resource.
@@ -8233,12 +8414,13 @@ export def "transport-plivo update" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
   let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/api/transport-plivo/{id}"))
   let req_body = {"dataSegmentCode": $data_segment_code, "plivoAuthId": $plivo_auth_id, "plivoAuthToken": $plivo_auth_token, "plivoFrom": $plivo_from, "transportName": $transport_name} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: {}, body: $req_body}
 }
 
 # Retrieves the collection of TransportPushbullet resources.
@@ -8258,18 +8440,18 @@ export def "transport-pushbullet get-collection" [
   --accept: string@accept-completer # Response content type
   --page: int # The collection page number (default: 1, allows empty value)
   --data-segment-code: string # allows empty value
-  --data-segment-code: list<string> # allows empty value
+  --data-segment-code-list: list<string> # allows empty value (array variant)
   --partition: string # allows empty value
-  --partition: list<string> # allows empty value
+  --partition-list: list<string> # allows empty value (array variant)
   --properties: list<string> # allows empty value
 ]: nothing -> table<createdAt: string, dataSegmentCode: string, id: string, partition: string, pushbulletAccessToken: string, pushbulletEmail: string, resourceOwner: string, transportName: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "page" $page "scalar") (serialize-qp "dataSegmentCode" $data_segment_code "scalar") (serialize-qp "dataSegmentCode[]" $data_segment_code "multi") (serialize-qp "partition" $partition "scalar") (serialize-qp "partition[]" $partition "multi") (serialize-qp "properties[]" $properties "multi")] | flatten | str join "&"
+  let qp = [(serialize-qp "page" $page "scalar") (serialize-qp "dataSegmentCode" $data_segment_code "scalar") (serialize-qp "dataSegmentCode[]" $data_segment_code_list "multi") (serialize-qp "partition" $partition "scalar") (serialize-qp "partition[]" $partition_list "multi") (serialize-qp "properties[]" $properties "multi")] | flatten | str join "&"
   let full_url = (build-url $base "/api/transport-pushbullet" $qp)
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"page": $page, "dataSegmentCode": $data_segment_code, "dataSegmentCode[]": $data_segment_code_list, "partition": $partition, "partition[]": $partition_list, "properties[]": $properties} | compact), body: null}
 }
 
 # Creates a TransportPushbullet resource.
@@ -8301,7 +8483,7 @@ export def "transport-pushbullet create" [
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: {}, body: $req_body}
 }
 
 # Removes the TransportPushbullet resource.
@@ -8322,10 +8504,11 @@ export def "transport-pushbullet delete" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
   let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/api/transport-pushbullet/{id}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
 }
 
 # Retrieves a TransportPushbullet resource.
@@ -8347,10 +8530,11 @@ export def "transport-pushbullet get" [
 ]: nothing -> record<createdAt: string, dataSegmentCode: string, id: string, partition: string, pushbulletAccessToken: string, pushbulletEmail: string, resourceOwner: string, transportName: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
   let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/api/transport-pushbullet/{id}"))
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
 }
 
 # Replaces the TransportPushbullet resource.
@@ -8377,12 +8561,13 @@ export def "transport-pushbullet update" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
   let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/api/transport-pushbullet/{id}"))
   let req_body = {"dataSegmentCode": $data_segment_code, "pushbulletAccessToken": $pushbullet_access_token, "pushbulletEmail": $pushbullet_email, "transportName": $transport_name} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: {}, body: $req_body}
 }
 
 # Retrieves the collection of TransportPushover resources.
@@ -8402,18 +8587,18 @@ export def "transport-pushover get-collection" [
   --accept: string@accept-completer # Response content type
   --page: int # The collection page number (default: 1, allows empty value)
   --data-segment-code: string # allows empty value
-  --data-segment-code: list<string> # allows empty value
+  --data-segment-code-list: list<string> # allows empty value (array variant)
   --partition: string # allows empty value
-  --partition: list<string> # allows empty value
+  --partition-list: list<string> # allows empty value (array variant)
   --properties: list<string> # allows empty value
 ]: nothing -> table<createdAt: string, dataSegmentCode: string, id: string, partition: string, pushoverAppToken: string, pushoverUserKey: string, resourceOwner: string, transportName: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "page" $page "scalar") (serialize-qp "dataSegmentCode" $data_segment_code "scalar") (serialize-qp "dataSegmentCode[]" $data_segment_code "multi") (serialize-qp "partition" $partition "scalar") (serialize-qp "partition[]" $partition "multi") (serialize-qp "properties[]" $properties "multi")] | flatten | str join "&"
+  let qp = [(serialize-qp "page" $page "scalar") (serialize-qp "dataSegmentCode" $data_segment_code "scalar") (serialize-qp "dataSegmentCode[]" $data_segment_code_list "multi") (serialize-qp "partition" $partition "scalar") (serialize-qp "partition[]" $partition_list "multi") (serialize-qp "properties[]" $properties "multi")] | flatten | str join "&"
   let full_url = (build-url $base "/api/transport-pushover" $qp)
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"page": $page, "dataSegmentCode": $data_segment_code, "dataSegmentCode[]": $data_segment_code_list, "partition": $partition, "partition[]": $partition_list, "properties[]": $properties} | compact), body: null}
 }
 
 # Creates a TransportPushover resource.
@@ -8445,7 +8630,7 @@ export def "transport-pushover create" [
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: {}, body: $req_body}
 }
 
 # Removes the TransportPushover resource.
@@ -8466,10 +8651,11 @@ export def "transport-pushover delete" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
   let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/api/transport-pushover/{id}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
 }
 
 # Retrieves a TransportPushover resource.
@@ -8491,10 +8677,11 @@ export def "transport-pushover get" [
 ]: nothing -> record<createdAt: string, dataSegmentCode: string, id: string, partition: string, pushoverAppToken: string, pushoverUserKey: string, resourceOwner: string, transportName: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
   let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/api/transport-pushover/{id}"))
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
 }
 
 # Replaces the TransportPushover resource.
@@ -8521,12 +8708,13 @@ export def "transport-pushover update" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
   let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/api/transport-pushover/{id}"))
   let req_body = {"dataSegmentCode": $data_segment_code, "pushoverAppToken": $pushover_app_token, "pushoverUserKey": $pushover_user_key, "transportName": $transport_name} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: {}, body: $req_body}
 }
 
 # Retrieves the collection of TransportPushy resources.
@@ -8546,18 +8734,18 @@ export def "transport-pushy get-collection" [
   --accept: string@accept-completer # Response content type
   --page: int # The collection page number (default: 1, allows empty value)
   --data-segment-code: string # allows empty value
-  --data-segment-code: list<string> # allows empty value
+  --data-segment-code-list: list<string> # allows empty value (array variant)
   --partition: string # allows empty value
-  --partition: list<string> # allows empty value
+  --partition-list: list<string> # allows empty value (array variant)
   --properties: list<string> # allows empty value
 ]: nothing -> table<createdAt: string, dataSegmentCode: string, id: string, partition: string, pushyApiKey: string, pushyTo: string, resourceOwner: string, transportName: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "page" $page "scalar") (serialize-qp "dataSegmentCode" $data_segment_code "scalar") (serialize-qp "dataSegmentCode[]" $data_segment_code "multi") (serialize-qp "partition" $partition "scalar") (serialize-qp "partition[]" $partition "multi") (serialize-qp "properties[]" $properties "multi")] | flatten | str join "&"
+  let qp = [(serialize-qp "page" $page "scalar") (serialize-qp "dataSegmentCode" $data_segment_code "scalar") (serialize-qp "dataSegmentCode[]" $data_segment_code_list "multi") (serialize-qp "partition" $partition "scalar") (serialize-qp "partition[]" $partition_list "multi") (serialize-qp "properties[]" $properties "multi")] | flatten | str join "&"
   let full_url = (build-url $base "/api/transport-pushy" $qp)
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"page": $page, "dataSegmentCode": $data_segment_code, "dataSegmentCode[]": $data_segment_code_list, "partition": $partition, "partition[]": $partition_list, "properties[]": $properties} | compact), body: null}
 }
 
 # Creates a TransportPushy resource.
@@ -8589,7 +8777,7 @@ export def "transport-pushy create" [
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: {}, body: $req_body}
 }
 
 # Removes the TransportPushy resource.
@@ -8610,10 +8798,11 @@ export def "transport-pushy delete" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
   let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/api/transport-pushy/{id}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
 }
 
 # Retrieves a TransportPushy resource.
@@ -8635,10 +8824,11 @@ export def "transport-pushy get" [
 ]: nothing -> record<createdAt: string, dataSegmentCode: string, id: string, partition: string, pushyApiKey: string, pushyTo: string, resourceOwner: string, transportName: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
   let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/api/transport-pushy/{id}"))
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
 }
 
 # Replaces the TransportPushy resource.
@@ -8665,12 +8855,13 @@ export def "transport-pushy update" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
   let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/api/transport-pushy/{id}"))
   let req_body = {"dataSegmentCode": $data_segment_code, "pushyApiKey": $pushy_api_key, "pushyTo": $pushy_to, "transportName": $transport_name} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: {}, body: $req_body}
 }
 
 # Retrieves the collection of TransportRingCentral resources.
@@ -8690,18 +8881,18 @@ export def "transport-ring-central get-collection" [
   --accept: string@accept-completer # Response content type
   --page: int # The collection page number (default: 1, allows empty value)
   --data-segment-code: string # allows empty value
-  --data-segment-code: list<string> # allows empty value
+  --data-segment-code-list: list<string> # allows empty value (array variant)
   --partition: string # allows empty value
-  --partition: list<string> # allows empty value
+  --partition-list: list<string> # allows empty value (array variant)
   --properties: list<string> # allows empty value
 ]: nothing -> table<createdAt: string, dataSegmentCode: string, id: string, partition: string, resourceOwner: string, ringCentralApiToken: string, ringCentralFrom: string, transportName: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "page" $page "scalar") (serialize-qp "dataSegmentCode" $data_segment_code "scalar") (serialize-qp "dataSegmentCode[]" $data_segment_code "multi") (serialize-qp "partition" $partition "scalar") (serialize-qp "partition[]" $partition "multi") (serialize-qp "properties[]" $properties "multi")] | flatten | str join "&"
+  let qp = [(serialize-qp "page" $page "scalar") (serialize-qp "dataSegmentCode" $data_segment_code "scalar") (serialize-qp "dataSegmentCode[]" $data_segment_code_list "multi") (serialize-qp "partition" $partition "scalar") (serialize-qp "partition[]" $partition_list "multi") (serialize-qp "properties[]" $properties "multi")] | flatten | str join "&"
   let full_url = (build-url $base "/api/transport-ring-central" $qp)
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"page": $page, "dataSegmentCode": $data_segment_code, "dataSegmentCode[]": $data_segment_code_list, "partition": $partition, "partition[]": $partition_list, "properties[]": $properties} | compact), body: null}
 }
 
 # Creates a TransportRingCentral resource.
@@ -8733,7 +8924,7 @@ export def "transport-ring-central create" [
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: {}, body: $req_body}
 }
 
 # Removes the TransportRingCentral resource.
@@ -8754,10 +8945,11 @@ export def "transport-ring-central delete" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
   let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/api/transport-ring-central/{id}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
 }
 
 # Retrieves a TransportRingCentral resource.
@@ -8779,10 +8971,11 @@ export def "transport-ring-central get" [
 ]: nothing -> record<createdAt: string, dataSegmentCode: string, id: string, partition: string, resourceOwner: string, ringCentralApiToken: string, ringCentralFrom: string, transportName: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
   let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/api/transport-ring-central/{id}"))
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
 }
 
 # Replaces the TransportRingCentral resource.
@@ -8809,12 +9002,13 @@ export def "transport-ring-central update" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
   let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/api/transport-ring-central/{id}"))
   let req_body = {"dataSegmentCode": $data_segment_code, "ringCentralApiToken": $ring_central_api_token, "ringCentralFrom": $ring_central_from, "transportName": $transport_name} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: {}, body: $req_body}
 }
 
 # Retrieves the collection of TransportRocketChat resources.
@@ -8834,18 +9028,18 @@ export def "transport-rocket-chat get-collection" [
   --accept: string@accept-completer # Response content type
   --page: int # The collection page number (default: 1, allows empty value)
   --data-segment-code: string # allows empty value
-  --data-segment-code: list<string> # allows empty value
+  --data-segment-code-list: list<string> # allows empty value (array variant)
   --partition: string # allows empty value
-  --partition: list<string> # allows empty value
+  --partition-list: list<string> # allows empty value (array variant)
   --properties: list<string> # allows empty value
 ]: nothing -> table<createdAt: string, dataSegmentCode: string, id: string, partition: string, resourceOwner: string, rocketChatChannel: string, rocketChatToken: string, transportName: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "page" $page "scalar") (serialize-qp "dataSegmentCode" $data_segment_code "scalar") (serialize-qp "dataSegmentCode[]" $data_segment_code "multi") (serialize-qp "partition" $partition "scalar") (serialize-qp "partition[]" $partition "multi") (serialize-qp "properties[]" $properties "multi")] | flatten | str join "&"
+  let qp = [(serialize-qp "page" $page "scalar") (serialize-qp "dataSegmentCode" $data_segment_code "scalar") (serialize-qp "dataSegmentCode[]" $data_segment_code_list "multi") (serialize-qp "partition" $partition "scalar") (serialize-qp "partition[]" $partition_list "multi") (serialize-qp "properties[]" $properties "multi")] | flatten | str join "&"
   let full_url = (build-url $base "/api/transport-rocket-chat" $qp)
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"page": $page, "dataSegmentCode": $data_segment_code, "dataSegmentCode[]": $data_segment_code_list, "partition": $partition, "partition[]": $partition_list, "properties[]": $properties} | compact), body: null}
 }
 
 # Creates a TransportRocketChat resource.
@@ -8877,7 +9071,7 @@ export def "transport-rocket-chat create" [
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: {}, body: $req_body}
 }
 
 # Removes the TransportRocketChat resource.
@@ -8898,10 +9092,11 @@ export def "transport-rocket-chat delete" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
   let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/api/transport-rocket-chat/{id}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
 }
 
 # Retrieves a TransportRocketChat resource.
@@ -8923,10 +9118,11 @@ export def "transport-rocket-chat get" [
 ]: nothing -> record<createdAt: string, dataSegmentCode: string, id: string, partition: string, resourceOwner: string, rocketChatChannel: string, rocketChatToken: string, transportName: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
   let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/api/transport-rocket-chat/{id}"))
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
 }
 
 # Replaces the TransportRocketChat resource.
@@ -8953,12 +9149,13 @@ export def "transport-rocket-chat update" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
   let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/api/transport-rocket-chat/{id}"))
   let req_body = {"dataSegmentCode": $data_segment_code, "rocketChatChannel": $rocket_chat_channel, "rocketChatToken": $rocket_chat_token, "transportName": $transport_name} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: {}, body: $req_body}
 }
 
 # Retrieves the collection of TransportSendberry resources.
@@ -8978,18 +9175,18 @@ export def "transport-sendberry get-collection" [
   --accept: string@accept-completer # Response content type
   --page: int # The collection page number (default: 1, allows empty value)
   --data-segment-code: string # allows empty value
-  --data-segment-code: list<string> # allows empty value
+  --data-segment-code-list: list<string> # allows empty value (array variant)
   --partition: string # allows empty value
-  --partition: list<string> # allows empty value
+  --partition-list: list<string> # allows empty value (array variant)
   --properties: list<string> # allows empty value
 ]: nothing -> table<createdAt: string, dataSegmentCode: string, id: string, partition: string, resourceOwner: string, sendberryAuthKey: string, sendberryFrom: string, sendberryPassword: string, sendberryUsername: string, transportName: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "page" $page "scalar") (serialize-qp "dataSegmentCode" $data_segment_code "scalar") (serialize-qp "dataSegmentCode[]" $data_segment_code "multi") (serialize-qp "partition" $partition "scalar") (serialize-qp "partition[]" $partition "multi") (serialize-qp "properties[]" $properties "multi")] | flatten | str join "&"
+  let qp = [(serialize-qp "page" $page "scalar") (serialize-qp "dataSegmentCode" $data_segment_code "scalar") (serialize-qp "dataSegmentCode[]" $data_segment_code_list "multi") (serialize-qp "partition" $partition "scalar") (serialize-qp "partition[]" $partition_list "multi") (serialize-qp "properties[]" $properties "multi")] | flatten | str join "&"
   let full_url = (build-url $base "/api/transport-sendberry" $qp)
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"page": $page, "dataSegmentCode": $data_segment_code, "dataSegmentCode[]": $data_segment_code_list, "partition": $partition, "partition[]": $partition_list, "properties[]": $properties} | compact), body: null}
 }
 
 # Creates a TransportSendberry resource.
@@ -9023,7 +9220,7 @@ export def "transport-sendberry create" [
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: {}, body: $req_body}
 }
 
 # Removes the TransportSendberry resource.
@@ -9044,10 +9241,11 @@ export def "transport-sendberry delete" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
   let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/api/transport-sendberry/{id}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
 }
 
 # Retrieves a TransportSendberry resource.
@@ -9069,10 +9267,11 @@ export def "transport-sendberry get" [
 ]: nothing -> record<createdAt: string, dataSegmentCode: string, id: string, partition: string, resourceOwner: string, sendberryAuthKey: string, sendberryFrom: string, sendberryPassword: string, sendberryUsername: string, transportName: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
   let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/api/transport-sendberry/{id}"))
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
 }
 
 # Replaces the TransportSendberry resource.
@@ -9101,12 +9300,13 @@ export def "transport-sendberry update" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
   let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/api/transport-sendberry/{id}"))
   let req_body = {"dataSegmentCode": $data_segment_code, "sendberryAuthKey": $sendberry_auth_key, "sendberryFrom": $sendberry_from, "sendberryPassword": $sendberry_password, "sendberryUsername": $sendberry_username, "transportName": $transport_name} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: {}, body: $req_body}
 }
 
 # Retrieves the collection of TransportSendinblue resources.
@@ -9126,18 +9326,18 @@ export def "transport-sendinblue get-collection" [
   --accept: string@accept-completer # Response content type
   --page: int # The collection page number (default: 1, allows empty value)
   --data-segment-code: string # allows empty value
-  --data-segment-code: list<string> # allows empty value
+  --data-segment-code-list: list<string> # allows empty value (array variant)
   --partition: string # allows empty value
-  --partition: list<string> # allows empty value
+  --partition-list: list<string> # allows empty value (array variant)
   --properties: list<string> # allows empty value
 ]: nothing -> table<createdAt: string, dataSegmentCode: string, id: string, partition: string, resourceOwner: string, sendinblueApiKey: string, sendinblueSenderPhone: string, transportName: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "page" $page "scalar") (serialize-qp "dataSegmentCode" $data_segment_code "scalar") (serialize-qp "dataSegmentCode[]" $data_segment_code "multi") (serialize-qp "partition" $partition "scalar") (serialize-qp "partition[]" $partition "multi") (serialize-qp "properties[]" $properties "multi")] | flatten | str join "&"
+  let qp = [(serialize-qp "page" $page "scalar") (serialize-qp "dataSegmentCode" $data_segment_code "scalar") (serialize-qp "dataSegmentCode[]" $data_segment_code_list "multi") (serialize-qp "partition" $partition "scalar") (serialize-qp "partition[]" $partition_list "multi") (serialize-qp "properties[]" $properties "multi")] | flatten | str join "&"
   let full_url = (build-url $base "/api/transport-sendinblue" $qp)
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"page": $page, "dataSegmentCode": $data_segment_code, "dataSegmentCode[]": $data_segment_code_list, "partition": $partition, "partition[]": $partition_list, "properties[]": $properties} | compact), body: null}
 }
 
 # Creates a TransportSendinblue resource.
@@ -9169,7 +9369,7 @@ export def "transport-sendinblue create" [
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: {}, body: $req_body}
 }
 
 # Removes the TransportSendinblue resource.
@@ -9190,10 +9390,11 @@ export def "transport-sendinblue delete" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
   let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/api/transport-sendinblue/{id}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
 }
 
 # Retrieves a TransportSendinblue resource.
@@ -9215,10 +9416,11 @@ export def "transport-sendinblue get" [
 ]: nothing -> record<createdAt: string, dataSegmentCode: string, id: string, partition: string, resourceOwner: string, sendinblueApiKey: string, sendinblueSenderPhone: string, transportName: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
   let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/api/transport-sendinblue/{id}"))
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
 }
 
 # Replaces the TransportSendinblue resource.
@@ -9245,12 +9447,13 @@ export def "transport-sendinblue update" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
   let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/api/transport-sendinblue/{id}"))
   let req_body = {"dataSegmentCode": $data_segment_code, "sendinblueApiKey": $sendinblue_api_key, "sendinblueSenderPhone": $sendinblue_sender_phone, "transportName": $transport_name} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: {}, body: $req_body}
 }
 
 # Retrieves the collection of TransportSimpleTextin resources.
@@ -9270,18 +9473,18 @@ export def "transport-simple-textin get-collection" [
   --accept: string@accept-completer # Response content type
   --page: int # The collection page number (default: 1, allows empty value)
   --data-segment-code: string # allows empty value
-  --data-segment-code: list<string> # allows empty value
+  --data-segment-code-list: list<string> # allows empty value (array variant)
   --partition: string # allows empty value
-  --partition: list<string> # allows empty value
+  --partition-list: list<string> # allows empty value (array variant)
   --properties: list<string> # allows empty value
 ]: nothing -> table<createdAt: string, dataSegmentCode: string, id: string, partition: string, resourceOwner: string, simpleTextinApiKey: string, simpleTextinFrom: string, transportName: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "page" $page "scalar") (serialize-qp "dataSegmentCode" $data_segment_code "scalar") (serialize-qp "dataSegmentCode[]" $data_segment_code "multi") (serialize-qp "partition" $partition "scalar") (serialize-qp "partition[]" $partition "multi") (serialize-qp "properties[]" $properties "multi")] | flatten | str join "&"
+  let qp = [(serialize-qp "page" $page "scalar") (serialize-qp "dataSegmentCode" $data_segment_code "scalar") (serialize-qp "dataSegmentCode[]" $data_segment_code_list "multi") (serialize-qp "partition" $partition "scalar") (serialize-qp "partition[]" $partition_list "multi") (serialize-qp "properties[]" $properties "multi")] | flatten | str join "&"
   let full_url = (build-url $base "/api/transport-simple-textin" $qp)
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"page": $page, "dataSegmentCode": $data_segment_code, "dataSegmentCode[]": $data_segment_code_list, "partition": $partition, "partition[]": $partition_list, "properties[]": $properties} | compact), body: null}
 }
 
 # Creates a TransportSimpleTextin resource.
@@ -9313,7 +9516,7 @@ export def "transport-simple-textin create" [
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: {}, body: $req_body}
 }
 
 # Removes the TransportSimpleTextin resource.
@@ -9334,10 +9537,11 @@ export def "transport-simple-textin delete" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
   let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/api/transport-simple-textin/{id}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
 }
 
 # Retrieves a TransportSimpleTextin resource.
@@ -9359,10 +9563,11 @@ export def "transport-simple-textin get" [
 ]: nothing -> record<createdAt: string, dataSegmentCode: string, id: string, partition: string, resourceOwner: string, simpleTextinApiKey: string, simpleTextinFrom: string, transportName: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
   let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/api/transport-simple-textin/{id}"))
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
 }
 
 # Replaces the TransportSimpleTextin resource.
@@ -9389,12 +9594,13 @@ export def "transport-simple-textin update" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
   let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/api/transport-simple-textin/{id}"))
   let req_body = {"dataSegmentCode": $data_segment_code, "simpleTextinApiKey": $simple_textin_api_key, "simpleTextinFrom": $simple_textin_from, "transportName": $transport_name} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: {}, body: $req_body}
 }
 
 # Retrieves the collection of TransportSinch resources.
@@ -9414,18 +9620,18 @@ export def "transport-sinch get-collection" [
   --accept: string@accept-completer # Response content type
   --page: int # The collection page number (default: 1, allows empty value)
   --data-segment-code: string # allows empty value
-  --data-segment-code: list<string> # allows empty value
+  --data-segment-code-list: list<string> # allows empty value (array variant)
   --partition: string # allows empty value
-  --partition: list<string> # allows empty value
+  --partition-list: list<string> # allows empty value (array variant)
   --properties: list<string> # allows empty value
 ]: nothing -> table<createdAt: string, dataSegmentCode: string, id: string, partition: string, resourceOwner: string, sinchAuthToken: string, sinchFrom: string, sinchServicePlanId: string, transportName: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "page" $page "scalar") (serialize-qp "dataSegmentCode" $data_segment_code "scalar") (serialize-qp "dataSegmentCode[]" $data_segment_code "multi") (serialize-qp "partition" $partition "scalar") (serialize-qp "partition[]" $partition "multi") (serialize-qp "properties[]" $properties "multi")] | flatten | str join "&"
+  let qp = [(serialize-qp "page" $page "scalar") (serialize-qp "dataSegmentCode" $data_segment_code "scalar") (serialize-qp "dataSegmentCode[]" $data_segment_code_list "multi") (serialize-qp "partition" $partition "scalar") (serialize-qp "partition[]" $partition_list "multi") (serialize-qp "properties[]" $properties "multi")] | flatten | str join "&"
   let full_url = (build-url $base "/api/transport-sinch" $qp)
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"page": $page, "dataSegmentCode": $data_segment_code, "dataSegmentCode[]": $data_segment_code_list, "partition": $partition, "partition[]": $partition_list, "properties[]": $properties} | compact), body: null}
 }
 
 # Creates a TransportSinch resource.
@@ -9458,7 +9664,7 @@ export def "transport-sinch create" [
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: {}, body: $req_body}
 }
 
 # Removes the TransportSinch resource.
@@ -9479,10 +9685,11 @@ export def "transport-sinch delete" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
   let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/api/transport-sinch/{id}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
 }
 
 # Retrieves a TransportSinch resource.
@@ -9504,10 +9711,11 @@ export def "transport-sinch get" [
 ]: nothing -> record<createdAt: string, dataSegmentCode: string, id: string, partition: string, resourceOwner: string, sinchAuthToken: string, sinchFrom: string, sinchServicePlanId: string, transportName: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
   let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/api/transport-sinch/{id}"))
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
 }
 
 # Replaces the TransportSinch resource.
@@ -9535,12 +9743,13 @@ export def "transport-sinch update" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
   let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/api/transport-sinch/{id}"))
   let req_body = {"dataSegmentCode": $data_segment_code, "sinchAuthToken": $sinch_auth_token, "sinchFrom": $sinch_from, "sinchServicePlanId": $sinch_service_plan_id, "transportName": $transport_name} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: {}, body: $req_body}
 }
 
 # Retrieves the collection of TransportSlack resources.
@@ -9560,18 +9769,18 @@ export def "transport-slack get-collection" [
   --accept: string@accept-completer # Response content type
   --page: int # The collection page number (default: 1, allows empty value)
   --data-segment-code: string # allows empty value
-  --data-segment-code: list<string> # allows empty value
+  --data-segment-code-list: list<string> # allows empty value (array variant)
   --partition: string # allows empty value
-  --partition: list<string> # allows empty value
+  --partition-list: list<string> # allows empty value (array variant)
   --properties: list<string> # allows empty value
 ]: nothing -> table<createdAt: string, dataSegmentCode: string, id: string, partition: string, resourceOwner: string, slackChannel: string, slackToken: string, transportName: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "page" $page "scalar") (serialize-qp "dataSegmentCode" $data_segment_code "scalar") (serialize-qp "dataSegmentCode[]" $data_segment_code "multi") (serialize-qp "partition" $partition "scalar") (serialize-qp "partition[]" $partition "multi") (serialize-qp "properties[]" $properties "multi")] | flatten | str join "&"
+  let qp = [(serialize-qp "page" $page "scalar") (serialize-qp "dataSegmentCode" $data_segment_code "scalar") (serialize-qp "dataSegmentCode[]" $data_segment_code_list "multi") (serialize-qp "partition" $partition "scalar") (serialize-qp "partition[]" $partition_list "multi") (serialize-qp "properties[]" $properties "multi")] | flatten | str join "&"
   let full_url = (build-url $base "/api/transport-slack" $qp)
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"page": $page, "dataSegmentCode": $data_segment_code, "dataSegmentCode[]": $data_segment_code_list, "partition": $partition, "partition[]": $partition_list, "properties[]": $properties} | compact), body: null}
 }
 
 # Creates a TransportSlack resource.
@@ -9603,7 +9812,7 @@ export def "transport-slack create" [
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: {}, body: $req_body}
 }
 
 # Removes the TransportSlack resource.
@@ -9624,10 +9833,11 @@ export def "transport-slack delete" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
   let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/api/transport-slack/{id}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
 }
 
 # Retrieves a TransportSlack resource.
@@ -9649,10 +9859,11 @@ export def "transport-slack get" [
 ]: nothing -> record<createdAt: string, dataSegmentCode: string, id: string, partition: string, resourceOwner: string, slackChannel: string, slackToken: string, transportName: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
   let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/api/transport-slack/{id}"))
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
 }
 
 # Replaces the TransportSlack resource.
@@ -9679,12 +9890,13 @@ export def "transport-slack update" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
   let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/api/transport-slack/{id}"))
   let req_body = {"dataSegmentCode": $data_segment_code, "slackChannel": $slack_channel, "slackToken": $slack_token, "transportName": $transport_name} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: {}, body: $req_body}
 }
 
 # Retrieves the collection of TransportSmsBiuras resources.
@@ -9704,18 +9916,18 @@ export def "transport-sms-biuras get-collection" [
   --accept: string@accept-completer # Response content type
   --page: int # The collection page number (default: 1, allows empty value)
   --data-segment-code: string # allows empty value
-  --data-segment-code: list<string> # allows empty value
+  --data-segment-code-list: list<string> # allows empty value (array variant)
   --partition: string # allows empty value
-  --partition: list<string> # allows empty value
+  --partition-list: list<string> # allows empty value (array variant)
   --properties: list<string> # allows empty value
 ]: nothing -> table<createdAt: string, dataSegmentCode: string, id: string, partition: string, resourceOwner: string, smsBiurasApiKey: string, smsBiurasFrom: string, smsBiurasUid: string, transportName: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "page" $page "scalar") (serialize-qp "dataSegmentCode" $data_segment_code "scalar") (serialize-qp "dataSegmentCode[]" $data_segment_code "multi") (serialize-qp "partition" $partition "scalar") (serialize-qp "partition[]" $partition "multi") (serialize-qp "properties[]" $properties "multi")] | flatten | str join "&"
+  let qp = [(serialize-qp "page" $page "scalar") (serialize-qp "dataSegmentCode" $data_segment_code "scalar") (serialize-qp "dataSegmentCode[]" $data_segment_code_list "multi") (serialize-qp "partition" $partition "scalar") (serialize-qp "partition[]" $partition_list "multi") (serialize-qp "properties[]" $properties "multi")] | flatten | str join "&"
   let full_url = (build-url $base "/api/transport-sms-biuras" $qp)
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"page": $page, "dataSegmentCode": $data_segment_code, "dataSegmentCode[]": $data_segment_code_list, "partition": $partition, "partition[]": $partition_list, "properties[]": $properties} | compact), body: null}
 }
 
 # Creates a TransportSmsBiuras resource.
@@ -9748,7 +9960,7 @@ export def "transport-sms-biuras create" [
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: {}, body: $req_body}
 }
 
 # Removes the TransportSmsBiuras resource.
@@ -9769,10 +9981,11 @@ export def "transport-sms-biuras delete" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
   let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/api/transport-sms-biuras/{id}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
 }
 
 # Retrieves a TransportSmsBiuras resource.
@@ -9794,10 +10007,11 @@ export def "transport-sms-biuras get" [
 ]: nothing -> record<createdAt: string, dataSegmentCode: string, id: string, partition: string, resourceOwner: string, smsBiurasApiKey: string, smsBiurasFrom: string, smsBiurasUid: string, transportName: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
   let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/api/transport-sms-biuras/{id}"))
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
 }
 
 # Replaces the TransportSmsBiuras resource.
@@ -9825,12 +10039,13 @@ export def "transport-sms-biuras update" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
   let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/api/transport-sms-biuras/{id}"))
   let req_body = {"dataSegmentCode": $data_segment_code, "smsBiurasApiKey": $sms_biuras_api_key, "smsBiurasFrom": $sms_biuras_from, "smsBiurasUid": $sms_biuras_uid, "transportName": $transport_name} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: {}, body: $req_body}
 }
 
 # Retrieves the collection of TransportSmsFactor resources.
@@ -9850,18 +10065,18 @@ export def "transport-sms-factor get-collection" [
   --accept: string@accept-completer # Response content type
   --page: int # The collection page number (default: 1, allows empty value)
   --data-segment-code: string # allows empty value
-  --data-segment-code: list<string> # allows empty value
+  --data-segment-code-list: list<string> # allows empty value (array variant)
   --partition: string # allows empty value
-  --partition: list<string> # allows empty value
+  --partition-list: list<string> # allows empty value (array variant)
   --properties: list<string> # allows empty value
 ]: nothing -> table<createdAt: string, dataSegmentCode: string, id: string, partition: string, resourceOwner: string, smsFactorPushType: string, smsFactorSender: string, smsFactorToken: string, transportName: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "page" $page "scalar") (serialize-qp "dataSegmentCode" $data_segment_code "scalar") (serialize-qp "dataSegmentCode[]" $data_segment_code "multi") (serialize-qp "partition" $partition "scalar") (serialize-qp "partition[]" $partition "multi") (serialize-qp "properties[]" $properties "multi")] | flatten | str join "&"
+  let qp = [(serialize-qp "page" $page "scalar") (serialize-qp "dataSegmentCode" $data_segment_code "scalar") (serialize-qp "dataSegmentCode[]" $data_segment_code_list "multi") (serialize-qp "partition" $partition "scalar") (serialize-qp "partition[]" $partition_list "multi") (serialize-qp "properties[]" $properties "multi")] | flatten | str join "&"
   let full_url = (build-url $base "/api/transport-sms-factor" $qp)
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"page": $page, "dataSegmentCode": $data_segment_code, "dataSegmentCode[]": $data_segment_code_list, "partition": $partition, "partition[]": $partition_list, "properties[]": $properties} | compact), body: null}
 }
 
 # Creates a TransportSmsFactor resource.
@@ -9894,7 +10109,7 @@ export def "transport-sms-factor create" [
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: {}, body: $req_body}
 }
 
 # Removes the TransportSmsFactor resource.
@@ -9915,10 +10130,11 @@ export def "transport-sms-factor delete" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
   let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/api/transport-sms-factor/{id}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
 }
 
 # Retrieves a TransportSmsFactor resource.
@@ -9940,10 +10156,11 @@ export def "transport-sms-factor get" [
 ]: nothing -> record<createdAt: string, dataSegmentCode: string, id: string, partition: string, resourceOwner: string, smsFactorPushType: string, smsFactorSender: string, smsFactorToken: string, transportName: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
   let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/api/transport-sms-factor/{id}"))
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
 }
 
 # Replaces the TransportSmsFactor resource.
@@ -9971,12 +10188,13 @@ export def "transport-sms-factor update" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
   let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/api/transport-sms-factor/{id}"))
   let req_body = {"dataSegmentCode": $data_segment_code, "smsFactorPushType": $sms_factor_push_type, "smsFactorSender": $sms_factor_sender, "smsFactorToken": $sms_factor_token, "transportName": $transport_name} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: {}, body: $req_body}
 }
 
 # Retrieves the collection of TransportSms77 resources.
@@ -9996,18 +10214,18 @@ export def "transport-sms77 get-collection" [
   --accept: string@accept-completer # Response content type
   --page: int # The collection page number (default: 1, allows empty value)
   --data-segment-code: string # allows empty value
-  --data-segment-code: list<string> # allows empty value
+  --data-segment-code-list: list<string> # allows empty value (array variant)
   --partition: string # allows empty value
-  --partition: list<string> # allows empty value
+  --partition-list: list<string> # allows empty value (array variant)
   --properties: list<string> # allows empty value
 ]: nothing -> table<createdAt: string, dataSegmentCode: string, id: string, partition: string, resourceOwner: string, sms77ApiKey: string, sms77From: string, transportName: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "page" $page "scalar") (serialize-qp "dataSegmentCode" $data_segment_code "scalar") (serialize-qp "dataSegmentCode[]" $data_segment_code "multi") (serialize-qp "partition" $partition "scalar") (serialize-qp "partition[]" $partition "multi") (serialize-qp "properties[]" $properties "multi")] | flatten | str join "&"
+  let qp = [(serialize-qp "page" $page "scalar") (serialize-qp "dataSegmentCode" $data_segment_code "scalar") (serialize-qp "dataSegmentCode[]" $data_segment_code_list "multi") (serialize-qp "partition" $partition "scalar") (serialize-qp "partition[]" $partition_list "multi") (serialize-qp "properties[]" $properties "multi")] | flatten | str join "&"
   let full_url = (build-url $base "/api/transport-sms77" $qp)
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"page": $page, "dataSegmentCode": $data_segment_code, "dataSegmentCode[]": $data_segment_code_list, "partition": $partition, "partition[]": $partition_list, "properties[]": $properties} | compact), body: null}
 }
 
 # Creates a TransportSms77 resource.
@@ -10039,7 +10257,7 @@ export def "transport-sms77 create" [
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: {}, body: $req_body}
 }
 
 # Removes the TransportSms77 resource.
@@ -10060,10 +10278,11 @@ export def "transport-sms77 delete" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
   let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/api/transport-sms77/{id}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
 }
 
 # Retrieves a TransportSms77 resource.
@@ -10085,10 +10304,11 @@ export def "transport-sms77 get" [
 ]: nothing -> record<createdAt: string, dataSegmentCode: string, id: string, partition: string, resourceOwner: string, sms77ApiKey: string, sms77From: string, transportName: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
   let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/api/transport-sms77/{id}"))
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
 }
 
 # Replaces the TransportSms77 resource.
@@ -10115,12 +10335,13 @@ export def "transport-sms77 update" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
   let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/api/transport-sms77/{id}"))
   let req_body = {"dataSegmentCode": $data_segment_code, "sms77ApiKey": $sms77_api_key, "sms77From": $sms77_from, "transportName": $transport_name} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: {}, body: $req_body}
 }
 
 # Retrieves the collection of TransportSmsapi resources.
@@ -10140,18 +10361,18 @@ export def "transport-smsapi get-collection" [
   --accept: string@accept-completer # Response content type
   --page: int # The collection page number (default: 1, allows empty value)
   --data-segment-code: string # allows empty value
-  --data-segment-code: list<string> # allows empty value
+  --data-segment-code-list: list<string> # allows empty value (array variant)
   --partition: string # allows empty value
-  --partition: list<string> # allows empty value
+  --partition-list: list<string> # allows empty value (array variant)
   --properties: list<string> # allows empty value
 ]: nothing -> table<createdAt: string, dataSegmentCode: string, id: string, partition: string, resourceOwner: string, smsapiFrom: string, smsapiToken: string, transportName: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "page" $page "scalar") (serialize-qp "dataSegmentCode" $data_segment_code "scalar") (serialize-qp "dataSegmentCode[]" $data_segment_code "multi") (serialize-qp "partition" $partition "scalar") (serialize-qp "partition[]" $partition "multi") (serialize-qp "properties[]" $properties "multi")] | flatten | str join "&"
+  let qp = [(serialize-qp "page" $page "scalar") (serialize-qp "dataSegmentCode" $data_segment_code "scalar") (serialize-qp "dataSegmentCode[]" $data_segment_code_list "multi") (serialize-qp "partition" $partition "scalar") (serialize-qp "partition[]" $partition_list "multi") (serialize-qp "properties[]" $properties "multi")] | flatten | str join "&"
   let full_url = (build-url $base "/api/transport-smsapi" $qp)
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"page": $page, "dataSegmentCode": $data_segment_code, "dataSegmentCode[]": $data_segment_code_list, "partition": $partition, "partition[]": $partition_list, "properties[]": $properties} | compact), body: null}
 }
 
 # Creates a TransportSmsapi resource.
@@ -10183,7 +10404,7 @@ export def "transport-smsapi create" [
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: {}, body: $req_body}
 }
 
 # Removes the TransportSmsapi resource.
@@ -10204,10 +10425,11 @@ export def "transport-smsapi delete" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
   let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/api/transport-smsapi/{id}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
 }
 
 # Retrieves a TransportSmsapi resource.
@@ -10229,10 +10451,11 @@ export def "transport-smsapi get" [
 ]: nothing -> record<createdAt: string, dataSegmentCode: string, id: string, partition: string, resourceOwner: string, smsapiFrom: string, smsapiToken: string, transportName: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
   let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/api/transport-smsapi/{id}"))
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
 }
 
 # Replaces the TransportSmsapi resource.
@@ -10259,12 +10482,13 @@ export def "transport-smsapi update" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
   let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/api/transport-smsapi/{id}"))
   let req_body = {"dataSegmentCode": $data_segment_code, "smsapiFrom": $smsapi_from, "smsapiToken": $smsapi_token, "transportName": $transport_name} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: {}, body: $req_body}
 }
 
 # Retrieves the collection of TransportSmsc resources.
@@ -10284,18 +10508,18 @@ export def "transport-smsc get-collection" [
   --accept: string@accept-completer # Response content type
   --page: int # The collection page number (default: 1, allows empty value)
   --data-segment-code: string # allows empty value
-  --data-segment-code: list<string> # allows empty value
+  --data-segment-code-list: list<string> # allows empty value (array variant)
   --partition: string # allows empty value
-  --partition: list<string> # allows empty value
+  --partition-list: list<string> # allows empty value (array variant)
   --properties: list<string> # allows empty value
 ]: nothing -> table<createdAt: string, dataSegmentCode: string, id: string, partition: string, resourceOwner: string, smscFrom: string, smscLogin: string, smscPassword: string, transportName: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "page" $page "scalar") (serialize-qp "dataSegmentCode" $data_segment_code "scalar") (serialize-qp "dataSegmentCode[]" $data_segment_code "multi") (serialize-qp "partition" $partition "scalar") (serialize-qp "partition[]" $partition "multi") (serialize-qp "properties[]" $properties "multi")] | flatten | str join "&"
+  let qp = [(serialize-qp "page" $page "scalar") (serialize-qp "dataSegmentCode" $data_segment_code "scalar") (serialize-qp "dataSegmentCode[]" $data_segment_code_list "multi") (serialize-qp "partition" $partition "scalar") (serialize-qp "partition[]" $partition_list "multi") (serialize-qp "properties[]" $properties "multi")] | flatten | str join "&"
   let full_url = (build-url $base "/api/transport-smsc" $qp)
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"page": $page, "dataSegmentCode": $data_segment_code, "dataSegmentCode[]": $data_segment_code_list, "partition": $partition, "partition[]": $partition_list, "properties[]": $properties} | compact), body: null}
 }
 
 # Creates a TransportSmsc resource.
@@ -10328,7 +10552,7 @@ export def "transport-smsc create" [
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: {}, body: $req_body}
 }
 
 # Removes the TransportSmsc resource.
@@ -10349,10 +10573,11 @@ export def "transport-smsc delete" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
   let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/api/transport-smsc/{id}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
 }
 
 # Retrieves a TransportSmsc resource.
@@ -10374,10 +10599,11 @@ export def "transport-smsc get" [
 ]: nothing -> record<createdAt: string, dataSegmentCode: string, id: string, partition: string, resourceOwner: string, smscFrom: string, smscLogin: string, smscPassword: string, transportName: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
   let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/api/transport-smsc/{id}"))
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
 }
 
 # Replaces the TransportSmsc resource.
@@ -10405,12 +10631,13 @@ export def "transport-smsc update" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
   let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/api/transport-smsc/{id}"))
   let req_body = {"dataSegmentCode": $data_segment_code, "smscFrom": $smsc_from, "smscLogin": $smsc_login, "smscPassword": $smsc_password, "transportName": $transport_name} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: {}, body: $req_body}
 }
 
 # Retrieves the collection of TransportSmsmode resources.
@@ -10430,18 +10657,18 @@ export def "transport-smsmode get-collection" [
   --accept: string@accept-completer # Response content type
   --page: int # The collection page number (default: 1, allows empty value)
   --data-segment-code: string # allows empty value
-  --data-segment-code: list<string> # allows empty value
+  --data-segment-code-list: list<string> # allows empty value (array variant)
   --partition: string # allows empty value
-  --partition: list<string> # allows empty value
+  --partition-list: list<string> # allows empty value (array variant)
   --properties: list<string> # allows empty value
 ]: nothing -> table<createdAt: string, dataSegmentCode: string, id: string, partition: string, resourceOwner: string, smsmodeApiKey: string, smsmodeFrom: string, transportName: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "page" $page "scalar") (serialize-qp "dataSegmentCode" $data_segment_code "scalar") (serialize-qp "dataSegmentCode[]" $data_segment_code "multi") (serialize-qp "partition" $partition "scalar") (serialize-qp "partition[]" $partition "multi") (serialize-qp "properties[]" $properties "multi")] | flatten | str join "&"
+  let qp = [(serialize-qp "page" $page "scalar") (serialize-qp "dataSegmentCode" $data_segment_code "scalar") (serialize-qp "dataSegmentCode[]" $data_segment_code_list "multi") (serialize-qp "partition" $partition "scalar") (serialize-qp "partition[]" $partition_list "multi") (serialize-qp "properties[]" $properties "multi")] | flatten | str join "&"
   let full_url = (build-url $base "/api/transport-smsmode" $qp)
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"page": $page, "dataSegmentCode": $data_segment_code, "dataSegmentCode[]": $data_segment_code_list, "partition": $partition, "partition[]": $partition_list, "properties[]": $properties} | compact), body: null}
 }
 
 # Creates a TransportSmsmode resource.
@@ -10473,7 +10700,7 @@ export def "transport-smsmode create" [
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: {}, body: $req_body}
 }
 
 # Removes the TransportSmsmode resource.
@@ -10494,10 +10721,11 @@ export def "transport-smsmode delete" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
   let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/api/transport-smsmode/{id}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
 }
 
 # Retrieves a TransportSmsmode resource.
@@ -10519,10 +10747,11 @@ export def "transport-smsmode get" [
 ]: nothing -> record<createdAt: string, dataSegmentCode: string, id: string, partition: string, resourceOwner: string, smsmodeApiKey: string, smsmodeFrom: string, transportName: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
   let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/api/transport-smsmode/{id}"))
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
 }
 
 # Replaces the TransportSmsmode resource.
@@ -10549,12 +10778,13 @@ export def "transport-smsmode update" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
   let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/api/transport-smsmode/{id}"))
   let req_body = {"dataSegmentCode": $data_segment_code, "smsmodeApiKey": $smsmode_api_key, "smsmodeFrom": $smsmode_from, "transportName": $transport_name} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: {}, body: $req_body}
 }
 
 # Retrieves the collection of TransportSpotHit resources.
@@ -10574,18 +10804,18 @@ export def "transport-spot-hit get-collection" [
   --accept: string@accept-completer # Response content type
   --page: int # The collection page number (default: 1, allows empty value)
   --data-segment-code: string # allows empty value
-  --data-segment-code: list<string> # allows empty value
+  --data-segment-code-list: list<string> # allows empty value (array variant)
   --partition: string # allows empty value
-  --partition: list<string> # allows empty value
+  --partition-list: list<string> # allows empty value (array variant)
   --properties: list<string> # allows empty value
 ]: nothing -> table<createdAt: string, dataSegmentCode: string, id: string, partition: string, resourceOwner: string, spotHitFrom: string, spotHitToken: string, transportName: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "page" $page "scalar") (serialize-qp "dataSegmentCode" $data_segment_code "scalar") (serialize-qp "dataSegmentCode[]" $data_segment_code "multi") (serialize-qp "partition" $partition "scalar") (serialize-qp "partition[]" $partition "multi") (serialize-qp "properties[]" $properties "multi")] | flatten | str join "&"
+  let qp = [(serialize-qp "page" $page "scalar") (serialize-qp "dataSegmentCode" $data_segment_code "scalar") (serialize-qp "dataSegmentCode[]" $data_segment_code_list "multi") (serialize-qp "partition" $partition "scalar") (serialize-qp "partition[]" $partition_list "multi") (serialize-qp "properties[]" $properties "multi")] | flatten | str join "&"
   let full_url = (build-url $base "/api/transport-spot-hit" $qp)
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"page": $page, "dataSegmentCode": $data_segment_code, "dataSegmentCode[]": $data_segment_code_list, "partition": $partition, "partition[]": $partition_list, "properties[]": $properties} | compact), body: null}
 }
 
 # Creates a TransportSpotHit resource.
@@ -10617,7 +10847,7 @@ export def "transport-spot-hit create" [
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: {}, body: $req_body}
 }
 
 # Removes the TransportSpotHit resource.
@@ -10638,10 +10868,11 @@ export def "transport-spot-hit delete" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
   let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/api/transport-spot-hit/{id}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
 }
 
 # Retrieves a TransportSpotHit resource.
@@ -10663,10 +10894,11 @@ export def "transport-spot-hit get" [
 ]: nothing -> record<createdAt: string, dataSegmentCode: string, id: string, partition: string, resourceOwner: string, spotHitFrom: string, spotHitToken: string, transportName: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
   let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/api/transport-spot-hit/{id}"))
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
 }
 
 # Replaces the TransportSpotHit resource.
@@ -10693,12 +10925,13 @@ export def "transport-spot-hit update" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
   let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/api/transport-spot-hit/{id}"))
   let req_body = {"dataSegmentCode": $data_segment_code, "spotHitFrom": $spot_hit_from, "spotHitToken": $spot_hit_token, "transportName": $transport_name} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: {}, body: $req_body}
 }
 
 # Retrieves the collection of TransportTelegram resources.
@@ -10718,18 +10951,18 @@ export def "transport-telegram get-collection" [
   --accept: string@accept-completer # Response content type
   --page: int # The collection page number (default: 1, allows empty value)
   --data-segment-code: string # allows empty value
-  --data-segment-code: list<string> # allows empty value
+  --data-segment-code-list: list<string> # allows empty value (array variant)
   --partition: string # allows empty value
-  --partition: list<string> # allows empty value
+  --partition-list: list<string> # allows empty value (array variant)
   --properties: list<string> # allows empty value
 ]: nothing -> table<createdAt: string, dataSegmentCode: string, id: string, partition: string, resourceOwner: string, telegramChatId: string, telegramToken: string, transportName: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "page" $page "scalar") (serialize-qp "dataSegmentCode" $data_segment_code "scalar") (serialize-qp "dataSegmentCode[]" $data_segment_code "multi") (serialize-qp "partition" $partition "scalar") (serialize-qp "partition[]" $partition "multi") (serialize-qp "properties[]" $properties "multi")] | flatten | str join "&"
+  let qp = [(serialize-qp "page" $page "scalar") (serialize-qp "dataSegmentCode" $data_segment_code "scalar") (serialize-qp "dataSegmentCode[]" $data_segment_code_list "multi") (serialize-qp "partition" $partition "scalar") (serialize-qp "partition[]" $partition_list "multi") (serialize-qp "properties[]" $properties "multi")] | flatten | str join "&"
   let full_url = (build-url $base "/api/transport-telegram" $qp)
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"page": $page, "dataSegmentCode": $data_segment_code, "dataSegmentCode[]": $data_segment_code_list, "partition": $partition, "partition[]": $partition_list, "properties[]": $properties} | compact), body: null}
 }
 
 # Creates a TransportTelegram resource.
@@ -10761,7 +10994,7 @@ export def "transport-telegram create" [
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: {}, body: $req_body}
 }
 
 # Removes the TransportTelegram resource.
@@ -10782,10 +11015,11 @@ export def "transport-telegram delete" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
   let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/api/transport-telegram/{id}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
 }
 
 # Retrieves a TransportTelegram resource.
@@ -10807,10 +11041,11 @@ export def "transport-telegram get" [
 ]: nothing -> record<createdAt: string, dataSegmentCode: string, id: string, partition: string, resourceOwner: string, telegramChatId: string, telegramToken: string, transportName: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
   let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/api/transport-telegram/{id}"))
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
 }
 
 # Replaces the TransportTelegram resource.
@@ -10837,12 +11072,13 @@ export def "transport-telegram update" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
   let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/api/transport-telegram/{id}"))
   let req_body = {"dataSegmentCode": $data_segment_code, "telegramChatId": $telegram_chat_id, "telegramToken": $telegram_token, "transportName": $transport_name} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: {}, body: $req_body}
 }
 
 # Retrieves the collection of TransportTelnyx resources.
@@ -10862,18 +11098,18 @@ export def "transport-telnyx get-collection" [
   --accept: string@accept-completer # Response content type
   --page: int # The collection page number (default: 1, allows empty value)
   --data-segment-code: string # allows empty value
-  --data-segment-code: list<string> # allows empty value
+  --data-segment-code-list: list<string> # allows empty value (array variant)
   --partition: string # allows empty value
-  --partition: list<string> # allows empty value
+  --partition-list: list<string> # allows empty value (array variant)
   --properties: list<string> # allows empty value
 ]: nothing -> table<createdAt: string, dataSegmentCode: string, id: string, partition: string, resourceOwner: string, telnyxApiKey: string, telnyxFrom: string, telnyxMessagingProfileId: string, transportName: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "page" $page "scalar") (serialize-qp "dataSegmentCode" $data_segment_code "scalar") (serialize-qp "dataSegmentCode[]" $data_segment_code "multi") (serialize-qp "partition" $partition "scalar") (serialize-qp "partition[]" $partition "multi") (serialize-qp "properties[]" $properties "multi")] | flatten | str join "&"
+  let qp = [(serialize-qp "page" $page "scalar") (serialize-qp "dataSegmentCode" $data_segment_code "scalar") (serialize-qp "dataSegmentCode[]" $data_segment_code_list "multi") (serialize-qp "partition" $partition "scalar") (serialize-qp "partition[]" $partition_list "multi") (serialize-qp "properties[]" $properties "multi")] | flatten | str join "&"
   let full_url = (build-url $base "/api/transport-telnyx" $qp)
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"page": $page, "dataSegmentCode": $data_segment_code, "dataSegmentCode[]": $data_segment_code_list, "partition": $partition, "partition[]": $partition_list, "properties[]": $properties} | compact), body: null}
 }
 
 # Creates a TransportTelnyx resource.
@@ -10906,7 +11142,7 @@ export def "transport-telnyx create" [
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: {}, body: $req_body}
 }
 
 # Removes the TransportTelnyx resource.
@@ -10927,10 +11163,11 @@ export def "transport-telnyx delete" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
   let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/api/transport-telnyx/{id}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
 }
 
 # Retrieves a TransportTelnyx resource.
@@ -10952,10 +11189,11 @@ export def "transport-telnyx get" [
 ]: nothing -> record<createdAt: string, dataSegmentCode: string, id: string, partition: string, resourceOwner: string, telnyxApiKey: string, telnyxFrom: string, telnyxMessagingProfileId: string, transportName: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
   let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/api/transport-telnyx/{id}"))
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
 }
 
 # Replaces the TransportTelnyx resource.
@@ -10983,12 +11221,13 @@ export def "transport-telnyx update" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
   let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/api/transport-telnyx/{id}"))
   let req_body = {"dataSegmentCode": $data_segment_code, "telnyxApiKey": $telnyx_api_key, "telnyxFrom": $telnyx_from, "telnyxMessagingProfileId": $telnyx_messaging_profile_id, "transportName": $transport_name} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: {}, body: $req_body}
 }
 
 # Retrieves the collection of TransportTermii resources.
@@ -11008,18 +11247,18 @@ export def "transport-termii get-collection" [
   --accept: string@accept-completer # Response content type
   --page: int # The collection page number (default: 1, allows empty value)
   --data-segment-code: string # allows empty value
-  --data-segment-code: list<string> # allows empty value
+  --data-segment-code-list: list<string> # allows empty value (array variant)
   --partition: string # allows empty value
-  --partition: list<string> # allows empty value
+  --partition-list: list<string> # allows empty value (array variant)
   --properties: list<string> # allows empty value
 ]: nothing -> table<createdAt: string, dataSegmentCode: string, id: string, partition: string, resourceOwner: string, termiiApiKey: string, termiiChannel: string, termiiFrom: string, transportName: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "page" $page "scalar") (serialize-qp "dataSegmentCode" $data_segment_code "scalar") (serialize-qp "dataSegmentCode[]" $data_segment_code "multi") (serialize-qp "partition" $partition "scalar") (serialize-qp "partition[]" $partition "multi") (serialize-qp "properties[]" $properties "multi")] | flatten | str join "&"
+  let qp = [(serialize-qp "page" $page "scalar") (serialize-qp "dataSegmentCode" $data_segment_code "scalar") (serialize-qp "dataSegmentCode[]" $data_segment_code_list "multi") (serialize-qp "partition" $partition "scalar") (serialize-qp "partition[]" $partition_list "multi") (serialize-qp "properties[]" $properties "multi")] | flatten | str join "&"
   let full_url = (build-url $base "/api/transport-termii" $qp)
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"page": $page, "dataSegmentCode": $data_segment_code, "dataSegmentCode[]": $data_segment_code_list, "partition": $partition, "partition[]": $partition_list, "properties[]": $properties} | compact), body: null}
 }
 
 # Creates a TransportTermii resource.
@@ -11052,7 +11291,7 @@ export def "transport-termii create" [
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: {}, body: $req_body}
 }
 
 # Removes the TransportTermii resource.
@@ -11073,10 +11312,11 @@ export def "transport-termii delete" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
   let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/api/transport-termii/{id}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
 }
 
 # Retrieves a TransportTermii resource.
@@ -11098,10 +11338,11 @@ export def "transport-termii get" [
 ]: nothing -> record<createdAt: string, dataSegmentCode: string, id: string, partition: string, resourceOwner: string, termiiApiKey: string, termiiChannel: string, termiiFrom: string, transportName: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
   let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/api/transport-termii/{id}"))
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
 }
 
 # Replaces the TransportTermii resource.
@@ -11129,12 +11370,13 @@ export def "transport-termii update" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
   let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/api/transport-termii/{id}"))
   let req_body = {"dataSegmentCode": $data_segment_code, "termiiApiKey": $termii_api_key, "termiiChannel": $termii_channel, "termiiFrom": $termii_from, "transportName": $transport_name} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: {}, body: $req_body}
 }
 
 # Retrieves the collection of TransportTrello resources.
@@ -11154,18 +11396,18 @@ export def "transport-trello get-collection" [
   --accept: string@accept-completer # Response content type
   --page: int # The collection page number (default: 1, allows empty value)
   --data-segment-code: string # allows empty value
-  --data-segment-code: list<string> # allows empty value
+  --data-segment-code-list: list<string> # allows empty value (array variant)
   --partition: string # allows empty value
-  --partition: list<string> # allows empty value
+  --partition-list: list<string> # allows empty value (array variant)
   --properties: list<string> # allows empty value
 ]: nothing -> table<createdAt: string, dataSegmentCode: string, id: string, partition: string, resourceOwner: string, transportName: string, trelloApiKey: string, trelloApiToken: string, trelloListId: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "page" $page "scalar") (serialize-qp "dataSegmentCode" $data_segment_code "scalar") (serialize-qp "dataSegmentCode[]" $data_segment_code "multi") (serialize-qp "partition" $partition "scalar") (serialize-qp "partition[]" $partition "multi") (serialize-qp "properties[]" $properties "multi")] | flatten | str join "&"
+  let qp = [(serialize-qp "page" $page "scalar") (serialize-qp "dataSegmentCode" $data_segment_code "scalar") (serialize-qp "dataSegmentCode[]" $data_segment_code_list "multi") (serialize-qp "partition" $partition "scalar") (serialize-qp "partition[]" $partition_list "multi") (serialize-qp "properties[]" $properties "multi")] | flatten | str join "&"
   let full_url = (build-url $base "/api/transport-trello" $qp)
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"page": $page, "dataSegmentCode": $data_segment_code, "dataSegmentCode[]": $data_segment_code_list, "partition": $partition, "partition[]": $partition_list, "properties[]": $properties} | compact), body: null}
 }
 
 # Creates a TransportTrello resource.
@@ -11198,7 +11440,7 @@ export def "transport-trello create" [
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: {}, body: $req_body}
 }
 
 # Removes the TransportTrello resource.
@@ -11219,10 +11461,11 @@ export def "transport-trello delete" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
   let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/api/transport-trello/{id}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
 }
 
 # Retrieves a TransportTrello resource.
@@ -11244,10 +11487,11 @@ export def "transport-trello get" [
 ]: nothing -> record<createdAt: string, dataSegmentCode: string, id: string, partition: string, resourceOwner: string, transportName: string, trelloApiKey: string, trelloApiToken: string, trelloListId: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
   let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/api/transport-trello/{id}"))
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
 }
 
 # Replaces the TransportTrello resource.
@@ -11275,12 +11519,13 @@ export def "transport-trello update" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
   let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/api/transport-trello/{id}"))
   let req_body = {"dataSegmentCode": $data_segment_code, "transportName": $transport_name, "trelloApiKey": $trello_api_key, "trelloApiToken": $trello_api_token, "trelloListId": $trello_list_id} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: {}, body: $req_body}
 }
 
 # Retrieves the collection of TransportTurboSms resources.
@@ -11300,18 +11545,18 @@ export def "transport-turbo-sms get-collection" [
   --accept: string@accept-completer # Response content type
   --page: int # The collection page number (default: 1, allows empty value)
   --data-segment-code: string # allows empty value
-  --data-segment-code: list<string> # allows empty value
+  --data-segment-code-list: list<string> # allows empty value (array variant)
   --partition: string # allows empty value
-  --partition: list<string> # allows empty value
+  --partition-list: list<string> # allows empty value (array variant)
   --properties: list<string> # allows empty value
 ]: nothing -> table<createdAt: string, dataSegmentCode: string, id: string, partition: string, resourceOwner: string, transportName: string, turboSmsAuthToken: string, turboSmsFrom: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "page" $page "scalar") (serialize-qp "dataSegmentCode" $data_segment_code "scalar") (serialize-qp "dataSegmentCode[]" $data_segment_code "multi") (serialize-qp "partition" $partition "scalar") (serialize-qp "partition[]" $partition "multi") (serialize-qp "properties[]" $properties "multi")] | flatten | str join "&"
+  let qp = [(serialize-qp "page" $page "scalar") (serialize-qp "dataSegmentCode" $data_segment_code "scalar") (serialize-qp "dataSegmentCode[]" $data_segment_code_list "multi") (serialize-qp "partition" $partition "scalar") (serialize-qp "partition[]" $partition_list "multi") (serialize-qp "properties[]" $properties "multi")] | flatten | str join "&"
   let full_url = (build-url $base "/api/transport-turbo-sms" $qp)
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"page": $page, "dataSegmentCode": $data_segment_code, "dataSegmentCode[]": $data_segment_code_list, "partition": $partition, "partition[]": $partition_list, "properties[]": $properties} | compact), body: null}
 }
 
 # Creates a TransportTurboSms resource.
@@ -11343,7 +11588,7 @@ export def "transport-turbo-sms create" [
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: {}, body: $req_body}
 }
 
 # Removes the TransportTurboSms resource.
@@ -11364,10 +11609,11 @@ export def "transport-turbo-sms delete" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
   let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/api/transport-turbo-sms/{id}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
 }
 
 # Retrieves a TransportTurboSms resource.
@@ -11389,10 +11635,11 @@ export def "transport-turbo-sms get" [
 ]: nothing -> record<createdAt: string, dataSegmentCode: string, id: string, partition: string, resourceOwner: string, transportName: string, turboSmsAuthToken: string, turboSmsFrom: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
   let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/api/transport-turbo-sms/{id}"))
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
 }
 
 # Replaces the TransportTurboSms resource.
@@ -11419,12 +11666,13 @@ export def "transport-turbo-sms update" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
   let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/api/transport-turbo-sms/{id}"))
   let req_body = {"dataSegmentCode": $data_segment_code, "transportName": $transport_name, "turboSmsAuthToken": $turbo_sms_auth_token, "turboSmsFrom": $turbo_sms_from} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: {}, body: $req_body}
 }
 
 # Retrieves the collection of TransportTwilio resources.
@@ -11444,18 +11692,18 @@ export def "transport-twilio get-collection" [
   --accept: string@accept-completer # Response content type
   --page: int # The collection page number (default: 1, allows empty value)
   --data-segment-code: string # allows empty value
-  --data-segment-code: list<string> # allows empty value
+  --data-segment-code-list: list<string> # allows empty value (array variant)
   --partition: string # allows empty value
-  --partition: list<string> # allows empty value
+  --partition-list: list<string> # allows empty value (array variant)
   --properties: list<string> # allows empty value
 ]: nothing -> table<createdAt: string, dataSegmentCode: string, id: string, partition: string, resourceOwner: string, transportName: string, twilioFrom: string, twilioSid: string, twilioToken: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "page" $page "scalar") (serialize-qp "dataSegmentCode" $data_segment_code "scalar") (serialize-qp "dataSegmentCode[]" $data_segment_code "multi") (serialize-qp "partition" $partition "scalar") (serialize-qp "partition[]" $partition "multi") (serialize-qp "properties[]" $properties "multi")] | flatten | str join "&"
+  let qp = [(serialize-qp "page" $page "scalar") (serialize-qp "dataSegmentCode" $data_segment_code "scalar") (serialize-qp "dataSegmentCode[]" $data_segment_code_list "multi") (serialize-qp "partition" $partition "scalar") (serialize-qp "partition[]" $partition_list "multi") (serialize-qp "properties[]" $properties "multi")] | flatten | str join "&"
   let full_url = (build-url $base "/api/transport-twilio" $qp)
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"page": $page, "dataSegmentCode": $data_segment_code, "dataSegmentCode[]": $data_segment_code_list, "partition": $partition, "partition[]": $partition_list, "properties[]": $properties} | compact), body: null}
 }
 
 # Creates a TransportTwilio resource.
@@ -11488,7 +11736,7 @@ export def "transport-twilio create" [
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: {}, body: $req_body}
 }
 
 # Removes the TransportTwilio resource.
@@ -11509,10 +11757,11 @@ export def "transport-twilio delete" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
   let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/api/transport-twilio/{id}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
 }
 
 # Retrieves a TransportTwilio resource.
@@ -11534,10 +11783,11 @@ export def "transport-twilio get" [
 ]: nothing -> record<createdAt: string, dataSegmentCode: string, id: string, partition: string, resourceOwner: string, transportName: string, twilioFrom: string, twilioSid: string, twilioToken: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
   let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/api/transport-twilio/{id}"))
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
 }
 
 # Replaces the TransportTwilio resource.
@@ -11565,12 +11815,13 @@ export def "transport-twilio update" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
   let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/api/transport-twilio/{id}"))
   let req_body = {"dataSegmentCode": $data_segment_code, "transportName": $transport_name, "twilioFrom": $twilio_from, "twilioSid": $twilio_sid, "twilioToken": $twilio_token} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: {}, body: $req_body}
 }
 
 # Retrieves the collection of TransportTwitter resources.
@@ -11590,18 +11841,18 @@ export def "transport-twitter get-collection" [
   --accept: string@accept-completer # Response content type
   --page: int # The collection page number (default: 1, allows empty value)
   --data-segment-code: string # allows empty value
-  --data-segment-code: list<string> # allows empty value
+  --data-segment-code-list: list<string> # allows empty value (array variant)
   --partition: string # allows empty value
-  --partition: list<string> # allows empty value
+  --partition-list: list<string> # allows empty value (array variant)
   --properties: list<string> # allows empty value
 ]: nothing -> table<createdAt: string, dataSegmentCode: string, id: string, partition: string, resourceOwner: string, transportName: string, twitterAccessToken: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "page" $page "scalar") (serialize-qp "dataSegmentCode" $data_segment_code "scalar") (serialize-qp "dataSegmentCode[]" $data_segment_code "multi") (serialize-qp "partition" $partition "scalar") (serialize-qp "partition[]" $partition "multi") (serialize-qp "properties[]" $properties "multi")] | flatten | str join "&"
+  let qp = [(serialize-qp "page" $page "scalar") (serialize-qp "dataSegmentCode" $data_segment_code "scalar") (serialize-qp "dataSegmentCode[]" $data_segment_code_list "multi") (serialize-qp "partition" $partition "scalar") (serialize-qp "partition[]" $partition_list "multi") (serialize-qp "properties[]" $properties "multi")] | flatten | str join "&"
   let full_url = (build-url $base "/api/transport-twitter" $qp)
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"page": $page, "dataSegmentCode": $data_segment_code, "dataSegmentCode[]": $data_segment_code_list, "partition": $partition, "partition[]": $partition_list, "properties[]": $properties} | compact), body: null}
 }
 
 # Creates a TransportTwitter resource.
@@ -11632,7 +11883,7 @@ export def "transport-twitter create" [
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: {}, body: $req_body}
 }
 
 # Removes the TransportTwitter resource.
@@ -11653,10 +11904,11 @@ export def "transport-twitter delete" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
   let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/api/transport-twitter/{id}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
 }
 
 # Retrieves a TransportTwitter resource.
@@ -11678,10 +11930,11 @@ export def "transport-twitter get" [
 ]: nothing -> record<createdAt: string, dataSegmentCode: string, id: string, partition: string, resourceOwner: string, transportName: string, twitterAccessToken: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
   let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/api/transport-twitter/{id}"))
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
 }
 
 # Replaces the TransportTwitter resource.
@@ -11707,12 +11960,13 @@ export def "transport-twitter update" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
   let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/api/transport-twitter/{id}"))
   let req_body = {"dataSegmentCode": $data_segment_code, "transportName": $transport_name, "twitterAccessToken": $twitter_access_token} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: {}, body: $req_body}
 }
 
 # Retrieves the collection of TransportVonage resources.
@@ -11732,18 +11986,18 @@ export def "transport-vonage get-collection" [
   --accept: string@accept-completer # Response content type
   --page: int # The collection page number (default: 1, allows empty value)
   --data-segment-code: string # allows empty value
-  --data-segment-code: list<string> # allows empty value
+  --data-segment-code-list: list<string> # allows empty value (array variant)
   --partition: string # allows empty value
-  --partition: list<string> # allows empty value
+  --partition-list: list<string> # allows empty value (array variant)
   --properties: list<string> # allows empty value
 ]: nothing -> table<createdAt: string, dataSegmentCode: string, id: string, partition: string, resourceOwner: string, transportName: string, vonageFrom: string, vonageKey: string, vonageSecret: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "page" $page "scalar") (serialize-qp "dataSegmentCode" $data_segment_code "scalar") (serialize-qp "dataSegmentCode[]" $data_segment_code "multi") (serialize-qp "partition" $partition "scalar") (serialize-qp "partition[]" $partition "multi") (serialize-qp "properties[]" $properties "multi")] | flatten | str join "&"
+  let qp = [(serialize-qp "page" $page "scalar") (serialize-qp "dataSegmentCode" $data_segment_code "scalar") (serialize-qp "dataSegmentCode[]" $data_segment_code_list "multi") (serialize-qp "partition" $partition "scalar") (serialize-qp "partition[]" $partition_list "multi") (serialize-qp "properties[]" $properties "multi")] | flatten | str join "&"
   let full_url = (build-url $base "/api/transport-vonage" $qp)
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"page": $page, "dataSegmentCode": $data_segment_code, "dataSegmentCode[]": $data_segment_code_list, "partition": $partition, "partition[]": $partition_list, "properties[]": $properties} | compact), body: null}
 }
 
 # Creates a TransportVonage resource.
@@ -11776,7 +12030,7 @@ export def "transport-vonage create" [
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: {}, body: $req_body}
 }
 
 # Removes the TransportVonage resource.
@@ -11797,10 +12051,11 @@ export def "transport-vonage delete" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
   let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/api/transport-vonage/{id}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
 }
 
 # Retrieves a TransportVonage resource.
@@ -11822,10 +12077,11 @@ export def "transport-vonage get" [
 ]: nothing -> record<createdAt: string, dataSegmentCode: string, id: string, partition: string, resourceOwner: string, transportName: string, vonageFrom: string, vonageKey: string, vonageSecret: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
   let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/api/transport-vonage/{id}"))
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
 }
 
 # Replaces the TransportVonage resource.
@@ -11853,12 +12109,13 @@ export def "transport-vonage update" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
   let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/api/transport-vonage/{id}"))
   let req_body = {"dataSegmentCode": $data_segment_code, "transportName": $transport_name, "vonageFrom": $vonage_from, "vonageKey": $vonage_key, "vonageSecret": $vonage_secret} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: {}, body: $req_body}
 }
 
 # Retrieves the collection of TransportWebhook resources.
@@ -11878,18 +12135,18 @@ export def "transport-webhook get-collection" [
   --accept: string@accept-completer # Response content type
   --page: int # The collection page number (default: 1, allows empty value)
   --data-segment-code: string # allows empty value
-  --data-segment-code: list<string> # allows empty value
+  --data-segment-code-list: list<string> # allows empty value (array variant)
   --partition: string # allows empty value
-  --partition: list<string> # allows empty value
+  --partition-list: list<string> # allows empty value (array variant)
   --properties: list<string> # allows empty value
 ]: nothing -> table<createdAt: string, dataSegmentCode: string, httpMethodCode: string, id: string, mustBeEncryptedValue: string, partition: string, resourceOwner: string, transportName: string, webhookHeaders: list<string>, webhookUrl: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "page" $page "scalar") (serialize-qp "dataSegmentCode" $data_segment_code "scalar") (serialize-qp "dataSegmentCode[]" $data_segment_code "multi") (serialize-qp "partition" $partition "scalar") (serialize-qp "partition[]" $partition "multi") (serialize-qp "properties[]" $properties "multi")] | flatten | str join "&"
+  let qp = [(serialize-qp "page" $page "scalar") (serialize-qp "dataSegmentCode" $data_segment_code "scalar") (serialize-qp "dataSegmentCode[]" $data_segment_code_list "multi") (serialize-qp "partition" $partition "scalar") (serialize-qp "partition[]" $partition_list "multi") (serialize-qp "properties[]" $properties "multi")] | flatten | str join "&"
   let full_url = (build-url $base "/api/transport-webhook" $qp)
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"page": $page, "dataSegmentCode": $data_segment_code, "dataSegmentCode[]": $data_segment_code_list, "partition": $partition, "partition[]": $partition_list, "properties[]": $properties} | compact), body: null}
 }
 
 # Creates a TransportWebhook resource.
@@ -11923,7 +12180,7 @@ export def "transport-webhook create" [
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: {}, body: $req_body}
 }
 
 # Removes the TransportWebhook resource.
@@ -11944,10 +12201,11 @@ export def "transport-webhook delete" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
   let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/api/transport-webhook/{id}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
 }
 
 # Retrieves a TransportWebhook resource.
@@ -11969,10 +12227,11 @@ export def "transport-webhook get" [
 ]: nothing -> record<createdAt: string, dataSegmentCode: string, httpMethodCode: string, id: string, mustBeEncryptedValue: string, partition: string, resourceOwner: string, transportName: string, webhookHeaders: list<string>, webhookUrl: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
   let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/api/transport-webhook/{id}"))
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
 }
 
 # Replaces the TransportWebhook resource.
@@ -12001,12 +12260,13 @@ export def "transport-webhook update" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
   let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/api/transport-webhook/{id}"))
   let req_body = {"dataSegmentCode": $data_segment_code, "httpMethodCode": $http_method_code, "mustBeEncryptedValue": $must_be_encrypted_value, "transportName": $transport_name, "webhookHeaders": $webhook_headers, "webhookUrl": $webhook_url} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: {}, body: $req_body}
 }
 
 # Retrieves the collection of TransportYunpian resources.
@@ -12026,18 +12286,18 @@ export def "transport-yunpian get-collection" [
   --accept: string@accept-completer # Response content type
   --page: int # The collection page number (default: 1, allows empty value)
   --data-segment-code: string # allows empty value
-  --data-segment-code: list<string> # allows empty value
+  --data-segment-code-list: list<string> # allows empty value (array variant)
   --partition: string # allows empty value
-  --partition: list<string> # allows empty value
+  --partition-list: list<string> # allows empty value (array variant)
   --properties: list<string> # allows empty value
 ]: nothing -> table<createdAt: string, dataSegmentCode: string, id: string, partition: string, resourceOwner: string, transportName: string, yunpianApiKey: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "page" $page "scalar") (serialize-qp "dataSegmentCode" $data_segment_code "scalar") (serialize-qp "dataSegmentCode[]" $data_segment_code "multi") (serialize-qp "partition" $partition "scalar") (serialize-qp "partition[]" $partition "multi") (serialize-qp "properties[]" $properties "multi")] | flatten | str join "&"
+  let qp = [(serialize-qp "page" $page "scalar") (serialize-qp "dataSegmentCode" $data_segment_code "scalar") (serialize-qp "dataSegmentCode[]" $data_segment_code_list "multi") (serialize-qp "partition" $partition "scalar") (serialize-qp "partition[]" $partition_list "multi") (serialize-qp "properties[]" $properties "multi")] | flatten | str join "&"
   let full_url = (build-url $base "/api/transport-yunpian" $qp)
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"page": $page, "dataSegmentCode": $data_segment_code, "dataSegmentCode[]": $data_segment_code_list, "partition": $partition, "partition[]": $partition_list, "properties[]": $properties} | compact), body: null}
 }
 
 # Creates a TransportYunpian resource.
@@ -12068,7 +12328,7 @@ export def "transport-yunpian create" [
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: {}, body: $req_body}
 }
 
 # Removes the TransportYunpian resource.
@@ -12089,10 +12349,11 @@ export def "transport-yunpian delete" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
   let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/api/transport-yunpian/{id}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
 }
 
 # Retrieves a TransportYunpian resource.
@@ -12114,10 +12375,11 @@ export def "transport-yunpian get" [
 ]: nothing -> record<createdAt: string, dataSegmentCode: string, id: string, partition: string, resourceOwner: string, transportName: string, yunpianApiKey: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
   let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/api/transport-yunpian/{id}"))
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
 }
 
 # Replaces the TransportYunpian resource.
@@ -12143,12 +12405,13 @@ export def "transport-yunpian update" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
   let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/api/transport-yunpian/{id}"))
   let req_body = {"dataSegmentCode": $data_segment_code, "transportName": $transport_name, "yunpianApiKey": $yunpian_api_key} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: {}, body: $req_body}
 }
 
 # Retrieves the collection of TransportZendesk resources.
@@ -12168,18 +12431,18 @@ export def "transport-zendesk get-collection" [
   --accept: string@accept-completer # Response content type
   --page: int # The collection page number (default: 1, allows empty value)
   --data-segment-code: string # allows empty value
-  --data-segment-code: list<string> # allows empty value
+  --data-segment-code-list: list<string> # allows empty value (array variant)
   --partition: string # allows empty value
-  --partition: list<string> # allows empty value
+  --partition-list: list<string> # allows empty value (array variant)
   --properties: list<string> # allows empty value
 ]: nothing -> table<createdAt: string, dataSegmentCode: string, id: string, partition: string, resourceOwner: string, transportName: string, zendeskEmail: string, zendeskHost: string, zendeskToken: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "page" $page "scalar") (serialize-qp "dataSegmentCode" $data_segment_code "scalar") (serialize-qp "dataSegmentCode[]" $data_segment_code "multi") (serialize-qp "partition" $partition "scalar") (serialize-qp "partition[]" $partition "multi") (serialize-qp "properties[]" $properties "multi")] | flatten | str join "&"
+  let qp = [(serialize-qp "page" $page "scalar") (serialize-qp "dataSegmentCode" $data_segment_code "scalar") (serialize-qp "dataSegmentCode[]" $data_segment_code_list "multi") (serialize-qp "partition" $partition "scalar") (serialize-qp "partition[]" $partition_list "multi") (serialize-qp "properties[]" $properties "multi")] | flatten | str join "&"
   let full_url = (build-url $base "/api/transport-zendesk" $qp)
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"page": $page, "dataSegmentCode": $data_segment_code, "dataSegmentCode[]": $data_segment_code_list, "partition": $partition, "partition[]": $partition_list, "properties[]": $properties} | compact), body: null}
 }
 
 # Creates a TransportZendesk resource.
@@ -12212,7 +12475,7 @@ export def "transport-zendesk create" [
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: {}, body: $req_body}
 }
 
 # Removes the TransportZendesk resource.
@@ -12233,10 +12496,11 @@ export def "transport-zendesk delete" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
   let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/api/transport-zendesk/{id}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
 }
 
 # Retrieves a TransportZendesk resource.
@@ -12258,10 +12522,11 @@ export def "transport-zendesk get" [
 ]: nothing -> record<createdAt: string, dataSegmentCode: string, id: string, partition: string, resourceOwner: string, transportName: string, zendeskEmail: string, zendeskHost: string, zendeskToken: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
   let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/api/transport-zendesk/{id}"))
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
 }
 
 # Replaces the TransportZendesk resource.
@@ -12289,12 +12554,13 @@ export def "transport-zendesk update" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
   let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/api/transport-zendesk/{id}"))
   let req_body = {"dataSegmentCode": $data_segment_code, "transportName": $transport_name, "zendeskEmail": $zendesk_email, "zendeskHost": $zendesk_host, "zendeskToken": $zendesk_token} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: {}, body: $req_body}
 }
 
 # Retrieves the collection of TransportZulip resources.
@@ -12314,18 +12580,18 @@ export def "transport-zulip get-collection" [
   --accept: string@accept-completer # Response content type
   --page: int # The collection page number (default: 1, allows empty value)
   --data-segment-code: string # allows empty value
-  --data-segment-code: list<string> # allows empty value
+  --data-segment-code-list: list<string> # allows empty value (array variant)
   --partition: string # allows empty value
-  --partition: list<string> # allows empty value
+  --partition-list: list<string> # allows empty value (array variant)
   --properties: list<string> # allows empty value
 ]: nothing -> table<createdAt: string, dataSegmentCode: string, id: string, partition: string, resourceOwner: string, transportName: string, zulipChannel: string, zulipEmail: string, zulipHost: string, zulipToken: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "page" $page "scalar") (serialize-qp "dataSegmentCode" $data_segment_code "scalar") (serialize-qp "dataSegmentCode[]" $data_segment_code "multi") (serialize-qp "partition" $partition "scalar") (serialize-qp "partition[]" $partition "multi") (serialize-qp "properties[]" $properties "multi")] | flatten | str join "&"
+  let qp = [(serialize-qp "page" $page "scalar") (serialize-qp "dataSegmentCode" $data_segment_code "scalar") (serialize-qp "dataSegmentCode[]" $data_segment_code_list "multi") (serialize-qp "partition" $partition "scalar") (serialize-qp "partition[]" $partition_list "multi") (serialize-qp "properties[]" $properties "multi")] | flatten | str join "&"
   let full_url = (build-url $base "/api/transport-zulip" $qp)
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"page": $page, "dataSegmentCode": $data_segment_code, "dataSegmentCode[]": $data_segment_code_list, "partition": $partition, "partition[]": $partition_list, "properties[]": $properties} | compact), body: null}
 }
 
 # Creates a TransportZulip resource.
@@ -12359,7 +12625,7 @@ export def "transport-zulip create" [
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: {}, body: $req_body}
 }
 
 # Removes the TransportZulip resource.
@@ -12380,10 +12646,11 @@ export def "transport-zulip delete" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
   let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/api/transport-zulip/{id}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
 }
 
 # Retrieves a TransportZulip resource.
@@ -12405,10 +12672,11 @@ export def "transport-zulip get" [
 ]: nothing -> record<createdAt: string, dataSegmentCode: string, id: string, partition: string, resourceOwner: string, transportName: string, zulipChannel: string, zulipEmail: string, zulipHost: string, zulipToken: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
   let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/api/transport-zulip/{id}"))
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
 }
 
 # Replaces the TransportZulip resource.
@@ -12437,12 +12705,13 @@ export def "transport-zulip update" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
   let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/api/transport-zulip/{id}"))
   let req_body = {"dataSegmentCode": $data_segment_code, "transportName": $transport_name, "zulipChannel": $zulip_channel, "zulipEmail": $zulip_email, "zulipHost": $zulip_host, "zulipToken": $zulip_token} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: {}, body: $req_body}
 }
 
 # Retrieves the collection of UserAccount resources.
@@ -12469,7 +12738,7 @@ export def "user-account get-collection" [
   let full_url = (build-url $base "/api/user-account" $qp)
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"page": $page, "properties[]": $properties} | compact), body: null}
 }
 
 # Retrieves the collection of UserAccountLevelCode resources.
@@ -12496,7 +12765,7 @@ export def "user-account-level-code get-collection" [
   let full_url = (build-url $base "/api/user-account-level-code" $qp)
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"page": $page, "properties[]": $properties} | compact), body: null}
 }
 
 # Retrieves a UserAccountLevelCode resource.
@@ -12518,10 +12787,11 @@ export def "user-account-level-code get" [
 ]: nothing -> record<codeName: string, id: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
   let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/api/user-account-level-code/{id}"))
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
 }
 
 # Retrieves a UserAccount resource.
@@ -12543,10 +12813,11 @@ export def "user-account get" [
 ]: nothing -> record<accountLevelCode: string, creditsOveragePercentTripSwitch: int, email: string, firstName: string, id: string, isDelinquent: bool, lastName: string, timezoneCode: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
   let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/api/user-account/{id}"))
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
 }
 
 # Replaces the UserAccount resource.
@@ -12570,10 +12841,11 @@ export def "user-account update" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
   let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/api/user-account/{id}"))
   let req_body = {"creditsOveragePercentTripSwitch": $credits_overage_percent_trip_switch} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: {}, body: $req_body}
 }

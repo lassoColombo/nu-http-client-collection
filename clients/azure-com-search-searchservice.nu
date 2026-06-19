@@ -3,16 +3,17 @@
 # Auth: --token flag or $env.SEARCHSERVICECLIENT_TOKEN
 
 const BASE_URL = "https://azure.local"
-const DEFAULT_AUTH = "bearer"
 
-# Build auth: returns {headers: record, query: string}
+# Build auth: returns {scheme: string, headers: record, query: string, location: string}.
+# `location` is "header" | "query" | "cookie" | "none" and tells dry-run callers
+# where the token went without inspecting headers/query themselves.
 def build-auth [token?: string, auth_scheme?: string]: nothing -> record {
   let token_val = if ($token != null) and ($token | is-not-empty) { $token } else { $env | get -o SEARCHSERVICECLIENT_TOKEN | default "" }
   let scheme = ($auth_scheme | default "bearer")
-  if ($scheme == "none") or ($token_val | is-empty) { return {headers: {}, query: ""} }
+  if ($scheme == "none") or ($token_val | is-empty) { return {scheme: $scheme, headers: {}, query: "", location: "none"} }
   match $scheme {
-    "none" => { {headers: {}, query: ""} }
-    _ => { {headers: {Authorization: $"Bearer ($token_val)"}, query: ""} }
+    "none" => { {scheme: $scheme, headers: {}, query: "", location: "none"} }
+    _ => { {scheme: $scheme, headers: {Authorization: $"Bearer ($token_val)"}, query: "", location: "header"} }
   }
 }
 
@@ -21,8 +22,9 @@ def build-auth [token?: string, auth_scheme?: string]: nothing -> record {
 # ([A-Za-z0-9-._~]) stay literal; everything else gets %XX.
 def serialize-qp [name: string, value: any, style: string]: nothing -> list<string> {
   if ($value == null) { return [] }
-  let n = (encode-path-segment $name)
   let is_list = ($value | describe | str starts-with "list")
+  if $is_list and ($value | is-empty) { return [] }
+  let n = (encode-path-segment $name)
   if ($value | describe | str starts-with "record") { return ($value | transpose k v | each { $"($n)[(encode-path-segment $in.k)]=(encode-path-segment $in.v)" }) }
   if not $is_list { return [$"($n)=(encode-path-segment $value)"] }
   match $style {
@@ -53,22 +55,42 @@ def build-url [base: string, path: string, query?: string]: nothing -> string {
   if ($query != null) and ($query | is-not-empty) { $result | upsert query $query | url join } else { $result | url join }
 }
 
+# Build the dry-run record returned by --dry-run. Shape:
+#   {dry_run: true, method, url, query: <record>, headers, body, content_type, timeout,
+#    auth: {scheme, location}}
+# `meta` carries logical-form data (the query record by spec name, the pre-serialization
+# body) that do-request itself cannot reconstruct from its wire-format args.
+def build-dry-run-record [method: string, url: string, auth: record, content_type: string, timeout: duration, meta?: record]: nothing -> record {
+  let m = ($meta | default {})
+  {
+    dry_run: true
+    method: $method
+    url: $url
+    query: ($m | get -o query | default {})
+    headers: $auth.headers
+    body: ($m | get -o body)
+    content_type: $content_type
+    timeout: $timeout
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+}
+
 # Execute HTTP request with method dispatch
-def do-request [method: string, url: string, auth: record, insecure: bool, raw: bool, dry_run: bool, max_time?: duration, allow_errors?: bool, full?: bool, content_type?: string, body?: any]: nothing -> any {
+def do-request [method: string, url: string, auth: record, insecure: bool, raw: bool, dry_run: bool, max_time?: duration, allow_errors?: bool, full?: bool, content_type?: string, body?: any, dry_run_meta?: record]: nothing -> any {
   let req_url = if ($auth.query | is-not-empty) { if ($url | str contains "?") { $"($url)&($auth.query)" } else { $"($url)?($auth.query)" } } else { $url }
   let timeout = ($max_time | default 30min)
   let ct = ($content_type | default "application/json")
-  if $dry_run { return {method: $method, url: $req_url, headers: $auth.headers, query_string: $auth.query, content_type: $ct, timeout: $timeout, body: $body} }
+  if $dry_run { return (build-dry-run-record $method $req_url $auth $ct $timeout $dry_run_meta) }
   let resp = match $method {
     "get" => { http get --headers $auth.headers --full --allow-errors --max-time $timeout --insecure=$insecure --raw=$raw $req_url }
-    "head" => { http head --headers $auth.headers --max-time $timeout --insecure=$insecure $req_url }
-    "options" => { http options --headers $auth.headers --max-time $timeout --insecure=$insecure $req_url }
+    "head" => { http head --headers $auth.headers --full --allow-errors --max-time $timeout --insecure=$insecure $req_url }
+    "options" => { http options --headers $auth.headers --full --allow-errors --max-time $timeout --insecure=$insecure $req_url }
     "post" => { if ($body | is-empty) { http post --headers $auth.headers --full --allow-errors --max-time $timeout --insecure=$insecure --raw=$raw $req_url "" } else { http post --headers $auth.headers --content-type $ct --full --allow-errors --max-time $timeout --insecure=$insecure --raw=$raw $req_url $body } }
     "put" => { if ($body | is-empty) { http put --headers $auth.headers --full --allow-errors --max-time $timeout --insecure=$insecure --raw=$raw $req_url "" } else { http put --headers $auth.headers --content-type $ct --full --allow-errors --max-time $timeout --insecure=$insecure --raw=$raw $req_url $body } }
     "patch" => { if ($body | is-empty) { http patch --headers $auth.headers --full --allow-errors --max-time $timeout --insecure=$insecure --raw=$raw $req_url "" } else { http patch --headers $auth.headers --content-type $ct --full --allow-errors --max-time $timeout --insecure=$insecure --raw=$raw $req_url $body } }
     "delete" => { if ($body | is-empty) { http delete --headers $auth.headers --full --allow-errors --max-time $timeout --insecure=$insecure --raw=$raw $req_url } else { http delete --headers $auth.headers --content-type $ct --data $body --full --allow-errors --max-time $timeout --insecure=$insecure --raw=$raw $req_url } }
   }
-  if ($method in ["head" "options"]) { return $resp }
+  if ($method == "head") and (not $full) and (not $allow_errors) and $resp.status < 400 { return $resp.headers }
   if $allow_errors { $resp } else if $resp.status >= 400 { error make --unspanned { msg: $"HTTP ($resp.status): ($resp.body)" } } else if $full { {status: $resp.status, headers: $resp.headers, body: $resp.body} } else if $resp.status == 204 { null } else { $resp.body }
 }
 
@@ -132,7 +154,7 @@ export def "datasources list-data-sources" [
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"client-request-id": $client_request_id} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"$select": $select, "api-version": $api_version} | compact), body: null}
 }
 
 # Creates a new datasource.
@@ -176,7 +198,7 @@ export def "datasources create-data-sources" [
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"client-request-id": $client_request_id} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: ({"api-version": $api_version} | compact), body: $req_body}
 }
 
 # Deletes a datasource.
@@ -202,13 +224,14 @@ export def "datasources delete-data-sources" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($data_source_name | is-empty) { error make --unspanned { msg: "path parameter 'dataSourceName' must be non-empty" } }
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({data_source_name: (encode-path-segment $data_source_name)} | format pattern "/datasources('{data_source_name}')") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"client-request-id": $client_request_id, "If-Match": $if_match, "If-None-Match": $if_none_match} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"api-version": $api_version} | compact), body: null}
 }
 
 # Retrieves a datasource definition.
@@ -232,13 +255,14 @@ export def "datasources get-data-sources" [
 ]: nothing -> record<_odata_etag: string, container: record<name: string, query: string>, credentials: record<connectionString: string>, dataChangeDetectionPolicy: record<_odata_type: string>, dataDeletionDetectionPolicy: record<_odata_type: string>, description: string, name: string, type: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($data_source_name | is-empty) { error make --unspanned { msg: "path parameter 'dataSourceName' must be non-empty" } }
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({data_source_name: (encode-path-segment $data_source_name)} | format pattern "/datasources('{data_source_name}')") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"client-request-id": $client_request_id} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"api-version": $api_version} | compact), body: null}
 }
 
 # Creates a new datasource or updates a datasource if it already exists.
@@ -278,6 +302,7 @@ export def "datasources create-data-sources-or-update" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($data_source_name | is-empty) { error make --unspanned { msg: "path parameter 'dataSourceName' must be non-empty" } }
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({data_source_name: (encode-path-segment $data_source_name)} | format pattern "/datasources('{data_source_name}')") $qp)
   let req_body = {"@odata.etag": $odata_etag, "container": $container, "credentials": $credentials, "dataChangeDetectionPolicy": $data_change_detection_policy, "dataDeletionDetectionPolicy": $data_deletion_detection_policy, "description": $description, "name": $name, "type": $type} | compact
@@ -286,7 +311,7 @@ export def "datasources create-data-sources-or-update" [
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"client-request-id": $client_request_id, "If-Match": $if_match, "If-None-Match": $if_none_match, "Prefer": $prefer} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: ({"api-version": $api_version} | compact), body: $req_body}
 }
 
 # Lists all indexers available for a search service.
@@ -316,7 +341,7 @@ export def "indexers list" [
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"client-request-id": $client_request_id} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"$select": $select, "api-version": $api_version} | compact), body: null}
 }
 
 # Creates a new indexer.
@@ -363,7 +388,7 @@ export def "indexers create" [
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"client-request-id": $client_request_id} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: ({"api-version": $api_version} | compact), body: $req_body}
 }
 
 # Deletes an indexer.
@@ -389,13 +414,14 @@ export def "indexers delete" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($indexer_name | is-empty) { error make --unspanned { msg: "path parameter 'indexerName' must be non-empty" } }
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({indexer_name: (encode-path-segment $indexer_name)} | format pattern "/indexers('{indexer_name}')") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"client-request-id": $client_request_id, "If-Match": $if_match, "If-None-Match": $if_none_match} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"api-version": $api_version} | compact), body: null}
 }
 
 # Retrieves an indexer definition.
@@ -419,13 +445,14 @@ export def "indexers get" [
 ]: nothing -> record<_odata_etag: string, dataSourceName: string, description: string, disabled: bool, fieldMappings: table<mappingFunction: record, sourceFieldName: string, targetFieldName: string>, name: string, outputFieldMappings: table<mappingFunction: record, sourceFieldName: string, targetFieldName: string>, parameters: record<base64EncodeKeys: bool, batchSize: int, configuration: record, maxFailedItems: int, maxFailedItemsPerBatch: int>, schedule: record<interval: string, startTime: string>, skillsetName: string, targetIndexName: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($indexer_name | is-empty) { error make --unspanned { msg: "path parameter 'indexerName' must be non-empty" } }
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({indexer_name: (encode-path-segment $indexer_name)} | format pattern "/indexers('{indexer_name}')") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"client-request-id": $client_request_id} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"api-version": $api_version} | compact), body: null}
 }
 
 # Creates a new indexer or updates an indexer if it already exists.
@@ -468,6 +495,7 @@ export def "indexers create-or-update" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($indexer_name | is-empty) { error make --unspanned { msg: "path parameter 'indexerName' must be non-empty" } }
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({indexer_name: (encode-path-segment $indexer_name)} | format pattern "/indexers('{indexer_name}')") $qp)
   let req_body = {"@odata.etag": $odata_etag, "dataSourceName": $data_source_name, "description": $description, "disabled": $disabled, "fieldMappings": $field_mappings, "name": $name, "outputFieldMappings": $output_field_mappings, "parameters": $parameters, "schedule": $schedule, "skillsetName": $skillset_name, "targetIndexName": $target_index_name} | compact
@@ -476,7 +504,7 @@ export def "indexers create-or-update" [
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"client-request-id": $client_request_id, "If-Match": $if_match, "If-None-Match": $if_none_match, "Prefer": $prefer} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: ({"api-version": $api_version} | compact), body: $req_body}
 }
 
 # Resets the change tracking state associated with an indexer.
@@ -500,13 +528,14 @@ export def "indexers-search-reset reset" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($indexer_name | is-empty) { error make --unspanned { msg: "path parameter 'indexerName' must be non-empty" } }
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({indexer_name: (encode-path-segment $indexer_name)} | format pattern "/indexers('{indexer_name}')/search.reset") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"client-request-id": $client_request_id} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"api-version": $api_version} | compact), body: null}
 }
 
 # Runs an indexer on-demand.
@@ -530,13 +559,14 @@ export def "indexers-search-run create" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($indexer_name | is-empty) { error make --unspanned { msg: "path parameter 'indexerName' must be non-empty" } }
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({indexer_name: (encode-path-segment $indexer_name)} | format pattern "/indexers('{indexer_name}')/search.run") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"client-request-id": $client_request_id} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"api-version": $api_version} | compact), body: null}
 }
 
 # Returns the current status and execution history of an indexer.
@@ -560,13 +590,14 @@ export def "indexers-search-status get" [
 ]: nothing -> record<executionHistory: table<endTime: string, errorMessage: string, errors: list, finalTrackingState: string, initialTrackingState: string, itemsFailed: int, itemsProcessed: int, startTime: string, status: string, warnings: list>, lastResult: record<endTime: string, errorMessage: string, errors: list<record>, finalTrackingState: string, initialTrackingState: string, itemsFailed: int, itemsProcessed: int, startTime: string, status: string, warnings: list<record>>, limits: record<maxDocumentContentCharactersToExtract: float, maxDocumentExtractionSize: float, maxRunTime: string>, status: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($indexer_name | is-empty) { error make --unspanned { msg: "path parameter 'indexerName' must be non-empty" } }
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({indexer_name: (encode-path-segment $indexer_name)} | format pattern "/indexers('{indexer_name}')/search.status") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"client-request-id": $client_request_id} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"api-version": $api_version} | compact), body: null}
 }
 
 # Lists all indexes available for a search service.
@@ -596,7 +627,7 @@ export def "indexes list" [
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"client-request-id": $client_request_id} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"$select": $select, "api-version": $api_version} | compact), body: null}
 }
 
 # Creates a new search index.
@@ -649,7 +680,7 @@ export def "indexes create" [
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"client-request-id": $client_request_id} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: ({"api-version": $api_version} | compact), body: $req_body}
 }
 
 # Deletes a search index and all the documents it contains.
@@ -675,13 +706,14 @@ export def "indexes delete" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($index_name | is-empty) { error make --unspanned { msg: "path parameter 'indexName' must be non-empty" } }
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({index_name: (encode-path-segment $index_name)} | format pattern "/indexes('{index_name}')") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"client-request-id": $client_request_id, "If-Match": $if_match, "If-None-Match": $if_none_match} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"api-version": $api_version} | compact), body: null}
 }
 
 # Retrieves an index definition.
@@ -705,13 +737,14 @@ export def "indexes get" [
 ]: nothing -> record<_odata_etag: string, analyzers: table<_odata_type: string, name: string>, charFilters: table<_odata_type: string, name: string>, corsOptions: record<allowedOrigins: list<string>, maxAgeInSeconds: int>, defaultScoringProfile: string, encryptionKey: record<accessCredentials: record<applicationId: string, applicationSecret: string>, keyVaultKeyName: string, keyVaultKeyVersion: string, keyVaultUri: string>, fields: table<analyzer: string, facetable: bool, fields: list, filterable: bool, indexAnalyzer: string, key: bool, name: string, retrievable: bool, searchAnalyzer: string, searchable: bool, sortable: bool, synonymMaps: list, type: string>, name: string, scoringProfiles: table<functionAggregation: string, functions: list, name: string, text: record>, suggesters: table<name: string, searchMode: string, sourceFields: list>, tokenFilters: table<_odata_type: string, name: string>, tokenizers: table<_odata_type: string, name: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($index_name | is-empty) { error make --unspanned { msg: "path parameter 'indexName' must be non-empty" } }
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({index_name: (encode-path-segment $index_name)} | format pattern "/indexes('{index_name}')") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"client-request-id": $client_request_id} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"api-version": $api_version} | compact), body: null}
 }
 
 # Creates a new search index or updates an index if it already exists.
@@ -761,6 +794,7 @@ export def "indexes create-or-update" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($index_name | is-empty) { error make --unspanned { msg: "path parameter 'indexName' must be non-empty" } }
   let qp = [(serialize-qp "allowIndexDowntime" $allow_index_downtime "scalar") (serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({index_name: (encode-path-segment $index_name)} | format pattern "/indexes('{index_name}')") $qp)
   let req_body = {"@odata.etag": $odata_etag, "analyzers": $analyzers, "charFilters": $char_filters, "corsOptions": $cors_options, "defaultScoringProfile": $default_scoring_profile, "encryptionKey": $encryption_key, "fields": $fields, "name": $name, "scoringProfiles": $scoring_profiles, "suggesters": $suggesters, "tokenFilters": $token_filters, "tokenizers": $tokenizers} | compact
@@ -769,7 +803,7 @@ export def "indexes create-or-update" [
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"client-request-id": $client_request_id, "If-Match": $if_match, "If-None-Match": $if_none_match, "Prefer": $prefer} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: ({"allowIndexDowntime": $allow_index_downtime, "api-version": $api_version} | compact), body: $req_body}
 }
 
 # Shows how an analyzer breaks text into tokens.
@@ -799,6 +833,7 @@ export def "indexes-search-analyze create" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($index_name | is-empty) { error make --unspanned { msg: "path parameter 'indexName' must be non-empty" } }
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({index_name: (encode-path-segment $index_name)} | format pattern "/indexes('{index_name}')/search.analyze") $qp)
   let req_body = {"analyzer": $analyzer, "charFilters": $char_filters, "text": $text, "tokenFilters": $token_filters, "tokenizer": $tokenizer} | compact
@@ -807,7 +842,7 @@ export def "indexes-search-analyze create" [
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"client-request-id": $client_request_id} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: ({"api-version": $api_version} | compact), body: $req_body}
 }
 
 # Returns statistics for the given index, including a document count and storage usage.
@@ -831,13 +866,14 @@ export def "indexes-search-stats get-statistics" [
 ]: nothing -> record<documentCount: int, storageSize: int> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($index_name | is-empty) { error make --unspanned { msg: "path parameter 'indexName' must be non-empty" } }
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({index_name: (encode-path-segment $index_name)} | format pattern "/indexes('{index_name}')/search.stats") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"client-request-id": $client_request_id} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"api-version": $api_version} | compact), body: null}
 }
 
 # Gets service level statistics for a search service.
@@ -865,7 +901,7 @@ export def "servicestats get-service-statistics" [
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"client-request-id": $client_request_id} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"api-version": $api_version} | compact), body: null}
 }
 
 # List all skillsets in a search service.
@@ -895,7 +931,7 @@ export def "skillsets list" [
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"client-request-id": $client_request_id} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"$select": $select, "api-version": $api_version} | compact), body: null}
 }
 
 # Creates a new skillset in a search service.
@@ -934,7 +970,7 @@ export def "skillsets create" [
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"client-request-id": $client_request_id} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: ({"api-version": $api_version} | compact), body: $req_body}
 }
 
 # Deletes a skillset in a search service.
@@ -960,13 +996,14 @@ export def "skillsets delete" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($skillset_name | is-empty) { error make --unspanned { msg: "path parameter 'skillsetName' must be non-empty" } }
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({skillset_name: (encode-path-segment $skillset_name)} | format pattern "/skillsets('{skillset_name}')") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"client-request-id": $client_request_id, "If-Match": $if_match, "If-None-Match": $if_none_match} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"api-version": $api_version} | compact), body: null}
 }
 
 # Retrieves a skillset in a search service.
@@ -990,13 +1027,14 @@ export def "skillsets get" [
 ]: nothing -> record<_odata_etag: string, cognitiveServices: record<_odata_type: string, description: string>, description: string, name: string, skills: table<_odata_type: string, context: string, description: string, inputs: list, name: string, outputs: list>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($skillset_name | is-empty) { error make --unspanned { msg: "path parameter 'skillsetName' must be non-empty" } }
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({skillset_name: (encode-path-segment $skillset_name)} | format pattern "/skillsets('{skillset_name}')") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"client-request-id": $client_request_id} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"api-version": $api_version} | compact), body: null}
 }
 
 # Creates a new skillset in a search service or updates the skillset if it already exists.
@@ -1031,6 +1069,7 @@ export def "skillsets create-or-update" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($skillset_name | is-empty) { error make --unspanned { msg: "path parameter 'skillsetName' must be non-empty" } }
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({skillset_name: (encode-path-segment $skillset_name)} | format pattern "/skillsets('{skillset_name}')") $qp)
   let req_body = {"@odata.etag": $odata_etag, "cognitiveServices": $cognitive_services, "description": $description, "name": $name, "skills": $skills} | compact
@@ -1039,7 +1078,7 @@ export def "skillsets create-or-update" [
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"client-request-id": $client_request_id, "If-Match": $if_match, "If-None-Match": $if_none_match, "Prefer": $prefer} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: ({"api-version": $api_version} | compact), body: $req_body}
 }
 
 # Lists all synonym maps available for a search service.
@@ -1069,7 +1108,7 @@ export def "synonymmaps list-synonym-maps" [
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"client-request-id": $client_request_id} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"$select": $select, "api-version": $api_version} | compact), body: null}
 }
 
 # Creates a new synonym map.
@@ -1107,7 +1146,7 @@ export def "synonymmaps create-synonym-maps" [
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"client-request-id": $client_request_id} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: ({"api-version": $api_version} | compact), body: $req_body}
 }
 
 # Deletes a synonym map.
@@ -1133,13 +1172,14 @@ export def "synonymmaps delete-synonym-maps" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($synonym_map_name | is-empty) { error make --unspanned { msg: "path parameter 'synonymMapName' must be non-empty" } }
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({synonym_map_name: (encode-path-segment $synonym_map_name)} | format pattern "/synonymmaps('{synonym_map_name}')") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"client-request-id": $client_request_id, "If-Match": $if_match, "If-None-Match": $if_none_match} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"api-version": $api_version} | compact), body: null}
 }
 
 # Retrieves a synonym map definition.
@@ -1163,13 +1203,14 @@ export def "synonymmaps get-synonym-maps" [
 ]: nothing -> record<_odata_etag: string, encryptionKey: record<accessCredentials: record<applicationId: string, applicationSecret: string>, keyVaultKeyName: string, keyVaultKeyVersion: string, keyVaultUri: string>, format: string, name: string, synonyms: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($synonym_map_name | is-empty) { error make --unspanned { msg: "path parameter 'synonymMapName' must be non-empty" } }
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({synonym_map_name: (encode-path-segment $synonym_map_name)} | format pattern "/synonymmaps('{synonym_map_name}')") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"client-request-id": $client_request_id} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"api-version": $api_version} | compact), body: null}
 }
 
 # Creates a new synonym map or updates a synonym map if it already exists.
@@ -1203,6 +1244,7 @@ export def "synonymmaps create-synonym-maps-or-update" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($synonym_map_name | is-empty) { error make --unspanned { msg: "path parameter 'synonymMapName' must be non-empty" } }
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({synonym_map_name: (encode-path-segment $synonym_map_name)} | format pattern "/synonymmaps('{synonym_map_name}')") $qp)
   let req_body = {"@odata.etag": $odata_etag, "encryptionKey": $encryption_key, "format": $format, "name": $name, "synonyms": $synonyms} | compact
@@ -1211,5 +1253,5 @@ export def "synonymmaps create-synonym-maps-or-update" [
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"client-request-id": $client_request_id, "If-Match": $if_match, "If-None-Match": $if_none_match, "Prefer": $prefer} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: ({"api-version": $api_version} | compact), body: $req_body}
 }

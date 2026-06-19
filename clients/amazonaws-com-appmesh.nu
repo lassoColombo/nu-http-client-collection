@@ -3,17 +3,18 @@
 # Auth: --token flag or $env.AWS_APP_MESH_TOKEN
 
 const BASE_URL = "http://appmesh.us-east-1.amazonaws.com"
-const DEFAULT_AUTH = "bearer"
 
-# Build auth: returns {headers: record, query: string}
+# Build auth: returns {scheme: string, headers: record, query: string, location: string}.
+# `location` is "header" | "query" | "cookie" | "none" and tells dry-run callers
+# where the token went without inspecting headers/query themselves.
 def build-auth [token?: string, auth_scheme?: string]: nothing -> record {
   let token_val = if ($token != null) and ($token | is-not-empty) { $token } else { $env | get -o AWS_APP_MESH_TOKEN | default "" }
   let scheme = ($auth_scheme | default "bearer")
-  if ($scheme == "none") or ($token_val | is-empty) { return {headers: {}, query: ""} }
+  if ($scheme == "none") or ($token_val | is-empty) { return {scheme: $scheme, headers: {}, query: "", location: "none"} }
   match $scheme {
-    "bearer" => { {headers: {Authorization: $"Bearer ($token_val)"}, query: ""} }
-    "none" => { {headers: {}, query: ""} }
-    _ => { {headers: {Authorization: $"Bearer ($token_val)"}, query: ""} }
+    "bearer" => { {scheme: $scheme, headers: {Authorization: $"Bearer ($token_val)"}, query: "", location: "header"} }
+    "none" => { {scheme: $scheme, headers: {}, query: "", location: "none"} }
+    _ => { {scheme: $scheme, headers: {Authorization: $"Bearer ($token_val)"}, query: "", location: "header"} }
   }
 }
 
@@ -22,8 +23,9 @@ def build-auth [token?: string, auth_scheme?: string]: nothing -> record {
 # ([A-Za-z0-9-._~]) stay literal; everything else gets %XX.
 def serialize-qp [name: string, value: any, style: string]: nothing -> list<string> {
   if ($value == null) { return [] }
-  let n = (encode-path-segment $name)
   let is_list = ($value | describe | str starts-with "list")
+  if $is_list and ($value | is-empty) { return [] }
+  let n = (encode-path-segment $name)
   if ($value | describe | str starts-with "record") { return ($value | transpose k v | each { $"($n)[(encode-path-segment $in.k)]=(encode-path-segment $in.v)" }) }
   if not $is_list { return [$"($n)=(encode-path-segment $value)"] }
   match $style {
@@ -54,22 +56,42 @@ def build-url [base: string, path: string, query?: string]: nothing -> string {
   if ($query != null) and ($query | is-not-empty) { $result | upsert query $query | url join } else { $result | url join }
 }
 
+# Build the dry-run record returned by --dry-run. Shape:
+#   {dry_run: true, method, url, query: <record>, headers, body, content_type, timeout,
+#    auth: {scheme, location}}
+# `meta` carries logical-form data (the query record by spec name, the pre-serialization
+# body) that do-request itself cannot reconstruct from its wire-format args.
+def build-dry-run-record [method: string, url: string, auth: record, content_type: string, timeout: duration, meta?: record]: nothing -> record {
+  let m = ($meta | default {})
+  {
+    dry_run: true
+    method: $method
+    url: $url
+    query: ($m | get -o query | default {})
+    headers: $auth.headers
+    body: ($m | get -o body)
+    content_type: $content_type
+    timeout: $timeout
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+}
+
 # Execute HTTP request with method dispatch
-def do-request [method: string, url: string, auth: record, insecure: bool, raw: bool, dry_run: bool, max_time?: duration, allow_errors?: bool, full?: bool, content_type?: string, body?: any]: nothing -> any {
+def do-request [method: string, url: string, auth: record, insecure: bool, raw: bool, dry_run: bool, max_time?: duration, allow_errors?: bool, full?: bool, content_type?: string, body?: any, dry_run_meta?: record]: nothing -> any {
   let req_url = if ($auth.query | is-not-empty) { if ($url | str contains "?") { $"($url)&($auth.query)" } else { $"($url)?($auth.query)" } } else { $url }
   let timeout = ($max_time | default 30min)
   let ct = ($content_type | default "application/json")
-  if $dry_run { return {method: $method, url: $req_url, headers: $auth.headers, query_string: $auth.query, content_type: $ct, timeout: $timeout, body: $body} }
+  if $dry_run { return (build-dry-run-record $method $req_url $auth $ct $timeout $dry_run_meta) }
   let resp = match $method {
     "get" => { http get --headers $auth.headers --full --allow-errors --max-time $timeout --insecure=$insecure --raw=$raw $req_url }
-    "head" => { http head --headers $auth.headers --max-time $timeout --insecure=$insecure $req_url }
-    "options" => { http options --headers $auth.headers --max-time $timeout --insecure=$insecure $req_url }
+    "head" => { http head --headers $auth.headers --full --allow-errors --max-time $timeout --insecure=$insecure $req_url }
+    "options" => { http options --headers $auth.headers --full --allow-errors --max-time $timeout --insecure=$insecure $req_url }
     "post" => { if ($body | is-empty) { http post --headers $auth.headers --full --allow-errors --max-time $timeout --insecure=$insecure --raw=$raw $req_url "" } else { http post --headers $auth.headers --content-type $ct --full --allow-errors --max-time $timeout --insecure=$insecure --raw=$raw $req_url $body } }
     "put" => { if ($body | is-empty) { http put --headers $auth.headers --full --allow-errors --max-time $timeout --insecure=$insecure --raw=$raw $req_url "" } else { http put --headers $auth.headers --content-type $ct --full --allow-errors --max-time $timeout --insecure=$insecure --raw=$raw $req_url $body } }
     "patch" => { if ($body | is-empty) { http patch --headers $auth.headers --full --allow-errors --max-time $timeout --insecure=$insecure --raw=$raw $req_url "" } else { http patch --headers $auth.headers --content-type $ct --full --allow-errors --max-time $timeout --insecure=$insecure --raw=$raw $req_url $body } }
     "delete" => { if ($body | is-empty) { http delete --headers $auth.headers --full --allow-errors --max-time $timeout --insecure=$insecure --raw=$raw $req_url } else { http delete --headers $auth.headers --content-type $ct --data $body --full --allow-errors --max-time $timeout --insecure=$insecure --raw=$raw $req_url } }
   }
-  if ($method in ["head" "options"]) { return $resp }
+  if ($method == "head") and (not $full) and (not $allow_errors) and $resp.status < 400 { return $resp.headers }
   if $allow_errors { $resp } else if $resp.status >= 400 { error make --unspanned { msg: $"HTTP ($resp.status): ($resp.body)" } } else if $full { {status: $resp.status, headers: $resp.headers, body: $resp.body} } else if $resp.status == 204 { null } else { $resp.body }
 }
 
@@ -134,6 +156,8 @@ export def "meshes-virtual-gateway-gateway-routes create" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($mesh_name | is-empty) { error make --unspanned { msg: "path parameter 'meshName' must be non-empty" } }
+  if ($virtual_gateway_name | is-empty) { error make --unspanned { msg: "path parameter 'virtualGatewayName' must be non-empty" } }
   let qp = [(serialize-qp "meshOwner" $mesh_owner "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({mesh_name: (encode-path-segment $mesh_name), virtual_gateway_name: (encode-path-segment $virtual_gateway_name)} | format pattern "/v20190125/meshes/{mesh_name}/virtualGateway/{virtual_gateway_name}/gatewayRoutes") $qp)
   let req_body = {"clientToken": $client_token, "gatewayRouteName": $gateway_route_name, "spec": $spec, "tags": $tags} | compact
@@ -142,7 +166,7 @@ export def "meshes-virtual-gateway-gateway-routes create" [
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: ({"meshOwner": $mesh_owner} | compact), body: $req_body}
 }
 
 # Returns a list of existing gateway routes that are associated to a virtual gateway.
@@ -174,13 +198,15 @@ export def "meshes-virtual-gateway-gateway-routes list" [
 ]: nothing -> record<gatewayRoutes: record, nextToken: record> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($mesh_name | is-empty) { error make --unspanned { msg: "path parameter 'meshName' must be non-empty" } }
+  if ($virtual_gateway_name | is-empty) { error make --unspanned { msg: "path parameter 'virtualGatewayName' must be non-empty" } }
   let qp = [(serialize-qp "limit" $limit "scalar") (serialize-qp "meshOwner" $mesh_owner "scalar") (serialize-qp "nextToken" $next_token "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({mesh_name: (encode-path-segment $mesh_name), virtual_gateway_name: (encode-path-segment $virtual_gateway_name)} | format pattern "/v20190125/meshes/{mesh_name}/virtualGateway/{virtual_gateway_name}/gatewayRoutes") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"limit": $limit, "meshOwner": $mesh_owner, "nextToken": $next_token} | compact), body: null}
 }
 
 # Creates a service mesh. A service mesh is a logical boundary for network traffic between services that are represented by resources within the mesh. After you create your service mesh, you can create virtual services, virtual nodes, virtual routers, and routes to distribute traffic between the applications in your mesh. For more information about service meshes, see Service meshes (https://docs.aws.amazon.com/app-mesh/latest/userguide/meshes.html).
@@ -221,7 +247,7 @@ export def "meshes create-mesh" [
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: {}, body: $req_body}
 }
 
 # Returns a list of existing service meshes.
@@ -256,7 +282,7 @@ export def "meshes list" [
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"limit": $limit, "nextToken": $next_token} | compact), body: null}
 }
 
 # Creates a route that is associated with a virtual router. You can route several different protocols and define a retry policy for a route. Traffic can be routed to one or more virtual nodes. For more information about routes, see Routes (https://docs.aws.amazon.com/app-mesh/latest/userguide/routes.html).
@@ -293,6 +319,8 @@ export def "meshes-virtual-router-routes create" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($mesh_name | is-empty) { error make --unspanned { msg: "path parameter 'meshName' must be non-empty" } }
+  if ($virtual_router_name | is-empty) { error make --unspanned { msg: "path parameter 'virtualRouterName' must be non-empty" } }
   let qp = [(serialize-qp "meshOwner" $mesh_owner "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({mesh_name: (encode-path-segment $mesh_name), virtual_router_name: (encode-path-segment $virtual_router_name)} | format pattern "/v20190125/meshes/{mesh_name}/virtualRouter/{virtual_router_name}/routes") $qp)
   let req_body = {"clientToken": $client_token, "routeName": $route_name, "spec": $spec, "tags": $tags} | compact
@@ -301,7 +329,7 @@ export def "meshes-virtual-router-routes create" [
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: ({"meshOwner": $mesh_owner} | compact), body: $req_body}
 }
 
 # Returns a list of existing routes in a service mesh.
@@ -333,13 +361,15 @@ export def "meshes-virtual-router-routes list" [
 ]: nothing -> record<nextToken: record, routes: record> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($mesh_name | is-empty) { error make --unspanned { msg: "path parameter 'meshName' must be non-empty" } }
+  if ($virtual_router_name | is-empty) { error make --unspanned { msg: "path parameter 'virtualRouterName' must be non-empty" } }
   let qp = [(serialize-qp "limit" $limit "scalar") (serialize-qp "meshOwner" $mesh_owner "scalar") (serialize-qp "nextToken" $next_token "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({mesh_name: (encode-path-segment $mesh_name), virtual_router_name: (encode-path-segment $virtual_router_name)} | format pattern "/v20190125/meshes/{mesh_name}/virtualRouter/{virtual_router_name}/routes") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"limit": $limit, "meshOwner": $mesh_owner, "nextToken": $next_token} | compact), body: null}
 }
 
 # Creates a virtual gateway. A virtual gateway allows resources outside your mesh to communicate to resources that are inside your mesh. The virtual gateway represents an Envoy proxy running in an Amazon ECS task, in a Kubernetes service, or on an Amazon EC2 instance. Unlike a virtual node, which represents an Envoy running with an application, a virtual gateway represents Envoy deployed by itself. For more information about virtual gateways, see Virtual gateways (https://docs.aws.amazon.com/app-mesh/latest/userguide/virtual_gateways.html).
@@ -375,6 +405,7 @@ export def "meshes-virtual-gateways create" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($mesh_name | is-empty) { error make --unspanned { msg: "path parameter 'meshName' must be non-empty" } }
   let qp = [(serialize-qp "meshOwner" $mesh_owner "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({mesh_name: (encode-path-segment $mesh_name)} | format pattern "/v20190125/meshes/{mesh_name}/virtualGateways") $qp)
   let req_body = {"clientToken": $client_token, "spec": $spec, "tags": $tags, "virtualGatewayName": $virtual_gateway_name} | compact
@@ -383,7 +414,7 @@ export def "meshes-virtual-gateways create" [
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: ({"meshOwner": $mesh_owner} | compact), body: $req_body}
 }
 
 # Returns a list of existing virtual gateways in a service mesh.
@@ -414,13 +445,14 @@ export def "meshes-virtual-gateways list" [
 ]: nothing -> record<nextToken: record, virtualGateways: record> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($mesh_name | is-empty) { error make --unspanned { msg: "path parameter 'meshName' must be non-empty" } }
   let qp = [(serialize-qp "limit" $limit "scalar") (serialize-qp "meshOwner" $mesh_owner "scalar") (serialize-qp "nextToken" $next_token "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({mesh_name: (encode-path-segment $mesh_name)} | format pattern "/v20190125/meshes/{mesh_name}/virtualGateways") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"limit": $limit, "meshOwner": $mesh_owner, "nextToken": $next_token} | compact), body: null}
 }
 
 # Creates a virtual node within a service mesh. A virtual node acts as a logical pointer to a particular task group, such as an Amazon ECS service or a Kubernetes deployment. When you create a virtual node, you can specify the service discovery information for your task group, and whether the proxy running in a task group will communicate with other proxies using Transport Layer Security (TLS). You define a listener for any inbound traffic that your virtual node expects. Any virtual service that your virtual node expects to communicate to is specified as a backend. The response metadata for your new virtual node contains the arn that is associated with the virtual node. Set this value to the full ARN; for example, arn:aws:appmesh:us-west-2:123456789012:myMesh/default/virtualNode/myApp) as the APPMESH_RESOURCE_ARN environment variable for your task group's Envoy proxy container in your task definition or pod spec. This is then mapped to the node.id and node.cluster Envoy parameters. By default, App Mesh uses the name of the resource you specified in APPMESH_RESOURCE_ARN when Envoy is referring to itself in metrics and traces. You can override this behavior by setting the APPMESH_RESOURCE_CLUSTER environment variable with your own name. For more information about virtual nodes, see Virtual nodes (https://docs.aws.amazon.com/app-mesh/latest/userguide/virtual_nodes.html). You must be using 1.15.0 or later of the Envoy image when setting these variables. For more information aboutApp Mesh Envoy variables, see Envoy image (https://docs.aws.amazon.com/app-mesh/latest/userguide/envoy.html) in the App Mesh User Guide.
@@ -456,6 +488,7 @@ export def "meshes-virtual-nodes create" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($mesh_name | is-empty) { error make --unspanned { msg: "path parameter 'meshName' must be non-empty" } }
   let qp = [(serialize-qp "meshOwner" $mesh_owner "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({mesh_name: (encode-path-segment $mesh_name)} | format pattern "/v20190125/meshes/{mesh_name}/virtualNodes") $qp)
   let req_body = {"clientToken": $client_token, "spec": $spec, "tags": $tags, "virtualNodeName": $virtual_node_name} | compact
@@ -464,7 +497,7 @@ export def "meshes-virtual-nodes create" [
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: ({"meshOwner": $mesh_owner} | compact), body: $req_body}
 }
 
 # Returns a list of existing virtual nodes.
@@ -495,13 +528,14 @@ export def "meshes-virtual-nodes list" [
 ]: nothing -> record<nextToken: record, virtualNodes: record> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($mesh_name | is-empty) { error make --unspanned { msg: "path parameter 'meshName' must be non-empty" } }
   let qp = [(serialize-qp "limit" $limit "scalar") (serialize-qp "meshOwner" $mesh_owner "scalar") (serialize-qp "nextToken" $next_token "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({mesh_name: (encode-path-segment $mesh_name)} | format pattern "/v20190125/meshes/{mesh_name}/virtualNodes") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"limit": $limit, "meshOwner": $mesh_owner, "nextToken": $next_token} | compact), body: null}
 }
 
 # Creates a virtual router within a service mesh. Specify a listener for any inbound traffic that your virtual router receives. Create a virtual router for each protocol and port that you need to route. Virtual routers handle traffic for one or more virtual services within your mesh. After you create your virtual router, create and associate routes for your virtual router that direct incoming requests to different virtual nodes. For more information about virtual routers, see Virtual routers (https://docs.aws.amazon.com/app-mesh/latest/userguide/virtual_routers.html).
@@ -537,6 +571,7 @@ export def "meshes-virtual-routers create" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($mesh_name | is-empty) { error make --unspanned { msg: "path parameter 'meshName' must be non-empty" } }
   let qp = [(serialize-qp "meshOwner" $mesh_owner "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({mesh_name: (encode-path-segment $mesh_name)} | format pattern "/v20190125/meshes/{mesh_name}/virtualRouters") $qp)
   let req_body = {"clientToken": $client_token, "spec": $spec, "tags": $tags, "virtualRouterName": $virtual_router_name} | compact
@@ -545,7 +580,7 @@ export def "meshes-virtual-routers create" [
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: ({"meshOwner": $mesh_owner} | compact), body: $req_body}
 }
 
 # Returns a list of existing virtual routers in a service mesh.
@@ -576,13 +611,14 @@ export def "meshes-virtual-routers list" [
 ]: nothing -> record<nextToken: record, virtualRouters: record> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($mesh_name | is-empty) { error make --unspanned { msg: "path parameter 'meshName' must be non-empty" } }
   let qp = [(serialize-qp "limit" $limit "scalar") (serialize-qp "meshOwner" $mesh_owner "scalar") (serialize-qp "nextToken" $next_token "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({mesh_name: (encode-path-segment $mesh_name)} | format pattern "/v20190125/meshes/{mesh_name}/virtualRouters") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"limit": $limit, "meshOwner": $mesh_owner, "nextToken": $next_token} | compact), body: null}
 }
 
 # Creates a virtual service within a service mesh. A virtual service is an abstraction of a real service that is provided by a virtual node directly or indirectly by means of a virtual router. Dependent services call your virtual service by its virtualServiceName, and those requests are routed to the virtual node or virtual router that is specified as the provider for the virtual service. For more information about virtual services, see Virtual services (https://docs.aws.amazon.com/app-mesh/latest/userguide/virtual_services.html).
@@ -618,6 +654,7 @@ export def "meshes-virtual-services create" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($mesh_name | is-empty) { error make --unspanned { msg: "path parameter 'meshName' must be non-empty" } }
   let qp = [(serialize-qp "meshOwner" $mesh_owner "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({mesh_name: (encode-path-segment $mesh_name)} | format pattern "/v20190125/meshes/{mesh_name}/virtualServices") $qp)
   let req_body = {"clientToken": $client_token, "spec": $spec, "tags": $tags, "virtualServiceName": $virtual_service_name} | compact
@@ -626,7 +663,7 @@ export def "meshes-virtual-services create" [
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: ({"meshOwner": $mesh_owner} | compact), body: $req_body}
 }
 
 # Returns a list of existing virtual services in a service mesh.
@@ -657,13 +694,14 @@ export def "meshes-virtual-services list" [
 ]: nothing -> record<nextToken: record, virtualServices: record> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($mesh_name | is-empty) { error make --unspanned { msg: "path parameter 'meshName' must be non-empty" } }
   let qp = [(serialize-qp "limit" $limit "scalar") (serialize-qp "meshOwner" $mesh_owner "scalar") (serialize-qp "nextToken" $next_token "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({mesh_name: (encode-path-segment $mesh_name)} | format pattern "/v20190125/meshes/{mesh_name}/virtualServices") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"limit": $limit, "meshOwner": $mesh_owner, "nextToken": $next_token} | compact), body: null}
 }
 
 # Deletes an existing gateway route.
@@ -694,13 +732,16 @@ export def "meshes-virtual-gateway-gateway-routes delete" [
 ]: nothing -> record<gatewayRoute: record<gatewayRouteName: record, meshName: record, metadata: record<arn: record, createdAt: record, lastUpdatedAt: record, meshOwner: record, resourceOwner: record, uid: record, version: record>, spec: record<grpcRoute: record, http2Route: record, httpRoute: record, priority: record>, status: record<status: record>, virtualGatewayName: record>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($mesh_name | is-empty) { error make --unspanned { msg: "path parameter 'meshName' must be non-empty" } }
+  if ($virtual_gateway_name | is-empty) { error make --unspanned { msg: "path parameter 'virtualGatewayName' must be non-empty" } }
+  if ($gateway_route_name | is-empty) { error make --unspanned { msg: "path parameter 'gatewayRouteName' must be non-empty" } }
   let qp = [(serialize-qp "meshOwner" $mesh_owner "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({mesh_name: (encode-path-segment $mesh_name), virtual_gateway_name: (encode-path-segment $virtual_gateway_name), gateway_route_name: (encode-path-segment $gateway_route_name)} | format pattern "/v20190125/meshes/{mesh_name}/virtualGateway/{virtual_gateway_name}/gatewayRoutes/{gateway_route_name}") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"meshOwner": $mesh_owner} | compact), body: null}
 }
 
 # Describes an existing gateway route.
@@ -731,13 +772,16 @@ export def "meshes-virtual-gateway-gateway-routes get" [
 ]: nothing -> record<gatewayRoute: record<gatewayRouteName: record, meshName: record, metadata: record<arn: record, createdAt: record, lastUpdatedAt: record, meshOwner: record, resourceOwner: record, uid: record, version: record>, spec: record<grpcRoute: record, http2Route: record, httpRoute: record, priority: record>, status: record<status: record>, virtualGatewayName: record>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($mesh_name | is-empty) { error make --unspanned { msg: "path parameter 'meshName' must be non-empty" } }
+  if ($virtual_gateway_name | is-empty) { error make --unspanned { msg: "path parameter 'virtualGatewayName' must be non-empty" } }
+  if ($gateway_route_name | is-empty) { error make --unspanned { msg: "path parameter 'gatewayRouteName' must be non-empty" } }
   let qp = [(serialize-qp "meshOwner" $mesh_owner "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({mesh_name: (encode-path-segment $mesh_name), virtual_gateway_name: (encode-path-segment $virtual_gateway_name), gateway_route_name: (encode-path-segment $gateway_route_name)} | format pattern "/v20190125/meshes/{mesh_name}/virtualGateway/{virtual_gateway_name}/gatewayRoutes/{gateway_route_name}") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"meshOwner": $mesh_owner} | compact), body: null}
 }
 
 # Updates an existing gateway route that is associated to a specified virtual gateway in a service mesh.
@@ -772,6 +816,9 @@ export def "meshes-virtual-gateway-gateway-routes update" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($mesh_name | is-empty) { error make --unspanned { msg: "path parameter 'meshName' must be non-empty" } }
+  if ($virtual_gateway_name | is-empty) { error make --unspanned { msg: "path parameter 'virtualGatewayName' must be non-empty" } }
+  if ($gateway_route_name | is-empty) { error make --unspanned { msg: "path parameter 'gatewayRouteName' must be non-empty" } }
   let qp = [(serialize-qp "meshOwner" $mesh_owner "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({mesh_name: (encode-path-segment $mesh_name), virtual_gateway_name: (encode-path-segment $virtual_gateway_name), gateway_route_name: (encode-path-segment $gateway_route_name)} | format pattern "/v20190125/meshes/{mesh_name}/virtualGateway/{virtual_gateway_name}/gatewayRoutes/{gateway_route_name}") $qp)
   let req_body = {"clientToken": $client_token, "spec": $spec} | compact
@@ -780,7 +827,7 @@ export def "meshes-virtual-gateway-gateway-routes update" [
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: ({"meshOwner": $mesh_owner} | compact), body: $req_body}
 }
 
 # Deletes an existing service mesh. You must delete all resources (virtual services, routes, virtual routers, and virtual nodes) in the service mesh before you can delete the mesh itself.
@@ -808,12 +855,13 @@ export def "meshes delete-mesh" [
 ]: nothing -> record<mesh: record<meshName: record, metadata: record<arn: record, createdAt: record, lastUpdatedAt: record, meshOwner: record, resourceOwner: record, uid: record, version: record>, spec: record<egressFilter: record, serviceDiscovery: record>, status: record<status: record>>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($mesh_name | is-empty) { error make --unspanned { msg: "path parameter 'meshName' must be non-empty" } }
   let full_url = (build-url $base ({mesh_name: (encode-path-segment $mesh_name)} | format pattern "/v20190125/meshes/{mesh_name}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
 }
 
 # Describes an existing service mesh.
@@ -842,13 +890,14 @@ export def "meshes get-mesh" [
 ]: nothing -> record<mesh: record<meshName: record, metadata: record<arn: record, createdAt: record, lastUpdatedAt: record, meshOwner: record, resourceOwner: record, uid: record, version: record>, spec: record<egressFilter: record, serviceDiscovery: record>, status: record<status: record>>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($mesh_name | is-empty) { error make --unspanned { msg: "path parameter 'meshName' must be non-empty" } }
   let qp = [(serialize-qp "meshOwner" $mesh_owner "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({mesh_name: (encode-path-segment $mesh_name)} | format pattern "/v20190125/meshes/{mesh_name}") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"meshOwner": $mesh_owner} | compact), body: null}
 }
 
 # Updates an existing service mesh.
@@ -880,6 +929,7 @@ export def "meshes update-mesh" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($mesh_name | is-empty) { error make --unspanned { msg: "path parameter 'meshName' must be non-empty" } }
   let full_url = (build-url $base ({mesh_name: (encode-path-segment $mesh_name)} | format pattern "/v20190125/meshes/{mesh_name}"))
   let req_body = {"clientToken": $client_token, "spec": $spec} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
@@ -887,7 +937,7 @@ export def "meshes update-mesh" [
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: {}, body: $req_body}
 }
 
 # Deletes an existing route.
@@ -918,13 +968,16 @@ export def "meshes-virtual-router-routes delete" [
 ]: nothing -> record<route: record<meshName: record, metadata: record<arn: record, createdAt: record, lastUpdatedAt: record, meshOwner: record, resourceOwner: record, uid: record, version: record>, routeName: record, spec: record<grpcRoute: record, http2Route: record, httpRoute: record, priority: record, tcpRoute: record>, status: record<status: record>, virtualRouterName: record>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($mesh_name | is-empty) { error make --unspanned { msg: "path parameter 'meshName' must be non-empty" } }
+  if ($virtual_router_name | is-empty) { error make --unspanned { msg: "path parameter 'virtualRouterName' must be non-empty" } }
+  if ($route_name | is-empty) { error make --unspanned { msg: "path parameter 'routeName' must be non-empty" } }
   let qp = [(serialize-qp "meshOwner" $mesh_owner "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({mesh_name: (encode-path-segment $mesh_name), virtual_router_name: (encode-path-segment $virtual_router_name), route_name: (encode-path-segment $route_name)} | format pattern "/v20190125/meshes/{mesh_name}/virtualRouter/{virtual_router_name}/routes/{route_name}") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"meshOwner": $mesh_owner} | compact), body: null}
 }
 
 # Describes an existing route.
@@ -955,13 +1008,16 @@ export def "meshes-virtual-router-routes get" [
 ]: nothing -> record<route: record<meshName: record, metadata: record<arn: record, createdAt: record, lastUpdatedAt: record, meshOwner: record, resourceOwner: record, uid: record, version: record>, routeName: record, spec: record<grpcRoute: record, http2Route: record, httpRoute: record, priority: record, tcpRoute: record>, status: record<status: record>, virtualRouterName: record>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($mesh_name | is-empty) { error make --unspanned { msg: "path parameter 'meshName' must be non-empty" } }
+  if ($virtual_router_name | is-empty) { error make --unspanned { msg: "path parameter 'virtualRouterName' must be non-empty" } }
+  if ($route_name | is-empty) { error make --unspanned { msg: "path parameter 'routeName' must be non-empty" } }
   let qp = [(serialize-qp "meshOwner" $mesh_owner "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({mesh_name: (encode-path-segment $mesh_name), virtual_router_name: (encode-path-segment $virtual_router_name), route_name: (encode-path-segment $route_name)} | format pattern "/v20190125/meshes/{mesh_name}/virtualRouter/{virtual_router_name}/routes/{route_name}") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"meshOwner": $mesh_owner} | compact), body: null}
 }
 
 # Updates an existing route for a specified service mesh and virtual router.
@@ -996,6 +1052,9 @@ export def "meshes-virtual-router-routes update" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($mesh_name | is-empty) { error make --unspanned { msg: "path parameter 'meshName' must be non-empty" } }
+  if ($virtual_router_name | is-empty) { error make --unspanned { msg: "path parameter 'virtualRouterName' must be non-empty" } }
+  if ($route_name | is-empty) { error make --unspanned { msg: "path parameter 'routeName' must be non-empty" } }
   let qp = [(serialize-qp "meshOwner" $mesh_owner "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({mesh_name: (encode-path-segment $mesh_name), virtual_router_name: (encode-path-segment $virtual_router_name), route_name: (encode-path-segment $route_name)} | format pattern "/v20190125/meshes/{mesh_name}/virtualRouter/{virtual_router_name}/routes/{route_name}") $qp)
   let req_body = {"clientToken": $client_token, "spec": $spec} | compact
@@ -1004,7 +1063,7 @@ export def "meshes-virtual-router-routes update" [
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: ({"meshOwner": $mesh_owner} | compact), body: $req_body}
 }
 
 # Deletes an existing virtual gateway. You cannot delete a virtual gateway if any gateway routes are associated to it.
@@ -1034,13 +1093,15 @@ export def "meshes-virtual-gateways delete" [
 ]: nothing -> record<virtualGateway: record<meshName: record, metadata: record<arn: record, createdAt: record, lastUpdatedAt: record, meshOwner: record, resourceOwner: record, uid: record, version: record>, spec: record<backendDefaults: record, listeners: record, logging: record>, status: record<status: record>, virtualGatewayName: record>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($mesh_name | is-empty) { error make --unspanned { msg: "path parameter 'meshName' must be non-empty" } }
+  if ($virtual_gateway_name | is-empty) { error make --unspanned { msg: "path parameter 'virtualGatewayName' must be non-empty" } }
   let qp = [(serialize-qp "meshOwner" $mesh_owner "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({mesh_name: (encode-path-segment $mesh_name), virtual_gateway_name: (encode-path-segment $virtual_gateway_name)} | format pattern "/v20190125/meshes/{mesh_name}/virtualGateways/{virtual_gateway_name}") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"meshOwner": $mesh_owner} | compact), body: null}
 }
 
 # Describes an existing virtual gateway.
@@ -1070,13 +1131,15 @@ export def "meshes-virtual-gateways get" [
 ]: nothing -> record<virtualGateway: record<meshName: record, metadata: record<arn: record, createdAt: record, lastUpdatedAt: record, meshOwner: record, resourceOwner: record, uid: record, version: record>, spec: record<backendDefaults: record, listeners: record, logging: record>, status: record<status: record>, virtualGatewayName: record>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($mesh_name | is-empty) { error make --unspanned { msg: "path parameter 'meshName' must be non-empty" } }
+  if ($virtual_gateway_name | is-empty) { error make --unspanned { msg: "path parameter 'virtualGatewayName' must be non-empty" } }
   let qp = [(serialize-qp "meshOwner" $mesh_owner "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({mesh_name: (encode-path-segment $mesh_name), virtual_gateway_name: (encode-path-segment $virtual_gateway_name)} | format pattern "/v20190125/meshes/{mesh_name}/virtualGateways/{virtual_gateway_name}") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"meshOwner": $mesh_owner} | compact), body: null}
 }
 
 # Updates an existing virtual gateway in a specified service mesh.
@@ -1110,6 +1173,8 @@ export def "meshes-virtual-gateways update" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($mesh_name | is-empty) { error make --unspanned { msg: "path parameter 'meshName' must be non-empty" } }
+  if ($virtual_gateway_name | is-empty) { error make --unspanned { msg: "path parameter 'virtualGatewayName' must be non-empty" } }
   let qp = [(serialize-qp "meshOwner" $mesh_owner "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({mesh_name: (encode-path-segment $mesh_name), virtual_gateway_name: (encode-path-segment $virtual_gateway_name)} | format pattern "/v20190125/meshes/{mesh_name}/virtualGateways/{virtual_gateway_name}") $qp)
   let req_body = {"clientToken": $client_token, "spec": $spec} | compact
@@ -1118,7 +1183,7 @@ export def "meshes-virtual-gateways update" [
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: ({"meshOwner": $mesh_owner} | compact), body: $req_body}
 }
 
 # Deletes an existing virtual node. You must delete any virtual services that list a virtual node as a service provider before you can delete the virtual node itself.
@@ -1148,13 +1213,15 @@ export def "meshes-virtual-nodes delete" [
 ]: nothing -> record<virtualNode: record<meshName: record, metadata: record<arn: record, createdAt: record, lastUpdatedAt: record, meshOwner: record, resourceOwner: record, uid: record, version: record>, spec: record<backendDefaults: record, backends: record, listeners: record, logging: record, serviceDiscovery: record>, status: record<status: record>, virtualNodeName: record>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($mesh_name | is-empty) { error make --unspanned { msg: "path parameter 'meshName' must be non-empty" } }
+  if ($virtual_node_name | is-empty) { error make --unspanned { msg: "path parameter 'virtualNodeName' must be non-empty" } }
   let qp = [(serialize-qp "meshOwner" $mesh_owner "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({mesh_name: (encode-path-segment $mesh_name), virtual_node_name: (encode-path-segment $virtual_node_name)} | format pattern "/v20190125/meshes/{mesh_name}/virtualNodes/{virtual_node_name}") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"meshOwner": $mesh_owner} | compact), body: null}
 }
 
 # Describes an existing virtual node.
@@ -1184,13 +1251,15 @@ export def "meshes-virtual-nodes get" [
 ]: nothing -> record<virtualNode: record<meshName: record, metadata: record<arn: record, createdAt: record, lastUpdatedAt: record, meshOwner: record, resourceOwner: record, uid: record, version: record>, spec: record<backendDefaults: record, backends: record, listeners: record, logging: record, serviceDiscovery: record>, status: record<status: record>, virtualNodeName: record>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($mesh_name | is-empty) { error make --unspanned { msg: "path parameter 'meshName' must be non-empty" } }
+  if ($virtual_node_name | is-empty) { error make --unspanned { msg: "path parameter 'virtualNodeName' must be non-empty" } }
   let qp = [(serialize-qp "meshOwner" $mesh_owner "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({mesh_name: (encode-path-segment $mesh_name), virtual_node_name: (encode-path-segment $virtual_node_name)} | format pattern "/v20190125/meshes/{mesh_name}/virtualNodes/{virtual_node_name}") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"meshOwner": $mesh_owner} | compact), body: null}
 }
 
 # Updates an existing virtual node in a specified service mesh.
@@ -1224,6 +1293,8 @@ export def "meshes-virtual-nodes update" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($mesh_name | is-empty) { error make --unspanned { msg: "path parameter 'meshName' must be non-empty" } }
+  if ($virtual_node_name | is-empty) { error make --unspanned { msg: "path parameter 'virtualNodeName' must be non-empty" } }
   let qp = [(serialize-qp "meshOwner" $mesh_owner "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({mesh_name: (encode-path-segment $mesh_name), virtual_node_name: (encode-path-segment $virtual_node_name)} | format pattern "/v20190125/meshes/{mesh_name}/virtualNodes/{virtual_node_name}") $qp)
   let req_body = {"clientToken": $client_token, "spec": $spec} | compact
@@ -1232,7 +1303,7 @@ export def "meshes-virtual-nodes update" [
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: ({"meshOwner": $mesh_owner} | compact), body: $req_body}
 }
 
 # Deletes an existing virtual router. You must delete any routes associated with the virtual router before you can delete the router itself.
@@ -1262,13 +1333,15 @@ export def "meshes-virtual-routers delete" [
 ]: nothing -> record<virtualRouter: record<meshName: record, metadata: record<arn: record, createdAt: record, lastUpdatedAt: record, meshOwner: record, resourceOwner: record, uid: record, version: record>, spec: record<listeners: record>, status: record<status: record>, virtualRouterName: record>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($mesh_name | is-empty) { error make --unspanned { msg: "path parameter 'meshName' must be non-empty" } }
+  if ($virtual_router_name | is-empty) { error make --unspanned { msg: "path parameter 'virtualRouterName' must be non-empty" } }
   let qp = [(serialize-qp "meshOwner" $mesh_owner "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({mesh_name: (encode-path-segment $mesh_name), virtual_router_name: (encode-path-segment $virtual_router_name)} | format pattern "/v20190125/meshes/{mesh_name}/virtualRouters/{virtual_router_name}") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"meshOwner": $mesh_owner} | compact), body: null}
 }
 
 # Describes an existing virtual router.
@@ -1298,13 +1371,15 @@ export def "meshes-virtual-routers get" [
 ]: nothing -> record<virtualRouter: record<meshName: record, metadata: record<arn: record, createdAt: record, lastUpdatedAt: record, meshOwner: record, resourceOwner: record, uid: record, version: record>, spec: record<listeners: record>, status: record<status: record>, virtualRouterName: record>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($mesh_name | is-empty) { error make --unspanned { msg: "path parameter 'meshName' must be non-empty" } }
+  if ($virtual_router_name | is-empty) { error make --unspanned { msg: "path parameter 'virtualRouterName' must be non-empty" } }
   let qp = [(serialize-qp "meshOwner" $mesh_owner "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({mesh_name: (encode-path-segment $mesh_name), virtual_router_name: (encode-path-segment $virtual_router_name)} | format pattern "/v20190125/meshes/{mesh_name}/virtualRouters/{virtual_router_name}") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"meshOwner": $mesh_owner} | compact), body: null}
 }
 
 # Updates an existing virtual router in a specified service mesh.
@@ -1338,6 +1413,8 @@ export def "meshes-virtual-routers update" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($mesh_name | is-empty) { error make --unspanned { msg: "path parameter 'meshName' must be non-empty" } }
+  if ($virtual_router_name | is-empty) { error make --unspanned { msg: "path parameter 'virtualRouterName' must be non-empty" } }
   let qp = [(serialize-qp "meshOwner" $mesh_owner "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({mesh_name: (encode-path-segment $mesh_name), virtual_router_name: (encode-path-segment $virtual_router_name)} | format pattern "/v20190125/meshes/{mesh_name}/virtualRouters/{virtual_router_name}") $qp)
   let req_body = {"clientToken": $client_token, "spec": $spec} | compact
@@ -1346,7 +1423,7 @@ export def "meshes-virtual-routers update" [
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: ({"meshOwner": $mesh_owner} | compact), body: $req_body}
 }
 
 # Deletes an existing virtual service.
@@ -1376,13 +1453,15 @@ export def "meshes-virtual-services delete" [
 ]: nothing -> record<virtualService: record<meshName: record, metadata: record<arn: record, createdAt: record, lastUpdatedAt: record, meshOwner: record, resourceOwner: record, uid: record, version: record>, spec: record<provider: record>, status: record<status: record>, virtualServiceName: record>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($mesh_name | is-empty) { error make --unspanned { msg: "path parameter 'meshName' must be non-empty" } }
+  if ($virtual_service_name | is-empty) { error make --unspanned { msg: "path parameter 'virtualServiceName' must be non-empty" } }
   let qp = [(serialize-qp "meshOwner" $mesh_owner "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({mesh_name: (encode-path-segment $mesh_name), virtual_service_name: (encode-path-segment $virtual_service_name)} | format pattern "/v20190125/meshes/{mesh_name}/virtualServices/{virtual_service_name}") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"meshOwner": $mesh_owner} | compact), body: null}
 }
 
 # Describes an existing virtual service.
@@ -1412,13 +1491,15 @@ export def "meshes-virtual-services get" [
 ]: nothing -> record<virtualService: record<meshName: record, metadata: record<arn: record, createdAt: record, lastUpdatedAt: record, meshOwner: record, resourceOwner: record, uid: record, version: record>, spec: record<provider: record>, status: record<status: record>, virtualServiceName: record>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($mesh_name | is-empty) { error make --unspanned { msg: "path parameter 'meshName' must be non-empty" } }
+  if ($virtual_service_name | is-empty) { error make --unspanned { msg: "path parameter 'virtualServiceName' must be non-empty" } }
   let qp = [(serialize-qp "meshOwner" $mesh_owner "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({mesh_name: (encode-path-segment $mesh_name), virtual_service_name: (encode-path-segment $virtual_service_name)} | format pattern "/v20190125/meshes/{mesh_name}/virtualServices/{virtual_service_name}") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"meshOwner": $mesh_owner} | compact), body: null}
 }
 
 # Updates an existing virtual service in a specified service mesh.
@@ -1452,6 +1533,8 @@ export def "meshes-virtual-services update" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($mesh_name | is-empty) { error make --unspanned { msg: "path parameter 'meshName' must be non-empty" } }
+  if ($virtual_service_name | is-empty) { error make --unspanned { msg: "path parameter 'virtualServiceName' must be non-empty" } }
   let qp = [(serialize-qp "meshOwner" $mesh_owner "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({mesh_name: (encode-path-segment $mesh_name), virtual_service_name: (encode-path-segment $virtual_service_name)} | format pattern "/v20190125/meshes/{mesh_name}/virtualServices/{virtual_service_name}") $qp)
   let req_body = {"clientToken": $client_token, "spec": $spec} | compact
@@ -1460,14 +1543,14 @@ export def "meshes-virtual-services update" [
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: ({"meshOwner": $mesh_owner} | compact), body: $req_body}
 }
 
 # List the tags for an App Mesh resource.
 #
-# GET /v20190125/tags#resourceArn
+# GET /v20190125/tags
 # operationId: ListTagsForResource
-export def "tagsresource-arn list-tags-for-resource" [
+export def "tags list-for-resource" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1491,20 +1574,20 @@ export def "tagsresource-arn list-tags-for-resource" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "limit" $limit "scalar") (serialize-qp "nextToken" $next_token "scalar") (serialize-qp "resourceArn" $resource_arn "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base "/v20190125/tags#resourceArn" $qp)
+  let full_url = (build-url $base "/v20190125/tags" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"limit": $limit, "nextToken": $next_token, "resourceArn": $resource_arn} | compact), body: null}
 }
 
 # Associates the specified tags to a resource with the specified resourceArn. If existing tags on a resource aren't specified in the request parameters, they aren't changed. When a resource is deleted, the tags associated with that resource are also deleted.
 #
-# PUT /v20190125/tag#resourceArn
+# PUT /v20190125/tag
 # operationId: TagResource
 # --tags item shape: {key: any, value: any}
-export def "tagresource-arn tag-resource" [
+export def "tag tag-resource" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1528,21 +1611,21 @@ export def "tagresource-arn tag-resource" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "resourceArn" $resource_arn "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base "/v20190125/tag#resourceArn" $qp)
+  let full_url = (build-url $base "/v20190125/tag" $qp)
   let req_body = {"tags": $tags} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: ({"resourceArn": $resource_arn} | compact), body: $req_body}
 }
 
 # Deletes specified tags from a resource.
 #
-# PUT /v20190125/untag#resourceArn
+# PUT /v20190125/untag
 # operationId: UntagResource
-export def "untagresource-arn untag-resource" [
+export def "untag untag-resource" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1566,12 +1649,12 @@ export def "untagresource-arn untag-resource" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "resourceArn" $resource_arn "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base "/v20190125/untag#resourceArn" $qp)
+  let full_url = (build-url $base "/v20190125/untag" $qp)
   let req_body = {"tagKeys": $tag_keys} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: ({"resourceArn": $resource_arn} | compact), body: $req_body}
 }

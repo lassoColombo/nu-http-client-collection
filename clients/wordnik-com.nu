@@ -3,17 +3,18 @@
 # Auth: --token flag or $env.WORDNIK_TOKEN
 
 const BASE_URL = "https://api.wordnik.com/v4"
-const DEFAULT_AUTH = "query-api_key"
 
-# Build auth: returns {headers: record, query: string}
+# Build auth: returns {scheme: string, headers: record, query: string, location: string}.
+# `location` is "header" | "query" | "cookie" | "none" and tells dry-run callers
+# where the token went without inspecting headers/query themselves.
 def build-auth [token?: string, auth_scheme?: string]: nothing -> record {
   let token_val = if ($token != null) and ($token | is-not-empty) { $token } else { $env | get -o WORDNIK_TOKEN | default "" }
   let scheme = ($auth_scheme | default "bearer")
-  if ($scheme == "none") or ($token_val | is-empty) { return {headers: {}, query: ""} }
+  if ($scheme == "none") or ($token_val | is-empty) { return {scheme: $scheme, headers: {}, query: "", location: "none"} }
   match $scheme {
-    "query-api_key" => { {headers: {}, query: $"(encode-path-segment "api_key")=(encode-path-segment $token_val)"} }
-    "none" => { {headers: {}, query: ""} }
-    _ => { {headers: {Authorization: $"Bearer ($token_val)"}, query: ""} }
+    "query-api_key" => { {scheme: $scheme, headers: {}, query: $"(encode-path-segment "api_key")=(encode-path-segment $token_val)", location: "query"} }
+    "none" => { {scheme: $scheme, headers: {}, query: "", location: "none"} }
+    _ => { {scheme: $scheme, headers: {Authorization: $"Bearer ($token_val)"}, query: "", location: "header"} }
   }
 }
 
@@ -22,8 +23,9 @@ def build-auth [token?: string, auth_scheme?: string]: nothing -> record {
 # ([A-Za-z0-9-._~]) stay literal; everything else gets %XX.
 def serialize-qp [name: string, value: any, style: string]: nothing -> list<string> {
   if ($value == null) { return [] }
-  let n = (encode-path-segment $name)
   let is_list = ($value | describe | str starts-with "list")
+  if $is_list and ($value | is-empty) { return [] }
+  let n = (encode-path-segment $name)
   if ($value | describe | str starts-with "record") { return ($value | transpose k v | each { $"($n)[(encode-path-segment $in.k)]=(encode-path-segment $in.v)" }) }
   if not $is_list { return [$"($n)=(encode-path-segment $value)"] }
   match $style {
@@ -54,22 +56,42 @@ def build-url [base: string, path: string, query?: string]: nothing -> string {
   if ($query != null) and ($query | is-not-empty) { $result | upsert query $query | url join } else { $result | url join }
 }
 
+# Build the dry-run record returned by --dry-run. Shape:
+#   {dry_run: true, method, url, query: <record>, headers, body, content_type, timeout,
+#    auth: {scheme, location}}
+# `meta` carries logical-form data (the query record by spec name, the pre-serialization
+# body) that do-request itself cannot reconstruct from its wire-format args.
+def build-dry-run-record [method: string, url: string, auth: record, content_type: string, timeout: duration, meta?: record]: nothing -> record {
+  let m = ($meta | default {})
+  {
+    dry_run: true
+    method: $method
+    url: $url
+    query: ($m | get -o query | default {})
+    headers: $auth.headers
+    body: ($m | get -o body)
+    content_type: $content_type
+    timeout: $timeout
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+}
+
 # Execute HTTP request with method dispatch
-def do-request [method: string, url: string, auth: record, insecure: bool, raw: bool, dry_run: bool, max_time?: duration, allow_errors?: bool, full?: bool, content_type?: string, body?: any]: nothing -> any {
+def do-request [method: string, url: string, auth: record, insecure: bool, raw: bool, dry_run: bool, max_time?: duration, allow_errors?: bool, full?: bool, content_type?: string, body?: any, dry_run_meta?: record]: nothing -> any {
   let req_url = if ($auth.query | is-not-empty) { if ($url | str contains "?") { $"($url)&($auth.query)" } else { $"($url)?($auth.query)" } } else { $url }
   let timeout = ($max_time | default 30min)
   let ct = ($content_type | default "application/json")
-  if $dry_run { return {method: $method, url: $req_url, headers: $auth.headers, query_string: $auth.query, content_type: $ct, timeout: $timeout, body: $body} }
+  if $dry_run { return (build-dry-run-record $method $req_url $auth $ct $timeout $dry_run_meta) }
   let resp = match $method {
     "get" => { http get --headers $auth.headers --full --allow-errors --max-time $timeout --insecure=$insecure --raw=$raw $req_url }
-    "head" => { http head --headers $auth.headers --max-time $timeout --insecure=$insecure $req_url }
-    "options" => { http options --headers $auth.headers --max-time $timeout --insecure=$insecure $req_url }
+    "head" => { http head --headers $auth.headers --full --allow-errors --max-time $timeout --insecure=$insecure $req_url }
+    "options" => { http options --headers $auth.headers --full --allow-errors --max-time $timeout --insecure=$insecure $req_url }
     "post" => { if ($body | is-empty) { http post --headers $auth.headers --full --allow-errors --max-time $timeout --insecure=$insecure --raw=$raw $req_url "" } else { http post --headers $auth.headers --content-type $ct --full --allow-errors --max-time $timeout --insecure=$insecure --raw=$raw $req_url $body } }
     "put" => { if ($body | is-empty) { http put --headers $auth.headers --full --allow-errors --max-time $timeout --insecure=$insecure --raw=$raw $req_url "" } else { http put --headers $auth.headers --content-type $ct --full --allow-errors --max-time $timeout --insecure=$insecure --raw=$raw $req_url $body } }
     "patch" => { if ($body | is-empty) { http patch --headers $auth.headers --full --allow-errors --max-time $timeout --insecure=$insecure --raw=$raw $req_url "" } else { http patch --headers $auth.headers --content-type $ct --full --allow-errors --max-time $timeout --insecure=$insecure --raw=$raw $req_url $body } }
     "delete" => { if ($body | is-empty) { http delete --headers $auth.headers --full --allow-errors --max-time $timeout --insecure=$insecure --raw=$raw $req_url } else { http delete --headers $auth.headers --content-type $ct --data $body --full --allow-errors --max-time $timeout --insecure=$insecure --raw=$raw $req_url } }
   }
-  if ($method in ["head" "options"]) { return $resp }
+  if ($method == "head") and (not $full) and (not $allow_errors) and $resp.status < 400 { return $resp.headers }
   if $allow_errors { $resp } else if $resp.status >= 400 { error make --unspanned { msg: $"HTTP ($resp.status): ($resp.body)" } } else if $full { {status: $resp.status, headers: $resp.headers, body: $resp.body} } else if $resp.status == 204 { null } else { $resp.body }
 }
 
@@ -134,11 +156,12 @@ export def "word-json-audio get" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "query-api_key"))
   let base = ($base_url | default $BASE_URL)
+  if ($word | is-empty) { error make --unspanned { msg: "path parameter 'word' must be non-empty" } }
   let qp = [(serialize-qp "useCanonical" $use_canonical "scalar") (serialize-qp "limit" $limit "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({word: (encode-path-segment $word)} | format pattern "/word.json/{word}/audio") $qp)
   let accept_val = "*/*"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"useCanonical": $use_canonical, "limit": $limit} | compact), body: null}
 }
 
 # Return definitions for a word
@@ -165,11 +188,12 @@ export def "word-json-definitions get" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "query-api_key"))
   let base = ($base_url | default $BASE_URL)
+  if ($word | is-empty) { error make --unspanned { msg: "path parameter 'word' must be non-empty" } }
   let qp = [(serialize-qp "limit" $limit "scalar") (serialize-qp "partOfSpeech" $part_of_speech "scalar") (serialize-qp "includeRelated" $include_related "scalar") (serialize-qp "sourceDictionaries" $source_dictionaries "csv") (serialize-qp "useCanonical" $use_canonical "scalar") (serialize-qp "includeTags" $include_tags "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({word: (encode-path-segment $word)} | format pattern "/word.json/{word}/definitions") $qp)
   let accept_val = "*/*"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"limit": $limit, "partOfSpeech": $part_of_speech, "includeRelated": $include_related, "sourceDictionaries": $source_dictionaries, "useCanonical": $use_canonical, "includeTags": $include_tags} | compact), body: null}
 }
 
 # Fetches etymology data
@@ -191,11 +215,12 @@ export def "word-json-etymologies get" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "query-api_key"))
   let base = ($base_url | default $BASE_URL)
+  if ($word | is-empty) { error make --unspanned { msg: "path parameter 'word' must be non-empty" } }
   let qp = [(serialize-qp "useCanonical" $use_canonical "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({word: (encode-path-segment $word)} | format pattern "/word.json/{word}/etymologies") $qp)
   let accept_val = "*/*"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"useCanonical": $use_canonical} | compact), body: null}
 }
 
 # Returns examples for a word
@@ -220,11 +245,12 @@ export def "word-json-examples get" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "query-api_key"))
   let base = ($base_url | default $BASE_URL)
+  if ($word | is-empty) { error make --unspanned { msg: "path parameter 'word' must be non-empty" } }
   let qp = [(serialize-qp "includeDuplicates" $include_duplicates "scalar") (serialize-qp "useCanonical" $use_canonical "scalar") (serialize-qp "skip" $skip "scalar") (serialize-qp "limit" $limit "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({word: (encode-path-segment $word)} | format pattern "/word.json/{word}/examples") $qp)
   let accept_val = "*/*"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"includeDuplicates": $include_duplicates, "useCanonical": $use_canonical, "skip": $skip, "limit": $limit} | compact), body: null}
 }
 
 # Returns word usage over time
@@ -248,11 +274,12 @@ export def "word-json-frequency get" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "query-api_key"))
   let base = ($base_url | default $BASE_URL)
+  if ($word | is-empty) { error make --unspanned { msg: "path parameter 'word' must be non-empty" } }
   let qp = [(serialize-qp "useCanonical" $use_canonical "scalar") (serialize-qp "startYear" $start_year "scalar") (serialize-qp "endYear" $end_year "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({word: (encode-path-segment $word)} | format pattern "/word.json/{word}/frequency") $qp)
   let accept_val = "*/*"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"useCanonical": $use_canonical, "startYear": $start_year, "endYear": $end_year} | compact), body: null}
 }
 
 # Returns syllable information for a word
@@ -276,11 +303,12 @@ export def "word-json-hyphenation get" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "query-api_key"))
   let base = ($base_url | default $BASE_URL)
+  if ($word | is-empty) { error make --unspanned { msg: "path parameter 'word' must be non-empty" } }
   let qp = [(serialize-qp "useCanonical" $use_canonical "scalar") (serialize-qp "sourceDictionary" $source_dictionary "scalar") (serialize-qp "limit" $limit "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({word: (encode-path-segment $word)} | format pattern "/word.json/{word}/hyphenation") $qp)
   let accept_val = "*/*"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"useCanonical": $use_canonical, "sourceDictionary": $source_dictionary, "limit": $limit} | compact), body: null}
 }
 
 # Fetches bi-gram phrases for a word
@@ -304,11 +332,12 @@ export def "word-json-phrases get" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "query-api_key"))
   let base = ($base_url | default $BASE_URL)
+  if ($word | is-empty) { error make --unspanned { msg: "path parameter 'word' must be non-empty" } }
   let qp = [(serialize-qp "limit" $limit "scalar") (serialize-qp "wlmi" $wlmi "scalar") (serialize-qp "useCanonical" $use_canonical "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({word: (encode-path-segment $word)} | format pattern "/word.json/{word}/phrases") $qp)
   let accept_val = "*/*"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"limit": $limit, "wlmi": $wlmi, "useCanonical": $use_canonical} | compact), body: null}
 }
 
 # Returns text pronunciations for a given word
@@ -333,11 +362,12 @@ export def "word-json-pronunciations get-text" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "query-api_key"))
   let base = ($base_url | default $BASE_URL)
+  if ($word | is-empty) { error make --unspanned { msg: "path parameter 'word' must be non-empty" } }
   let qp = [(serialize-qp "useCanonical" $use_canonical "scalar") (serialize-qp "sourceDictionary" $source_dictionary "scalar") (serialize-qp "typeFormat" $type_format "scalar") (serialize-qp "limit" $limit "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({word: (encode-path-segment $word)} | format pattern "/word.json/{word}/pronunciations") $qp)
   let accept_val = "*/*"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"useCanonical": $use_canonical, "sourceDictionary": $source_dictionary, "typeFormat": $type_format, "limit": $limit} | compact), body: null}
 }
 
 # Given a word as a string, returns relationships from the Word Graph
@@ -361,11 +391,12 @@ export def "word-json-related-words get" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "query-api_key"))
   let base = ($base_url | default $BASE_URL)
+  if ($word | is-empty) { error make --unspanned { msg: "path parameter 'word' must be non-empty" } }
   let qp = [(serialize-qp "useCanonical" $use_canonical "scalar") (serialize-qp "relationshipTypes" $relationship_types "scalar") (serialize-qp "limitPerRelationshipType" $limit_per_relationship_type "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({word: (encode-path-segment $word)} | format pattern "/word.json/{word}/relatedWords") $qp)
   let accept_val = "*/*"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"useCanonical": $use_canonical, "relationshipTypes": $relationship_types, "limitPerRelationshipType": $limit_per_relationship_type} | compact), body: null}
 }
 
 # Returns the Scrabble score for a word
@@ -386,10 +417,11 @@ export def "word-json-scrabble-score get" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "query-api_key"))
   let base = ($base_url | default $BASE_URL)
+  if ($word | is-empty) { error make --unspanned { msg: "path parameter 'word' must be non-empty" } }
   let full_url = (build-url $base ({word: (encode-path-segment $word)} | format pattern "/word.json/{word}/scrabbleScore"))
   let accept_val = "*/*"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
 }
 
 # Returns a top example for a word
@@ -411,11 +443,12 @@ export def "word-json-top-example get" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "query-api_key"))
   let base = ($base_url | default $BASE_URL)
+  if ($word | is-empty) { error make --unspanned { msg: "path parameter 'word' must be non-empty" } }
   let qp = [(serialize-qp "useCanonical" $use_canonical "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({word: (encode-path-segment $word)} | format pattern "/word.json/{word}/topExample") $qp)
   let accept_val = "*/*"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"useCanonical": $use_canonical} | compact), body: null}
 }
 
 # Returns a single random WordObject
@@ -448,7 +481,7 @@ export def "words-json-random-word get" [
   let full_url = (build-url $base "/words.json/randomWord" $qp)
   let accept_val = "*/*"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"hasDictionaryDef": $has_dictionary_def, "includePartOfSpeech": $include_part_of_speech, "excludePartOfSpeech": $exclude_part_of_speech, "minCorpusCount": $min_corpus_count, "maxCorpusCount": $max_corpus_count, "minDictionaryCount": $min_dictionary_count, "maxDictionaryCount": $max_dictionary_count, "minLength": $min_length, "maxLength": $max_length} | compact), body: null}
 }
 
 # Returns an array of random WordObjects
@@ -484,7 +517,7 @@ export def "words-json-random-words get" [
   let full_url = (build-url $base "/words.json/randomWords" $qp)
   let accept_val = "*/*"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"hasDictionaryDef": $has_dictionary_def, "includePartOfSpeech": $include_part_of_speech, "excludePartOfSpeech": $exclude_part_of_speech, "minCorpusCount": $min_corpus_count, "maxCorpusCount": $max_corpus_count, "minDictionaryCount": $min_dictionary_count, "maxDictionaryCount": $max_dictionary_count, "minLength": $min_length, "maxLength": $max_length, "sortBy": $sort_by, "sortOrder": $sort_order, "limit": $limit} | compact), body: null}
 }
 
 # Reverse dictionary search
@@ -524,7 +557,7 @@ export def "words-json-reverse-dictionary get" [
   let full_url = (build-url $base "/words.json/reverseDictionary" $qp)
   let accept_val = "*/*"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"query": $query, "findSenseForWord": $find_sense_for_word, "includeSourceDictionaries": $include_source_dictionaries, "excludeSourceDictionaries": $exclude_source_dictionaries, "includePartOfSpeech": $include_part_of_speech, "excludePartOfSpeech": $exclude_part_of_speech, "minCorpusCount": $min_corpus_count, "maxCorpusCount": $max_corpus_count, "minLength": $min_length, "maxLength": $max_length, "expandTerms": $expand_terms, "includeTags": $include_tags, "sortBy": $sort_by, "sortOrder": $sort_order, "skip": $skip, "limit": $limit} | compact), body: null}
 }
 
 # Searches words
@@ -557,11 +590,12 @@ export def "words-json-search list" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "query-api_key"))
   let base = ($base_url | default $BASE_URL)
+  if ($query | is-empty) { error make --unspanned { msg: "path parameter 'query' must be non-empty" } }
   let qp = [(serialize-qp "allowRegex" $allow_regex "scalar") (serialize-qp "caseSensitive" $case_sensitive "scalar") (serialize-qp "includePartOfSpeech" $include_part_of_speech "scalar") (serialize-qp "excludePartOfSpeech" $exclude_part_of_speech "scalar") (serialize-qp "minCorpusCount" $min_corpus_count "scalar") (serialize-qp "maxCorpusCount" $max_corpus_count "scalar") (serialize-qp "minDictionaryCount" $min_dictionary_count "scalar") (serialize-qp "maxDictionaryCount" $max_dictionary_count "scalar") (serialize-qp "minLength" $min_length "scalar") (serialize-qp "maxLength" $max_length "scalar") (serialize-qp "skip" $skip "scalar") (serialize-qp "limit" $limit "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({query: (encode-path-segment $query)} | format pattern "/words.json/search/{query}") $qp)
   let accept_val = "*/*"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"allowRegex": $allow_regex, "caseSensitive": $case_sensitive, "includePartOfSpeech": $include_part_of_speech, "excludePartOfSpeech": $exclude_part_of_speech, "minCorpusCount": $min_corpus_count, "maxCorpusCount": $max_corpus_count, "minDictionaryCount": $min_dictionary_count, "maxDictionaryCount": $max_dictionary_count, "minLength": $min_length, "maxLength": $max_length, "skip": $skip, "limit": $limit} | compact), body: null}
 }
 
 # Returns a specific WordOfTheDay
@@ -586,5 +620,5 @@ export def "words-json-word-of-the-day get" [
   let full_url = (build-url $base "/words.json/wordOfTheDay" $qp)
   let accept_val = "*/*"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"date": $date} | compact), body: null}
 }

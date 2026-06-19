@@ -3,17 +3,18 @@
 # Auth: --token flag or $env.BILLINGMANAGEMENTCLIENT_TOKEN
 
 const BASE_URL = "https://management.azure.com"
-const DEFAULT_AUTH = "bearer"
 
-# Build auth: returns {headers: record, query: string}
+# Build auth: returns {scheme: string, headers: record, query: string, location: string}.
+# `location` is "header" | "query" | "cookie" | "none" and tells dry-run callers
+# where the token went without inspecting headers/query themselves.
 def build-auth [token?: string, auth_scheme?: string]: nothing -> record {
   let token_val = if ($token != null) and ($token | is-not-empty) { $token } else { $env | get -o BILLINGMANAGEMENTCLIENT_TOKEN | default "" }
   let scheme = ($auth_scheme | default "bearer")
-  if ($scheme == "none") or ($token_val | is-empty) { return {headers: {}, query: ""} }
+  if ($scheme == "none") or ($token_val | is-empty) { return {scheme: $scheme, headers: {}, query: "", location: "none"} }
   match $scheme {
-    "bearer" => { {headers: {Authorization: $"Bearer ($token_val)"}, query: ""} }
-    "none" => { {headers: {}, query: ""} }
-    _ => { {headers: {Authorization: $"Bearer ($token_val)"}, query: ""} }
+    "bearer" => { {scheme: $scheme, headers: {Authorization: $"Bearer ($token_val)"}, query: "", location: "header"} }
+    "none" => { {scheme: $scheme, headers: {}, query: "", location: "none"} }
+    _ => { {scheme: $scheme, headers: {Authorization: $"Bearer ($token_val)"}, query: "", location: "header"} }
   }
 }
 
@@ -22,8 +23,9 @@ def build-auth [token?: string, auth_scheme?: string]: nothing -> record {
 # ([A-Za-z0-9-._~]) stay literal; everything else gets %XX.
 def serialize-qp [name: string, value: any, style: string]: nothing -> list<string> {
   if ($value == null) { return [] }
-  let n = (encode-path-segment $name)
   let is_list = ($value | describe | str starts-with "list")
+  if $is_list and ($value | is-empty) { return [] }
+  let n = (encode-path-segment $name)
   if ($value | describe | str starts-with "record") { return ($value | transpose k v | each { $"($n)[(encode-path-segment $in.k)]=(encode-path-segment $in.v)" }) }
   if not $is_list { return [$"($n)=(encode-path-segment $value)"] }
   match $style {
@@ -54,28 +56,50 @@ def build-url [base: string, path: string, query?: string]: nothing -> string {
   if ($query != null) and ($query | is-not-empty) { $result | upsert query $query | url join } else { $result | url join }
 }
 
+# Build the dry-run record returned by --dry-run. Shape:
+#   {dry_run: true, method, url, query: <record>, headers, body, content_type, timeout,
+#    auth: {scheme, location}}
+# `meta` carries logical-form data (the query record by spec name, the pre-serialization
+# body) that do-request itself cannot reconstruct from its wire-format args.
+def build-dry-run-record [method: string, url: string, auth: record, content_type: string, timeout: duration, meta?: record]: nothing -> record {
+  let m = ($meta | default {})
+  {
+    dry_run: true
+    method: $method
+    url: $url
+    query: ($m | get -o query | default {})
+    headers: $auth.headers
+    body: ($m | get -o body)
+    content_type: $content_type
+    timeout: $timeout
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+}
+
 # Execute HTTP request with method dispatch
-def do-request [method: string, url: string, auth: record, insecure: bool, raw: bool, dry_run: bool, max_time?: duration, allow_errors?: bool, full?: bool, content_type?: string, body?: any]: nothing -> any {
+def do-request [method: string, url: string, auth: record, insecure: bool, raw: bool, dry_run: bool, max_time?: duration, allow_errors?: bool, full?: bool, content_type?: string, body?: any, dry_run_meta?: record]: nothing -> any {
   let req_url = if ($auth.query | is-not-empty) { if ($url | str contains "?") { $"($url)&($auth.query)" } else { $"($url)?($auth.query)" } } else { $url }
   let timeout = ($max_time | default 30min)
   let ct = ($content_type | default "application/json")
-  if $dry_run { return {method: $method, url: $req_url, headers: $auth.headers, query_string: $auth.query, content_type: $ct, timeout: $timeout, body: $body} }
+  if $dry_run { return (build-dry-run-record $method $req_url $auth $ct $timeout $dry_run_meta) }
   let resp = match $method {
     "get" => { http get --headers $auth.headers --full --allow-errors --max-time $timeout --insecure=$insecure --raw=$raw $req_url }
-    "head" => { http head --headers $auth.headers --max-time $timeout --insecure=$insecure $req_url }
-    "options" => { http options --headers $auth.headers --max-time $timeout --insecure=$insecure $req_url }
+    "head" => { http head --headers $auth.headers --full --allow-errors --max-time $timeout --insecure=$insecure $req_url }
+    "options" => { http options --headers $auth.headers --full --allow-errors --max-time $timeout --insecure=$insecure $req_url }
     "post" => { if ($body | is-empty) { http post --headers $auth.headers --full --allow-errors --max-time $timeout --insecure=$insecure --raw=$raw $req_url "" } else { http post --headers $auth.headers --content-type $ct --full --allow-errors --max-time $timeout --insecure=$insecure --raw=$raw $req_url $body } }
     "put" => { if ($body | is-empty) { http put --headers $auth.headers --full --allow-errors --max-time $timeout --insecure=$insecure --raw=$raw $req_url "" } else { http put --headers $auth.headers --content-type $ct --full --allow-errors --max-time $timeout --insecure=$insecure --raw=$raw $req_url $body } }
     "patch" => { if ($body | is-empty) { http patch --headers $auth.headers --full --allow-errors --max-time $timeout --insecure=$insecure --raw=$raw $req_url "" } else { http patch --headers $auth.headers --content-type $ct --full --allow-errors --max-time $timeout --insecure=$insecure --raw=$raw $req_url $body } }
     "delete" => { if ($body | is-empty) { http delete --headers $auth.headers --full --allow-errors --max-time $timeout --insecure=$insecure --raw=$raw $req_url } else { http delete --headers $auth.headers --content-type $ct --data $body --full --allow-errors --max-time $timeout --insecure=$insecure --raw=$raw $req_url } }
   }
-  if ($method in ["head" "options"]) { return $resp }
+  if ($method == "head") and (not $full) and (not $allow_errors) and $resp.status < 400 { return $resp.headers }
   if $allow_errors { $resp } else if $resp.status >= 400 { error make --unspanned { msg: $"HTTP ($resp.status): ($resp.body)" } } else if $full { {status: $resp.status, headers: $resp.headers, body: $resp.body} } else if $resp.status == 204 { null } else { $resp.body }
 }
 
 def base-url-completer [] { ["https://management.azure.com"] }
 def auth-scheme-completer [] { ["bearer"] }
 
+# Completers for enum parameters
+def auto-renew-completer [] { ["false" "true"] }
 
 # List all available API commands with their parameters
 export def commands []: nothing -> table {
@@ -123,7 +147,7 @@ export def "providers-microsoft-billing-billing-accounts list" [
   let full_url = (build-url $base "/providers/Microsoft.Billing/billingAccounts" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"api-version": $api_version, "$expand": $expand} | compact), body: null}
 }
 
 # Get the billing account by id.
@@ -146,11 +170,12 @@ export def "providers-microsoft-billing-billing-accounts get" [
 ]: nothing -> record<properties: record<address: record<addressLine1: string, addressLine2: string, addressLine3: string, city: string, companyName: string, country: string, firstName: string, lastName: string, postalCode: string, region: string>, agreementType: string, billingProfiles: list<record>, customerType: string, departments: list<record>, displayName: string, enrollmentAccounts: list<record>, enrollmentDetails: record<billingCycle: string, channel: string, countryCode: string, currency: string, endDate: string, language: string, policies: record, startDate: string, status: string>, organizationId: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($billing_account_name | is-empty) { error make --unspanned { msg: "path parameter 'billingAccountName' must be non-empty" } }
   let qp = [(serialize-qp "api-version" $api_version "scalar") (serialize-qp "$expand" $expand "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({billing_account_name: (encode-path-segment $billing_account_name)} | format pattern "/providers/Microsoft.Billing/billingAccounts/{billing_account_name}") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"api-version": $api_version, "$expand": $expand} | compact), body: null}
 }
 
 # The operation to update a billing account.
@@ -175,13 +200,14 @@ export def "providers-microsoft-billing-billing-accounts update" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($billing_account_name | is-empty) { error make --unspanned { msg: "path parameter 'billingAccountName' must be non-empty" } }
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({billing_account_name: (encode-path-segment $billing_account_name)} | format pattern "/providers/Microsoft.Billing/billingAccounts/{billing_account_name}") $qp)
   let req_body = {"properties": $properties} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "patch" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body
+  do-request "patch" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: ({"api-version": $api_version} | compact), body: $req_body}
 }
 
 # Lists all agreements for a billing account.
@@ -204,11 +230,12 @@ export def "providers-microsoft-billing-billing-accounts-agreements list" [
 ]: nothing -> record<nextLink: string, value: table<properties: record>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($billing_account_name | is-empty) { error make --unspanned { msg: "path parameter 'billingAccountName' must be non-empty" } }
   let qp = [(serialize-qp "api-version" $api_version "scalar") (serialize-qp "$expand" $expand "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({billing_account_name: (encode-path-segment $billing_account_name)} | format pattern "/providers/Microsoft.Billing/billingAccounts/{billing_account_name}/agreements") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"api-version": $api_version, "$expand": $expand} | compact), body: null}
 }
 
 # Get the agreement by name.
@@ -232,11 +259,13 @@ export def "providers-microsoft-billing-billing-accounts-agreements get" [
 ]: nothing -> record<properties: record<agreementLink: string, effectiveDate: string, expirationDate: string, participants: list<record>, status: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($billing_account_name | is-empty) { error make --unspanned { msg: "path parameter 'billingAccountName' must be non-empty" } }
+  if ($agreement_name | is-empty) { error make --unspanned { msg: "path parameter 'agreementName' must be non-empty" } }
   let qp = [(serialize-qp "api-version" $api_version "scalar") (serialize-qp "$expand" $expand "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({billing_account_name: (encode-path-segment $billing_account_name), agreement_name: (encode-path-segment $agreement_name)} | format pattern "/providers/Microsoft.Billing/billingAccounts/{billing_account_name}/agreements/{agreement_name}") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"api-version": $api_version, "$expand": $expand} | compact), body: null}
 }
 
 # Lists all billing permissions for the caller under a billing account.
@@ -258,11 +287,12 @@ export def "providers-microsoft-billing-billing-accounts-billing-permissions lis
 ]: nothing -> record<value: table<actions: list, notActions: list>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($billing_account_name | is-empty) { error make --unspanned { msg: "path parameter 'billingAccountName' must be non-empty" } }
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({billing_account_name: (encode-path-segment $billing_account_name)} | format pattern "/providers/Microsoft.Billing/billingAccounts/{billing_account_name}/billingPermissions") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"api-version": $api_version} | compact), body: null}
 }
 
 # Lists all billing profiles for a user which that user has access to.
@@ -285,11 +315,12 @@ export def "providers-microsoft-billing-billing-accounts-billing-profiles list" 
 ]: nothing -> record<nextLink: string, value: table<properties: record>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($billing_account_name | is-empty) { error make --unspanned { msg: "path parameter 'billingAccountName' must be non-empty" } }
   let qp = [(serialize-qp "api-version" $api_version "scalar") (serialize-qp "$expand" $expand "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({billing_account_name: (encode-path-segment $billing_account_name)} | format pattern "/providers/Microsoft.Billing/billingAccounts/{billing_account_name}/billingProfiles") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"api-version": $api_version, "$expand": $expand} | compact), body: null}
 }
 
 # Get the billing profile by id.
@@ -313,11 +344,13 @@ export def "providers-microsoft-billing-billing-accounts-billing-profiles get" [
 ]: nothing -> record<properties: record<address: record<addressLine1: string, addressLine2: string, addressLine3: string, city: string, companyName: string, country: string, firstName: string, lastName: string, postalCode: string, region: string>, currency: string, displayName: string, enabledAzurePlans: list<record>, invoiceDay: int, invoiceEmailOptIn: bool, invoiceSections: list<record>, poNumber: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($billing_account_name | is-empty) { error make --unspanned { msg: "path parameter 'billingAccountName' must be non-empty" } }
+  if ($billing_profile_name | is-empty) { error make --unspanned { msg: "path parameter 'billingProfileName' must be non-empty" } }
   let qp = [(serialize-qp "api-version" $api_version "scalar") (serialize-qp "$expand" $expand "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({billing_account_name: (encode-path-segment $billing_account_name), billing_profile_name: (encode-path-segment $billing_profile_name)} | format pattern "/providers/Microsoft.Billing/billingAccounts/{billing_account_name}/billingProfiles/{billing_profile_name}") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"api-version": $api_version, "$expand": $expand} | compact), body: null}
 }
 
 # The operation to update a billing profile.
@@ -343,13 +376,15 @@ export def "providers-microsoft-billing-billing-accounts-billing-profiles update
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($billing_account_name | is-empty) { error make --unspanned { msg: "path parameter 'billingAccountName' must be non-empty" } }
+  if ($billing_profile_name | is-empty) { error make --unspanned { msg: "path parameter 'billingProfileName' must be non-empty" } }
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({billing_account_name: (encode-path-segment $billing_account_name), billing_profile_name: (encode-path-segment $billing_profile_name)} | format pattern "/providers/Microsoft.Billing/billingAccounts/{billing_account_name}/billingProfiles/{billing_profile_name}") $qp)
   let req_body = {"properties": $properties} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "patch" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body
+  do-request "patch" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: ({"api-version": $api_version} | compact), body: $req_body}
 }
 
 # The operation to create a BillingProfile.
@@ -380,13 +415,15 @@ export def "providers-microsoft-billing-billing-accounts-billing-profiles create
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($billing_account_name | is-empty) { error make --unspanned { msg: "path parameter 'billingAccountName' must be non-empty" } }
+  if ($billing_profile_name | is-empty) { error make --unspanned { msg: "path parameter 'billingProfileName' must be non-empty" } }
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({billing_account_name: (encode-path-segment $billing_account_name), billing_profile_name: (encode-path-segment $billing_profile_name)} | format pattern "/providers/Microsoft.Billing/billingAccounts/{billing_account_name}/billingProfiles/{billing_profile_name}") $qp)
   let req_body = {"address": $address, "displayName": $display_name, "enabledAzurePlans": $enabled_azure_plans, "invoiceEmailOptIn": $invoice_email_opt_in, "poNumber": $po_number} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: ({"api-version": $api_version} | compact), body: $req_body}
 }
 
 # The latest available credit balance for a given billingAccountName and billingProfileName.
@@ -409,11 +446,13 @@ export def "providers-microsoft-billing-billing-accounts-billing-profiles-availa
 ]: nothing -> record<properties: record<amount: record<currency: string, value: float>>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($billing_account_name | is-empty) { error make --unspanned { msg: "path parameter 'billingAccountName' must be non-empty" } }
+  if ($billing_profile_name | is-empty) { error make --unspanned { msg: "path parameter 'billingProfileName' must be non-empty" } }
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({billing_account_name: (encode-path-segment $billing_account_name), billing_profile_name: (encode-path-segment $billing_profile_name)} | format pattern "/providers/Microsoft.Billing/billingAccounts/{billing_account_name}/billingProfiles/{billing_profile_name}/availableBalance/default") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"api-version": $api_version} | compact), body: null}
 }
 
 # Lists all billing permissions the caller has for a billing account.
@@ -436,11 +475,13 @@ export def "providers-microsoft-billing-billing-accounts-billing-profiles-billin
 ]: nothing -> record<value: table<actions: list, notActions: list>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($billing_account_name | is-empty) { error make --unspanned { msg: "path parameter 'billingAccountName' must be non-empty" } }
+  if ($billing_profile_name | is-empty) { error make --unspanned { msg: "path parameter 'billingProfileName' must be non-empty" } }
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({billing_account_name: (encode-path-segment $billing_account_name), billing_profile_name: (encode-path-segment $billing_profile_name)} | format pattern "/providers/Microsoft.Billing/billingAccounts/{billing_account_name}/billingProfiles/{billing_profile_name}/billingPermissions") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"api-version": $api_version} | compact), body: null}
 }
 
 # Get the role assignments on the Billing Profile
@@ -463,11 +504,13 @@ export def "providers-microsoft-billing-billing-accounts-billing-profiles-billin
 ]: nothing -> record<value: table<properties: record>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($billing_account_name | is-empty) { error make --unspanned { msg: "path parameter 'billingAccountName' must be non-empty" } }
+  if ($billing_profile_name | is-empty) { error make --unspanned { msg: "path parameter 'billingProfileName' must be non-empty" } }
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({billing_account_name: (encode-path-segment $billing_account_name), billing_profile_name: (encode-path-segment $billing_profile_name)} | format pattern "/providers/Microsoft.Billing/billingAccounts/{billing_account_name}/billingProfiles/{billing_profile_name}/billingRoleAssignments") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"api-version": $api_version} | compact), body: null}
 }
 
 # Delete the role assignment on this Billing Profile
@@ -491,11 +534,14 @@ export def "providers-microsoft-billing-billing-accounts-billing-profiles-billin
 ]: nothing -> record<properties: record<createdByPrincipalId: string, createdByPrincipalTenantId: string, createdOn: string, name: string, principalId: string, roleDefinitionName: string, scope: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($billing_account_name | is-empty) { error make --unspanned { msg: "path parameter 'billingAccountName' must be non-empty" } }
+  if ($billing_profile_name | is-empty) { error make --unspanned { msg: "path parameter 'billingProfileName' must be non-empty" } }
+  if ($billing_role_assignment_name | is-empty) { error make --unspanned { msg: "path parameter 'billingRoleAssignmentName' must be non-empty" } }
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({billing_account_name: (encode-path-segment $billing_account_name), billing_profile_name: (encode-path-segment $billing_profile_name), billing_role_assignment_name: (encode-path-segment $billing_role_assignment_name)} | format pattern "/providers/Microsoft.Billing/billingAccounts/{billing_account_name}/billingProfiles/{billing_profile_name}/billingRoleAssignments/{billing_role_assignment_name}") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"api-version": $api_version} | compact), body: null}
 }
 
 # Get the role assignment for the caller on the Billing Profile
@@ -519,11 +565,14 @@ export def "providers-microsoft-billing-billing-accounts-billing-profiles-billin
 ]: nothing -> record<properties: record<createdByPrincipalId: string, createdByPrincipalTenantId: string, createdOn: string, name: string, principalId: string, roleDefinitionName: string, scope: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($billing_account_name | is-empty) { error make --unspanned { msg: "path parameter 'billingAccountName' must be non-empty" } }
+  if ($billing_profile_name | is-empty) { error make --unspanned { msg: "path parameter 'billingProfileName' must be non-empty" } }
+  if ($billing_role_assignment_name | is-empty) { error make --unspanned { msg: "path parameter 'billingRoleAssignmentName' must be non-empty" } }
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({billing_account_name: (encode-path-segment $billing_account_name), billing_profile_name: (encode-path-segment $billing_profile_name), billing_role_assignment_name: (encode-path-segment $billing_role_assignment_name)} | format pattern "/providers/Microsoft.Billing/billingAccounts/{billing_account_name}/billingProfiles/{billing_profile_name}/billingRoleAssignments/{billing_role_assignment_name}") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"api-version": $api_version} | compact), body: null}
 }
 
 # Lists the role definition for a Billing Profile
@@ -546,11 +595,13 @@ export def "providers-microsoft-billing-billing-accounts-billing-profiles-billin
 ]: nothing -> record<value: table<properties: record>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($billing_account_name | is-empty) { error make --unspanned { msg: "path parameter 'billingAccountName' must be non-empty" } }
+  if ($billing_profile_name | is-empty) { error make --unspanned { msg: "path parameter 'billingProfileName' must be non-empty" } }
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({billing_account_name: (encode-path-segment $billing_account_name), billing_profile_name: (encode-path-segment $billing_profile_name)} | format pattern "/providers/Microsoft.Billing/billingAccounts/{billing_account_name}/billingProfiles/{billing_profile_name}/billingRoleDefinitions") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"api-version": $api_version} | compact), body: null}
 }
 
 # Gets the role definition for a role
@@ -574,11 +625,14 @@ export def "providers-microsoft-billing-billing-accounts-billing-profiles-billin
 ]: nothing -> record<properties: record<description: string, permissions: list<record>, roleName: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($billing_account_name | is-empty) { error make --unspanned { msg: "path parameter 'billingAccountName' must be non-empty" } }
+  if ($billing_profile_name | is-empty) { error make --unspanned { msg: "path parameter 'billingProfileName' must be non-empty" } }
+  if ($billing_role_definition_name | is-empty) { error make --unspanned { msg: "path parameter 'billingRoleDefinitionName' must be non-empty" } }
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({billing_account_name: (encode-path-segment $billing_account_name), billing_profile_name: (encode-path-segment $billing_profile_name), billing_role_definition_name: (encode-path-segment $billing_role_definition_name)} | format pattern "/providers/Microsoft.Billing/billingAccounts/{billing_account_name}/billingProfiles/{billing_profile_name}/billingRoleDefinitions/{billing_role_definition_name}") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"api-version": $api_version} | compact), body: null}
 }
 
 # Lists billing subscriptions by billing profile name.
@@ -602,11 +656,13 @@ export def "providers-microsoft-billing-billing-accounts-billing-profiles-billin
 ]: nothing -> record<nextLink: string, value: table<properties: record>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($billing_account_name | is-empty) { error make --unspanned { msg: "path parameter 'billingAccountName' must be non-empty" } }
+  if ($billing_profile_name | is-empty) { error make --unspanned { msg: "path parameter 'billingProfileName' must be non-empty" } }
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({billing_account_name: (encode-path-segment $billing_account_name), billing_profile_name: (encode-path-segment $billing_profile_name)} | format pattern "/providers/Microsoft.Billing/billingAccounts/{billing_account_name}/billingProfiles/{billing_profile_name}/billingSubscriptions") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"api-version": $api_version} | compact), body: null}
 }
 
 # The operation to add a role assignment to a billing profile.
@@ -632,13 +688,15 @@ export def "providers-microsoft-billing-billing-accounts-billing-profiles-create
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($billing_account_name | is-empty) { error make --unspanned { msg: "path parameter 'billingAccountName' must be non-empty" } }
+  if ($billing_profile_name | is-empty) { error make --unspanned { msg: "path parameter 'billingProfileName' must be non-empty" } }
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({billing_account_name: (encode-path-segment $billing_account_name), billing_profile_name: (encode-path-segment $billing_profile_name)} | format pattern "/providers/Microsoft.Billing/billingAccounts/{billing_account_name}/billingProfiles/{billing_profile_name}/createBillingRoleAssignment") $qp)
   let req_body = {"billingRoleDefinitionId": $billing_role_definition_id, "principalId": $principal_id} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: ({"api-version": $api_version} | compact), body: $req_body}
 }
 
 # Lists customers by billing profile which the current user can work with on-behalf of a partner.
@@ -663,11 +721,13 @@ export def "providers-microsoft-billing-billing-accounts-billing-profiles-custom
 ]: nothing -> record<nextLink: string, value: table<properties: record>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($billing_account_name | is-empty) { error make --unspanned { msg: "path parameter 'billingAccountName' must be non-empty" } }
+  if ($billing_profile_name | is-empty) { error make --unspanned { msg: "path parameter 'billingProfileName' must be non-empty" } }
   let qp = [(serialize-qp "api-version" $api_version "scalar") (serialize-qp "$filter" $filter "scalar") (serialize-qp "$skiptoken" $skiptoken "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({billing_account_name: (encode-path-segment $billing_account_name), billing_profile_name: (encode-path-segment $billing_profile_name)} | format pattern "/providers/Microsoft.Billing/billingAccounts/{billing_account_name}/billingProfiles/{billing_profile_name}/customers") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"api-version": $api_version, "$filter": $filter, "$skiptoken": $skiptoken} | compact), body: null}
 }
 
 # Initiates the request to transfer the legacy subscriptions or RIs.
@@ -693,12 +753,15 @@ export def "providers-microsoft-billing-billing-accounts-billing-profiles-custom
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($billing_account_name | is-empty) { error make --unspanned { msg: "path parameter 'billingAccountName' must be non-empty" } }
+  if ($billing_profile_name | is-empty) { error make --unspanned { msg: "path parameter 'billingProfileName' must be non-empty" } }
+  if ($customer_name | is-empty) { error make --unspanned { msg: "path parameter 'customerName' must be non-empty" } }
   let full_url = (build-url $base ({billing_account_name: (encode-path-segment $billing_account_name), billing_profile_name: (encode-path-segment $billing_profile_name), customer_name: (encode-path-segment $customer_name)} | format pattern "/providers/Microsoft.Billing/billingAccounts/{billing_account_name}/billingProfiles/{billing_profile_name}/customers/{customer_name}/initiateTransfer"))
   let req_body = {"properties": $properties} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: {}, body: $req_body}
 }
 
 # Lists all transfer's details initiated from given invoice section.
@@ -721,10 +784,13 @@ export def "providers-microsoft-billing-billing-accounts-billing-profiles-custom
 ]: nothing -> record<nextLink: string, value: table<properties: record>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($billing_account_name | is-empty) { error make --unspanned { msg: "path parameter 'billingAccountName' must be non-empty" } }
+  if ($billing_profile_name | is-empty) { error make --unspanned { msg: "path parameter 'billingProfileName' must be non-empty" } }
+  if ($customer_name | is-empty) { error make --unspanned { msg: "path parameter 'customerName' must be non-empty" } }
   let full_url = (build-url $base ({billing_account_name: (encode-path-segment $billing_account_name), billing_profile_name: (encode-path-segment $billing_profile_name), customer_name: (encode-path-segment $customer_name)} | format pattern "/providers/Microsoft.Billing/billingAccounts/{billing_account_name}/billingProfiles/{billing_profile_name}/customers/{customer_name}/transfers"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
 }
 
 # Cancels the transfer for given transfer Id.
@@ -748,10 +814,14 @@ export def "providers-microsoft-billing-billing-accounts-billing-profiles-custom
 ]: nothing -> record<properties: record<billingAccountId: string, billingProfileId: string, canceledBy: string, creationTime: string, detailedTransferStatus: list<record>, expirationTime: string, initiatorCustomerType: string, initiatorEmailId: string, invoiceSectionId: string, lastModifiedTime: string, recipientEmailId: string, resellerId: string, resellerName: string, transferStatus: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($billing_account_name | is-empty) { error make --unspanned { msg: "path parameter 'billingAccountName' must be non-empty" } }
+  if ($billing_profile_name | is-empty) { error make --unspanned { msg: "path parameter 'billingProfileName' must be non-empty" } }
+  if ($customer_name | is-empty) { error make --unspanned { msg: "path parameter 'customerName' must be non-empty" } }
+  if ($transfer_name | is-empty) { error make --unspanned { msg: "path parameter 'transferName' must be non-empty" } }
   let full_url = (build-url $base ({billing_account_name: (encode-path-segment $billing_account_name), billing_profile_name: (encode-path-segment $billing_profile_name), customer_name: (encode-path-segment $customer_name), transfer_name: (encode-path-segment $transfer_name)} | format pattern "/providers/Microsoft.Billing/billingAccounts/{billing_account_name}/billingProfiles/{billing_profile_name}/customers/{customer_name}/transfers/{transfer_name}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
 }
 
 # Gets the transfer details for given transfer Id.
@@ -775,10 +845,14 @@ export def "providers-microsoft-billing-billing-accounts-billing-profiles-custom
 ]: nothing -> record<properties: record<billingAccountId: string, billingProfileId: string, canceledBy: string, creationTime: string, detailedTransferStatus: list<record>, expirationTime: string, initiatorCustomerType: string, initiatorEmailId: string, invoiceSectionId: string, lastModifiedTime: string, recipientEmailId: string, resellerId: string, resellerName: string, transferStatus: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($billing_account_name | is-empty) { error make --unspanned { msg: "path parameter 'billingAccountName' must be non-empty" } }
+  if ($billing_profile_name | is-empty) { error make --unspanned { msg: "path parameter 'billingProfileName' must be non-empty" } }
+  if ($customer_name | is-empty) { error make --unspanned { msg: "path parameter 'customerName' must be non-empty" } }
+  if ($transfer_name | is-empty) { error make --unspanned { msg: "path parameter 'transferName' must be non-empty" } }
   let full_url = (build-url $base ({billing_account_name: (encode-path-segment $billing_account_name), billing_profile_name: (encode-path-segment $billing_profile_name), customer_name: (encode-path-segment $customer_name), transfer_name: (encode-path-segment $transfer_name)} | format pattern "/providers/Microsoft.Billing/billingAccounts/{billing_account_name}/billingProfiles/{billing_profile_name}/customers/{customer_name}/transfers/{transfer_name}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
 }
 
 # Lists the instructions by billing profile id.
@@ -802,11 +876,13 @@ export def "providers-microsoft-billing-billing-accounts-billing-profiles-instru
 ]: nothing -> record<nextLink: string, value: table<properties: record>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($billing_account_name | is-empty) { error make --unspanned { msg: "path parameter 'billingAccountName' must be non-empty" } }
+  if ($billing_profile_name | is-empty) { error make --unspanned { msg: "path parameter 'billingProfileName' must be non-empty" } }
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({billing_account_name: (encode-path-segment $billing_account_name), billing_profile_name: (encode-path-segment $billing_profile_name)} | format pattern "/providers/Microsoft.Billing/billingAccounts/{billing_account_name}/billingProfiles/{billing_profile_name}/instructions") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"api-version": $api_version} | compact), body: null}
 }
 
 # Get the instruction by name.
@@ -830,11 +906,14 @@ export def "providers-microsoft-billing-billing-accounts-billing-profiles-instru
 ]: nothing -> record<properties: record<amount: float, endDate: string, startDate: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($billing_account_name | is-empty) { error make --unspanned { msg: "path parameter 'billingAccountName' must be non-empty" } }
+  if ($billing_profile_name | is-empty) { error make --unspanned { msg: "path parameter 'billingProfileName' must be non-empty" } }
+  if ($instruction_name | is-empty) { error make --unspanned { msg: "path parameter 'instructionName' must be non-empty" } }
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({billing_account_name: (encode-path-segment $billing_account_name), billing_profile_name: (encode-path-segment $billing_profile_name), instruction_name: (encode-path-segment $instruction_name)} | format pattern "/providers/Microsoft.Billing/billingAccounts/{billing_account_name}/billingProfiles/{billing_profile_name}/instructions/{instruction_name}") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"api-version": $api_version} | compact), body: null}
 }
 
 # The operation to create or update a instruction.
@@ -861,13 +940,16 @@ export def "providers-microsoft-billing-billing-accounts-billing-profiles-instru
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($billing_account_name | is-empty) { error make --unspanned { msg: "path parameter 'billingAccountName' must be non-empty" } }
+  if ($billing_profile_name | is-empty) { error make --unspanned { msg: "path parameter 'billingProfileName' must be non-empty" } }
+  if ($instruction_name | is-empty) { error make --unspanned { msg: "path parameter 'instructionName' must be non-empty" } }
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({billing_account_name: (encode-path-segment $billing_account_name), billing_profile_name: (encode-path-segment $billing_profile_name), instruction_name: (encode-path-segment $instruction_name)} | format pattern "/providers/Microsoft.Billing/billingAccounts/{billing_account_name}/billingProfiles/{billing_profile_name}/instructions/{instruction_name}") $qp)
   let req_body = {"properties": $properties} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: ({"api-version": $api_version} | compact), body: $req_body}
 }
 
 # Lists all invoice sections for a user which he has access to.
@@ -890,11 +972,13 @@ export def "providers-microsoft-billing-billing-accounts-billing-profiles-invoic
 ]: nothing -> record<nextLink: string, value: table<properties: record>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($billing_account_name | is-empty) { error make --unspanned { msg: "path parameter 'billingAccountName' must be non-empty" } }
+  if ($billing_profile_name | is-empty) { error make --unspanned { msg: "path parameter 'billingProfileName' must be non-empty" } }
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({billing_account_name: (encode-path-segment $billing_account_name), billing_profile_name: (encode-path-segment $billing_profile_name)} | format pattern "/providers/Microsoft.Billing/billingAccounts/{billing_account_name}/billingProfiles/{billing_profile_name}/invoiceSections") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"api-version": $api_version} | compact), body: null}
 }
 
 # Get the InvoiceSection by id.
@@ -918,11 +1002,14 @@ export def "providers-microsoft-billing-billing-accounts-billing-profiles-invoic
 ]: nothing -> record<properties: record<displayName: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($billing_account_name | is-empty) { error make --unspanned { msg: "path parameter 'billingAccountName' must be non-empty" } }
+  if ($billing_profile_name | is-empty) { error make --unspanned { msg: "path parameter 'billingProfileName' must be non-empty" } }
+  if ($invoice_section_name | is-empty) { error make --unspanned { msg: "path parameter 'invoiceSectionName' must be non-empty" } }
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({billing_account_name: (encode-path-segment $billing_account_name), billing_profile_name: (encode-path-segment $billing_profile_name), invoice_section_name: (encode-path-segment $invoice_section_name)} | format pattern "/providers/Microsoft.Billing/billingAccounts/{billing_account_name}/billingProfiles/{billing_profile_name}/invoiceSections/{invoice_section_name}") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"api-version": $api_version} | compact), body: null}
 }
 
 # The operation to update a InvoiceSection.
@@ -949,13 +1036,16 @@ export def "providers-microsoft-billing-billing-accounts-billing-profiles-invoic
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($billing_account_name | is-empty) { error make --unspanned { msg: "path parameter 'billingAccountName' must be non-empty" } }
+  if ($billing_profile_name | is-empty) { error make --unspanned { msg: "path parameter 'billingProfileName' must be non-empty" } }
+  if ($invoice_section_name | is-empty) { error make --unspanned { msg: "path parameter 'invoiceSectionName' must be non-empty" } }
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({billing_account_name: (encode-path-segment $billing_account_name), billing_profile_name: (encode-path-segment $billing_profile_name), invoice_section_name: (encode-path-segment $invoice_section_name)} | format pattern "/providers/Microsoft.Billing/billingAccounts/{billing_account_name}/billingProfiles/{billing_profile_name}/invoiceSections/{invoice_section_name}") $qp)
   let req_body = {"properties": $properties} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "patch" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body
+  do-request "patch" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: ({"api-version": $api_version} | compact), body: $req_body}
 }
 
 # The operation to create an invoice section.
@@ -981,13 +1071,16 @@ export def "providers-microsoft-billing-billing-accounts-billing-profiles-invoic
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($billing_account_name | is-empty) { error make --unspanned { msg: "path parameter 'billingAccountName' must be non-empty" } }
+  if ($billing_profile_name | is-empty) { error make --unspanned { msg: "path parameter 'billingProfileName' must be non-empty" } }
+  if ($invoice_section_name | is-empty) { error make --unspanned { msg: "path parameter 'invoiceSectionName' must be non-empty" } }
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({billing_account_name: (encode-path-segment $billing_account_name), billing_profile_name: (encode-path-segment $billing_profile_name), invoice_section_name: (encode-path-segment $invoice_section_name)} | format pattern "/providers/Microsoft.Billing/billingAccounts/{billing_account_name}/billingProfiles/{billing_profile_name}/invoiceSections/{invoice_section_name}") $qp)
   let req_body = {"displayName": $display_name} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: ({"api-version": $api_version} | compact), body: $req_body}
 }
 
 # Lists all billing permissions for the caller under invoice section.
@@ -1011,11 +1104,14 @@ export def "providers-microsoft-billing-billing-accounts-billing-profiles-invoic
 ]: nothing -> record<value: table<actions: list, notActions: list>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($billing_account_name | is-empty) { error make --unspanned { msg: "path parameter 'billingAccountName' must be non-empty" } }
+  if ($billing_profile_name | is-empty) { error make --unspanned { msg: "path parameter 'billingProfileName' must be non-empty" } }
+  if ($invoice_section_name | is-empty) { error make --unspanned { msg: "path parameter 'invoiceSectionName' must be non-empty" } }
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({billing_account_name: (encode-path-segment $billing_account_name), billing_profile_name: (encode-path-segment $billing_profile_name), invoice_section_name: (encode-path-segment $invoice_section_name)} | format pattern "/providers/Microsoft.Billing/billingAccounts/{billing_account_name}/billingProfiles/{billing_profile_name}/invoiceSections/{invoice_section_name}/billingPermissions") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"api-version": $api_version} | compact), body: null}
 }
 
 # Get the role assignments on the invoice Section
@@ -1039,11 +1135,14 @@ export def "providers-microsoft-billing-billing-accounts-billing-profiles-invoic
 ]: nothing -> record<value: table<properties: record>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($billing_account_name | is-empty) { error make --unspanned { msg: "path parameter 'billingAccountName' must be non-empty" } }
+  if ($billing_profile_name | is-empty) { error make --unspanned { msg: "path parameter 'billingProfileName' must be non-empty" } }
+  if ($invoice_section_name | is-empty) { error make --unspanned { msg: "path parameter 'invoiceSectionName' must be non-empty" } }
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({billing_account_name: (encode-path-segment $billing_account_name), billing_profile_name: (encode-path-segment $billing_profile_name), invoice_section_name: (encode-path-segment $invoice_section_name)} | format pattern "/providers/Microsoft.Billing/billingAccounts/{billing_account_name}/billingProfiles/{billing_profile_name}/invoiceSections/{invoice_section_name}/billingRoleAssignments") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"api-version": $api_version} | compact), body: null}
 }
 
 # Delete the role assignment on the invoice Section
@@ -1068,11 +1167,15 @@ export def "providers-microsoft-billing-billing-accounts-billing-profiles-invoic
 ]: nothing -> record<properties: record<createdByPrincipalId: string, createdByPrincipalTenantId: string, createdOn: string, name: string, principalId: string, roleDefinitionName: string, scope: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($billing_account_name | is-empty) { error make --unspanned { msg: "path parameter 'billingAccountName' must be non-empty" } }
+  if ($billing_profile_name | is-empty) { error make --unspanned { msg: "path parameter 'billingProfileName' must be non-empty" } }
+  if ($invoice_section_name | is-empty) { error make --unspanned { msg: "path parameter 'invoiceSectionName' must be non-empty" } }
+  if ($billing_role_assignment_name | is-empty) { error make --unspanned { msg: "path parameter 'billingRoleAssignmentName' must be non-empty" } }
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({billing_account_name: (encode-path-segment $billing_account_name), billing_profile_name: (encode-path-segment $billing_profile_name), invoice_section_name: (encode-path-segment $invoice_section_name), billing_role_assignment_name: (encode-path-segment $billing_role_assignment_name)} | format pattern "/providers/Microsoft.Billing/billingAccounts/{billing_account_name}/billingProfiles/{billing_profile_name}/invoiceSections/{invoice_section_name}/billingRoleAssignments/{billing_role_assignment_name}") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"api-version": $api_version} | compact), body: null}
 }
 
 # Get the role assignment for the caller on the invoice Section
@@ -1097,11 +1200,15 @@ export def "providers-microsoft-billing-billing-accounts-billing-profiles-invoic
 ]: nothing -> record<properties: record<createdByPrincipalId: string, createdByPrincipalTenantId: string, createdOn: string, name: string, principalId: string, roleDefinitionName: string, scope: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($billing_account_name | is-empty) { error make --unspanned { msg: "path parameter 'billingAccountName' must be non-empty" } }
+  if ($billing_profile_name | is-empty) { error make --unspanned { msg: "path parameter 'billingProfileName' must be non-empty" } }
+  if ($invoice_section_name | is-empty) { error make --unspanned { msg: "path parameter 'invoiceSectionName' must be non-empty" } }
+  if ($billing_role_assignment_name | is-empty) { error make --unspanned { msg: "path parameter 'billingRoleAssignmentName' must be non-empty" } }
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({billing_account_name: (encode-path-segment $billing_account_name), billing_profile_name: (encode-path-segment $billing_profile_name), invoice_section_name: (encode-path-segment $invoice_section_name), billing_role_assignment_name: (encode-path-segment $billing_role_assignment_name)} | format pattern "/providers/Microsoft.Billing/billingAccounts/{billing_account_name}/billingProfiles/{billing_profile_name}/invoiceSections/{invoice_section_name}/billingRoleAssignments/{billing_role_assignment_name}") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"api-version": $api_version} | compact), body: null}
 }
 
 # Lists the role definition for an invoice Section
@@ -1125,11 +1232,14 @@ export def "providers-microsoft-billing-billing-accounts-billing-profiles-invoic
 ]: nothing -> record<value: table<properties: record>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($billing_account_name | is-empty) { error make --unspanned { msg: "path parameter 'billingAccountName' must be non-empty" } }
+  if ($billing_profile_name | is-empty) { error make --unspanned { msg: "path parameter 'billingProfileName' must be non-empty" } }
+  if ($invoice_section_name | is-empty) { error make --unspanned { msg: "path parameter 'invoiceSectionName' must be non-empty" } }
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({billing_account_name: (encode-path-segment $billing_account_name), billing_profile_name: (encode-path-segment $billing_profile_name), invoice_section_name: (encode-path-segment $invoice_section_name)} | format pattern "/providers/Microsoft.Billing/billingAccounts/{billing_account_name}/billingProfiles/{billing_profile_name}/invoiceSections/{invoice_section_name}/billingRoleDefinitions") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"api-version": $api_version} | compact), body: null}
 }
 
 # Gets the role definition for a role
@@ -1154,11 +1264,15 @@ export def "providers-microsoft-billing-billing-accounts-billing-profiles-invoic
 ]: nothing -> record<properties: record<description: string, permissions: list<record>, roleName: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($billing_account_name | is-empty) { error make --unspanned { msg: "path parameter 'billingAccountName' must be non-empty" } }
+  if ($billing_profile_name | is-empty) { error make --unspanned { msg: "path parameter 'billingProfileName' must be non-empty" } }
+  if ($invoice_section_name | is-empty) { error make --unspanned { msg: "path parameter 'invoiceSectionName' must be non-empty" } }
+  if ($billing_role_definition_name | is-empty) { error make --unspanned { msg: "path parameter 'billingRoleDefinitionName' must be non-empty" } }
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({billing_account_name: (encode-path-segment $billing_account_name), billing_profile_name: (encode-path-segment $billing_profile_name), invoice_section_name: (encode-path-segment $invoice_section_name), billing_role_definition_name: (encode-path-segment $billing_role_definition_name)} | format pattern "/providers/Microsoft.Billing/billingAccounts/{billing_account_name}/billingProfiles/{billing_profile_name}/invoiceSections/{invoice_section_name}/billingRoleDefinitions/{billing_role_definition_name}") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"api-version": $api_version} | compact), body: null}
 }
 
 # Lists billing subscription by invoice section name.
@@ -1183,11 +1297,14 @@ export def "providers-microsoft-billing-billing-accounts-billing-profiles-invoic
 ]: nothing -> record<nextLink: string, value: table<properties: record>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($billing_account_name | is-empty) { error make --unspanned { msg: "path parameter 'billingAccountName' must be non-empty" } }
+  if ($billing_profile_name | is-empty) { error make --unspanned { msg: "path parameter 'billingProfileName' must be non-empty" } }
+  if ($invoice_section_name | is-empty) { error make --unspanned { msg: "path parameter 'invoiceSectionName' must be non-empty" } }
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({billing_account_name: (encode-path-segment $billing_account_name), billing_profile_name: (encode-path-segment $billing_profile_name), invoice_section_name: (encode-path-segment $invoice_section_name)} | format pattern "/providers/Microsoft.Billing/billingAccounts/{billing_account_name}/billingProfiles/{billing_profile_name}/invoiceSections/{invoice_section_name}/billingSubscriptions") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"api-version": $api_version} | compact), body: null}
 }
 
 # Get a single billing subscription by name.
@@ -1213,11 +1330,15 @@ export def "providers-microsoft-billing-billing-accounts-billing-profiles-invoic
 ]: nothing -> record<properties: record<billingProfileDisplayName: string, billingProfileId: string, customerDisplayName: string, customerId: string, displayName: string, invoiceSectionDisplayName: string, invoiceSectionId: string, lastMonthCharges: record<currency: string, value: float>, monthToDateCharges: record<currency: string, value: float>, reseller: record<description: string, resellerId: string>, skuDescription: string, skuId: string, subscriptionBillingStatus: string, subscriptionId: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($billing_account_name | is-empty) { error make --unspanned { msg: "path parameter 'billingAccountName' must be non-empty" } }
+  if ($billing_profile_name | is-empty) { error make --unspanned { msg: "path parameter 'billingProfileName' must be non-empty" } }
+  if ($invoice_section_name | is-empty) { error make --unspanned { msg: "path parameter 'invoiceSectionName' must be non-empty" } }
+  if ($billing_subscription_name | is-empty) { error make --unspanned { msg: "path parameter 'billingSubscriptionName' must be non-empty" } }
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({billing_account_name: (encode-path-segment $billing_account_name), billing_profile_name: (encode-path-segment $billing_profile_name), invoice_section_name: (encode-path-segment $invoice_section_name), billing_subscription_name: (encode-path-segment $billing_subscription_name)} | format pattern "/providers/Microsoft.Billing/billingAccounts/{billing_account_name}/billingProfiles/{billing_profile_name}/invoiceSections/{invoice_section_name}/billingSubscriptions/{billing_subscription_name}") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"api-version": $api_version} | compact), body: null}
 }
 
 # Transfers the subscription from one invoice section to another within a billing account.
@@ -1244,12 +1365,16 @@ export def "providers-microsoft-billing-billing-accounts-billing-profiles-invoic
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($billing_account_name | is-empty) { error make --unspanned { msg: "path parameter 'billingAccountName' must be non-empty" } }
+  if ($billing_profile_name | is-empty) { error make --unspanned { msg: "path parameter 'billingProfileName' must be non-empty" } }
+  if ($invoice_section_name | is-empty) { error make --unspanned { msg: "path parameter 'invoiceSectionName' must be non-empty" } }
+  if ($billing_subscription_name | is-empty) { error make --unspanned { msg: "path parameter 'billingSubscriptionName' must be non-empty" } }
   let full_url = (build-url $base ({billing_account_name: (encode-path-segment $billing_account_name), billing_profile_name: (encode-path-segment $billing_profile_name), invoice_section_name: (encode-path-segment $invoice_section_name), billing_subscription_name: (encode-path-segment $billing_subscription_name)} | format pattern "/providers/Microsoft.Billing/billingAccounts/{billing_account_name}/billingProfiles/{billing_profile_name}/invoiceSections/{invoice_section_name}/billingSubscriptions/{billing_subscription_name}/transfer"))
   let req_body = {"destinationBillingProfileId": $destination_billing_profile_id, "destinationInvoiceSectionId": $destination_invoice_section_id} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: {}, body: $req_body}
 }
 
 # Validates the transfer of billing subscriptions across invoice sections.
@@ -1276,12 +1401,16 @@ export def "providers-microsoft-billing-billing-accounts-billing-profiles-invoic
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($billing_account_name | is-empty) { error make --unspanned { msg: "path parameter 'billingAccountName' must be non-empty" } }
+  if ($billing_profile_name | is-empty) { error make --unspanned { msg: "path parameter 'billingProfileName' must be non-empty" } }
+  if ($invoice_section_name | is-empty) { error make --unspanned { msg: "path parameter 'invoiceSectionName' must be non-empty" } }
+  if ($billing_subscription_name | is-empty) { error make --unspanned { msg: "path parameter 'billingSubscriptionName' must be non-empty" } }
   let full_url = (build-url $base ({billing_account_name: (encode-path-segment $billing_account_name), billing_profile_name: (encode-path-segment $billing_profile_name), invoice_section_name: (encode-path-segment $invoice_section_name), billing_subscription_name: (encode-path-segment $billing_subscription_name)} | format pattern "/providers/Microsoft.Billing/billingAccounts/{billing_account_name}/billingProfiles/{billing_profile_name}/invoiceSections/{invoice_section_name}/billingSubscriptions/{billing_subscription_name}/validateTransferEligibility"))
   let req_body = {"destinationBillingProfileId": $destination_billing_profile_id, "destinationInvoiceSectionId": $destination_invoice_section_id} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: {}, body: $req_body}
 }
 
 # The operation to add a role assignment to a invoice Section.
@@ -1308,13 +1437,16 @@ export def "providers-microsoft-billing-billing-accounts-billing-profiles-invoic
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($billing_account_name | is-empty) { error make --unspanned { msg: "path parameter 'billingAccountName' must be non-empty" } }
+  if ($billing_profile_name | is-empty) { error make --unspanned { msg: "path parameter 'billingProfileName' must be non-empty" } }
+  if ($invoice_section_name | is-empty) { error make --unspanned { msg: "path parameter 'invoiceSectionName' must be non-empty" } }
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({billing_account_name: (encode-path-segment $billing_account_name), billing_profile_name: (encode-path-segment $billing_profile_name), invoice_section_name: (encode-path-segment $invoice_section_name)} | format pattern "/providers/Microsoft.Billing/billingAccounts/{billing_account_name}/billingProfiles/{billing_profile_name}/invoiceSections/{invoice_section_name}/createBillingRoleAssignment") $qp)
   let req_body = {"billingRoleDefinitionId": $billing_role_definition_id, "principalId": $principal_id} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: ({"api-version": $api_version} | compact), body: $req_body}
 }
 
 # Elevates the caller's access to match their billing profile access.
@@ -1337,10 +1469,13 @@ export def "providers-microsoft-billing-billing-accounts-billing-profiles-invoic
 ]: nothing -> record<error: record<code: string, message: string, target: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($billing_account_name | is-empty) { error make --unspanned { msg: "path parameter 'billingAccountName' must be non-empty" } }
+  if ($billing_profile_name | is-empty) { error make --unspanned { msg: "path parameter 'billingProfileName' must be non-empty" } }
+  if ($invoice_section_name | is-empty) { error make --unspanned { msg: "path parameter 'invoiceSectionName' must be non-empty" } }
   let full_url = (build-url $base ({billing_account_name: (encode-path-segment $billing_account_name), billing_profile_name: (encode-path-segment $billing_profile_name), invoice_section_name: (encode-path-segment $invoice_section_name)} | format pattern "/providers/Microsoft.Billing/billingAccounts/{billing_account_name}/billingProfiles/{billing_profile_name}/invoiceSections/{invoice_section_name}/elevate"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
 }
 
 # Initiates the request to transfer the legacy subscriptions or RIs.
@@ -1366,12 +1501,15 @@ export def "providers-microsoft-billing-billing-accounts-billing-profiles-invoic
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($billing_account_name | is-empty) { error make --unspanned { msg: "path parameter 'billingAccountName' must be non-empty" } }
+  if ($billing_profile_name | is-empty) { error make --unspanned { msg: "path parameter 'billingProfileName' must be non-empty" } }
+  if ($invoice_section_name | is-empty) { error make --unspanned { msg: "path parameter 'invoiceSectionName' must be non-empty" } }
   let full_url = (build-url $base ({billing_account_name: (encode-path-segment $billing_account_name), billing_profile_name: (encode-path-segment $billing_profile_name), invoice_section_name: (encode-path-segment $invoice_section_name)} | format pattern "/providers/Microsoft.Billing/billingAccounts/{billing_account_name}/billingProfiles/{billing_profile_name}/invoiceSections/{invoice_section_name}/initiateTransfer"))
   let req_body = {"properties": $properties} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: {}, body: $req_body}
 }
 
 # Lists products by invoice section name.
@@ -1397,11 +1535,14 @@ export def "providers-microsoft-billing-billing-accounts-billing-profiles-invoic
 ]: nothing -> record<nextLink: string, value: table<properties: record>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($billing_account_name | is-empty) { error make --unspanned { msg: "path parameter 'billingAccountName' must be non-empty" } }
+  if ($billing_profile_name | is-empty) { error make --unspanned { msg: "path parameter 'billingProfileName' must be non-empty" } }
+  if ($invoice_section_name | is-empty) { error make --unspanned { msg: "path parameter 'invoiceSectionName' must be non-empty" } }
   let qp = [(serialize-qp "api-version" $api_version "scalar") (serialize-qp "$filter" $filter "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({billing_account_name: (encode-path-segment $billing_account_name), billing_profile_name: (encode-path-segment $billing_profile_name), invoice_section_name: (encode-path-segment $invoice_section_name)} | format pattern "/providers/Microsoft.Billing/billingAccounts/{billing_account_name}/billingProfiles/{billing_profile_name}/invoiceSections/{invoice_section_name}/products") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"api-version": $api_version, "$filter": $filter} | compact), body: null}
 }
 
 # Get a single product by name.
@@ -1427,11 +1568,15 @@ export def "providers-microsoft-billing-billing-accounts-billing-profiles-invoic
 ]: nothing -> record<properties: record<availabilityId: string, billingFrequency: string, billingProfileDisplayName: string, billingProfileId: string, customerDisplayName: string, customerId: string, displayName: string, endDate: string, invoiceSectionDisplayName: string, invoiceSectionId: string, lastCharge: record<currency: string, value: float>, lastChargeDate: string, parentProductId: string, productType: string, productTypeId: string, purchaseDate: string, quantity: float, reseller: record<description: string, resellerId: string>, skuDescription: string, skuId: string, status: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($billing_account_name | is-empty) { error make --unspanned { msg: "path parameter 'billingAccountName' must be non-empty" } }
+  if ($billing_profile_name | is-empty) { error make --unspanned { msg: "path parameter 'billingProfileName' must be non-empty" } }
+  if ($invoice_section_name | is-empty) { error make --unspanned { msg: "path parameter 'invoiceSectionName' must be non-empty" } }
+  if ($product_name | is-empty) { error make --unspanned { msg: "path parameter 'productName' must be non-empty" } }
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({billing_account_name: (encode-path-segment $billing_account_name), billing_profile_name: (encode-path-segment $billing_profile_name), invoice_section_name: (encode-path-segment $invoice_section_name), product_name: (encode-path-segment $product_name)} | format pattern "/providers/Microsoft.Billing/billingAccounts/{billing_account_name}/billingProfiles/{billing_profile_name}/invoiceSections/{invoice_section_name}/products/{product_name}") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"api-version": $api_version} | compact), body: null}
 }
 
 # The operation to transfer a Product to another invoice section.
@@ -1459,13 +1604,17 @@ export def "providers-microsoft-billing-billing-accounts-billing-profiles-invoic
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($billing_account_name | is-empty) { error make --unspanned { msg: "path parameter 'billingAccountName' must be non-empty" } }
+  if ($billing_profile_name | is-empty) { error make --unspanned { msg: "path parameter 'billingProfileName' must be non-empty" } }
+  if ($invoice_section_name | is-empty) { error make --unspanned { msg: "path parameter 'invoiceSectionName' must be non-empty" } }
+  if ($product_name | is-empty) { error make --unspanned { msg: "path parameter 'productName' must be non-empty" } }
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({billing_account_name: (encode-path-segment $billing_account_name), billing_profile_name: (encode-path-segment $billing_profile_name), invoice_section_name: (encode-path-segment $invoice_section_name), product_name: (encode-path-segment $product_name)} | format pattern "/providers/Microsoft.Billing/billingAccounts/{billing_account_name}/billingProfiles/{billing_profile_name}/invoiceSections/{invoice_section_name}/products/{product_name}/transfer") $qp)
   let req_body = {"destinationBillingProfileId": $destination_billing_profile_id, "destinationInvoiceSectionId": $destination_invoice_section_id} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: ({"api-version": $api_version} | compact), body: $req_body}
 }
 
 # Cancel auto renew for product by product id and invoice section name
@@ -1487,14 +1636,22 @@ export def "providers-microsoft-billing-billing-accounts-billing-profiles-invoic
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --api-version: string # Version of the API to be used with the client request. The current version is 2019-10-01-preview.
-]: nothing -> record<properties: record<endDate: string>> {
+  --auto-renew: string@auto-renew-completer # Request parameters to update auto renew policy a product.
+]: any -> record<properties: record<endDate: string>> {
+  let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($billing_account_name | is-empty) { error make --unspanned { msg: "path parameter 'billingAccountName' must be non-empty" } }
+  if ($billing_profile_name | is-empty) { error make --unspanned { msg: "path parameter 'billingProfileName' must be non-empty" } }
+  if ($invoice_section_name | is-empty) { error make --unspanned { msg: "path parameter 'invoiceSectionName' must be non-empty" } }
+  if ($product_name | is-empty) { error make --unspanned { msg: "path parameter 'productName' must be non-empty" } }
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({billing_account_name: (encode-path-segment $billing_account_name), billing_profile_name: (encode-path-segment $billing_profile_name), invoice_section_name: (encode-path-segment $invoice_section_name), product_name: (encode-path-segment $product_name)} | format pattern "/providers/Microsoft.Billing/billingAccounts/{billing_account_name}/billingProfiles/{billing_profile_name}/invoiceSections/{invoice_section_name}/products/{product_name}/updateAutoRenew") $qp)
+  let req_body = {"autoRenew": $auto_renew} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: ({"api-version": $api_version} | compact), body: $req_body}
 }
 
 # Validates the transfer of products across invoice sections.
@@ -1521,12 +1678,16 @@ export def "providers-microsoft-billing-billing-accounts-billing-profiles-invoic
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($billing_account_name | is-empty) { error make --unspanned { msg: "path parameter 'billingAccountName' must be non-empty" } }
+  if ($billing_profile_name | is-empty) { error make --unspanned { msg: "path parameter 'billingProfileName' must be non-empty" } }
+  if ($invoice_section_name | is-empty) { error make --unspanned { msg: "path parameter 'invoiceSectionName' must be non-empty" } }
+  if ($product_name | is-empty) { error make --unspanned { msg: "path parameter 'productName' must be non-empty" } }
   let full_url = (build-url $base ({billing_account_name: (encode-path-segment $billing_account_name), billing_profile_name: (encode-path-segment $billing_profile_name), invoice_section_name: (encode-path-segment $invoice_section_name), product_name: (encode-path-segment $product_name)} | format pattern "/providers/Microsoft.Billing/billingAccounts/{billing_account_name}/billingProfiles/{billing_profile_name}/invoiceSections/{invoice_section_name}/products/{product_name}/validateTransferEligibility"))
   let req_body = {"destinationBillingProfileId": $destination_billing_profile_id, "destinationInvoiceSectionId": $destination_invoice_section_id} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: {}, body: $req_body}
 }
 
 # Lists the transactions by invoice section name for given start date and end date.
@@ -1554,11 +1715,14 @@ export def "providers-microsoft-billing-billing-accounts-billing-profiles-invoic
 ]: nothing -> record<nextLink: string, value: table<properties: record>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($billing_account_name | is-empty) { error make --unspanned { msg: "path parameter 'billingAccountName' must be non-empty" } }
+  if ($billing_profile_name | is-empty) { error make --unspanned { msg: "path parameter 'billingProfileName' must be non-empty" } }
+  if ($invoice_section_name | is-empty) { error make --unspanned { msg: "path parameter 'invoiceSectionName' must be non-empty" } }
   let qp = [(serialize-qp "api-version" $api_version "scalar") (serialize-qp "periodStartDate" $period_start_date "scalar") (serialize-qp "periodEndDate" $period_end_date "scalar") (serialize-qp "$filter" $filter "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({billing_account_name: (encode-path-segment $billing_account_name), billing_profile_name: (encode-path-segment $billing_profile_name), invoice_section_name: (encode-path-segment $invoice_section_name)} | format pattern "/providers/Microsoft.Billing/billingAccounts/{billing_account_name}/billingProfiles/{billing_profile_name}/invoiceSections/{invoice_section_name}/transactions") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"api-version": $api_version, "periodStartDate": $period_start_date, "periodEndDate": $period_end_date, "$filter": $filter} | compact), body: null}
 }
 
 # Lists all transfer's details initiated from given invoice section.
@@ -1581,10 +1745,13 @@ export def "providers-microsoft-billing-billing-accounts-billing-profiles-invoic
 ]: nothing -> record<nextLink: string, value: table<properties: record>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($billing_account_name | is-empty) { error make --unspanned { msg: "path parameter 'billingAccountName' must be non-empty" } }
+  if ($billing_profile_name | is-empty) { error make --unspanned { msg: "path parameter 'billingProfileName' must be non-empty" } }
+  if ($invoice_section_name | is-empty) { error make --unspanned { msg: "path parameter 'invoiceSectionName' must be non-empty" } }
   let full_url = (build-url $base ({billing_account_name: (encode-path-segment $billing_account_name), billing_profile_name: (encode-path-segment $billing_profile_name), invoice_section_name: (encode-path-segment $invoice_section_name)} | format pattern "/providers/Microsoft.Billing/billingAccounts/{billing_account_name}/billingProfiles/{billing_profile_name}/invoiceSections/{invoice_section_name}/transfers"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
 }
 
 # Cancels the transfer for given transfer Id.
@@ -1608,10 +1775,14 @@ export def "providers-microsoft-billing-billing-accounts-billing-profiles-invoic
 ]: nothing -> record<properties: record<billingAccountId: string, billingProfileId: string, canceledBy: string, creationTime: string, detailedTransferStatus: list<record>, expirationTime: string, initiatorCustomerType: string, initiatorEmailId: string, invoiceSectionId: string, lastModifiedTime: string, recipientEmailId: string, resellerId: string, resellerName: string, transferStatus: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($billing_account_name | is-empty) { error make --unspanned { msg: "path parameter 'billingAccountName' must be non-empty" } }
+  if ($billing_profile_name | is-empty) { error make --unspanned { msg: "path parameter 'billingProfileName' must be non-empty" } }
+  if ($invoice_section_name | is-empty) { error make --unspanned { msg: "path parameter 'invoiceSectionName' must be non-empty" } }
+  if ($transfer_name | is-empty) { error make --unspanned { msg: "path parameter 'transferName' must be non-empty" } }
   let full_url = (build-url $base ({billing_account_name: (encode-path-segment $billing_account_name), billing_profile_name: (encode-path-segment $billing_profile_name), invoice_section_name: (encode-path-segment $invoice_section_name), transfer_name: (encode-path-segment $transfer_name)} | format pattern "/providers/Microsoft.Billing/billingAccounts/{billing_account_name}/billingProfiles/{billing_profile_name}/invoiceSections/{invoice_section_name}/transfers/{transfer_name}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
 }
 
 # Gets the transfer details for given transfer Id.
@@ -1635,10 +1806,14 @@ export def "providers-microsoft-billing-billing-accounts-billing-profiles-invoic
 ]: nothing -> record<properties: record<billingAccountId: string, billingProfileId: string, canceledBy: string, creationTime: string, detailedTransferStatus: list<record>, expirationTime: string, initiatorCustomerType: string, initiatorEmailId: string, invoiceSectionId: string, lastModifiedTime: string, recipientEmailId: string, resellerId: string, resellerName: string, transferStatus: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($billing_account_name | is-empty) { error make --unspanned { msg: "path parameter 'billingAccountName' must be non-empty" } }
+  if ($billing_profile_name | is-empty) { error make --unspanned { msg: "path parameter 'billingProfileName' must be non-empty" } }
+  if ($invoice_section_name | is-empty) { error make --unspanned { msg: "path parameter 'invoiceSectionName' must be non-empty" } }
+  if ($transfer_name | is-empty) { error make --unspanned { msg: "path parameter 'transferName' must be non-empty" } }
   let full_url = (build-url $base ({billing_account_name: (encode-path-segment $billing_account_name), billing_profile_name: (encode-path-segment $billing_profile_name), invoice_section_name: (encode-path-segment $invoice_section_name), transfer_name: (encode-path-segment $transfer_name)} | format pattern "/providers/Microsoft.Billing/billingAccounts/{billing_account_name}/billingProfiles/{billing_profile_name}/invoiceSections/{invoice_section_name}/transfers/{transfer_name}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
 }
 
 # List of invoices for a billing profile.
@@ -1663,11 +1838,13 @@ export def "providers-microsoft-billing-billing-accounts-billing-profiles-invoic
 ]: nothing -> record<nextLink: string, value: table<properties: record>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($billing_account_name | is-empty) { error make --unspanned { msg: "path parameter 'billingAccountName' must be non-empty" } }
+  if ($billing_profile_name | is-empty) { error make --unspanned { msg: "path parameter 'billingProfileName' must be non-empty" } }
   let qp = [(serialize-qp "api-version" $api_version "scalar") (serialize-qp "periodStartDate" $period_start_date "scalar") (serialize-qp "periodEndDate" $period_end_date "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({billing_account_name: (encode-path-segment $billing_account_name), billing_profile_name: (encode-path-segment $billing_profile_name)} | format pattern "/providers/Microsoft.Billing/billingAccounts/{billing_account_name}/billingProfiles/{billing_profile_name}/invoices") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"api-version": $api_version, "periodStartDate": $period_start_date, "periodEndDate": $period_end_date} | compact), body: null}
 }
 
 # Get the invoice by name.
@@ -1691,11 +1868,14 @@ export def "providers-microsoft-billing-billing-accounts-billing-profiles-invoic
 ]: nothing -> record<properties: record<amountDue: record<currency: string, value: float>, billedAmount: record<currency: string, value: float>, billingProfileDisplayName: string, billingProfileId: string, documents: list<record>, dueDate: string, invoiceDate: string, invoicePeriodEndDate: string, invoicePeriodStartDate: string, invoiceType: any, payments: list<record>, purchaseOrderNumber: string, status: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($billing_account_name | is-empty) { error make --unspanned { msg: "path parameter 'billingAccountName' must be non-empty" } }
+  if ($billing_profile_name | is-empty) { error make --unspanned { msg: "path parameter 'billingProfileName' must be non-empty" } }
+  if ($invoice_name | is-empty) { error make --unspanned { msg: "path parameter 'invoiceName' must be non-empty" } }
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({billing_account_name: (encode-path-segment $billing_account_name), billing_profile_name: (encode-path-segment $billing_profile_name), invoice_name: (encode-path-segment $invoice_name)} | format pattern "/providers/Microsoft.Billing/billingAccounts/{billing_account_name}/billingProfiles/{billing_profile_name}/invoices/{invoice_name}") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"api-version": $api_version} | compact), body: null}
 }
 
 # Download price sheet for an invoice.
@@ -1719,11 +1899,14 @@ export def "providers-microsoft-billing-billing-accounts-billing-profiles-invoic
 ]: nothing -> record<expiryTime: string, url: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($billing_account_name | is-empty) { error make --unspanned { msg: "path parameter 'billingAccountName' must be non-empty" } }
+  if ($billing_profile_name | is-empty) { error make --unspanned { msg: "path parameter 'billingProfileName' must be non-empty" } }
+  if ($invoice_name | is-empty) { error make --unspanned { msg: "path parameter 'invoiceName' must be non-empty" } }
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({billing_account_name: (encode-path-segment $billing_account_name), billing_profile_name: (encode-path-segment $billing_profile_name), invoice_name: (encode-path-segment $invoice_name)} | format pattern "/providers/Microsoft.Billing/billingAccounts/{billing_account_name}/billingProfiles/{billing_profile_name}/invoices/{invoice_name}/pricesheet/default/download") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"api-version": $api_version} | compact), body: null}
 }
 
 # Lists the Payment Methods by billing profile Id.
@@ -1747,11 +1930,13 @@ export def "providers-microsoft-billing-billing-accounts-billing-profiles-paymen
 ]: nothing -> record<nextLink: string, value: table<properties: record>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($billing_account_name | is-empty) { error make --unspanned { msg: "path parameter 'billingAccountName' must be non-empty" } }
+  if ($billing_profile_name | is-empty) { error make --unspanned { msg: "path parameter 'billingProfileName' must be non-empty" } }
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({billing_account_name: (encode-path-segment $billing_account_name), billing_profile_name: (encode-path-segment $billing_profile_name)} | format pattern "/providers/Microsoft.Billing/billingAccounts/{billing_account_name}/billingProfiles/{billing_profile_name}/paymentMethods") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"api-version": $api_version} | compact), body: null}
 }
 
 # The policy for a given billing account name and billing profile name.
@@ -1775,11 +1960,13 @@ export def "providers-microsoft-billing-billing-accounts-billing-profiles-polici
 ]: nothing -> record<properties: record<marketplacePurchases: string, reservationPurchases: string, viewCharges: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($billing_account_name | is-empty) { error make --unspanned { msg: "path parameter 'billingAccountName' must be non-empty" } }
+  if ($billing_profile_name | is-empty) { error make --unspanned { msg: "path parameter 'billingProfileName' must be non-empty" } }
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({billing_account_name: (encode-path-segment $billing_account_name), billing_profile_name: (encode-path-segment $billing_profile_name)} | format pattern "/providers/Microsoft.Billing/billingAccounts/{billing_account_name}/billingProfiles/{billing_profile_name}/policies/default") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"api-version": $api_version} | compact), body: null}
 }
 
 # The operation to update a policy.
@@ -1805,13 +1992,15 @@ export def "providers-microsoft-billing-billing-accounts-billing-profiles-polici
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($billing_account_name | is-empty) { error make --unspanned { msg: "path parameter 'billingAccountName' must be non-empty" } }
+  if ($billing_profile_name | is-empty) { error make --unspanned { msg: "path parameter 'billingProfileName' must be non-empty" } }
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({billing_account_name: (encode-path-segment $billing_account_name), billing_profile_name: (encode-path-segment $billing_profile_name)} | format pattern "/providers/Microsoft.Billing/billingAccounts/{billing_account_name}/billingProfiles/{billing_profile_name}/policies/default") $qp)
   let req_body = {"properties": $properties} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: ({"api-version": $api_version} | compact), body: $req_body}
 }
 
 # Download price sheet for a billing profile.
@@ -1834,11 +2023,13 @@ export def "providers-microsoft-billing-billing-accounts-billing-profiles-prices
 ]: nothing -> record<expiryTime: string, url: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($billing_account_name | is-empty) { error make --unspanned { msg: "path parameter 'billingAccountName' must be non-empty" } }
+  if ($billing_profile_name | is-empty) { error make --unspanned { msg: "path parameter 'billingProfileName' must be non-empty" } }
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({billing_account_name: (encode-path-segment $billing_account_name), billing_profile_name: (encode-path-segment $billing_profile_name)} | format pattern "/providers/Microsoft.Billing/billingAccounts/{billing_account_name}/billingProfiles/{billing_profile_name}/pricesheet/default/download") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"api-version": $api_version} | compact), body: null}
 }
 
 # Lists the transactions by billing profile name for given start date and end date.
@@ -1865,11 +2056,13 @@ export def "providers-microsoft-billing-billing-accounts-billing-profiles-transa
 ]: nothing -> record<nextLink: string, value: table<properties: record>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($billing_account_name | is-empty) { error make --unspanned { msg: "path parameter 'billingAccountName' must be non-empty" } }
+  if ($billing_profile_name | is-empty) { error make --unspanned { msg: "path parameter 'billingProfileName' must be non-empty" } }
   let qp = [(serialize-qp "api-version" $api_version "scalar") (serialize-qp "periodStartDate" $period_start_date "scalar") (serialize-qp "periodEndDate" $period_end_date "scalar") (serialize-qp "$filter" $filter "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({billing_account_name: (encode-path-segment $billing_account_name), billing_profile_name: (encode-path-segment $billing_profile_name)} | format pattern "/providers/Microsoft.Billing/billingAccounts/{billing_account_name}/billingProfiles/{billing_profile_name}/transactions") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"api-version": $api_version, "periodStartDate": $period_start_date, "periodEndDate": $period_end_date, "$filter": $filter} | compact), body: null}
 }
 
 # Get the transaction.
@@ -1896,11 +2089,14 @@ export def "providers-microsoft-billing-billing-accounts-billing-profiles-transa
 ]: nothing -> record<properties: record<billingProfileDisplayName: string, billingProfileId: string, customerDisplayName: string, customerId: string, date: string, invoice: string, invoiceSectionDisplayName: string, invoiceSectionId: string, kind: string, orderId: string, orderName: string, productDescription: string, productFamily: string, productType: string, productTypeId: string, quantity: int, subscriptionId: string, subscriptionName: string, transactionAmount: record<currency: string, value: float>, transactionType: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($billing_account_name | is-empty) { error make --unspanned { msg: "path parameter 'billingAccountName' must be non-empty" } }
+  if ($billing_profile_name | is-empty) { error make --unspanned { msg: "path parameter 'billingProfileName' must be non-empty" } }
+  if ($transaction_name | is-empty) { error make --unspanned { msg: "path parameter 'transactionName' must be non-empty" } }
   let qp = [(serialize-qp "periodStartDate" $period_start_date "scalar") (serialize-qp "periodEndDate" $period_end_date "scalar") (serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({billing_account_name: (encode-path-segment $billing_account_name), billing_profile_name: (encode-path-segment $billing_profile_name), transaction_name: (encode-path-segment $transaction_name)} | format pattern "/providers/Microsoft.Billing/billingAccounts/{billing_account_name}/billingProfiles/{billing_profile_name}/transactions/{transaction_name}") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"periodStartDate": $period_start_date, "periodEndDate": $period_end_date, "api-version": $api_version} | compact), body: null}
 }
 
 # Get the role assignments on the Billing Account
@@ -1922,11 +2118,12 @@ export def "providers-microsoft-billing-billing-accounts-billing-role-assignment
 ]: nothing -> record<value: table<properties: record>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($billing_account_name | is-empty) { error make --unspanned { msg: "path parameter 'billingAccountName' must be non-empty" } }
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({billing_account_name: (encode-path-segment $billing_account_name)} | format pattern "/providers/Microsoft.Billing/billingAccounts/{billing_account_name}/billingRoleAssignments") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"api-version": $api_version} | compact), body: null}
 }
 
 # Delete the role assignment on this billing account
@@ -1949,11 +2146,13 @@ export def "providers-microsoft-billing-billing-accounts-billing-role-assignment
 ]: nothing -> record<properties: record<createdByPrincipalId: string, createdByPrincipalTenantId: string, createdOn: string, name: string, principalId: string, roleDefinitionName: string, scope: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($billing_account_name | is-empty) { error make --unspanned { msg: "path parameter 'billingAccountName' must be non-empty" } }
+  if ($billing_role_assignment_name | is-empty) { error make --unspanned { msg: "path parameter 'billingRoleAssignmentName' must be non-empty" } }
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({billing_account_name: (encode-path-segment $billing_account_name), billing_role_assignment_name: (encode-path-segment $billing_role_assignment_name)} | format pattern "/providers/Microsoft.Billing/billingAccounts/{billing_account_name}/billingRoleAssignments/{billing_role_assignment_name}") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"api-version": $api_version} | compact), body: null}
 }
 
 # Get the role assignment for the caller
@@ -1976,11 +2175,13 @@ export def "providers-microsoft-billing-billing-accounts-billing-role-assignment
 ]: nothing -> record<properties: record<createdByPrincipalId: string, createdByPrincipalTenantId: string, createdOn: string, name: string, principalId: string, roleDefinitionName: string, scope: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($billing_account_name | is-empty) { error make --unspanned { msg: "path parameter 'billingAccountName' must be non-empty" } }
+  if ($billing_role_assignment_name | is-empty) { error make --unspanned { msg: "path parameter 'billingRoleAssignmentName' must be non-empty" } }
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({billing_account_name: (encode-path-segment $billing_account_name), billing_role_assignment_name: (encode-path-segment $billing_role_assignment_name)} | format pattern "/providers/Microsoft.Billing/billingAccounts/{billing_account_name}/billingRoleAssignments/{billing_role_assignment_name}") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"api-version": $api_version} | compact), body: null}
 }
 
 # Lists the role definition for a billing account
@@ -2002,11 +2203,12 @@ export def "providers-microsoft-billing-billing-accounts-billing-role-definition
 ]: nothing -> record<value: table<properties: record>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($billing_account_name | is-empty) { error make --unspanned { msg: "path parameter 'billingAccountName' must be non-empty" } }
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({billing_account_name: (encode-path-segment $billing_account_name)} | format pattern "/providers/Microsoft.Billing/billingAccounts/{billing_account_name}/billingRoleDefinitions") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"api-version": $api_version} | compact), body: null}
 }
 
 # Gets the role definition for a role
@@ -2029,11 +2231,13 @@ export def "providers-microsoft-billing-billing-accounts-billing-role-definition
 ]: nothing -> record<properties: record<description: string, permissions: list<record>, roleName: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($billing_account_name | is-empty) { error make --unspanned { msg: "path parameter 'billingAccountName' must be non-empty" } }
+  if ($billing_role_definition_name | is-empty) { error make --unspanned { msg: "path parameter 'billingRoleDefinitionName' must be non-empty" } }
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({billing_account_name: (encode-path-segment $billing_account_name), billing_role_definition_name: (encode-path-segment $billing_role_definition_name)} | format pattern "/providers/Microsoft.Billing/billingAccounts/{billing_account_name}/billingRoleDefinitions/{billing_role_definition_name}") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"api-version": $api_version} | compact), body: null}
 }
 
 # Lists billing subscriptions by billing account name.
@@ -2056,11 +2260,12 @@ export def "providers-microsoft-billing-billing-accounts-billing-subscriptions l
 ]: nothing -> record<nextLink: string, value: table<properties: record>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($billing_account_name | is-empty) { error make --unspanned { msg: "path parameter 'billingAccountName' must be non-empty" } }
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({billing_account_name: (encode-path-segment $billing_account_name)} | format pattern "/providers/Microsoft.Billing/billingAccounts/{billing_account_name}/billingSubscriptions") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"api-version": $api_version} | compact), body: null}
 }
 
 # Lists invoices by billing subscriptions name.
@@ -2086,11 +2291,13 @@ export def "providers-microsoft-billing-billing-accounts-billing-subscriptions-i
 ]: nothing -> record<nextLink: string, value: table<properties: record>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($billing_account_name | is-empty) { error make --unspanned { msg: "path parameter 'billingAccountName' must be non-empty" } }
+  if ($billing_subscription_name | is-empty) { error make --unspanned { msg: "path parameter 'billingSubscriptionName' must be non-empty" } }
   let qp = [(serialize-qp "periodStartDate" $period_start_date "scalar") (serialize-qp "periodEndDate" $period_end_date "scalar") (serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({billing_account_name: (encode-path-segment $billing_account_name), billing_subscription_name: (encode-path-segment $billing_subscription_name)} | format pattern "/providers/Microsoft.Billing/billingAccounts/{billing_account_name}/billingSubscriptions/{billing_subscription_name}/invoices") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"periodStartDate": $period_start_date, "periodEndDate": $period_end_date, "api-version": $api_version} | compact), body: null}
 }
 
 # Gets the invoice by name.
@@ -2115,11 +2322,14 @@ export def "providers-microsoft-billing-billing-accounts-billing-subscriptions-i
 ]: nothing -> record<properties: record<amountDue: record<currency: string, value: float>, billedAmount: record<currency: string, value: float>, billingProfileDisplayName: string, billingProfileId: string, documents: list<record>, dueDate: string, invoiceDate: string, invoicePeriodEndDate: string, invoicePeriodStartDate: string, invoiceType: any, payments: list<record>, purchaseOrderNumber: string, status: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($billing_account_name | is-empty) { error make --unspanned { msg: "path parameter 'billingAccountName' must be non-empty" } }
+  if ($billing_subscription_name | is-empty) { error make --unspanned { msg: "path parameter 'billingSubscriptionName' must be non-empty" } }
+  if ($invoice_name | is-empty) { error make --unspanned { msg: "path parameter 'invoiceName' must be non-empty" } }
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({billing_account_name: (encode-path-segment $billing_account_name), billing_subscription_name: (encode-path-segment $billing_subscription_name), invoice_name: (encode-path-segment $invoice_name)} | format pattern "/providers/Microsoft.Billing/billingAccounts/{billing_account_name}/billingSubscriptions/{billing_subscription_name}/invoices/{invoice_name}") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"api-version": $api_version} | compact), body: null}
 }
 
 # The operation to add a role assignment to a billing account.
@@ -2144,13 +2354,14 @@ export def "providers-microsoft-billing-billing-accounts-create-billing-role-ass
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($billing_account_name | is-empty) { error make --unspanned { msg: "path parameter 'billingAccountName' must be non-empty" } }
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({billing_account_name: (encode-path-segment $billing_account_name)} | format pattern "/providers/Microsoft.Billing/billingAccounts/{billing_account_name}/createBillingRoleAssignment") $qp)
   let req_body = {"billingRoleDefinitionId": $billing_role_definition_id, "principalId": $principal_id} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: ({"api-version": $api_version} | compact), body: $req_body}
 }
 
 # Lists customers which the current user can work with on-behalf of a partner.
@@ -2174,11 +2385,12 @@ export def "providers-microsoft-billing-billing-accounts-customers list" [
 ]: nothing -> record<nextLink: string, value: table<properties: record>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($billing_account_name | is-empty) { error make --unspanned { msg: "path parameter 'billingAccountName' must be non-empty" } }
   let qp = [(serialize-qp "api-version" $api_version "scalar") (serialize-qp "$filter" $filter "scalar") (serialize-qp "$skiptoken" $skiptoken "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({billing_account_name: (encode-path-segment $billing_account_name)} | format pattern "/providers/Microsoft.Billing/billingAccounts/{billing_account_name}/customers") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"api-version": $api_version, "$filter": $filter, "$skiptoken": $skiptoken} | compact), body: null}
 }
 
 # Gets a customer by its id.
@@ -2202,11 +2414,13 @@ export def "providers-microsoft-billing-billing-accounts-customers get" [
 ]: nothing -> record<properties: record<displayName: string, enabledAzurePlans: list<record>, resellers: list<record>>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($billing_account_name | is-empty) { error make --unspanned { msg: "path parameter 'billingAccountName' must be non-empty" } }
+  if ($customer_name | is-empty) { error make --unspanned { msg: "path parameter 'customerName' must be non-empty" } }
   let qp = [(serialize-qp "api-version" $api_version "scalar") (serialize-qp "$expand" $expand "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({billing_account_name: (encode-path-segment $billing_account_name), customer_name: (encode-path-segment $customer_name)} | format pattern "/providers/Microsoft.Billing/billingAccounts/{billing_account_name}/customers/{customer_name}") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"api-version": $api_version, "$expand": $expand} | compact), body: null}
 }
 
 # Lists all billing permissions the caller has for a customer.
@@ -2229,11 +2443,13 @@ export def "providers-microsoft-billing-billing-accounts-customers-billing-permi
 ]: nothing -> record<value: table<actions: list, notActions: list>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($billing_account_name | is-empty) { error make --unspanned { msg: "path parameter 'billingAccountName' must be non-empty" } }
+  if ($customer_name | is-empty) { error make --unspanned { msg: "path parameter 'customerName' must be non-empty" } }
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({billing_account_name: (encode-path-segment $billing_account_name), customer_name: (encode-path-segment $customer_name)} | format pattern "/providers/Microsoft.Billing/billingAccounts/{billing_account_name}/customers/{customer_name}/billingPermissions") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"api-version": $api_version} | compact), body: null}
 }
 
 # Lists billing subscription by customer id.
@@ -2257,11 +2473,13 @@ export def "providers-microsoft-billing-billing-accounts-customers-billing-subsc
 ]: nothing -> record<nextLink: string, value: table<properties: record>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($billing_account_name | is-empty) { error make --unspanned { msg: "path parameter 'billingAccountName' must be non-empty" } }
+  if ($customer_name | is-empty) { error make --unspanned { msg: "path parameter 'customerName' must be non-empty" } }
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({billing_account_name: (encode-path-segment $billing_account_name), customer_name: (encode-path-segment $customer_name)} | format pattern "/providers/Microsoft.Billing/billingAccounts/{billing_account_name}/customers/{customer_name}/billingSubscriptions") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"api-version": $api_version} | compact), body: null}
 }
 
 # Get a single billing subscription by id.
@@ -2286,11 +2504,14 @@ export def "providers-microsoft-billing-billing-accounts-customers-billing-subsc
 ]: nothing -> record<properties: record<billingProfileDisplayName: string, billingProfileId: string, customerDisplayName: string, customerId: string, displayName: string, invoiceSectionDisplayName: string, invoiceSectionId: string, lastMonthCharges: record<currency: string, value: float>, monthToDateCharges: record<currency: string, value: float>, reseller: record<description: string, resellerId: string>, skuDescription: string, skuId: string, subscriptionBillingStatus: string, subscriptionId: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($billing_account_name | is-empty) { error make --unspanned { msg: "path parameter 'billingAccountName' must be non-empty" } }
+  if ($customer_name | is-empty) { error make --unspanned { msg: "path parameter 'customerName' must be non-empty" } }
+  if ($billing_subscription_name | is-empty) { error make --unspanned { msg: "path parameter 'billingSubscriptionName' must be non-empty" } }
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({billing_account_name: (encode-path-segment $billing_account_name), customer_name: (encode-path-segment $customer_name), billing_subscription_name: (encode-path-segment $billing_subscription_name)} | format pattern "/providers/Microsoft.Billing/billingAccounts/{billing_account_name}/customers/{customer_name}/billingSubscriptions/{billing_subscription_name}") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"api-version": $api_version} | compact), body: null}
 }
 
 # The policy for a given billing account name and customer name.
@@ -2314,11 +2535,13 @@ export def "providers-microsoft-billing-billing-accounts-customers-policies-defa
 ]: nothing -> record<properties: record<viewCharges: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($billing_account_name | is-empty) { error make --unspanned { msg: "path parameter 'billingAccountName' must be non-empty" } }
+  if ($customer_name | is-empty) { error make --unspanned { msg: "path parameter 'customerName' must be non-empty" } }
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({billing_account_name: (encode-path-segment $billing_account_name), customer_name: (encode-path-segment $customer_name)} | format pattern "/providers/Microsoft.Billing/billingAccounts/{billing_account_name}/customers/{customer_name}/policies/default") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"api-version": $api_version} | compact), body: null}
 }
 
 # The operation to update a Customer policy.
@@ -2344,13 +2567,15 @@ export def "providers-microsoft-billing-billing-accounts-customers-policies-defa
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($billing_account_name | is-empty) { error make --unspanned { msg: "path parameter 'billingAccountName' must be non-empty" } }
+  if ($customer_name | is-empty) { error make --unspanned { msg: "path parameter 'customerName' must be non-empty" } }
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({billing_account_name: (encode-path-segment $billing_account_name), customer_name: (encode-path-segment $customer_name)} | format pattern "/providers/Microsoft.Billing/billingAccounts/{billing_account_name}/customers/{customer_name}/policies/default") $qp)
   let req_body = {"properties": $properties} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: ({"api-version": $api_version} | compact), body: $req_body}
 }
 
 # Lists products by customer id.
@@ -2375,11 +2600,13 @@ export def "providers-microsoft-billing-billing-accounts-customers-products list
 ]: nothing -> record<nextLink: string, value: table<properties: record>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($billing_account_name | is-empty) { error make --unspanned { msg: "path parameter 'billingAccountName' must be non-empty" } }
+  if ($customer_name | is-empty) { error make --unspanned { msg: "path parameter 'customerName' must be non-empty" } }
   let qp = [(serialize-qp "api-version" $api_version "scalar") (serialize-qp "$filter" $filter "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({billing_account_name: (encode-path-segment $billing_account_name), customer_name: (encode-path-segment $customer_name)} | format pattern "/providers/Microsoft.Billing/billingAccounts/{billing_account_name}/customers/{customer_name}/products") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"api-version": $api_version, "$filter": $filter} | compact), body: null}
 }
 
 # Get a customer's product by name.
@@ -2404,11 +2631,14 @@ export def "providers-microsoft-billing-billing-accounts-customers-products get"
 ]: nothing -> record<properties: record<availabilityId: string, billingFrequency: string, billingProfileDisplayName: string, billingProfileId: string, customerDisplayName: string, customerId: string, displayName: string, endDate: string, invoiceSectionDisplayName: string, invoiceSectionId: string, lastCharge: record<currency: string, value: float>, lastChargeDate: string, parentProductId: string, productType: string, productTypeId: string, purchaseDate: string, quantity: float, reseller: record<description: string, resellerId: string>, skuDescription: string, skuId: string, status: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($billing_account_name | is-empty) { error make --unspanned { msg: "path parameter 'billingAccountName' must be non-empty" } }
+  if ($customer_name | is-empty) { error make --unspanned { msg: "path parameter 'customerName' must be non-empty" } }
+  if ($product_name | is-empty) { error make --unspanned { msg: "path parameter 'productName' must be non-empty" } }
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({billing_account_name: (encode-path-segment $billing_account_name), customer_name: (encode-path-segment $customer_name), product_name: (encode-path-segment $product_name)} | format pattern "/providers/Microsoft.Billing/billingAccounts/{billing_account_name}/customers/{customer_name}/products/{product_name}") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"api-version": $api_version} | compact), body: null}
 }
 
 # Lists the transactions by customer id for given start date and end date.
@@ -2435,11 +2665,13 @@ export def "providers-microsoft-billing-billing-accounts-customers-transactions 
 ]: nothing -> record<nextLink: string, value: table<properties: record>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($billing_account_name | is-empty) { error make --unspanned { msg: "path parameter 'billingAccountName' must be non-empty" } }
+  if ($customer_name | is-empty) { error make --unspanned { msg: "path parameter 'customerName' must be non-empty" } }
   let qp = [(serialize-qp "api-version" $api_version "scalar") (serialize-qp "periodStartDate" $period_start_date "scalar") (serialize-qp "periodEndDate" $period_end_date "scalar") (serialize-qp "$filter" $filter "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({billing_account_name: (encode-path-segment $billing_account_name), customer_name: (encode-path-segment $customer_name)} | format pattern "/providers/Microsoft.Billing/billingAccounts/{billing_account_name}/customers/{customer_name}/transactions") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"api-version": $api_version, "periodStartDate": $period_start_date, "periodEndDate": $period_end_date, "$filter": $filter} | compact), body: null}
 }
 
 # Lists all departments for a user which he has access to.
@@ -2463,11 +2695,12 @@ export def "providers-microsoft-billing-billing-accounts-departments list-by-nam
 ]: nothing -> record<nextLink: string, value: table<properties: record>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($billing_account_name | is-empty) { error make --unspanned { msg: "path parameter 'billingAccountName' must be non-empty" } }
   let qp = [(serialize-qp "api-version" $api_version "scalar") (serialize-qp "$expand" $expand "scalar") (serialize-qp "$filter" $filter "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({billing_account_name: (encode-path-segment $billing_account_name)} | format pattern "/providers/Microsoft.Billing/billingAccounts/{billing_account_name}/departments") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"api-version": $api_version, "$expand": $expand, "$filter": $filter} | compact), body: null}
 }
 
 # Get the department by id.
@@ -2492,11 +2725,13 @@ export def "providers-microsoft-billing-billing-accounts-departments get" [
 ]: nothing -> record<properties: record<costCenter: string, departmentName: string, enrollmentAccounts: list<record>, status: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($billing_account_name | is-empty) { error make --unspanned { msg: "path parameter 'billingAccountName' must be non-empty" } }
+  if ($department_name | is-empty) { error make --unspanned { msg: "path parameter 'departmentName' must be non-empty" } }
   let qp = [(serialize-qp "api-version" $api_version "scalar") (serialize-qp "$expand" $expand "scalar") (serialize-qp "$filter" $filter "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({billing_account_name: (encode-path-segment $billing_account_name), department_name: (encode-path-segment $department_name)} | format pattern "/providers/Microsoft.Billing/billingAccounts/{billing_account_name}/departments/{department_name}") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"api-version": $api_version, "$expand": $expand, "$filter": $filter} | compact), body: null}
 }
 
 # Lists all Enrollment Accounts for a user which he has access to.
@@ -2520,11 +2755,12 @@ export def "providers-microsoft-billing-billing-accounts-enrollment-accounts lis
 ]: nothing -> record<nextLink: string, value: table<properties: record>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($billing_account_name | is-empty) { error make --unspanned { msg: "path parameter 'billingAccountName' must be non-empty" } }
   let qp = [(serialize-qp "api-version" $api_version "scalar") (serialize-qp "$expand" $expand "scalar") (serialize-qp "$filter" $filter "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({billing_account_name: (encode-path-segment $billing_account_name)} | format pattern "/providers/Microsoft.Billing/billingAccounts/{billing_account_name}/enrollmentAccounts") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"api-version": $api_version, "$expand": $expand, "$filter": $filter} | compact), body: null}
 }
 
 # Get the enrollment account by id.
@@ -2549,11 +2785,13 @@ export def "providers-microsoft-billing-billing-accounts-enrollment-accounts get
 ]: nothing -> record<properties: record<accountName: string, accountOwner: string, costCenter: string, department: record<properties: record>, endDate: string, startDate: string, status: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($billing_account_name | is-empty) { error make --unspanned { msg: "path parameter 'billingAccountName' must be non-empty" } }
+  if ($enrollment_account_name | is-empty) { error make --unspanned { msg: "path parameter 'enrollmentAccountName' must be non-empty" } }
   let qp = [(serialize-qp "api-version" $api_version "scalar") (serialize-qp "$expand" $expand "scalar") (serialize-qp "$filter" $filter "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({billing_account_name: (encode-path-segment $billing_account_name), enrollment_account_name: (encode-path-segment $enrollment_account_name)} | format pattern "/providers/Microsoft.Billing/billingAccounts/{billing_account_name}/enrollmentAccounts/{enrollment_account_name}") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"api-version": $api_version, "$expand": $expand, "$filter": $filter} | compact), body: null}
 }
 
 # List of invoices for a billing account.
@@ -2577,11 +2815,12 @@ export def "providers-microsoft-billing-billing-accounts-invoices list" [
 ]: nothing -> record<nextLink: string, value: table<properties: record>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($billing_account_name | is-empty) { error make --unspanned { msg: "path parameter 'billingAccountName' must be non-empty" } }
   let qp = [(serialize-qp "api-version" $api_version "scalar") (serialize-qp "periodStartDate" $period_start_date "scalar") (serialize-qp "periodEndDate" $period_end_date "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({billing_account_name: (encode-path-segment $billing_account_name)} | format pattern "/providers/Microsoft.Billing/billingAccounts/{billing_account_name}/invoices") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"api-version": $api_version, "periodStartDate": $period_start_date, "periodEndDate": $period_end_date} | compact), body: null}
 }
 
 # Lists all invoice sections with create subscription permission for a user.
@@ -2603,11 +2842,12 @@ export def "providers-microsoft-billing-billing-accounts-list-invoice-sections-w
 ]: nothing -> record<nextLink: string, value: table<billingProfileDisplayName: string, billingProfileId: string, enabledAzurePlans: list, invoiceSectionDisplayName: string, invoiceSectionId: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($billing_account_name | is-empty) { error make --unspanned { msg: "path parameter 'billingAccountName' must be non-empty" } }
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({billing_account_name: (encode-path-segment $billing_account_name)} | format pattern "/providers/Microsoft.Billing/billingAccounts/{billing_account_name}/listInvoiceSectionsWithCreateSubscriptionPermission") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"api-version": $api_version} | compact), body: null}
 }
 
 # Lists the Payment Methods by billing account Id.
@@ -2630,11 +2870,12 @@ export def "providers-microsoft-billing-billing-accounts-payment-methods list" [
 ]: nothing -> record<nextLink: string, value: table<properties: record>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($billing_account_name | is-empty) { error make --unspanned { msg: "path parameter 'billingAccountName' must be non-empty" } }
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({billing_account_name: (encode-path-segment $billing_account_name)} | format pattern "/providers/Microsoft.Billing/billingAccounts/{billing_account_name}/paymentMethods") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"api-version": $api_version} | compact), body: null}
 }
 
 # Lists products by billing account name.
@@ -2658,11 +2899,12 @@ export def "providers-microsoft-billing-billing-accounts-products list" [
 ]: nothing -> record<nextLink: string, value: table<properties: record>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($billing_account_name | is-empty) { error make --unspanned { msg: "path parameter 'billingAccountName' must be non-empty" } }
   let qp = [(serialize-qp "api-version" $api_version "scalar") (serialize-qp "$filter" $filter "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({billing_account_name: (encode-path-segment $billing_account_name)} | format pattern "/providers/Microsoft.Billing/billingAccounts/{billing_account_name}/products") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"api-version": $api_version, "$filter": $filter} | compact), body: null}
 }
 
 # Lists the transactions by billing account name for given start and end date.
@@ -2688,11 +2930,12 @@ export def "providers-microsoft-billing-billing-accounts-transactions list" [
 ]: nothing -> record<nextLink: string, value: table<properties: record>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($billing_account_name | is-empty) { error make --unspanned { msg: "path parameter 'billingAccountName' must be non-empty" } }
   let qp = [(serialize-qp "api-version" $api_version "scalar") (serialize-qp "periodStartDate" $period_start_date "scalar") (serialize-qp "periodEndDate" $period_end_date "scalar") (serialize-qp "$filter" $filter "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({billing_account_name: (encode-path-segment $billing_account_name)} | format pattern "/providers/Microsoft.Billing/billingAccounts/{billing_account_name}/transactions") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"api-version": $api_version, "periodStartDate": $period_start_date, "periodEndDate": $period_end_date, "$filter": $filter} | compact), body: null}
 }
 
 # Lists all of the available billing REST API operations.
@@ -2717,7 +2960,7 @@ export def "providers-microsoft-billing-operations list" [
   let full_url = (build-url $base "/providers/Microsoft.Billing/operations" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"api-version": $api_version} | compact), body: null}
 }
 
 # Lists the transfers received by caller.
@@ -2740,7 +2983,7 @@ export def "providers-microsoft-billing-transfers list-recipient" [
   let full_url = (build-url $base "/providers/Microsoft.Billing/transfers")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
 }
 
 # Gets the transfer with given transfer Id.
@@ -2761,10 +3004,11 @@ export def "providers-microsoft-billing-transfers get-recipient" [
 ]: nothing -> record<properties: record<allowedProductType: list<string>, canceledBy: string, creationTime: string, detailedTransferStatus: list<record>, expirationTime: string, initiatorCustomerType: string, initiatorEmailId: string, lastModifiedTime: string, recipientEmailId: string, resellerId: string, resellerName: string, transferStatus: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($transfer_name | is-empty) { error make --unspanned { msg: "path parameter 'transferName' must be non-empty" } }
   let full_url = (build-url $base ({transfer_name: (encode-path-segment $transfer_name)} | format pattern "/providers/Microsoft.Billing/transfers/{transfer_name}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
 }
 
 # Accepts the transfer with given transfer Id.
@@ -2788,12 +3032,13 @@ export def "providers-microsoft-billing-transfers-accept-transfer create-recipie
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($transfer_name | is-empty) { error make --unspanned { msg: "path parameter 'transferName' must be non-empty" } }
   let full_url = (build-url $base ({transfer_name: (encode-path-segment $transfer_name)} | format pattern "/providers/Microsoft.Billing/transfers/{transfer_name}/acceptTransfer"))
   let req_body = {"properties": $properties} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: {}, body: $req_body}
 }
 
 # Declines the transfer with given transfer Id.
@@ -2814,10 +3059,11 @@ export def "providers-microsoft-billing-transfers-decline-transfer create-recipi
 ]: nothing -> record<properties: record<allowedProductType: list<string>, canceledBy: string, creationTime: string, detailedTransferStatus: list<record>, expirationTime: string, initiatorCustomerType: string, initiatorEmailId: string, lastModifiedTime: string, recipientEmailId: string, resellerId: string, resellerName: string, transferStatus: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($transfer_name | is-empty) { error make --unspanned { msg: "path parameter 'transferName' must be non-empty" } }
   let full_url = (build-url $base ({transfer_name: (encode-path-segment $transfer_name)} | format pattern "/providers/Microsoft.Billing/transfers/{transfer_name}/declineTransfer"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
 }
 
 # Validates if the products can be transferred in the context of the given transfer name.
@@ -2841,12 +3087,13 @@ export def "providers-microsoft-billing-transfers-validate-transfer validate-rec
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($transfer_name | is-empty) { error make --unspanned { msg: "path parameter 'transferName' must be non-empty" } }
   let full_url = (build-url $base ({transfer_name: (encode-path-segment $transfer_name)} | format pattern "/providers/Microsoft.Billing/transfers/{transfer_name}/validateTransfer"))
   let req_body = {"properties": $properties} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: {}, body: $req_body}
 }
 
 # Validates the address.
@@ -2884,7 +3131,7 @@ export def "providers-microsoft-billing-validate-address validate" [
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: ({"api-version": $api_version} | compact), body: $req_body}
 }
 
 # Get the current line of credit.
@@ -2906,11 +3153,12 @@ export def "subscriptions-providers-microsoft-billing-billing-accounts-default-l
 ]: nothing -> record<properties: record<creditLimit: record<currency: string, value: float>, reason: string, remainingBalance: record<currency: string, value: float>, status: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($subscription_id | is-empty) { error make --unspanned { msg: "path parameter 'subscriptionId' must be non-empty" } }
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id)} | format pattern "/subscriptions/{subscription_id}/providers/Microsoft.Billing/billingAccounts/default/lineOfCredit/default") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"api-version": $api_version} | compact), body: null}
 }
 
 # Increase the current line of credit.
@@ -2935,13 +3183,14 @@ export def "subscriptions-providers-microsoft-billing-billing-accounts-default-l
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($subscription_id | is-empty) { error make --unspanned { msg: "path parameter 'subscriptionId' must be non-empty" } }
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id)} | format pattern "/subscriptions/{subscription_id}/providers/Microsoft.Billing/billingAccounts/default/lineOfCredit/default") $qp)
   let req_body = {"properties": $properties} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: ({"api-version": $api_version} | compact), body: $req_body}
 }
 
 # Get billing property by subscription Id.
@@ -2964,9 +3213,10 @@ export def "subscriptions-providers-microsoft-billing-billing-property-default g
 ]: nothing -> record<properties: record<billingAccountDisplayName: string, billingAccountId: string, billingProfileDisplayName: string, billingProfileId: string, billingTenantId: string, costCenter: string, invoiceSectionDisplayName: string, invoiceSectionId: string, productId: string, productName: string, skuDescription: string, skuId: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($subscription_id | is-empty) { error make --unspanned { msg: "path parameter 'subscriptionId' must be non-empty" } }
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id)} | format pattern "/subscriptions/{subscription_id}/providers/Microsoft.Billing/billingProperty/default") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"api-version": $api_version} | compact), body: null}
 }

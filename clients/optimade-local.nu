@@ -3,16 +3,17 @@
 # Auth: --token flag or $env.OPTIMADE_API_TOKEN
 
 const BASE_URL = "http://optimade.local"
-const DEFAULT_AUTH = "bearer"
 
-# Build auth: returns {headers: record, query: string}
+# Build auth: returns {scheme: string, headers: record, query: string, location: string}.
+# `location` is "header" | "query" | "cookie" | "none" and tells dry-run callers
+# where the token went without inspecting headers/query themselves.
 def build-auth [token?: string, auth_scheme?: string]: nothing -> record {
   let token_val = if ($token != null) and ($token | is-not-empty) { $token } else { $env | get -o OPTIMADE_API_TOKEN | default "" }
   let scheme = ($auth_scheme | default "bearer")
-  if ($scheme == "none") or ($token_val | is-empty) { return {headers: {}, query: ""} }
+  if ($scheme == "none") or ($token_val | is-empty) { return {scheme: $scheme, headers: {}, query: "", location: "none"} }
   match $scheme {
-    "none" => { {headers: {}, query: ""} }
-    _ => { {headers: {Authorization: $"Bearer ($token_val)"}, query: ""} }
+    "none" => { {scheme: $scheme, headers: {}, query: "", location: "none"} }
+    _ => { {scheme: $scheme, headers: {Authorization: $"Bearer ($token_val)"}, query: "", location: "header"} }
   }
 }
 
@@ -21,8 +22,9 @@ def build-auth [token?: string, auth_scheme?: string]: nothing -> record {
 # ([A-Za-z0-9-._~]) stay literal; everything else gets %XX.
 def serialize-qp [name: string, value: any, style: string]: nothing -> list<string> {
   if ($value == null) { return [] }
-  let n = (encode-path-segment $name)
   let is_list = ($value | describe | str starts-with "list")
+  if $is_list and ($value | is-empty) { return [] }
+  let n = (encode-path-segment $name)
   if ($value | describe | str starts-with "record") { return ($value | transpose k v | each { $"($n)[(encode-path-segment $in.k)]=(encode-path-segment $in.v)" }) }
   if not $is_list { return [$"($n)=(encode-path-segment $value)"] }
   match $style {
@@ -53,22 +55,42 @@ def build-url [base: string, path: string, query?: string]: nothing -> string {
   if ($query != null) and ($query | is-not-empty) { $result | upsert query $query | url join } else { $result | url join }
 }
 
+# Build the dry-run record returned by --dry-run. Shape:
+#   {dry_run: true, method, url, query: <record>, headers, body, content_type, timeout,
+#    auth: {scheme, location}}
+# `meta` carries logical-form data (the query record by spec name, the pre-serialization
+# body) that do-request itself cannot reconstruct from its wire-format args.
+def build-dry-run-record [method: string, url: string, auth: record, content_type: string, timeout: duration, meta?: record]: nothing -> record {
+  let m = ($meta | default {})
+  {
+    dry_run: true
+    method: $method
+    url: $url
+    query: ($m | get -o query | default {})
+    headers: $auth.headers
+    body: ($m | get -o body)
+    content_type: $content_type
+    timeout: $timeout
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+}
+
 # Execute HTTP request with method dispatch
-def do-request [method: string, url: string, auth: record, insecure: bool, raw: bool, dry_run: bool, max_time?: duration, allow_errors?: bool, full?: bool, content_type?: string, body?: any]: nothing -> any {
+def do-request [method: string, url: string, auth: record, insecure: bool, raw: bool, dry_run: bool, max_time?: duration, allow_errors?: bool, full?: bool, content_type?: string, body?: any, dry_run_meta?: record]: nothing -> any {
   let req_url = if ($auth.query | is-not-empty) { if ($url | str contains "?") { $"($url)&($auth.query)" } else { $"($url)?($auth.query)" } } else { $url }
   let timeout = ($max_time | default 30min)
   let ct = ($content_type | default "application/json")
-  if $dry_run { return {method: $method, url: $req_url, headers: $auth.headers, query_string: $auth.query, content_type: $ct, timeout: $timeout, body: $body} }
+  if $dry_run { return (build-dry-run-record $method $req_url $auth $ct $timeout $dry_run_meta) }
   let resp = match $method {
     "get" => { http get --headers $auth.headers --full --allow-errors --max-time $timeout --insecure=$insecure --raw=$raw $req_url }
-    "head" => { http head --headers $auth.headers --max-time $timeout --insecure=$insecure $req_url }
-    "options" => { http options --headers $auth.headers --max-time $timeout --insecure=$insecure $req_url }
+    "head" => { http head --headers $auth.headers --full --allow-errors --max-time $timeout --insecure=$insecure $req_url }
+    "options" => { http options --headers $auth.headers --full --allow-errors --max-time $timeout --insecure=$insecure $req_url }
     "post" => { if ($body | is-empty) { http post --headers $auth.headers --full --allow-errors --max-time $timeout --insecure=$insecure --raw=$raw $req_url "" } else { http post --headers $auth.headers --content-type $ct --full --allow-errors --max-time $timeout --insecure=$insecure --raw=$raw $req_url $body } }
     "put" => { if ($body | is-empty) { http put --headers $auth.headers --full --allow-errors --max-time $timeout --insecure=$insecure --raw=$raw $req_url "" } else { http put --headers $auth.headers --content-type $ct --full --allow-errors --max-time $timeout --insecure=$insecure --raw=$raw $req_url $body } }
     "patch" => { if ($body | is-empty) { http patch --headers $auth.headers --full --allow-errors --max-time $timeout --insecure=$insecure --raw=$raw $req_url "" } else { http patch --headers $auth.headers --content-type $ct --full --allow-errors --max-time $timeout --insecure=$insecure --raw=$raw $req_url $body } }
     "delete" => { if ($body | is-empty) { http delete --headers $auth.headers --full --allow-errors --max-time $timeout --insecure=$insecure --raw=$raw $req_url } else { http delete --headers $auth.headers --content-type $ct --data $body --full --allow-errors --max-time $timeout --insecure=$insecure --raw=$raw $req_url } }
   }
-  if ($method in ["head" "options"]) { return $resp }
+  if ($method == "head") and (not $full) and (not $allow_errors) and $resp.status < 400 { return $resp.headers }
   if $allow_errors { $resp } else if $resp.status >= 400 { error make --unspanned { msg: $"HTTP ($resp.status): ($resp.body)" } } else if $full { {status: $resp.status, headers: $resp.headers, body: $resp.body} } else if $resp.status == 204 { null } else { $resp.body }
 }
 
@@ -119,14 +141,14 @@ export def "info list" [
   let full_url = (build-url $base "/info")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
 }
 
 # Get Entry Info
 #
 # GET /info/{entry}
 # operationId: get_entry_info_info__entry__get
-export def "info get-get" [
+export def "info get" [
   entry: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -140,17 +162,18 @@ export def "info get-get" [
 ]: nothing -> record<data: record<description: string, formats: list<string>, output_fields_by_format: record, properties: record>, errors: table<code: string, detail: string, id: string, links: record, meta: record, source: record, status: string, title: string>, included: table<attributes: record, id: string, links: record, meta: record, relationships: record, type: string>, jsonapi: record<meta: record, version: string>, links: record<first: any, last: any, next: any, prev: any, related: any, self: any>, meta: record<api_version: string, data_available: int, data_returned: int, implementation: record<homepage: any, issue_tracker: any, maintainer: record, name: string, source_url: any, version: string>, last_id: string, more_data_available: bool, provider: record<description: string, homepage: any, name: string, prefix: string>, query: record<representation: string>, response_message: string, schema: any, time_stamp: string, warnings: list<record>>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($entry | is-empty) { error make --unspanned { msg: "path parameter 'entry' must be non-empty" } }
   let full_url = (build-url $base ({entry: (encode-path-segment $entry)} | format pattern "/info/{entry}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
 }
 
 # Get Links
 #
 # GET /links
 # operationId: get_links_links_get
-export def "links get-get" [
+export def "links get" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -180,14 +203,14 @@ export def "links get-get" [
   let full_url = (build-url $base "/links" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"filter": $filter, "response_format": $response_format, "email_address": $email_address, "response_fields": $response_fields, "sort": $qp_sort, "page_limit": $page_limit, "page_offset": $page_offset, "page_number": $page_number, "page_cursor": $page_cursor, "page_above": $page_above, "page_below": $page_below, "include": $include, "api_hint": $api_hint} | compact), body: null}
 }
 
 # Get References
 #
 # GET /references
 # operationId: get_references_references_get
-export def "references get-get" [
+export def "references get" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -217,14 +240,14 @@ export def "references get-get" [
   let full_url = (build-url $base "/references" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"filter": $filter, "response_format": $response_format, "email_address": $email_address, "response_fields": $response_fields, "sort": $qp_sort, "page_limit": $page_limit, "page_offset": $page_offset, "page_number": $page_number, "page_cursor": $page_cursor, "page_above": $page_above, "page_below": $page_below, "include": $include, "api_hint": $api_hint} | compact), body: null}
 }
 
 # Get Single Reference
 #
 # GET /references/{entry_id}
 # operationId: get_single_reference_references__entry_id__get
-export def "references get-single-get" [
+export def "references get-single" [
   entry_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -243,18 +266,19 @@ export def "references get-single-get" [
 ]: nothing -> record<data: any, errors: table<code: string, detail: string, id: string, links: record, meta: record, source: record, status: string, title: string>, included: any, jsonapi: record<meta: record, version: string>, links: record<first: any, last: any, next: any, prev: any, related: any, self: any>, meta: record<api_version: string, data_available: int, data_returned: int, implementation: record<homepage: any, issue_tracker: any, maintainer: record, name: string, source_url: any, version: string>, last_id: string, more_data_available: bool, provider: record<description: string, homepage: any, name: string, prefix: string>, query: record<representation: string>, response_message: string, schema: any, time_stamp: string, warnings: list<record>>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($entry_id | is-empty) { error make --unspanned { msg: "path parameter 'entry_id' must be non-empty" } }
   let qp = [(serialize-qp "response_format" $response_format "scalar") (serialize-qp "email_address" $email_address "scalar") (serialize-qp "response_fields" $response_fields "scalar") (serialize-qp "include" $include "scalar") (serialize-qp "api_hint" $api_hint "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({entry_id: (encode-path-segment $entry_id)} | format pattern "/references/{entry_id}") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"response_format": $response_format, "email_address": $email_address, "response_fields": $response_fields, "include": $include, "api_hint": $api_hint} | compact), body: null}
 }
 
 # Get Structures
 #
 # GET /structures
 # operationId: get_structures_structures_get
-export def "structures get-get" [
+export def "structures get" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -284,14 +308,14 @@ export def "structures get-get" [
   let full_url = (build-url $base "/structures" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"filter": $filter, "response_format": $response_format, "email_address": $email_address, "response_fields": $response_fields, "sort": $qp_sort, "page_limit": $page_limit, "page_offset": $page_offset, "page_number": $page_number, "page_cursor": $page_cursor, "page_above": $page_above, "page_below": $page_below, "include": $include, "api_hint": $api_hint} | compact), body: null}
 }
 
 # Get Single Structure
 #
 # GET /structures/{entry_id}
 # operationId: get_single_structure_structures__entry_id__get
-export def "structures get-single-get" [
+export def "structures get-single" [
   entry_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -310,18 +334,19 @@ export def "structures get-single-get" [
 ]: nothing -> record<data: any, errors: table<code: string, detail: string, id: string, links: record, meta: record, source: record, status: string, title: string>, included: any, jsonapi: record<meta: record, version: string>, links: record<first: any, last: any, next: any, prev: any, related: any, self: any>, meta: record<api_version: string, data_available: int, data_returned: int, implementation: record<homepage: any, issue_tracker: any, maintainer: record, name: string, source_url: any, version: string>, last_id: string, more_data_available: bool, provider: record<description: string, homepage: any, name: string, prefix: string>, query: record<representation: string>, response_message: string, schema: any, time_stamp: string, warnings: list<record>>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($entry_id | is-empty) { error make --unspanned { msg: "path parameter 'entry_id' must be non-empty" } }
   let qp = [(serialize-qp "response_format" $response_format "scalar") (serialize-qp "email_address" $email_address "scalar") (serialize-qp "response_fields" $response_fields "scalar") (serialize-qp "include" $include "scalar") (serialize-qp "api_hint" $api_hint "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({entry_id: (encode-path-segment $entry_id)} | format pattern "/structures/{entry_id}") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"response_format": $response_format, "email_address": $email_address, "response_fields": $response_fields, "include": $include, "api_hint": $api_hint} | compact), body: null}
 }
 
 # Get Versions
 #
 # GET /versions
 # operationId: get_versions_versions_get
-export def "versions get-get" [
+export def "versions get" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -337,5 +362,5 @@ export def "versions get-get" [
   let full_url = (build-url $base "/versions")
   let accept_val = "text/csv; header=present"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
 }

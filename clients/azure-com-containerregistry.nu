@@ -3,19 +3,20 @@
 # Auth: --token flag or $env.AZURE_CONTAINER_REGISTRY_TOKEN
 
 const BASE_URL = "https://azure.local"
-const DEFAULT_AUTH = "basic"
 
-# Build auth: returns {headers: record, query: string}
+# Build auth: returns {scheme: string, headers: record, query: string, location: string}.
+# `location` is "header" | "query" | "cookie" | "none" and tells dry-run callers
+# where the token went without inspecting headers/query themselves.
 def build-auth [token?: string, auth_scheme?: string]: nothing -> record {
   let token_val = if ($token != null) and ($token | is-not-empty) { $token } else { $env | get -o AZURE_CONTAINER_REGISTRY_TOKEN | default "" }
   let scheme = ($auth_scheme | default "bearer")
-  if ($scheme == "none") or ($token_val | is-empty) { return {headers: {}, query: ""} }
+  if ($scheme == "none") or ($token_val | is-empty) { return {scheme: $scheme, headers: {}, query: "", location: "none"} }
   match $scheme {
-    "basic" => { {headers: {Authorization: $"Basic ($token_val)"}, query: ""} }
-    "bearer" => { {headers: {Authorization: $"Bearer ($token_val)"}, query: ""} }
-    "basic-credentials" => { {headers: {Authorization: $"Basic ($token_val | encode base64)"}, query: ""} }
-    "none" => { {headers: {}, query: ""} }
-    _ => { {headers: {Authorization: $"Bearer ($token_val)"}, query: ""} }
+    "basic" => { {scheme: $scheme, headers: {Authorization: $"Basic ($token_val)"}, query: "", location: "header"} }
+    "bearer" => { {scheme: $scheme, headers: {Authorization: $"Bearer ($token_val)"}, query: "", location: "header"} }
+    "basic-credentials" => { {scheme: $scheme, headers: {Authorization: $"Basic ($token_val | encode base64)"}, query: "", location: "header"} }
+    "none" => { {scheme: $scheme, headers: {}, query: "", location: "none"} }
+    _ => { {scheme: $scheme, headers: {Authorization: $"Bearer ($token_val)"}, query: "", location: "header"} }
   }
 }
 
@@ -24,8 +25,9 @@ def build-auth [token?: string, auth_scheme?: string]: nothing -> record {
 # ([A-Za-z0-9-._~]) stay literal; everything else gets %XX.
 def serialize-qp [name: string, value: any, style: string]: nothing -> list<string> {
   if ($value == null) { return [] }
-  let n = (encode-path-segment $name)
   let is_list = ($value | describe | str starts-with "list")
+  if $is_list and ($value | is-empty) { return [] }
+  let n = (encode-path-segment $name)
   if ($value | describe | str starts-with "record") { return ($value | transpose k v | each { $"($n)[(encode-path-segment $in.k)]=(encode-path-segment $in.v)" }) }
   if not $is_list { return [$"($n)=(encode-path-segment $value)"] }
   match $style {
@@ -56,22 +58,42 @@ def build-url [base: string, path: string, query?: string]: nothing -> string {
   if ($query != null) and ($query | is-not-empty) { $result | upsert query $query | url join } else { $result | url join }
 }
 
+# Build the dry-run record returned by --dry-run. Shape:
+#   {dry_run: true, method, url, query: <record>, headers, body, content_type, timeout,
+#    auth: {scheme, location}}
+# `meta` carries logical-form data (the query record by spec name, the pre-serialization
+# body) that do-request itself cannot reconstruct from its wire-format args.
+def build-dry-run-record [method: string, url: string, auth: record, content_type: string, timeout: duration, meta?: record]: nothing -> record {
+  let m = ($meta | default {})
+  {
+    dry_run: true
+    method: $method
+    url: $url
+    query: ($m | get -o query | default {})
+    headers: $auth.headers
+    body: ($m | get -o body)
+    content_type: $content_type
+    timeout: $timeout
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+}
+
 # Execute HTTP request with method dispatch
-def do-request [method: string, url: string, auth: record, insecure: bool, raw: bool, dry_run: bool, max_time?: duration, allow_errors?: bool, full?: bool, content_type?: string, body?: any]: nothing -> any {
+def do-request [method: string, url: string, auth: record, insecure: bool, raw: bool, dry_run: bool, max_time?: duration, allow_errors?: bool, full?: bool, content_type?: string, body?: any, dry_run_meta?: record]: nothing -> any {
   let req_url = if ($auth.query | is-not-empty) { if ($url | str contains "?") { $"($url)&($auth.query)" } else { $"($url)?($auth.query)" } } else { $url }
   let timeout = ($max_time | default 30min)
   let ct = ($content_type | default "application/json")
-  if $dry_run { return {method: $method, url: $req_url, headers: $auth.headers, query_string: $auth.query, content_type: $ct, timeout: $timeout, body: $body} }
+  if $dry_run { return (build-dry-run-record $method $req_url $auth $ct $timeout $dry_run_meta) }
   let resp = match $method {
     "get" => { http get --headers $auth.headers --full --allow-errors --max-time $timeout --insecure=$insecure --raw=$raw $req_url }
-    "head" => { http head --headers $auth.headers --max-time $timeout --insecure=$insecure $req_url }
-    "options" => { http options --headers $auth.headers --max-time $timeout --insecure=$insecure $req_url }
+    "head" => { http head --headers $auth.headers --full --allow-errors --max-time $timeout --insecure=$insecure $req_url }
+    "options" => { http options --headers $auth.headers --full --allow-errors --max-time $timeout --insecure=$insecure $req_url }
     "post" => { if ($body | is-empty) { http post --headers $auth.headers --full --allow-errors --max-time $timeout --insecure=$insecure --raw=$raw $req_url "" } else { http post --headers $auth.headers --content-type $ct --full --allow-errors --max-time $timeout --insecure=$insecure --raw=$raw $req_url $body } }
     "put" => { if ($body | is-empty) { http put --headers $auth.headers --full --allow-errors --max-time $timeout --insecure=$insecure --raw=$raw $req_url "" } else { http put --headers $auth.headers --content-type $ct --full --allow-errors --max-time $timeout --insecure=$insecure --raw=$raw $req_url $body } }
     "patch" => { if ($body | is-empty) { http patch --headers $auth.headers --full --allow-errors --max-time $timeout --insecure=$insecure --raw=$raw $req_url "" } else { http patch --headers $auth.headers --content-type $ct --full --allow-errors --max-time $timeout --insecure=$insecure --raw=$raw $req_url $body } }
     "delete" => { if ($body | is-empty) { http delete --headers $auth.headers --full --allow-errors --max-time $timeout --insecure=$insecure --raw=$raw $req_url } else { http delete --headers $auth.headers --content-type $ct --data $body --full --allow-errors --max-time $timeout --insecure=$insecure --raw=$raw $req_url } }
   }
-  if ($method in ["head" "options"]) { return $resp }
+  if ($method == "head") and (not $full) and (not $allow_errors) and $resp.status < 400 { return $resp.headers }
   if $allow_errors { $resp } else if $resp.status >= 400 { error make --unspanned { msg: $"HTTP ($resp.status): ($resp.body)" } } else if $full { {status: $resp.status, headers: $resp.headers, body: $resp.body} } else if $resp.status == 204 { null } else { $resp.body }
 }
 
@@ -79,7 +101,8 @@ def base-url-completer [] { ["https://azure.local"] }
 def auth-scheme-completer [] { ["basic" "bearer" "basic-credentials"] }
 
 # Completers for enum parameters
-def grant-type-completer [] { ["refresh_token"] }
+def grant-type-completer [] { ["access_token" "access_token_refresh_token" "refresh_token"] }
+def grant-type-completer-1 [] { ["refresh_token"] }
 
 # List all available API commands with their parameters
 export def commands []: nothing -> table {
@@ -127,7 +150,7 @@ export def "acr-catalog get-repository-list" [
   let full_url = (build-url $base "/acr/v1/_catalog" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"last": $last, "n": $n} | compact), body: null}
 }
 
 # Delete the repository identified by `name`
@@ -148,10 +171,11 @@ export def "acr delete-repository" [
 ]: nothing -> record<manifestsDeleted: list<string>, tagsDeleted: list<string>> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
+  if ($name | is-empty) { error make --unspanned { msg: "path parameter 'name' must be non-empty" } }
   let full_url = (build-url $base ({name: (encode-path-segment $name)} | format pattern "/acr/v1/{name}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
 }
 
 # Get repository attributes
@@ -172,10 +196,11 @@ export def "acr get-repository-attributes" [
 ]: nothing -> record<changeableAttributes: record<deleteEnabled: bool, listEnabled: bool, readEnabled: bool, writeEnabled: bool>, createdTime: string, imageName: string, lastUpdateTime: string, manifestCount: int, registry: string, tagCount: int> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
+  if ($name | is-empty) { error make --unspanned { msg: "path parameter 'name' must be non-empty" } }
   let full_url = (build-url $base ({name: (encode-path-segment $name)} | format pattern "/acr/v1/{name}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
 }
 
 # Update the attribute identified by `name` where `reference` is the name of the repository.
@@ -201,12 +226,13 @@ export def "acr update-repository-attributes" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
+  if ($name | is-empty) { error make --unspanned { msg: "path parameter 'name' must be non-empty" } }
   let full_url = (build-url $base ({name: (encode-path-segment $name)} | format pattern "/acr/v1/{name}"))
   let req_body = {"deleteEnabled": $delete_enabled, "listEnabled": $list_enabled, "readEnabled": $read_enabled, "writeEnabled": $write_enabled} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "patch" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body
+  do-request "patch" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: {}, body: $req_body}
 }
 
 # List manifests of a repository
@@ -230,11 +256,12 @@ export def "acr-manifests get-list" [
 ]: nothing -> record<imageName: string, manifests: table<architecture: string, changeableAttributes: record, configMediaType: string, createdTime: string, digest: string, imageSize: int, lastUpdateTime: string, mediaType: string, os: string, tags: list>, registry: string> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
+  if ($name | is-empty) { error make --unspanned { msg: "path parameter 'name' must be non-empty" } }
   let qp = [(serialize-qp "last" $last "scalar") (serialize-qp "n" $n "scalar") (serialize-qp "orderby" $orderby "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({name: (encode-path-segment $name)} | format pattern "/acr/v1/{name}/_manifests") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"last": $last, "n": $n, "orderby": $orderby} | compact), body: null}
 }
 
 # Get manifest attributes
@@ -256,10 +283,12 @@ export def "acr-manifests get-attributes" [
 ]: nothing -> record<imageName: string, manifest: record<architecture: string, changeableAttributes: record<deleteEnabled: bool, listEnabled: bool, readEnabled: bool, writeEnabled: bool>, configMediaType: string, createdTime: string, digest: string, imageSize: int, lastUpdateTime: string, mediaType: string, os: string, tags: list<string>>, registry: string> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
+  if ($name | is-empty) { error make --unspanned { msg: "path parameter 'name' must be non-empty" } }
+  if ($reference | is-empty) { error make --unspanned { msg: "path parameter 'reference' must be non-empty" } }
   let full_url = (build-url $base ({name: (encode-path-segment $name), reference: (encode-path-segment $reference)} | format pattern "/acr/v1/{name}/_manifests/{reference}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
 }
 
 # Update attributes of a manifest
@@ -278,13 +307,22 @@ export def "acr-manifests update-attributes" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> record<errors: table<code: string, detail: record, message: string>> {
+  --delete-enabled: oneof<nothing, bool> # Delete enabled
+  --list-enabled: oneof<nothing, bool> # List enabled
+  --read-enabled: oneof<nothing, bool> # Read enabled
+  --write-enabled: oneof<nothing, bool> # Write enabled
+]: any -> record<errors: table<code: string, detail: record, message: string>> {
+  let input = $in
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
+  if ($name | is-empty) { error make --unspanned { msg: "path parameter 'name' must be non-empty" } }
+  if ($reference | is-empty) { error make --unspanned { msg: "path parameter 'reference' must be non-empty" } }
   let full_url = (build-url $base ({name: (encode-path-segment $name), reference: (encode-path-segment $reference)} | format pattern "/acr/v1/{name}/_manifests/{reference}"))
+  let req_body = {"deleteEnabled": $delete_enabled, "listEnabled": $list_enabled, "readEnabled": $read_enabled, "writeEnabled": $write_enabled} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "patch" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "patch" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: {}, body: $req_body}
 }
 
 # List tags of a repository
@@ -309,11 +347,12 @@ export def "acr-tags get-list" [
 ]: nothing -> record<imageName: string, registry: string, tags: table<changeableAttributes: record, createdTime: string, digest: string, lastUpdateTime: string, name: string, signed: bool>> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
+  if ($name | is-empty) { error make --unspanned { msg: "path parameter 'name' must be non-empty" } }
   let qp = [(serialize-qp "last" $last "scalar") (serialize-qp "n" $n "scalar") (serialize-qp "orderby" $orderby "scalar") (serialize-qp "digest" $digest "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({name: (encode-path-segment $name)} | format pattern "/acr/v1/{name}/_tags") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"last": $last, "n": $n, "orderby": $orderby, "digest": $digest} | compact), body: null}
 }
 
 # Delete tag
@@ -335,10 +374,12 @@ export def "acr-tags delete" [
 ]: nothing -> record<errors: table<code: string, detail: record, message: string>> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
+  if ($name | is-empty) { error make --unspanned { msg: "path parameter 'name' must be non-empty" } }
+  if ($reference | is-empty) { error make --unspanned { msg: "path parameter 'reference' must be non-empty" } }
   let full_url = (build-url $base ({name: (encode-path-segment $name), reference: (encode-path-segment $reference)} | format pattern "/acr/v1/{name}/_tags/{reference}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
 }
 
 # Get tag attributes by tag
@@ -360,10 +401,12 @@ export def "acr-tags get-attributes" [
 ]: nothing -> record<imageName: string, registry: string, tag: record<changeableAttributes: record<deleteEnabled: bool, listEnabled: bool, readEnabled: bool, writeEnabled: bool>, createdTime: string, digest: string, lastUpdateTime: string, name: string, signed: bool>> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
+  if ($name | is-empty) { error make --unspanned { msg: "path parameter 'name' must be non-empty" } }
+  if ($reference | is-empty) { error make --unspanned { msg: "path parameter 'reference' must be non-empty" } }
   let full_url = (build-url $base ({name: (encode-path-segment $name), reference: (encode-path-segment $reference)} | format pattern "/acr/v1/{name}/_tags/{reference}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
 }
 
 # Update tag attributes
@@ -382,13 +425,22 @@ export def "acr-tags update-attributes" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> record<errors: table<code: string, detail: record, message: string>> {
+  --delete-enabled: oneof<nothing, bool> # Delete enabled
+  --list-enabled: oneof<nothing, bool> # List enabled
+  --read-enabled: oneof<nothing, bool> # Read enabled
+  --write-enabled: oneof<nothing, bool> # Write enabled
+]: any -> record<errors: table<code: string, detail: record, message: string>> {
+  let input = $in
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
+  if ($name | is-empty) { error make --unspanned { msg: "path parameter 'name' must be non-empty" } }
+  if ($reference | is-empty) { error make --unspanned { msg: "path parameter 'reference' must be non-empty" } }
   let full_url = (build-url $base ({name: (encode-path-segment $name), reference: (encode-path-segment $reference)} | format pattern "/acr/v1/{name}/_tags/{reference}"))
+  let req_body = {"deleteEnabled": $delete_enabled, "listEnabled": $list_enabled, "readEnabled": $read_enabled, "writeEnabled": $write_enabled} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "patch" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "patch" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: {}, body: $req_body}
 }
 
 # Exchange AAD tokens for an ACR refresh Token
@@ -405,13 +457,22 @@ export def "oauth2-exchange refresh-tokens-get" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> record<refresh_token: string> {
+  grant_type: string@grant-type-completer # Can take a value of access_token_refresh_token, or access_token, or refresh_token
+  service: string # Indicates the name of your Azure container registry.
+  --tenant: string # AAD tenant associated to the AAD credentials.
+  --refresh-token: string # AAD refresh token, mandatory when grant_type is access_token_refresh_token or refresh_token
+  --access-token: string # AAD access token, mandatory when grant_type is access_token_refresh_token or access_token.
+]: any -> record<refresh_token: string> {
+  let input = $in
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/oauth2/exchange")
+  let req_body = {"grant_type": $grant_type, "service": $service, "tenant": $tenant, "refresh_token": $refresh_token, "access_token": $access_token} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  let req_body_wire = ($req_body | transpose k v | where v != null | reduce -f {} {|p, acc| $acc | upsert $p.k $p.v } | url build-query)
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/x-www-form-urlencoded" $req_body_wire {query: {}, body: $req_body}
 }
 
 # Exchange Username, Password and Scope an ACR Access Token
@@ -437,7 +498,7 @@ export def "oauth2-token get-access-from-login" [
   let full_url = (build-url $base "/oauth2/token" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"service": $service, "scope": $scope} | compact), body: null}
 }
 
 # Exchange ACR Refresh token for an ACR Access Token
@@ -454,7 +515,8 @@ export def "oauth2-token get-access" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  grant_type: string@grant-type-completer # Grant type is expected to be refresh_token
+  grant_type: string@grant-type-completer-1 # Grant type is expected to be refresh_token
+  service: string # Indicates the name of your Azure container registry.
   scope: string # Which is expected to be a valid scope, and can be specified more than once for multiple scope requests. You obtained this from the Www-Authenticate response header from the challenge.
   refresh_token: string # Must be a valid ACR refresh token
 ]: any -> record<access_token: string> {
@@ -462,12 +524,12 @@ export def "oauth2-token get-access" [
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/oauth2/token")
-  let req_body = {"grant_type": $grant_type, "scope": $scope, "refresh_token": $refresh_token} | compact
+  let req_body = {"grant_type": $grant_type, "service": $service, "scope": $scope, "refresh_token": $refresh_token} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  let req_body = ($req_body | transpose k v | where v != null | reduce -f {} {|p, acc| $acc | upsert $p.k $p.v } | url build-query)
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/x-www-form-urlencoded" $req_body
+  let req_body_wire = ($req_body | transpose k v | where v != null | reduce -f {} {|p, acc| $acc | upsert $p.k $p.v } | url build-query)
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/x-www-form-urlencoded" $req_body_wire {query: {}, body: $req_body}
 }
 
 # Tells whether this Docker Registry instance supports Docker Registry HTTP API v2
@@ -490,7 +552,7 @@ export def "v2 check-support" [
   let full_url = (build-url $base "/v2/")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
 }
 
 # Mount a blob identified by the `mount` parameter from another repository.
@@ -513,11 +575,12 @@ export def "blobs-uploads create-mount" [
 ]: nothing -> record<errors: table<code: string, detail: record, message: string>> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
+  if ($name | is-empty) { error make --unspanned { msg: "path parameter 'name' must be non-empty" } }
   let qp = [(serialize-qp "from" $qp_from "scalar") (serialize-qp "mount" $mount "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({name: (encode-path-segment $name)} | format pattern "/v2/{name}/blobs/uploads/") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"from": $qp_from, "mount": $mount} | compact), body: null}
 }
 
 # Removes an already uploaded blob.
@@ -539,10 +602,12 @@ export def "blobs delete" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
+  if ($name | is-empty) { error make --unspanned { msg: "path parameter 'name' must be non-empty" } }
+  if ($digest | is-empty) { error make --unspanned { msg: "path parameter 'digest' must be non-empty" } }
   let full_url = (build-url $base ({name: (encode-path-segment $name), digest: (encode-path-segment $digest)} | format pattern "/v2/{name}/blobs/{digest}"))
   let accept_val = "application/octet-stream"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
 }
 
 # Retrieve the blob from the registry identified by digest.
@@ -564,10 +629,12 @@ export def "blobs get" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
+  if ($name | is-empty) { error make --unspanned { msg: "path parameter 'name' must be non-empty" } }
+  if ($digest | is-empty) { error make --unspanned { msg: "path parameter 'digest' must be non-empty" } }
   let full_url = (build-url $base ({name: (encode-path-segment $name), digest: (encode-path-segment $digest)} | format pattern "/v2/{name}/blobs/{digest}"))
   let accept_val = "application/octet-stream"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
 }
 
 # Same as GET, except only the headers are returned.
@@ -589,10 +656,12 @@ export def "blobs check" [
 ]: nothing -> record {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
+  if ($name | is-empty) { error make --unspanned { msg: "path parameter 'name' must be non-empty" } }
+  if ($digest | is-empty) { error make --unspanned { msg: "path parameter 'digest' must be non-empty" } }
   let full_url = (build-url $base ({name: (encode-path-segment $name), digest: (encode-path-segment $digest)} | format pattern "/v2/{name}/blobs/{digest}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "head" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "head" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
 }
 
 # Delete the manifest identified by `name` and `reference`. Note that a manifest can _only_ be deleted by `digest`.
@@ -614,10 +683,12 @@ export def "manifests delete" [
 ]: nothing -> record<errors: table<code: string, detail: record, message: string>> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
+  if ($name | is-empty) { error make --unspanned { msg: "path parameter 'name' must be non-empty" } }
+  if ($reference | is-empty) { error make --unspanned { msg: "path parameter 'reference' must be non-empty" } }
   let full_url = (build-url $base ({name: (encode-path-segment $name), reference: (encode-path-segment $reference)} | format pattern "/v2/{name}/manifests/{reference}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
 }
 
 # Get the manifest identified by `name` and `reference` where `reference` can be a tag or digest.
@@ -640,12 +711,14 @@ export def "manifests get" [
 ]: nothing -> record<annotations: record<org_opencontainers_image_authors: string, org_opencontainers_image_created: string, org_opencontainers_image_description: string, org_opencontainers_image_documentation: string, org_opencontainers_image_licenses: string, org_opencontainers_image_ref_name: string, org_opencontainers_image_revision: string, org_opencontainers_image_source: string, org_opencontainers_image_title: string, org_opencontainers_image_url: string, org_opencontainers_image_vendor: string, org_opencontainers_image_version: string>, architecture: string, config: record<annotations: record<org_opencontainers_image_authors: string, org_opencontainers_image_created: string, org_opencontainers_image_description: string, org_opencontainers_image_documentation: string, org_opencontainers_image_licenses: string, org_opencontainers_image_ref_name: string, org_opencontainers_image_revision: string, org_opencontainers_image_source: string, org_opencontainers_image_title: string, org_opencontainers_image_url: string, org_opencontainers_image_vendor: string, org_opencontainers_image_version: string>, digest: string, mediaType: string, size: int, urls: list<string>>, fsLayers: table<blobSum: string>, history: table<v1Compatibility: string>, layers: table<annotations: record, digest: string, mediaType: string, size: int, urls: list>, manifests: table<digest: string, mediaType: string, platform: record, size: int>, mediaType: string, name: string, signatures: table<header: record, protected: string, signature: string>, tag: string, schemaVersion: int> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
+  if ($name | is-empty) { error make --unspanned { msg: "path parameter 'name' must be non-empty" } }
+  if ($reference | is-empty) { error make --unspanned { msg: "path parameter 'reference' must be non-empty" } }
   let full_url = (build-url $base ({name: (encode-path-segment $name), reference: (encode-path-segment $reference)} | format pattern "/v2/{name}/manifests/{reference}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"accept": $hdr_accept} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
 }
 
 # Put the manifest identified by `name` and `reference` where `reference` can be a tag or digest.
@@ -664,13 +737,19 @@ export def "manifests create" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> record<errors: table<code: string, detail: record, message: string>> {
+  --body: any
+]: any -> record<errors: table<code: string, detail: record, message: string>> {
+  let input = $in
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
+  if ($name | is-empty) { error make --unspanned { msg: "path parameter 'name' must be non-empty" } }
+  if ($reference | is-empty) { error make --unspanned { msg: "path parameter 'reference' must be non-empty" } }
   let full_url = (build-url $base ({name: (encode-path-segment $name), reference: (encode-path-segment $reference)} | format pattern "/v2/{name}/manifests/{reference}"))
+  let req_body = $body
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else if (($input | is-not-empty) and ($req_body | is-empty)) { $input } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/vnd.docker.distribution.manifest.v2+json" $req_body {query: {}, body: $req_body}
 }
 
 # Cancel outstanding upload processes, releasing associated resources. If this is not called, the unfinished uploads will eventually timeout.
@@ -691,10 +770,11 @@ export def "layer cancel-blob-upload" [
 ]: nothing -> record<errors: table<code: string, detail: record, message: string>> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
+  if ($next_blob_uuid_link | is-empty) { error make --unspanned { msg: "path parameter 'nextBlobUuidLink' must be non-empty" } }
   let full_url = (build-url $base ({next_blob_uuid_link: (encode-path-segment $next_blob_uuid_link)} | format pattern "/{next_blob_uuid_link}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
 }
 
 # Retrieve status of upload identified by uuid. The primary purpose of this endpoint is to resolve the current status of a resumable upload.
@@ -715,10 +795,11 @@ export def "layer get-blob-status" [
 ]: nothing -> record<errors: table<code: string, detail: record, message: string>> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
+  if ($next_blob_uuid_link | is-empty) { error make --unspanned { msg: "path parameter 'nextBlobUuidLink' must be non-empty" } }
   let full_url = (build-url $base ({next_blob_uuid_link: (encode-path-segment $next_blob_uuid_link)} | format pattern "/{next_blob_uuid_link}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
 }
 
 # Upload a stream of data without completing the upload.
@@ -736,13 +817,18 @@ export def "layer upload-blob" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> record<errors: table<code: string, detail: record, message: string>> {
+  --body: any
+]: any -> record<errors: table<code: string, detail: record, message: string>> {
+  let input = $in
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
+  if ($next_blob_uuid_link | is-empty) { error make --unspanned { msg: "path parameter 'nextBlobUuidLink' must be non-empty" } }
   let full_url = (build-url $base ({next_blob_uuid_link: (encode-path-segment $next_blob_uuid_link)} | format pattern "/{next_blob_uuid_link}"))
+  let req_body = $body
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else if (($input | is-not-empty) and ($req_body | is-empty)) { $input } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "patch" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "patch" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/octet-stream" $req_body {query: {}, body: $req_body}
 }
 
 # Complete the upload, providing all the data in the body, if necessary. A request without a body will just complete the upload with previously uploaded content.
@@ -761,12 +847,17 @@ export def "layer upload-blob-end" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --digest: string # Digest of a BLOB
-]: nothing -> record<errors: table<code: string, detail: record, message: string>> {
+  --body: any
+]: any -> record<errors: table<code: string, detail: record, message: string>> {
+  let input = $in
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
+  if ($next_blob_uuid_link | is-empty) { error make --unspanned { msg: "path parameter 'nextBlobUuidLink' must be non-empty" } }
   let qp = [(serialize-qp "digest" $digest "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({next_blob_uuid_link: (encode-path-segment $next_blob_uuid_link)} | format pattern "/{next_blob_uuid_link}") $qp)
+  let req_body = $body
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else if (($input | is-not-empty) and ($req_body | is-empty)) { $input } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/octet-stream" $req_body {query: ({"digest": $digest} | compact), body: $req_body}
 }

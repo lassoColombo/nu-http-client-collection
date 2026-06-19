@@ -3,17 +3,18 @@
 # Auth: --token flag or $env.AMAZON_CLOUDDIRECTORY_TOKEN
 
 const BASE_URL = "http://clouddirectory.us-east-1.amazonaws.com"
-const DEFAULT_AUTH = "bearer"
 
-# Build auth: returns {headers: record, query: string}
+# Build auth: returns {scheme: string, headers: record, query: string, location: string}.
+# `location` is "header" | "query" | "cookie" | "none" and tells dry-run callers
+# where the token went without inspecting headers/query themselves.
 def build-auth [token?: string, auth_scheme?: string]: nothing -> record {
   let token_val = if ($token != null) and ($token | is-not-empty) { $token } else { $env | get -o AMAZON_CLOUDDIRECTORY_TOKEN | default "" }
   let scheme = ($auth_scheme | default "bearer")
-  if ($scheme == "none") or ($token_val | is-empty) { return {headers: {}, query: ""} }
+  if ($scheme == "none") or ($token_val | is-empty) { return {scheme: $scheme, headers: {}, query: "", location: "none"} }
   match $scheme {
-    "bearer" => { {headers: {Authorization: $"Bearer ($token_val)"}, query: ""} }
-    "none" => { {headers: {}, query: ""} }
-    _ => { {headers: {Authorization: $"Bearer ($token_val)"}, query: ""} }
+    "bearer" => { {scheme: $scheme, headers: {Authorization: $"Bearer ($token_val)"}, query: "", location: "header"} }
+    "none" => { {scheme: $scheme, headers: {}, query: "", location: "none"} }
+    _ => { {scheme: $scheme, headers: {Authorization: $"Bearer ($token_val)"}, query: "", location: "header"} }
   }
 }
 
@@ -22,8 +23,9 @@ def build-auth [token?: string, auth_scheme?: string]: nothing -> record {
 # ([A-Za-z0-9-._~]) stay literal; everything else gets %XX.
 def serialize-qp [name: string, value: any, style: string]: nothing -> list<string> {
   if ($value == null) { return [] }
-  let n = (encode-path-segment $name)
   let is_list = ($value | describe | str starts-with "list")
+  if $is_list and ($value | is-empty) { return [] }
+  let n = (encode-path-segment $name)
   if ($value | describe | str starts-with "record") { return ($value | transpose k v | each { $"($n)[(encode-path-segment $in.k)]=(encode-path-segment $in.v)" }) }
   if not $is_list { return [$"($n)=(encode-path-segment $value)"] }
   match $style {
@@ -54,22 +56,42 @@ def build-url [base: string, path: string, query?: string]: nothing -> string {
   if ($query != null) and ($query | is-not-empty) { $result | upsert query $query | url join } else { $result | url join }
 }
 
+# Build the dry-run record returned by --dry-run. Shape:
+#   {dry_run: true, method, url, query: <record>, headers, body, content_type, timeout,
+#    auth: {scheme, location}}
+# `meta` carries logical-form data (the query record by spec name, the pre-serialization
+# body) that do-request itself cannot reconstruct from its wire-format args.
+def build-dry-run-record [method: string, url: string, auth: record, content_type: string, timeout: duration, meta?: record]: nothing -> record {
+  let m = ($meta | default {})
+  {
+    dry_run: true
+    method: $method
+    url: $url
+    query: ($m | get -o query | default {})
+    headers: $auth.headers
+    body: ($m | get -o body)
+    content_type: $content_type
+    timeout: $timeout
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+}
+
 # Execute HTTP request with method dispatch
-def do-request [method: string, url: string, auth: record, insecure: bool, raw: bool, dry_run: bool, max_time?: duration, allow_errors?: bool, full?: bool, content_type?: string, body?: any]: nothing -> any {
+def do-request [method: string, url: string, auth: record, insecure: bool, raw: bool, dry_run: bool, max_time?: duration, allow_errors?: bool, full?: bool, content_type?: string, body?: any, dry_run_meta?: record]: nothing -> any {
   let req_url = if ($auth.query | is-not-empty) { if ($url | str contains "?") { $"($url)&($auth.query)" } else { $"($url)?($auth.query)" } } else { $url }
   let timeout = ($max_time | default 30min)
   let ct = ($content_type | default "application/json")
-  if $dry_run { return {method: $method, url: $req_url, headers: $auth.headers, query_string: $auth.query, content_type: $ct, timeout: $timeout, body: $body} }
+  if $dry_run { return (build-dry-run-record $method $req_url $auth $ct $timeout $dry_run_meta) }
   let resp = match $method {
     "get" => { http get --headers $auth.headers --full --allow-errors --max-time $timeout --insecure=$insecure --raw=$raw $req_url }
-    "head" => { http head --headers $auth.headers --max-time $timeout --insecure=$insecure $req_url }
-    "options" => { http options --headers $auth.headers --max-time $timeout --insecure=$insecure $req_url }
+    "head" => { http head --headers $auth.headers --full --allow-errors --max-time $timeout --insecure=$insecure $req_url }
+    "options" => { http options --headers $auth.headers --full --allow-errors --max-time $timeout --insecure=$insecure $req_url }
     "post" => { if ($body | is-empty) { http post --headers $auth.headers --full --allow-errors --max-time $timeout --insecure=$insecure --raw=$raw $req_url "" } else { http post --headers $auth.headers --content-type $ct --full --allow-errors --max-time $timeout --insecure=$insecure --raw=$raw $req_url $body } }
     "put" => { if ($body | is-empty) { http put --headers $auth.headers --full --allow-errors --max-time $timeout --insecure=$insecure --raw=$raw $req_url "" } else { http put --headers $auth.headers --content-type $ct --full --allow-errors --max-time $timeout --insecure=$insecure --raw=$raw $req_url $body } }
     "patch" => { if ($body | is-empty) { http patch --headers $auth.headers --full --allow-errors --max-time $timeout --insecure=$insecure --raw=$raw $req_url "" } else { http patch --headers $auth.headers --content-type $ct --full --allow-errors --max-time $timeout --insecure=$insecure --raw=$raw $req_url $body } }
     "delete" => { if ($body | is-empty) { http delete --headers $auth.headers --full --allow-errors --max-time $timeout --insecure=$insecure --raw=$raw $req_url } else { http delete --headers $auth.headers --content-type $ct --data $body --full --allow-errors --max-time $timeout --insecure=$insecure --raw=$raw $req_url } }
   }
-  if ($method in ["head" "options"]) { return $resp }
+  if ($method == "head") and (not $full) and (not $allow_errors) and $resp.status < 400 { return $resp.headers }
   if $allow_errors { $resp } else if $resp.status >= 400 { error make --unspanned { msg: $"HTTP ($resp.status): ($resp.body)" } } else if $full { {status: $resp.status, headers: $resp.headers, body: $resp.body} } else if $resp.status == 204 { null } else { $resp.body }
 }
 
@@ -86,7 +108,7 @@ def state-completer [] { ["DELETED" "DISABLED" "ENABLED"] }
 # List all available API commands with their parameters
 export def commands []: nothing -> table {
   let builtin_flags = ["base-url" "token" "auth-scheme" "insecure" "max-time" "raw" "allow-errors" "full" "dry-run" "accept" "help"]
-  let mod_name = (scope modules | where { $in.commands | any { $in.name == "amazonclouddirectory-2017-01-11-object-facetsx-amz-data-partition create-facet" } } | get name | first)
+  let mod_name = (scope modules | where { $in.commands | any { $in.name == "amazonclouddirectory-2017-01-11-object-facets create" } } | get name | first)
   let mod_cmds = (scope modules | where name == $mod_name | get commands | first)
   let cmd_ids = ($mod_cmds | where name not-in [$mod_name "commands"] | get decl_id)
   scope commands | where decl_id in $cmd_ids | each {|cmd|
@@ -108,12 +130,12 @@ export def commands []: nothing -> table {
 
 # Adds a new Facet to an object. An object can have more than one facet applied on it.
 #
-# PUT /amazonclouddirectory/2017-01-11/object/facets#x-amz-data-partition
+# PUT /amazonclouddirectory/2017-01-11/object/facets
 # operationId: AddFacetToObject
 # --SchemaFacet shape: {SchemaArn?: any, FacetName?: any}
 # --ObjectAttributeList item shape: {Key: any, Value: any}
 # --ObjectReference shape: {Selector?: any}
-export def "amazonclouddirectory-2017-01-11-object-facetsx-amz-data-partition create-facet" [
+export def "amazonclouddirectory-2017-01-11-object-facets create" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -138,21 +160,21 @@ export def "amazonclouddirectory-2017-01-11-object-facetsx-amz-data-partition cr
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base "/amazonclouddirectory/2017-01-11/object/facets#x-amz-data-partition")
+  let full_url = (build-url $base "/amazonclouddirectory/2017-01-11/object/facets")
   let req_body = {"SchemaFacet": $schema_facet, "ObjectAttributeList": $object_attribute_list, "ObjectReference": $object_reference} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers, "x-amz-data-partition": $x_amz_data_partition} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: {}, body: $req_body}
 }
 
 # Copies the input published schema, at the specified version, into the Directory with the same name and version as that of the published schema.
 #
-# PUT /amazonclouddirectory/2017-01-11/schema/apply#x-amz-data-partition
+# PUT /amazonclouddirectory/2017-01-11/schema/apply
 # operationId: ApplySchema
-export def "amazonclouddirectory-2017-01-11-schema-applyx-amz-data-partition update-apply" [
+export def "amazonclouddirectory-2017-01-11-schema-apply update" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -175,23 +197,23 @@ export def "amazonclouddirectory-2017-01-11-schema-applyx-amz-data-partition upd
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base "/amazonclouddirectory/2017-01-11/schema/apply#x-amz-data-partition")
+  let full_url = (build-url $base "/amazonclouddirectory/2017-01-11/schema/apply")
   let req_body = {"PublishedSchemaArn": $published_schema_arn} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers, "x-amz-data-partition": $x_amz_data_partition} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: {}, body: $req_body}
 }
 
 # Attaches an existing object to another object. An object can be accessed in two ways: Using the path Using ObjectIdentifier
 #
-# PUT /amazonclouddirectory/2017-01-11/object/attach#x-amz-data-partition
+# PUT /amazonclouddirectory/2017-01-11/object/attach
 # operationId: AttachObject
 # --ParentReference shape: {Selector?: any}
 # --ChildReference shape: {Selector?: any}
-export def "amazonclouddirectory-2017-01-11-object-attachx-amz-data-partition attach" [
+export def "amazonclouddirectory-2017-01-11-object-attach attach" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -216,23 +238,23 @@ export def "amazonclouddirectory-2017-01-11-object-attachx-amz-data-partition at
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base "/amazonclouddirectory/2017-01-11/object/attach#x-amz-data-partition")
+  let full_url = (build-url $base "/amazonclouddirectory/2017-01-11/object/attach")
   let req_body = {"ParentReference": $parent_reference, "ChildReference": $child_reference, "LinkName": $link_name} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers, "x-amz-data-partition": $x_amz_data_partition} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: {}, body: $req_body}
 }
 
 # Attaches a policy object to a regular object. An object can have a limited number of attached policies.
 #
-# PUT /amazonclouddirectory/2017-01-11/policy/attach#x-amz-data-partition
+# PUT /amazonclouddirectory/2017-01-11/policy/attach
 # operationId: AttachPolicy
 # --PolicyReference shape: {Selector?: any}
 # --ObjectReference shape: {Selector?: any}
-export def "amazonclouddirectory-2017-01-11-policy-attachx-amz-data-partition attach" [
+export def "amazonclouddirectory-2017-01-11-policy-attach attach" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -256,23 +278,23 @@ export def "amazonclouddirectory-2017-01-11-policy-attachx-amz-data-partition at
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base "/amazonclouddirectory/2017-01-11/policy/attach#x-amz-data-partition")
+  let full_url = (build-url $base "/amazonclouddirectory/2017-01-11/policy/attach")
   let req_body = {"PolicyReference": $policy_reference, "ObjectReference": $object_reference} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers, "x-amz-data-partition": $x_amz_data_partition} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: {}, body: $req_body}
 }
 
 # Attaches the specified object to the specified index.
 #
-# PUT /amazonclouddirectory/2017-01-11/index/attach#x-amz-data-partition
+# PUT /amazonclouddirectory/2017-01-11/index/attach
 # operationId: AttachToIndex
 # --IndexReference shape: {Selector?: any}
 # --TargetReference shape: {Selector?: any}
-export def "amazonclouddirectory-2017-01-11-index-attachx-amz-data-partition attach" [
+export def "amazonclouddirectory-2017-01-11-index-attach attach" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -296,25 +318,25 @@ export def "amazonclouddirectory-2017-01-11-index-attachx-amz-data-partition att
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base "/amazonclouddirectory/2017-01-11/index/attach#x-amz-data-partition")
+  let full_url = (build-url $base "/amazonclouddirectory/2017-01-11/index/attach")
   let req_body = {"IndexReference": $index_reference, "TargetReference": $target_reference} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers, "x-amz-data-partition": $x_amz_data_partition} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: {}, body: $req_body}
 }
 
 # Attaches a typed link to a specified source and target object. For more information, see Typed Links (https://docs.aws.amazon.com/clouddirectory/latest/developerguide/directory_objects_links.html#directory_objects_links_typedlink).
 #
-# PUT /amazonclouddirectory/2017-01-11/typedlink/attach#x-amz-data-partition
+# PUT /amazonclouddirectory/2017-01-11/typedlink/attach
 # operationId: AttachTypedLink
 # --SourceObjectReference shape: {Selector?: any}
 # --TargetObjectReference shape: {Selector?: any}
 # --TypedLinkFacet shape: {SchemaArn?: any, TypedLinkName?: any}
 # --Attributes item shape: {AttributeName: any, Value: any}
-export def "amazonclouddirectory-2017-01-11-typedlink-attachx-amz-data-partition attach-typed-link" [
+export def "amazonclouddirectory-2017-01-11-typedlink-attach attach-typed-link" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -340,22 +362,22 @@ export def "amazonclouddirectory-2017-01-11-typedlink-attachx-amz-data-partition
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base "/amazonclouddirectory/2017-01-11/typedlink/attach#x-amz-data-partition")
+  let full_url = (build-url $base "/amazonclouddirectory/2017-01-11/typedlink/attach")
   let req_body = {"SourceObjectReference": $source_object_reference, "TargetObjectReference": $target_object_reference, "TypedLinkFacet": $typed_link_facet, "Attributes": $attributes} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers, "x-amz-data-partition": $x_amz_data_partition} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: {}, body: $req_body}
 }
 
 # Performs all the read operations in a batch.
 #
-# POST /amazonclouddirectory/2017-01-11/batchread#x-amz-data-partition
+# POST /amazonclouddirectory/2017-01-11/batchread
 # operationId: BatchRead
 # --Operations item shape: {ListObjectAttributes?: any, ListObjectChildren?: any, ListAttachedIndices?: any, ListObjectParentPaths?: any, GetObjectInformation?: any, GetObjectAttributes?: any, ListObjectParents?: any, ListObjectPolicies?: any, ListPolicyAttachments?: any, LookupPolicy?: any, ListIndex?: any, ListOutgoingTypedLinks?: any, ListIncomingTypedLinks?: any, GetLinkAttributes?: any}
-export def "amazonclouddirectory-2017-01-11-batchreadx-amz-data-partition get-batch" [
+export def "amazonclouddirectory-2017-01-11-batchread get-batch" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -379,22 +401,22 @@ export def "amazonclouddirectory-2017-01-11-batchreadx-amz-data-partition get-ba
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base "/amazonclouddirectory/2017-01-11/batchread#x-amz-data-partition")
+  let full_url = (build-url $base "/amazonclouddirectory/2017-01-11/batchread")
   let req_body = {"Operations": $operations} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers, "x-amz-data-partition": $x_amz_data_partition, "x-amz-consistency-level": $x_amz_consistency_level} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: {}, body: $req_body}
 }
 
 # Performs all the write operations in a batch. Either all the operations succeed or none.
 #
-# PUT /amazonclouddirectory/2017-01-11/batchwrite#x-amz-data-partition
+# PUT /amazonclouddirectory/2017-01-11/batchwrite
 # operationId: BatchWrite
 # --Operations item shape: {CreateObject?: any, AttachObject?: any, DetachObject?: any, UpdateObjectAttributes?: any, DeleteObject?: any, AddFacetToObject?: any, RemoveFacetFromObject?: any, AttachPolicy?: any, DetachPolicy?: any, CreateIndex?: any, AttachToIndex?: any, DetachFromIndex?: any, AttachTypedLink?: any, DetachTypedLink?: any, UpdateLinkAttributes?: any}
-export def "amazonclouddirectory-2017-01-11-batchwritex-amz-data-partition update-batch-write" [
+export def "amazonclouddirectory-2017-01-11-batchwrite update-batch-write" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -417,21 +439,21 @@ export def "amazonclouddirectory-2017-01-11-batchwritex-amz-data-partition updat
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base "/amazonclouddirectory/2017-01-11/batchwrite#x-amz-data-partition")
+  let full_url = (build-url $base "/amazonclouddirectory/2017-01-11/batchwrite")
   let req_body = {"Operations": $operations} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers, "x-amz-data-partition": $x_amz_data_partition} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: {}, body: $req_body}
 }
 
 # Creates a Directory by copying the published schema into the directory. A directory cannot be created without a schema. You can also quickly create a directory using a managed schema, called the QuickStartSchema. For more information, see Managed Schema (https://docs.aws.amazon.com/clouddirectory/latest/developerguide/schemas_managed.html) in the Amazon Cloud Directory Developer Guide.
 #
-# PUT /amazonclouddirectory/2017-01-11/directory/create#x-amz-data-partition
+# PUT /amazonclouddirectory/2017-01-11/directory/create
 # operationId: CreateDirectory
-export def "amazonclouddirectory-2017-01-11-directory-createx-amz-data-partition create" [
+export def "amazonclouddirectory-2017-01-11-directory-create create" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -454,22 +476,22 @@ export def "amazonclouddirectory-2017-01-11-directory-createx-amz-data-partition
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base "/amazonclouddirectory/2017-01-11/directory/create#x-amz-data-partition")
+  let full_url = (build-url $base "/amazonclouddirectory/2017-01-11/directory/create")
   let req_body = {"Name": $name} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers, "x-amz-data-partition": $x_amz_data_partition} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: {}, body: $req_body}
 }
 
 # Creates a new Facet in a schema. Facet creation is allowed only in development or applied schemas.
 #
-# PUT /amazonclouddirectory/2017-01-11/facet/create#x-amz-data-partition
+# PUT /amazonclouddirectory/2017-01-11/facet/create
 # operationId: CreateFacet
 # --Attributes item shape: {Name: any, AttributeDefinition?: any, AttributeReference?: any, RequiredBehavior?: any}
-export def "amazonclouddirectory-2017-01-11-facet-createx-amz-data-partition create" [
+export def "amazonclouddirectory-2017-01-11-facet-create create" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -495,23 +517,23 @@ export def "amazonclouddirectory-2017-01-11-facet-createx-amz-data-partition cre
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base "/amazonclouddirectory/2017-01-11/facet/create#x-amz-data-partition")
+  let full_url = (build-url $base "/amazonclouddirectory/2017-01-11/facet/create")
   let req_body = {"Name": $name, "Attributes": $attributes, "ObjectType": $object_type, "FacetStyle": $facet_style} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers, "x-amz-data-partition": $x_amz_data_partition} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: {}, body: $req_body}
 }
 
 # Creates an index object. See Indexing and search (https://docs.aws.amazon.com/clouddirectory/latest/developerguide/indexing_search.html) for more information.
 #
-# PUT /amazonclouddirectory/2017-01-11/index#x-amz-data-partition
+# PUT /amazonclouddirectory/2017-01-11/index
 # operationId: CreateIndex
 # --OrderedIndexedAttributeList item shape: {SchemaArn: any, FacetName: any, Name: any}
 # --ParentReference shape: {Selector?: any}
-export def "amazonclouddirectory-2017-01-11-indexx-amz-data-partition create-index" [
+export def "amazonclouddirectory-2017-01-11-index create" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -537,24 +559,24 @@ export def "amazonclouddirectory-2017-01-11-indexx-amz-data-partition create-ind
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base "/amazonclouddirectory/2017-01-11/index#x-amz-data-partition")
+  let full_url = (build-url $base "/amazonclouddirectory/2017-01-11/index")
   let req_body = {"OrderedIndexedAttributeList": $ordered_indexed_attribute_list, "IsUnique": $is_unique, "ParentReference": $parent_reference, "LinkName": $link_name} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers, "x-amz-data-partition": $x_amz_data_partition} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: {}, body: $req_body}
 }
 
 # Creates an object in a Directory. Additionally attaches the object to a parent, if a parent reference and LinkName is specified. An object is simply a collection of Facet attributes. You can also use this API call to create a policy object, if the facet from which you create the object is a policy facet.
 #
-# PUT /amazonclouddirectory/2017-01-11/object#x-amz-data-partition
+# PUT /amazonclouddirectory/2017-01-11/object
 # operationId: CreateObject
 # --SchemaFacets item shape: {SchemaArn?: any, FacetName?: any}
 # --ObjectAttributeList item shape: {Key: any, Value: any}
 # --ParentReference shape: {Selector?: any}
-export def "amazonclouddirectory-2017-01-11-objectx-amz-data-partition create-object" [
+export def "amazonclouddirectory-2017-01-11-object create" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -580,14 +602,14 @@ export def "amazonclouddirectory-2017-01-11-objectx-amz-data-partition create-ob
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base "/amazonclouddirectory/2017-01-11/object#x-amz-data-partition")
+  let full_url = (build-url $base "/amazonclouddirectory/2017-01-11/object")
   let req_body = {"SchemaFacets": $schema_facets, "ObjectAttributeList": $object_attribute_list, "ParentReference": $parent_reference, "LinkName": $link_name} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers, "x-amz-data-partition": $x_amz_data_partition} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: {}, body: $req_body}
 }
 
 # Creates a new schema in a development state. A schema can exist in three phases: Development: This is a mutable phase of the schema. All new schemas are in the development phase. Once the schema is finalized, it can be published. Published: Published schemas are immutable and have a version associated with them. Applied: Applied schemas are mutable in a way that allows you to add new schema facets. You can also add new, nonrequired attributes to existing schema facets. You can apply only published schemas to directories.
@@ -623,15 +645,15 @@ export def "amazonclouddirectory-2017-01-11-schema-create create" [
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: {}, body: $req_body}
 }
 
 # Creates a TypedLinkFacet. For more information, see Typed Links (https://docs.aws.amazon.com/clouddirectory/latest/developerguide/directory_objects_links.html#directory_objects_links_typedlink).
 #
-# PUT /amazonclouddirectory/2017-01-11/typedlink/facet/create#x-amz-data-partition
+# PUT /amazonclouddirectory/2017-01-11/typedlink/facet/create
 # operationId: CreateTypedLinkFacet
 # --Facet shape: {Name?: any, Attributes?: any, IdentityAttributeOrder?: any}
-export def "amazonclouddirectory-2017-01-11-typedlink-facet-createx-amz-data-partition create-typed-link" [
+export def "amazonclouddirectory-2017-01-11-typedlink-facet-create create-typed-link" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -654,21 +676,21 @@ export def "amazonclouddirectory-2017-01-11-typedlink-facet-createx-amz-data-par
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base "/amazonclouddirectory/2017-01-11/typedlink/facet/create#x-amz-data-partition")
+  let full_url = (build-url $base "/amazonclouddirectory/2017-01-11/typedlink/facet/create")
   let req_body = {"Facet": $facet} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers, "x-amz-data-partition": $x_amz_data_partition} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: {}, body: $req_body}
 }
 
 # Deletes a directory. Only disabled directories can be deleted. A deleted directory cannot be undone. Exercise extreme caution when deleting directories.
 #
-# PUT /amazonclouddirectory/2017-01-11/directory#x-amz-data-partition
+# PUT /amazonclouddirectory/2017-01-11/directory
 # operationId: DeleteDirectory
-export def "amazonclouddirectory-2017-01-11-directoryx-amz-data-partition delete-directory" [
+export def "amazonclouddirectory-2017-01-11-directory delete" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -689,19 +711,19 @@ export def "amazonclouddirectory-2017-01-11-directoryx-amz-data-partition delete
 ]: nothing -> record<DirectoryArn: record> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base "/amazonclouddirectory/2017-01-11/directory#x-amz-data-partition")
+  let full_url = (build-url $base "/amazonclouddirectory/2017-01-11/directory")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers, "x-amz-data-partition": $x_amz_data_partition} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
 }
 
 # Deletes a given Facet. All attributes and Rules that are associated with the facet will be deleted. Only development schema facets are allowed deletion.
 #
-# PUT /amazonclouddirectory/2017-01-11/facet/delete#x-amz-data-partition
+# PUT /amazonclouddirectory/2017-01-11/facet/delete
 # operationId: DeleteFacet
-export def "amazonclouddirectory-2017-01-11-facet-deletex-amz-data-partition delete" [
+export def "amazonclouddirectory-2017-01-11-facet-delete delete" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -724,22 +746,22 @@ export def "amazonclouddirectory-2017-01-11-facet-deletex-amz-data-partition del
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base "/amazonclouddirectory/2017-01-11/facet/delete#x-amz-data-partition")
+  let full_url = (build-url $base "/amazonclouddirectory/2017-01-11/facet/delete")
   let req_body = {"Name": $name} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers, "x-amz-data-partition": $x_amz_data_partition} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: {}, body: $req_body}
 }
 
 # Deletes an object and its associated attributes. Only objects with no children and no parents can be deleted. The maximum number of attributes that can be deleted during an object deletion is 30. For more information, see Amazon Cloud Directory Limits (https://docs.aws.amazon.com/clouddirectory/latest/developerguide/limits.html).
 #
-# PUT /amazonclouddirectory/2017-01-11/object/delete#x-amz-data-partition
+# PUT /amazonclouddirectory/2017-01-11/object/delete
 # operationId: DeleteObject
 # --ObjectReference shape: {Selector?: any}
-export def "amazonclouddirectory-2017-01-11-object-deletex-amz-data-partition delete" [
+export def "amazonclouddirectory-2017-01-11-object-delete delete" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -762,21 +784,21 @@ export def "amazonclouddirectory-2017-01-11-object-deletex-amz-data-partition de
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base "/amazonclouddirectory/2017-01-11/object/delete#x-amz-data-partition")
+  let full_url = (build-url $base "/amazonclouddirectory/2017-01-11/object/delete")
   let req_body = {"ObjectReference": $object_reference} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers, "x-amz-data-partition": $x_amz_data_partition} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: {}, body: $req_body}
 }
 
 # Deletes a given schema. Schemas in a development and published state can only be deleted.
 #
-# PUT /amazonclouddirectory/2017-01-11/schema#x-amz-data-partition
+# PUT /amazonclouddirectory/2017-01-11/schema
 # operationId: DeleteSchema
-export def "amazonclouddirectory-2017-01-11-schemax-amz-data-partition delete-schema" [
+export def "amazonclouddirectory-2017-01-11-schema delete" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -797,19 +819,19 @@ export def "amazonclouddirectory-2017-01-11-schemax-amz-data-partition delete-sc
 ]: nothing -> record<SchemaArn: record> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base "/amazonclouddirectory/2017-01-11/schema#x-amz-data-partition")
+  let full_url = (build-url $base "/amazonclouddirectory/2017-01-11/schema")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers, "x-amz-data-partition": $x_amz_data_partition} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
 }
 
 # Deletes a TypedLinkFacet. For more information, see Typed Links (https://docs.aws.amazon.com/clouddirectory/latest/developerguide/directory_objects_links.html#directory_objects_links_typedlink).
 #
-# PUT /amazonclouddirectory/2017-01-11/typedlink/facet/delete#x-amz-data-partition
+# PUT /amazonclouddirectory/2017-01-11/typedlink/facet/delete
 # operationId: DeleteTypedLinkFacet
-export def "amazonclouddirectory-2017-01-11-typedlink-facet-deletex-amz-data-partition delete-typed-link" [
+export def "amazonclouddirectory-2017-01-11-typedlink-facet-delete delete-typed-link" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -832,23 +854,23 @@ export def "amazonclouddirectory-2017-01-11-typedlink-facet-deletex-amz-data-par
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base "/amazonclouddirectory/2017-01-11/typedlink/facet/delete#x-amz-data-partition")
+  let full_url = (build-url $base "/amazonclouddirectory/2017-01-11/typedlink/facet/delete")
   let req_body = {"Name": $name} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers, "x-amz-data-partition": $x_amz_data_partition} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: {}, body: $req_body}
 }
 
 # Detaches the specified object from the specified index.
 #
-# PUT /amazonclouddirectory/2017-01-11/index/detach#x-amz-data-partition
+# PUT /amazonclouddirectory/2017-01-11/index/detach
 # operationId: DetachFromIndex
 # --IndexReference shape: {Selector?: any}
 # --TargetReference shape: {Selector?: any}
-export def "amazonclouddirectory-2017-01-11-index-detachx-amz-data-partition update-detach" [
+export def "amazonclouddirectory-2017-01-11-index-detach update" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -872,22 +894,22 @@ export def "amazonclouddirectory-2017-01-11-index-detachx-amz-data-partition upd
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base "/amazonclouddirectory/2017-01-11/index/detach#x-amz-data-partition")
+  let full_url = (build-url $base "/amazonclouddirectory/2017-01-11/index/detach")
   let req_body = {"IndexReference": $index_reference, "TargetReference": $target_reference} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers, "x-amz-data-partition": $x_amz_data_partition} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: {}, body: $req_body}
 }
 
 # Detaches a given object from the parent object. The object that is to be detached from the parent is specified by the link name.
 #
-# PUT /amazonclouddirectory/2017-01-11/object/detach#x-amz-data-partition
+# PUT /amazonclouddirectory/2017-01-11/object/detach
 # operationId: DetachObject
 # --ParentReference shape: {Selector?: any}
-export def "amazonclouddirectory-2017-01-11-object-detachx-amz-data-partition update-detach" [
+export def "amazonclouddirectory-2017-01-11-object-detach update" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -911,23 +933,23 @@ export def "amazonclouddirectory-2017-01-11-object-detachx-amz-data-partition up
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base "/amazonclouddirectory/2017-01-11/object/detach#x-amz-data-partition")
+  let full_url = (build-url $base "/amazonclouddirectory/2017-01-11/object/detach")
   let req_body = {"ParentReference": $parent_reference, "LinkName": $link_name} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers, "x-amz-data-partition": $x_amz_data_partition} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: {}, body: $req_body}
 }
 
 # Detaches a policy from an object.
 #
-# PUT /amazonclouddirectory/2017-01-11/policy/detach#x-amz-data-partition
+# PUT /amazonclouddirectory/2017-01-11/policy/detach
 # operationId: DetachPolicy
 # --PolicyReference shape: {Selector?: any}
 # --ObjectReference shape: {Selector?: any}
-export def "amazonclouddirectory-2017-01-11-policy-detachx-amz-data-partition update-detach" [
+export def "amazonclouddirectory-2017-01-11-policy-detach update" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -951,22 +973,22 @@ export def "amazonclouddirectory-2017-01-11-policy-detachx-amz-data-partition up
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base "/amazonclouddirectory/2017-01-11/policy/detach#x-amz-data-partition")
+  let full_url = (build-url $base "/amazonclouddirectory/2017-01-11/policy/detach")
   let req_body = {"PolicyReference": $policy_reference, "ObjectReference": $object_reference} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers, "x-amz-data-partition": $x_amz_data_partition} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: {}, body: $req_body}
 }
 
 # Detaches a typed link from a specified source and target object. For more information, see Typed Links (https://docs.aws.amazon.com/clouddirectory/latest/developerguide/directory_objects_links.html#directory_objects_links_typedlink).
 #
-# PUT /amazonclouddirectory/2017-01-11/typedlink/detach#x-amz-data-partition
+# PUT /amazonclouddirectory/2017-01-11/typedlink/detach
 # operationId: DetachTypedLink
 # --TypedLinkSpecifier shape: {TypedLinkFacet?: any, SourceObjectReference?: any, TargetObjectReference?: any, IdentityAttributeValues?: any}
-export def "amazonclouddirectory-2017-01-11-typedlink-detachx-amz-data-partition update-detach-typed-link" [
+export def "amazonclouddirectory-2017-01-11-typedlink-detach update-typed-link" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -989,21 +1011,21 @@ export def "amazonclouddirectory-2017-01-11-typedlink-detachx-amz-data-partition
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base "/amazonclouddirectory/2017-01-11/typedlink/detach#x-amz-data-partition")
+  let full_url = (build-url $base "/amazonclouddirectory/2017-01-11/typedlink/detach")
   let req_body = {"TypedLinkSpecifier": $typed_link_specifier} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers, "x-amz-data-partition": $x_amz_data_partition} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: {}, body: $req_body}
 }
 
 # Disables the specified directory. Disabled directories cannot be read or written to. Only enabled directories can be disabled. Disabled directories may be reenabled.
 #
-# PUT /amazonclouddirectory/2017-01-11/directory/disable#x-amz-data-partition
+# PUT /amazonclouddirectory/2017-01-11/directory/disable
 # operationId: DisableDirectory
-export def "amazonclouddirectory-2017-01-11-directory-disablex-amz-data-partition disable" [
+export def "amazonclouddirectory-2017-01-11-directory-disable disable" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1024,19 +1046,19 @@ export def "amazonclouddirectory-2017-01-11-directory-disablex-amz-data-partitio
 ]: nothing -> record<DirectoryArn: record> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base "/amazonclouddirectory/2017-01-11/directory/disable#x-amz-data-partition")
+  let full_url = (build-url $base "/amazonclouddirectory/2017-01-11/directory/disable")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers, "x-amz-data-partition": $x_amz_data_partition} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
 }
 
 # Enables the specified directory. Only disabled directories can be enabled. Once enabled, the directory can then be read and written to.
 #
-# PUT /amazonclouddirectory/2017-01-11/directory/enable#x-amz-data-partition
+# PUT /amazonclouddirectory/2017-01-11/directory/enable
 # operationId: EnableDirectory
-export def "amazonclouddirectory-2017-01-11-directory-enablex-amz-data-partition enable" [
+export def "amazonclouddirectory-2017-01-11-directory-enable enable" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1057,12 +1079,12 @@ export def "amazonclouddirectory-2017-01-11-directory-enablex-amz-data-partition
 ]: nothing -> record<DirectoryArn: record> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base "/amazonclouddirectory/2017-01-11/directory/enable#x-amz-data-partition")
+  let full_url = (build-url $base "/amazonclouddirectory/2017-01-11/directory/enable")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers, "x-amz-data-partition": $x_amz_data_partition} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
 }
 
 # Returns current applied schema version ARN, including the minor version in use.
@@ -1098,14 +1120,14 @@ export def "amazonclouddirectory-2017-01-11-schema-getappliedschema get-applied-
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: {}, body: $req_body}
 }
 
 # Retrieves metadata about a directory.
 #
-# POST /amazonclouddirectory/2017-01-11/directory/get#x-amz-data-partition
+# POST /amazonclouddirectory/2017-01-11/directory/get
 # operationId: GetDirectory
-export def "amazonclouddirectory-2017-01-11-directory-getx-amz-data-partition get" [
+export def "amazonclouddirectory-2017-01-11-directory-get get" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1126,19 +1148,19 @@ export def "amazonclouddirectory-2017-01-11-directory-getx-amz-data-partition ge
 ]: nothing -> record<Directory: record<Name: record, DirectoryArn: record, State: record, CreationDateTime: record>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base "/amazonclouddirectory/2017-01-11/directory/get#x-amz-data-partition")
+  let full_url = (build-url $base "/amazonclouddirectory/2017-01-11/directory/get")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers, "x-amz-data-partition": $x_amz_data_partition} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
 }
 
 # Gets details of the Facet, such as facet name, attributes, Rules, or ObjectType. You can call this on all kinds of schema facets -- published, development, or applied.
 #
-# POST /amazonclouddirectory/2017-01-11/facet#x-amz-data-partition
+# POST /amazonclouddirectory/2017-01-11/facet
 # operationId: GetFacet
-export def "amazonclouddirectory-2017-01-11-facetx-amz-data-partition get-facet" [
+export def "amazonclouddirectory-2017-01-11-facet get" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1161,22 +1183,22 @@ export def "amazonclouddirectory-2017-01-11-facetx-amz-data-partition get-facet"
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base "/amazonclouddirectory/2017-01-11/facet#x-amz-data-partition")
+  let full_url = (build-url $base "/amazonclouddirectory/2017-01-11/facet")
   let req_body = {"Name": $name} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers, "x-amz-data-partition": $x_amz_data_partition} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: {}, body: $req_body}
 }
 
 # Does the following: Adds new Attributes, Rules, or ObjectTypes. Updates existing Attributes, Rules, or ObjectTypes. Deletes existing Attributes, Rules, or ObjectTypes.
 #
-# PUT /amazonclouddirectory/2017-01-11/facet#x-amz-data-partition
+# PUT /amazonclouddirectory/2017-01-11/facet
 # operationId: UpdateFacet
 # --AttributeUpdates item shape: {Attribute?: any, Action?: any}
-export def "amazonclouddirectory-2017-01-11-facetx-amz-data-partition update-facet" [
+export def "amazonclouddirectory-2017-01-11-facet update" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1201,22 +1223,22 @@ export def "amazonclouddirectory-2017-01-11-facetx-amz-data-partition update-fac
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base "/amazonclouddirectory/2017-01-11/facet#x-amz-data-partition")
+  let full_url = (build-url $base "/amazonclouddirectory/2017-01-11/facet")
   let req_body = {"Name": $name, "AttributeUpdates": $attribute_updates, "ObjectType": $object_type} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers, "x-amz-data-partition": $x_amz_data_partition} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: {}, body: $req_body}
 }
 
 # Retrieves attributes that are associated with a typed link.
 #
-# POST /amazonclouddirectory/2017-01-11/typedlink/attributes/get#x-amz-data-partition
+# POST /amazonclouddirectory/2017-01-11/typedlink/attributes/get
 # operationId: GetLinkAttributes
 # --TypedLinkSpecifier shape: {TypedLinkFacet?: any, SourceObjectReference?: any, TargetObjectReference?: any, IdentityAttributeValues?: any}
-export def "amazonclouddirectory-2017-01-11-typedlink-attributes-getx-amz-data-partition get-link" [
+export def "amazonclouddirectory-2017-01-11-typedlink-attributes-get get-link" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1241,23 +1263,23 @@ export def "amazonclouddirectory-2017-01-11-typedlink-attributes-getx-amz-data-p
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base "/amazonclouddirectory/2017-01-11/typedlink/attributes/get#x-amz-data-partition")
+  let full_url = (build-url $base "/amazonclouddirectory/2017-01-11/typedlink/attributes/get")
   let req_body = {"TypedLinkSpecifier": $typed_link_specifier, "AttributeNames": $attribute_names, "ConsistencyLevel": $consistency_level} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers, "x-amz-data-partition": $x_amz_data_partition} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: {}, body: $req_body}
 }
 
 # Retrieves attributes within a facet that are associated with an object.
 #
-# POST /amazonclouddirectory/2017-01-11/object/attributes/get#x-amz-data-partition
+# POST /amazonclouddirectory/2017-01-11/object/attributes/get
 # operationId: GetObjectAttributes
 # --ObjectReference shape: {Selector?: any}
 # --SchemaFacet shape: {SchemaArn?: any, FacetName?: any}
-export def "amazonclouddirectory-2017-01-11-object-attributes-getx-amz-data-partition get" [
+export def "amazonclouddirectory-2017-01-11-object-attributes-get get" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1283,22 +1305,22 @@ export def "amazonclouddirectory-2017-01-11-object-attributes-getx-amz-data-part
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base "/amazonclouddirectory/2017-01-11/object/attributes/get#x-amz-data-partition")
+  let full_url = (build-url $base "/amazonclouddirectory/2017-01-11/object/attributes/get")
   let req_body = {"ObjectReference": $object_reference, "SchemaFacet": $schema_facet, "AttributeNames": $attribute_names} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers, "x-amz-data-partition": $x_amz_data_partition, "x-amz-consistency-level": $x_amz_consistency_level} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: {}, body: $req_body}
 }
 
 # Retrieves metadata about an object.
 #
-# POST /amazonclouddirectory/2017-01-11/object/information#x-amz-data-partition
+# POST /amazonclouddirectory/2017-01-11/object/information
 # operationId: GetObjectInformation
 # --ObjectReference shape: {Selector?: any}
-export def "amazonclouddirectory-2017-01-11-object-informationx-amz-data-partition get-information" [
+export def "amazonclouddirectory-2017-01-11-object-information get" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1322,21 +1344,21 @@ export def "amazonclouddirectory-2017-01-11-object-informationx-amz-data-partiti
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base "/amazonclouddirectory/2017-01-11/object/information#x-amz-data-partition")
+  let full_url = (build-url $base "/amazonclouddirectory/2017-01-11/object/information")
   let req_body = {"ObjectReference": $object_reference} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers, "x-amz-data-partition": $x_amz_data_partition, "x-amz-consistency-level": $x_amz_consistency_level} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: {}, body: $req_body}
 }
 
 # Retrieves a JSON representation of the schema. See JSON Schema Format (https://docs.aws.amazon.com/clouddirectory/latest/developerguide/schemas_jsonformat.html#schemas_json) for more information.
 #
-# POST /amazonclouddirectory/2017-01-11/schema/json#x-amz-data-partition
+# POST /amazonclouddirectory/2017-01-11/schema/json
 # operationId: GetSchemaAsJson
-export def "amazonclouddirectory-2017-01-11-schema-jsonx-amz-data-partition get-as-json" [
+export def "amazonclouddirectory-2017-01-11-schema-json get" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1357,19 +1379,19 @@ export def "amazonclouddirectory-2017-01-11-schema-jsonx-amz-data-partition get-
 ]: nothing -> record<Name: record, Document: record> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base "/amazonclouddirectory/2017-01-11/schema/json#x-amz-data-partition")
+  let full_url = (build-url $base "/amazonclouddirectory/2017-01-11/schema/json")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers, "x-amz-data-partition": $x_amz_data_partition} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
 }
 
 # Allows a schema to be updated using JSON upload. Only available for development schemas. See JSON Schema Format (https://docs.aws.amazon.com/clouddirectory/latest/developerguide/schemas_jsonformat.html#schemas_json) for more information.
 #
-# PUT /amazonclouddirectory/2017-01-11/schema/json#x-amz-data-partition
+# PUT /amazonclouddirectory/2017-01-11/schema/json
 # operationId: PutSchemaFromJson
-export def "amazonclouddirectory-2017-01-11-schema-jsonx-amz-data-partition update-from-json" [
+export def "amazonclouddirectory-2017-01-11-schema-json update" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1392,21 +1414,21 @@ export def "amazonclouddirectory-2017-01-11-schema-jsonx-amz-data-partition upda
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base "/amazonclouddirectory/2017-01-11/schema/json#x-amz-data-partition")
+  let full_url = (build-url $base "/amazonclouddirectory/2017-01-11/schema/json")
   let req_body = {"Document": $document} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers, "x-amz-data-partition": $x_amz_data_partition} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: {}, body: $req_body}
 }
 
 # Returns the identity attribute order for a specific TypedLinkFacet. For more information, see Typed Links (https://docs.aws.amazon.com/clouddirectory/latest/developerguide/directory_objects_links.html#directory_objects_links_typedlink).
 #
-# POST /amazonclouddirectory/2017-01-11/typedlink/facet/get#x-amz-data-partition
+# POST /amazonclouddirectory/2017-01-11/typedlink/facet/get
 # operationId: GetTypedLinkFacetInformation
-export def "amazonclouddirectory-2017-01-11-typedlink-facet-getx-amz-data-partition get-typed-link-information" [
+export def "amazonclouddirectory-2017-01-11-typedlink-facet-get get-typed-link-information" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1429,14 +1451,14 @@ export def "amazonclouddirectory-2017-01-11-typedlink-facet-getx-amz-data-partit
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base "/amazonclouddirectory/2017-01-11/typedlink/facet/get#x-amz-data-partition")
+  let full_url = (build-url $base "/amazonclouddirectory/2017-01-11/typedlink/facet/get")
   let req_body = {"Name": $name} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers, "x-amz-data-partition": $x_amz_data_partition} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: {}, body: $req_body}
 }
 
 # Lists schema major versions applied to a directory. If SchemaArn is provided, lists the minor version.
@@ -1464,29 +1486,29 @@ export def "amazonclouddirectory-2017-01-11-schema-applied list-arns" [
   --x-amz-signed-headers: string
   directory_arn: string # The ARN of the directory you are listing.
   --schema-arn: string # The response for ListAppliedSchemaArns when this parameter is used will list all minor version ARNs for a major version.
-  --next-token: string # The pagination token.
-  --max-results: int # The maximum number of results to retrieve.
+  --next-token-body: string # The pagination token. (body field)
+  --max-results-body: int # The maximum number of results to retrieve. (body field)
 ]: any -> record<SchemaArns: record, NextToken: record> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "MaxResults" $max_results "scalar") (serialize-qp "NextToken" $next_token "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/amazonclouddirectory/2017-01-11/schema/applied" $qp)
-  let req_body = {"DirectoryArn": $directory_arn, "SchemaArn": $schema_arn, "NextToken": $next_token, "MaxResults": $max_results} | compact
+  let req_body = {"DirectoryArn": $directory_arn, "SchemaArn": $schema_arn, "NextToken": $next_token_body, "MaxResults": $max_results_body} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: ({"MaxResults": $max_results, "NextToken": $next_token} | compact), body: $req_body}
 }
 
 # Lists indices attached to the specified object.
 #
-# POST /amazonclouddirectory/2017-01-11/object/indices#x-amz-data-partition
+# POST /amazonclouddirectory/2017-01-11/object/indices
 # operationId: ListAttachedIndices
 # --TargetReference shape: {Selector?: any}
-export def "amazonclouddirectory-2017-01-11-object-indicesx-amz-data-partition list-attached-indices" [
+export def "amazonclouddirectory-2017-01-11-object-indices list-attached" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1508,21 +1530,21 @@ export def "amazonclouddirectory-2017-01-11-object-indicesx-amz-data-partition l
   --x-amz-data-partition: string # The ARN of the directory.
   --x-amz-consistency-level: string@x-amz-consistency-level-completer # The consistency level to use for this operation.
   target_reference: record # The reference that identifies an object. — shape: {Selector?: any}
-  --next-token: string # The pagination token.
-  --max-results: int # The maximum number of results to retrieve.
+  --next-token-body: string # The pagination token. (body field)
+  --max-results-body: int # The maximum number of results to retrieve. (body field)
 ]: any -> record<IndexAttachments: record, NextToken: record> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "MaxResults" $max_results "scalar") (serialize-qp "NextToken" $next_token "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base "/amazonclouddirectory/2017-01-11/object/indices#x-amz-data-partition" $qp)
-  let req_body = {"TargetReference": $target_reference, "NextToken": $next_token, "MaxResults": $max_results} | compact
+  let full_url = (build-url $base "/amazonclouddirectory/2017-01-11/object/indices" $qp)
+  let req_body = {"TargetReference": $target_reference, "NextToken": $next_token_body, "MaxResults": $max_results_body} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers, "x-amz-data-partition": $x_amz_data_partition, "x-amz-consistency-level": $x_amz_consistency_level} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: ({"MaxResults": $max_results, "NextToken": $next_token} | compact), body: $req_body}
 }
 
 # Retrieves each Amazon Resource Name (ARN) of schemas in the development state.
@@ -1548,21 +1570,21 @@ export def "amazonclouddirectory-2017-01-11-schema-development list-arns" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-  --next-token: string # The pagination token.
-  --max-results: int # The maximum number of results to retrieve.
+  --next-token-body: string # The pagination token. (body field)
+  --max-results-body: int # The maximum number of results to retrieve. (body field)
 ]: any -> record<SchemaArns: record, NextToken: record> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "MaxResults" $max_results "scalar") (serialize-qp "NextToken" $next_token "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/amazonclouddirectory/2017-01-11/schema/development" $qp)
-  let req_body = {"NextToken": $next_token, "MaxResults": $max_results} | compact
+  let req_body = {"NextToken": $next_token_body, "MaxResults": $max_results_body} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: ({"MaxResults": $max_results, "NextToken": $next_token} | compact), body: $req_body}
 }
 
 # Lists directories created within an account.
@@ -1588,8 +1610,8 @@ export def "amazonclouddirectory-2017-01-11-directory-list list-directories" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-  --next-token: string # The pagination token.
-  --max-results: int # The maximum number of results to retrieve.
+  --next-token-body: string # The pagination token. (body field)
+  --max-results-body: int # The maximum number of results to retrieve. (body field)
   --state: string@state-completer # The state of the directories in the list. Can be either Enabled, Disabled, or Deleted.
 ]: any -> record<Directories: record, NextToken: record> {
   let input = $in
@@ -1597,20 +1619,20 @@ export def "amazonclouddirectory-2017-01-11-directory-list list-directories" [
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "MaxResults" $max_results "scalar") (serialize-qp "NextToken" $next_token "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/amazonclouddirectory/2017-01-11/directory/list" $qp)
-  let req_body = {"NextToken": $next_token, "MaxResults": $max_results, "state": $state} | compact
+  let req_body = {"NextToken": $next_token_body, "MaxResults": $max_results_body, "state": $state} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: ({"MaxResults": $max_results, "NextToken": $next_token} | compact), body: $req_body}
 }
 
 # Retrieves attributes attached to the facet.
 #
-# POST /amazonclouddirectory/2017-01-11/facet/attributes#x-amz-data-partition
+# POST /amazonclouddirectory/2017-01-11/facet/attributes
 # operationId: ListFacetAttributes
-export def "amazonclouddirectory-2017-01-11-facet-attributesx-amz-data-partition list-attributes" [
+export def "amazonclouddirectory-2017-01-11-facet-attributes list" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1631,28 +1653,28 @@ export def "amazonclouddirectory-2017-01-11-facet-attributesx-amz-data-partition
   --x-amz-signed-headers: string
   --x-amz-data-partition: string # The ARN of the schema where the facet resides.
   name: string # The name of the facet whose attributes will be retrieved.
-  --next-token: string # The pagination token.
-  --max-results: int # The maximum number of results to retrieve.
+  --next-token-body: string # The pagination token. (body field)
+  --max-results-body: int # The maximum number of results to retrieve. (body field)
 ]: any -> record<Attributes: record, NextToken: record> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "MaxResults" $max_results "scalar") (serialize-qp "NextToken" $next_token "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base "/amazonclouddirectory/2017-01-11/facet/attributes#x-amz-data-partition" $qp)
-  let req_body = {"Name": $name, "NextToken": $next_token, "MaxResults": $max_results} | compact
+  let full_url = (build-url $base "/amazonclouddirectory/2017-01-11/facet/attributes" $qp)
+  let req_body = {"Name": $name, "NextToken": $next_token_body, "MaxResults": $max_results_body} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers, "x-amz-data-partition": $x_amz_data_partition} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: ({"MaxResults": $max_results, "NextToken": $next_token} | compact), body: $req_body}
 }
 
 # Retrieves the names of facets that exist in a schema.
 #
-# POST /amazonclouddirectory/2017-01-11/facet/list#x-amz-data-partition
+# POST /amazonclouddirectory/2017-01-11/facet/list
 # operationId: ListFacetNames
-export def "amazonclouddirectory-2017-01-11-facet-listx-amz-data-partition list-names" [
+export def "amazonclouddirectory-2017-01-11-facet-list list-names" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1672,31 +1694,31 @@ export def "amazonclouddirectory-2017-01-11-facet-listx-amz-data-partition list-
   --x-amz-signature: string
   --x-amz-signed-headers: string
   --x-amz-data-partition: string # The Amazon Resource Name (ARN) to retrieve facet names from.
-  --next-token: string # The pagination token.
-  --max-results: int # The maximum number of results to retrieve.
+  --next-token-body: string # The pagination token. (body field)
+  --max-results-body: int # The maximum number of results to retrieve. (body field)
 ]: any -> record<FacetNames: record, NextToken: record> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "MaxResults" $max_results "scalar") (serialize-qp "NextToken" $next_token "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base "/amazonclouddirectory/2017-01-11/facet/list#x-amz-data-partition" $qp)
-  let req_body = {"NextToken": $next_token, "MaxResults": $max_results} | compact
+  let full_url = (build-url $base "/amazonclouddirectory/2017-01-11/facet/list" $qp)
+  let req_body = {"NextToken": $next_token_body, "MaxResults": $max_results_body} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers, "x-amz-data-partition": $x_amz_data_partition} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: ({"MaxResults": $max_results, "NextToken": $next_token} | compact), body: $req_body}
 }
 
 # Returns a paginated list of all the incoming TypedLinkSpecifier information for an object. It also supports filtering by typed link facet and identity attributes. For more information, see Typed Links (https://docs.aws.amazon.com/clouddirectory/latest/developerguide/directory_objects_links.html#directory_objects_links_typedlink).
 #
-# POST /amazonclouddirectory/2017-01-11/typedlink/incoming#x-amz-data-partition
+# POST /amazonclouddirectory/2017-01-11/typedlink/incoming
 # operationId: ListIncomingTypedLinks
 # --ObjectReference shape: {Selector?: any}
 # --FilterAttributeRanges item shape: {AttributeName?: any, Range: any}
 # --FilterTypedLink shape: {SchemaArn?: any, TypedLinkName?: any}
-export def "amazonclouddirectory-2017-01-11-typedlink-incomingx-amz-data-partition list-incoming-typed-links" [
+export def "amazonclouddirectory-2017-01-11-typedlink-incoming list-typed-links" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1724,23 +1746,23 @@ export def "amazonclouddirectory-2017-01-11-typedlink-incomingx-amz-data-partiti
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base "/amazonclouddirectory/2017-01-11/typedlink/incoming#x-amz-data-partition")
+  let full_url = (build-url $base "/amazonclouddirectory/2017-01-11/typedlink/incoming")
   let req_body = {"ObjectReference": $object_reference, "FilterAttributeRanges": $filter_attribute_ranges, "FilterTypedLink": $filter_typed_link, "NextToken": $next_token, "MaxResults": $max_results, "ConsistencyLevel": $consistency_level} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers, "x-amz-data-partition": $x_amz_data_partition} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: {}, body: $req_body}
 }
 
 # Lists objects attached to the specified index.
 #
-# POST /amazonclouddirectory/2017-01-11/index/targets#x-amz-data-partition
+# POST /amazonclouddirectory/2017-01-11/index/targets
 # operationId: ListIndex
 # --RangesOnIndexedValues item shape: {AttributeKey?: any, Range?: any}
 # --IndexReference shape: {Selector?: any}
-export def "amazonclouddirectory-2017-01-11-index-targetsx-amz-data-partition list" [
+export def "amazonclouddirectory-2017-01-11-index-targets list" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1763,21 +1785,21 @@ export def "amazonclouddirectory-2017-01-11-index-targetsx-amz-data-partition li
   --x-amz-consistency-level: string@x-amz-consistency-level-completer # The consistency level to execute the request at.
   --ranges-on-indexed-values: list # Specifies the ranges of indexed values that you want to query. — item shape: {AttributeKey?: any, Range?: any}
   index_reference: record # The reference that identifies an object. — shape: {Selector?: any}
-  --max-results: int # The maximum number of objects in a single page to retrieve from the index during a request. For more information, see Amazon Cloud Directory Limits (http://docs.aws.amazon.com/clouddirectory/latest/developerguide/limits.html).
-  --next-token: string # The pagination token.
+  --max-results-body: int # The maximum number of objects in a single page to retrieve from the index during a request. For more information, see Amazon Cloud Directory Limits (http://docs.aws.amazon.com/clouddirectory/latest/developerguide/limits.html). (body field)
+  --next-token-body: string # The pagination token. (body field)
 ]: any -> record<IndexAttachments: record, NextToken: record> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "MaxResults" $max_results "scalar") (serialize-qp "NextToken" $next_token "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base "/amazonclouddirectory/2017-01-11/index/targets#x-amz-data-partition" $qp)
-  let req_body = {"RangesOnIndexedValues": $ranges_on_indexed_values, "IndexReference": $index_reference, "MaxResults": $max_results, "NextToken": $next_token} | compact
+  let full_url = (build-url $base "/amazonclouddirectory/2017-01-11/index/targets" $qp)
+  let req_body = {"RangesOnIndexedValues": $ranges_on_indexed_values, "IndexReference": $index_reference, "MaxResults": $max_results_body, "NextToken": $next_token_body} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers, "x-amz-data-partition": $x_amz_data_partition, "x-amz-consistency-level": $x_amz_consistency_level} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: ({"MaxResults": $max_results, "NextToken": $next_token} | compact), body: $req_body}
 }
 
 # Lists the major version families of each managed schema. If a major version ARN is provided as SchemaArn, the minor version revisions in that family are listed instead.
@@ -1804,30 +1826,30 @@ export def "amazonclouddirectory-2017-01-11-schema-managed list-arns" [
   --x-amz-signature: string
   --x-amz-signed-headers: string
   --schema-arn: string # The response for ListManagedSchemaArns. When this parameter is used, all minor version ARNs for a major version are listed.
-  --next-token: string # The pagination token.
-  --max-results: int # The maximum number of results to retrieve.
+  --next-token-body: string # The pagination token. (body field)
+  --max-results-body: int # The maximum number of results to retrieve. (body field)
 ]: any -> record<SchemaArns: record, NextToken: record> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "MaxResults" $max_results "scalar") (serialize-qp "NextToken" $next_token "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/amazonclouddirectory/2017-01-11/schema/managed" $qp)
-  let req_body = {"SchemaArn": $schema_arn, "NextToken": $next_token, "MaxResults": $max_results} | compact
+  let req_body = {"SchemaArn": $schema_arn, "NextToken": $next_token_body, "MaxResults": $max_results_body} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: ({"MaxResults": $max_results, "NextToken": $next_token} | compact), body: $req_body}
 }
 
 # Lists all attributes that are associated with an object.
 #
-# POST /amazonclouddirectory/2017-01-11/object/attributes#x-amz-data-partition
+# POST /amazonclouddirectory/2017-01-11/object/attributes
 # operationId: ListObjectAttributes
 # --ObjectReference shape: {Selector?: any}
 # --FacetFilter shape: {SchemaArn?: any, FacetName?: any}
-export def "amazonclouddirectory-2017-01-11-object-attributesx-amz-data-partition list-attributes" [
+export def "amazonclouddirectory-2017-01-11-object-attributes list" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1849,30 +1871,30 @@ export def "amazonclouddirectory-2017-01-11-object-attributesx-amz-data-partitio
   --x-amz-data-partition: string # The Amazon Resource Name (ARN) that is associated with the Directory where the object resides. For more information, see arns.
   --x-amz-consistency-level: string@x-amz-consistency-level-completer # Represents the manner and timing in which the successful write or update of an object is reflected in a subsequent read operation of that same object.
   object_reference: record # The reference that identifies an object. — shape: {Selector?: any}
-  --next-token: string # The pagination token.
-  --max-results: int # The maximum number of items to be retrieved in a single call. This is an approximate number.
+  --next-token-body: string # The pagination token. (body field)
+  --max-results-body: int # The maximum number of items to be retrieved in a single call. This is an approximate number. (body field)
   --facet-filter: record # A facet. — shape: {SchemaArn?: any, FacetName?: any}
 ]: any -> record<Attributes: record, NextToken: record> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "MaxResults" $max_results "scalar") (serialize-qp "NextToken" $next_token "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base "/amazonclouddirectory/2017-01-11/object/attributes#x-amz-data-partition" $qp)
-  let req_body = {"ObjectReference": $object_reference, "NextToken": $next_token, "MaxResults": $max_results, "FacetFilter": $facet_filter} | compact
+  let full_url = (build-url $base "/amazonclouddirectory/2017-01-11/object/attributes" $qp)
+  let req_body = {"ObjectReference": $object_reference, "NextToken": $next_token_body, "MaxResults": $max_results_body, "FacetFilter": $facet_filter} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers, "x-amz-data-partition": $x_amz_data_partition, "x-amz-consistency-level": $x_amz_consistency_level} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: ({"MaxResults": $max_results, "NextToken": $next_token} | compact), body: $req_body}
 }
 
 # Returns a paginated list of child objects that are associated with a given object.
 #
-# POST /amazonclouddirectory/2017-01-11/object/children#x-amz-data-partition
+# POST /amazonclouddirectory/2017-01-11/object/children
 # operationId: ListObjectChildren
 # --ObjectReference shape: {Selector?: any}
-export def "amazonclouddirectory-2017-01-11-object-childrenx-amz-data-partition list-children" [
+export def "amazonclouddirectory-2017-01-11-object-children list" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1894,29 +1916,29 @@ export def "amazonclouddirectory-2017-01-11-object-childrenx-amz-data-partition 
   --x-amz-data-partition: string # The Amazon Resource Name (ARN) that is associated with the Directory where the object resides. For more information, see arns.
   --x-amz-consistency-level: string@x-amz-consistency-level-completer # Represents the manner and timing in which the successful write or update of an object is reflected in a subsequent read operation of that same object.
   object_reference: record # The reference that identifies an object. — shape: {Selector?: any}
-  --next-token: string # The pagination token.
-  --max-results: int # The maximum number of items to be retrieved in a single call. This is an approximate number.
+  --next-token-body: string # The pagination token. (body field)
+  --max-results-body: int # The maximum number of items to be retrieved in a single call. This is an approximate number. (body field)
 ]: any -> record<Children: record, NextToken: record> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "MaxResults" $max_results "scalar") (serialize-qp "NextToken" $next_token "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base "/amazonclouddirectory/2017-01-11/object/children#x-amz-data-partition" $qp)
-  let req_body = {"ObjectReference": $object_reference, "NextToken": $next_token, "MaxResults": $max_results} | compact
+  let full_url = (build-url $base "/amazonclouddirectory/2017-01-11/object/children" $qp)
+  let req_body = {"ObjectReference": $object_reference, "NextToken": $next_token_body, "MaxResults": $max_results_body} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers, "x-amz-data-partition": $x_amz_data_partition, "x-amz-consistency-level": $x_amz_consistency_level} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: ({"MaxResults": $max_results, "NextToken": $next_token} | compact), body: $req_body}
 }
 
 # Retrieves all available parent paths for any object type such as node, leaf node, policy node, and index node objects. For more information about objects, see Directory Structure (https://docs.aws.amazon.com/clouddirectory/latest/developerguide/key_concepts_directorystructure.html). Use this API to evaluate all parents for an object. The call returns all objects from the root of the directory up to the requested object. The API returns the number of paths based on user-defined MaxResults, in case there are multiple paths to the parent. The order of the paths and nodes returned is consistent among multiple API calls unless the objects are deleted or moved. Paths not leading to the directory root are ignored from the target object.
 #
-# POST /amazonclouddirectory/2017-01-11/object/parentpaths#x-amz-data-partition
+# POST /amazonclouddirectory/2017-01-11/object/parentpaths
 # operationId: ListObjectParentPaths
 # --ObjectReference shape: {Selector?: any}
-export def "amazonclouddirectory-2017-01-11-object-parentpathsx-amz-data-partition list-parent-paths" [
+export def "amazonclouddirectory-2017-01-11-object-parentpaths list-parent-paths" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1937,29 +1959,29 @@ export def "amazonclouddirectory-2017-01-11-object-parentpathsx-amz-data-partiti
   --x-amz-signed-headers: string
   --x-amz-data-partition: string # The ARN of the directory to which the parent path applies.
   object_reference: record # The reference that identifies an object. — shape: {Selector?: any}
-  --next-token: string # The pagination token.
-  --max-results: int # The maximum number of items to be retrieved in a single call. This is an approximate number.
+  --next-token-body: string # The pagination token. (body field)
+  --max-results-body: int # The maximum number of items to be retrieved in a single call. This is an approximate number. (body field)
 ]: any -> record<PathToObjectIdentifiersList: record, NextToken: record> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "MaxResults" $max_results "scalar") (serialize-qp "NextToken" $next_token "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base "/amazonclouddirectory/2017-01-11/object/parentpaths#x-amz-data-partition" $qp)
-  let req_body = {"ObjectReference": $object_reference, "NextToken": $next_token, "MaxResults": $max_results} | compact
+  let full_url = (build-url $base "/amazonclouddirectory/2017-01-11/object/parentpaths" $qp)
+  let req_body = {"ObjectReference": $object_reference, "NextToken": $next_token_body, "MaxResults": $max_results_body} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers, "x-amz-data-partition": $x_amz_data_partition} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: ({"MaxResults": $max_results, "NextToken": $next_token} | compact), body: $req_body}
 }
 
 # Lists parent objects that are associated with a given object in pagination fashion.
 #
-# POST /amazonclouddirectory/2017-01-11/object/parent#x-amz-data-partition
+# POST /amazonclouddirectory/2017-01-11/object/parent
 # operationId: ListObjectParents
 # --ObjectReference shape: {Selector?: any}
-export def "amazonclouddirectory-2017-01-11-object-parentx-amz-data-partition list-parents" [
+export def "amazonclouddirectory-2017-01-11-object-parent list" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1981,30 +2003,30 @@ export def "amazonclouddirectory-2017-01-11-object-parentx-amz-data-partition li
   --x-amz-data-partition: string # The Amazon Resource Name (ARN) that is associated with the Directory where the object resides. For more information, see arns.
   --x-amz-consistency-level: string@x-amz-consistency-level-completer # Represents the manner and timing in which the successful write or update of an object is reflected in a subsequent read operation of that same object.
   object_reference: record # The reference that identifies an object. — shape: {Selector?: any}
-  --next-token: string # The pagination token.
-  --max-results: int # The maximum number of items to be retrieved in a single call. This is an approximate number.
+  --next-token-body: string # The pagination token. (body field)
+  --max-results-body: int # The maximum number of items to be retrieved in a single call. This is an approximate number. (body field)
   --include-all-links-to-each-parent: oneof<nothing, bool> # When set to True, returns all ListObjectParentsResponse$ParentLinks. There could be multiple links between a parent-child pair.
 ]: any -> record<Parents: record, NextToken: record, ParentLinks: record> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "MaxResults" $max_results "scalar") (serialize-qp "NextToken" $next_token "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base "/amazonclouddirectory/2017-01-11/object/parent#x-amz-data-partition" $qp)
-  let req_body = {"ObjectReference": $object_reference, "NextToken": $next_token, "MaxResults": $max_results, "IncludeAllLinksToEachParent": $include_all_links_to_each_parent} | compact
+  let full_url = (build-url $base "/amazonclouddirectory/2017-01-11/object/parent" $qp)
+  let req_body = {"ObjectReference": $object_reference, "NextToken": $next_token_body, "MaxResults": $max_results_body, "IncludeAllLinksToEachParent": $include_all_links_to_each_parent} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers, "x-amz-data-partition": $x_amz_data_partition, "x-amz-consistency-level": $x_amz_consistency_level} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: ({"MaxResults": $max_results, "NextToken": $next_token} | compact), body: $req_body}
 }
 
 # Returns policies attached to an object in pagination fashion.
 #
-# POST /amazonclouddirectory/2017-01-11/object/policy#x-amz-data-partition
+# POST /amazonclouddirectory/2017-01-11/object/policy
 # operationId: ListObjectPolicies
 # --ObjectReference shape: {Selector?: any}
-export def "amazonclouddirectory-2017-01-11-object-policyx-amz-data-partition list-policies" [
+export def "amazonclouddirectory-2017-01-11-object-policy list-policies" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2026,31 +2048,31 @@ export def "amazonclouddirectory-2017-01-11-object-policyx-amz-data-partition li
   --x-amz-data-partition: string # The Amazon Resource Name (ARN) that is associated with the Directory where objects reside. For more information, see arns.
   --x-amz-consistency-level: string@x-amz-consistency-level-completer # Represents the manner and timing in which the successful write or update of an object is reflected in a subsequent read operation of that same object.
   object_reference: record # The reference that identifies an object. — shape: {Selector?: any}
-  --next-token: string # The pagination token.
-  --max-results: int # The maximum number of items to be retrieved in a single call. This is an approximate number.
+  --next-token-body: string # The pagination token. (body field)
+  --max-results-body: int # The maximum number of items to be retrieved in a single call. This is an approximate number. (body field)
 ]: any -> record<AttachedPolicyIds: record, NextToken: record> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "MaxResults" $max_results "scalar") (serialize-qp "NextToken" $next_token "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base "/amazonclouddirectory/2017-01-11/object/policy#x-amz-data-partition" $qp)
-  let req_body = {"ObjectReference": $object_reference, "NextToken": $next_token, "MaxResults": $max_results} | compact
+  let full_url = (build-url $base "/amazonclouddirectory/2017-01-11/object/policy" $qp)
+  let req_body = {"ObjectReference": $object_reference, "NextToken": $next_token_body, "MaxResults": $max_results_body} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers, "x-amz-data-partition": $x_amz_data_partition, "x-amz-consistency-level": $x_amz_consistency_level} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: ({"MaxResults": $max_results, "NextToken": $next_token} | compact), body: $req_body}
 }
 
 # Returns a paginated list of all the outgoing TypedLinkSpecifier information for an object. It also supports filtering by typed link facet and identity attributes. For more information, see Typed Links (https://docs.aws.amazon.com/clouddirectory/latest/developerguide/directory_objects_links.html#directory_objects_links_typedlink).
 #
-# POST /amazonclouddirectory/2017-01-11/typedlink/outgoing#x-amz-data-partition
+# POST /amazonclouddirectory/2017-01-11/typedlink/outgoing
 # operationId: ListOutgoingTypedLinks
 # --ObjectReference shape: {Selector?: any}
 # --FilterAttributeRanges item shape: {AttributeName?: any, Range: any}
 # --FilterTypedLink shape: {SchemaArn?: any, TypedLinkName?: any}
-export def "amazonclouddirectory-2017-01-11-typedlink-outgoingx-amz-data-partition list-outgoing-typed-links" [
+export def "amazonclouddirectory-2017-01-11-typedlink-outgoing list-typed-links" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2078,22 +2100,22 @@ export def "amazonclouddirectory-2017-01-11-typedlink-outgoingx-amz-data-partiti
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base "/amazonclouddirectory/2017-01-11/typedlink/outgoing#x-amz-data-partition")
+  let full_url = (build-url $base "/amazonclouddirectory/2017-01-11/typedlink/outgoing")
   let req_body = {"ObjectReference": $object_reference, "FilterAttributeRanges": $filter_attribute_ranges, "FilterTypedLink": $filter_typed_link, "NextToken": $next_token, "MaxResults": $max_results, "ConsistencyLevel": $consistency_level} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers, "x-amz-data-partition": $x_amz_data_partition} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: {}, body: $req_body}
 }
 
 # Returns all of the ObjectIdentifiers to which a given policy is attached.
 #
-# POST /amazonclouddirectory/2017-01-11/policy/attachment#x-amz-data-partition
+# POST /amazonclouddirectory/2017-01-11/policy/attachment
 # operationId: ListPolicyAttachments
 # --PolicyReference shape: {Selector?: any}
-export def "amazonclouddirectory-2017-01-11-policy-attachmentx-amz-data-partition list-attachments" [
+export def "amazonclouddirectory-2017-01-11-policy-attachment list" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2115,21 +2137,21 @@ export def "amazonclouddirectory-2017-01-11-policy-attachmentx-amz-data-partitio
   --x-amz-data-partition: string # The Amazon Resource Name (ARN) that is associated with the Directory where objects reside. For more information, see arns.
   --x-amz-consistency-level: string@x-amz-consistency-level-completer # Represents the manner and timing in which the successful write or update of an object is reflected in a subsequent read operation of that same object.
   policy_reference: record # The reference that identifies an object. — shape: {Selector?: any}
-  --next-token: string # The pagination token.
-  --max-results: int # The maximum number of items to be retrieved in a single call. This is an approximate number.
+  --next-token-body: string # The pagination token. (body field)
+  --max-results-body: int # The maximum number of items to be retrieved in a single call. This is an approximate number. (body field)
 ]: any -> record<ObjectIdentifiers: record, NextToken: record> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "MaxResults" $max_results "scalar") (serialize-qp "NextToken" $next_token "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base "/amazonclouddirectory/2017-01-11/policy/attachment#x-amz-data-partition" $qp)
-  let req_body = {"PolicyReference": $policy_reference, "NextToken": $next_token, "MaxResults": $max_results} | compact
+  let full_url = (build-url $base "/amazonclouddirectory/2017-01-11/policy/attachment" $qp)
+  let req_body = {"PolicyReference": $policy_reference, "NextToken": $next_token_body, "MaxResults": $max_results_body} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers, "x-amz-data-partition": $x_amz_data_partition, "x-amz-consistency-level": $x_amz_consistency_level} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: ({"MaxResults": $max_results, "NextToken": $next_token} | compact), body: $req_body}
 }
 
 # Lists the major version families of each published schema. If a major version ARN is provided as SchemaArn, the minor version revisions in that family are listed instead.
@@ -2156,21 +2178,21 @@ export def "amazonclouddirectory-2017-01-11-schema-published list-arns" [
   --x-amz-signature: string
   --x-amz-signed-headers: string
   --schema-arn: string # The response for ListPublishedSchemaArns when this parameter is used will list all minor version ARNs for a major version.
-  --next-token: string # The pagination token.
-  --max-results: int # The maximum number of results to retrieve.
+  --next-token-body: string # The pagination token. (body field)
+  --max-results-body: int # The maximum number of results to retrieve. (body field)
 ]: any -> record<SchemaArns: record, NextToken: record> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "MaxResults" $max_results "scalar") (serialize-qp "NextToken" $next_token "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/amazonclouddirectory/2017-01-11/schema/published" $qp)
-  let req_body = {"SchemaArn": $schema_arn, "NextToken": $next_token, "MaxResults": $max_results} | compact
+  let req_body = {"SchemaArn": $schema_arn, "NextToken": $next_token_body, "MaxResults": $max_results_body} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: ({"MaxResults": $max_results, "NextToken": $next_token} | compact), body: $req_body}
 }
 
 # Returns tags for a resource. Tagging is currently supported only for directories with a limit of 50 tags per directory. All 50 tags are returned for a given directory with this API call.
@@ -2197,28 +2219,28 @@ export def "amazonclouddirectory-2017-01-11-tags list-for-resource" [
   --x-amz-signature: string
   --x-amz-signed-headers: string
   resource_arn: string # The Amazon Resource Name (ARN) of the resource. Tagging is only supported for directories.
-  --next-token: string # The pagination token. This is for future use. Currently pagination is not supported for tagging.
-  --max-results: int # The MaxResults parameter sets the maximum number of results returned in a single page. This is for future use and is not supported currently.
+  --next-token-body: string # The pagination token. This is for future use. Currently pagination is not supported for tagging. (body field)
+  --max-results-body: int # The MaxResults parameter sets the maximum number of results returned in a single page. This is for future use and is not supported currently. (body field)
 ]: any -> record<Tags: record, NextToken: record> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "MaxResults" $max_results "scalar") (serialize-qp "NextToken" $next_token "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/amazonclouddirectory/2017-01-11/tags" $qp)
-  let req_body = {"ResourceArn": $resource_arn, "NextToken": $next_token, "MaxResults": $max_results} | compact
+  let req_body = {"ResourceArn": $resource_arn, "NextToken": $next_token_body, "MaxResults": $max_results_body} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: ({"MaxResults": $max_results, "NextToken": $next_token} | compact), body: $req_body}
 }
 
 # Returns a paginated list of all attribute definitions for a particular TypedLinkFacet. For more information, see Typed Links (https://docs.aws.amazon.com/clouddirectory/latest/developerguide/directory_objects_links.html#directory_objects_links_typedlink).
 #
-# POST /amazonclouddirectory/2017-01-11/typedlink/facet/attributes#x-amz-data-partition
+# POST /amazonclouddirectory/2017-01-11/typedlink/facet/attributes
 # operationId: ListTypedLinkFacetAttributes
-export def "amazonclouddirectory-2017-01-11-typedlink-facet-attributesx-amz-data-partition list-typed-link-attributes" [
+export def "amazonclouddirectory-2017-01-11-typedlink-facet-attributes list-typed-link" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2239,28 +2261,28 @@ export def "amazonclouddirectory-2017-01-11-typedlink-facet-attributesx-amz-data
   --x-amz-signed-headers: string
   --x-amz-data-partition: string # The Amazon Resource Name (ARN) that is associated with the schema. For more information, see arns.
   name: string # The unique name of the typed link facet.
-  --next-token: string # The pagination token.
-  --max-results: int # The maximum number of results to retrieve.
+  --next-token-body: string # The pagination token. (body field)
+  --max-results-body: int # The maximum number of results to retrieve. (body field)
 ]: any -> record<Attributes: record, NextToken: record> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "MaxResults" $max_results "scalar") (serialize-qp "NextToken" $next_token "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base "/amazonclouddirectory/2017-01-11/typedlink/facet/attributes#x-amz-data-partition" $qp)
-  let req_body = {"Name": $name, "NextToken": $next_token, "MaxResults": $max_results} | compact
+  let full_url = (build-url $base "/amazonclouddirectory/2017-01-11/typedlink/facet/attributes" $qp)
+  let req_body = {"Name": $name, "NextToken": $next_token_body, "MaxResults": $max_results_body} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers, "x-amz-data-partition": $x_amz_data_partition} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: ({"MaxResults": $max_results, "NextToken": $next_token} | compact), body: $req_body}
 }
 
 # Returns a paginated list of TypedLink facet names for a particular schema. For more information, see Typed Links (https://docs.aws.amazon.com/clouddirectory/latest/developerguide/directory_objects_links.html#directory_objects_links_typedlink).
 #
-# POST /amazonclouddirectory/2017-01-11/typedlink/facet/list#x-amz-data-partition
+# POST /amazonclouddirectory/2017-01-11/typedlink/facet/list
 # operationId: ListTypedLinkFacetNames
-export def "amazonclouddirectory-2017-01-11-typedlink-facet-listx-amz-data-partition list-typed-link-names" [
+export def "amazonclouddirectory-2017-01-11-typedlink-facet-list list-typed-link-names" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2280,29 +2302,29 @@ export def "amazonclouddirectory-2017-01-11-typedlink-facet-listx-amz-data-parti
   --x-amz-signature: string
   --x-amz-signed-headers: string
   --x-amz-data-partition: string # The Amazon Resource Name (ARN) that is associated with the schema. For more information, see arns.
-  --next-token: string # The pagination token.
-  --max-results: int # The maximum number of results to retrieve.
+  --next-token-body: string # The pagination token. (body field)
+  --max-results-body: int # The maximum number of results to retrieve. (body field)
 ]: any -> record<FacetNames: record, NextToken: record> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "MaxResults" $max_results "scalar") (serialize-qp "NextToken" $next_token "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base "/amazonclouddirectory/2017-01-11/typedlink/facet/list#x-amz-data-partition" $qp)
-  let req_body = {"NextToken": $next_token, "MaxResults": $max_results} | compact
+  let full_url = (build-url $base "/amazonclouddirectory/2017-01-11/typedlink/facet/list" $qp)
+  let req_body = {"NextToken": $next_token_body, "MaxResults": $max_results_body} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers, "x-amz-data-partition": $x_amz_data_partition} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: ({"MaxResults": $max_results, "NextToken": $next_token} | compact), body: $req_body}
 }
 
 # Lists all policies from the root of the Directory to the object specified. If there are no policies present, an empty list is returned. If policies are present, and if some objects don't have the policies attached, it returns the ObjectIdentifier for such objects. If policies are present, it returns ObjectIdentifier, policyId, and policyType. Paths that don't lead to the root from the target object are ignored. For more information, see Policies (https://docs.aws.amazon.com/clouddirectory/latest/developerguide/key_concepts_directory.html#key_concepts_policies).
 #
-# POST /amazonclouddirectory/2017-01-11/policy/lookup#x-amz-data-partition
+# POST /amazonclouddirectory/2017-01-11/policy/lookup
 # operationId: LookupPolicy
 # --ObjectReference shape: {Selector?: any}
-export def "amazonclouddirectory-2017-01-11-policy-lookupx-amz-data-partition create-lookup" [
+export def "amazonclouddirectory-2017-01-11-policy-lookup create" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2323,28 +2345,28 @@ export def "amazonclouddirectory-2017-01-11-policy-lookupx-amz-data-partition cr
   --x-amz-signed-headers: string
   --x-amz-data-partition: string # The Amazon Resource Name (ARN) that is associated with the Directory. For more information, see arns.
   object_reference: record # The reference that identifies an object. — shape: {Selector?: any}
-  --next-token: string # The token to request the next page of results.
-  --max-results: int # The maximum number of items to be retrieved in a single call. This is an approximate number.
+  --next-token-body: string # The token to request the next page of results. (body field)
+  --max-results-body: int # The maximum number of items to be retrieved in a single call. This is an approximate number. (body field)
 ]: any -> record<PolicyToPathList: record, NextToken: record> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "MaxResults" $max_results "scalar") (serialize-qp "NextToken" $next_token "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base "/amazonclouddirectory/2017-01-11/policy/lookup#x-amz-data-partition" $qp)
-  let req_body = {"ObjectReference": $object_reference, "NextToken": $next_token, "MaxResults": $max_results} | compact
+  let full_url = (build-url $base "/amazonclouddirectory/2017-01-11/policy/lookup" $qp)
+  let req_body = {"ObjectReference": $object_reference, "NextToken": $next_token_body, "MaxResults": $max_results_body} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers, "x-amz-data-partition": $x_amz_data_partition} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: ({"MaxResults": $max_results, "NextToken": $next_token} | compact), body: $req_body}
 }
 
 # Publishes a development schema with a major version and a recommended minor version.
 #
-# PUT /amazonclouddirectory/2017-01-11/schema/publish#x-amz-data-partition
+# PUT /amazonclouddirectory/2017-01-11/schema/publish
 # operationId: PublishSchema
-export def "amazonclouddirectory-2017-01-11-schema-publishx-amz-data-partition publish" [
+export def "amazonclouddirectory-2017-01-11-schema-publish publish" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2369,23 +2391,23 @@ export def "amazonclouddirectory-2017-01-11-schema-publishx-amz-data-partition p
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base "/amazonclouddirectory/2017-01-11/schema/publish#x-amz-data-partition")
+  let full_url = (build-url $base "/amazonclouddirectory/2017-01-11/schema/publish")
   let req_body = {"Version": $version, "MinorVersion": $minor_version, "Name": $name} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers, "x-amz-data-partition": $x_amz_data_partition} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: {}, body: $req_body}
 }
 
 # Removes the specified facet from the specified object.
 #
-# PUT /amazonclouddirectory/2017-01-11/object/facets/delete#x-amz-data-partition
+# PUT /amazonclouddirectory/2017-01-11/object/facets/delete
 # operationId: RemoveFacetFromObject
 # --SchemaFacet shape: {SchemaArn?: any, FacetName?: any}
 # --ObjectReference shape: {Selector?: any}
-export def "amazonclouddirectory-2017-01-11-object-facets-deletex-amz-data-partition delete" [
+export def "amazonclouddirectory-2017-01-11-object-facets-delete delete" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2409,14 +2431,14 @@ export def "amazonclouddirectory-2017-01-11-object-facets-deletex-amz-data-parti
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base "/amazonclouddirectory/2017-01-11/object/facets/delete#x-amz-data-partition")
+  let full_url = (build-url $base "/amazonclouddirectory/2017-01-11/object/facets/delete")
   let req_body = {"SchemaFacet": $schema_facet, "ObjectReference": $object_reference} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers, "x-amz-data-partition": $x_amz_data_partition} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: {}, body: $req_body}
 }
 
 # An API operation for adding tags to a resource.
@@ -2454,7 +2476,7 @@ export def "amazonclouddirectory-2017-01-11-tags-add tag-resource" [
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: {}, body: $req_body}
 }
 
 # An API operation for removing tags from a resource.
@@ -2491,16 +2513,16 @@ export def "amazonclouddirectory-2017-01-11-tags-remove untag-resource" [
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: {}, body: $req_body}
 }
 
 # Updates a given typed link’s attributes. Attributes to be updated must not contribute to the typed link’s identity, as defined by its IdentityAttributeOrder.
 #
-# POST /amazonclouddirectory/2017-01-11/typedlink/attributes/update#x-amz-data-partition
+# POST /amazonclouddirectory/2017-01-11/typedlink/attributes/update
 # operationId: UpdateLinkAttributes
 # --TypedLinkSpecifier shape: {TypedLinkFacet?: any, SourceObjectReference?: any, TargetObjectReference?: any, IdentityAttributeValues?: any}
 # --AttributeUpdates item shape: {AttributeKey?: any, AttributeAction?: any}
-export def "amazonclouddirectory-2017-01-11-typedlink-attributes-updatex-amz-data-partition update-link" [
+export def "amazonclouddirectory-2017-01-11-typedlink-attributes-update update-link" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2524,23 +2546,23 @@ export def "amazonclouddirectory-2017-01-11-typedlink-attributes-updatex-amz-dat
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base "/amazonclouddirectory/2017-01-11/typedlink/attributes/update#x-amz-data-partition")
+  let full_url = (build-url $base "/amazonclouddirectory/2017-01-11/typedlink/attributes/update")
   let req_body = {"TypedLinkSpecifier": $typed_link_specifier, "AttributeUpdates": $attribute_updates} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers, "x-amz-data-partition": $x_amz_data_partition} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: {}, body: $req_body}
 }
 
 # Updates a given object's attributes.
 #
-# PUT /amazonclouddirectory/2017-01-11/object/update#x-amz-data-partition
+# PUT /amazonclouddirectory/2017-01-11/object/update
 # operationId: UpdateObjectAttributes
 # --ObjectReference shape: {Selector?: any}
 # --AttributeUpdates item shape: {ObjectAttributeKey?: any, ObjectAttributeAction?: any}
-export def "amazonclouddirectory-2017-01-11-object-updatex-amz-data-partition update-attributes" [
+export def "amazonclouddirectory-2017-01-11-object-update update-attributes" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2564,21 +2586,21 @@ export def "amazonclouddirectory-2017-01-11-object-updatex-amz-data-partition up
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base "/amazonclouddirectory/2017-01-11/object/update#x-amz-data-partition")
+  let full_url = (build-url $base "/amazonclouddirectory/2017-01-11/object/update")
   let req_body = {"ObjectReference": $object_reference, "AttributeUpdates": $attribute_updates} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers, "x-amz-data-partition": $x_amz_data_partition} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: {}, body: $req_body}
 }
 
 # Updates the schema name with a new name. Only development schema names can be updated.
 #
-# PUT /amazonclouddirectory/2017-01-11/schema/update#x-amz-data-partition
+# PUT /amazonclouddirectory/2017-01-11/schema/update
 # operationId: UpdateSchema
-export def "amazonclouddirectory-2017-01-11-schema-updatex-amz-data-partition update" [
+export def "amazonclouddirectory-2017-01-11-schema-update update" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2601,22 +2623,22 @@ export def "amazonclouddirectory-2017-01-11-schema-updatex-amz-data-partition up
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base "/amazonclouddirectory/2017-01-11/schema/update#x-amz-data-partition")
+  let full_url = (build-url $base "/amazonclouddirectory/2017-01-11/schema/update")
   let req_body = {"Name": $name} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers, "x-amz-data-partition": $x_amz_data_partition} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: {}, body: $req_body}
 }
 
 # Updates a TypedLinkFacet. For more information, see Typed Links (https://docs.aws.amazon.com/clouddirectory/latest/developerguide/directory_objects_links.html#directory_objects_links_typedlink).
 #
-# PUT /amazonclouddirectory/2017-01-11/typedlink/facet#x-amz-data-partition
+# PUT /amazonclouddirectory/2017-01-11/typedlink/facet
 # operationId: UpdateTypedLinkFacet
 # --AttributeUpdates item shape: {Attribute: any, Action: any}
-export def "amazonclouddirectory-2017-01-11-typedlink-facetx-amz-data-partition update-typed-link-facet" [
+export def "amazonclouddirectory-2017-01-11-typedlink-facet update-typed-link" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2641,14 +2663,14 @@ export def "amazonclouddirectory-2017-01-11-typedlink-facetx-amz-data-partition 
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base "/amazonclouddirectory/2017-01-11/typedlink/facet#x-amz-data-partition")
+  let full_url = (build-url $base "/amazonclouddirectory/2017-01-11/typedlink/facet")
   let req_body = {"Name": $name, "AttributeUpdates": $attribute_updates, "IdentityAttributeOrder": $identity_attribute_order} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers, "x-amz-data-partition": $x_amz_data_partition} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: {}, body: $req_body}
 }
 
 # Upgrades a single directory in-place using the PublishedSchemaArn with schema updates found in MinorVersion. Backwards-compatible minor version upgrades are instantaneously available for readers on all objects in the directory. Note: This is a synchronous API call and upgrades only one schema on a given directory per call. To upgrade multiple directories from one schema, you would need to call this API on each directory.
@@ -2686,7 +2708,7 @@ export def "amazonclouddirectory-2017-01-11-schema-upgradeapplied update-upgrade
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: {}, body: $req_body}
 }
 
 # Upgrades a published schema under a new minor version revision using the current contents of DevelopmentSchemaArn.
@@ -2725,5 +2747,5 @@ export def "amazonclouddirectory-2017-01-11-schema-upgradepublished update-upgra
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: {}, body: $req_body}
 }

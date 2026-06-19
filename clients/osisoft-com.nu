@@ -3,16 +3,17 @@
 # Auth: --token flag or $env.PI_WEB_API_2018_SP1_SWAGGER_SPEC_TOKEN
 
 const BASE_URL = "https://devdata.osisoft.com/piwebapi"
-const DEFAULT_AUTH = "bearer"
 
-# Build auth: returns {headers: record, query: string}
+# Build auth: returns {scheme: string, headers: record, query: string, location: string}.
+# `location` is "header" | "query" | "cookie" | "none" and tells dry-run callers
+# where the token went without inspecting headers/query themselves.
 def build-auth [token?: string, auth_scheme?: string]: nothing -> record {
   let token_val = if ($token != null) and ($token | is-not-empty) { $token } else { $env | get -o PI_WEB_API_2018_SP1_SWAGGER_SPEC_TOKEN | default "" }
   let scheme = ($auth_scheme | default "bearer")
-  if ($scheme == "none") or ($token_val | is-empty) { return {headers: {}, query: ""} }
+  if ($scheme == "none") or ($token_val | is-empty) { return {scheme: $scheme, headers: {}, query: "", location: "none"} }
   match $scheme {
-    "none" => { {headers: {}, query: ""} }
-    _ => { {headers: {Authorization: $"Bearer ($token_val)"}, query: ""} }
+    "none" => { {scheme: $scheme, headers: {}, query: "", location: "none"} }
+    _ => { {scheme: $scheme, headers: {Authorization: $"Bearer ($token_val)"}, query: "", location: "header"} }
   }
 }
 
@@ -21,8 +22,9 @@ def build-auth [token?: string, auth_scheme?: string]: nothing -> record {
 # ([A-Za-z0-9-._~]) stay literal; everything else gets %XX.
 def serialize-qp [name: string, value: any, style: string]: nothing -> list<string> {
   if ($value == null) { return [] }
-  let n = (encode-path-segment $name)
   let is_list = ($value | describe | str starts-with "list")
+  if $is_list and ($value | is-empty) { return [] }
+  let n = (encode-path-segment $name)
   if ($value | describe | str starts-with "record") { return ($value | transpose k v | each { $"($n)[(encode-path-segment $in.k)]=(encode-path-segment $in.v)" }) }
   if not $is_list { return [$"($n)=(encode-path-segment $value)"] }
   match $style {
@@ -53,22 +55,42 @@ def build-url [base: string, path: string, query?: string]: nothing -> string {
   if ($query != null) and ($query | is-not-empty) { $result | upsert query $query | url join } else { $result | url join }
 }
 
+# Build the dry-run record returned by --dry-run. Shape:
+#   {dry_run: true, method, url, query: <record>, headers, body, content_type, timeout,
+#    auth: {scheme, location}}
+# `meta` carries logical-form data (the query record by spec name, the pre-serialization
+# body) that do-request itself cannot reconstruct from its wire-format args.
+def build-dry-run-record [method: string, url: string, auth: record, content_type: string, timeout: duration, meta?: record]: nothing -> record {
+  let m = ($meta | default {})
+  {
+    dry_run: true
+    method: $method
+    url: $url
+    query: ($m | get -o query | default {})
+    headers: $auth.headers
+    body: ($m | get -o body)
+    content_type: $content_type
+    timeout: $timeout
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+}
+
 # Execute HTTP request with method dispatch
-def do-request [method: string, url: string, auth: record, insecure: bool, raw: bool, dry_run: bool, max_time?: duration, allow_errors?: bool, full?: bool, content_type?: string, body?: any]: nothing -> any {
+def do-request [method: string, url: string, auth: record, insecure: bool, raw: bool, dry_run: bool, max_time?: duration, allow_errors?: bool, full?: bool, content_type?: string, body?: any, dry_run_meta?: record]: nothing -> any {
   let req_url = if ($auth.query | is-not-empty) { if ($url | str contains "?") { $"($url)&($auth.query)" } else { $"($url)?($auth.query)" } } else { $url }
   let timeout = ($max_time | default 30min)
   let ct = ($content_type | default "application/json")
-  if $dry_run { return {method: $method, url: $req_url, headers: $auth.headers, query_string: $auth.query, content_type: $ct, timeout: $timeout, body: $body} }
+  if $dry_run { return (build-dry-run-record $method $req_url $auth $ct $timeout $dry_run_meta) }
   let resp = match $method {
     "get" => { http get --headers $auth.headers --full --allow-errors --max-time $timeout --insecure=$insecure --raw=$raw $req_url }
-    "head" => { http head --headers $auth.headers --max-time $timeout --insecure=$insecure $req_url }
-    "options" => { http options --headers $auth.headers --max-time $timeout --insecure=$insecure $req_url }
+    "head" => { http head --headers $auth.headers --full --allow-errors --max-time $timeout --insecure=$insecure $req_url }
+    "options" => { http options --headers $auth.headers --full --allow-errors --max-time $timeout --insecure=$insecure $req_url }
     "post" => { if ($body | is-empty) { http post --headers $auth.headers --full --allow-errors --max-time $timeout --insecure=$insecure --raw=$raw $req_url "" } else { http post --headers $auth.headers --content-type $ct --full --allow-errors --max-time $timeout --insecure=$insecure --raw=$raw $req_url $body } }
     "put" => { if ($body | is-empty) { http put --headers $auth.headers --full --allow-errors --max-time $timeout --insecure=$insecure --raw=$raw $req_url "" } else { http put --headers $auth.headers --content-type $ct --full --allow-errors --max-time $timeout --insecure=$insecure --raw=$raw $req_url $body } }
     "patch" => { if ($body | is-empty) { http patch --headers $auth.headers --full --allow-errors --max-time $timeout --insecure=$insecure --raw=$raw $req_url "" } else { http patch --headers $auth.headers --content-type $ct --full --allow-errors --max-time $timeout --insecure=$insecure --raw=$raw $req_url $body } }
     "delete" => { if ($body | is-empty) { http delete --headers $auth.headers --full --allow-errors --max-time $timeout --insecure=$insecure --raw=$raw $req_url } else { http delete --headers $auth.headers --content-type $ct --data $body --full --allow-errors --max-time $timeout --insecure=$insecure --raw=$raw $req_url } }
   }
-  if ($method in ["head" "options"]) { return $resp }
+  if ($method == "head") and (not $full) and (not $allow_errors) and $resp.status < 400 { return $resp.headers }
   if $allow_errors { $resp } else if $resp.status >= 400 { error make --unspanned { msg: $"HTTP ($resp.status): ($resp.body)" } } else if $full { {status: $resp.status, headers: $resp.headers, body: $resp.body} } else if $resp.status == 204 { null } else { $resp.body }
 }
 
@@ -122,7 +144,7 @@ export def "home get" [
   let full_url = (build-url $base "/")
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
 }
 
 # Retrieve an Analysis by path.
@@ -150,7 +172,7 @@ export def "analyses get-analysis-by-path" [
   let full_url = (build-url $base "/analyses" $qp)
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"path": $path, "selectedFields": $selected_fields, "webIdType": $web_id_type} | compact), body: null}
 }
 
 # Retrieve analyses based on the specified conditions. By default, returns all analyses.
@@ -181,7 +203,7 @@ export def "analyses-search get-analysis-list" [
   let full_url = (build-url $base "/analyses/search" $qp)
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"databaseWebId": $database_web_id, "maxCount": $max_count, "query": $query, "selectedFields": $selected_fields, "startIndex": $start_index, "webIdType": $web_id_type} | compact), body: null}
 }
 
 # Delete an Analysis.
@@ -203,10 +225,11 @@ export def "analyses delete-analysis" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($web_id | is-empty) { error make --unspanned { msg: "path parameter 'webId' must be non-empty" } }
   let full_url = (build-url $base ({web_id: (encode-path-segment $web_id)} | format pattern "/analyses/{web_id}"))
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
 }
 
 # Retrieve an Analysis.
@@ -230,11 +253,12 @@ export def "analyses get-analysis" [
 ]: nothing -> record<AnalysisRulePlugInName: string, AutoCreated: bool, CategoryNames: list<string>, Description: string, GroupId: int, HasNotification: bool, HasTarget: bool, HasTemplate: bool, Id: string, IsConfigured: bool, IsTimeRuleDefinedByTemplate: bool, Links: record<AnalysisRule: string, AnalysisRulePlugIn: string, Categories: string, Database: string, Security: string, SecurityEntries: string, Self: string, Target: string, Template: string, TimeRule: string, TimeRulePlugIn: string>, MaximumQueueSize: int, Name: string, OutputTime: string, Path: string, Priority: string, PublishResults: bool, Status: string, TargetWebId: string, TemplateName: string, TimeRulePlugInName: string, WebException: record<Errors: list<string>, StatusCode: int>, WebId: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($web_id | is-empty) { error make --unspanned { msg: "path parameter 'webId' must be non-empty" } }
   let qp = [(serialize-qp "selectedFields" $selected_fields "scalar") (serialize-qp "webIdType" $web_id_type "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({web_id: (encode-path-segment $web_id)} | format pattern "/analyses/{web_id}") $qp)
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"selectedFields": $selected_fields, "webIdType": $web_id_type} | compact), body: null}
 }
 
 # Update an Analysis.
@@ -283,12 +307,13 @@ export def "analyses update-analysis" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($web_id | is-empty) { error make --unspanned { msg: "path parameter 'webId' must be non-empty" } }
   let full_url = (build-url $base ({web_id: (encode-path-segment $web_id)} | format pattern "/analyses/{web_id}"))
   let req_body = {"AnalysisRulePlugInName": $analysis_rule_plug_in_name, "AutoCreated": $auto_created, "CategoryNames": $category_names, "Description": $description, "GroupId": $group_id, "HasNotification": $has_notification, "HasTarget": $has_target, "HasTemplate": $has_template, "Id": $id, "IsConfigured": $is_configured, "IsTimeRuleDefinedByTemplate": $is_time_rule_defined_by_template, "Links": $links, "MaximumQueueSize": $maximum_queue_size, "Name": $name, "OutputTime": $output_time, "Path": $path, "Priority": $priority, "PublishResults": $publish_results, "Status": $status, "TargetWebId": $target_web_id, "TemplateName": $template_name, "TimeRulePlugInName": $time_rule_plug_in_name, "WebException": $web_exception, "WebId": $body_web_id} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "patch" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body
+  do-request "patch" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: {}, body: $req_body}
 }
 
 # Get an Analysis' categories.
@@ -312,11 +337,12 @@ export def "analyses-categories get-analysis" [
 ]: nothing -> record<Items: table<Description: string, Id: string, Links: record, Name: string, Path: string, WebException: record, WebId: string>, Links: record<First: string, Last: string, Next: string, Previous: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($web_id | is-empty) { error make --unspanned { msg: "path parameter 'webId' must be non-empty" } }
   let qp = [(serialize-qp "selectedFields" $selected_fields "scalar") (serialize-qp "webIdType" $web_id_type "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({web_id: (encode-path-segment $web_id)} | format pattern "/analyses/{web_id}/categories") $qp)
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"selectedFields": $selected_fields, "webIdType": $web_id_type} | compact), body: null}
 }
 
 # Get the security information of the specified security item associated with the Analysis for a specified user.
@@ -342,11 +368,12 @@ export def "analyses-security get-analysis" [
 ]: nothing -> record<Items: table<CanAnnotate: bool, CanDelete: bool, CanExecute: bool, CanRead: bool, CanReadData: bool, CanSubscribe: bool, CanSubscribeOthers: bool, CanWrite: bool, CanWriteData: bool, HasAdmin: bool, Links: record, OwnerWebId: string, Rights: list, SecurityItem: string, UserIdentity: string, WebException: record>, Links: record<First: string, Last: string, Next: string, Previous: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($web_id | is-empty) { error make --unspanned { msg: "path parameter 'webId' must be non-empty" } }
   let qp = [(serialize-qp "userIdentity" $user_identity "multi") (serialize-qp "forceRefresh" $force_refresh "scalar") (serialize-qp "selectedFields" $selected_fields "scalar") (serialize-qp "webIdType" $web_id_type "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({web_id: (encode-path-segment $web_id)} | format pattern "/analyses/{web_id}/security") $qp)
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"userIdentity": $user_identity, "forceRefresh": $force_refresh, "selectedFields": $selected_fields, "webIdType": $web_id_type} | compact), body: null}
 }
 
 # Retrieve the security entries associated with the analysis based on the specified criteria. By default, all security entries for this analysis are returned.
@@ -371,11 +398,12 @@ export def "analyses-securityentries get-analysis-security-entries" [
 ]: nothing -> record<Items: table<AllowRights: list, DenyRights: list, Links: record, Name: string, SecurityIdentityName: string, WebException: record>, Links: record<First: string, Last: string, Next: string, Previous: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($web_id | is-empty) { error make --unspanned { msg: "path parameter 'webId' must be non-empty" } }
   let qp = [(serialize-qp "nameFilter" $name_filter "scalar") (serialize-qp "selectedFields" $selected_fields "scalar") (serialize-qp "webIdType" $web_id_type "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({web_id: (encode-path-segment $web_id)} | format pattern "/analyses/{web_id}/securityentries") $qp)
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"nameFilter": $name_filter, "selectedFields": $selected_fields, "webIdType": $web_id_type} | compact), body: null}
 }
 
 # Create a security entry owned by the analysis.
@@ -408,13 +436,14 @@ export def "analyses-securityentries create-analysis-security-entry" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($web_id | is-empty) { error make --unspanned { msg: "path parameter 'webId' must be non-empty" } }
   let qp = [(serialize-qp "applyToChildren" $apply_to_children "scalar") (serialize-qp "webIdType" $web_id_type "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({web_id: (encode-path-segment $web_id)} | format pattern "/analyses/{web_id}/securityentries") $qp)
   let req_body = {"AllowRights": $allow_rights, "DenyRights": $deny_rights, "Links": $links, "Name": $name, "SecurityIdentityName": $security_identity_name, "WebException": $web_exception} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: ({"applyToChildren": $apply_to_children, "webIdType": $web_id_type} | compact), body: $req_body}
 }
 
 # Delete a security entry owned by the analysis.
@@ -438,11 +467,13 @@ export def "analyses-securityentries delete-analysis-security-entry" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($web_id | is-empty) { error make --unspanned { msg: "path parameter 'webId' must be non-empty" } }
+  if ($name | is-empty) { error make --unspanned { msg: "path parameter 'name' must be non-empty" } }
   let qp = [(serialize-qp "applyToChildren" $apply_to_children "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({web_id: (encode-path-segment $web_id), name: (encode-path-segment $name)} | format pattern "/analyses/{web_id}/securityentries/{name}") $qp)
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"applyToChildren": $apply_to_children} | compact), body: null}
 }
 
 # Retrieve the security entry associated with the analysis with the specified name.
@@ -467,11 +498,13 @@ export def "analyses-securityentries get-analysis-security-entry" [
 ]: nothing -> record<AllowRights: list<string>, DenyRights: list<string>, Links: record<SecurableObject: string, SecurityIdentity: string, Self: string>, Name: string, SecurityIdentityName: string, WebException: record<Errors: list<string>, StatusCode: int>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($web_id | is-empty) { error make --unspanned { msg: "path parameter 'webId' must be non-empty" } }
+  if ($name | is-empty) { error make --unspanned { msg: "path parameter 'name' must be non-empty" } }
   let qp = [(serialize-qp "selectedFields" $selected_fields "scalar") (serialize-qp "webIdType" $web_id_type "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({web_id: (encode-path-segment $web_id), name: (encode-path-segment $name)} | format pattern "/analyses/{web_id}/securityentries/{name}") $qp)
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"selectedFields": $selected_fields, "webIdType": $web_id_type} | compact), body: null}
 }
 
 # Update a security entry owned by the analysis.
@@ -504,13 +537,15 @@ export def "analyses-securityentries update-analysis-security-entry" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($web_id | is-empty) { error make --unspanned { msg: "path parameter 'webId' must be non-empty" } }
+  if ($name | is-empty) { error make --unspanned { msg: "path parameter 'name' must be non-empty" } }
   let qp = [(serialize-qp "applyToChildren" $apply_to_children "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({web_id: (encode-path-segment $web_id), name: (encode-path-segment $name)} | format pattern "/analyses/{web_id}/securityentries/{name}") $qp)
   let req_body = {"AllowRights": $allow_rights, "DenyRights": $deny_rights, "Links": $links, "Name": $body_name, "SecurityIdentityName": $security_identity_name, "WebException": $web_exception} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: ({"applyToChildren": $apply_to_children} | compact), body: $req_body}
 }
 
 # Retrieve an analysis category by path.
@@ -538,7 +573,7 @@ export def "analysiscategories get-analysis-category-by-path" [
   let full_url = (build-url $base "/analysiscategories" $qp)
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"path": $path, "selectedFields": $selected_fields, "webIdType": $web_id_type} | compact), body: null}
 }
 
 # Delete an analysis category.
@@ -560,10 +595,11 @@ export def "analysiscategories delete-analysis-category" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($web_id | is-empty) { error make --unspanned { msg: "path parameter 'webId' must be non-empty" } }
   let full_url = (build-url $base ({web_id: (encode-path-segment $web_id)} | format pattern "/analysiscategories/{web_id}"))
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
 }
 
 # Retrieve an analysis category.
@@ -587,11 +623,12 @@ export def "analysiscategories get-analysis-category" [
 ]: nothing -> record<Description: string, Id: string, Links: record<Database: string, Security: string, SecurityEntries: string, Self: string>, Name: string, Path: string, WebException: record<Errors: list<string>, StatusCode: int>, WebId: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($web_id | is-empty) { error make --unspanned { msg: "path parameter 'webId' must be non-empty" } }
   let qp = [(serialize-qp "selectedFields" $selected_fields "scalar") (serialize-qp "webIdType" $web_id_type "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({web_id: (encode-path-segment $web_id)} | format pattern "/analysiscategories/{web_id}") $qp)
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"selectedFields": $selected_fields, "webIdType": $web_id_type} | compact), body: null}
 }
 
 # Update an analysis category by replacing items in its definition.
@@ -623,12 +660,13 @@ export def "analysiscategories update-analysis-category" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($web_id | is-empty) { error make --unspanned { msg: "path parameter 'webId' must be non-empty" } }
   let full_url = (build-url $base ({web_id: (encode-path-segment $web_id)} | format pattern "/analysiscategories/{web_id}"))
   let req_body = {"Description": $description, "Id": $id, "Links": $links, "Name": $name, "Path": $path, "WebException": $web_exception, "WebId": $body_web_id} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "patch" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body
+  do-request "patch" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: {}, body: $req_body}
 }
 
 # Get the security information of the specified security item associated with the analysis category for a specified user.
@@ -654,11 +692,12 @@ export def "analysiscategories-security get-analysis-category" [
 ]: nothing -> record<Items: table<CanAnnotate: bool, CanDelete: bool, CanExecute: bool, CanRead: bool, CanReadData: bool, CanSubscribe: bool, CanSubscribeOthers: bool, CanWrite: bool, CanWriteData: bool, HasAdmin: bool, Links: record, OwnerWebId: string, Rights: list, SecurityItem: string, UserIdentity: string, WebException: record>, Links: record<First: string, Last: string, Next: string, Previous: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($web_id | is-empty) { error make --unspanned { msg: "path parameter 'webId' must be non-empty" } }
   let qp = [(serialize-qp "userIdentity" $user_identity "multi") (serialize-qp "forceRefresh" $force_refresh "scalar") (serialize-qp "selectedFields" $selected_fields "scalar") (serialize-qp "webIdType" $web_id_type "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({web_id: (encode-path-segment $web_id)} | format pattern "/analysiscategories/{web_id}/security") $qp)
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"userIdentity": $user_identity, "forceRefresh": $force_refresh, "selectedFields": $selected_fields, "webIdType": $web_id_type} | compact), body: null}
 }
 
 # Retrieve the security entries associated with the analysis category based on the specified criteria. By default, all security entries for this analysis category are returned.
@@ -683,11 +722,12 @@ export def "analysiscategories-securityentries get-analysis-category-security-en
 ]: nothing -> record<Items: table<AllowRights: list, DenyRights: list, Links: record, Name: string, SecurityIdentityName: string, WebException: record>, Links: record<First: string, Last: string, Next: string, Previous: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($web_id | is-empty) { error make --unspanned { msg: "path parameter 'webId' must be non-empty" } }
   let qp = [(serialize-qp "nameFilter" $name_filter "scalar") (serialize-qp "selectedFields" $selected_fields "scalar") (serialize-qp "webIdType" $web_id_type "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({web_id: (encode-path-segment $web_id)} | format pattern "/analysiscategories/{web_id}/securityentries") $qp)
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"nameFilter": $name_filter, "selectedFields": $selected_fields, "webIdType": $web_id_type} | compact), body: null}
 }
 
 # Create a security entry owned by the analysis category.
@@ -720,13 +760,14 @@ export def "analysiscategories-securityentries create-analysis-category-security
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($web_id | is-empty) { error make --unspanned { msg: "path parameter 'webId' must be non-empty" } }
   let qp = [(serialize-qp "applyToChildren" $apply_to_children "scalar") (serialize-qp "webIdType" $web_id_type "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({web_id: (encode-path-segment $web_id)} | format pattern "/analysiscategories/{web_id}/securityentries") $qp)
   let req_body = {"AllowRights": $allow_rights, "DenyRights": $deny_rights, "Links": $links, "Name": $name, "SecurityIdentityName": $security_identity_name, "WebException": $web_exception} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: ({"applyToChildren": $apply_to_children, "webIdType": $web_id_type} | compact), body: $req_body}
 }
 
 # Delete a security entry owned by the analysis category.
@@ -750,11 +791,13 @@ export def "analysiscategories-securityentries delete-analysis-category-security
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($web_id | is-empty) { error make --unspanned { msg: "path parameter 'webId' must be non-empty" } }
+  if ($name | is-empty) { error make --unspanned { msg: "path parameter 'name' must be non-empty" } }
   let qp = [(serialize-qp "applyToChildren" $apply_to_children "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({web_id: (encode-path-segment $web_id), name: (encode-path-segment $name)} | format pattern "/analysiscategories/{web_id}/securityentries/{name}") $qp)
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"applyToChildren": $apply_to_children} | compact), body: null}
 }
 
 # Retrieve the security entry associated with the analysis category with the specified name.
@@ -779,11 +822,13 @@ export def "analysiscategories-securityentries get-analysis-category-security-en
 ]: nothing -> record<AllowRights: list<string>, DenyRights: list<string>, Links: record<SecurableObject: string, SecurityIdentity: string, Self: string>, Name: string, SecurityIdentityName: string, WebException: record<Errors: list<string>, StatusCode: int>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($web_id | is-empty) { error make --unspanned { msg: "path parameter 'webId' must be non-empty" } }
+  if ($name | is-empty) { error make --unspanned { msg: "path parameter 'name' must be non-empty" } }
   let qp = [(serialize-qp "selectedFields" $selected_fields "scalar") (serialize-qp "webIdType" $web_id_type "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({web_id: (encode-path-segment $web_id), name: (encode-path-segment $name)} | format pattern "/analysiscategories/{web_id}/securityentries/{name}") $qp)
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"selectedFields": $selected_fields, "webIdType": $web_id_type} | compact), body: null}
 }
 
 # Update a security entry owned by the analysis category.
@@ -816,13 +861,15 @@ export def "analysiscategories-securityentries update-analysis-category-security
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($web_id | is-empty) { error make --unspanned { msg: "path parameter 'webId' must be non-empty" } }
+  if ($name | is-empty) { error make --unspanned { msg: "path parameter 'name' must be non-empty" } }
   let qp = [(serialize-qp "applyToChildren" $apply_to_children "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({web_id: (encode-path-segment $web_id), name: (encode-path-segment $name)} | format pattern "/analysiscategories/{web_id}/securityentries/{name}") $qp)
   let req_body = {"AllowRights": $allow_rights, "DenyRights": $deny_rights, "Links": $links, "Name": $body_name, "SecurityIdentityName": $security_identity_name, "WebException": $web_exception} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: ({"applyToChildren": $apply_to_children} | compact), body: $req_body}
 }
 
 # Retrieve an Analysis Rule Plug-in by path.
@@ -850,7 +897,7 @@ export def "analysisruleplugins get-analysis-rule-plug-in-by-path" [
   let full_url = (build-url $base "/analysisruleplugins" $qp)
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"path": $path, "selectedFields": $selected_fields, "webIdType": $web_id_type} | compact), body: null}
 }
 
 # Retrieve an Analysis Rule Plug-in.
@@ -874,11 +921,12 @@ export def "analysisruleplugins get-analysis-rule-plug-in" [
 ]: nothing -> record<AssemblyFileName: string, AssemblyID: string, AssemblyLoadProperties: list<string>, AssemblyTime: string, CompatibilityVersion: int, Description: string, Id: string, IsBrowsable: bool, IsNonEditableConfig: bool, Links: record<AssetServer: string, Self: string>, LoadedAssemblyTime: string, LoadedVersion: string, Name: string, Path: string, Version: string, WebException: record<Errors: list<string>, StatusCode: int>, WebId: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($web_id | is-empty) { error make --unspanned { msg: "path parameter 'webId' must be non-empty" } }
   let qp = [(serialize-qp "selectedFields" $selected_fields "scalar") (serialize-qp "webIdType" $web_id_type "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({web_id: (encode-path-segment $web_id)} | format pattern "/analysisruleplugins/{web_id}") $qp)
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"selectedFields": $selected_fields, "webIdType": $web_id_type} | compact), body: null}
 }
 
 # Retrieve an Analysis Rule by path.
@@ -906,7 +954,7 @@ export def "analysisrules get-analysis-rule-by-path" [
   let full_url = (build-url $base "/analysisrules" $qp)
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"path": $path, "selectedFields": $selected_fields, "webIdType": $web_id_type} | compact), body: null}
 }
 
 # Delete an Analysis Rule.
@@ -928,10 +976,11 @@ export def "analysisrules delete-analysis-rule" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($web_id | is-empty) { error make --unspanned { msg: "path parameter 'webId' must be non-empty" } }
   let full_url = (build-url $base ({web_id: (encode-path-segment $web_id)} | format pattern "/analysisrules/{web_id}"))
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
 }
 
 # Retrieve an Analysis Rule.
@@ -955,11 +1004,12 @@ export def "analysisrules get-analysis-rule" [
 ]: nothing -> record<ConfigString: string, Description: string, DisplayString: string, EditorType: string, HasChildren: bool, Id: string, IsConfigured: bool, IsInitializing: bool, Links: record<Analysis: string, AnalysisRules: string, AnalysisTemplate: string, Parent: string, PlugIn: string, Self: string>, Name: string, Path: string, PlugInName: string, SupportedBehaviors: list<string>, VariableMapping: string, WebException: record<Errors: list<string>, StatusCode: int>, WebId: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($web_id | is-empty) { error make --unspanned { msg: "path parameter 'webId' must be non-empty" } }
   let qp = [(serialize-qp "selectedFields" $selected_fields "scalar") (serialize-qp "webIdType" $web_id_type "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({web_id: (encode-path-segment $web_id)} | format pattern "/analysisrules/{web_id}") $qp)
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"selectedFields": $selected_fields, "webIdType": $web_id_type} | compact), body: null}
 }
 
 # Update an Analysis Rule by replacing items in its definition.
@@ -1000,12 +1050,13 @@ export def "analysisrules update-analysis-rule" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($web_id | is-empty) { error make --unspanned { msg: "path parameter 'webId' must be non-empty" } }
   let full_url = (build-url $base ({web_id: (encode-path-segment $web_id)} | format pattern "/analysisrules/{web_id}"))
   let req_body = {"ConfigString": $config_string, "Description": $description, "DisplayString": $display_string, "EditorType": $editor_type, "HasChildren": $has_children, "Id": $id, "IsConfigured": $is_configured, "IsInitializing": $is_initializing, "Links": $links, "Name": $name, "Path": $path, "PlugInName": $plug_in_name, "SupportedBehaviors": $supported_behaviors, "VariableMapping": $variable_mapping, "WebException": $web_exception, "WebId": $body_web_id} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "patch" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body
+  do-request "patch" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: {}, body: $req_body}
 }
 
 # Get the child Analysis Rules of the Analysis Rule.
@@ -1035,11 +1086,12 @@ export def "analysisrules-analysisrules get-analysis-rule-analysis-rules" [
 ]: nothing -> record<Items: table<ConfigString: string, Description: string, DisplayString: string, EditorType: string, HasChildren: bool, Id: string, IsConfigured: bool, IsInitializing: bool, Links: record, Name: string, Path: string, PlugInName: string, SupportedBehaviors: list, VariableMapping: string, WebException: record, WebId: string>, Links: record<First: string, Last: string, Next: string, Previous: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($web_id | is-empty) { error make --unspanned { msg: "path parameter 'webId' must be non-empty" } }
   let qp = [(serialize-qp "maxCount" $max_count "scalar") (serialize-qp "nameFilter" $name_filter "scalar") (serialize-qp "searchFullHierarchy" $search_full_hierarchy "scalar") (serialize-qp "selectedFields" $selected_fields "scalar") (serialize-qp "sortField" $sort_field "scalar") (serialize-qp "sortOrder" $sort_order "scalar") (serialize-qp "startIndex" $start_index "scalar") (serialize-qp "webIdType" $web_id_type "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({web_id: (encode-path-segment $web_id)} | format pattern "/analysisrules/{web_id}/analysisrules") $qp)
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"maxCount": $max_count, "nameFilter": $name_filter, "searchFullHierarchy": $search_full_hierarchy, "selectedFields": $selected_fields, "sortField": $sort_field, "sortOrder": $sort_order, "startIndex": $start_index, "webIdType": $web_id_type} | compact), body: null}
 }
 
 # Create a new Analysis Rule as a child of an existing Analysis Rule.
@@ -1081,13 +1133,14 @@ export def "analysisrules-analysisrules create-analysis-rule-analysis-rule" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($web_id | is-empty) { error make --unspanned { msg: "path parameter 'webId' must be non-empty" } }
   let qp = [(serialize-qp "webIdType" $web_id_type "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({web_id: (encode-path-segment $web_id)} | format pattern "/analysisrules/{web_id}/analysisrules") $qp)
   let req_body = {"ConfigString": $config_string, "Description": $description, "DisplayString": $display_string, "EditorType": $editor_type, "HasChildren": $has_children, "Id": $id, "IsConfigured": $is_configured, "IsInitializing": $is_initializing, "Links": $links, "Name": $name, "Path": $path, "PlugInName": $plug_in_name, "SupportedBehaviors": $supported_behaviors, "VariableMapping": $variable_mapping, "WebException": $web_exception, "WebId": $body_web_id} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: ({"webIdType": $web_id_type} | compact), body: $req_body}
 }
 
 # Retrieve an analysis template by path.
@@ -1115,7 +1168,7 @@ export def "analysistemplates get-analysis-template-by-path" [
   let full_url = (build-url $base "/analysistemplates" $qp)
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"path": $path, "selectedFields": $selected_fields, "webIdType": $web_id_type} | compact), body: null}
 }
 
 # Create an Analysis template based upon a specified Analysis.
@@ -1143,7 +1196,7 @@ export def "analysistemplates create-analysis-template-from-analysis" [
   let full_url = (build-url $base "/analysistemplates" $qp)
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"analysisWebId": $analysis_web_id, "name": $name, "webIdType": $web_id_type} | compact), body: null}
 }
 
 # Retrieve analysis templates based on the specified conditions. By default, returns all analysis templates.
@@ -1174,7 +1227,7 @@ export def "analysistemplates-search get-analysis-template-analysis-templates-li
   let full_url = (build-url $base "/analysistemplates/search" $qp)
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"databaseWebId": $database_web_id, "maxCount": $max_count, "query": $query, "selectedFields": $selected_fields, "startIndex": $start_index, "webIdType": $web_id_type} | compact), body: null}
 }
 
 # Delete an analysis template.
@@ -1196,10 +1249,11 @@ export def "analysistemplates delete-analysis-template" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($web_id | is-empty) { error make --unspanned { msg: "path parameter 'webId' must be non-empty" } }
   let full_url = (build-url $base ({web_id: (encode-path-segment $web_id)} | format pattern "/analysistemplates/{web_id}"))
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
 }
 
 # Retrieve an analysis template.
@@ -1223,11 +1277,12 @@ export def "analysistemplates get-analysis-template" [
 ]: nothing -> record<AnalysisRulePlugInName: string, CategoryNames: list<string>, CreateEnabled: bool, Description: string, GroupId: int, HasNotificationTemplate: bool, HasTarget: bool, Id: string, Links: record<AnalysisRule: string, AnalysisRulePlugIn: string, Categories: string, Database: string, Security: string, SecurityEntries: string, Self: string, Target: string, TimeRule: string, TimeRulePlugIn: string>, Name: string, OutputTime: string, Path: string, TargetName: string, TimeRulePlugInName: string, WebException: record<Errors: list<string>, StatusCode: int>, WebId: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($web_id | is-empty) { error make --unspanned { msg: "path parameter 'webId' must be non-empty" } }
   let qp = [(serialize-qp "selectedFields" $selected_fields "scalar") (serialize-qp "webIdType" $web_id_type "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({web_id: (encode-path-segment $web_id)} | format pattern "/analysistemplates/{web_id}") $qp)
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"selectedFields": $selected_fields, "webIdType": $web_id_type} | compact), body: null}
 }
 
 # Update an analysis template by replacing items in its definition.
@@ -1268,12 +1323,13 @@ export def "analysistemplates update-analysis-template" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($web_id | is-empty) { error make --unspanned { msg: "path parameter 'webId' must be non-empty" } }
   let full_url = (build-url $base ({web_id: (encode-path-segment $web_id)} | format pattern "/analysistemplates/{web_id}"))
   let req_body = {"AnalysisRulePlugInName": $analysis_rule_plug_in_name, "CategoryNames": $category_names, "CreateEnabled": $create_enabled, "Description": $description, "GroupId": $group_id, "HasNotificationTemplate": $has_notification_template, "HasTarget": $has_target, "Id": $id, "Links": $links, "Name": $name, "OutputTime": $output_time, "Path": $path, "TargetName": $target_name, "TimeRulePlugInName": $time_rule_plug_in_name, "WebException": $web_exception, "WebId": $body_web_id} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "patch" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body
+  do-request "patch" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: {}, body: $req_body}
 }
 
 # Get an analysis template's categories.
@@ -1297,11 +1353,12 @@ export def "analysistemplates-categories get-analysis-template" [
 ]: nothing -> record<Items: table<Description: string, Id: string, Links: record, Name: string, Path: string, WebException: record, WebId: string>, Links: record<First: string, Last: string, Next: string, Previous: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($web_id | is-empty) { error make --unspanned { msg: "path parameter 'webId' must be non-empty" } }
   let qp = [(serialize-qp "selectedFields" $selected_fields "scalar") (serialize-qp "webIdType" $web_id_type "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({web_id: (encode-path-segment $web_id)} | format pattern "/analysistemplates/{web_id}/categories") $qp)
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"selectedFields": $selected_fields, "webIdType": $web_id_type} | compact), body: null}
 }
 
 # Get the security information of the specified security item associated with the analysis template for a specified user.
@@ -1327,11 +1384,12 @@ export def "analysistemplates-security get-analysis-template" [
 ]: nothing -> record<Items: table<CanAnnotate: bool, CanDelete: bool, CanExecute: bool, CanRead: bool, CanReadData: bool, CanSubscribe: bool, CanSubscribeOthers: bool, CanWrite: bool, CanWriteData: bool, HasAdmin: bool, Links: record, OwnerWebId: string, Rights: list, SecurityItem: string, UserIdentity: string, WebException: record>, Links: record<First: string, Last: string, Next: string, Previous: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($web_id | is-empty) { error make --unspanned { msg: "path parameter 'webId' must be non-empty" } }
   let qp = [(serialize-qp "userIdentity" $user_identity "multi") (serialize-qp "forceRefresh" $force_refresh "scalar") (serialize-qp "selectedFields" $selected_fields "scalar") (serialize-qp "webIdType" $web_id_type "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({web_id: (encode-path-segment $web_id)} | format pattern "/analysistemplates/{web_id}/security") $qp)
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"userIdentity": $user_identity, "forceRefresh": $force_refresh, "selectedFields": $selected_fields, "webIdType": $web_id_type} | compact), body: null}
 }
 
 # Retrieve the security entries associated with the analysis template based on the specified criteria. By default, all security entries for this analysis template are returned.
@@ -1356,11 +1414,12 @@ export def "analysistemplates-securityentries get-analysis-template-security-ent
 ]: nothing -> record<Items: table<AllowRights: list, DenyRights: list, Links: record, Name: string, SecurityIdentityName: string, WebException: record>, Links: record<First: string, Last: string, Next: string, Previous: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($web_id | is-empty) { error make --unspanned { msg: "path parameter 'webId' must be non-empty" } }
   let qp = [(serialize-qp "nameFilter" $name_filter "scalar") (serialize-qp "selectedFields" $selected_fields "scalar") (serialize-qp "webIdType" $web_id_type "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({web_id: (encode-path-segment $web_id)} | format pattern "/analysistemplates/{web_id}/securityentries") $qp)
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"nameFilter": $name_filter, "selectedFields": $selected_fields, "webIdType": $web_id_type} | compact), body: null}
 }
 
 # Create a security entry owned by the analysis template.
@@ -1393,13 +1452,14 @@ export def "analysistemplates-securityentries create-analysis-template-security-
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($web_id | is-empty) { error make --unspanned { msg: "path parameter 'webId' must be non-empty" } }
   let qp = [(serialize-qp "applyToChildren" $apply_to_children "scalar") (serialize-qp "webIdType" $web_id_type "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({web_id: (encode-path-segment $web_id)} | format pattern "/analysistemplates/{web_id}/securityentries") $qp)
   let req_body = {"AllowRights": $allow_rights, "DenyRights": $deny_rights, "Links": $links, "Name": $name, "SecurityIdentityName": $security_identity_name, "WebException": $web_exception} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: ({"applyToChildren": $apply_to_children, "webIdType": $web_id_type} | compact), body: $req_body}
 }
 
 # Delete a security entry owned by the analysis template.
@@ -1423,11 +1483,13 @@ export def "analysistemplates-securityentries delete-analysis-template-security-
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($web_id | is-empty) { error make --unspanned { msg: "path parameter 'webId' must be non-empty" } }
+  if ($name | is-empty) { error make --unspanned { msg: "path parameter 'name' must be non-empty" } }
   let qp = [(serialize-qp "applyToChildren" $apply_to_children "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({web_id: (encode-path-segment $web_id), name: (encode-path-segment $name)} | format pattern "/analysistemplates/{web_id}/securityentries/{name}") $qp)
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"applyToChildren": $apply_to_children} | compact), body: null}
 }
 
 # Retrieve the security entry associated with the analysis template with the specified name.
@@ -1452,11 +1514,13 @@ export def "analysistemplates-securityentries get-analysis-template-security-ent
 ]: nothing -> record<AllowRights: list<string>, DenyRights: list<string>, Links: record<SecurableObject: string, SecurityIdentity: string, Self: string>, Name: string, SecurityIdentityName: string, WebException: record<Errors: list<string>, StatusCode: int>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($web_id | is-empty) { error make --unspanned { msg: "path parameter 'webId' must be non-empty" } }
+  if ($name | is-empty) { error make --unspanned { msg: "path parameter 'name' must be non-empty" } }
   let qp = [(serialize-qp "selectedFields" $selected_fields "scalar") (serialize-qp "webIdType" $web_id_type "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({web_id: (encode-path-segment $web_id), name: (encode-path-segment $name)} | format pattern "/analysistemplates/{web_id}/securityentries/{name}") $qp)
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"selectedFields": $selected_fields, "webIdType": $web_id_type} | compact), body: null}
 }
 
 # Update a security entry owned by the analysis template.
@@ -1489,13 +1553,15 @@ export def "analysistemplates-securityentries update-analysis-template-security-
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($web_id | is-empty) { error make --unspanned { msg: "path parameter 'webId' must be non-empty" } }
+  if ($name | is-empty) { error make --unspanned { msg: "path parameter 'name' must be non-empty" } }
   let qp = [(serialize-qp "applyToChildren" $apply_to_children "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({web_id: (encode-path-segment $web_id), name: (encode-path-segment $name)} | format pattern "/analysistemplates/{web_id}/securityentries/{name}") $qp)
   let req_body = {"AllowRights": $allow_rights, "DenyRights": $deny_rights, "Links": $links, "Name": $body_name, "SecurityIdentityName": $security_identity_name, "WebException": $web_exception} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: ({"applyToChildren": $apply_to_children} | compact), body: $req_body}
 }
 
 # Retrieve an Asset Database by path.
@@ -1523,7 +1589,7 @@ export def "assetdatabases get-asset-database-by-path" [
   let full_url = (build-url $base "/assetdatabases" $qp)
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"path": $path, "selectedFields": $selected_fields, "webIdType": $web_id_type} | compact), body: null}
 }
 
 # Delete an asset database.
@@ -1545,10 +1611,11 @@ export def "assetdatabases delete-asset-database" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($web_id | is-empty) { error make --unspanned { msg: "path parameter 'webId' must be non-empty" } }
   let full_url = (build-url $base ({web_id: (encode-path-segment $web_id)} | format pattern "/assetdatabases/{web_id}"))
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
 }
 
 # Retrieve an Asset Database.
@@ -1572,11 +1639,12 @@ export def "assetdatabases get-asset-database" [
 ]: nothing -> record<Description: string, ExtendedProperties: record, Id: string, Links: record<AnalysisCategories: string, AnalysisTemplates: string, AssetServer: string, AttributeCategories: string, ElementCategories: string, ElementTemplates: string, Elements: string, EnumerationSets: string, EventFrames: string, Security: string, SecurityEntries: string, Self: string, TableCategories: string, Tables: string>, Name: string, Path: string, WebException: record<Errors: list<string>, StatusCode: int>, WebId: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($web_id | is-empty) { error make --unspanned { msg: "path parameter 'webId' must be non-empty" } }
   let qp = [(serialize-qp "selectedFields" $selected_fields "scalar") (serialize-qp "webIdType" $web_id_type "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({web_id: (encode-path-segment $web_id)} | format pattern "/assetdatabases/{web_id}") $qp)
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"selectedFields": $selected_fields, "webIdType": $web_id_type} | compact), body: null}
 }
 
 # Update an asset database by replacing items in its definition.
@@ -1609,12 +1677,13 @@ export def "assetdatabases update-asset-database" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($web_id | is-empty) { error make --unspanned { msg: "path parameter 'webId' must be non-empty" } }
   let full_url = (build-url $base ({web_id: (encode-path-segment $web_id)} | format pattern "/assetdatabases/{web_id}"))
   let req_body = {"Description": $description, "ExtendedProperties": $extended_properties, "Id": $id, "Links": $links, "Name": $name, "Path": $path, "WebException": $web_exception, "WebId": $body_web_id} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "patch" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body
+  do-request "patch" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: {}, body: $req_body}
 }
 
 # Retrieve analyses based on the specified conditions.
@@ -1644,11 +1713,12 @@ export def "assetdatabases-analyses find-asset-database" [
 ]: nothing -> record<Items: table<AnalysisRulePlugInName: string, AutoCreated: bool, CategoryNames: list, Description: string, GroupId: int, HasNotification: bool, HasTarget: bool, HasTemplate: bool, Id: string, IsConfigured: bool, IsTimeRuleDefinedByTemplate: bool, Links: record, MaximumQueueSize: int, Name: string, OutputTime: string, Path: string, Priority: string, PublishResults: bool, Status: string, TargetWebId: string, TemplateName: string, TimeRulePlugInName: string, WebException: record, WebId: string>, Links: record<First: string, Last: string, Next: string, Previous: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($web_id | is-empty) { error make --unspanned { msg: "path parameter 'webId' must be non-empty" } }
   let qp = [(serialize-qp "field" $field "multi") (serialize-qp "maxCount" $max_count "scalar") (serialize-qp "query" $query "scalar") (serialize-qp "selectedFields" $selected_fields "scalar") (serialize-qp "sortField" $sort_field "scalar") (serialize-qp "sortOrder" $sort_order "scalar") (serialize-qp "startIndex" $start_index "scalar") (serialize-qp "webIdType" $web_id_type "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({web_id: (encode-path-segment $web_id)} | format pattern "/assetdatabases/{web_id}/analyses") $qp)
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"field": $field, "maxCount": $max_count, "query": $query, "selectedFields": $selected_fields, "sortField": $sort_field, "sortOrder": $sort_order, "startIndex": $start_index, "webIdType": $web_id_type} | compact), body: null}
 }
 
 # Retrieve analysis categories for a given Asset Database.
@@ -1672,11 +1742,12 @@ export def "assetdatabases-analysiscategories get-asset-database-analysis-catego
 ]: nothing -> record<Items: table<Description: string, Id: string, Links: record, Name: string, Path: string, WebException: record, WebId: string>, Links: record<First: string, Last: string, Next: string, Previous: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($web_id | is-empty) { error make --unspanned { msg: "path parameter 'webId' must be non-empty" } }
   let qp = [(serialize-qp "selectedFields" $selected_fields "scalar") (serialize-qp "webIdType" $web_id_type "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({web_id: (encode-path-segment $web_id)} | format pattern "/assetdatabases/{web_id}/analysiscategories") $qp)
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"selectedFields": $selected_fields, "webIdType": $web_id_type} | compact), body: null}
 }
 
 # Create an analysis category at the Asset Database root.
@@ -1709,13 +1780,14 @@ export def "assetdatabases-analysiscategories create-asset-database-analysis-cat
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($web_id | is-empty) { error make --unspanned { msg: "path parameter 'webId' must be non-empty" } }
   let qp = [(serialize-qp "webIdType" $web_id_type "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({web_id: (encode-path-segment $web_id)} | format pattern "/assetdatabases/{web_id}/analysiscategories") $qp)
   let req_body = {"Description": $description, "Id": $id, "Links": $links, "Name": $name, "Path": $path, "WebException": $web_exception, "WebId": $body_web_id} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: ({"webIdType": $web_id_type} | compact), body: $req_body}
 }
 
 # Retrieve analysis templates based on the specified criteria. By default, all analysis templates in the specified Asset Database are returned.
@@ -1744,11 +1816,12 @@ export def "assetdatabases-analysistemplates get-asset-database-analysis-templat
 ]: nothing -> record<Items: table<AnalysisRulePlugInName: string, CategoryNames: list, CreateEnabled: bool, Description: string, GroupId: int, HasNotificationTemplate: bool, HasTarget: bool, Id: string, Links: record, Name: string, OutputTime: string, Path: string, TargetName: string, TimeRulePlugInName: string, WebException: record, WebId: string>, Links: record<First: string, Last: string, Next: string, Previous: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($web_id | is-empty) { error make --unspanned { msg: "path parameter 'webId' must be non-empty" } }
   let qp = [(serialize-qp "field" $field "multi") (serialize-qp "maxCount" $max_count "scalar") (serialize-qp "query" $query "scalar") (serialize-qp "selectedFields" $selected_fields "scalar") (serialize-qp "sortField" $sort_field "scalar") (serialize-qp "sortOrder" $sort_order "scalar") (serialize-qp "webIdType" $web_id_type "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({web_id: (encode-path-segment $web_id)} | format pattern "/assetdatabases/{web_id}/analysistemplates") $qp)
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"field": $field, "maxCount": $max_count, "query": $query, "selectedFields": $selected_fields, "sortField": $sort_field, "sortOrder": $sort_order, "webIdType": $web_id_type} | compact), body: null}
 }
 
 # Create an analysis template at the Asset Database root.
@@ -1790,13 +1863,14 @@ export def "assetdatabases-analysistemplates create-asset-database-analysis-temp
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($web_id | is-empty) { error make --unspanned { msg: "path parameter 'webId' must be non-empty" } }
   let qp = [(serialize-qp "webIdType" $web_id_type "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({web_id: (encode-path-segment $web_id)} | format pattern "/assetdatabases/{web_id}/analysistemplates") $qp)
   let req_body = {"AnalysisRulePlugInName": $analysis_rule_plug_in_name, "CategoryNames": $category_names, "CreateEnabled": $create_enabled, "Description": $description, "GroupId": $group_id, "HasNotificationTemplate": $has_notification_template, "HasTarget": $has_target, "Id": $id, "Links": $links, "Name": $name, "OutputTime": $output_time, "Path": $path, "TargetName": $target_name, "TimeRulePlugInName": $time_rule_plug_in_name, "WebException": $web_exception, "WebId": $body_web_id} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: ({"webIdType": $web_id_type} | compact), body: $req_body}
 }
 
 # Retrieve attribute categories for a given Asset Database.
@@ -1820,11 +1894,12 @@ export def "assetdatabases-attributecategories get-asset-database-attribute-cate
 ]: nothing -> record<Items: table<Description: string, Id: string, Links: record, Name: string, Path: string, WebException: record, WebId: string>, Links: record<First: string, Last: string, Next: string, Previous: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($web_id | is-empty) { error make --unspanned { msg: "path parameter 'webId' must be non-empty" } }
   let qp = [(serialize-qp "selectedFields" $selected_fields "scalar") (serialize-qp "webIdType" $web_id_type "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({web_id: (encode-path-segment $web_id)} | format pattern "/assetdatabases/{web_id}/attributecategories") $qp)
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"selectedFields": $selected_fields, "webIdType": $web_id_type} | compact), body: null}
 }
 
 # Create an attribute category at the Asset Database root.
@@ -1857,13 +1932,14 @@ export def "assetdatabases-attributecategories create-asset-database-attribute-c
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($web_id | is-empty) { error make --unspanned { msg: "path parameter 'webId' must be non-empty" } }
   let qp = [(serialize-qp "webIdType" $web_id_type "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({web_id: (encode-path-segment $web_id)} | format pattern "/assetdatabases/{web_id}/attributecategories") $qp)
   let req_body = {"Description": $description, "Id": $id, "Links": $links, "Name": $name, "Path": $path, "WebException": $web_exception, "WebId": $body_web_id} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: ({"webIdType": $web_id_type} | compact), body: $req_body}
 }
 
 # Retrieves a list of element attributes matching the specified filters from the specified asset database.
@@ -1902,11 +1978,12 @@ export def "assetdatabases-elementattributes find-asset-database-element-attribu
 ]: nothing -> record<Items: table<CategoryNames: list, ConfigString: string, DataReference: record, DataReferencePlugIn: string, DefaultUnitsName: string, DefaultUnitsNameAbbreviation: string, Description: string, DisplayDigits: int, HasChildren: bool, Id: string, IsConfigurationItem: bool, IsExcluded: bool, IsHidden: bool, IsManualDataEntry: bool, Links: record, Name: string, Path: string, Paths: list, Span: float, Step: bool, TraitName: string, Type: string, TypeQualifier: string, WebException: record, WebId: string, Zero: float>, Links: record<First: string, Last: string, Next: string, Previous: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($web_id | is-empty) { error make --unspanned { msg: "path parameter 'webId' must be non-empty" } }
   let qp = [(serialize-qp "associations" $associations "scalar") (serialize-qp "attributeCategory" $attribute_category "scalar") (serialize-qp "attributeDescriptionFilter" $attribute_description_filter "scalar") (serialize-qp "attributeNameFilter" $attribute_name_filter "scalar") (serialize-qp "attributeType" $attribute_type "scalar") (serialize-qp "elementCategory" $element_category "scalar") (serialize-qp "elementDescriptionFilter" $element_description_filter "scalar") (serialize-qp "elementNameFilter" $element_name_filter "scalar") (serialize-qp "elementTemplate" $element_template "scalar") (serialize-qp "elementType" $element_type "scalar") (serialize-qp "maxCount" $max_count "scalar") (serialize-qp "searchFullHierarchy" $search_full_hierarchy "scalar") (serialize-qp "selectedFields" $selected_fields "scalar") (serialize-qp "sortField" $sort_field "scalar") (serialize-qp "sortOrder" $sort_order "scalar") (serialize-qp "startIndex" $start_index "scalar") (serialize-qp "webIdType" $web_id_type "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({web_id: (encode-path-segment $web_id)} | format pattern "/assetdatabases/{web_id}/elementattributes") $qp)
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"associations": $associations, "attributeCategory": $attribute_category, "attributeDescriptionFilter": $attribute_description_filter, "attributeNameFilter": $attribute_name_filter, "attributeType": $attribute_type, "elementCategory": $element_category, "elementDescriptionFilter": $element_description_filter, "elementNameFilter": $element_name_filter, "elementTemplate": $element_template, "elementType": $element_type, "maxCount": $max_count, "searchFullHierarchy": $search_full_hierarchy, "selectedFields": $selected_fields, "sortField": $sort_field, "sortOrder": $sort_order, "startIndex": $start_index, "webIdType": $web_id_type} | compact), body: null}
 }
 
 # Retrieve element categories for a given Asset Database.
@@ -1930,11 +2007,12 @@ export def "assetdatabases-elementcategories get-asset-database-element-categori
 ]: nothing -> record<Items: table<Description: string, Id: string, Links: record, Name: string, Path: string, WebException: record, WebId: string>, Links: record<First: string, Last: string, Next: string, Previous: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($web_id | is-empty) { error make --unspanned { msg: "path parameter 'webId' must be non-empty" } }
   let qp = [(serialize-qp "selectedFields" $selected_fields "scalar") (serialize-qp "webIdType" $web_id_type "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({web_id: (encode-path-segment $web_id)} | format pattern "/assetdatabases/{web_id}/elementcategories") $qp)
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"selectedFields": $selected_fields, "webIdType": $web_id_type} | compact), body: null}
 }
 
 # Create an element category at the Asset Database root.
@@ -1967,13 +2045,14 @@ export def "assetdatabases-elementcategories create-asset-database-element-categ
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($web_id | is-empty) { error make --unspanned { msg: "path parameter 'webId' must be non-empty" } }
   let qp = [(serialize-qp "webIdType" $web_id_type "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({web_id: (encode-path-segment $web_id)} | format pattern "/assetdatabases/{web_id}/elementcategories") $qp)
   let req_body = {"Description": $description, "Id": $id, "Links": $links, "Name": $name, "Path": $path, "WebException": $web_exception, "WebId": $body_web_id} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: ({"webIdType": $web_id_type} | compact), body: $req_body}
 }
 
 # Retrieve elements based on the specified conditions. By default, this method selects immediate children of the specified asset database.
@@ -2008,11 +2087,12 @@ export def "assetdatabases-elements get-asset-database" [
 ]: nothing -> record<Items: table<CategoryNames: list, Description: string, Errors: list, ExtendedProperties: record, HasChildren: bool, Id: string, Links: record, Name: string, Path: string, Paths: list, TemplateName: string, WebException: record, WebId: string>, Links: record<First: string, Last: string, Next: string, Previous: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($web_id | is-empty) { error make --unspanned { msg: "path parameter 'webId' must be non-empty" } }
   let qp = [(serialize-qp "associations" $associations "scalar") (serialize-qp "categoryName" $category_name "scalar") (serialize-qp "descriptionFilter" $description_filter "scalar") (serialize-qp "elementType" $element_type "scalar") (serialize-qp "maxCount" $max_count "scalar") (serialize-qp "nameFilter" $name_filter "scalar") (serialize-qp "searchFullHierarchy" $search_full_hierarchy "scalar") (serialize-qp "selectedFields" $selected_fields "scalar") (serialize-qp "sortField" $sort_field "scalar") (serialize-qp "sortOrder" $sort_order "scalar") (serialize-qp "startIndex" $start_index "scalar") (serialize-qp "templateName" $template_name "scalar") (serialize-qp "webIdType" $web_id_type "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({web_id: (encode-path-segment $web_id)} | format pattern "/assetdatabases/{web_id}/elements") $qp)
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"associations": $associations, "categoryName": $category_name, "descriptionFilter": $description_filter, "elementType": $element_type, "maxCount": $max_count, "nameFilter": $name_filter, "searchFullHierarchy": $search_full_hierarchy, "selectedFields": $selected_fields, "sortField": $sort_field, "sortOrder": $sort_order, "startIndex": $start_index, "templateName": $template_name, "webIdType": $web_id_type} | compact), body: null}
 }
 
 # Create a child element.
@@ -2052,13 +2132,14 @@ export def "assetdatabases-elements create-asset-database" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($web_id | is-empty) { error make --unspanned { msg: "path parameter 'webId' must be non-empty" } }
   let qp = [(serialize-qp "webIdType" $web_id_type "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({web_id: (encode-path-segment $web_id)} | format pattern "/assetdatabases/{web_id}/elements") $qp)
   let req_body = {"CategoryNames": $category_names, "Description": $description, "Errors": $errors, "ExtendedProperties": $extended_properties, "HasChildren": $has_children, "Id": $id, "Links": $links, "Name": $name, "Path": $path, "Paths": $paths, "TemplateName": $template_name, "WebException": $web_exception, "WebId": $body_web_id} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: ({"webIdType": $web_id_type} | compact), body: $req_body}
 }
 
 # Retrieve element templates based on the specified criteria. Only templates of instance type "Element" and "EventFrame" are returned. By default, all element and event frame templates in the specified Asset Database are returned.
@@ -2087,11 +2168,12 @@ export def "assetdatabases-elementtemplates get-asset-database-element-templates
 ]: nothing -> record<Items: table<AllowElementToExtend: bool, BaseTemplate: string, CanBeAcknowledged: bool, CategoryNames: list, Description: string, ExtendedProperties: record, Id: string, InstanceType: string, Links: record, Name: string, NamingPattern: string, Path: string, Severity: string, WebException: record, WebId: string>, Links: record<First: string, Last: string, Next: string, Previous: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($web_id | is-empty) { error make --unspanned { msg: "path parameter 'webId' must be non-empty" } }
   let qp = [(serialize-qp "field" $field "multi") (serialize-qp "maxCount" $max_count "scalar") (serialize-qp "query" $query "scalar") (serialize-qp "selectedFields" $selected_fields "scalar") (serialize-qp "sortField" $sort_field "scalar") (serialize-qp "sortOrder" $sort_order "scalar") (serialize-qp "webIdType" $web_id_type "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({web_id: (encode-path-segment $web_id)} | format pattern "/assetdatabases/{web_id}/elementtemplates") $qp)
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"field": $field, "maxCount": $max_count, "query": $query, "selectedFields": $selected_fields, "sortField": $sort_field, "sortOrder": $sort_order, "webIdType": $web_id_type} | compact), body: null}
 }
 
 # Create a template at the Asset Database root. Specify InstanceType of "Element" or "EventFrame" to create element or event frame template respectively. Only these two types of templates can be created.
@@ -2132,13 +2214,14 @@ export def "assetdatabases-elementtemplates create-asset-database-element-templa
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($web_id | is-empty) { error make --unspanned { msg: "path parameter 'webId' must be non-empty" } }
   let qp = [(serialize-qp "webIdType" $web_id_type "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({web_id: (encode-path-segment $web_id)} | format pattern "/assetdatabases/{web_id}/elementtemplates") $qp)
   let req_body = {"AllowElementToExtend": $allow_element_to_extend, "BaseTemplate": $base_template, "CanBeAcknowledged": $can_be_acknowledged, "CategoryNames": $category_names, "Description": $description, "ExtendedProperties": $extended_properties, "Id": $id, "InstanceType": $instance_type, "Links": $links, "Name": $name, "NamingPattern": $naming_pattern, "Path": $path, "Severity": $severity, "WebException": $web_exception, "WebId": $body_web_id} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: ({"webIdType": $web_id_type} | compact), body: $req_body}
 }
 
 # Retrieve enumeration sets for given asset database.
@@ -2162,11 +2245,12 @@ export def "assetdatabases-enumerationsets get-asset-database-enumeration-sets" 
 ]: nothing -> record<Items: table<Description: string, Id: string, Links: record, Name: string, Path: string, SerializeDescription: bool, WebException: record, WebId: string>, Links: record<First: string, Last: string, Next: string, Previous: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($web_id | is-empty) { error make --unspanned { msg: "path parameter 'webId' must be non-empty" } }
   let qp = [(serialize-qp "selectedFields" $selected_fields "scalar") (serialize-qp "webIdType" $web_id_type "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({web_id: (encode-path-segment $web_id)} | format pattern "/assetdatabases/{web_id}/enumerationsets") $qp)
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"selectedFields": $selected_fields, "webIdType": $web_id_type} | compact), body: null}
 }
 
 # Create an enumeration set at the Asset Database.
@@ -2200,13 +2284,14 @@ export def "assetdatabases-enumerationsets create-asset-database-enumeration-upd
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($web_id | is-empty) { error make --unspanned { msg: "path parameter 'webId' must be non-empty" } }
   let qp = [(serialize-qp "webIdType" $web_id_type "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({web_id: (encode-path-segment $web_id)} | format pattern "/assetdatabases/{web_id}/enumerationsets") $qp)
   let req_body = {"Description": $description, "Id": $id, "Links": $links, "Name": $name, "Path": $path, "SerializeDescription": $serialize_description, "WebException": $web_exception, "WebId": $body_web_id} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: ({"webIdType": $web_id_type} | compact), body: $req_body}
 }
 
 # Retrieves a list of event frame attributes matching the specified filters from the specified asset database.
@@ -2248,11 +2333,12 @@ export def "assetdatabases-eventframeattributes find-asset-database-event-frame-
 ]: nothing -> record<Items: table<CategoryNames: list, ConfigString: string, DataReference: record, DataReferencePlugIn: string, DefaultUnitsName: string, DefaultUnitsNameAbbreviation: string, Description: string, DisplayDigits: int, HasChildren: bool, Id: string, IsConfigurationItem: bool, IsExcluded: bool, IsHidden: bool, IsManualDataEntry: bool, Links: record, Name: string, Path: string, Paths: list, Span: float, Step: bool, TraitName: string, Type: string, TypeQualifier: string, WebException: record, WebId: string, Zero: float>, Links: record<First: string, Last: string, Next: string, Previous: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($web_id | is-empty) { error make --unspanned { msg: "path parameter 'webId' must be non-empty" } }
   let qp = [(serialize-qp "associations" $associations "scalar") (serialize-qp "attributeCategory" $attribute_category "scalar") (serialize-qp "attributeDescriptionFilter" $attribute_description_filter "scalar") (serialize-qp "attributeNameFilter" $attribute_name_filter "scalar") (serialize-qp "attributeType" $attribute_type "scalar") (serialize-qp "endTime" $end_time "scalar") (serialize-qp "eventFrameCategory" $event_frame_category "scalar") (serialize-qp "eventFrameDescriptionFilter" $event_frame_description_filter "scalar") (serialize-qp "eventFrameNameFilter" $event_frame_name_filter "scalar") (serialize-qp "eventFrameTemplate" $event_frame_template "scalar") (serialize-qp "maxCount" $max_count "scalar") (serialize-qp "referencedElementNameFilter" $referenced_element_name_filter "scalar") (serialize-qp "searchFullHierarchy" $search_full_hierarchy "scalar") (serialize-qp "searchMode" $search_mode "scalar") (serialize-qp "selectedFields" $selected_fields "scalar") (serialize-qp "sortField" $sort_field "scalar") (serialize-qp "sortOrder" $sort_order "scalar") (serialize-qp "startIndex" $start_index "scalar") (serialize-qp "startTime" $start_time "scalar") (serialize-qp "webIdType" $web_id_type "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({web_id: (encode-path-segment $web_id)} | format pattern "/assetdatabases/{web_id}/eventframeattributes") $qp)
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"associations": $associations, "attributeCategory": $attribute_category, "attributeDescriptionFilter": $attribute_description_filter, "attributeNameFilter": $attribute_name_filter, "attributeType": $attribute_type, "endTime": $end_time, "eventFrameCategory": $event_frame_category, "eventFrameDescriptionFilter": $event_frame_description_filter, "eventFrameNameFilter": $event_frame_name_filter, "eventFrameTemplate": $event_frame_template, "maxCount": $max_count, "referencedElementNameFilter": $referenced_element_name_filter, "searchFullHierarchy": $search_full_hierarchy, "searchMode": $search_mode, "selectedFields": $selected_fields, "sortField": $sort_field, "sortOrder": $sort_order, "startIndex": $start_index, "startTime": $start_time, "webIdType": $web_id_type} | compact), body: null}
 }
 
 # Retrieve event frames based on the specified conditions. By default, returns all children of the specified root resource that have been active in the past 8 hours.
@@ -2292,11 +2378,12 @@ export def "assetdatabases-eventframes get-asset-database-event-frames" [
 ]: nothing -> record<Items: table<AcknowledgedBy: string, AcknowledgedDate: string, AreValuesCaptured: bool, CanBeAcknowledged: bool, CategoryNames: list, Description: string, EndTime: string, ExtendedProperties: record, HasChildren: bool, Id: string, IsAcknowledged: bool, IsAnnotated: bool, IsLocked: bool, Links: record, Name: string, Path: string, RefElementWebIds: list, Security: record, Severity: string, StartTime: string, TemplateName: string, WebException: record, WebId: string>, Links: record<First: string, Last: string, Next: string, Previous: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($web_id | is-empty) { error make --unspanned { msg: "path parameter 'webId' must be non-empty" } }
   let qp = [(serialize-qp "canBeAcknowledged" $can_be_acknowledged "scalar") (serialize-qp "categoryName" $category_name "scalar") (serialize-qp "endTime" $end_time "scalar") (serialize-qp "isAcknowledged" $is_acknowledged "scalar") (serialize-qp "maxCount" $max_count "scalar") (serialize-qp "nameFilter" $name_filter "scalar") (serialize-qp "referencedElementNameFilter" $referenced_element_name_filter "scalar") (serialize-qp "referencedElementTemplateName" $referenced_element_template_name "scalar") (serialize-qp "searchFullHierarchy" $search_full_hierarchy "scalar") (serialize-qp "searchMode" $search_mode "scalar") (serialize-qp "selectedFields" $selected_fields "scalar") (serialize-qp "severity" $severity "multi") (serialize-qp "sortField" $sort_field "scalar") (serialize-qp "sortOrder" $sort_order "scalar") (serialize-qp "startIndex" $start_index "scalar") (serialize-qp "startTime" $start_time "scalar") (serialize-qp "templateName" $template_name "scalar") (serialize-qp "webIdType" $web_id_type "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({web_id: (encode-path-segment $web_id)} | format pattern "/assetdatabases/{web_id}/eventframes") $qp)
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"canBeAcknowledged": $can_be_acknowledged, "categoryName": $category_name, "endTime": $end_time, "isAcknowledged": $is_acknowledged, "maxCount": $max_count, "nameFilter": $name_filter, "referencedElementNameFilter": $referenced_element_name_filter, "referencedElementTemplateName": $referenced_element_template_name, "searchFullHierarchy": $search_full_hierarchy, "searchMode": $search_mode, "selectedFields": $selected_fields, "severity": $severity, "sortField": $sort_field, "sortOrder": $sort_order, "startIndex": $start_index, "startTime": $start_time, "templateName": $template_name, "webIdType": $web_id_type} | compact), body: null}
 }
 
 # Create an event frame.
@@ -2346,13 +2433,14 @@ export def "assetdatabases-eventframes create-asset-database-event-frame" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($web_id | is-empty) { error make --unspanned { msg: "path parameter 'webId' must be non-empty" } }
   let qp = [(serialize-qp "webIdType" $web_id_type "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({web_id: (encode-path-segment $web_id)} | format pattern "/assetdatabases/{web_id}/eventframes") $qp)
   let req_body = {"AcknowledgedBy": $acknowledged_by, "AcknowledgedDate": $acknowledged_date, "AreValuesCaptured": $are_values_captured, "CanBeAcknowledged": $can_be_acknowledged, "CategoryNames": $category_names, "Description": $description, "EndTime": $end_time, "ExtendedProperties": $extended_properties, "HasChildren": $has_children, "Id": $id, "IsAcknowledged": $is_acknowledged, "IsAnnotated": $is_annotated, "IsLocked": $is_locked, "Links": $links, "Name": $name, "Path": $path, "RefElementWebIds": $ref_element_web_ids, "Security": $security, "Severity": $severity, "StartTime": $start_time, "TemplateName": $template_name, "WebException": $web_exception, "WebId": $body_web_id} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: ({"webIdType": $web_id_type} | compact), body: $req_body}
 }
 
 # Export the asset database.
@@ -2377,11 +2465,12 @@ export def "assetdatabases-export export-asset-database" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($web_id | is-empty) { error make --unspanned { msg: "path parameter 'webId' must be non-empty" } }
   let qp = [(serialize-qp "endTime" $end_time "scalar") (serialize-qp "exportMode" $export_mode "multi") (serialize-qp "startTime" $start_time "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({web_id: (encode-path-segment $web_id)} | format pattern "/assetdatabases/{web_id}/export") $qp)
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"endTime": $end_time, "exportMode": $export_mode, "startTime": $start_time} | compact), body: null}
 }
 
 # Import an asset database.
@@ -2404,11 +2493,12 @@ export def "assetdatabases-import import-asset-database" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($web_id | is-empty) { error make --unspanned { msg: "path parameter 'webId' must be non-empty" } }
   let qp = [(serialize-qp "importMode" $import_mode "multi")] | flatten | str join "&"
   let full_url = (build-url $base ({web_id: (encode-path-segment $web_id)} | format pattern "/assetdatabases/{web_id}/import") $qp)
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"importMode": $import_mode} | compact), body: null}
 }
 
 # Remove a reference to an existing element from the specified database.
@@ -2431,11 +2521,12 @@ export def "assetdatabases-referencedelements delete-asset-database-referenced-e
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($web_id | is-empty) { error make --unspanned { msg: "path parameter 'webId' must be non-empty" } }
   let qp = [(serialize-qp "referencedElementWebId" $referenced_element_web_id "multi")] | flatten | str join "&"
   let full_url = (build-url $base ({web_id: (encode-path-segment $web_id)} | format pattern "/assetdatabases/{web_id}/referencedelements") $qp)
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"referencedElementWebId": $referenced_element_web_id} | compact), body: null}
 }
 
 # Retrieve referenced elements based on the specified conditions. By default, this method selects all referenced elements at the root level of the asset database.
@@ -2469,11 +2560,12 @@ export def "assetdatabases-referencedelements get-asset-database-referenced-elem
 ]: nothing -> record<Items: table<CategoryNames: list, Description: string, Errors: list, ExtendedProperties: record, HasChildren: bool, Id: string, Links: record, Name: string, Path: string, Paths: list, TemplateName: string, WebException: record, WebId: string>, Links: record<First: string, Last: string, Next: string, Previous: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($web_id | is-empty) { error make --unspanned { msg: "path parameter 'webId' must be non-empty" } }
   let qp = [(serialize-qp "associations" $associations "scalar") (serialize-qp "categoryName" $category_name "scalar") (serialize-qp "descriptionFilter" $description_filter "scalar") (serialize-qp "elementType" $element_type "scalar") (serialize-qp "maxCount" $max_count "scalar") (serialize-qp "nameFilter" $name_filter "scalar") (serialize-qp "selectedFields" $selected_fields "scalar") (serialize-qp "sortField" $sort_field "scalar") (serialize-qp "sortOrder" $sort_order "scalar") (serialize-qp "startIndex" $start_index "scalar") (serialize-qp "templateName" $template_name "scalar") (serialize-qp "webIdType" $web_id_type "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({web_id: (encode-path-segment $web_id)} | format pattern "/assetdatabases/{web_id}/referencedelements") $qp)
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"associations": $associations, "categoryName": $category_name, "descriptionFilter": $description_filter, "elementType": $element_type, "maxCount": $max_count, "nameFilter": $name_filter, "selectedFields": $selected_fields, "sortField": $sort_field, "sortOrder": $sort_order, "startIndex": $start_index, "templateName": $template_name, "webIdType": $web_id_type} | compact), body: null}
 }
 
 # Add a reference to an existing element to the specified database.
@@ -2497,11 +2589,12 @@ export def "assetdatabases-referencedelements create-asset-database-referenced-e
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($web_id | is-empty) { error make --unspanned { msg: "path parameter 'webId' must be non-empty" } }
   let qp = [(serialize-qp "referencedElementWebId" $referenced_element_web_id "multi") (serialize-qp "referenceType" $reference_type "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({web_id: (encode-path-segment $web_id)} | format pattern "/assetdatabases/{web_id}/referencedelements") $qp)
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"referencedElementWebId": $referenced_element_web_id, "referenceType": $reference_type} | compact), body: null}
 }
 
 # Get the security information of the specified security item associated with the asset database for a specified user.
@@ -2528,11 +2621,12 @@ export def "assetdatabases-security get-asset-database" [
 ]: nothing -> record<Items: table<CanAnnotate: bool, CanDelete: bool, CanExecute: bool, CanRead: bool, CanReadData: bool, CanSubscribe: bool, CanSubscribeOthers: bool, CanWrite: bool, CanWriteData: bool, HasAdmin: bool, Links: record, OwnerWebId: string, Rights: list, SecurityItem: string, UserIdentity: string, WebException: record>, Links: record<First: string, Last: string, Next: string, Previous: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($web_id | is-empty) { error make --unspanned { msg: "path parameter 'webId' must be non-empty" } }
   let qp = [(serialize-qp "securityItem" $security_item "multi") (serialize-qp "userIdentity" $user_identity "multi") (serialize-qp "forceRefresh" $force_refresh "scalar") (serialize-qp "selectedFields" $selected_fields "scalar") (serialize-qp "webIdType" $web_id_type "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({web_id: (encode-path-segment $web_id)} | format pattern "/assetdatabases/{web_id}/security") $qp)
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"securityItem": $security_item, "userIdentity": $user_identity, "forceRefresh": $force_refresh, "selectedFields": $selected_fields, "webIdType": $web_id_type} | compact), body: null}
 }
 
 # Retrieve the security entries of the specified security item associated with the asset database based on the specified criteria. By default, all security entries for this asset database are returned.
@@ -2558,11 +2652,12 @@ export def "assetdatabases-securityentries get-asset-database-security-entries" 
 ]: nothing -> record<Items: table<AllowRights: list, DenyRights: list, Links: record, Name: string, SecurityIdentityName: string, WebException: record>, Links: record<First: string, Last: string, Next: string, Previous: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($web_id | is-empty) { error make --unspanned { msg: "path parameter 'webId' must be non-empty" } }
   let qp = [(serialize-qp "nameFilter" $name_filter "scalar") (serialize-qp "securityItem" $security_item "scalar") (serialize-qp "selectedFields" $selected_fields "scalar") (serialize-qp "webIdType" $web_id_type "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({web_id: (encode-path-segment $web_id)} | format pattern "/assetdatabases/{web_id}/securityentries") $qp)
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"nameFilter": $name_filter, "securityItem": $security_item, "selectedFields": $selected_fields, "webIdType": $web_id_type} | compact), body: null}
 }
 
 # Create a security entry owned by the asset database.
@@ -2596,13 +2691,14 @@ export def "assetdatabases-securityentries create-asset-database-security-entry"
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($web_id | is-empty) { error make --unspanned { msg: "path parameter 'webId' must be non-empty" } }
   let qp = [(serialize-qp "applyToChildren" $apply_to_children "scalar") (serialize-qp "securityItem" $security_item "scalar") (serialize-qp "webIdType" $web_id_type "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({web_id: (encode-path-segment $web_id)} | format pattern "/assetdatabases/{web_id}/securityentries") $qp)
   let req_body = {"AllowRights": $allow_rights, "DenyRights": $deny_rights, "Links": $links, "Name": $name, "SecurityIdentityName": $security_identity_name, "WebException": $web_exception} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: ({"applyToChildren": $apply_to_children, "securityItem": $security_item, "webIdType": $web_id_type} | compact), body: $req_body}
 }
 
 # Delete a security entry owned by the asset database.
@@ -2627,11 +2723,13 @@ export def "assetdatabases-securityentries delete-asset-database-security-entry"
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($web_id | is-empty) { error make --unspanned { msg: "path parameter 'webId' must be non-empty" } }
+  if ($name | is-empty) { error make --unspanned { msg: "path parameter 'name' must be non-empty" } }
   let qp = [(serialize-qp "applyToChildren" $apply_to_children "scalar") (serialize-qp "securityItem" $security_item "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({web_id: (encode-path-segment $web_id), name: (encode-path-segment $name)} | format pattern "/assetdatabases/{web_id}/securityentries/{name}") $qp)
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"applyToChildren": $apply_to_children, "securityItem": $security_item} | compact), body: null}
 }
 
 # Retrieve the security entry of the specified security item associated with the asset database with the specified name.
@@ -2657,11 +2755,13 @@ export def "assetdatabases-securityentries get-asset-database-security-entry" [
 ]: nothing -> record<AllowRights: list<string>, DenyRights: list<string>, Links: record<SecurableObject: string, SecurityIdentity: string, Self: string>, Name: string, SecurityIdentityName: string, WebException: record<Errors: list<string>, StatusCode: int>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($web_id | is-empty) { error make --unspanned { msg: "path parameter 'webId' must be non-empty" } }
+  if ($name | is-empty) { error make --unspanned { msg: "path parameter 'name' must be non-empty" } }
   let qp = [(serialize-qp "securityItem" $security_item "scalar") (serialize-qp "selectedFields" $selected_fields "scalar") (serialize-qp "webIdType" $web_id_type "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({web_id: (encode-path-segment $web_id), name: (encode-path-segment $name)} | format pattern "/assetdatabases/{web_id}/securityentries/{name}") $qp)
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"securityItem": $security_item, "selectedFields": $selected_fields, "webIdType": $web_id_type} | compact), body: null}
 }
 
 # Update a security entry owned by the asset database.
@@ -2695,13 +2795,15 @@ export def "assetdatabases-securityentries update-asset-database-security-entry"
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($web_id | is-empty) { error make --unspanned { msg: "path parameter 'webId' must be non-empty" } }
+  if ($name | is-empty) { error make --unspanned { msg: "path parameter 'name' must be non-empty" } }
   let qp = [(serialize-qp "applyToChildren" $apply_to_children "scalar") (serialize-qp "securityItem" $security_item "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({web_id: (encode-path-segment $web_id), name: (encode-path-segment $name)} | format pattern "/assetdatabases/{web_id}/securityentries/{name}") $qp)
   let req_body = {"AllowRights": $allow_rights, "DenyRights": $deny_rights, "Links": $links, "Name": $body_name, "SecurityIdentityName": $security_identity_name, "WebException": $web_exception} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: ({"applyToChildren": $apply_to_children, "securityItem": $security_item} | compact), body: $req_body}
 }
 
 # Retrieve table categories for a given Asset Database.
@@ -2725,11 +2827,12 @@ export def "assetdatabases-tablecategories get-asset-database-table-categories" 
 ]: nothing -> record<Items: table<Description: string, Id: string, Links: record, Name: string, Path: string, WebException: record, WebId: string>, Links: record<First: string, Last: string, Next: string, Previous: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($web_id | is-empty) { error make --unspanned { msg: "path parameter 'webId' must be non-empty" } }
   let qp = [(serialize-qp "selectedFields" $selected_fields "scalar") (serialize-qp "webIdType" $web_id_type "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({web_id: (encode-path-segment $web_id)} | format pattern "/assetdatabases/{web_id}/tablecategories") $qp)
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"selectedFields": $selected_fields, "webIdType": $web_id_type} | compact), body: null}
 }
 
 # Create a table category on the Asset Database.
@@ -2762,13 +2865,14 @@ export def "assetdatabases-tablecategories create-asset-database-table-category"
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($web_id | is-empty) { error make --unspanned { msg: "path parameter 'webId' must be non-empty" } }
   let qp = [(serialize-qp "webIdType" $web_id_type "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({web_id: (encode-path-segment $web_id)} | format pattern "/assetdatabases/{web_id}/tablecategories") $qp)
   let req_body = {"Description": $description, "Id": $id, "Links": $links, "Name": $name, "Path": $path, "WebException": $web_exception, "WebId": $body_web_id} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: ({"webIdType": $web_id_type} | compact), body: $req_body}
 }
 
 # Retrieve tables for given Asset Database.
@@ -2792,11 +2896,12 @@ export def "assetdatabases-tables get-asset-database" [
 ]: nothing -> record<Items: table<CategoryNames: list, ConvertToLocalTime: bool, Description: string, Id: string, Links: record, Name: string, Path: string, TimeZone: string, WebException: record, WebId: string>, Links: record<First: string, Last: string, Next: string, Previous: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($web_id | is-empty) { error make --unspanned { msg: "path parameter 'webId' must be non-empty" } }
   let qp = [(serialize-qp "selectedFields" $selected_fields "scalar") (serialize-qp "webIdType" $web_id_type "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({web_id: (encode-path-segment $web_id)} | format pattern "/assetdatabases/{web_id}/tables") $qp)
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"selectedFields": $selected_fields, "webIdType": $web_id_type} | compact), body: null}
 }
 
 # Create a table on the Asset Database.
@@ -2832,13 +2937,14 @@ export def "assetdatabases-tables create-asset-database" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($web_id | is-empty) { error make --unspanned { msg: "path parameter 'webId' must be non-empty" } }
   let qp = [(serialize-qp "webIdType" $web_id_type "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({web_id: (encode-path-segment $web_id)} | format pattern "/assetdatabases/{web_id}/tables") $qp)
   let req_body = {"CategoryNames": $category_names, "ConvertToLocalTime": $convert_to_local_time, "Description": $description, "Id": $id, "Links": $links, "Name": $name, "Path": $path, "TimeZone": $time_zone, "WebException": $web_exception, "WebId": $body_web_id} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: ({"webIdType": $web_id_type} | compact), body: $req_body}
 }
 
 # Retrieve a list of all Asset Servers known to this service.
@@ -2865,14 +2971,14 @@ export def "assetservers list-asset-server" [
   let full_url = (build-url $base "/assetservers" $qp)
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"selectedFields": $selected_fields, "webIdType": $web_id_type} | compact), body: null}
 }
 
 # Retrieve an Asset Server by name.
 #
-# GET /assetservers#name
+# GET /assetservers
 # operationId: AssetServer_GetByName
-export def "assetserversname get-asset-server-by-name" [
+export def "assetservers get-asset-server-by-name" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2890,17 +2996,17 @@ export def "assetserversname get-asset-server-by-name" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "name" $name "scalar") (serialize-qp "selectedFields" $selected_fields "scalar") (serialize-qp "webIdType" $web_id_type "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base "/assetservers#name" $qp)
+  let full_url = (build-url $base "/assetservers" $qp)
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"name": $name, "selectedFields": $selected_fields, "webIdType": $web_id_type} | compact), body: null}
 }
 
 # Retrieve an Asset Server by path.
 #
-# GET /assetservers#path
+# GET /assetservers
 # operationId: AssetServer_GetByPath
-export def "assetserverspath get-asset-server-by-path" [
+export def "assetservers get-asset-server-by-path" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2918,10 +3024,10 @@ export def "assetserverspath get-asset-server-by-path" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "path" $path "scalar") (serialize-qp "selectedFields" $selected_fields "scalar") (serialize-qp "webIdType" $web_id_type "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base "/assetservers#path" $qp)
+  let full_url = (build-url $base "/assetservers" $qp)
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"path": $path, "selectedFields": $selected_fields, "webIdType": $web_id_type} | compact), body: null}
 }
 
 # Retrieve an Asset Server.
@@ -2945,11 +3051,12 @@ export def "assetservers get-asset-server" [
 ]: nothing -> record<Description: string, ExtendedProperties: record, Id: string, IsConnected: bool, Links: record<AnalysisRulePlugIns: string, Databases: string, NotificationContactTemplates: string, NotificationPlugIns: string, Security: string, SecurityEntries: string, SecurityIdentities: string, SecurityMappings: string, Self: string, TimeRulePlugIns: string, UnitClasses: string>, Name: string, Path: string, ServerTime: string, ServerVersion: string, WebException: record<Errors: list<string>, StatusCode: int>, WebId: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($web_id | is-empty) { error make --unspanned { msg: "path parameter 'webId' must be non-empty" } }
   let qp = [(serialize-qp "selectedFields" $selected_fields "scalar") (serialize-qp "webIdType" $web_id_type "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({web_id: (encode-path-segment $web_id)} | format pattern "/assetservers/{web_id}") $qp)
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"selectedFields": $selected_fields, "webIdType": $web_id_type} | compact), body: null}
 }
 
 # Retrieve a list of all Analysis Rule Plug-in's.
@@ -2973,11 +3080,12 @@ export def "assetservers-analysisruleplugins get-asset-server-analysis-rule-plug
 ]: nothing -> record<Items: table<AssemblyFileName: string, AssemblyID: string, AssemblyLoadProperties: list, AssemblyTime: string, CompatibilityVersion: int, Description: string, Id: string, IsBrowsable: bool, IsNonEditableConfig: bool, Links: record, LoadedAssemblyTime: string, LoadedVersion: string, Name: string, Path: string, Version: string, WebException: record, WebId: string>, Links: record<First: string, Last: string, Next: string, Previous: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($web_id | is-empty) { error make --unspanned { msg: "path parameter 'webId' must be non-empty" } }
   let qp = [(serialize-qp "selectedFields" $selected_fields "scalar") (serialize-qp "webIdType" $web_id_type "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({web_id: (encode-path-segment $web_id)} | format pattern "/assetservers/{web_id}/analysisruleplugins") $qp)
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"selectedFields": $selected_fields, "webIdType": $web_id_type} | compact), body: null}
 }
 
 # Retrieve a list of all Asset Databases on the specified Asset Server.
@@ -3001,11 +3109,12 @@ export def "assetservers-assetdatabases get-asset-server-databases" [
 ]: nothing -> record<Items: table<Description: string, ExtendedProperties: record, Id: string, Links: record, Name: string, Path: string, WebException: record, WebId: string>, Links: record<First: string, Last: string, Next: string, Previous: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($web_id | is-empty) { error make --unspanned { msg: "path parameter 'webId' must be non-empty" } }
   let qp = [(serialize-qp "selectedFields" $selected_fields "scalar") (serialize-qp "webIdType" $web_id_type "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({web_id: (encode-path-segment $web_id)} | format pattern "/assetservers/{web_id}/assetdatabases") $qp)
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"selectedFields": $selected_fields, "webIdType": $web_id_type} | compact), body: null}
 }
 
 # Create an asset database.
@@ -3039,13 +3148,14 @@ export def "assetservers-assetdatabases create-asset-server-asset-database" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($web_id | is-empty) { error make --unspanned { msg: "path parameter 'webId' must be non-empty" } }
   let qp = [(serialize-qp "webIdType" $web_id_type "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({web_id: (encode-path-segment $web_id)} | format pattern "/assetservers/{web_id}/assetdatabases") $qp)
   let req_body = {"Description": $description, "ExtendedProperties": $extended_properties, "Id": $id, "Links": $links, "Name": $name, "Path": $path, "WebException": $web_exception, "WebId": $body_web_id} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: ({"webIdType": $web_id_type} | compact), body: $req_body}
 }
 
 # Retrieve a list of all notification contact templates on the specified Asset Server.
@@ -3069,11 +3179,12 @@ export def "assetservers-notificationcontacttemplates get-asset-server-notificat
 ]: nothing -> record<Items: table<Available: bool, ConfigString: string, ContactType: string, Description: string, EscalationTimeout: string, HasChildren: bool, Id: string, Links: record, MaximumRetries: int, MinimumAcknowledgements: int, Name: string, NotifyWhenInstanceEnded: bool, Path: string, PlugInName: string, RetryInterval: string, WebException: record, WebId: string>, Links: record<First: string, Last: string, Next: string, Previous: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($web_id | is-empty) { error make --unspanned { msg: "path parameter 'webId' must be non-empty" } }
   let qp = [(serialize-qp "selectedFields" $selected_fields "scalar") (serialize-qp "webIdType" $web_id_type "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({web_id: (encode-path-segment $web_id)} | format pattern "/assetservers/{web_id}/notificationcontacttemplates") $qp)
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"selectedFields": $selected_fields, "webIdType": $web_id_type} | compact), body: null}
 }
 
 # Create a notification contact template.
@@ -3116,13 +3227,14 @@ export def "assetservers-notificationcontacttemplates create-asset-server-notifi
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($web_id | is-empty) { error make --unspanned { msg: "path parameter 'webId' must be non-empty" } }
   let qp = [(serialize-qp "webIdType" $web_id_type "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({web_id: (encode-path-segment $web_id)} | format pattern "/assetservers/{web_id}/notificationcontacttemplates") $qp)
   let req_body = {"Available": $available, "ConfigString": $config_string, "ContactType": $contact_type, "Description": $description, "EscalationTimeout": $escalation_timeout, "HasChildren": $has_children, "Id": $id, "Links": $links, "MaximumRetries": $maximum_retries, "MinimumAcknowledgements": $minimum_acknowledgements, "Name": $name, "NotifyWhenInstanceEnded": $notify_when_instance_ended, "Path": $path, "PlugInName": $plug_in_name, "RetryInterval": $retry_interval, "WebException": $web_exception, "WebId": $body_web_id} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: ({"webIdType": $web_id_type} | compact), body: $req_body}
 }
 
 # Retrieve a list of all notification plugins on the specified Asset Server.
@@ -3146,11 +3258,12 @@ export def "assetservers-notificationplugins get-asset-server-notification-plug-
 ]: nothing -> record<Items: table<AssemblyFileName: string, AssemblyID: string, AssemblyLoadProperties: list, AssemblyTime: string, CompatibilityVersion: int, Description: string, Id: string, IsBrowsable: bool, IsNonEditableConfig: bool, Links: record, LoadedAssemblyTime: string, LoadedVersion: string, Name: string, Path: string, Version: string, WebException: record, WebId: string>, Links: record<First: string, Last: string, Next: string, Previous: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($web_id | is-empty) { error make --unspanned { msg: "path parameter 'webId' must be non-empty" } }
   let qp = [(serialize-qp "selectedFields" $selected_fields "scalar") (serialize-qp "webIdType" $web_id_type "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({web_id: (encode-path-segment $web_id)} | format pattern "/assetservers/{web_id}/notificationplugins") $qp)
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"selectedFields": $selected_fields, "webIdType": $web_id_type} | compact), body: null}
 }
 
 # Get the security information of the specified security item associated with the asset server for a specified user.
@@ -3177,11 +3290,12 @@ export def "assetservers-security get-asset-server" [
 ]: nothing -> record<Items: table<CanAnnotate: bool, CanDelete: bool, CanExecute: bool, CanRead: bool, CanReadData: bool, CanSubscribe: bool, CanSubscribeOthers: bool, CanWrite: bool, CanWriteData: bool, HasAdmin: bool, Links: record, OwnerWebId: string, Rights: list, SecurityItem: string, UserIdentity: string, WebException: record>, Links: record<First: string, Last: string, Next: string, Previous: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($web_id | is-empty) { error make --unspanned { msg: "path parameter 'webId' must be non-empty" } }
   let qp = [(serialize-qp "securityItem" $security_item "multi") (serialize-qp "userIdentity" $user_identity "multi") (serialize-qp "forceRefresh" $force_refresh "scalar") (serialize-qp "selectedFields" $selected_fields "scalar") (serialize-qp "webIdType" $web_id_type "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({web_id: (encode-path-segment $web_id)} | format pattern "/assetservers/{web_id}/security") $qp)
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"securityItem": $security_item, "userIdentity": $user_identity, "forceRefresh": $force_refresh, "selectedFields": $selected_fields, "webIdType": $web_id_type} | compact), body: null}
 }
 
 # Retrieve the security entries of the specified security item associated with the asset server based on the specified criteria. By default, all security entries for this asset server are returned.
@@ -3207,11 +3321,12 @@ export def "assetservers-securityentries get-asset-server-security-entries" [
 ]: nothing -> record<Items: table<AllowRights: list, DenyRights: list, Links: record, Name: string, SecurityIdentityName: string, WebException: record>, Links: record<First: string, Last: string, Next: string, Previous: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($web_id | is-empty) { error make --unspanned { msg: "path parameter 'webId' must be non-empty" } }
   let qp = [(serialize-qp "nameFilter" $name_filter "scalar") (serialize-qp "securityItem" $security_item "scalar") (serialize-qp "selectedFields" $selected_fields "scalar") (serialize-qp "webIdType" $web_id_type "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({web_id: (encode-path-segment $web_id)} | format pattern "/assetservers/{web_id}/securityentries") $qp)
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"nameFilter": $name_filter, "securityItem": $security_item, "selectedFields": $selected_fields, "webIdType": $web_id_type} | compact), body: null}
 }
 
 # Create a security entry owned by the asset server.
@@ -3245,13 +3360,14 @@ export def "assetservers-securityentries create-asset-server-security-entry" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($web_id | is-empty) { error make --unspanned { msg: "path parameter 'webId' must be non-empty" } }
   let qp = [(serialize-qp "applyToChildren" $apply_to_children "scalar") (serialize-qp "securityItem" $security_item "scalar") (serialize-qp "webIdType" $web_id_type "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({web_id: (encode-path-segment $web_id)} | format pattern "/assetservers/{web_id}/securityentries") $qp)
   let req_body = {"AllowRights": $allow_rights, "DenyRights": $deny_rights, "Links": $links, "Name": $name, "SecurityIdentityName": $security_identity_name, "WebException": $web_exception} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: ({"applyToChildren": $apply_to_children, "securityItem": $security_item, "webIdType": $web_id_type} | compact), body: $req_body}
 }
 
 # Delete a security entry owned by the asset server.
@@ -3276,11 +3392,13 @@ export def "assetservers-securityentries delete-asset-server-security-entry" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($web_id | is-empty) { error make --unspanned { msg: "path parameter 'webId' must be non-empty" } }
+  if ($name | is-empty) { error make --unspanned { msg: "path parameter 'name' must be non-empty" } }
   let qp = [(serialize-qp "applyToChildren" $apply_to_children "scalar") (serialize-qp "securityItem" $security_item "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({web_id: (encode-path-segment $web_id), name: (encode-path-segment $name)} | format pattern "/assetservers/{web_id}/securityentries/{name}") $qp)
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"applyToChildren": $apply_to_children, "securityItem": $security_item} | compact), body: null}
 }
 
 # Retrieve the security entry of the specified security item associated with the asset server with the specified name.
@@ -3306,11 +3424,13 @@ export def "assetservers-securityentries get-asset-server-security-entry" [
 ]: nothing -> record<AllowRights: list<string>, DenyRights: list<string>, Links: record<SecurableObject: string, SecurityIdentity: string, Self: string>, Name: string, SecurityIdentityName: string, WebException: record<Errors: list<string>, StatusCode: int>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($web_id | is-empty) { error make --unspanned { msg: "path parameter 'webId' must be non-empty" } }
+  if ($name | is-empty) { error make --unspanned { msg: "path parameter 'name' must be non-empty" } }
   let qp = [(serialize-qp "securityItem" $security_item "scalar") (serialize-qp "selectedFields" $selected_fields "scalar") (serialize-qp "webIdType" $web_id_type "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({web_id: (encode-path-segment $web_id), name: (encode-path-segment $name)} | format pattern "/assetservers/{web_id}/securityentries/{name}") $qp)
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"securityItem": $security_item, "selectedFields": $selected_fields, "webIdType": $web_id_type} | compact), body: null}
 }
 
 # Update a security entry owned by the asset server.
@@ -3344,13 +3464,15 @@ export def "assetservers-securityentries update-asset-server-security-entry" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($web_id | is-empty) { error make --unspanned { msg: "path parameter 'webId' must be non-empty" } }
+  if ($name | is-empty) { error make --unspanned { msg: "path parameter 'name' must be non-empty" } }
   let qp = [(serialize-qp "applyToChildren" $apply_to_children "scalar") (serialize-qp "securityItem" $security_item "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({web_id: (encode-path-segment $web_id), name: (encode-path-segment $name)} | format pattern "/assetservers/{web_id}/securityentries/{name}") $qp)
   let req_body = {"AllowRights": $allow_rights, "DenyRights": $deny_rights, "Links": $links, "Name": $body_name, "SecurityIdentityName": $security_identity_name, "WebException": $web_exception} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: ({"applyToChildren": $apply_to_children, "securityItem": $security_item} | compact), body: $req_body}
 }
 
 # Retrieve security identities based on the specified criteria. By default, all security identities in the specified Asset Server are returned.
@@ -3379,11 +3501,12 @@ export def "assetservers-securityidentities get-asset-server-security-identities
 ]: nothing -> record<Items: table<Description: string, Id: string, IsEnabled: bool, Links: record, Name: string, Path: string, WebException: record, WebId: string>, Links: record<First: string, Last: string, Next: string, Previous: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($web_id | is-empty) { error make --unspanned { msg: "path parameter 'webId' must be non-empty" } }
   let qp = [(serialize-qp "field" $field "scalar") (serialize-qp "maxCount" $max_count "scalar") (serialize-qp "query" $query "scalar") (serialize-qp "selectedFields" $selected_fields "scalar") (serialize-qp "sortField" $sort_field "scalar") (serialize-qp "sortOrder" $sort_order "scalar") (serialize-qp "webIdType" $web_id_type "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({web_id: (encode-path-segment $web_id)} | format pattern "/assetservers/{web_id}/securityidentities") $qp)
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"field": $field, "maxCount": $max_count, "query": $query, "selectedFields": $selected_fields, "sortField": $sort_field, "sortOrder": $sort_order, "webIdType": $web_id_type} | compact), body: null}
 }
 
 # Create a security identity.
@@ -3417,20 +3540,21 @@ export def "assetservers-securityidentities create-asset-server-security-identit
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($web_id | is-empty) { error make --unspanned { msg: "path parameter 'webId' must be non-empty" } }
   let qp = [(serialize-qp "webIdType" $web_id_type "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({web_id: (encode-path-segment $web_id)} | format pattern "/assetservers/{web_id}/securityidentities") $qp)
   let req_body = {"Description": $description, "Id": $id, "IsEnabled": $is_enabled, "Links": $links, "Name": $name, "Path": $path, "WebException": $web_exception, "WebId": $body_web_id} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: ({"webIdType": $web_id_type} | compact), body: $req_body}
 }
 
 # Retrieve security identities for a specific user.
 #
-# GET /assetservers/{webId}/securityidentities#userIdentity
+# GET /assetservers/{webId}/securityidentities
 # operationId: AssetServer_GetSecurityIdentitiesForUser
-export def "assetservers-securityidentitiesuser-identity get-asset-server-security-identities-for-user" [
+export def "assetservers-securityidentities get-asset-server-security-identities-for-user" [
   web_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -3448,11 +3572,12 @@ export def "assetservers-securityidentitiesuser-identity get-asset-server-securi
 ]: nothing -> record<Items: table<Description: string, Id: string, IsEnabled: bool, Links: record, Name: string, Path: string, WebException: record, WebId: string>, Links: record<First: string, Last: string, Next: string, Previous: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($web_id | is-empty) { error make --unspanned { msg: "path parameter 'webId' must be non-empty" } }
   let qp = [(serialize-qp "userIdentity" $user_identity "scalar") (serialize-qp "selectedFields" $selected_fields "scalar") (serialize-qp "webIdType" $web_id_type "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({web_id: (encode-path-segment $web_id)} | format pattern "/assetservers/{web_id}/securityidentities#userIdentity") $qp)
+  let full_url = (build-url $base ({web_id: (encode-path-segment $web_id)} | format pattern "/assetservers/{web_id}/securityidentities") $qp)
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"userIdentity": $user_identity, "selectedFields": $selected_fields, "webIdType": $web_id_type} | compact), body: null}
 }
 
 # Retrieve security mappings based on the specified criteria. By default, all security mappings in the specified Asset Server are returned.
@@ -3481,11 +3606,12 @@ export def "assetservers-securitymappings get-asset-server-security-mappings" [
 ]: nothing -> record<Items: table<Account: string, Description: string, Id: string, Links: record, Name: string, Path: string, SecurityIdentityWebId: string, WebException: record, WebId: string>, Links: record<First: string, Last: string, Next: string, Previous: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($web_id | is-empty) { error make --unspanned { msg: "path parameter 'webId' must be non-empty" } }
   let qp = [(serialize-qp "field" $field "scalar") (serialize-qp "maxCount" $max_count "scalar") (serialize-qp "query" $query "scalar") (serialize-qp "selectedFields" $selected_fields "scalar") (serialize-qp "sortField" $sort_field "scalar") (serialize-qp "sortOrder" $sort_order "scalar") (serialize-qp "webIdType" $web_id_type "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({web_id: (encode-path-segment $web_id)} | format pattern "/assetservers/{web_id}/securitymappings") $qp)
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"field": $field, "maxCount": $max_count, "query": $query, "selectedFields": $selected_fields, "sortField": $sort_field, "sortOrder": $sort_order, "webIdType": $web_id_type} | compact), body: null}
 }
 
 # Create a security mapping.
@@ -3520,13 +3646,14 @@ export def "assetservers-securitymappings create-asset-server-security-mapping" 
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($web_id | is-empty) { error make --unspanned { msg: "path parameter 'webId' must be non-empty" } }
   let qp = [(serialize-qp "webIdType" $web_id_type "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({web_id: (encode-path-segment $web_id)} | format pattern "/assetservers/{web_id}/securitymappings") $qp)
   let req_body = {"Account": $account, "Description": $description, "Id": $id, "Links": $links, "Name": $name, "Path": $path, "SecurityIdentityWebId": $security_identity_web_id, "WebException": $web_exception, "WebId": $body_web_id} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: ({"webIdType": $web_id_type} | compact), body: $req_body}
 }
 
 # Retrieve a list of all Time Rule Plug-in's.
@@ -3550,11 +3677,12 @@ export def "assetservers-timeruleplugins get-asset-server-time-rule-plug-ins" [
 ]: nothing -> record<Items: table<AssemblyFileName: string, AssemblyID: string, AssemblyLoadProperties: list, AssemblyTime: string, CompatibilityVersion: int, Description: string, Id: string, IsBrowsable: bool, IsNonEditableConfig: bool, Links: record, LoadedAssemblyTime: string, LoadedVersion: string, Name: string, Path: string, Version: string, WebException: record, WebId: string>, Links: record<First: string, Last: string, Next: string, Previous: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($web_id | is-empty) { error make --unspanned { msg: "path parameter 'webId' must be non-empty" } }
   let qp = [(serialize-qp "selectedFields" $selected_fields "scalar") (serialize-qp "webIdType" $web_id_type "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({web_id: (encode-path-segment $web_id)} | format pattern "/assetservers/{web_id}/timeruleplugins") $qp)
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"selectedFields": $selected_fields, "webIdType": $web_id_type} | compact), body: null}
 }
 
 # Retrieve a list of all unit classes on the specified Asset Server.
@@ -3578,11 +3706,12 @@ export def "assetservers-unitclasses get-asset-server-unit-classes" [
 ]: nothing -> record<Items: table<CanonicalUnitAbbreviation: string, CanonicalUnitName: string, Description: string, Id: string, Links: record, Name: string, Path: string, WebException: record, WebId: string>, Links: record<First: string, Last: string, Next: string, Previous: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($web_id | is-empty) { error make --unspanned { msg: "path parameter 'webId' must be non-empty" } }
   let qp = [(serialize-qp "selectedFields" $selected_fields "scalar") (serialize-qp "webIdType" $web_id_type "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({web_id: (encode-path-segment $web_id)} | format pattern "/assetservers/{web_id}/unitclasses") $qp)
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"selectedFields": $selected_fields, "webIdType": $web_id_type} | compact), body: null}
 }
 
 # Create a unit class in the specified Asset Server.
@@ -3617,13 +3746,14 @@ export def "assetservers-unitclasses create-asset-server-unit-class" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($web_id | is-empty) { error make --unspanned { msg: "path parameter 'webId' must be non-empty" } }
   let qp = [(serialize-qp "webIdType" $web_id_type "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({web_id: (encode-path-segment $web_id)} | format pattern "/assetservers/{web_id}/unitclasses") $qp)
   let req_body = {"CanonicalUnitAbbreviation": $canonical_unit_abbreviation, "CanonicalUnitName": $canonical_unit_name, "Description": $description, "Id": $id, "Links": $links, "Name": $name, "Path": $path, "WebException": $web_exception, "WebId": $body_web_id} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: ({"webIdType": $web_id_type} | compact), body: $req_body}
 }
 
 # Retrieve an attribute category by path.
@@ -3651,7 +3781,7 @@ export def "attributecategories get-attribute-category-by-path" [
   let full_url = (build-url $base "/attributecategories" $qp)
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"path": $path, "selectedFields": $selected_fields, "webIdType": $web_id_type} | compact), body: null}
 }
 
 # Delete an attribute category.
@@ -3673,10 +3803,11 @@ export def "attributecategories delete-attribute-category" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($web_id | is-empty) { error make --unspanned { msg: "path parameter 'webId' must be non-empty" } }
   let full_url = (build-url $base ({web_id: (encode-path-segment $web_id)} | format pattern "/attributecategories/{web_id}"))
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
 }
 
 # Retrieve an attribute category.
@@ -3700,11 +3831,12 @@ export def "attributecategories get-attribute-category" [
 ]: nothing -> record<Description: string, Id: string, Links: record<Database: string, Security: string, SecurityEntries: string, Self: string>, Name: string, Path: string, WebException: record<Errors: list<string>, StatusCode: int>, WebId: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($web_id | is-empty) { error make --unspanned { msg: "path parameter 'webId' must be non-empty" } }
   let qp = [(serialize-qp "selectedFields" $selected_fields "scalar") (serialize-qp "webIdType" $web_id_type "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({web_id: (encode-path-segment $web_id)} | format pattern "/attributecategories/{web_id}") $qp)
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"selectedFields": $selected_fields, "webIdType": $web_id_type} | compact), body: null}
 }
 
 # Update an attribute category by replacing items in its definition.
@@ -3736,12 +3868,13 @@ export def "attributecategories update-attribute-category" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($web_id | is-empty) { error make --unspanned { msg: "path parameter 'webId' must be non-empty" } }
   let full_url = (build-url $base ({web_id: (encode-path-segment $web_id)} | format pattern "/attributecategories/{web_id}"))
   let req_body = {"Description": $description, "Id": $id, "Links": $links, "Name": $name, "Path": $path, "WebException": $web_exception, "WebId": $body_web_id} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "patch" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body
+  do-request "patch" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: {}, body: $req_body}
 }
 
 # Get the security information of the specified security item associated with the attribute category for a specified user.
@@ -3767,11 +3900,12 @@ export def "attributecategories-security get-attribute-category" [
 ]: nothing -> record<Items: table<CanAnnotate: bool, CanDelete: bool, CanExecute: bool, CanRead: bool, CanReadData: bool, CanSubscribe: bool, CanSubscribeOthers: bool, CanWrite: bool, CanWriteData: bool, HasAdmin: bool, Links: record, OwnerWebId: string, Rights: list, SecurityItem: string, UserIdentity: string, WebException: record>, Links: record<First: string, Last: string, Next: string, Previous: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($web_id | is-empty) { error make --unspanned { msg: "path parameter 'webId' must be non-empty" } }
   let qp = [(serialize-qp "userIdentity" $user_identity "multi") (serialize-qp "forceRefresh" $force_refresh "scalar") (serialize-qp "selectedFields" $selected_fields "scalar") (serialize-qp "webIdType" $web_id_type "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({web_id: (encode-path-segment $web_id)} | format pattern "/attributecategories/{web_id}/security") $qp)
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"userIdentity": $user_identity, "forceRefresh": $force_refresh, "selectedFields": $selected_fields, "webIdType": $web_id_type} | compact), body: null}
 }
 
 # Retrieve the security entries associated with the attribute category based on the specified criteria. By default, all security entries for this attribute category are returned.
@@ -3796,11 +3930,12 @@ export def "attributecategories-securityentries get-attribute-category-security-
 ]: nothing -> record<Items: table<AllowRights: list, DenyRights: list, Links: record, Name: string, SecurityIdentityName: string, WebException: record>, Links: record<First: string, Last: string, Next: string, Previous: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($web_id | is-empty) { error make --unspanned { msg: "path parameter 'webId' must be non-empty" } }
   let qp = [(serialize-qp "nameFilter" $name_filter "scalar") (serialize-qp "selectedFields" $selected_fields "scalar") (serialize-qp "webIdType" $web_id_type "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({web_id: (encode-path-segment $web_id)} | format pattern "/attributecategories/{web_id}/securityentries") $qp)
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"nameFilter": $name_filter, "selectedFields": $selected_fields, "webIdType": $web_id_type} | compact), body: null}
 }
 
 # Create a security entry owned by the attribute category.
@@ -3833,13 +3968,14 @@ export def "attributecategories-securityentries create-attribute-category-securi
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($web_id | is-empty) { error make --unspanned { msg: "path parameter 'webId' must be non-empty" } }
   let qp = [(serialize-qp "applyToChildren" $apply_to_children "scalar") (serialize-qp "webIdType" $web_id_type "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({web_id: (encode-path-segment $web_id)} | format pattern "/attributecategories/{web_id}/securityentries") $qp)
   let req_body = {"AllowRights": $allow_rights, "DenyRights": $deny_rights, "Links": $links, "Name": $name, "SecurityIdentityName": $security_identity_name, "WebException": $web_exception} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: ({"applyToChildren": $apply_to_children, "webIdType": $web_id_type} | compact), body: $req_body}
 }
 
 # Delete a security entry owned by the attribute category.
@@ -3863,11 +3999,13 @@ export def "attributecategories-securityentries delete-attribute-category-securi
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($web_id | is-empty) { error make --unspanned { msg: "path parameter 'webId' must be non-empty" } }
+  if ($name | is-empty) { error make --unspanned { msg: "path parameter 'name' must be non-empty" } }
   let qp = [(serialize-qp "applyToChildren" $apply_to_children "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({web_id: (encode-path-segment $web_id), name: (encode-path-segment $name)} | format pattern "/attributecategories/{web_id}/securityentries/{name}") $qp)
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"applyToChildren": $apply_to_children} | compact), body: null}
 }
 
 # Retrieve the security entry associated with the attribute category with the specified name.
@@ -3892,11 +4030,13 @@ export def "attributecategories-securityentries get-attribute-category-security-
 ]: nothing -> record<AllowRights: list<string>, DenyRights: list<string>, Links: record<SecurableObject: string, SecurityIdentity: string, Self: string>, Name: string, SecurityIdentityName: string, WebException: record<Errors: list<string>, StatusCode: int>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($web_id | is-empty) { error make --unspanned { msg: "path parameter 'webId' must be non-empty" } }
+  if ($name | is-empty) { error make --unspanned { msg: "path parameter 'name' must be non-empty" } }
   let qp = [(serialize-qp "selectedFields" $selected_fields "scalar") (serialize-qp "webIdType" $web_id_type "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({web_id: (encode-path-segment $web_id), name: (encode-path-segment $name)} | format pattern "/attributecategories/{web_id}/securityentries/{name}") $qp)
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"selectedFields": $selected_fields, "webIdType": $web_id_type} | compact), body: null}
 }
 
 # Update a security entry owned by the attribute category.
@@ -3929,13 +4069,15 @@ export def "attributecategories-securityentries update-attribute-category-securi
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($web_id | is-empty) { error make --unspanned { msg: "path parameter 'webId' must be non-empty" } }
+  if ($name | is-empty) { error make --unspanned { msg: "path parameter 'name' must be non-empty" } }
   let qp = [(serialize-qp "applyToChildren" $apply_to_children "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({web_id: (encode-path-segment $web_id), name: (encode-path-segment $name)} | format pattern "/attributecategories/{web_id}/securityentries/{name}") $qp)
   let req_body = {"AllowRights": $allow_rights, "DenyRights": $deny_rights, "Links": $links, "Name": $body_name, "SecurityIdentityName": $security_identity_name, "WebException": $web_exception} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: ({"applyToChildren": $apply_to_children} | compact), body: $req_body}
 }
 
 # Retrieve an attribute by path.
@@ -3964,7 +4106,7 @@ export def "attributes get-by-path" [
   let full_url = (build-url $base "/attributes" $qp)
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"path": $path, "associations": $associations, "selectedFields": $selected_fields, "webIdType": $web_id_type} | compact), body: null}
 }
 
 # Retrieve multiple attributes by web id or path.
@@ -3996,7 +4138,7 @@ export def "attributes-multiple get" [
   let full_url = (build-url $base "/attributes/multiple" $qp)
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"asParallel": $as_parallel, "associations": $associations, "includeMode": $include_mode, "path": $path, "selectedFields": $selected_fields, "webId": $web_id, "webIdType": $web_id_type} | compact), body: null}
 }
 
 # Retrieve attributes based on the specified conditions. Returns attributes using the specified search query string.
@@ -4028,7 +4170,7 @@ export def "attributes-search get-list" [
   let full_url = (build-url $base "/attributes/search" $qp)
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"associations": $associations, "databaseWebId": $database_web_id, "maxCount": $max_count, "query": $query, "selectedFields": $selected_fields, "startIndex": $start_index, "webIdType": $web_id_type} | compact), body: null}
 }
 
 # Delete an attribute.
@@ -4050,10 +4192,11 @@ export def "attributes delete" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($web_id | is-empty) { error make --unspanned { msg: "path parameter 'webId' must be non-empty" } }
   let full_url = (build-url $base ({web_id: (encode-path-segment $web_id)} | format pattern "/attributes/{web_id}"))
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
 }
 
 # Retrieve an attribute.
@@ -4078,11 +4221,12 @@ export def "attributes get" [
 ]: nothing -> record<CategoryNames: list<string>, ConfigString: string, DataReference: record<PIPoint: record<Descriptor: string, DigitalSetName: string, DisplayDigits: int, EngineeringUnits: string, Future: bool, Id: int, Name: string, Path: string, PointClass: string, PointType: string, Span: float, Step: bool, WebId: string, Zero: float>, Type: string, WebException: record<Errors: list, StatusCode: int>>, DataReferencePlugIn: string, DefaultUnitsName: string, DefaultUnitsNameAbbreviation: string, Description: string, DisplayDigits: int, HasChildren: bool, Id: string, IsConfigurationItem: bool, IsExcluded: bool, IsHidden: bool, IsManualDataEntry: bool, Links: record<Attributes: string, Categories: string, Element: string, EndValue: string, EnumerationSet: string, EnumerationValues: string, EventFrame: string, InterpolatedData: string, Parent: string, PlotData: string, Point: string, RecordedData: string, Self: string, SummaryData: string, Template: string, Trait: string, Value: string>, Name: string, Path: string, Paths: list<string>, Span: float, Step: bool, TraitName: string, Type: string, TypeQualifier: string, WebException: record<Errors: list<string>, StatusCode: int>, WebId: string, Zero: float> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($web_id | is-empty) { error make --unspanned { msg: "path parameter 'webId' must be non-empty" } }
   let qp = [(serialize-qp "associations" $associations "scalar") (serialize-qp "selectedFields" $selected_fields "scalar") (serialize-qp "webIdType" $web_id_type "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({web_id: (encode-path-segment $web_id)} | format pattern "/attributes/{web_id}") $qp)
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"associations": $associations, "selectedFields": $selected_fields, "webIdType": $web_id_type} | compact), body: null}
 }
 
 # Update an attribute by replacing items in its definition.
@@ -4134,12 +4278,13 @@ export def "attributes update" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($web_id | is-empty) { error make --unspanned { msg: "path parameter 'webId' must be non-empty" } }
   let full_url = (build-url $base ({web_id: (encode-path-segment $web_id)} | format pattern "/attributes/{web_id}"))
   let req_body = {"CategoryNames": $category_names, "ConfigString": $config_string, "DataReference": $data_reference, "DataReferencePlugIn": $data_reference_plug_in, "DefaultUnitsName": $default_units_name, "DefaultUnitsNameAbbreviation": $default_units_name_abbreviation, "Description": $description, "DisplayDigits": $display_digits, "HasChildren": $has_children, "Id": $id, "IsConfigurationItem": $is_configuration_item, "IsExcluded": $is_excluded, "IsHidden": $is_hidden, "IsManualDataEntry": $is_manual_data_entry, "Links": $links, "Name": $name, "Path": $path, "Paths": $paths, "Span": $span, "Step": $step, "TraitName": $trait_name, "Type": $type, "TypeQualifier": $type_qualifier, "WebException": $web_exception, "WebId": $body_web_id, "Zero": $zero} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "patch" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body
+  do-request "patch" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: {}, body: $req_body}
 }
 
 # Get the child attributes of the specified attribute.
@@ -4177,11 +4322,12 @@ export def "attributes-attributes get" [
 ]: nothing -> record<Items: table<CategoryNames: list, ConfigString: string, DataReference: record, DataReferencePlugIn: string, DefaultUnitsName: string, DefaultUnitsNameAbbreviation: string, Description: string, DisplayDigits: int, HasChildren: bool, Id: string, IsConfigurationItem: bool, IsExcluded: bool, IsHidden: bool, IsManualDataEntry: bool, Links: record, Name: string, Path: string, Paths: list, Span: float, Step: bool, TraitName: string, Type: string, TypeQualifier: string, WebException: record, WebId: string, Zero: float>, Links: record<First: string, Last: string, Next: string, Previous: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($web_id | is-empty) { error make --unspanned { msg: "path parameter 'webId' must be non-empty" } }
   let qp = [(serialize-qp "associations" $associations "scalar") (serialize-qp "categoryName" $category_name "scalar") (serialize-qp "maxCount" $max_count "scalar") (serialize-qp "nameFilter" $name_filter "scalar") (serialize-qp "searchFullHierarchy" $search_full_hierarchy "scalar") (serialize-qp "selectedFields" $selected_fields "scalar") (serialize-qp "showExcluded" $show_excluded "scalar") (serialize-qp "showHidden" $show_hidden "scalar") (serialize-qp "sortField" $sort_field "scalar") (serialize-qp "sortOrder" $sort_order "scalar") (serialize-qp "startIndex" $start_index "scalar") (serialize-qp "templateName" $template_name "scalar") (serialize-qp "trait" $trait "multi") (serialize-qp "traitCategory" $trait_category "multi") (serialize-qp "valueType" $value_type "scalar") (serialize-qp "webIdType" $web_id_type "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({web_id: (encode-path-segment $web_id)} | format pattern "/attributes/{web_id}/attributes") $qp)
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"associations": $associations, "categoryName": $category_name, "maxCount": $max_count, "nameFilter": $name_filter, "searchFullHierarchy": $search_full_hierarchy, "selectedFields": $selected_fields, "showExcluded": $show_excluded, "showHidden": $show_hidden, "sortField": $sort_field, "sortOrder": $sort_order, "startIndex": $start_index, "templateName": $template_name, "trait": $trait, "traitCategory": $trait_category, "valueType": $value_type, "webIdType": $web_id_type} | compact), body: null}
 }
 
 # Create a new attribute as a child of the specified attribute.
@@ -4234,13 +4380,14 @@ export def "attributes-attributes create" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($web_id | is-empty) { error make --unspanned { msg: "path parameter 'webId' must be non-empty" } }
   let qp = [(serialize-qp "webIdType" $web_id_type "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({web_id: (encode-path-segment $web_id)} | format pattern "/attributes/{web_id}/attributes") $qp)
   let req_body = {"CategoryNames": $category_names, "ConfigString": $config_string, "DataReference": $data_reference, "DataReferencePlugIn": $data_reference_plug_in, "DefaultUnitsName": $default_units_name, "DefaultUnitsNameAbbreviation": $default_units_name_abbreviation, "Description": $description, "DisplayDigits": $display_digits, "HasChildren": $has_children, "Id": $id, "IsConfigurationItem": $is_configuration_item, "IsExcluded": $is_excluded, "IsHidden": $is_hidden, "IsManualDataEntry": $is_manual_data_entry, "Links": $links, "Name": $name, "Path": $path, "Paths": $paths, "Span": $span, "Step": $step, "TraitName": $trait_name, "Type": $type, "TypeQualifier": $type_qualifier, "WebException": $web_exception, "WebId": $body_web_id, "Zero": $zero} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: ({"webIdType": $web_id_type} | compact), body: $req_body}
 }
 
 # Get an attribute's categories.
@@ -4264,11 +4411,12 @@ export def "attributes-categories get" [
 ]: nothing -> record<Items: table<Description: string, Id: string, Links: record, Name: string, Path: string, WebException: record, WebId: string>, Links: record<First: string, Last: string, Next: string, Previous: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($web_id | is-empty) { error make --unspanned { msg: "path parameter 'webId' must be non-empty" } }
   let qp = [(serialize-qp "selectedFields" $selected_fields "scalar") (serialize-qp "webIdType" $web_id_type "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({web_id: (encode-path-segment $web_id)} | format pattern "/attributes/{web_id}/categories") $qp)
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"selectedFields": $selected_fields, "webIdType": $web_id_type} | compact), body: null}
 }
 
 # Create or update an attribute's DataReference configuration (Create/Update PI point for PI Point DataReference).
@@ -4291,11 +4439,12 @@ export def "attributes-config create" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($web_id | is-empty) { error make --unspanned { msg: "path parameter 'webId' must be non-empty" } }
   let qp = [(serialize-qp "webIdType" $web_id_type "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({web_id: (encode-path-segment $web_id)} | format pattern "/attributes/{web_id}/config") $qp)
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"webIdType": $web_id_type} | compact), body: null}
 }
 
 # Get the attribute's value. This call is intended for use with attributes that have no data reference only. For attributes with a data reference, consult the documentation for Streams.
@@ -4318,11 +4467,12 @@ export def "attributes-value get" [
 ]: nothing -> record<Annotated: bool, Errors: table<FieldName: string, Message: list>, Good: bool, Questionable: bool, Substituted: bool, Timestamp: string, UnitsAbbreviation: string, Value: record, WebException: record<Errors: list<string>, StatusCode: int>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($web_id | is-empty) { error make --unspanned { msg: "path parameter 'webId' must be non-empty" } }
   let qp = [(serialize-qp "selectedFields" $selected_fields "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({web_id: (encode-path-segment $web_id)} | format pattern "/attributes/{web_id}/value") $qp)
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"selectedFields": $selected_fields} | compact), body: null}
 }
 
 # Set the value of a configuration item attribute. For attributes with a data reference or non-configuration item attributes, consult the documentation for streams.
@@ -4356,12 +4506,13 @@ export def "attributes-value update" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($web_id | is-empty) { error make --unspanned { msg: "path parameter 'webId' must be non-empty" } }
   let full_url = (build-url $base ({web_id: (encode-path-segment $web_id)} | format pattern "/attributes/{web_id}/value"))
   let req_body = {"Annotated": $annotated, "Errors": $errors, "Good": $good, "Questionable": $questionable, "Substituted": $substituted, "Timestamp": $timestamp, "UnitsAbbreviation": $units_abbreviation, "Value": $value, "WebException": $web_exception} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: {}, body: $req_body}
 }
 
 # Retrieve an attribute template by path.
@@ -4389,7 +4540,7 @@ export def "attributetemplates get-attribute-template-by-path" [
   let full_url = (build-url $base "/attributetemplates" $qp)
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"path": $path, "selectedFields": $selected_fields, "webIdType": $web_id_type} | compact), body: null}
 }
 
 # Delete an attribute template.
@@ -4411,10 +4562,11 @@ export def "attributetemplates delete-attribute-template" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($web_id | is-empty) { error make --unspanned { msg: "path parameter 'webId' must be non-empty" } }
   let full_url = (build-url $base ({web_id: (encode-path-segment $web_id)} | format pattern "/attributetemplates/{web_id}"))
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
 }
 
 # Retrieve an attribute template.
@@ -4438,11 +4590,12 @@ export def "attributetemplates get-attribute-template" [
 ]: nothing -> record<CategoryNames: list<string>, ConfigString: string, DataReferencePlugIn: string, DefaultUnitsName: string, DefaultUnitsNameAbbreviation: string, DefaultValue: record, Description: string, HasChildren: bool, Id: string, IsConfigurationItem: bool, IsExcluded: bool, IsHidden: bool, IsManualDataEntry: bool, Links: record<AttributeTemplates: string, Categories: string, ElementTemplate: string, Parent: string, Self: string, Trait: string>, Name: string, Path: string, TraitName: string, Type: string, TypeQualifier: string, WebException: record<Errors: list<string>, StatusCode: int>, WebId: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($web_id | is-empty) { error make --unspanned { msg: "path parameter 'webId' must be non-empty" } }
   let qp = [(serialize-qp "selectedFields" $selected_fields "scalar") (serialize-qp "webIdType" $web_id_type "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({web_id: (encode-path-segment $web_id)} | format pattern "/attributetemplates/{web_id}") $qp)
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"selectedFields": $selected_fields, "webIdType": $web_id_type} | compact), body: null}
 }
 
 # Update an existing attribute template by replacing items in its definition.
@@ -4488,12 +4641,13 @@ export def "attributetemplates update-attribute-template" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($web_id | is-empty) { error make --unspanned { msg: "path parameter 'webId' must be non-empty" } }
   let full_url = (build-url $base ({web_id: (encode-path-segment $web_id)} | format pattern "/attributetemplates/{web_id}"))
   let req_body = {"CategoryNames": $category_names, "ConfigString": $config_string, "DataReferencePlugIn": $data_reference_plug_in, "DefaultUnitsName": $default_units_name, "DefaultUnitsNameAbbreviation": $default_units_name_abbreviation, "DefaultValue": $default_value, "Description": $description, "HasChildren": $has_children, "Id": $id, "IsConfigurationItem": $is_configuration_item, "IsExcluded": $is_excluded, "IsHidden": $is_hidden, "IsManualDataEntry": $is_manual_data_entry, "Links": $links, "Name": $name, "Path": $path, "TraitName": $trait_name, "Type": $type, "TypeQualifier": $type_qualifier, "WebException": $web_exception, "WebId": $body_web_id} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "patch" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body
+  do-request "patch" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: {}, body: $req_body}
 }
 
 # Retrieve an attribute template's child attribute templates.
@@ -4517,11 +4671,12 @@ export def "attributetemplates-attributetemplates get-attribute-template-attribu
 ]: nothing -> record<Items: table<CategoryNames: list, ConfigString: string, DataReferencePlugIn: string, DefaultUnitsName: string, DefaultUnitsNameAbbreviation: string, DefaultValue: record, Description: string, HasChildren: bool, Id: string, IsConfigurationItem: bool, IsExcluded: bool, IsHidden: bool, IsManualDataEntry: bool, Links: record, Name: string, Path: string, TraitName: string, Type: string, TypeQualifier: string, WebException: record, WebId: string>, Links: record<First: string, Last: string, Next: string, Previous: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($web_id | is-empty) { error make --unspanned { msg: "path parameter 'webId' must be non-empty" } }
   let qp = [(serialize-qp "selectedFields" $selected_fields "scalar") (serialize-qp "webIdType" $web_id_type "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({web_id: (encode-path-segment $web_id)} | format pattern "/attributetemplates/{web_id}/attributetemplates") $qp)
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"selectedFields": $selected_fields, "webIdType": $web_id_type} | compact), body: null}
 }
 
 # Create an attribute template as a child of another attribute template.
@@ -4568,13 +4723,14 @@ export def "attributetemplates-attributetemplates create-attribute-template-attr
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($web_id | is-empty) { error make --unspanned { msg: "path parameter 'webId' must be non-empty" } }
   let qp = [(serialize-qp "webIdType" $web_id_type "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({web_id: (encode-path-segment $web_id)} | format pattern "/attributetemplates/{web_id}/attributetemplates") $qp)
   let req_body = {"CategoryNames": $category_names, "ConfigString": $config_string, "DataReferencePlugIn": $data_reference_plug_in, "DefaultUnitsName": $default_units_name, "DefaultUnitsNameAbbreviation": $default_units_name_abbreviation, "DefaultValue": $default_value, "Description": $description, "HasChildren": $has_children, "Id": $id, "IsConfigurationItem": $is_configuration_item, "IsExcluded": $is_excluded, "IsHidden": $is_hidden, "IsManualDataEntry": $is_manual_data_entry, "Links": $links, "Name": $name, "Path": $path, "TraitName": $trait_name, "Type": $type, "TypeQualifier": $type_qualifier, "WebException": $web_exception, "WebId": $body_web_id} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: ({"webIdType": $web_id_type} | compact), body: $req_body}
 }
 
 # Get an attribute template's categories.
@@ -4598,11 +4754,12 @@ export def "attributetemplates-categories get-attribute-template" [
 ]: nothing -> record<Items: table<Description: string, Id: string, Links: record, Name: string, Path: string, WebException: record, WebId: string>, Links: record<First: string, Last: string, Next: string, Previous: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($web_id | is-empty) { error make --unspanned { msg: "path parameter 'webId' must be non-empty" } }
   let qp = [(serialize-qp "selectedFields" $selected_fields "scalar") (serialize-qp "webIdType" $web_id_type "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({web_id: (encode-path-segment $web_id)} | format pattern "/attributetemplates/{web_id}/categories") $qp)
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"selectedFields": $selected_fields, "webIdType": $web_id_type} | compact), body: null}
 }
 
 # Retrieve all attribute traits of the specified category/categories.
@@ -4629,7 +4786,7 @@ export def "attributetraits get-attribute-trait-by-category" [
   let full_url = (build-url $base "/attributetraits" $qp)
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"category": $category, "selectedFields": $selected_fields} | compact), body: null}
 }
 
 # Retrieve an attribute trait.
@@ -4652,11 +4809,12 @@ export def "attributetraits get-attribute-trait" [
 ]: nothing -> record<Abbreviation: string, AllowChildAttributes: bool, AllowDuplicates: bool, IsAllowedOnRootAttribute: bool, IsTypeInherited: bool, IsUOMInherited: bool, Links: record<Self: string>, Name: string, RequireNumeric: bool, RequireString: bool, WebException: record<Errors: list<string>, StatusCode: int>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($name | is-empty) { error make --unspanned { msg: "path parameter 'name' must be non-empty" } }
   let qp = [(serialize-qp "selectedFields" $selected_fields "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({name: (encode-path-segment $name)} | format pattern "/attributetraits/{name}") $qp)
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"selectedFields": $selected_fields} | compact), body: null}
 }
 
 # Execute a batch of requests against the service. As shown in the Sample Request, the input is a dictionary with IDs as keys and request objects as values. Each request object specifies the HTTP method and the resource and, optionally, the content and a list of parent IDs. The list of parent IDs specifies which other requests must complete before the given request will be executed. The example first creates an element, then gets the element by the response's Location header, then creates an attribute for the element. Note that the resource can be an absolute URL or a JsonPath that references the response to the parent request. The batch's response is a dictionary uses keys corresponding those provided in the request, with response objects containing a status code, response headers, and the response body. A request can alternatively specify a request template in place of a resource. In this case, a single JsonPath may select multiple tokens, and a separate subrequest will be made from the template for each token. The responses of these subrequests will returned as the content of a single outer response.
@@ -4684,7 +4842,7 @@ export def "batch create-execute" [
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: {}, body: $req_body}
 }
 
 # Returns results of evaluating the expression over the time range from the start time to the end time at a defined interval.
@@ -4715,7 +4873,7 @@ export def "calculation-intervals get-at" [
   let full_url = (build-url $base "/calculation/intervals" $qp)
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"expression": $expression, "endTime": $end_time, "sampleInterval": $sample_interval, "selectedFields": $selected_fields, "startTime": $start_time, "webId": $web_id} | compact), body: null}
 }
 
 # Returns the result of evaluating the expression at each point in time over the time range from the start time to the end time where a recorded value exists for a member of the expression.
@@ -4745,7 +4903,7 @@ export def "calculation-recorded get-at" [
   let full_url = (build-url $base "/calculation/recorded" $qp)
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"expression": $expression, "endTime": $end_time, "selectedFields": $selected_fields, "startTime": $start_time, "webId": $web_id} | compact), body: null}
 }
 
 # Returns the result of evaluating the expression over the time range from the start time to the end time. The time range is first divided into a number of summary intervals. Then the calculation is performed for the specified summaries over each interval.
@@ -4781,7 +4939,7 @@ export def "calculation-summary get" [
   let full_url = (build-url $base "/calculation/summary" $qp)
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"expression": $expression, "calculationBasis": $calculation_basis, "endTime": $end_time, "sampleInterval": $sample_interval, "sampleType": $sample_type, "selectedFields": $selected_fields, "startTime": $start_time, "summaryDuration": $summary_duration, "summaryType": $summary_type, "timeType": $time_type, "webId": $web_id} | compact), body: null}
 }
 
 # Returns the result of evaluating the expression at the specified timestamps.
@@ -4811,7 +4969,7 @@ export def "calculation-times get-at" [
   let full_url = (build-url $base "/calculation/times" $qp)
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"expression": $expression, "time": $time, "selectedFields": $selected_fields, "sortOrder": $sort_order, "webId": $web_id} | compact), body: null}
 }
 
 # Retrieves a list of currently running channel instances.
@@ -4835,7 +4993,7 @@ export def "channels-instances get" [
   let full_url = (build-url $base "/channels/instances")
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
 }
 
 # Retrieve a list of Data Servers known to this service.
@@ -4862,14 +5020,14 @@ export def "dataservers list-data-server" [
   let full_url = (build-url $base "/dataservers" $qp)
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"selectedFields": $selected_fields, "webIdType": $web_id_type} | compact), body: null}
 }
 
 # Retrieve a Data Server by name.
 #
-# GET /dataservers#name
+# GET /dataservers
 # operationId: DataServer_GetByName
-export def "dataserversname get-data-server-by-name" [
+export def "dataservers get-data-server-by-name" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -4887,17 +5045,17 @@ export def "dataserversname get-data-server-by-name" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "name" $name "scalar") (serialize-qp "selectedFields" $selected_fields "scalar") (serialize-qp "webIdType" $web_id_type "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base "/dataservers#name" $qp)
+  let full_url = (build-url $base "/dataservers" $qp)
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"name": $name, "selectedFields": $selected_fields, "webIdType": $web_id_type} | compact), body: null}
 }
 
 # Retrieve a Data Server by path.
 #
-# GET /dataservers#path
+# GET /dataservers
 # operationId: DataServer_GetByPath
-export def "dataserverspath get-data-server-by-path" [
+export def "dataservers get-data-server-by-path" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -4915,10 +5073,10 @@ export def "dataserverspath get-data-server-by-path" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "path" $path "scalar") (serialize-qp "selectedFields" $selected_fields "scalar") (serialize-qp "webIdType" $web_id_type "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base "/dataservers#path" $qp)
+  let full_url = (build-url $base "/dataservers" $qp)
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"path": $path, "selectedFields": $selected_fields, "webIdType": $web_id_type} | compact), body: null}
 }
 
 # Retrieve a Data Server.
@@ -4942,11 +5100,12 @@ export def "dataservers get-data-server" [
 ]: nothing -> record<Id: string, IsConnected: bool, Links: record<EnumerationSets: string, Points: string, Self: string>, Name: string, Path: string, ServerTime: string, ServerVersion: string, WebException: record<Errors: list<string>, StatusCode: int>, WebId: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($web_id | is-empty) { error make --unspanned { msg: "path parameter 'webId' must be non-empty" } }
   let qp = [(serialize-qp "selectedFields" $selected_fields "scalar") (serialize-qp "webIdType" $web_id_type "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({web_id: (encode-path-segment $web_id)} | format pattern "/dataservers/{web_id}") $qp)
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"selectedFields": $selected_fields, "webIdType": $web_id_type} | compact), body: null}
 }
 
 # Retrieve enumeration sets for given Data Server.
@@ -4970,11 +5129,12 @@ export def "dataservers-enumerationsets get-data-server-enumeration-sets" [
 ]: nothing -> record<Items: table<Description: string, Id: string, Links: record, Name: string, Path: string, SerializeDescription: bool, WebException: record, WebId: string>, Links: record<First: string, Last: string, Next: string, Previous: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($web_id | is-empty) { error make --unspanned { msg: "path parameter 'webId' must be non-empty" } }
   let qp = [(serialize-qp "selectedFields" $selected_fields "scalar") (serialize-qp "webIdType" $web_id_type "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({web_id: (encode-path-segment $web_id)} | format pattern "/dataservers/{web_id}/enumerationsets") $qp)
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"selectedFields": $selected_fields, "webIdType": $web_id_type} | compact), body: null}
 }
 
 # Create an enumeration set on the Data Server.
@@ -5008,13 +5168,14 @@ export def "dataservers-enumerationsets create-data-server-enumeration-update" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($web_id | is-empty) { error make --unspanned { msg: "path parameter 'webId' must be non-empty" } }
   let qp = [(serialize-qp "webIdType" $web_id_type "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({web_id: (encode-path-segment $web_id)} | format pattern "/dataservers/{web_id}/enumerationsets") $qp)
   let req_body = {"Description": $description, "Id": $id, "Links": $links, "Name": $name, "Path": $path, "SerializeDescription": $serialize_description, "WebException": $web_exception, "WebId": $body_web_id} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: ({"webIdType": $web_id_type} | compact), body: $req_body}
 }
 
 # Retrieves the specified license for the given Data Server. The fields of the response object are string representations of the numerical values reported by the Data Server, with "Infinity" representing a license field with no limit.
@@ -5039,11 +5200,12 @@ export def "dataservers-license get-data-server" [
 ]: nothing -> record<AmountLeft: string, AmountUsed: string, Links: record<Parent: string, Self: string>, Name: string, TotalAmount: string, WebException: record<Errors: list<string>, StatusCode: int>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($web_id | is-empty) { error make --unspanned { msg: "path parameter 'webId' must be non-empty" } }
   let qp = [(serialize-qp "module" $qp_module "scalar") (serialize-qp "selectedFields" $selected_fields "scalar") (serialize-qp "webIdType" $web_id_type "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({web_id: (encode-path-segment $web_id)} | format pattern "/dataservers/{web_id}/license") $qp)
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"module": $qp_module, "selectedFields": $selected_fields, "webIdType": $web_id_type} | compact), body: null}
 }
 
 # Retrieve a list of points on a specified Data Server.
@@ -5070,11 +5232,12 @@ export def "dataservers-points get-data-server" [
 ]: nothing -> record<Items: table<Descriptor: string, DigitalSetName: string, DisplayDigits: int, EngineeringUnits: string, Future: bool, Id: int, Links: record, Name: string, Path: string, PointClass: string, PointType: string, Span: float, Step: bool, WebException: record, WebId: string, Zero: float>, Links: record<First: string, Last: string, Next: string, Previous: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($web_id | is-empty) { error make --unspanned { msg: "path parameter 'webId' must be non-empty" } }
   let qp = [(serialize-qp "maxCount" $max_count "scalar") (serialize-qp "nameFilter" $name_filter "scalar") (serialize-qp "selectedFields" $selected_fields "scalar") (serialize-qp "startIndex" $start_index "scalar") (serialize-qp "webIdType" $web_id_type "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({web_id: (encode-path-segment $web_id)} | format pattern "/dataservers/{web_id}/points") $qp)
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"maxCount": $max_count, "nameFilter": $name_filter, "selectedFields": $selected_fields, "startIndex": $start_index, "webIdType": $web_id_type} | compact), body: null}
 }
 
 # Create a point in the specified Data Server.
@@ -5116,13 +5279,14 @@ export def "dataservers-points create-data-server" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($web_id | is-empty) { error make --unspanned { msg: "path parameter 'webId' must be non-empty" } }
   let qp = [(serialize-qp "webIdType" $web_id_type "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({web_id: (encode-path-segment $web_id)} | format pattern "/dataservers/{web_id}/points") $qp)
   let req_body = {"Descriptor": $descriptor, "DigitalSetName": $digital_set_name, "DisplayDigits": $display_digits, "EngineeringUnits": $engineering_units, "Future": $future, "Id": $id, "Links": $links, "Name": $name, "Path": $path, "PointClass": $point_class, "PointType": $point_type, "Span": $span, "Step": $step, "WebException": $web_exception, "WebId": $body_web_id, "Zero": $zero} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: ({"webIdType": $web_id_type} | compact), body: $req_body}
 }
 
 # Retrieve an element category by path.
@@ -5150,7 +5314,7 @@ export def "elementcategories get-element-category-by-path" [
   let full_url = (build-url $base "/elementcategories" $qp)
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"path": $path, "selectedFields": $selected_fields, "webIdType": $web_id_type} | compact), body: null}
 }
 
 # Delete an element category.
@@ -5172,10 +5336,11 @@ export def "elementcategories delete-element-category" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($web_id | is-empty) { error make --unspanned { msg: "path parameter 'webId' must be non-empty" } }
   let full_url = (build-url $base ({web_id: (encode-path-segment $web_id)} | format pattern "/elementcategories/{web_id}"))
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
 }
 
 # Retrieve an element category.
@@ -5199,11 +5364,12 @@ export def "elementcategories get-element-category" [
 ]: nothing -> record<Description: string, Id: string, Links: record<Database: string, Security: string, SecurityEntries: string, Self: string>, Name: string, Path: string, WebException: record<Errors: list<string>, StatusCode: int>, WebId: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($web_id | is-empty) { error make --unspanned { msg: "path parameter 'webId' must be non-empty" } }
   let qp = [(serialize-qp "selectedFields" $selected_fields "scalar") (serialize-qp "webIdType" $web_id_type "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({web_id: (encode-path-segment $web_id)} | format pattern "/elementcategories/{web_id}") $qp)
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"selectedFields": $selected_fields, "webIdType": $web_id_type} | compact), body: null}
 }
 
 # Update an element category by replacing items in its definition.
@@ -5235,12 +5401,13 @@ export def "elementcategories update-element-category" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($web_id | is-empty) { error make --unspanned { msg: "path parameter 'webId' must be non-empty" } }
   let full_url = (build-url $base ({web_id: (encode-path-segment $web_id)} | format pattern "/elementcategories/{web_id}"))
   let req_body = {"Description": $description, "Id": $id, "Links": $links, "Name": $name, "Path": $path, "WebException": $web_exception, "WebId": $body_web_id} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "patch" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body
+  do-request "patch" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: {}, body: $req_body}
 }
 
 # Get the security information of the specified security item associated with the element category for a specified user.
@@ -5266,11 +5433,12 @@ export def "elementcategories-security get-element-category" [
 ]: nothing -> record<Items: table<CanAnnotate: bool, CanDelete: bool, CanExecute: bool, CanRead: bool, CanReadData: bool, CanSubscribe: bool, CanSubscribeOthers: bool, CanWrite: bool, CanWriteData: bool, HasAdmin: bool, Links: record, OwnerWebId: string, Rights: list, SecurityItem: string, UserIdentity: string, WebException: record>, Links: record<First: string, Last: string, Next: string, Previous: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($web_id | is-empty) { error make --unspanned { msg: "path parameter 'webId' must be non-empty" } }
   let qp = [(serialize-qp "userIdentity" $user_identity "multi") (serialize-qp "forceRefresh" $force_refresh "scalar") (serialize-qp "selectedFields" $selected_fields "scalar") (serialize-qp "webIdType" $web_id_type "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({web_id: (encode-path-segment $web_id)} | format pattern "/elementcategories/{web_id}/security") $qp)
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"userIdentity": $user_identity, "forceRefresh": $force_refresh, "selectedFields": $selected_fields, "webIdType": $web_id_type} | compact), body: null}
 }
 
 # Retrieve the security entries associated with the element category based on the specified criteria. By default, all security entries for this element category are returned.
@@ -5295,11 +5463,12 @@ export def "elementcategories-securityentries get-element-category-security-entr
 ]: nothing -> record<Items: table<AllowRights: list, DenyRights: list, Links: record, Name: string, SecurityIdentityName: string, WebException: record>, Links: record<First: string, Last: string, Next: string, Previous: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($web_id | is-empty) { error make --unspanned { msg: "path parameter 'webId' must be non-empty" } }
   let qp = [(serialize-qp "nameFilter" $name_filter "scalar") (serialize-qp "selectedFields" $selected_fields "scalar") (serialize-qp "webIdType" $web_id_type "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({web_id: (encode-path-segment $web_id)} | format pattern "/elementcategories/{web_id}/securityentries") $qp)
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"nameFilter": $name_filter, "selectedFields": $selected_fields, "webIdType": $web_id_type} | compact), body: null}
 }
 
 # Create a security entry owned by the element category.
@@ -5332,13 +5501,14 @@ export def "elementcategories-securityentries create-element-category-security-e
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($web_id | is-empty) { error make --unspanned { msg: "path parameter 'webId' must be non-empty" } }
   let qp = [(serialize-qp "applyToChildren" $apply_to_children "scalar") (serialize-qp "webIdType" $web_id_type "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({web_id: (encode-path-segment $web_id)} | format pattern "/elementcategories/{web_id}/securityentries") $qp)
   let req_body = {"AllowRights": $allow_rights, "DenyRights": $deny_rights, "Links": $links, "Name": $name, "SecurityIdentityName": $security_identity_name, "WebException": $web_exception} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: ({"applyToChildren": $apply_to_children, "webIdType": $web_id_type} | compact), body: $req_body}
 }
 
 # Delete a security entry owned by the element category.
@@ -5362,11 +5532,13 @@ export def "elementcategories-securityentries delete-element-category-security-e
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($web_id | is-empty) { error make --unspanned { msg: "path parameter 'webId' must be non-empty" } }
+  if ($name | is-empty) { error make --unspanned { msg: "path parameter 'name' must be non-empty" } }
   let qp = [(serialize-qp "applyToChildren" $apply_to_children "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({web_id: (encode-path-segment $web_id), name: (encode-path-segment $name)} | format pattern "/elementcategories/{web_id}/securityentries/{name}") $qp)
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"applyToChildren": $apply_to_children} | compact), body: null}
 }
 
 # Retrieve the security entry associated with the element category with the specified name.
@@ -5391,11 +5563,13 @@ export def "elementcategories-securityentries get-element-category-security-entr
 ]: nothing -> record<AllowRights: list<string>, DenyRights: list<string>, Links: record<SecurableObject: string, SecurityIdentity: string, Self: string>, Name: string, SecurityIdentityName: string, WebException: record<Errors: list<string>, StatusCode: int>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($web_id | is-empty) { error make --unspanned { msg: "path parameter 'webId' must be non-empty" } }
+  if ($name | is-empty) { error make --unspanned { msg: "path parameter 'name' must be non-empty" } }
   let qp = [(serialize-qp "selectedFields" $selected_fields "scalar") (serialize-qp "webIdType" $web_id_type "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({web_id: (encode-path-segment $web_id), name: (encode-path-segment $name)} | format pattern "/elementcategories/{web_id}/securityentries/{name}") $qp)
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"selectedFields": $selected_fields, "webIdType": $web_id_type} | compact), body: null}
 }
 
 # Update a security entry owned by the element category.
@@ -5428,13 +5602,15 @@ export def "elementcategories-securityentries update-element-category-security-e
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($web_id | is-empty) { error make --unspanned { msg: "path parameter 'webId' must be non-empty" } }
+  if ($name | is-empty) { error make --unspanned { msg: "path parameter 'name' must be non-empty" } }
   let qp = [(serialize-qp "applyToChildren" $apply_to_children "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({web_id: (encode-path-segment $web_id), name: (encode-path-segment $name)} | format pattern "/elementcategories/{web_id}/securityentries/{name}") $qp)
   let req_body = {"AllowRights": $allow_rights, "DenyRights": $deny_rights, "Links": $links, "Name": $body_name, "SecurityIdentityName": $security_identity_name, "WebException": $web_exception} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: ({"applyToChildren": $apply_to_children} | compact), body: $req_body}
 }
 
 # Retrieve an element by path.
@@ -5463,7 +5639,7 @@ export def "elements get-by-path" [
   let full_url = (build-url $base "/elements" $qp)
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"path": $path, "associations": $associations, "selectedFields": $selected_fields, "webIdType": $web_id_type} | compact), body: null}
 }
 
 # Retrieve multiple elements by web id or path.
@@ -5495,7 +5671,7 @@ export def "elements-multiple get" [
   let full_url = (build-url $base "/elements/multiple" $qp)
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"asParallel": $as_parallel, "associations": $associations, "includeMode": $include_mode, "path": $path, "selectedFields": $selected_fields, "webId": $web_id, "webIdType": $web_id_type} | compact), body: null}
 }
 
 # Retrieve elements based on the specified conditions. By default, returns all the elements.
@@ -5528,7 +5704,7 @@ export def "elements-search get-list" [
   let full_url = (build-url $base "/elements/search" $qp)
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"associations": $associations, "databaseWebId": $database_web_id, "maxCount": $max_count, "query": $query, "queryDate": $query_date, "selectedFields": $selected_fields, "startIndex": $start_index, "webIdType": $web_id_type} | compact), body: null}
 }
 
 # Create a link for a "Search Elements By Attribute Value" operation, whose queries are specified in the request content. The SearchRoot is specified by the Web Id of the root Element. If the SearchRoot is not specified, then the search starts at the Asset Database. ElementTemplate must be provided as the Web ID of the ElementTemplate, which are used to create the Elements. All the attributes in the queries must be defined as AttributeTemplates on the ElementTemplate. An array of attribute value queries are ANDed together to find the desired Element objects. At least one value query must be specified. There are limitations on SearchOperators.
@@ -5565,7 +5741,7 @@ export def "elements-searchbyattribute create-list-by-attribute" [
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: ({"associations": $associations, "noResults": $no_results, "webIdType": $web_id_type} | compact), body: $req_body}
 }
 
 # Execute a "Search Elements By Attribute Value" operation.
@@ -5598,11 +5774,12 @@ export def "elements-searchbyattribute list-execute-by-attribute" [
 ]: nothing -> record<Items: table<CategoryNames: list, Description: string, Errors: list, ExtendedProperties: record, HasChildren: bool, Id: string, Links: record, Name: string, Path: string, Paths: list, TemplateName: string, WebException: record, WebId: string>, Links: record<First: string, Last: string, Next: string, Previous: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($search_id | is-empty) { error make --unspanned { msg: "path parameter 'searchId' must be non-empty" } }
   let qp = [(serialize-qp "associations" $associations "scalar") (serialize-qp "categoryName" $category_name "scalar") (serialize-qp "descriptionFilter" $description_filter "scalar") (serialize-qp "maxCount" $max_count "scalar") (serialize-qp "nameFilter" $name_filter "scalar") (serialize-qp "searchFullHierarchy" $search_full_hierarchy "scalar") (serialize-qp "selectedFields" $selected_fields "scalar") (serialize-qp "sortField" $sort_field "scalar") (serialize-qp "sortOrder" $sort_order "scalar") (serialize-qp "startIndex" $start_index "scalar") (serialize-qp "webIdType" $web_id_type "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({search_id: (encode-path-segment $search_id)} | format pattern "/elements/searchbyattribute/{search_id}") $qp)
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"associations": $associations, "categoryName": $category_name, "descriptionFilter": $description_filter, "maxCount": $max_count, "nameFilter": $name_filter, "searchFullHierarchy": $search_full_hierarchy, "selectedFields": $selected_fields, "sortField": $sort_field, "sortOrder": $sort_order, "startIndex": $start_index, "webIdType": $web_id_type} | compact), body: null}
 }
 
 # Delete an element.
@@ -5624,10 +5801,11 @@ export def "elements delete" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($web_id | is-empty) { error make --unspanned { msg: "path parameter 'webId' must be non-empty" } }
   let full_url = (build-url $base ({web_id: (encode-path-segment $web_id)} | format pattern "/elements/{web_id}"))
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
 }
 
 # Retrieve an element.
@@ -5652,11 +5830,12 @@ export def "elements get" [
 ]: nothing -> record<CategoryNames: list<string>, Description: string, Errors: table<FieldName: string, Message: list>, ExtendedProperties: record, HasChildren: bool, Id: string, Links: record<Analyses: string, Attributes: string, Categories: string, Database: string, DefaultAttribute: string, Elements: string, EndValue: string, EventFrames: string, InterpolatedData: string, NotificationRules: string, Parent: string, PlotData: string, RecordedData: string, Security: string, SecurityEntries: string, Self: string, SummaryData: string, Template: string, Value: string>, Name: string, Path: string, Paths: list<string>, TemplateName: string, WebException: record<Errors: list<string>, StatusCode: int>, WebId: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($web_id | is-empty) { error make --unspanned { msg: "path parameter 'webId' must be non-empty" } }
   let qp = [(serialize-qp "associations" $associations "scalar") (serialize-qp "selectedFields" $selected_fields "scalar") (serialize-qp "webIdType" $web_id_type "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({web_id: (encode-path-segment $web_id)} | format pattern "/elements/{web_id}") $qp)
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"associations": $associations, "selectedFields": $selected_fields, "webIdType": $web_id_type} | compact), body: null}
 }
 
 # Update an element by replacing items in its definition.
@@ -5695,12 +5874,13 @@ export def "elements update" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($web_id | is-empty) { error make --unspanned { msg: "path parameter 'webId' must be non-empty" } }
   let full_url = (build-url $base ({web_id: (encode-path-segment $web_id)} | format pattern "/elements/{web_id}"))
   let req_body = {"CategoryNames": $category_names, "Description": $description, "Errors": $errors, "ExtendedProperties": $extended_properties, "HasChildren": $has_children, "Id": $id, "Links": $links, "Name": $name, "Path": $path, "Paths": $paths, "TemplateName": $template_name, "WebException": $web_exception, "WebId": $body_web_id} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "patch" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body
+  do-request "patch" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: {}, body: $req_body}
 }
 
 # Retrieve analyses based on the specified conditions.
@@ -5728,11 +5908,12 @@ export def "elements-analyses get" [
 ]: nothing -> record<Items: table<AnalysisRulePlugInName: string, AutoCreated: bool, CategoryNames: list, Description: string, GroupId: int, HasNotification: bool, HasTarget: bool, HasTemplate: bool, Id: string, IsConfigured: bool, IsTimeRuleDefinedByTemplate: bool, Links: record, MaximumQueueSize: int, Name: string, OutputTime: string, Path: string, Priority: string, PublishResults: bool, Status: string, TargetWebId: string, TemplateName: string, TimeRulePlugInName: string, WebException: record, WebId: string>, Links: record<First: string, Last: string, Next: string, Previous: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($web_id | is-empty) { error make --unspanned { msg: "path parameter 'webId' must be non-empty" } }
   let qp = [(serialize-qp "maxCount" $max_count "scalar") (serialize-qp "selectedFields" $selected_fields "scalar") (serialize-qp "sortField" $sort_field "scalar") (serialize-qp "sortOrder" $sort_order "scalar") (serialize-qp "startIndex" $start_index "scalar") (serialize-qp "webIdType" $web_id_type "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({web_id: (encode-path-segment $web_id)} | format pattern "/elements/{web_id}/analyses") $qp)
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"maxCount": $max_count, "selectedFields": $selected_fields, "sortField": $sort_field, "sortOrder": $sort_order, "startIndex": $start_index, "webIdType": $web_id_type} | compact), body: null}
 }
 
 # Create an Analysis.
@@ -5782,13 +5963,14 @@ export def "elements-analyses create-analysis" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($web_id | is-empty) { error make --unspanned { msg: "path parameter 'webId' must be non-empty" } }
   let qp = [(serialize-qp "webIdType" $web_id_type "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({web_id: (encode-path-segment $web_id)} | format pattern "/elements/{web_id}/analyses") $qp)
   let req_body = {"AnalysisRulePlugInName": $analysis_rule_plug_in_name, "AutoCreated": $auto_created, "CategoryNames": $category_names, "Description": $description, "GroupId": $group_id, "HasNotification": $has_notification, "HasTarget": $has_target, "HasTemplate": $has_template, "Id": $id, "IsConfigured": $is_configured, "IsTimeRuleDefinedByTemplate": $is_time_rule_defined_by_template, "Links": $links, "MaximumQueueSize": $maximum_queue_size, "Name": $name, "OutputTime": $output_time, "Path": $path, "Priority": $priority, "PublishResults": $publish_results, "Status": $status, "TargetWebId": $target_web_id, "TemplateName": $template_name, "TimeRulePlugInName": $time_rule_plug_in_name, "WebException": $web_exception, "WebId": $body_web_id} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: ({"webIdType": $web_id_type} | compact), body: $req_body}
 }
 
 # Get the attributes of the specified element.
@@ -5826,11 +6008,12 @@ export def "elements-attributes get" [
 ]: nothing -> record<Items: table<CategoryNames: list, ConfigString: string, DataReference: record, DataReferencePlugIn: string, DefaultUnitsName: string, DefaultUnitsNameAbbreviation: string, Description: string, DisplayDigits: int, HasChildren: bool, Id: string, IsConfigurationItem: bool, IsExcluded: bool, IsHidden: bool, IsManualDataEntry: bool, Links: record, Name: string, Path: string, Paths: list, Span: float, Step: bool, TraitName: string, Type: string, TypeQualifier: string, WebException: record, WebId: string, Zero: float>, Links: record<First: string, Last: string, Next: string, Previous: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($web_id | is-empty) { error make --unspanned { msg: "path parameter 'webId' must be non-empty" } }
   let qp = [(serialize-qp "associations" $associations "scalar") (serialize-qp "categoryName" $category_name "scalar") (serialize-qp "maxCount" $max_count "scalar") (serialize-qp "nameFilter" $name_filter "scalar") (serialize-qp "searchFullHierarchy" $search_full_hierarchy "scalar") (serialize-qp "selectedFields" $selected_fields "scalar") (serialize-qp "showExcluded" $show_excluded "scalar") (serialize-qp "showHidden" $show_hidden "scalar") (serialize-qp "sortField" $sort_field "scalar") (serialize-qp "sortOrder" $sort_order "scalar") (serialize-qp "startIndex" $start_index "scalar") (serialize-qp "templateName" $template_name "scalar") (serialize-qp "trait" $trait "multi") (serialize-qp "traitCategory" $trait_category "multi") (serialize-qp "valueType" $value_type "scalar") (serialize-qp "webIdType" $web_id_type "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({web_id: (encode-path-segment $web_id)} | format pattern "/elements/{web_id}/attributes") $qp)
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"associations": $associations, "categoryName": $category_name, "maxCount": $max_count, "nameFilter": $name_filter, "searchFullHierarchy": $search_full_hierarchy, "selectedFields": $selected_fields, "showExcluded": $show_excluded, "showHidden": $show_hidden, "sortField": $sort_field, "sortOrder": $sort_order, "startIndex": $start_index, "templateName": $template_name, "trait": $trait, "traitCategory": $trait_category, "valueType": $value_type, "webIdType": $web_id_type} | compact), body: null}
 }
 
 # Create a new attribute of the specified element.
@@ -5883,13 +6066,14 @@ export def "elements-attributes create" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($web_id | is-empty) { error make --unspanned { msg: "path parameter 'webId' must be non-empty" } }
   let qp = [(serialize-qp "webIdType" $web_id_type "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({web_id: (encode-path-segment $web_id)} | format pattern "/elements/{web_id}/attributes") $qp)
   let req_body = {"CategoryNames": $category_names, "ConfigString": $config_string, "DataReference": $data_reference, "DataReferencePlugIn": $data_reference_plug_in, "DefaultUnitsName": $default_units_name, "DefaultUnitsNameAbbreviation": $default_units_name_abbreviation, "Description": $description, "DisplayDigits": $display_digits, "HasChildren": $has_children, "Id": $id, "IsConfigurationItem": $is_configuration_item, "IsExcluded": $is_excluded, "IsHidden": $is_hidden, "IsManualDataEntry": $is_manual_data_entry, "Links": $links, "Name": $name, "Path": $path, "Paths": $paths, "Span": $span, "Step": $step, "TraitName": $trait_name, "Type": $type, "TypeQualifier": $type_qualifier, "WebException": $web_exception, "WebId": $body_web_id, "Zero": $zero} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: ({"webIdType": $web_id_type} | compact), body: $req_body}
 }
 
 # Get an element's categories.
@@ -5913,11 +6097,12 @@ export def "elements-categories get" [
 ]: nothing -> record<Items: table<Description: string, Id: string, Links: record, Name: string, Path: string, WebException: record, WebId: string>, Links: record<First: string, Last: string, Next: string, Previous: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($web_id | is-empty) { error make --unspanned { msg: "path parameter 'webId' must be non-empty" } }
   let qp = [(serialize-qp "selectedFields" $selected_fields "scalar") (serialize-qp "webIdType" $web_id_type "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({web_id: (encode-path-segment $web_id)} | format pattern "/elements/{web_id}/categories") $qp)
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"selectedFields": $selected_fields, "webIdType": $web_id_type} | compact), body: null}
 }
 
 # Executes the create configuration function of the data references found within the attributes of the element, and optionally, its children.
@@ -5940,11 +6125,12 @@ export def "elements-config create" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($web_id | is-empty) { error make --unspanned { msg: "path parameter 'webId' must be non-empty" } }
   let qp = [(serialize-qp "includeChildElements" $include_child_elements "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({web_id: (encode-path-segment $web_id)} | format pattern "/elements/{web_id}/config") $qp)
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"includeChildElements": $include_child_elements} | compact), body: null}
 }
 
 # Retrieves a list of element attributes matching the specified filters from the specified element.
@@ -5983,11 +6169,12 @@ export def "elements-elementattributes find-attributes" [
 ]: nothing -> record<Items: table<CategoryNames: list, ConfigString: string, DataReference: record, DataReferencePlugIn: string, DefaultUnitsName: string, DefaultUnitsNameAbbreviation: string, Description: string, DisplayDigits: int, HasChildren: bool, Id: string, IsConfigurationItem: bool, IsExcluded: bool, IsHidden: bool, IsManualDataEntry: bool, Links: record, Name: string, Path: string, Paths: list, Span: float, Step: bool, TraitName: string, Type: string, TypeQualifier: string, WebException: record, WebId: string, Zero: float>, Links: record<First: string, Last: string, Next: string, Previous: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($web_id | is-empty) { error make --unspanned { msg: "path parameter 'webId' must be non-empty" } }
   let qp = [(serialize-qp "associations" $associations "scalar") (serialize-qp "attributeCategory" $attribute_category "scalar") (serialize-qp "attributeDescriptionFilter" $attribute_description_filter "scalar") (serialize-qp "attributeNameFilter" $attribute_name_filter "scalar") (serialize-qp "attributeType" $attribute_type "scalar") (serialize-qp "elementCategory" $element_category "scalar") (serialize-qp "elementDescriptionFilter" $element_description_filter "scalar") (serialize-qp "elementNameFilter" $element_name_filter "scalar") (serialize-qp "elementTemplate" $element_template "scalar") (serialize-qp "elementType" $element_type "scalar") (serialize-qp "maxCount" $max_count "scalar") (serialize-qp "searchFullHierarchy" $search_full_hierarchy "scalar") (serialize-qp "selectedFields" $selected_fields "scalar") (serialize-qp "sortField" $sort_field "scalar") (serialize-qp "sortOrder" $sort_order "scalar") (serialize-qp "startIndex" $start_index "scalar") (serialize-qp "webIdType" $web_id_type "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({web_id: (encode-path-segment $web_id)} | format pattern "/elements/{web_id}/elementattributes") $qp)
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"associations": $associations, "attributeCategory": $attribute_category, "attributeDescriptionFilter": $attribute_description_filter, "attributeNameFilter": $attribute_name_filter, "attributeType": $attribute_type, "elementCategory": $element_category, "elementDescriptionFilter": $element_description_filter, "elementNameFilter": $element_name_filter, "elementTemplate": $element_template, "elementType": $element_type, "maxCount": $max_count, "searchFullHierarchy": $search_full_hierarchy, "selectedFields": $selected_fields, "sortField": $sort_field, "sortOrder": $sort_order, "startIndex": $start_index, "webIdType": $web_id_type} | compact), body: null}
 }
 
 # Retrieve elements based on the specified conditions. By default, this method selects immediate children of the specified element.
@@ -6022,11 +6209,12 @@ export def "elements-elements get" [
 ]: nothing -> record<Items: table<CategoryNames: list, Description: string, Errors: list, ExtendedProperties: record, HasChildren: bool, Id: string, Links: record, Name: string, Path: string, Paths: list, TemplateName: string, WebException: record, WebId: string>, Links: record<First: string, Last: string, Next: string, Previous: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($web_id | is-empty) { error make --unspanned { msg: "path parameter 'webId' must be non-empty" } }
   let qp = [(serialize-qp "associations" $associations "scalar") (serialize-qp "categoryName" $category_name "scalar") (serialize-qp "descriptionFilter" $description_filter "scalar") (serialize-qp "elementType" $element_type "scalar") (serialize-qp "maxCount" $max_count "scalar") (serialize-qp "nameFilter" $name_filter "scalar") (serialize-qp "searchFullHierarchy" $search_full_hierarchy "scalar") (serialize-qp "selectedFields" $selected_fields "scalar") (serialize-qp "sortField" $sort_field "scalar") (serialize-qp "sortOrder" $sort_order "scalar") (serialize-qp "startIndex" $start_index "scalar") (serialize-qp "templateName" $template_name "scalar") (serialize-qp "webIdType" $web_id_type "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({web_id: (encode-path-segment $web_id)} | format pattern "/elements/{web_id}/elements") $qp)
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"associations": $associations, "categoryName": $category_name, "descriptionFilter": $description_filter, "elementType": $element_type, "maxCount": $max_count, "nameFilter": $name_filter, "searchFullHierarchy": $search_full_hierarchy, "selectedFields": $selected_fields, "sortField": $sort_field, "sortOrder": $sort_order, "startIndex": $start_index, "templateName": $template_name, "webIdType": $web_id_type} | compact), body: null}
 }
 
 # Create a child element.
@@ -6066,13 +6254,14 @@ export def "elements-elements create" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($web_id | is-empty) { error make --unspanned { msg: "path parameter 'webId' must be non-empty" } }
   let qp = [(serialize-qp "webIdType" $web_id_type "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({web_id: (encode-path-segment $web_id)} | format pattern "/elements/{web_id}/elements") $qp)
   let req_body = {"CategoryNames": $category_names, "Description": $description, "Errors": $errors, "ExtendedProperties": $extended_properties, "HasChildren": $has_children, "Id": $id, "Links": $links, "Name": $name, "Path": $path, "Paths": $paths, "TemplateName": $template_name, "WebException": $web_exception, "WebId": $body_web_id} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: ({"webIdType": $web_id_type} | compact), body: $req_body}
 }
 
 # Retrieve event frames that reference this element based on the specified conditions. By default, returns all event frames that reference this element that have been active in the past 8 hours.
@@ -6109,11 +6298,12 @@ export def "elements-eventframes get-event-frames" [
 ]: nothing -> record<Items: table<AcknowledgedBy: string, AcknowledgedDate: string, AreValuesCaptured: bool, CanBeAcknowledged: bool, CategoryNames: list, Description: string, EndTime: string, ExtendedProperties: record, HasChildren: bool, Id: string, IsAcknowledged: bool, IsAnnotated: bool, IsLocked: bool, Links: record, Name: string, Path: string, RefElementWebIds: list, Security: record, Severity: string, StartTime: string, TemplateName: string, WebException: record, WebId: string>, Links: record<First: string, Last: string, Next: string, Previous: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($web_id | is-empty) { error make --unspanned { msg: "path parameter 'webId' must be non-empty" } }
   let qp = [(serialize-qp "canBeAcknowledged" $can_be_acknowledged "scalar") (serialize-qp "categoryName" $category_name "scalar") (serialize-qp "endTime" $end_time "scalar") (serialize-qp "isAcknowledged" $is_acknowledged "scalar") (serialize-qp "maxCount" $max_count "scalar") (serialize-qp "nameFilter" $name_filter "scalar") (serialize-qp "searchMode" $search_mode "scalar") (serialize-qp "selectedFields" $selected_fields "scalar") (serialize-qp "severity" $severity "multi") (serialize-qp "sortField" $sort_field "scalar") (serialize-qp "sortOrder" $sort_order "scalar") (serialize-qp "startIndex" $start_index "scalar") (serialize-qp "startTime" $start_time "scalar") (serialize-qp "templateName" $template_name "scalar") (serialize-qp "webIdType" $web_id_type "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({web_id: (encode-path-segment $web_id)} | format pattern "/elements/{web_id}/eventframes") $qp)
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"canBeAcknowledged": $can_be_acknowledged, "categoryName": $category_name, "endTime": $end_time, "isAcknowledged": $is_acknowledged, "maxCount": $max_count, "nameFilter": $name_filter, "searchMode": $search_mode, "selectedFields": $selected_fields, "severity": $severity, "sortField": $sort_field, "sortOrder": $sort_order, "startIndex": $start_index, "startTime": $start_time, "templateName": $template_name, "webIdType": $web_id_type} | compact), body: null}
 }
 
 # Retrieve notification rules for an element
@@ -6137,11 +6327,12 @@ export def "elements-notificationrules get-notification-rules" [
 ]: nothing -> record<Items: table<AutoCreated: bool, CategoryNames: list, Criteria: string, Description: string, Id: string, MultiTriggerEventOption: string, Name: string, NonrepetitionInterval: string, Path: string, ResendInterval: string, Status: string, TemplateName: string, WebException: record, WebId: string>, Links: record<First: string, Last: string, Next: string, Previous: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($web_id | is-empty) { error make --unspanned { msg: "path parameter 'webId' must be non-empty" } }
   let qp = [(serialize-qp "selectedFields" $selected_fields "scalar") (serialize-qp "webIdType" $web_id_type "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({web_id: (encode-path-segment $web_id)} | format pattern "/elements/{web_id}/notificationrules") $qp)
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"selectedFields": $selected_fields, "webIdType": $web_id_type} | compact), body: null}
 }
 
 # Create a notification rule.
@@ -6180,13 +6371,14 @@ export def "elements-notificationrules create-notification-rule" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($web_id | is-empty) { error make --unspanned { msg: "path parameter 'webId' must be non-empty" } }
   let qp = [(serialize-qp "webIdType" $web_id_type "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({web_id: (encode-path-segment $web_id)} | format pattern "/elements/{web_id}/notificationrules") $qp)
   let req_body = {"AutoCreated": $auto_created, "CategoryNames": $category_names, "Criteria": $criteria, "Description": $description, "Id": $id, "MultiTriggerEventOption": $multi_trigger_event_option, "Name": $name, "NonrepetitionInterval": $nonrepetition_interval, "Path": $path, "ResendInterval": $resend_interval, "Status": $status, "TemplateName": $template_name, "WebException": $web_exception, "WebId": $body_web_id} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: ({"webIdType": $web_id_type} | compact), body: $req_body}
 }
 
 # Get a list of the full or relative paths to this element.
@@ -6209,11 +6401,12 @@ export def "elements-paths get" [
 ]: nothing -> record<Items: list<string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($web_id | is-empty) { error make --unspanned { msg: "path parameter 'webId' must be non-empty" } }
   let qp = [(serialize-qp "relativePath" $relative_path "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({web_id: (encode-path-segment $web_id)} | format pattern "/elements/{web_id}/paths") $qp)
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"relativePath": $relative_path} | compact), body: null}
 }
 
 # Remove a reference to an existing element from the child elements collection.
@@ -6236,11 +6429,12 @@ export def "elements-referencedelements delete-referenced" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($web_id | is-empty) { error make --unspanned { msg: "path parameter 'webId' must be non-empty" } }
   let qp = [(serialize-qp "referencedElementWebId" $referenced_element_web_id "multi")] | flatten | str join "&"
   let full_url = (build-url $base ({web_id: (encode-path-segment $web_id)} | format pattern "/elements/{web_id}/referencedelements") $qp)
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"referencedElementWebId": $referenced_element_web_id} | compact), body: null}
 }
 
 # Retrieve referenced elements based on the specified conditions. By default, this method selects all referenced elements of the current resource.
@@ -6274,11 +6468,12 @@ export def "elements-referencedelements get-referenced" [
 ]: nothing -> record<Items: table<CategoryNames: list, Description: string, Errors: list, ExtendedProperties: record, HasChildren: bool, Id: string, Links: record, Name: string, Path: string, Paths: list, TemplateName: string, WebException: record, WebId: string>, Links: record<First: string, Last: string, Next: string, Previous: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($web_id | is-empty) { error make --unspanned { msg: "path parameter 'webId' must be non-empty" } }
   let qp = [(serialize-qp "associations" $associations "scalar") (serialize-qp "categoryName" $category_name "scalar") (serialize-qp "descriptionFilter" $description_filter "scalar") (serialize-qp "elementType" $element_type "scalar") (serialize-qp "maxCount" $max_count "scalar") (serialize-qp "nameFilter" $name_filter "scalar") (serialize-qp "selectedFields" $selected_fields "scalar") (serialize-qp "sortField" $sort_field "scalar") (serialize-qp "sortOrder" $sort_order "scalar") (serialize-qp "startIndex" $start_index "scalar") (serialize-qp "templateName" $template_name "scalar") (serialize-qp "webIdType" $web_id_type "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({web_id: (encode-path-segment $web_id)} | format pattern "/elements/{web_id}/referencedelements") $qp)
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"associations": $associations, "categoryName": $category_name, "descriptionFilter": $description_filter, "elementType": $element_type, "maxCount": $max_count, "nameFilter": $name_filter, "selectedFields": $selected_fields, "sortField": $sort_field, "sortOrder": $sort_order, "startIndex": $start_index, "templateName": $template_name, "webIdType": $web_id_type} | compact), body: null}
 }
 
 # Add a reference to an existing element to the child elements collection.
@@ -6302,11 +6497,12 @@ export def "elements-referencedelements create-referenced" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($web_id | is-empty) { error make --unspanned { msg: "path parameter 'webId' must be non-empty" } }
   let qp = [(serialize-qp "referencedElementWebId" $referenced_element_web_id "multi") (serialize-qp "referenceType" $reference_type "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({web_id: (encode-path-segment $web_id)} | format pattern "/elements/{web_id}/referencedelements") $qp)
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"referencedElementWebId": $referenced_element_web_id, "referenceType": $reference_type} | compact), body: null}
 }
 
 # Get the security information of the specified security item associated with the element for a specified user.
@@ -6332,11 +6528,12 @@ export def "elements-security get" [
 ]: nothing -> record<Items: table<CanAnnotate: bool, CanDelete: bool, CanExecute: bool, CanRead: bool, CanReadData: bool, CanSubscribe: bool, CanSubscribeOthers: bool, CanWrite: bool, CanWriteData: bool, HasAdmin: bool, Links: record, OwnerWebId: string, Rights: list, SecurityItem: string, UserIdentity: string, WebException: record>, Links: record<First: string, Last: string, Next: string, Previous: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($web_id | is-empty) { error make --unspanned { msg: "path parameter 'webId' must be non-empty" } }
   let qp = [(serialize-qp "userIdentity" $user_identity "multi") (serialize-qp "forceRefresh" $force_refresh "scalar") (serialize-qp "selectedFields" $selected_fields "scalar") (serialize-qp "webIdType" $web_id_type "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({web_id: (encode-path-segment $web_id)} | format pattern "/elements/{web_id}/security") $qp)
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"userIdentity": $user_identity, "forceRefresh": $force_refresh, "selectedFields": $selected_fields, "webIdType": $web_id_type} | compact), body: null}
 }
 
 # Retrieve the security entries associated with the element based on the specified criteria. By default, all security entries for this element are returned.
@@ -6361,11 +6558,12 @@ export def "elements-securityentries get-security-entries" [
 ]: nothing -> record<Items: table<AllowRights: list, DenyRights: list, Links: record, Name: string, SecurityIdentityName: string, WebException: record>, Links: record<First: string, Last: string, Next: string, Previous: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($web_id | is-empty) { error make --unspanned { msg: "path parameter 'webId' must be non-empty" } }
   let qp = [(serialize-qp "nameFilter" $name_filter "scalar") (serialize-qp "selectedFields" $selected_fields "scalar") (serialize-qp "webIdType" $web_id_type "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({web_id: (encode-path-segment $web_id)} | format pattern "/elements/{web_id}/securityentries") $qp)
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"nameFilter": $name_filter, "selectedFields": $selected_fields, "webIdType": $web_id_type} | compact), body: null}
 }
 
 # Create a security entry owned by the element.
@@ -6398,13 +6596,14 @@ export def "elements-securityentries create-security-entry" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($web_id | is-empty) { error make --unspanned { msg: "path parameter 'webId' must be non-empty" } }
   let qp = [(serialize-qp "applyToChildren" $apply_to_children "scalar") (serialize-qp "webIdType" $web_id_type "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({web_id: (encode-path-segment $web_id)} | format pattern "/elements/{web_id}/securityentries") $qp)
   let req_body = {"AllowRights": $allow_rights, "DenyRights": $deny_rights, "Links": $links, "Name": $name, "SecurityIdentityName": $security_identity_name, "WebException": $web_exception} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: ({"applyToChildren": $apply_to_children, "webIdType": $web_id_type} | compact), body: $req_body}
 }
 
 # Delete a security entry owned by the element.
@@ -6428,11 +6627,13 @@ export def "elements-securityentries delete-security-entry" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($web_id | is-empty) { error make --unspanned { msg: "path parameter 'webId' must be non-empty" } }
+  if ($name | is-empty) { error make --unspanned { msg: "path parameter 'name' must be non-empty" } }
   let qp = [(serialize-qp "applyToChildren" $apply_to_children "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({web_id: (encode-path-segment $web_id), name: (encode-path-segment $name)} | format pattern "/elements/{web_id}/securityentries/{name}") $qp)
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"applyToChildren": $apply_to_children} | compact), body: null}
 }
 
 # Retrieve the security entry associated with the element with the specified name.
@@ -6457,11 +6658,13 @@ export def "elements-securityentries get-security-entry" [
 ]: nothing -> record<AllowRights: list<string>, DenyRights: list<string>, Links: record<SecurableObject: string, SecurityIdentity: string, Self: string>, Name: string, SecurityIdentityName: string, WebException: record<Errors: list<string>, StatusCode: int>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($web_id | is-empty) { error make --unspanned { msg: "path parameter 'webId' must be non-empty" } }
+  if ($name | is-empty) { error make --unspanned { msg: "path parameter 'name' must be non-empty" } }
   let qp = [(serialize-qp "selectedFields" $selected_fields "scalar") (serialize-qp "webIdType" $web_id_type "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({web_id: (encode-path-segment $web_id), name: (encode-path-segment $name)} | format pattern "/elements/{web_id}/securityentries/{name}") $qp)
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"selectedFields": $selected_fields, "webIdType": $web_id_type} | compact), body: null}
 }
 
 # Update a security entry owned by the element.
@@ -6494,13 +6697,15 @@ export def "elements-securityentries update-security-entry" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($web_id | is-empty) { error make --unspanned { msg: "path parameter 'webId' must be non-empty" } }
+  if ($name | is-empty) { error make --unspanned { msg: "path parameter 'name' must be non-empty" } }
   let qp = [(serialize-qp "applyToChildren" $apply_to_children "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({web_id: (encode-path-segment $web_id), name: (encode-path-segment $name)} | format pattern "/elements/{web_id}/securityentries/{name}") $qp)
   let req_body = {"AllowRights": $allow_rights, "DenyRights": $deny_rights, "Links": $links, "Name": $body_name, "SecurityIdentityName": $security_identity_name, "WebException": $web_exception} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: ({"applyToChildren": $apply_to_children} | compact), body: $req_body}
 }
 
 # Retrieve an element template by path.
@@ -6528,7 +6733,7 @@ export def "elementtemplates get-element-template-by-path" [
   let full_url = (build-url $base "/elementtemplates" $qp)
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"path": $path, "selectedFields": $selected_fields, "webIdType": $web_id_type} | compact), body: null}
 }
 
 # Delete an element template.
@@ -6550,10 +6755,11 @@ export def "elementtemplates delete-element-template" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($web_id | is-empty) { error make --unspanned { msg: "path parameter 'webId' must be non-empty" } }
   let full_url = (build-url $base ({web_id: (encode-path-segment $web_id)} | format pattern "/elementtemplates/{web_id}"))
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
 }
 
 # Retrieve an element template.
@@ -6577,11 +6783,12 @@ export def "elementtemplates get-element-template" [
 ]: nothing -> record<AllowElementToExtend: bool, BaseTemplate: string, CanBeAcknowledged: bool, CategoryNames: list<string>, Description: string, ExtendedProperties: record, Id: string, InstanceType: string, Links: record<AnalysisTemplates: string, AttributeTemplates: string, BaseTemplate: string, BaseTemplates: string, Categories: string, Database: string, DefaultAttribute: string, DerivedTemplates: string, NotificationRuleTemplates: string, Security: string, SecurityEntries: string, Self: string>, Name: string, NamingPattern: string, Path: string, Severity: string, WebException: record<Errors: list<string>, StatusCode: int>, WebId: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($web_id | is-empty) { error make --unspanned { msg: "path parameter 'webId' must be non-empty" } }
   let qp = [(serialize-qp "selectedFields" $selected_fields "scalar") (serialize-qp "webIdType" $web_id_type "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({web_id: (encode-path-segment $web_id)} | format pattern "/elementtemplates/{web_id}") $qp)
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"selectedFields": $selected_fields, "webIdType": $web_id_type} | compact), body: null}
 }
 
 # Update an element template by replacing items in its definition.
@@ -6621,12 +6828,13 @@ export def "elementtemplates update-element-template" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($web_id | is-empty) { error make --unspanned { msg: "path parameter 'webId' must be non-empty" } }
   let full_url = (build-url $base ({web_id: (encode-path-segment $web_id)} | format pattern "/elementtemplates/{web_id}"))
   let req_body = {"AllowElementToExtend": $allow_element_to_extend, "BaseTemplate": $base_template, "CanBeAcknowledged": $can_be_acknowledged, "CategoryNames": $category_names, "Description": $description, "ExtendedProperties": $extended_properties, "Id": $id, "InstanceType": $instance_type, "Links": $links, "Name": $name, "NamingPattern": $naming_pattern, "Path": $path, "Severity": $severity, "WebException": $web_exception, "WebId": $body_web_id} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "patch" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body
+  do-request "patch" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: {}, body: $req_body}
 }
 
 # Get analysis templates for an element template.
@@ -6650,11 +6858,12 @@ export def "elementtemplates-analysistemplates get-element-template-analysis-tem
 ]: nothing -> record<Items: table<AnalysisRulePlugInName: string, CategoryNames: list, CreateEnabled: bool, Description: string, GroupId: int, HasNotificationTemplate: bool, HasTarget: bool, Id: string, Links: record, Name: string, OutputTime: string, Path: string, TargetName: string, TimeRulePlugInName: string, WebException: record, WebId: string>, Links: record<First: string, Last: string, Next: string, Previous: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($web_id | is-empty) { error make --unspanned { msg: "path parameter 'webId' must be non-empty" } }
   let qp = [(serialize-qp "selectedFields" $selected_fields "scalar") (serialize-qp "webIdType" $web_id_type "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({web_id: (encode-path-segment $web_id)} | format pattern "/elementtemplates/{web_id}/analysistemplates") $qp)
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"selectedFields": $selected_fields, "webIdType": $web_id_type} | compact), body: null}
 }
 
 # Get child attribute templates for an element template.
@@ -6683,11 +6892,12 @@ export def "elementtemplates-attributetemplates get-element-template-attribute-t
 ]: nothing -> record<Items: table<CategoryNames: list, ConfigString: string, DataReferencePlugIn: string, DefaultUnitsName: string, DefaultUnitsNameAbbreviation: string, DefaultValue: record, Description: string, HasChildren: bool, Id: string, IsConfigurationItem: bool, IsExcluded: bool, IsHidden: bool, IsManualDataEntry: bool, Links: record, Name: string, Path: string, TraitName: string, Type: string, TypeQualifier: string, WebException: record, WebId: string>, Links: record<First: string, Last: string, Next: string, Previous: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($web_id | is-empty) { error make --unspanned { msg: "path parameter 'webId' must be non-empty" } }
   let qp = [(serialize-qp "depthFirstTraverse" $depth_first_traverse "scalar") (serialize-qp "maxCount" $max_count "scalar") (serialize-qp "selectedFields" $selected_fields "scalar") (serialize-qp "showDescendants" $show_descendants "scalar") (serialize-qp "showInherited" $show_inherited "scalar") (serialize-qp "startIndex" $start_index "scalar") (serialize-qp "webIdType" $web_id_type "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({web_id: (encode-path-segment $web_id)} | format pattern "/elementtemplates/{web_id}/attributetemplates") $qp)
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"depthFirstTraverse": $depth_first_traverse, "maxCount": $max_count, "selectedFields": $selected_fields, "showDescendants": $show_descendants, "showInherited": $show_inherited, "startIndex": $start_index, "webIdType": $web_id_type} | compact), body: null}
 }
 
 # Create an attribute template.
@@ -6734,13 +6944,14 @@ export def "elementtemplates-attributetemplates create-element-template-attribut
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($web_id | is-empty) { error make --unspanned { msg: "path parameter 'webId' must be non-empty" } }
   let qp = [(serialize-qp "webIdType" $web_id_type "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({web_id: (encode-path-segment $web_id)} | format pattern "/elementtemplates/{web_id}/attributetemplates") $qp)
   let req_body = {"CategoryNames": $category_names, "ConfigString": $config_string, "DataReferencePlugIn": $data_reference_plug_in, "DefaultUnitsName": $default_units_name, "DefaultUnitsNameAbbreviation": $default_units_name_abbreviation, "DefaultValue": $default_value, "Description": $description, "HasChildren": $has_children, "Id": $id, "IsConfigurationItem": $is_configuration_item, "IsExcluded": $is_excluded, "IsHidden": $is_hidden, "IsManualDataEntry": $is_manual_data_entry, "Links": $links, "Name": $name, "Path": $path, "TraitName": $trait_name, "Type": $type, "TypeQualifier": $type_qualifier, "WebException": $web_exception, "WebId": $body_web_id} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: ({"webIdType": $web_id_type} | compact), body: $req_body}
 }
 
 # Get base element templates for an element template.
@@ -6765,11 +6976,12 @@ export def "elementtemplates-baseelementtemplates get-element-template-base-elem
 ]: nothing -> record<Items: table<AllowElementToExtend: bool, BaseTemplate: string, CanBeAcknowledged: bool, CategoryNames: list, Description: string, ExtendedProperties: record, Id: string, InstanceType: string, Links: record, Name: string, NamingPattern: string, Path: string, Severity: string, WebException: record, WebId: string>, Links: record<First: string, Last: string, Next: string, Previous: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($web_id | is-empty) { error make --unspanned { msg: "path parameter 'webId' must be non-empty" } }
   let qp = [(serialize-qp "maxCount" $max_count "scalar") (serialize-qp "selectedFields" $selected_fields "scalar") (serialize-qp "webIdType" $web_id_type "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({web_id: (encode-path-segment $web_id)} | format pattern "/elementtemplates/{web_id}/baseelementtemplates") $qp)
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"maxCount": $max_count, "selectedFields": $selected_fields, "webIdType": $web_id_type} | compact), body: null}
 }
 
 # Get an element template's categories.
@@ -6794,11 +7006,12 @@ export def "elementtemplates-categories get-element-template" [
 ]: nothing -> record<Items: table<Description: string, Id: string, Links: record, Name: string, Path: string, WebException: record, WebId: string>, Links: record<First: string, Last: string, Next: string, Previous: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($web_id | is-empty) { error make --unspanned { msg: "path parameter 'webId' must be non-empty" } }
   let qp = [(serialize-qp "selectedFields" $selected_fields "scalar") (serialize-qp "showInherited" $show_inherited "scalar") (serialize-qp "webIdType" $web_id_type "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({web_id: (encode-path-segment $web_id)} | format pattern "/elementtemplates/{web_id}/categories") $qp)
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"selectedFields": $selected_fields, "showInherited": $show_inherited, "webIdType": $web_id_type} | compact), body: null}
 }
 
 # Get derived element templates for an element template.
@@ -6824,11 +7037,12 @@ export def "elementtemplates-derivedelementtemplates get-element-template-derive
 ]: nothing -> record<Items: table<AllowElementToExtend: bool, BaseTemplate: string, CanBeAcknowledged: bool, CategoryNames: list, Description: string, ExtendedProperties: record, Id: string, InstanceType: string, Links: record, Name: string, NamingPattern: string, Path: string, Severity: string, WebException: record, WebId: string>, Links: record<First: string, Last: string, Next: string, Previous: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($web_id | is-empty) { error make --unspanned { msg: "path parameter 'webId' must be non-empty" } }
   let qp = [(serialize-qp "maxCount" $max_count "scalar") (serialize-qp "selectedFields" $selected_fields "scalar") (serialize-qp "showDescendants" $show_descendants "scalar") (serialize-qp "webIdType" $web_id_type "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({web_id: (encode-path-segment $web_id)} | format pattern "/elementtemplates/{web_id}/derivedelementtemplates") $qp)
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"maxCount": $max_count, "selectedFields": $selected_fields, "showDescendants": $show_descendants, "webIdType": $web_id_type} | compact), body: null}
 }
 
 # Get notification rule templates for an element template
@@ -6852,11 +7066,12 @@ export def "elementtemplates-notificationruletemplates get-element-template-noti
 ]: nothing -> record<Items: table<CategoryNames: list, Criteria: string, Description: string, Id: string, MultiTriggerEventOption: string, Name: string, NonrepetitionInterval: string, Path: string, ResendInterval: string, Status: string, TemplateName: string, WebException: record, WebId: string>, Links: record<First: string, Last: string, Next: string, Previous: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($web_id | is-empty) { error make --unspanned { msg: "path parameter 'webId' must be non-empty" } }
   let qp = [(serialize-qp "selectedFields" $selected_fields "scalar") (serialize-qp "webIdType" $web_id_type "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({web_id: (encode-path-segment $web_id)} | format pattern "/elementtemplates/{web_id}/notificationruletemplates") $qp)
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"selectedFields": $selected_fields, "webIdType": $web_id_type} | compact), body: null}
 }
 
 # Create a notification rule template.
@@ -6894,13 +7109,14 @@ export def "elementtemplates-notificationruletemplates create-element-template-n
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($web_id | is-empty) { error make --unspanned { msg: "path parameter 'webId' must be non-empty" } }
   let qp = [(serialize-qp "webIdType" $web_id_type "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({web_id: (encode-path-segment $web_id)} | format pattern "/elementtemplates/{web_id}/notificationruletemplates") $qp)
   let req_body = {"CategoryNames": $category_names, "Criteria": $criteria, "Description": $description, "Id": $id, "MultiTriggerEventOption": $multi_trigger_event_option, "Name": $name, "NonrepetitionInterval": $nonrepetition_interval, "Path": $path, "ResendInterval": $resend_interval, "Status": $status, "TemplateName": $template_name, "WebException": $web_exception, "WebId": $body_web_id} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: ({"webIdType": $web_id_type} | compact), body: $req_body}
 }
 
 # Get the security information of the specified security item associated with the element template for a specified user.
@@ -6926,11 +7142,12 @@ export def "elementtemplates-security get-element-template" [
 ]: nothing -> record<Items: table<CanAnnotate: bool, CanDelete: bool, CanExecute: bool, CanRead: bool, CanReadData: bool, CanSubscribe: bool, CanSubscribeOthers: bool, CanWrite: bool, CanWriteData: bool, HasAdmin: bool, Links: record, OwnerWebId: string, Rights: list, SecurityItem: string, UserIdentity: string, WebException: record>, Links: record<First: string, Last: string, Next: string, Previous: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($web_id | is-empty) { error make --unspanned { msg: "path parameter 'webId' must be non-empty" } }
   let qp = [(serialize-qp "userIdentity" $user_identity "multi") (serialize-qp "forceRefresh" $force_refresh "scalar") (serialize-qp "selectedFields" $selected_fields "scalar") (serialize-qp "webIdType" $web_id_type "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({web_id: (encode-path-segment $web_id)} | format pattern "/elementtemplates/{web_id}/security") $qp)
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"userIdentity": $user_identity, "forceRefresh": $force_refresh, "selectedFields": $selected_fields, "webIdType": $web_id_type} | compact), body: null}
 }
 
 # Retrieve the security entries associated with the element template based on the specified criteria. By default, all security entries for this element template are returned.
@@ -6955,11 +7172,12 @@ export def "elementtemplates-securityentries get-element-template-security-entri
 ]: nothing -> record<Items: table<AllowRights: list, DenyRights: list, Links: record, Name: string, SecurityIdentityName: string, WebException: record>, Links: record<First: string, Last: string, Next: string, Previous: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($web_id | is-empty) { error make --unspanned { msg: "path parameter 'webId' must be non-empty" } }
   let qp = [(serialize-qp "nameFilter" $name_filter "scalar") (serialize-qp "selectedFields" $selected_fields "scalar") (serialize-qp "webIdType" $web_id_type "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({web_id: (encode-path-segment $web_id)} | format pattern "/elementtemplates/{web_id}/securityentries") $qp)
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"nameFilter": $name_filter, "selectedFields": $selected_fields, "webIdType": $web_id_type} | compact), body: null}
 }
 
 # Create a security entry owned by the element template.
@@ -6992,13 +7210,14 @@ export def "elementtemplates-securityentries create-element-template-security-en
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($web_id | is-empty) { error make --unspanned { msg: "path parameter 'webId' must be non-empty" } }
   let qp = [(serialize-qp "applyToChildren" $apply_to_children "scalar") (serialize-qp "webIdType" $web_id_type "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({web_id: (encode-path-segment $web_id)} | format pattern "/elementtemplates/{web_id}/securityentries") $qp)
   let req_body = {"AllowRights": $allow_rights, "DenyRights": $deny_rights, "Links": $links, "Name": $name, "SecurityIdentityName": $security_identity_name, "WebException": $web_exception} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: ({"applyToChildren": $apply_to_children, "webIdType": $web_id_type} | compact), body: $req_body}
 }
 
 # Delete a security entry owned by the element template.
@@ -7022,11 +7241,13 @@ export def "elementtemplates-securityentries delete-element-template-security-en
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($web_id | is-empty) { error make --unspanned { msg: "path parameter 'webId' must be non-empty" } }
+  if ($name | is-empty) { error make --unspanned { msg: "path parameter 'name' must be non-empty" } }
   let qp = [(serialize-qp "applyToChildren" $apply_to_children "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({web_id: (encode-path-segment $web_id), name: (encode-path-segment $name)} | format pattern "/elementtemplates/{web_id}/securityentries/{name}") $qp)
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"applyToChildren": $apply_to_children} | compact), body: null}
 }
 
 # Retrieve the security entry associated with the element template with the specified name.
@@ -7051,11 +7272,13 @@ export def "elementtemplates-securityentries get-element-template-security-entry
 ]: nothing -> record<Items: table<AllowRights: list, DenyRights: list, Links: record, Name: string, SecurityIdentityName: string, WebException: record>, Links: record<First: string, Last: string, Next: string, Previous: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($web_id | is-empty) { error make --unspanned { msg: "path parameter 'webId' must be non-empty" } }
+  if ($name | is-empty) { error make --unspanned { msg: "path parameter 'name' must be non-empty" } }
   let qp = [(serialize-qp "selectedFields" $selected_fields "scalar") (serialize-qp "webIdType" $web_id_type "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({web_id: (encode-path-segment $web_id), name: (encode-path-segment $name)} | format pattern "/elementtemplates/{web_id}/securityentries/{name}") $qp)
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"selectedFields": $selected_fields, "webIdType": $web_id_type} | compact), body: null}
 }
 
 # Update a security entry owned by the element template.
@@ -7088,13 +7311,15 @@ export def "elementtemplates-securityentries update-element-template-security-en
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($web_id | is-empty) { error make --unspanned { msg: "path parameter 'webId' must be non-empty" } }
+  if ($name | is-empty) { error make --unspanned { msg: "path parameter 'name' must be non-empty" } }
   let qp = [(serialize-qp "applyToChildren" $apply_to_children "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({web_id: (encode-path-segment $web_id), name: (encode-path-segment $name)} | format pattern "/elementtemplates/{web_id}/securityentries/{name}") $qp)
   let req_body = {"AllowRights": $allow_rights, "DenyRights": $deny_rights, "Links": $links, "Name": $body_name, "SecurityIdentityName": $security_identity_name, "WebException": $web_exception} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: ({"applyToChildren": $apply_to_children} | compact), body: $req_body}
 }
 
 # Retrieve an enumeration set by path.
@@ -7122,7 +7347,7 @@ export def "enumerationsets update-enumeration-get-by-path" [
   let full_url = (build-url $base "/enumerationsets" $qp)
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"path": $path, "selectedFields": $selected_fields, "webIdType": $web_id_type} | compact), body: null}
 }
 
 # Delete an enumeration set.
@@ -7144,10 +7369,11 @@ export def "enumerationsets update-enumeration-delete" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($web_id | is-empty) { error make --unspanned { msg: "path parameter 'webId' must be non-empty" } }
   let full_url = (build-url $base ({web_id: (encode-path-segment $web_id)} | format pattern "/enumerationsets/{web_id}"))
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
 }
 
 # Retrieve an enumeration set.
@@ -7171,11 +7397,12 @@ export def "enumerationsets update-enumeration-get" [
 ]: nothing -> record<Description: string, Id: string, Links: record<DataServer: string, Database: string, Security: string, SecurityEntries: string, Self: string, Values: string>, Name: string, Path: string, SerializeDescription: bool, WebException: record<Errors: list<string>, StatusCode: int>, WebId: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($web_id | is-empty) { error make --unspanned { msg: "path parameter 'webId' must be non-empty" } }
   let qp = [(serialize-qp "selectedFields" $selected_fields "scalar") (serialize-qp "webIdType" $web_id_type "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({web_id: (encode-path-segment $web_id)} | format pattern "/enumerationsets/{web_id}") $qp)
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"selectedFields": $selected_fields, "webIdType": $web_id_type} | compact), body: null}
 }
 
 # Update an enumeration set by replacing items in its definition.
@@ -7184,7 +7411,7 @@ export def "enumerationsets update-enumeration-get" [
 # operationId: EnumerationSet_Update
 # --Links shape: {DataServer?: string, Database?: string, Security?: string, SecurityEntries?: string, Self?: string, Values?: string}
 # --WebException shape: {Errors?: list<string>, StatusCode?: "100"|"101"|"200"|"201"|"202"|"203"|"204"|"205"|"206"|"207"|"300"|"301"|"302"|"303"|"304"|"305"|"306"|"307"|"400"|"401"|"402"|"403"|"404"|"405"|"406"|"407"|"408"|"409"|"410"|"411"|"412"|"413"|"414"|"415"|"416"|"417"|"426"|"500"|"501"|"502"|"503"|"504"|"505"}
-export def "enumerationsets update-enumeration-update" [
+export def "enumerationsets update-enumeration" [
   web_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -7208,12 +7435,13 @@ export def "enumerationsets update-enumeration-update" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($web_id | is-empty) { error make --unspanned { msg: "path parameter 'webId' must be non-empty" } }
   let full_url = (build-url $base ({web_id: (encode-path-segment $web_id)} | format pattern "/enumerationsets/{web_id}"))
   let req_body = {"Description": $description, "Id": $id, "Links": $links, "Name": $name, "Path": $path, "SerializeDescription": $serialize_description, "WebException": $web_exception, "WebId": $body_web_id} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "patch" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body
+  do-request "patch" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: {}, body: $req_body}
 }
 
 # Retrieve an enumeration set's values.
@@ -7237,11 +7465,12 @@ export def "enumerationsets-enumerationvalues update-enumeration-get-values" [
 ]: nothing -> record<Items: table<Description: string, Id: string, Links: record, Name: string, Parent: string, Path: string, SerializeDescription: bool, SerializeId: bool, SerializeLinks: bool, SerializePath: bool, SerializeWebId: bool, Value: int, WebException: record, WebId: string>, Links: record<First: string, Last: string, Next: string, Previous: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($web_id | is-empty) { error make --unspanned { msg: "path parameter 'webId' must be non-empty" } }
   let qp = [(serialize-qp "selectedFields" $selected_fields "scalar") (serialize-qp "webIdType" $web_id_type "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({web_id: (encode-path-segment $web_id)} | format pattern "/enumerationsets/{web_id}/enumerationvalues") $qp)
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"selectedFields": $selected_fields, "webIdType": $web_id_type} | compact), body: null}
 }
 
 # Create an enumeration value for a enumeration set.
@@ -7281,13 +7510,14 @@ export def "enumerationsets-enumerationvalues update-enumeration-create-value" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($web_id | is-empty) { error make --unspanned { msg: "path parameter 'webId' must be non-empty" } }
   let qp = [(serialize-qp "webIdType" $web_id_type "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({web_id: (encode-path-segment $web_id)} | format pattern "/enumerationsets/{web_id}/enumerationvalues") $qp)
   let req_body = {"Description": $description, "Id": $id, "Links": $links, "Name": $name, "Parent": $parent, "Path": $path, "SerializeDescription": $serialize_description, "SerializeId": $serialize_id, "SerializeLinks": $serialize_links, "SerializePath": $serialize_path, "SerializeWebId": $serialize_web_id, "Value": $value, "WebException": $web_exception, "WebId": $body_web_id} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: ({"webIdType": $web_id_type} | compact), body: $req_body}
 }
 
 # Get the security information of the specified security item associated with the enumeration set for a specified user.
@@ -7313,11 +7543,12 @@ export def "enumerationsets-security update-enumeration-get" [
 ]: nothing -> record<Items: table<CanAnnotate: bool, CanDelete: bool, CanExecute: bool, CanRead: bool, CanReadData: bool, CanSubscribe: bool, CanSubscribeOthers: bool, CanWrite: bool, CanWriteData: bool, HasAdmin: bool, Links: record, OwnerWebId: string, Rights: list, SecurityItem: string, UserIdentity: string, WebException: record>, Links: record<First: string, Last: string, Next: string, Previous: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($web_id | is-empty) { error make --unspanned { msg: "path parameter 'webId' must be non-empty" } }
   let qp = [(serialize-qp "userIdentity" $user_identity "multi") (serialize-qp "forceRefresh" $force_refresh "scalar") (serialize-qp "selectedFields" $selected_fields "scalar") (serialize-qp "webIdType" $web_id_type "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({web_id: (encode-path-segment $web_id)} | format pattern "/enumerationsets/{web_id}/security") $qp)
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"userIdentity": $user_identity, "forceRefresh": $force_refresh, "selectedFields": $selected_fields, "webIdType": $web_id_type} | compact), body: null}
 }
 
 # Retrieve the security entries associated with the enumeration set based on the specified criteria. By default, all security entries for this enumeration set are returned.
@@ -7342,11 +7573,12 @@ export def "enumerationsets-securityentries update-enumeration-get-security-entr
 ]: nothing -> record<Items: table<AllowRights: list, DenyRights: list, Links: record, Name: string, SecurityIdentityName: string, WebException: record>, Links: record<First: string, Last: string, Next: string, Previous: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($web_id | is-empty) { error make --unspanned { msg: "path parameter 'webId' must be non-empty" } }
   let qp = [(serialize-qp "nameFilter" $name_filter "scalar") (serialize-qp "selectedFields" $selected_fields "scalar") (serialize-qp "webIdType" $web_id_type "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({web_id: (encode-path-segment $web_id)} | format pattern "/enumerationsets/{web_id}/securityentries") $qp)
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"nameFilter": $name_filter, "selectedFields": $selected_fields, "webIdType": $web_id_type} | compact), body: null}
 }
 
 # Create a security entry owned by the enumeration set.
@@ -7379,13 +7611,14 @@ export def "enumerationsets-securityentries update-enumeration-create-security-e
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($web_id | is-empty) { error make --unspanned { msg: "path parameter 'webId' must be non-empty" } }
   let qp = [(serialize-qp "applyToChildren" $apply_to_children "scalar") (serialize-qp "webIdType" $web_id_type "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({web_id: (encode-path-segment $web_id)} | format pattern "/enumerationsets/{web_id}/securityentries") $qp)
   let req_body = {"AllowRights": $allow_rights, "DenyRights": $deny_rights, "Links": $links, "Name": $name, "SecurityIdentityName": $security_identity_name, "WebException": $web_exception} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: ({"applyToChildren": $apply_to_children, "webIdType": $web_id_type} | compact), body: $req_body}
 }
 
 # Delete a security entry owned by the enumeration set.
@@ -7409,11 +7642,13 @@ export def "enumerationsets-securityentries update-enumeration-delete-security-e
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($web_id | is-empty) { error make --unspanned { msg: "path parameter 'webId' must be non-empty" } }
+  if ($name | is-empty) { error make --unspanned { msg: "path parameter 'name' must be non-empty" } }
   let qp = [(serialize-qp "applyToChildren" $apply_to_children "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({web_id: (encode-path-segment $web_id), name: (encode-path-segment $name)} | format pattern "/enumerationsets/{web_id}/securityentries/{name}") $qp)
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"applyToChildren": $apply_to_children} | compact), body: null}
 }
 
 # Retrieve the security entry associated with the enumeration set with the specified name.
@@ -7438,11 +7673,13 @@ export def "enumerationsets-securityentries update-enumeration-get-security-entr
 ]: nothing -> record<AllowRights: list<string>, DenyRights: list<string>, Links: record<SecurableObject: string, SecurityIdentity: string, Self: string>, Name: string, SecurityIdentityName: string, WebException: record<Errors: list<string>, StatusCode: int>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($web_id | is-empty) { error make --unspanned { msg: "path parameter 'webId' must be non-empty" } }
+  if ($name | is-empty) { error make --unspanned { msg: "path parameter 'name' must be non-empty" } }
   let qp = [(serialize-qp "selectedFields" $selected_fields "scalar") (serialize-qp "webIdType" $web_id_type "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({web_id: (encode-path-segment $web_id), name: (encode-path-segment $name)} | format pattern "/enumerationsets/{web_id}/securityentries/{name}") $qp)
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"selectedFields": $selected_fields, "webIdType": $web_id_type} | compact), body: null}
 }
 
 # Update a security entry owned by the enumeration set.
@@ -7451,7 +7688,7 @@ export def "enumerationsets-securityentries update-enumeration-get-security-entr
 # operationId: EnumerationSet_UpdateSecurityEntry
 # --Links shape: {SecurableObject?: string, SecurityIdentity?: string, Self?: string}
 # --WebException shape: {Errors?: list<string>, StatusCode?: "100"|"101"|"200"|"201"|"202"|"203"|"204"|"205"|"206"|"207"|"300"|"301"|"302"|"303"|"304"|"305"|"306"|"307"|"400"|"401"|"402"|"403"|"404"|"405"|"406"|"407"|"408"|"409"|"410"|"411"|"412"|"413"|"414"|"415"|"416"|"417"|"426"|"500"|"501"|"502"|"503"|"504"|"505"}
-export def "enumerationsets-securityentries update-enumeration-update-security-entry" [
+export def "enumerationsets-securityentries update-enumeration-security-entry" [
   web_id: string
   name: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -7475,13 +7712,15 @@ export def "enumerationsets-securityentries update-enumeration-update-security-e
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($web_id | is-empty) { error make --unspanned { msg: "path parameter 'webId' must be non-empty" } }
+  if ($name | is-empty) { error make --unspanned { msg: "path parameter 'name' must be non-empty" } }
   let qp = [(serialize-qp "applyToChildren" $apply_to_children "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({web_id: (encode-path-segment $web_id), name: (encode-path-segment $name)} | format pattern "/enumerationsets/{web_id}/securityentries/{name}") $qp)
   let req_body = {"AllowRights": $allow_rights, "DenyRights": $deny_rights, "Links": $links, "Name": $body_name, "SecurityIdentityName": $security_identity_name, "WebException": $web_exception} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: ({"applyToChildren": $apply_to_children} | compact), body: $req_body}
 }
 
 # Retrieve an enumeration value by path.
@@ -7509,7 +7748,7 @@ export def "enumerationvalues get-enumeration-value-by-path" [
   let full_url = (build-url $base "/enumerationvalues" $qp)
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"path": $path, "selectedFields": $selected_fields, "webIdType": $web_id_type} | compact), body: null}
 }
 
 # Delete an enumeration value from an enumeration set.
@@ -7531,10 +7770,11 @@ export def "enumerationvalues delete-enumeration-value-enumeration-value" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($web_id | is-empty) { error make --unspanned { msg: "path parameter 'webId' must be non-empty" } }
   let full_url = (build-url $base ({web_id: (encode-path-segment $web_id)} | format pattern "/enumerationvalues/{web_id}"))
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
 }
 
 # Retrieve an enumeration value mapping
@@ -7558,11 +7798,12 @@ export def "enumerationvalues get-enumeration-value" [
 ]: nothing -> record<Description: string, Id: string, Links: record<EnumerationSet: string, Parent: string, Self: string>, Name: string, Parent: string, Path: string, SerializeDescription: bool, SerializeId: bool, SerializeLinks: bool, SerializePath: bool, SerializeWebId: bool, Value: int, WebException: record<Errors: list<string>, StatusCode: int>, WebId: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($web_id | is-empty) { error make --unspanned { msg: "path parameter 'webId' must be non-empty" } }
   let qp = [(serialize-qp "selectedFields" $selected_fields "scalar") (serialize-qp "webIdType" $web_id_type "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({web_id: (encode-path-segment $web_id)} | format pattern "/enumerationvalues/{web_id}") $qp)
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"selectedFields": $selected_fields, "webIdType": $web_id_type} | compact), body: null}
 }
 
 # Update an enumeration value by replacing items in its definition.
@@ -7601,12 +7842,13 @@ export def "enumerationvalues update-enumeration-value-enumeration-value" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($web_id | is-empty) { error make --unspanned { msg: "path parameter 'webId' must be non-empty" } }
   let full_url = (build-url $base ({web_id: (encode-path-segment $web_id)} | format pattern "/enumerationvalues/{web_id}"))
   let req_body = {"Description": $description, "Id": $id, "Links": $links, "Name": $name, "Parent": $parent, "Path": $path, "SerializeDescription": $serialize_description, "SerializeId": $serialize_id, "SerializeLinks": $serialize_links, "SerializePath": $serialize_path, "SerializeWebId": $serialize_web_id, "Value": $value, "WebException": $web_exception, "WebId": $body_web_id} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "patch" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body
+  do-request "patch" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: {}, body: $req_body}
 }
 
 # Retrieve an event frame by path.
@@ -7634,7 +7876,7 @@ export def "eventframes get-event-frame-by-path" [
   let full_url = (build-url $base "/eventframes" $qp)
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"path": $path, "selectedFields": $selected_fields, "webIdType": $web_id_type} | compact), body: null}
 }
 
 # Retrieve multiple event frames by web ids or paths.
@@ -7665,7 +7907,7 @@ export def "eventframes-multiple get-event-frame" [
   let full_url = (build-url $base "/eventframes/multiple" $qp)
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"asParallel": $as_parallel, "includeMode": $include_mode, "path": $path, "selectedFields": $selected_fields, "webId": $web_id, "webIdType": $web_id_type} | compact), body: null}
 }
 
 # Retrieve event frames based on the specified conditions. Returns event frames using the specified search query string.
@@ -7696,7 +7938,7 @@ export def "eventframes-search get-event-frame-event-frames-list" [
   let full_url = (build-url $base "/eventframes/search" $qp)
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"databaseWebId": $database_web_id, "maxCount": $max_count, "query": $query, "selectedFields": $selected_fields, "startIndex": $start_index, "webIdType": $web_id_type} | compact), body: null}
 }
 
 # Create a link for a "Search EventFrames By Attribute Value" operation, whose queries are specified in the request content. The SearchRoot is specified by the Web Id of the root EventFrame. If the SearchRoot is not specified, then the search starts at the Asset Database. ElementTemplate must be provided as the Web ID of the ElementTemplate, which are used to create the EventFrames. All the attributes in the queries must be defined as AttributeTemplates on the ElementTemplate. An array of attribute value queries are ANDed together to find the desired Element objects. At least one value query must be specified. There are limitations on SearchOperators.
@@ -7733,7 +7975,7 @@ export def "eventframes-searchbyattribute create-event-frame-list-by-attribute" 
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: ({"noResults": $no_results, "selectedFields": $selected_fields, "webIdType": $web_id_type} | compact), body: $req_body}
 }
 
 # Execute a "Search EventFrames By Attribute Value" operation.
@@ -7770,11 +8012,12 @@ export def "eventframes-searchbyattribute list-event-frame-execute-by-attribute"
 ]: nothing -> record<Items: table<AcknowledgedBy: string, AcknowledgedDate: string, AreValuesCaptured: bool, CanBeAcknowledged: bool, CategoryNames: list, Description: string, EndTime: string, ExtendedProperties: record, HasChildren: bool, Id: string, IsAcknowledged: bool, IsAnnotated: bool, IsLocked: bool, Links: record, Name: string, Path: string, RefElementWebIds: list, Security: record, Severity: string, StartTime: string, TemplateName: string, WebException: record, WebId: string>, Links: record<First: string, Last: string, Next: string, Previous: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($search_id | is-empty) { error make --unspanned { msg: "path parameter 'searchId' must be non-empty" } }
   let qp = [(serialize-qp "canBeAcknowledged" $can_be_acknowledged "scalar") (serialize-qp "endTime" $end_time "scalar") (serialize-qp "isAcknowledged" $is_acknowledged "scalar") (serialize-qp "maxCount" $max_count "scalar") (serialize-qp "nameFilter" $name_filter "scalar") (serialize-qp "referencedElementNameFilter" $referenced_element_name_filter "scalar") (serialize-qp "searchFullHierarchy" $search_full_hierarchy "scalar") (serialize-qp "searchMode" $search_mode "scalar") (serialize-qp "selectedFields" $selected_fields "scalar") (serialize-qp "severity" $severity "multi") (serialize-qp "sortField" $sort_field "scalar") (serialize-qp "sortOrder" $sort_order "scalar") (serialize-qp "startIndex" $start_index "scalar") (serialize-qp "startTime" $start_time "scalar") (serialize-qp "webIdType" $web_id_type "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({search_id: (encode-path-segment $search_id)} | format pattern "/eventframes/searchbyattribute/{search_id}") $qp)
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"canBeAcknowledged": $can_be_acknowledged, "endTime": $end_time, "isAcknowledged": $is_acknowledged, "maxCount": $max_count, "nameFilter": $name_filter, "referencedElementNameFilter": $referenced_element_name_filter, "searchFullHierarchy": $search_full_hierarchy, "searchMode": $search_mode, "selectedFields": $selected_fields, "severity": $severity, "sortField": $sort_field, "sortOrder": $sort_order, "startIndex": $start_index, "startTime": $start_time, "webIdType": $web_id_type} | compact), body: null}
 }
 
 # Delete an event frame.
@@ -7796,10 +8039,11 @@ export def "eventframes delete-event-frame" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($web_id | is-empty) { error make --unspanned { msg: "path parameter 'webId' must be non-empty" } }
   let full_url = (build-url $base ({web_id: (encode-path-segment $web_id)} | format pattern "/eventframes/{web_id}"))
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
 }
 
 # Retrieve an event frame.
@@ -7823,11 +8067,12 @@ export def "eventframes get-event-frame" [
 ]: nothing -> record<AcknowledgedBy: string, AcknowledgedDate: string, AreValuesCaptured: bool, CanBeAcknowledged: bool, CategoryNames: list<string>, Description: string, EndTime: string, ExtendedProperties: record, HasChildren: bool, Id: string, IsAcknowledged: bool, IsAnnotated: bool, IsLocked: bool, Links: record<Annotations: string, Attributes: string, Categories: string, Database: string, DefaultAttribute: string, EndValue: string, EventFrames: string, InterpolatedData: string, Parent: string, PlotData: string, PrimaryReferencedElement: string, RecordedData: string, ReferencedElements: string, Security: string, SecurityEntries: string, Self: string, SummaryData: string, Template: string, Value: string>, Name: string, Path: string, RefElementWebIds: list<string>, Security: record<CanAnnotate: bool, CanDelete: bool, CanExecute: bool, CanRead: bool, CanReadData: bool, CanSubscribe: bool, CanSubscribeOthers: bool, CanWrite: bool, CanWriteData: bool, HasAdmin: bool, Rights: list<string>, WebException: record<Errors: list, StatusCode: int>>, Severity: string, StartTime: string, TemplateName: string, WebException: record<Errors: list<string>, StatusCode: int>, WebId: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($web_id | is-empty) { error make --unspanned { msg: "path parameter 'webId' must be non-empty" } }
   let qp = [(serialize-qp "selectedFields" $selected_fields "scalar") (serialize-qp "webIdType" $web_id_type "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({web_id: (encode-path-segment $web_id)} | format pattern "/eventframes/{web_id}") $qp)
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"selectedFields": $selected_fields, "webIdType": $web_id_type} | compact), body: null}
 }
 
 # Update an event frame by replacing items in its definition.
@@ -7876,12 +8121,13 @@ export def "eventframes update-event-frame" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($web_id | is-empty) { error make --unspanned { msg: "path parameter 'webId' must be non-empty" } }
   let full_url = (build-url $base ({web_id: (encode-path-segment $web_id)} | format pattern "/eventframes/{web_id}"))
   let req_body = {"AcknowledgedBy": $acknowledged_by, "AcknowledgedDate": $acknowledged_date, "AreValuesCaptured": $are_values_captured, "CanBeAcknowledged": $can_be_acknowledged, "CategoryNames": $category_names, "Description": $description, "EndTime": $end_time, "ExtendedProperties": $extended_properties, "HasChildren": $has_children, "Id": $id, "IsAcknowledged": $is_acknowledged, "IsAnnotated": $is_annotated, "IsLocked": $is_locked, "Links": $links, "Name": $name, "Path": $path, "RefElementWebIds": $ref_element_web_ids, "Security": $security, "Severity": $severity, "StartTime": $start_time, "TemplateName": $template_name, "WebException": $web_exception, "WebId": $body_web_id} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "patch" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body
+  do-request "patch" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: {}, body: $req_body}
 }
 
 # Calls the EventFrame's Acknowledge method.
@@ -7903,10 +8149,11 @@ export def "eventframes-acknowledge update-event-frame" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($web_id | is-empty) { error make --unspanned { msg: "path parameter 'webId' must be non-empty" } }
   let full_url = (build-url $base ({web_id: (encode-path-segment $web_id)} | format pattern "/eventframes/{web_id}/acknowledge"))
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "patch" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "patch" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
 }
 
 # Get an event frame's annotations.
@@ -7930,11 +8177,12 @@ export def "eventframes-annotations list" [
 ]: nothing -> record<Items: table<CreationDate: string, Creator: string, Description: string, Errors: list, Id: string, Links: record, Modifier: string, ModifyDate: string, Name: string, Value: record, WebException: record>, Links: record<First: string, Last: string, Next: string, Previous: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($web_id | is-empty) { error make --unspanned { msg: "path parameter 'webId' must be non-empty" } }
   let qp = [(serialize-qp "selectedFields" $selected_fields "scalar") (serialize-qp "webIdType" $web_id_type "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({web_id: (encode-path-segment $web_id)} | format pattern "/eventframes/{web_id}/annotations") $qp)
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"selectedFields": $selected_fields, "webIdType": $web_id_type} | compact), body: null}
 }
 
 # Create an annotation on an event frame.
@@ -7972,13 +8220,14 @@ export def "eventframes-annotations create-event-frame" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($web_id | is-empty) { error make --unspanned { msg: "path parameter 'webId' must be non-empty" } }
   let qp = [(serialize-qp "webIdType" $web_id_type "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({web_id: (encode-path-segment $web_id)} | format pattern "/eventframes/{web_id}/annotations") $qp)
   let req_body = {"CreationDate": $creation_date, "Creator": $creator, "Description": $description, "Errors": $errors, "Id": $id, "Links": $links, "Modifier": $modifier, "ModifyDate": $modify_date, "Name": $name, "Value": $value, "WebException": $web_exception} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: ({"webIdType": $web_id_type} | compact), body: $req_body}
 }
 
 # Delete an annotation on an event frame. If the annotation has attached media, the attached media will also be deleted.
@@ -8001,10 +8250,12 @@ export def "eventframes-annotations delete-event-frame" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($web_id | is-empty) { error make --unspanned { msg: "path parameter 'webId' must be non-empty" } }
+  if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
   let full_url = (build-url $base ({web_id: (encode-path-segment $web_id), id: (encode-path-segment $id)} | format pattern "/eventframes/{web_id}/annotations/{id}"))
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
 }
 
 # Get a specific annotation on an event frame.
@@ -8029,11 +8280,13 @@ export def "eventframes-annotations get-event-frame" [
 ]: nothing -> record<CreationDate: string, Creator: string, Description: string, Errors: table<FieldName: string, Message: list>, Id: string, Links: record<MediaData: string, MediaMetadata: string, Owner: string, Self: string>, Modifier: string, ModifyDate: string, Name: string, Value: record, WebException: record<Errors: list<string>, StatusCode: int>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($web_id | is-empty) { error make --unspanned { msg: "path parameter 'webId' must be non-empty" } }
+  if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
   let qp = [(serialize-qp "selectedFields" $selected_fields "scalar") (serialize-qp "webIdType" $web_id_type "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({web_id: (encode-path-segment $web_id), id: (encode-path-segment $id)} | format pattern "/eventframes/{web_id}/annotations/{id}") $qp)
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"selectedFields": $selected_fields, "webIdType": $web_id_type} | compact), body: null}
 }
 
 # Update an annotation on an event frame by replacing items in its definition.
@@ -8071,12 +8324,14 @@ export def "eventframes-annotations update-event-frame" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($web_id | is-empty) { error make --unspanned { msg: "path parameter 'webId' must be non-empty" } }
+  if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
   let full_url = (build-url $base ({web_id: (encode-path-segment $web_id), id: (encode-path-segment $id)} | format pattern "/eventframes/{web_id}/annotations/{id}"))
   let req_body = {"CreationDate": $creation_date, "Creator": $creator, "Description": $description, "Errors": $errors, "Id": $body_id, "Links": $links, "Modifier": $modifier, "ModifyDate": $modify_date, "Name": $name, "Value": $value, "WebException": $web_exception} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "patch" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body
+  do-request "patch" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: {}, body: $req_body}
 }
 
 # Delete attached media from an annotation on an event frame.
@@ -8099,10 +8354,12 @@ export def "eventframes-annotations-attachment-media delete-event-frame" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($web_id | is-empty) { error make --unspanned { msg: "path parameter 'webId' must be non-empty" } }
+  if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
   let full_url = (build-url $base ({web_id: (encode-path-segment $web_id), id: (encode-path-segment $id)} | format pattern "/eventframes/{web_id}/annotations/{id}/attachment/media"))
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
 }
 
 # Gets the metadata of the media attached to the specified annotation.
@@ -8127,11 +8384,13 @@ export def "eventframes-annotations-attachment-media-metadata get-event-frame" [
 ]: nothing -> record<Author: string, ChangeDate: string, Description: string, Links: record<MediaData: string, Owner: string, Self: string>, Name: string, Size: float, WebException: record<Errors: list<string>, StatusCode: int>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($web_id | is-empty) { error make --unspanned { msg: "path parameter 'webId' must be non-empty" } }
+  if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
   let qp = [(serialize-qp "selectedFields" $selected_fields "scalar") (serialize-qp "webIdType" $web_id_type "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({web_id: (encode-path-segment $web_id), id: (encode-path-segment $id)} | format pattern "/eventframes/{web_id}/annotations/{id}/attachment/media/metadata") $qp)
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"selectedFields": $selected_fields, "webIdType": $web_id_type} | compact), body: null}
 }
 
 # Get the attributes of the specified event frame.
@@ -8169,11 +8428,12 @@ export def "eventframes-attributes get-event-frame" [
 ]: nothing -> record<Items: table<CategoryNames: list, ConfigString: string, DataReference: record, DataReferencePlugIn: string, DefaultUnitsName: string, DefaultUnitsNameAbbreviation: string, Description: string, DisplayDigits: int, HasChildren: bool, Id: string, IsConfigurationItem: bool, IsExcluded: bool, IsHidden: bool, IsManualDataEntry: bool, Links: record, Name: string, Path: string, Paths: list, Span: float, Step: bool, TraitName: string, Type: string, TypeQualifier: string, WebException: record, WebId: string, Zero: float>, Links: record<First: string, Last: string, Next: string, Previous: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($web_id | is-empty) { error make --unspanned { msg: "path parameter 'webId' must be non-empty" } }
   let qp = [(serialize-qp "associations" $associations "scalar") (serialize-qp "categoryName" $category_name "scalar") (serialize-qp "maxCount" $max_count "scalar") (serialize-qp "nameFilter" $name_filter "scalar") (serialize-qp "searchFullHierarchy" $search_full_hierarchy "scalar") (serialize-qp "selectedFields" $selected_fields "scalar") (serialize-qp "showExcluded" $show_excluded "scalar") (serialize-qp "showHidden" $show_hidden "scalar") (serialize-qp "sortField" $sort_field "scalar") (serialize-qp "sortOrder" $sort_order "scalar") (serialize-qp "startIndex" $start_index "scalar") (serialize-qp "templateName" $template_name "scalar") (serialize-qp "trait" $trait "multi") (serialize-qp "traitCategory" $trait_category "multi") (serialize-qp "valueType" $value_type "scalar") (serialize-qp "webIdType" $web_id_type "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({web_id: (encode-path-segment $web_id)} | format pattern "/eventframes/{web_id}/attributes") $qp)
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"associations": $associations, "categoryName": $category_name, "maxCount": $max_count, "nameFilter": $name_filter, "searchFullHierarchy": $search_full_hierarchy, "selectedFields": $selected_fields, "showExcluded": $show_excluded, "showHidden": $show_hidden, "sortField": $sort_field, "sortOrder": $sort_order, "startIndex": $start_index, "templateName": $template_name, "trait": $trait, "traitCategory": $trait_category, "valueType": $value_type, "webIdType": $web_id_type} | compact), body: null}
 }
 
 # Create a new attribute of the specified event frame.
@@ -8226,13 +8486,14 @@ export def "eventframes-attributes create-event-frame" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($web_id | is-empty) { error make --unspanned { msg: "path parameter 'webId' must be non-empty" } }
   let qp = [(serialize-qp "webIdType" $web_id_type "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({web_id: (encode-path-segment $web_id)} | format pattern "/eventframes/{web_id}/attributes") $qp)
   let req_body = {"CategoryNames": $category_names, "ConfigString": $config_string, "DataReference": $data_reference, "DataReferencePlugIn": $data_reference_plug_in, "DefaultUnitsName": $default_units_name, "DefaultUnitsNameAbbreviation": $default_units_name_abbreviation, "Description": $description, "DisplayDigits": $display_digits, "HasChildren": $has_children, "Id": $id, "IsConfigurationItem": $is_configuration_item, "IsExcluded": $is_excluded, "IsHidden": $is_hidden, "IsManualDataEntry": $is_manual_data_entry, "Links": $links, "Name": $name, "Path": $path, "Paths": $paths, "Span": $span, "Step": $step, "TraitName": $trait_name, "Type": $type, "TypeQualifier": $type_qualifier, "WebException": $web_exception, "WebId": $body_web_id, "Zero": $zero} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: ({"webIdType": $web_id_type} | compact), body: $req_body}
 }
 
 # Calls the EventFrame's CaptureValues method.
@@ -8254,10 +8515,11 @@ export def "eventframes-attributes-capture create-event-frame-values" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($web_id | is-empty) { error make --unspanned { msg: "path parameter 'webId' must be non-empty" } }
   let full_url = (build-url $base ({web_id: (encode-path-segment $web_id)} | format pattern "/eventframes/{web_id}/attributes/capture"))
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
 }
 
 # Get an event frame's categories.
@@ -8281,11 +8543,12 @@ export def "eventframes-categories get-event-frame" [
 ]: nothing -> record<Items: table<Description: string, Id: string, Links: record, Name: string, Path: string, WebException: record, WebId: string>, Links: record<First: string, Last: string, Next: string, Previous: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($web_id | is-empty) { error make --unspanned { msg: "path parameter 'webId' must be non-empty" } }
   let qp = [(serialize-qp "selectedFields" $selected_fields "scalar") (serialize-qp "webIdType" $web_id_type "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({web_id: (encode-path-segment $web_id)} | format pattern "/eventframes/{web_id}/categories") $qp)
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"selectedFields": $selected_fields, "webIdType": $web_id_type} | compact), body: null}
 }
 
 # Executes the create configuration function of the data references found within the attributes of the event frame, and optionally, its children.
@@ -8308,11 +8571,12 @@ export def "eventframes-config create-event-frame" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($web_id | is-empty) { error make --unspanned { msg: "path parameter 'webId' must be non-empty" } }
   let qp = [(serialize-qp "includeChildElements" $include_child_elements "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({web_id: (encode-path-segment $web_id)} | format pattern "/eventframes/{web_id}/config") $qp)
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"includeChildElements": $include_child_elements} | compact), body: null}
 }
 
 # Retrieves a list of event frame attributes matching the specified filters from the specified event frame.
@@ -8354,11 +8618,12 @@ export def "eventframes-eventframeattributes find-event-frame-event-frame-attrib
 ]: nothing -> record<Items: table<CategoryNames: list, ConfigString: string, DataReference: record, DataReferencePlugIn: string, DefaultUnitsName: string, DefaultUnitsNameAbbreviation: string, Description: string, DisplayDigits: int, HasChildren: bool, Id: string, IsConfigurationItem: bool, IsExcluded: bool, IsHidden: bool, IsManualDataEntry: bool, Links: record, Name: string, Path: string, Paths: list, Span: float, Step: bool, TraitName: string, Type: string, TypeQualifier: string, WebException: record, WebId: string, Zero: float>, Links: record<First: string, Last: string, Next: string, Previous: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($web_id | is-empty) { error make --unspanned { msg: "path parameter 'webId' must be non-empty" } }
   let qp = [(serialize-qp "associations" $associations "scalar") (serialize-qp "attributeCategory" $attribute_category "scalar") (serialize-qp "attributeDescriptionFilter" $attribute_description_filter "scalar") (serialize-qp "attributeNameFilter" $attribute_name_filter "scalar") (serialize-qp "attributeType" $attribute_type "scalar") (serialize-qp "endTime" $end_time "scalar") (serialize-qp "eventFrameCategory" $event_frame_category "scalar") (serialize-qp "eventFrameDescriptionFilter" $event_frame_description_filter "scalar") (serialize-qp "eventFrameNameFilter" $event_frame_name_filter "scalar") (serialize-qp "eventFrameTemplate" $event_frame_template "scalar") (serialize-qp "maxCount" $max_count "scalar") (serialize-qp "referencedElementNameFilter" $referenced_element_name_filter "scalar") (serialize-qp "searchFullHierarchy" $search_full_hierarchy "scalar") (serialize-qp "searchMode" $search_mode "scalar") (serialize-qp "selectedFields" $selected_fields "scalar") (serialize-qp "sortField" $sort_field "scalar") (serialize-qp "sortOrder" $sort_order "scalar") (serialize-qp "startIndex" $start_index "scalar") (serialize-qp "startTime" $start_time "scalar") (serialize-qp "webIdType" $web_id_type "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({web_id: (encode-path-segment $web_id)} | format pattern "/eventframes/{web_id}/eventframeattributes") $qp)
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"associations": $associations, "attributeCategory": $attribute_category, "attributeDescriptionFilter": $attribute_description_filter, "attributeNameFilter": $attribute_name_filter, "attributeType": $attribute_type, "endTime": $end_time, "eventFrameCategory": $event_frame_category, "eventFrameDescriptionFilter": $event_frame_description_filter, "eventFrameNameFilter": $event_frame_name_filter, "eventFrameTemplate": $event_frame_template, "maxCount": $max_count, "referencedElementNameFilter": $referenced_element_name_filter, "searchFullHierarchy": $search_full_hierarchy, "searchMode": $search_mode, "selectedFields": $selected_fields, "sortField": $sort_field, "sortOrder": $sort_order, "startIndex": $start_index, "startTime": $start_time, "webIdType": $web_id_type} | compact), body: null}
 }
 
 # Retrieve event frames based on the specified conditions. By default, returns all children of the specified root event frame that have been active in the past 8 hours.
@@ -8398,11 +8663,12 @@ export def "eventframes-eventframes get-event-frame-event-frames" [
 ]: nothing -> record<Items: table<AcknowledgedBy: string, AcknowledgedDate: string, AreValuesCaptured: bool, CanBeAcknowledged: bool, CategoryNames: list, Description: string, EndTime: string, ExtendedProperties: record, HasChildren: bool, Id: string, IsAcknowledged: bool, IsAnnotated: bool, IsLocked: bool, Links: record, Name: string, Path: string, RefElementWebIds: list, Security: record, Severity: string, StartTime: string, TemplateName: string, WebException: record, WebId: string>, Links: record<First: string, Last: string, Next: string, Previous: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($web_id | is-empty) { error make --unspanned { msg: "path parameter 'webId' must be non-empty" } }
   let qp = [(serialize-qp "canBeAcknowledged" $can_be_acknowledged "scalar") (serialize-qp "categoryName" $category_name "scalar") (serialize-qp "endTime" $end_time "scalar") (serialize-qp "isAcknowledged" $is_acknowledged "scalar") (serialize-qp "maxCount" $max_count "scalar") (serialize-qp "nameFilter" $name_filter "scalar") (serialize-qp "referencedElementNameFilter" $referenced_element_name_filter "scalar") (serialize-qp "referencedElementTemplateName" $referenced_element_template_name "scalar") (serialize-qp "searchFullHierarchy" $search_full_hierarchy "scalar") (serialize-qp "searchMode" $search_mode "scalar") (serialize-qp "selectedFields" $selected_fields "scalar") (serialize-qp "severity" $severity "multi") (serialize-qp "sortField" $sort_field "scalar") (serialize-qp "sortOrder" $sort_order "scalar") (serialize-qp "startIndex" $start_index "scalar") (serialize-qp "startTime" $start_time "scalar") (serialize-qp "templateName" $template_name "scalar") (serialize-qp "webIdType" $web_id_type "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({web_id: (encode-path-segment $web_id)} | format pattern "/eventframes/{web_id}/eventframes") $qp)
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"canBeAcknowledged": $can_be_acknowledged, "categoryName": $category_name, "endTime": $end_time, "isAcknowledged": $is_acknowledged, "maxCount": $max_count, "nameFilter": $name_filter, "referencedElementNameFilter": $referenced_element_name_filter, "referencedElementTemplateName": $referenced_element_template_name, "searchFullHierarchy": $search_full_hierarchy, "searchMode": $search_mode, "selectedFields": $selected_fields, "severity": $severity, "sortField": $sort_field, "sortOrder": $sort_order, "startIndex": $start_index, "startTime": $start_time, "templateName": $template_name, "webIdType": $web_id_type} | compact), body: null}
 }
 
 # Create an event frame as a child of the specified event frame.
@@ -8452,13 +8718,14 @@ export def "eventframes-eventframes create-event-frame-event-frame" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($web_id | is-empty) { error make --unspanned { msg: "path parameter 'webId' must be non-empty" } }
   let qp = [(serialize-qp "webIdType" $web_id_type "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({web_id: (encode-path-segment $web_id)} | format pattern "/eventframes/{web_id}/eventframes") $qp)
   let req_body = {"AcknowledgedBy": $acknowledged_by, "AcknowledgedDate": $acknowledged_date, "AreValuesCaptured": $are_values_captured, "CanBeAcknowledged": $can_be_acknowledged, "CategoryNames": $category_names, "Description": $description, "EndTime": $end_time, "ExtendedProperties": $extended_properties, "HasChildren": $has_children, "Id": $id, "IsAcknowledged": $is_acknowledged, "IsAnnotated": $is_annotated, "IsLocked": $is_locked, "Links": $links, "Name": $name, "Path": $path, "RefElementWebIds": $ref_element_web_ids, "Security": $security, "Severity": $severity, "StartTime": $start_time, "TemplateName": $template_name, "WebException": $web_exception, "WebId": $body_web_id} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: ({"webIdType": $web_id_type} | compact), body: $req_body}
 }
 
 # Retrieve the event frame's referenced elements.
@@ -8483,11 +8750,12 @@ export def "eventframes-referencedelements get-event-frame-referenced-elements" 
 ]: nothing -> record<Items: table<CategoryNames: list, Description: string, Errors: list, ExtendedProperties: record, HasChildren: bool, Id: string, Links: record, Name: string, Path: string, Paths: list, TemplateName: string, WebException: record, WebId: string>, Links: record<First: string, Last: string, Next: string, Previous: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($web_id | is-empty) { error make --unspanned { msg: "path parameter 'webId' must be non-empty" } }
   let qp = [(serialize-qp "associations" $associations "scalar") (serialize-qp "selectedFields" $selected_fields "scalar") (serialize-qp "webIdType" $web_id_type "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({web_id: (encode-path-segment $web_id)} | format pattern "/eventframes/{web_id}/referencedelements") $qp)
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"associations": $associations, "selectedFields": $selected_fields, "webIdType": $web_id_type} | compact), body: null}
 }
 
 # Get the security information of the specified security item associated with the event frame for a specified user.
@@ -8513,11 +8781,12 @@ export def "eventframes-security get-event-frame" [
 ]: nothing -> record<Items: table<CanAnnotate: bool, CanDelete: bool, CanExecute: bool, CanRead: bool, CanReadData: bool, CanSubscribe: bool, CanSubscribeOthers: bool, CanWrite: bool, CanWriteData: bool, HasAdmin: bool, Links: record, OwnerWebId: string, Rights: list, SecurityItem: string, UserIdentity: string, WebException: record>, Links: record<First: string, Last: string, Next: string, Previous: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($web_id | is-empty) { error make --unspanned { msg: "path parameter 'webId' must be non-empty" } }
   let qp = [(serialize-qp "userIdentity" $user_identity "multi") (serialize-qp "forceRefresh" $force_refresh "scalar") (serialize-qp "selectedFields" $selected_fields "scalar") (serialize-qp "webIdType" $web_id_type "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({web_id: (encode-path-segment $web_id)} | format pattern "/eventframes/{web_id}/security") $qp)
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"userIdentity": $user_identity, "forceRefresh": $force_refresh, "selectedFields": $selected_fields, "webIdType": $web_id_type} | compact), body: null}
 }
 
 # Retrieve the security entries associated with the event frame based on the specified criteria. By default, all security entries for this event frame are returned.
@@ -8542,11 +8811,12 @@ export def "eventframes-securityentries get-event-frame-security-entries" [
 ]: nothing -> record<Items: table<AllowRights: list, DenyRights: list, Links: record, Name: string, SecurityIdentityName: string, WebException: record>, Links: record<First: string, Last: string, Next: string, Previous: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($web_id | is-empty) { error make --unspanned { msg: "path parameter 'webId' must be non-empty" } }
   let qp = [(serialize-qp "nameFilter" $name_filter "scalar") (serialize-qp "selectedFields" $selected_fields "scalar") (serialize-qp "webIdType" $web_id_type "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({web_id: (encode-path-segment $web_id)} | format pattern "/eventframes/{web_id}/securityentries") $qp)
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"nameFilter": $name_filter, "selectedFields": $selected_fields, "webIdType": $web_id_type} | compact), body: null}
 }
 
 # Create a security entry owned by the event frame.
@@ -8579,13 +8849,14 @@ export def "eventframes-securityentries create-event-frame-security-entry" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($web_id | is-empty) { error make --unspanned { msg: "path parameter 'webId' must be non-empty" } }
   let qp = [(serialize-qp "applyToChildren" $apply_to_children "scalar") (serialize-qp "webIdType" $web_id_type "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({web_id: (encode-path-segment $web_id)} | format pattern "/eventframes/{web_id}/securityentries") $qp)
   let req_body = {"AllowRights": $allow_rights, "DenyRights": $deny_rights, "Links": $links, "Name": $name, "SecurityIdentityName": $security_identity_name, "WebException": $web_exception} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: ({"applyToChildren": $apply_to_children, "webIdType": $web_id_type} | compact), body: $req_body}
 }
 
 # Delete a security entry owned by the event frame.
@@ -8609,11 +8880,13 @@ export def "eventframes-securityentries delete-event-frame-security-entry" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($web_id | is-empty) { error make --unspanned { msg: "path parameter 'webId' must be non-empty" } }
+  if ($name | is-empty) { error make --unspanned { msg: "path parameter 'name' must be non-empty" } }
   let qp = [(serialize-qp "applyToChildren" $apply_to_children "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({web_id: (encode-path-segment $web_id), name: (encode-path-segment $name)} | format pattern "/eventframes/{web_id}/securityentries/{name}") $qp)
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"applyToChildren": $apply_to_children} | compact), body: null}
 }
 
 # Retrieve the security entry associated with the event frame with the specified name.
@@ -8638,11 +8911,13 @@ export def "eventframes-securityentries get-event-frame-security-entry" [
 ]: nothing -> record<AllowRights: list<string>, DenyRights: list<string>, Links: record<SecurableObject: string, SecurityIdentity: string, Self: string>, Name: string, SecurityIdentityName: string, WebException: record<Errors: list<string>, StatusCode: int>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($web_id | is-empty) { error make --unspanned { msg: "path parameter 'webId' must be non-empty" } }
+  if ($name | is-empty) { error make --unspanned { msg: "path parameter 'name' must be non-empty" } }
   let qp = [(serialize-qp "selectedFields" $selected_fields "scalar") (serialize-qp "webIdType" $web_id_type "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({web_id: (encode-path-segment $web_id), name: (encode-path-segment $name)} | format pattern "/eventframes/{web_id}/securityentries/{name}") $qp)
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"selectedFields": $selected_fields, "webIdType": $web_id_type} | compact), body: null}
 }
 
 # Update a security entry owned by the event frame.
@@ -8675,13 +8950,15 @@ export def "eventframes-securityentries update-event-frame-security-entry" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($web_id | is-empty) { error make --unspanned { msg: "path parameter 'webId' must be non-empty" } }
+  if ($name | is-empty) { error make --unspanned { msg: "path parameter 'name' must be non-empty" } }
   let qp = [(serialize-qp "applyToChildren" $apply_to_children "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({web_id: (encode-path-segment $web_id), name: (encode-path-segment $name)} | format pattern "/eventframes/{web_id}/securityentries/{name}") $qp)
   let req_body = {"AllowRights": $allow_rights, "DenyRights": $deny_rights, "Links": $links, "Name": $body_name, "SecurityIdentityName": $security_identity_name, "WebException": $web_exception} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: ({"applyToChildren": $apply_to_children} | compact), body: $req_body}
 }
 
 # Retrieve a notification contact template by path.
@@ -8709,7 +8986,7 @@ export def "notificationcontacttemplates get-notification-contact-template-by-pa
   let full_url = (build-url $base "/notificationcontacttemplates" $qp)
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"path": $path, "selectedFields": $selected_fields, "webIdType": $web_id_type} | compact), body: null}
 }
 
 # Retrieve notification contact templates based on the specified conditions. Returns notification contact templates using the specified search query string.
@@ -8740,7 +9017,7 @@ export def "notificationcontacttemplates-search get-notification-contact-templat
   let full_url = (build-url $base "/notificationcontacttemplates/search" $qp)
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"assetServerWebId": $asset_server_web_id, "maxCount": $max_count, "query": $query, "selectedFields": $selected_fields, "startIndex": $start_index, "webIdType": $web_id_type} | compact), body: null}
 }
 
 # Delete a notification contact template.
@@ -8762,10 +9039,11 @@ export def "notificationcontacttemplates delete-notification-contact-template" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($web_id | is-empty) { error make --unspanned { msg: "path parameter 'webId' must be non-empty" } }
   let full_url = (build-url $base ({web_id: (encode-path-segment $web_id)} | format pattern "/notificationcontacttemplates/{web_id}"))
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
 }
 
 # Retrieve a notification contact template.
@@ -8789,11 +9067,12 @@ export def "notificationcontacttemplates get-notification-contact-template" [
 ]: nothing -> record<Available: bool, ConfigString: string, ContactType: string, Description: string, EscalationTimeout: string, HasChildren: bool, Id: string, Links: record<AssetServer: string, NotificationContactTemplates: string, NotificationPlugIn: string, Security: string, SecurityEntries: string, Self: string>, MaximumRetries: int, MinimumAcknowledgements: int, Name: string, NotifyWhenInstanceEnded: bool, Path: string, PlugInName: string, RetryInterval: string, WebException: record<Errors: list<string>, StatusCode: int>, WebId: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($web_id | is-empty) { error make --unspanned { msg: "path parameter 'webId' must be non-empty" } }
   let qp = [(serialize-qp "selectedFields" $selected_fields "scalar") (serialize-qp "webIdType" $web_id_type "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({web_id: (encode-path-segment $web_id)} | format pattern "/notificationcontacttemplates/{web_id}") $qp)
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"selectedFields": $selected_fields, "webIdType": $web_id_type} | compact), body: null}
 }
 
 # Update a notification contact template by replacing items in its definition.
@@ -8835,12 +9114,13 @@ export def "notificationcontacttemplates update-notification-contact-template" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($web_id | is-empty) { error make --unspanned { msg: "path parameter 'webId' must be non-empty" } }
   let full_url = (build-url $base ({web_id: (encode-path-segment $web_id)} | format pattern "/notificationcontacttemplates/{web_id}"))
   let req_body = {"Available": $available, "ConfigString": $config_string, "ContactType": $contact_type, "Description": $description, "EscalationTimeout": $escalation_timeout, "HasChildren": $has_children, "Id": $id, "Links": $links, "MaximumRetries": $maximum_retries, "MinimumAcknowledgements": $minimum_acknowledgements, "Name": $name, "NotifyWhenInstanceEnded": $notify_when_instance_ended, "Path": $path, "PlugInName": $plug_in_name, "RetryInterval": $retry_interval, "WebException": $web_exception, "WebId": $body_web_id} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "patch" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body
+  do-request "patch" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: {}, body: $req_body}
 }
 
 # Retrieve notification contact template's child templates.
@@ -8864,11 +9144,12 @@ export def "notificationcontacttemplates-notificationcontacttemplates get-notifi
 ]: nothing -> record<Available: bool, ConfigString: string, ContactType: string, Description: string, EscalationTimeout: string, HasChildren: bool, Id: string, Links: record<AssetServer: string, NotificationContactTemplates: string, NotificationPlugIn: string, Security: string, SecurityEntries: string, Self: string>, MaximumRetries: int, MinimumAcknowledgements: int, Name: string, NotifyWhenInstanceEnded: bool, Path: string, PlugInName: string, RetryInterval: string, WebException: record<Errors: list<string>, StatusCode: int>, WebId: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($web_id | is-empty) { error make --unspanned { msg: "path parameter 'webId' must be non-empty" } }
   let qp = [(serialize-qp "selectedFields" $selected_fields "scalar") (serialize-qp "webIdType" $web_id_type "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({web_id: (encode-path-segment $web_id)} | format pattern "/notificationcontacttemplates/{web_id}/notificationcontacttemplates") $qp)
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"selectedFields": $selected_fields, "webIdType": $web_id_type} | compact), body: null}
 }
 
 # Get the security information of the specified security item associated with the notification contact template for a specified user.
@@ -8894,11 +9175,12 @@ export def "notificationcontacttemplates-security get-notification-contact-templ
 ]: nothing -> record<Items: table<CanAnnotate: bool, CanDelete: bool, CanExecute: bool, CanRead: bool, CanReadData: bool, CanSubscribe: bool, CanSubscribeOthers: bool, CanWrite: bool, CanWriteData: bool, HasAdmin: bool, Links: record, OwnerWebId: string, Rights: list, SecurityItem: string, UserIdentity: string, WebException: record>, Links: record<First: string, Last: string, Next: string, Previous: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($web_id | is-empty) { error make --unspanned { msg: "path parameter 'webId' must be non-empty" } }
   let qp = [(serialize-qp "userIdentity" $user_identity "multi") (serialize-qp "forceRefresh" $force_refresh "scalar") (serialize-qp "selectedFields" $selected_fields "scalar") (serialize-qp "webIdType" $web_id_type "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({web_id: (encode-path-segment $web_id)} | format pattern "/notificationcontacttemplates/{web_id}/security") $qp)
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"userIdentity": $user_identity, "forceRefresh": $force_refresh, "selectedFields": $selected_fields, "webIdType": $web_id_type} | compact), body: null}
 }
 
 # Retrieve the security entries associated with the notification contact template based on the specified criteria. By default, all security entries for this notification contact template are returned.
@@ -8923,11 +9205,12 @@ export def "notificationcontacttemplates-securityentries get-notification-contac
 ]: nothing -> record<Items: table<AllowRights: list, DenyRights: list, Links: record, Name: string, SecurityIdentityName: string, WebException: record>, Links: record<First: string, Last: string, Next: string, Previous: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($web_id | is-empty) { error make --unspanned { msg: "path parameter 'webId' must be non-empty" } }
   let qp = [(serialize-qp "nameFilter" $name_filter "scalar") (serialize-qp "selectedFields" $selected_fields "scalar") (serialize-qp "webIdType" $web_id_type "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({web_id: (encode-path-segment $web_id)} | format pattern "/notificationcontacttemplates/{web_id}/securityentries") $qp)
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"nameFilter": $name_filter, "selectedFields": $selected_fields, "webIdType": $web_id_type} | compact), body: null}
 }
 
 # Create a security entry owned by the notification contact template.
@@ -8960,13 +9243,14 @@ export def "notificationcontacttemplates-securityentries create-notification-con
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($web_id | is-empty) { error make --unspanned { msg: "path parameter 'webId' must be non-empty" } }
   let qp = [(serialize-qp "applyToChildren" $apply_to_children "scalar") (serialize-qp "webIdType" $web_id_type "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({web_id: (encode-path-segment $web_id)} | format pattern "/notificationcontacttemplates/{web_id}/securityentries") $qp)
   let req_body = {"AllowRights": $allow_rights, "DenyRights": $deny_rights, "Links": $links, "Name": $name, "SecurityIdentityName": $security_identity_name, "WebException": $web_exception} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: ({"applyToChildren": $apply_to_children, "webIdType": $web_id_type} | compact), body: $req_body}
 }
 
 # Delete a security entry owned by the notification contact template.
@@ -8990,11 +9274,13 @@ export def "notificationcontacttemplates-securityentries delete-notification-con
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($web_id | is-empty) { error make --unspanned { msg: "path parameter 'webId' must be non-empty" } }
+  if ($name | is-empty) { error make --unspanned { msg: "path parameter 'name' must be non-empty" } }
   let qp = [(serialize-qp "applyToChildren" $apply_to_children "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({web_id: (encode-path-segment $web_id), name: (encode-path-segment $name)} | format pattern "/notificationcontacttemplates/{web_id}/securityentries/{name}") $qp)
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"applyToChildren": $apply_to_children} | compact), body: null}
 }
 
 # Retrieve the security entry associated with the notification contact template with the specified name.
@@ -9019,11 +9305,13 @@ export def "notificationcontacttemplates-securityentries get-notification-contac
 ]: nothing -> record<AllowRights: list<string>, DenyRights: list<string>, Links: record<SecurableObject: string, SecurityIdentity: string, Self: string>, Name: string, SecurityIdentityName: string, WebException: record<Errors: list<string>, StatusCode: int>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($web_id | is-empty) { error make --unspanned { msg: "path parameter 'webId' must be non-empty" } }
+  if ($name | is-empty) { error make --unspanned { msg: "path parameter 'name' must be non-empty" } }
   let qp = [(serialize-qp "selectedFields" $selected_fields "scalar") (serialize-qp "webIdType" $web_id_type "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({web_id: (encode-path-segment $web_id), name: (encode-path-segment $name)} | format pattern "/notificationcontacttemplates/{web_id}/securityentries/{name}") $qp)
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"selectedFields": $selected_fields, "webIdType": $web_id_type} | compact), body: null}
 }
 
 # Update a security entry owned by the notification contact template.
@@ -9056,13 +9344,15 @@ export def "notificationcontacttemplates-securityentries update-notification-con
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($web_id | is-empty) { error make --unspanned { msg: "path parameter 'webId' must be non-empty" } }
+  if ($name | is-empty) { error make --unspanned { msg: "path parameter 'name' must be non-empty" } }
   let qp = [(serialize-qp "applyToChildren" $apply_to_children "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({web_id: (encode-path-segment $web_id), name: (encode-path-segment $name)} | format pattern "/notificationcontacttemplates/{web_id}/securityentries/{name}") $qp)
   let req_body = {"AllowRights": $allow_rights, "DenyRights": $deny_rights, "Links": $links, "Name": $body_name, "SecurityIdentityName": $security_identity_name, "WebException": $web_exception} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: ({"applyToChildren": $apply_to_children} | compact), body: $req_body}
 }
 
 # Retrieve a notification plugin by path.
@@ -9090,7 +9380,7 @@ export def "notificationplug-ins get-notification-plug-by-path" [
   let full_url = (build-url $base "/notificationplugIns" $qp)
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"path": $path, "selectedFields": $selected_fields, "webIdType": $web_id_type} | compact), body: null}
 }
 
 # Retrieve a notification plugin.
@@ -9114,11 +9404,12 @@ export def "notificationplugins get-notification-plug-in" [
 ]: nothing -> record<AssemblyFileName: string, AssemblyID: string, AssemblyLoadProperties: list<string>, AssemblyTime: string, CompatibilityVersion: int, Description: string, Id: string, IsBrowsable: bool, IsNonEditableConfig: bool, Links: record<AssetServer: string, Self: string>, LoadedAssemblyTime: string, LoadedVersion: string, Name: string, Path: string, Version: string, WebException: record<Errors: list<string>, StatusCode: int>, WebId: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($web_id | is-empty) { error make --unspanned { msg: "path parameter 'webId' must be non-empty" } }
   let qp = [(serialize-qp "selectedFields" $selected_fields "scalar") (serialize-qp "webIdType" $web_id_type "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({web_id: (encode-path-segment $web_id)} | format pattern "/notificationplugins/{web_id}") $qp)
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"selectedFields": $selected_fields, "webIdType": $web_id_type} | compact), body: null}
 }
 
 # Retrieve a notification rule by path.
@@ -9146,7 +9437,7 @@ export def "notificationrules get-notification-rule-by-path" [
   let full_url = (build-url $base "/notificationrules" $qp)
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"path": $path, "selectedFields": $selected_fields, "webIdType": $web_id_type} | compact), body: null}
 }
 
 # Retrieve notification rules based on the specified conditions. Returns notification rules using the specified search query string.
@@ -9177,7 +9468,7 @@ export def "notificationrules-search get-notification-rule-notification-rules-li
   let full_url = (build-url $base "/notificationrules/search" $qp)
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"databaseWebId": $database_web_id, "maxCount": $max_count, "query": $query, "selectedFields": $selected_fields, "startIndex": $start_index, "webIdType": $web_id_type} | compact), body: null}
 }
 
 # Delete a notification rule.
@@ -9199,10 +9490,11 @@ export def "notificationrules delete-notification-rule" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($web_id | is-empty) { error make --unspanned { msg: "path parameter 'webId' must be non-empty" } }
   let full_url = (build-url $base ({web_id: (encode-path-segment $web_id)} | format pattern "/notificationrules/{web_id}"))
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
 }
 
 # Retrieve a notification rule.
@@ -9226,11 +9518,12 @@ export def "notificationrules get-notification-rule" [
 ]: nothing -> record<AutoCreated: bool, CategoryNames: list<string>, Criteria: string, Description: string, Id: string, MultiTriggerEventOption: string, Name: string, NonrepetitionInterval: string, Path: string, ResendInterval: string, Status: string, TemplateName: string, WebException: record<Errors: list<string>, StatusCode: int>, WebId: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($web_id | is-empty) { error make --unspanned { msg: "path parameter 'webId' must be non-empty" } }
   let qp = [(serialize-qp "selectedFields" $selected_fields "scalar") (serialize-qp "webIdType" $web_id_type "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({web_id: (encode-path-segment $web_id)} | format pattern "/notificationrules/{web_id}") $qp)
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"selectedFields": $selected_fields, "webIdType": $web_id_type} | compact), body: null}
 }
 
 # Update a notification rule by replacing items in its definition.
@@ -9268,12 +9561,13 @@ export def "notificationrules update-notification-rule" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($web_id | is-empty) { error make --unspanned { msg: "path parameter 'webId' must be non-empty" } }
   let full_url = (build-url $base ({web_id: (encode-path-segment $web_id)} | format pattern "/notificationrules/{web_id}"))
   let req_body = {"AutoCreated": $auto_created, "CategoryNames": $category_names, "Criteria": $criteria, "Description": $description, "Id": $id, "MultiTriggerEventOption": $multi_trigger_event_option, "Name": $name, "NonrepetitionInterval": $nonrepetition_interval, "Path": $path, "ResendInterval": $resend_interval, "Status": $status, "TemplateName": $template_name, "WebException": $web_exception, "WebId": $body_web_id} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "patch" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body
+  do-request "patch" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: {}, body: $req_body}
 }
 
 # Retrieve notification rule subscribers.
@@ -9297,11 +9591,12 @@ export def "notificationrules-notificationrulesubscribers get-notification-rule-
 ]: nothing -> record<Items: table<ConfigString: string, ContactTemplateName: string, ContactType: string, DeliveryFormatName: string, Description: string, EscalationTimeout: string, Id: string, MaximumRetries: int, Name: string, NotifyOption: string, Path: string, PlugInName: string, RetryInterval: string, WebException: record, WebId: string>, Links: record<First: string, Last: string, Next: string, Previous: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($web_id | is-empty) { error make --unspanned { msg: "path parameter 'webId' must be non-empty" } }
   let qp = [(serialize-qp "selectedFields" $selected_fields "scalar") (serialize-qp "webIdType" $web_id_type "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({web_id: (encode-path-segment $web_id)} | format pattern "/notificationrules/{web_id}/notificationrulesubscribers") $qp)
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"selectedFields": $selected_fields, "webIdType": $web_id_type} | compact), body: null}
 }
 
 # Create a notification rule subscriber.
@@ -9341,13 +9636,14 @@ export def "notificationrules-notificationrulesubscribers create-notification-ru
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($web_id | is-empty) { error make --unspanned { msg: "path parameter 'webId' must be non-empty" } }
   let qp = [(serialize-qp "webIdType" $web_id_type "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({web_id: (encode-path-segment $web_id)} | format pattern "/notificationrules/{web_id}/notificationrulesubscribers") $qp)
   let req_body = {"ConfigString": $config_string, "ContactTemplateName": $contact_template_name, "ContactType": $contact_type, "DeliveryFormatName": $delivery_format_name, "Description": $description, "EscalationTimeout": $escalation_timeout, "Id": $id, "MaximumRetries": $maximum_retries, "Name": $name, "NotifyOption": $notify_option, "Path": $path, "PlugInName": $plug_in_name, "RetryInterval": $retry_interval, "WebException": $web_exception, "WebId": $body_web_id} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: ({"webIdType": $web_id_type} | compact), body: $req_body}
 }
 
 # Get the security information of the specified security item associated with the notification rule for a specified user.
@@ -9373,11 +9669,12 @@ export def "notificationrules-security get-notification-rule" [
 ]: nothing -> record<Items: table<CanAnnotate: bool, CanDelete: bool, CanExecute: bool, CanRead: bool, CanReadData: bool, CanSubscribe: bool, CanSubscribeOthers: bool, CanWrite: bool, CanWriteData: bool, HasAdmin: bool, Links: record, OwnerWebId: string, Rights: list, SecurityItem: string, UserIdentity: string, WebException: record>, Links: record<First: string, Last: string, Next: string, Previous: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($web_id | is-empty) { error make --unspanned { msg: "path parameter 'webId' must be non-empty" } }
   let qp = [(serialize-qp "userIdentity" $user_identity "multi") (serialize-qp "forceRefresh" $force_refresh "scalar") (serialize-qp "selectedFields" $selected_fields "scalar") (serialize-qp "webIdType" $web_id_type "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({web_id: (encode-path-segment $web_id)} | format pattern "/notificationrules/{web_id}/security") $qp)
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"userIdentity": $user_identity, "forceRefresh": $force_refresh, "selectedFields": $selected_fields, "webIdType": $web_id_type} | compact), body: null}
 }
 
 # Retrieve the security entries associated with the notification rule based on the specified criteria. By default, all security entries for this notification rule are returned.
@@ -9402,11 +9699,12 @@ export def "notificationrules-securityentries get-notification-rule-security-ent
 ]: nothing -> record<Items: table<AllowRights: list, DenyRights: list, Links: record, Name: string, SecurityIdentityName: string, WebException: record>, Links: record<First: string, Last: string, Next: string, Previous: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($web_id | is-empty) { error make --unspanned { msg: "path parameter 'webId' must be non-empty" } }
   let qp = [(serialize-qp "nameFilter" $name_filter "scalar") (serialize-qp "selectedFields" $selected_fields "scalar") (serialize-qp "webIdType" $web_id_type "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({web_id: (encode-path-segment $web_id)} | format pattern "/notificationrules/{web_id}/securityentries") $qp)
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"nameFilter": $name_filter, "selectedFields": $selected_fields, "webIdType": $web_id_type} | compact), body: null}
 }
 
 # Create a security entry owned by the notification rule.
@@ -9439,13 +9737,14 @@ export def "notificationrules-securityentries create-notification-rule-security-
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($web_id | is-empty) { error make --unspanned { msg: "path parameter 'webId' must be non-empty" } }
   let qp = [(serialize-qp "applyToChildren" $apply_to_children "scalar") (serialize-qp "webIdType" $web_id_type "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({web_id: (encode-path-segment $web_id)} | format pattern "/notificationrules/{web_id}/securityentries") $qp)
   let req_body = {"AllowRights": $allow_rights, "DenyRights": $deny_rights, "Links": $links, "Name": $name, "SecurityIdentityName": $security_identity_name, "WebException": $web_exception} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: ({"applyToChildren": $apply_to_children, "webIdType": $web_id_type} | compact), body: $req_body}
 }
 
 # Delete a security entry owned by the notification rule.
@@ -9469,11 +9768,13 @@ export def "notificationrules-securityentries delete-notification-rule-security-
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($web_id | is-empty) { error make --unspanned { msg: "path parameter 'webId' must be non-empty" } }
+  if ($name | is-empty) { error make --unspanned { msg: "path parameter 'name' must be non-empty" } }
   let qp = [(serialize-qp "applyToChildren" $apply_to_children "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({web_id: (encode-path-segment $web_id), name: (encode-path-segment $name)} | format pattern "/notificationrules/{web_id}/securityentries/{name}") $qp)
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"applyToChildren": $apply_to_children} | compact), body: null}
 }
 
 # Retrieve the security entry associated with the notification rule with the specified name.
@@ -9498,11 +9799,13 @@ export def "notificationrules-securityentries get-notification-rule-security-ent
 ]: nothing -> record<AllowRights: list<string>, DenyRights: list<string>, Links: record<SecurableObject: string, SecurityIdentity: string, Self: string>, Name: string, SecurityIdentityName: string, WebException: record<Errors: list<string>, StatusCode: int>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($web_id | is-empty) { error make --unspanned { msg: "path parameter 'webId' must be non-empty" } }
+  if ($name | is-empty) { error make --unspanned { msg: "path parameter 'name' must be non-empty" } }
   let qp = [(serialize-qp "selectedFields" $selected_fields "scalar") (serialize-qp "webIdType" $web_id_type "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({web_id: (encode-path-segment $web_id), name: (encode-path-segment $name)} | format pattern "/notificationrules/{web_id}/securityentries/{name}") $qp)
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"selectedFields": $selected_fields, "webIdType": $web_id_type} | compact), body: null}
 }
 
 # Update a security entry owned by the notification rule.
@@ -9535,13 +9838,15 @@ export def "notificationrules-securityentries update-notification-rule-security-
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($web_id | is-empty) { error make --unspanned { msg: "path parameter 'webId' must be non-empty" } }
+  if ($name | is-empty) { error make --unspanned { msg: "path parameter 'name' must be non-empty" } }
   let qp = [(serialize-qp "applyToChildren" $apply_to_children "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({web_id: (encode-path-segment $web_id), name: (encode-path-segment $name)} | format pattern "/notificationrules/{web_id}/securityentries/{name}") $qp)
   let req_body = {"AllowRights": $allow_rights, "DenyRights": $deny_rights, "Links": $links, "Name": $body_name, "SecurityIdentityName": $security_identity_name, "WebException": $web_exception} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: ({"applyToChildren": $apply_to_children} | compact), body: $req_body}
 }
 
 # Retrieve a notification rule subscriber by path.
@@ -9569,7 +9874,7 @@ export def "notificationrulesubscribers get-notification-rule-subscriber-by-path
   let full_url = (build-url $base "/notificationrulesubscribers" $qp)
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"path": $path, "selectedFields": $selected_fields, "webIdType": $web_id_type} | compact), body: null}
 }
 
 # Delete a notification rule subscriber.
@@ -9591,10 +9896,11 @@ export def "notificationrulesubscribers delete-notification-rule-subscriber" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($web_id | is-empty) { error make --unspanned { msg: "path parameter 'webId' must be non-empty" } }
   let full_url = (build-url $base ({web_id: (encode-path-segment $web_id)} | format pattern "/notificationrulesubscribers/{web_id}"))
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
 }
 
 # Retrieve a notification rule subscriber.
@@ -9618,11 +9924,12 @@ export def "notificationrulesubscribers get-notification-rule-subscriber" [
 ]: nothing -> record<ConfigString: string, ContactTemplateName: string, ContactType: string, DeliveryFormatName: string, Description: string, EscalationTimeout: string, Id: string, MaximumRetries: int, Name: string, NotifyOption: string, Path: string, PlugInName: string, RetryInterval: string, WebException: record<Errors: list<string>, StatusCode: int>, WebId: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($web_id | is-empty) { error make --unspanned { msg: "path parameter 'webId' must be non-empty" } }
   let qp = [(serialize-qp "selectedFields" $selected_fields "scalar") (serialize-qp "webIdType" $web_id_type "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({web_id: (encode-path-segment $web_id)} | format pattern "/notificationrulesubscribers/{web_id}") $qp)
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"selectedFields": $selected_fields, "webIdType": $web_id_type} | compact), body: null}
 }
 
 # Update a notification rule subscriber.
@@ -9661,12 +9968,13 @@ export def "notificationrulesubscribers update-notification-rule-subscriber" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($web_id | is-empty) { error make --unspanned { msg: "path parameter 'webId' must be non-empty" } }
   let full_url = (build-url $base ({web_id: (encode-path-segment $web_id)} | format pattern "/notificationrulesubscribers/{web_id}"))
   let req_body = {"ConfigString": $config_string, "ContactTemplateName": $contact_template_name, "ContactType": $contact_type, "DeliveryFormatName": $delivery_format_name, "Description": $description, "EscalationTimeout": $escalation_timeout, "Id": $id, "MaximumRetries": $maximum_retries, "Name": $name, "NotifyOption": $notify_option, "Path": $path, "PlugInName": $plug_in_name, "RetryInterval": $retry_interval, "WebException": $web_exception, "WebId": $body_web_id} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "patch" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body
+  do-request "patch" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: {}, body: $req_body}
 }
 
 # Retrieve notification rule subscriber subscribers.
@@ -9690,11 +9998,12 @@ export def "notificationrulesubscribers-notificationrulesubscribers get-notifica
 ]: nothing -> record<Items: table<ConfigString: string, ContactTemplateName: string, ContactType: string, DeliveryFormatName: string, Description: string, EscalationTimeout: string, Id: string, MaximumRetries: int, Name: string, NotifyOption: string, Path: string, PlugInName: string, RetryInterval: string, WebException: record, WebId: string>, Links: record<First: string, Last: string, Next: string, Previous: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($web_id | is-empty) { error make --unspanned { msg: "path parameter 'webId' must be non-empty" } }
   let qp = [(serialize-qp "selectedFields" $selected_fields "scalar") (serialize-qp "webIdType" $web_id_type "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({web_id: (encode-path-segment $web_id)} | format pattern "/notificationrulesubscribers/{web_id}/notificationrulesubscribers") $qp)
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"selectedFields": $selected_fields, "webIdType": $web_id_type} | compact), body: null}
 }
 
 # Retrieve a notification rule template by path.
@@ -9722,7 +10031,7 @@ export def "notificationruletemplates get-notification-rule-template-by-path" [
   let full_url = (build-url $base "/notificationruletemplates" $qp)
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"path": $path, "selectedFields": $selected_fields, "webIdType": $web_id_type} | compact), body: null}
 }
 
 # Retrieve Notification rule templates based on the specified conditions. Returns Notification rule templates using the specified search query string.
@@ -9753,7 +10062,7 @@ export def "notificationruletemplates-search get-notification-rule-template-noti
   let full_url = (build-url $base "/notificationruletemplates/search" $qp)
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"databaseWebId": $database_web_id, "maxCount": $max_count, "query": $query, "selectedFields": $selected_fields, "startIndex": $start_index, "webIdType": $web_id_type} | compact), body: null}
 }
 
 # Delete a notification rule template.
@@ -9775,10 +10084,11 @@ export def "notificationruletemplates delete-notification-rule-template" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($web_id | is-empty) { error make --unspanned { msg: "path parameter 'webId' must be non-empty" } }
   let full_url = (build-url $base ({web_id: (encode-path-segment $web_id)} | format pattern "/notificationruletemplates/{web_id}"))
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
 }
 
 # Get the specified notification rule template.
@@ -9802,11 +10112,12 @@ export def "notificationruletemplates get-notification-rule-template" [
 ]: nothing -> record<CategoryNames: list<string>, Criteria: string, Description: string, Id: string, MultiTriggerEventOption: string, Name: string, NonrepetitionInterval: string, Path: string, ResendInterval: string, Status: string, TemplateName: string, WebException: record<Errors: list<string>, StatusCode: int>, WebId: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($web_id | is-empty) { error make --unspanned { msg: "path parameter 'webId' must be non-empty" } }
   let qp = [(serialize-qp "selectedFields" $selected_fields "scalar") (serialize-qp "webIdType" $web_id_type "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({web_id: (encode-path-segment $web_id)} | format pattern "/notificationruletemplates/{web_id}") $qp)
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"selectedFields": $selected_fields, "webIdType": $web_id_type} | compact), body: null}
 }
 
 # Update a notification rule template by replacing items in its definition.
@@ -9843,12 +10154,13 @@ export def "notificationruletemplates update-notification-rule-template" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($web_id | is-empty) { error make --unspanned { msg: "path parameter 'webId' must be non-empty" } }
   let full_url = (build-url $base ({web_id: (encode-path-segment $web_id)} | format pattern "/notificationruletemplates/{web_id}"))
   let req_body = {"CategoryNames": $category_names, "Criteria": $criteria, "Description": $description, "Id": $id, "MultiTriggerEventOption": $multi_trigger_event_option, "Name": $name, "NonrepetitionInterval": $nonrepetition_interval, "Path": $path, "ResendInterval": $resend_interval, "Status": $status, "TemplateName": $template_name, "WebException": $web_exception, "WebId": $body_web_id} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "patch" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body
+  do-request "patch" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: {}, body: $req_body}
 }
 
 # Retrieve notification rule template subscribers.
@@ -9872,11 +10184,12 @@ export def "notificationruletemplates-notificationrulesubscribers get-notificati
 ]: nothing -> record<Items: table<ConfigString: string, ContactTemplateName: string, ContactType: string, DeliveryFormatName: string, Description: string, EscalationTimeout: string, Id: string, MaximumRetries: int, Name: string, NotifyOption: string, Path: string, PlugInName: string, RetryInterval: string, WebException: record, WebId: string>, Links: record<First: string, Last: string, Next: string, Previous: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($web_id | is-empty) { error make --unspanned { msg: "path parameter 'webId' must be non-empty" } }
   let qp = [(serialize-qp "selectedFields" $selected_fields "scalar") (serialize-qp "webIdType" $web_id_type "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({web_id: (encode-path-segment $web_id)} | format pattern "/notificationruletemplates/{web_id}/notificationrulesubscribers") $qp)
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"selectedFields": $selected_fields, "webIdType": $web_id_type} | compact), body: null}
 }
 
 # Create a notification rule subscriber.
@@ -9916,13 +10229,14 @@ export def "notificationruletemplates-notificationrulesubscribers create-notific
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($web_id | is-empty) { error make --unspanned { msg: "path parameter 'webId' must be non-empty" } }
   let qp = [(serialize-qp "webIdType" $web_id_type "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({web_id: (encode-path-segment $web_id)} | format pattern "/notificationruletemplates/{web_id}/notificationrulesubscribers") $qp)
   let req_body = {"ConfigString": $config_string, "ContactTemplateName": $contact_template_name, "ContactType": $contact_type, "DeliveryFormatName": $delivery_format_name, "Description": $description, "EscalationTimeout": $escalation_timeout, "Id": $id, "MaximumRetries": $maximum_retries, "Name": $name, "NotifyOption": $notify_option, "Path": $path, "PlugInName": $plug_in_name, "RetryInterval": $retry_interval, "WebException": $web_exception, "WebId": $body_web_id} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: ({"webIdType": $web_id_type} | compact), body: $req_body}
 }
 
 # Get the security information of the specified security item associated with the notification rule template for a specified user.
@@ -9948,11 +10262,12 @@ export def "notificationruletemplates-security get-notification-rule-template" [
 ]: nothing -> record<Items: table<CanAnnotate: bool, CanDelete: bool, CanExecute: bool, CanRead: bool, CanReadData: bool, CanSubscribe: bool, CanSubscribeOthers: bool, CanWrite: bool, CanWriteData: bool, HasAdmin: bool, Links: record, OwnerWebId: string, Rights: list, SecurityItem: string, UserIdentity: string, WebException: record>, Links: record<First: string, Last: string, Next: string, Previous: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($web_id | is-empty) { error make --unspanned { msg: "path parameter 'webId' must be non-empty" } }
   let qp = [(serialize-qp "userIdentity" $user_identity "multi") (serialize-qp "forceRefresh" $force_refresh "scalar") (serialize-qp "selectedFields" $selected_fields "scalar") (serialize-qp "webIdType" $web_id_type "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({web_id: (encode-path-segment $web_id)} | format pattern "/notificationruletemplates/{web_id}/security") $qp)
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"userIdentity": $user_identity, "forceRefresh": $force_refresh, "selectedFields": $selected_fields, "webIdType": $web_id_type} | compact), body: null}
 }
 
 # Retrieve the security entries associated with the notification rule template based on the specified criteria. By default, all security entries for this notification rule template are returned.
@@ -9977,11 +10292,12 @@ export def "notificationruletemplates-securityentries get-notification-rule-temp
 ]: nothing -> record<Items: table<AllowRights: list, DenyRights: list, Links: record, Name: string, SecurityIdentityName: string, WebException: record>, Links: record<First: string, Last: string, Next: string, Previous: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($web_id | is-empty) { error make --unspanned { msg: "path parameter 'webId' must be non-empty" } }
   let qp = [(serialize-qp "nameFilter" $name_filter "scalar") (serialize-qp "selectedFields" $selected_fields "scalar") (serialize-qp "webIdType" $web_id_type "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({web_id: (encode-path-segment $web_id)} | format pattern "/notificationruletemplates/{web_id}/securityentries") $qp)
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"nameFilter": $name_filter, "selectedFields": $selected_fields, "webIdType": $web_id_type} | compact), body: null}
 }
 
 # Create a security entry owned by the notification rule template.
@@ -10014,13 +10330,14 @@ export def "notificationruletemplates-securityentries create-notification-rule-t
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($web_id | is-empty) { error make --unspanned { msg: "path parameter 'webId' must be non-empty" } }
   let qp = [(serialize-qp "applyToChildren" $apply_to_children "scalar") (serialize-qp "webIdType" $web_id_type "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({web_id: (encode-path-segment $web_id)} | format pattern "/notificationruletemplates/{web_id}/securityentries") $qp)
   let req_body = {"AllowRights": $allow_rights, "DenyRights": $deny_rights, "Links": $links, "Name": $name, "SecurityIdentityName": $security_identity_name, "WebException": $web_exception} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: ({"applyToChildren": $apply_to_children, "webIdType": $web_id_type} | compact), body: $req_body}
 }
 
 # Delete a security entry owned by the notification rule template.
@@ -10044,11 +10361,13 @@ export def "notificationruletemplates-securityentries delete-notification-rule-t
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($web_id | is-empty) { error make --unspanned { msg: "path parameter 'webId' must be non-empty" } }
+  if ($name | is-empty) { error make --unspanned { msg: "path parameter 'name' must be non-empty" } }
   let qp = [(serialize-qp "applyToChildren" $apply_to_children "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({web_id: (encode-path-segment $web_id), name: (encode-path-segment $name)} | format pattern "/notificationruletemplates/{web_id}/securityentries/{name}") $qp)
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"applyToChildren": $apply_to_children} | compact), body: null}
 }
 
 # Retrieve the security entry associated with the notification rule template with the specified name.
@@ -10073,11 +10392,13 @@ export def "notificationruletemplates-securityentries get-notification-rule-temp
 ]: nothing -> record<AllowRights: list<string>, DenyRights: list<string>, Links: record<SecurableObject: string, SecurityIdentity: string, Self: string>, Name: string, SecurityIdentityName: string, WebException: record<Errors: list<string>, StatusCode: int>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($web_id | is-empty) { error make --unspanned { msg: "path parameter 'webId' must be non-empty" } }
+  if ($name | is-empty) { error make --unspanned { msg: "path parameter 'name' must be non-empty" } }
   let qp = [(serialize-qp "selectedFields" $selected_fields "scalar") (serialize-qp "webIdType" $web_id_type "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({web_id: (encode-path-segment $web_id), name: (encode-path-segment $name)} | format pattern "/notificationruletemplates/{web_id}/securityentries/{name}") $qp)
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"selectedFields": $selected_fields, "webIdType": $web_id_type} | compact), body: null}
 }
 
 # Update a security entry owned by the notification rule template.
@@ -10110,13 +10431,15 @@ export def "notificationruletemplates-securityentries update-notification-rule-t
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($web_id | is-empty) { error make --unspanned { msg: "path parameter 'webId' must be non-empty" } }
+  if ($name | is-empty) { error make --unspanned { msg: "path parameter 'name' must be non-empty" } }
   let qp = [(serialize-qp "applyToChildren" $apply_to_children "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({web_id: (encode-path-segment $web_id), name: (encode-path-segment $name)} | format pattern "/notificationruletemplates/{web_id}/securityentries/{name}") $qp)
   let req_body = {"AllowRights": $allow_rights, "DenyRights": $deny_rights, "Links": $links, "Name": $body_name, "SecurityIdentityName": $security_identity_name, "WebException": $web_exception} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: ({"applyToChildren": $apply_to_children} | compact), body: $req_body}
 }
 
 # Get a point by path.
@@ -10144,7 +10467,7 @@ export def "points get-by-path" [
   let full_url = (build-url $base "/points" $qp)
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"path": $path, "selectedFields": $selected_fields, "webIdType": $web_id_type} | compact), body: null}
 }
 
 # Retrieve multiple points by web id or path.
@@ -10175,7 +10498,7 @@ export def "points-multiple get" [
   let full_url = (build-url $base "/points/multiple" $qp)
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"asParallel": $as_parallel, "includeMode": $include_mode, "path": $path, "selectedFields": $selected_fields, "webId": $web_id, "webIdType": $web_id_type} | compact), body: null}
 }
 
 # Delete a point.
@@ -10197,10 +10520,11 @@ export def "points delete" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($web_id | is-empty) { error make --unspanned { msg: "path parameter 'webId' must be non-empty" } }
   let full_url = (build-url $base ({web_id: (encode-path-segment $web_id)} | format pattern "/points/{web_id}"))
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
 }
 
 # Get a point.
@@ -10224,11 +10548,12 @@ export def "points get" [
 ]: nothing -> record<Descriptor: string, DigitalSetName: string, DisplayDigits: int, EngineeringUnits: string, Future: bool, Id: int, Links: record<Attributes: string, DataServer: string, EndValue: string, InterpolatedData: string, PlotData: string, RecordedData: string, Self: string, SummaryData: string, Value: string>, Name: string, Path: string, PointClass: string, PointType: string, Span: float, Step: bool, WebException: record<Errors: list<string>, StatusCode: int>, WebId: string, Zero: float> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($web_id | is-empty) { error make --unspanned { msg: "path parameter 'webId' must be non-empty" } }
   let qp = [(serialize-qp "selectedFields" $selected_fields "scalar") (serialize-qp "webIdType" $web_id_type "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({web_id: (encode-path-segment $web_id)} | format pattern "/points/{web_id}") $qp)
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"selectedFields": $selected_fields, "webIdType": $web_id_type} | compact), body: null}
 }
 
 # Update a point. The only PI Point attributes that can be updated include: Name, Descriptor, EngineeringUnits, Step, and DisplayDigits. Other PI Point attributes cannot be updated through PI Web API.
@@ -10269,12 +10594,13 @@ export def "points update" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($web_id | is-empty) { error make --unspanned { msg: "path parameter 'webId' must be non-empty" } }
   let full_url = (build-url $base ({web_id: (encode-path-segment $web_id)} | format pattern "/points/{web_id}"))
   let req_body = {"Descriptor": $descriptor, "DigitalSetName": $digital_set_name, "DisplayDigits": $display_digits, "EngineeringUnits": $engineering_units, "Future": $future, "Id": $id, "Links": $links, "Name": $name, "Path": $path, "PointClass": $point_class, "PointType": $point_type, "Span": $span, "Step": $step, "WebException": $web_exception, "WebId": $body_web_id, "Zero": $zero} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "patch" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body
+  do-request "patch" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: {}, body: $req_body}
 }
 
 # Get point attributes.
@@ -10300,11 +10626,12 @@ export def "points-attributes list" [
 ]: nothing -> record<Items: table<Links: record, Name: string, Value: record, WebException: record>, Links: record<First: string, Last: string, Next: string, Previous: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($web_id | is-empty) { error make --unspanned { msg: "path parameter 'webId' must be non-empty" } }
   let qp = [(serialize-qp "name" $name "multi") (serialize-qp "nameFilter" $name_filter "scalar") (serialize-qp "selectedFields" $selected_fields "scalar") (serialize-qp "webIdType" $web_id_type "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({web_id: (encode-path-segment $web_id)} | format pattern "/points/{web_id}/attributes") $qp)
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"name": $name, "nameFilter": $name_filter, "selectedFields": $selected_fields, "webIdType": $web_id_type} | compact), body: null}
 }
 
 # Get a point attribute by name.
@@ -10329,11 +10656,13 @@ export def "points-attributes get" [
 ]: nothing -> record<Links: record<Point: string, Self: string>, Name: string, Value: record, WebException: record<Errors: list<string>, StatusCode: int>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($web_id | is-empty) { error make --unspanned { msg: "path parameter 'webId' must be non-empty" } }
+  if ($name | is-empty) { error make --unspanned { msg: "path parameter 'name' must be non-empty" } }
   let qp = [(serialize-qp "selectedFields" $selected_fields "scalar") (serialize-qp "webIdType" $web_id_type "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({web_id: (encode-path-segment $web_id), name: (encode-path-segment $name)} | format pattern "/points/{web_id}/attributes/{name}") $qp)
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"selectedFields": $selected_fields, "webIdType": $web_id_type} | compact), body: null}
 }
 
 # Retrieve a security identity by path.
@@ -10361,7 +10690,7 @@ export def "securityidentities get-security-identity-by-path" [
   let full_url = (build-url $base "/securityidentities" $qp)
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"path": $path, "selectedFields": $selected_fields, "webIdType": $web_id_type} | compact), body: null}
 }
 
 # Delete a security identity.
@@ -10383,10 +10712,11 @@ export def "securityidentities delete-security-identity" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($web_id | is-empty) { error make --unspanned { msg: "path parameter 'webId' must be non-empty" } }
   let full_url = (build-url $base ({web_id: (encode-path-segment $web_id)} | format pattern "/securityidentities/{web_id}"))
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
 }
 
 # Retrieve a security identity.
@@ -10410,11 +10740,12 @@ export def "securityidentities get-security-identity" [
 ]: nothing -> record<Description: string, Id: string, IsEnabled: bool, Links: record<AssetServer: string, Security: string, SecurityEntries: string, SecurityMappings: string, Self: string>, Name: string, Path: string, WebException: record<Errors: list<string>, StatusCode: int>, WebId: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($web_id | is-empty) { error make --unspanned { msg: "path parameter 'webId' must be non-empty" } }
   let qp = [(serialize-qp "selectedFields" $selected_fields "scalar") (serialize-qp "webIdType" $web_id_type "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({web_id: (encode-path-segment $web_id)} | format pattern "/securityidentities/{web_id}") $qp)
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"selectedFields": $selected_fields, "webIdType": $web_id_type} | compact), body: null}
 }
 
 # Update a security identity by replacing items in its definition.
@@ -10447,12 +10778,13 @@ export def "securityidentities update-security-identity" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($web_id | is-empty) { error make --unspanned { msg: "path parameter 'webId' must be non-empty" } }
   let full_url = (build-url $base ({web_id: (encode-path-segment $web_id)} | format pattern "/securityidentities/{web_id}"))
   let req_body = {"Description": $description, "Id": $id, "IsEnabled": $is_enabled, "Links": $links, "Name": $name, "Path": $path, "WebException": $web_exception, "WebId": $body_web_id} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "patch" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body
+  do-request "patch" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: {}, body: $req_body}
 }
 
 # Get the security information of the specified security item associated with the security identity for a specified user.
@@ -10478,11 +10810,12 @@ export def "securityidentities-security get-identity" [
 ]: nothing -> record<Items: table<CanAnnotate: bool, CanDelete: bool, CanExecute: bool, CanRead: bool, CanReadData: bool, CanSubscribe: bool, CanSubscribeOthers: bool, CanWrite: bool, CanWriteData: bool, HasAdmin: bool, Links: record, OwnerWebId: string, Rights: list, SecurityItem: string, UserIdentity: string, WebException: record>, Links: record<First: string, Last: string, Next: string, Previous: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($web_id | is-empty) { error make --unspanned { msg: "path parameter 'webId' must be non-empty" } }
   let qp = [(serialize-qp "userIdentity" $user_identity "multi") (serialize-qp "forceRefresh" $force_refresh "scalar") (serialize-qp "selectedFields" $selected_fields "scalar") (serialize-qp "webIdType" $web_id_type "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({web_id: (encode-path-segment $web_id)} | format pattern "/securityidentities/{web_id}/security") $qp)
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"userIdentity": $user_identity, "forceRefresh": $force_refresh, "selectedFields": $selected_fields, "webIdType": $web_id_type} | compact), body: null}
 }
 
 # Retrieve the security entries associated with the security identity based on the specified criteria. By default, all security entries for this security identity are returned.
@@ -10507,11 +10840,12 @@ export def "securityidentities-securityentries get-security-identity-security-en
 ]: nothing -> record<Items: table<AllowRights: list, DenyRights: list, Links: record, Name: string, SecurityIdentityName: string, WebException: record>, Links: record<First: string, Last: string, Next: string, Previous: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($web_id | is-empty) { error make --unspanned { msg: "path parameter 'webId' must be non-empty" } }
   let qp = [(serialize-qp "nameFilter" $name_filter "scalar") (serialize-qp "selectedFields" $selected_fields "scalar") (serialize-qp "webIdType" $web_id_type "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({web_id: (encode-path-segment $web_id)} | format pattern "/securityidentities/{web_id}/securityentries") $qp)
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"nameFilter": $name_filter, "selectedFields": $selected_fields, "webIdType": $web_id_type} | compact), body: null}
 }
 
 # Retrieve the security entry associated with the security identity with the specified name.
@@ -10536,11 +10870,13 @@ export def "securityidentities-securityentries get-security-identity-security-en
 ]: nothing -> record<AllowRights: list<string>, DenyRights: list<string>, Links: record<SecurableObject: string, SecurityIdentity: string, Self: string>, Name: string, SecurityIdentityName: string, WebException: record<Errors: list<string>, StatusCode: int>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($web_id | is-empty) { error make --unspanned { msg: "path parameter 'webId' must be non-empty" } }
+  if ($name | is-empty) { error make --unspanned { msg: "path parameter 'name' must be non-empty" } }
   let qp = [(serialize-qp "selectedFields" $selected_fields "scalar") (serialize-qp "webIdType" $web_id_type "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({web_id: (encode-path-segment $web_id), name: (encode-path-segment $name)} | format pattern "/securityidentities/{web_id}/securityentries/{name}") $qp)
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"selectedFields": $selected_fields, "webIdType": $web_id_type} | compact), body: null}
 }
 
 # Get security mappings for the specified security identity.
@@ -10564,11 +10900,12 @@ export def "securityidentities-securitymappings get-security-identity-security-m
 ]: nothing -> record<Items: table<Account: string, Description: string, Id: string, Links: record, Name: string, Path: string, SecurityIdentityWebId: string, WebException: record, WebId: string>, Links: record<First: string, Last: string, Next: string, Previous: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($web_id | is-empty) { error make --unspanned { msg: "path parameter 'webId' must be non-empty" } }
   let qp = [(serialize-qp "selectedFields" $selected_fields "scalar") (serialize-qp "webIdType" $web_id_type "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({web_id: (encode-path-segment $web_id)} | format pattern "/securityidentities/{web_id}/securitymappings") $qp)
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"selectedFields": $selected_fields, "webIdType": $web_id_type} | compact), body: null}
 }
 
 # Retrieve a security mapping by path.
@@ -10596,7 +10933,7 @@ export def "securitymappings get-security-mapping-by-path" [
   let full_url = (build-url $base "/securitymappings" $qp)
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"path": $path, "selectedFields": $selected_fields, "webIdType": $web_id_type} | compact), body: null}
 }
 
 # Delete a security mapping.
@@ -10618,10 +10955,11 @@ export def "securitymappings delete-security-mapping" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($web_id | is-empty) { error make --unspanned { msg: "path parameter 'webId' must be non-empty" } }
   let full_url = (build-url $base ({web_id: (encode-path-segment $web_id)} | format pattern "/securitymappings/{web_id}"))
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
 }
 
 # Retrieve a security mapping.
@@ -10645,11 +10983,12 @@ export def "securitymappings get-security-mapping" [
 ]: nothing -> record<Account: string, Description: string, Id: string, Links: record<AssetServer: string, Security: string, SecurityEntries: string, SecurityIdentity: string, Self: string>, Name: string, Path: string, SecurityIdentityWebId: string, WebException: record<Errors: list<string>, StatusCode: int>, WebId: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($web_id | is-empty) { error make --unspanned { msg: "path parameter 'webId' must be non-empty" } }
   let qp = [(serialize-qp "selectedFields" $selected_fields "scalar") (serialize-qp "webIdType" $web_id_type "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({web_id: (encode-path-segment $web_id)} | format pattern "/securitymappings/{web_id}") $qp)
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"selectedFields": $selected_fields, "webIdType": $web_id_type} | compact), body: null}
 }
 
 # Update a security mapping by replacing items in its definition.
@@ -10683,12 +11022,13 @@ export def "securitymappings update-security-mapping" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($web_id | is-empty) { error make --unspanned { msg: "path parameter 'webId' must be non-empty" } }
   let full_url = (build-url $base ({web_id: (encode-path-segment $web_id)} | format pattern "/securitymappings/{web_id}"))
   let req_body = {"Account": $account, "Description": $description, "Id": $id, "Links": $links, "Name": $name, "Path": $path, "SecurityIdentityWebId": $security_identity_web_id, "WebException": $web_exception, "WebId": $body_web_id} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "patch" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body
+  do-request "patch" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: {}, body: $req_body}
 }
 
 # Get the security information of the specified security item associated with the security mapping for a specified user.
@@ -10714,11 +11054,12 @@ export def "securitymappings-security get-mapping" [
 ]: nothing -> record<Items: table<CanAnnotate: bool, CanDelete: bool, CanExecute: bool, CanRead: bool, CanReadData: bool, CanSubscribe: bool, CanSubscribeOthers: bool, CanWrite: bool, CanWriteData: bool, HasAdmin: bool, Links: record, OwnerWebId: string, Rights: list, SecurityItem: string, UserIdentity: string, WebException: record>, Links: record<First: string, Last: string, Next: string, Previous: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($web_id | is-empty) { error make --unspanned { msg: "path parameter 'webId' must be non-empty" } }
   let qp = [(serialize-qp "userIdentity" $user_identity "multi") (serialize-qp "forceRefresh" $force_refresh "scalar") (serialize-qp "selectedFields" $selected_fields "scalar") (serialize-qp "webIdType" $web_id_type "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({web_id: (encode-path-segment $web_id)} | format pattern "/securitymappings/{web_id}/security") $qp)
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"userIdentity": $user_identity, "forceRefresh": $force_refresh, "selectedFields": $selected_fields, "webIdType": $web_id_type} | compact), body: null}
 }
 
 # Retrieve the security entries associated with the security mapping based on the specified criteria. By default, all security entries for this security mapping are returned.
@@ -10743,11 +11084,12 @@ export def "securitymappings-securityentries get-security-mapping-security-entri
 ]: nothing -> record<Items: table<AllowRights: list, DenyRights: list, Links: record, Name: string, SecurityIdentityName: string, WebException: record>, Links: record<First: string, Last: string, Next: string, Previous: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($web_id | is-empty) { error make --unspanned { msg: "path parameter 'webId' must be non-empty" } }
   let qp = [(serialize-qp "nameFilter" $name_filter "scalar") (serialize-qp "selectedFields" $selected_fields "scalar") (serialize-qp "webIdType" $web_id_type "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({web_id: (encode-path-segment $web_id)} | format pattern "/securitymappings/{web_id}/securityentries") $qp)
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"nameFilter": $name_filter, "selectedFields": $selected_fields, "webIdType": $web_id_type} | compact), body: null}
 }
 
 # Retrieve the security entry associated with the security mapping with the specified name.
@@ -10772,11 +11114,13 @@ export def "securitymappings-securityentries get-security-mapping-security-entry
 ]: nothing -> record<AllowRights: list<string>, DenyRights: list<string>, Links: record<SecurableObject: string, SecurityIdentity: string, Self: string>, Name: string, SecurityIdentityName: string, WebException: record<Errors: list<string>, StatusCode: int>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($web_id | is-empty) { error make --unspanned { msg: "path parameter 'webId' must be non-empty" } }
+  if ($name | is-empty) { error make --unspanned { msg: "path parameter 'name' must be non-empty" } }
   let qp = [(serialize-qp "selectedFields" $selected_fields "scalar") (serialize-qp "webIdType" $web_id_type "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({web_id: (encode-path-segment $web_id), name: (encode-path-segment $name)} | format pattern "/securitymappings/{web_id}/securityentries/{name}") $qp)
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"selectedFields": $selected_fields, "webIdType": $web_id_type} | compact), body: null}
 }
 
 # Receive stream updates
@@ -10801,11 +11145,12 @@ export def "streams-updates get" [
 ]: nothing -> record<Events: table<Action: string, Annotated: bool, Errors: list, Good: bool, PreviousEventAction: string, Questionable: bool, Substituted: bool, Timestamp: string, UnitsAbbreviation: string, Value: record, WebException: record>, Exception: record<Errors: list<string>>, LatestMarker: string, RequestedMarker: string, Source: string, SourceName: string, SourcePath: string, Status: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($marker | is-empty) { error make --unspanned { msg: "path parameter 'marker' must be non-empty" } }
   let qp = [(serialize-qp "desiredUnits" $desired_units "scalar") (serialize-qp "selectedFields" $selected_fields "scalar") (serialize-qp "webIdType" $web_id_type "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({marker: (encode-path-segment $marker)} | format pattern "/streams/updates/{marker}") $qp)
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"desiredUnits": $desired_units, "selectedFields": $selected_fields, "webIdType": $web_id_type} | compact), body: null}
 }
 
 # Opens a channel that will send messages about any value changes for the specified stream.
@@ -10830,11 +11175,12 @@ export def "streams-channel get" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($web_id | is-empty) { error make --unspanned { msg: "path parameter 'webId' must be non-empty" } }
   let qp = [(serialize-qp "heartbeatRate" $heartbeat_rate "scalar") (serialize-qp "includeInitialValues" $include_initial_values "scalar") (serialize-qp "webIdType" $web_id_type "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({web_id: (encode-path-segment $web_id)} | format pattern "/streams/{web_id}/channel") $qp)
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"heartbeatRate": $heartbeat_rate, "includeInitialValues": $include_initial_values, "webIdType": $web_id_type} | compact), body: null}
 }
 
 # Returns the end-of-stream value of the stream.
@@ -10858,11 +11204,12 @@ export def "streams-end get" [
 ]: nothing -> record<Annotated: bool, Errors: table<FieldName: string, Message: list>, Good: bool, Questionable: bool, Substituted: bool, Timestamp: string, UnitsAbbreviation: string, Value: record, WebException: record<Errors: list<string>, StatusCode: int>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($web_id | is-empty) { error make --unspanned { msg: "path parameter 'webId' must be non-empty" } }
   let qp = [(serialize-qp "desiredUnits" $desired_units "scalar") (serialize-qp "selectedFields" $selected_fields "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({web_id: (encode-path-segment $web_id)} | format pattern "/streams/{web_id}/end") $qp)
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"desiredUnits": $desired_units, "selectedFields": $selected_fields} | compact), body: null}
 }
 
 # Retrieves interpolated values over the specified time range at the specified sampling interval.
@@ -10894,11 +11241,12 @@ export def "streams-interpolated get" [
 ]: nothing -> record<Items: table<Annotated: bool, Errors: list, Good: bool, Questionable: bool, Substituted: bool, Timestamp: string, UnitsAbbreviation: string, Value: record, WebException: record>, UnitsAbbreviation: string, WebException: record<Errors: list<string>, StatusCode: int>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($web_id | is-empty) { error make --unspanned { msg: "path parameter 'webId' must be non-empty" } }
   let qp = [(serialize-qp "desiredUnits" $desired_units "scalar") (serialize-qp "endTime" $end_time "scalar") (serialize-qp "filterExpression" $filter_expression "scalar") (serialize-qp "includeFilteredValues" $include_filtered_values "scalar") (serialize-qp "interval" $interval "scalar") (serialize-qp "selectedFields" $selected_fields "scalar") (serialize-qp "startTime" $start_time "scalar") (serialize-qp "syncTime" $sync_time "scalar") (serialize-qp "syncTimeBoundaryType" $sync_time_boundary_type "scalar") (serialize-qp "timeZone" $time_zone "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({web_id: (encode-path-segment $web_id)} | format pattern "/streams/{web_id}/interpolated") $qp)
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"desiredUnits": $desired_units, "endTime": $end_time, "filterExpression": $filter_expression, "includeFilteredValues": $include_filtered_values, "interval": $interval, "selectedFields": $selected_fields, "startTime": $start_time, "syncTime": $sync_time, "syncTimeBoundaryType": $sync_time_boundary_type, "timeZone": $time_zone} | compact), body: null}
 }
 
 # Retrieves interpolated values over the specified time range at the specified sampling interval.
@@ -10927,11 +11275,12 @@ export def "streams-interpolatedattimes get-interpolated-at-times" [
 ]: nothing -> record<Items: table<Annotated: bool, Errors: list, Good: bool, Questionable: bool, Substituted: bool, Timestamp: string, UnitsAbbreviation: string, Value: record, WebException: record>, UnitsAbbreviation: string, WebException: record<Errors: list<string>, StatusCode: int>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($web_id | is-empty) { error make --unspanned { msg: "path parameter 'webId' must be non-empty" } }
   let qp = [(serialize-qp "time" $time "multi") (serialize-qp "desiredUnits" $desired_units "scalar") (serialize-qp "filterExpression" $filter_expression "scalar") (serialize-qp "includeFilteredValues" $include_filtered_values "scalar") (serialize-qp "selectedFields" $selected_fields "scalar") (serialize-qp "sortOrder" $sort_order "scalar") (serialize-qp "timeZone" $time_zone "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({web_id: (encode-path-segment $web_id)} | format pattern "/streams/{web_id}/interpolatedattimes") $qp)
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"time": $time, "desiredUnits": $desired_units, "filterExpression": $filter_expression, "includeFilteredValues": $include_filtered_values, "selectedFields": $selected_fields, "sortOrder": $sort_order, "timeZone": $time_zone} | compact), body: null}
 }
 
 # Retrieves values over the specified time range suitable for plotting over the number of intervals (typically represents pixels).
@@ -10959,11 +11308,12 @@ export def "streams-plot get" [
 ]: nothing -> record<Items: table<Annotated: bool, Errors: list, Good: bool, Questionable: bool, Substituted: bool, Timestamp: string, UnitsAbbreviation: string, Value: record, WebException: record>, UnitsAbbreviation: string, WebException: record<Errors: list<string>, StatusCode: int>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($web_id | is-empty) { error make --unspanned { msg: "path parameter 'webId' must be non-empty" } }
   let qp = [(serialize-qp "desiredUnits" $desired_units "scalar") (serialize-qp "endTime" $end_time "scalar") (serialize-qp "intervals" $intervals "scalar") (serialize-qp "selectedFields" $selected_fields "scalar") (serialize-qp "startTime" $start_time "scalar") (serialize-qp "timeZone" $time_zone "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({web_id: (encode-path-segment $web_id)} | format pattern "/streams/{web_id}/plot") $qp)
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"desiredUnits": $desired_units, "endTime": $end_time, "intervals": $intervals, "selectedFields": $selected_fields, "startTime": $start_time, "timeZone": $time_zone} | compact), body: null}
 }
 
 # Returns a list of compressed values for the requested time range from the source provider.
@@ -10995,11 +11345,12 @@ export def "streams-recorded get" [
 ]: nothing -> record<Items: table<Annotated: bool, Annotations: list, Errors: list, Good: bool, Questionable: bool, Substituted: bool, Timestamp: string, UnitsAbbreviation: string, Value: record, WebException: record>, UnitsAbbreviation: string, WebException: record<Errors: list<string>, StatusCode: int>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($web_id | is-empty) { error make --unspanned { msg: "path parameter 'webId' must be non-empty" } }
   let qp = [(serialize-qp "associations" $associations "scalar") (serialize-qp "boundaryType" $boundary_type "scalar") (serialize-qp "desiredUnits" $desired_units "scalar") (serialize-qp "endTime" $end_time "scalar") (serialize-qp "filterExpression" $filter_expression "scalar") (serialize-qp "includeFilteredValues" $include_filtered_values "scalar") (serialize-qp "maxCount" $max_count "scalar") (serialize-qp "selectedFields" $selected_fields "scalar") (serialize-qp "startTime" $start_time "scalar") (serialize-qp "timeZone" $time_zone "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({web_id: (encode-path-segment $web_id)} | format pattern "/streams/{web_id}/recorded") $qp)
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"associations": $associations, "boundaryType": $boundary_type, "desiredUnits": $desired_units, "endTime": $end_time, "filterExpression": $filter_expression, "includeFilteredValues": $include_filtered_values, "maxCount": $max_count, "selectedFields": $selected_fields, "startTime": $start_time, "timeZone": $time_zone} | compact), body: null}
 }
 
 # Updates multiple values for the specified stream.
@@ -11025,13 +11376,14 @@ export def "streams-recorded update-values" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($web_id | is-empty) { error make --unspanned { msg: "path parameter 'webId' must be non-empty" } }
   let qp = [(serialize-qp "bufferOption" $buffer_option "scalar") (serialize-qp "updateOption" $update_option "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({web_id: (encode-path-segment $web_id)} | format pattern "/streams/{web_id}/recorded") $qp)
   let req_body = $body
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else if (($input | is-not-empty) and ($req_body | is-empty)) { $input } else { $req_body }
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: ({"bufferOption": $buffer_option, "updateOption": $update_option} | compact), body: $req_body}
 }
 
 # Returns a single recorded value based on the passed time and retrieval mode from the stream.
@@ -11059,11 +11411,12 @@ export def "streams-recordedattime get-recorded-at-time" [
 ]: nothing -> record<Annotated: bool, Annotations: table<CreationDate: string, Creator: string, Description: string, Errors: list, Id: string, Modifier: string, ModifyDate: string, Name: string, Value: record, WebException: record>, Errors: table<FieldName: string, Message: list>, Good: bool, Questionable: bool, Substituted: bool, Timestamp: string, UnitsAbbreviation: string, Value: record, WebException: record<Errors: list<string>, StatusCode: int>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($web_id | is-empty) { error make --unspanned { msg: "path parameter 'webId' must be non-empty" } }
   let qp = [(serialize-qp "time" $time "scalar") (serialize-qp "associations" $associations "scalar") (serialize-qp "desiredUnits" $desired_units "scalar") (serialize-qp "retrievalMode" $retrieval_mode "scalar") (serialize-qp "selectedFields" $selected_fields "scalar") (serialize-qp "timeZone" $time_zone "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({web_id: (encode-path-segment $web_id)} | format pattern "/streams/{web_id}/recordedattime") $qp)
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"time": $time, "associations": $associations, "desiredUnits": $desired_units, "retrievalMode": $retrieval_mode, "selectedFields": $selected_fields, "timeZone": $time_zone} | compact), body: null}
 }
 
 # Retrieves recorded values at the specified times.
@@ -11092,11 +11445,12 @@ export def "streams-recordedattimes get-recorded-at-times" [
 ]: nothing -> record<Items: table<Annotated: bool, Annotations: list, Errors: list, Good: bool, Questionable: bool, Substituted: bool, Timestamp: string, UnitsAbbreviation: string, Value: record, WebException: record>, UnitsAbbreviation: string, WebException: record<Errors: list<string>, StatusCode: int>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($web_id | is-empty) { error make --unspanned { msg: "path parameter 'webId' must be non-empty" } }
   let qp = [(serialize-qp "time" $time "multi") (serialize-qp "associations" $associations "scalar") (serialize-qp "desiredUnits" $desired_units "scalar") (serialize-qp "retrievalMode" $retrieval_mode "scalar") (serialize-qp "selectedFields" $selected_fields "scalar") (serialize-qp "sortOrder" $sort_order "scalar") (serialize-qp "timeZone" $time_zone "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({web_id: (encode-path-segment $web_id)} | format pattern "/streams/{web_id}/recordedattimes") $qp)
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"time": $time, "associations": $associations, "desiredUnits": $desired_units, "retrievalMode": $retrieval_mode, "selectedFields": $selected_fields, "sortOrder": $sort_order, "timeZone": $time_zone} | compact), body: null}
 }
 
 # Returns a summary over the specified time range for the stream.
@@ -11129,11 +11483,12 @@ export def "streams-summary get" [
 ]: nothing -> record<Items: table<Type: string, Value: record, WebException: record>, Links: record<First: string, Last: string, Next: string, Previous: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($web_id | is-empty) { error make --unspanned { msg: "path parameter 'webId' must be non-empty" } }
   let qp = [(serialize-qp "calculationBasis" $calculation_basis "scalar") (serialize-qp "endTime" $end_time "scalar") (serialize-qp "filterExpression" $filter_expression "scalar") (serialize-qp "sampleInterval" $sample_interval "scalar") (serialize-qp "sampleType" $sample_type "scalar") (serialize-qp "selectedFields" $selected_fields "scalar") (serialize-qp "startTime" $start_time "scalar") (serialize-qp "summaryDuration" $summary_duration "scalar") (serialize-qp "summaryType" $summary_type "multi") (serialize-qp "timeType" $time_type "scalar") (serialize-qp "timeZone" $time_zone "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({web_id: (encode-path-segment $web_id)} | format pattern "/streams/{web_id}/summary") $qp)
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"calculationBasis": $calculation_basis, "endTime": $end_time, "filterExpression": $filter_expression, "sampleInterval": $sample_interval, "sampleType": $sample_type, "selectedFields": $selected_fields, "startTime": $start_time, "summaryDuration": $summary_duration, "summaryType": $summary_type, "timeType": $time_type, "timeZone": $time_zone} | compact), body: null}
 }
 
 # Register for stream updates
@@ -11157,11 +11512,12 @@ export def "streams-updates create" [
 ]: nothing -> record<Exception: record<Errors: list<string>>, LatestMarker: string, Source: string, SourceName: string, SourcePath: string, Status: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($web_id | is-empty) { error make --unspanned { msg: "path parameter 'webId' must be non-empty" } }
   let qp = [(serialize-qp "selectedFields" $selected_fields "scalar") (serialize-qp "webIdType" $web_id_type "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({web_id: (encode-path-segment $web_id)} | format pattern "/streams/{web_id}/updates") $qp)
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"selectedFields": $selected_fields, "webIdType": $web_id_type} | compact), body: null}
 }
 
 # Returns the value of the stream at the specified time. By default, this is usually the current value.
@@ -11187,11 +11543,12 @@ export def "streams-value get" [
 ]: nothing -> record<Annotated: bool, Errors: table<FieldName: string, Message: list>, Good: bool, Questionable: bool, Substituted: bool, Timestamp: string, UnitsAbbreviation: string, Value: record, WebException: record<Errors: list<string>, StatusCode: int>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($web_id | is-empty) { error make --unspanned { msg: "path parameter 'webId' must be non-empty" } }
   let qp = [(serialize-qp "desiredUnits" $desired_units "scalar") (serialize-qp "selectedFields" $selected_fields "scalar") (serialize-qp "time" $time "scalar") (serialize-qp "timeZone" $time_zone "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({web_id: (encode-path-segment $web_id)} | format pattern "/streams/{web_id}/value") $qp)
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"desiredUnits": $desired_units, "selectedFields": $selected_fields, "time": $time, "timeZone": $time_zone} | compact), body: null}
 }
 
 # Updates a value for the specified stream.
@@ -11228,13 +11585,14 @@ export def "streams-value update" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($web_id | is-empty) { error make --unspanned { msg: "path parameter 'webId' must be non-empty" } }
   let qp = [(serialize-qp "bufferOption" $buffer_option "scalar") (serialize-qp "updateOption" $update_option "scalar") (serialize-qp "webIdType" $web_id_type "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({web_id: (encode-path-segment $web_id)} | format pattern "/streams/{web_id}/value") $qp)
   let req_body = {"Annotated": $annotated, "Errors": $errors, "Good": $good, "Questionable": $questionable, "Substituted": $substituted, "Timestamp": $timestamp, "UnitsAbbreviation": $units_abbreviation, "Value": $value, "WebException": $web_exception} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: ({"bufferOption": $buffer_option, "updateOption": $update_option, "webIdType": $web_id_type} | compact), body: $req_body}
 }
 
 # Opens a channel that will send messages about any value changes for the specified streams.
@@ -11263,7 +11621,7 @@ export def "streamsets-channel update-stream-get-ad-hoc" [
   let full_url = (build-url $base "/streamsets/channel" $qp)
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"webId": $web_id, "heartbeatRate": $heartbeat_rate, "includeInitialValues": $include_initial_values, "webIdType": $web_id_type} | compact), body: null}
 }
 
 # Returns End Of Stream values for attributes of the specified streams
@@ -11293,7 +11651,7 @@ export def "streamsets-end update-stream-get-ad-hoc" [
   let full_url = (build-url $base "/streamsets/end" $qp)
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"webId": $web_id, "selectedFields": $selected_fields, "sortField": $sort_field, "sortOrder": $sort_order, "webIdType": $web_id_type} | compact), body: null}
 }
 
 # Returns interpolated values of the specified streams over the specified time range at the specified sampling interval.
@@ -11331,7 +11689,7 @@ export def "streamsets-interpolated update-stream-get-ad-hoc" [
   let full_url = (build-url $base "/streamsets/interpolated" $qp)
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"webId": $web_id, "endTime": $end_time, "filterExpression": $filter_expression, "includeFilteredValues": $include_filtered_values, "interval": $interval, "selectedFields": $selected_fields, "sortField": $sort_field, "sortOrder": $sort_order, "startTime": $start_time, "syncTime": $sync_time, "syncTimeBoundaryType": $sync_time_boundary_type, "timeZone": $time_zone, "webIdType": $web_id_type} | compact), body: null}
 }
 
 # Returns interpolated values of the specified streams at the specified times.
@@ -11364,7 +11722,7 @@ export def "streamsets-interpolatedattimes update-stream-get-interpolated-at-tim
   let full_url = (build-url $base "/streamsets/interpolatedattimes" $qp)
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"time": $time, "webId": $web_id, "filterExpression": $filter_expression, "includeFilteredValues": $include_filtered_values, "selectedFields": $selected_fields, "sortOrder": $sort_order, "timeZone": $time_zone, "webIdType": $web_id_type} | compact), body: null}
 }
 
 # Returns the base stream's recorded values and subordinate streams' interpolated values at times matching the recorded values' timestamps.
@@ -11400,7 +11758,7 @@ export def "streamsets-joined update-stream-get" [
   let full_url = (build-url $base "/streamsets/joined" $qp)
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"baseWebId": $base_web_id, "subordinateWebId": $subordinate_web_id, "boundaryType": $boundary_type, "endTime": $end_time, "filterExpression": $filter_expression, "includeFilteredValues": $include_filtered_values, "maxCount": $max_count, "selectedFields": $selected_fields, "startTime": $start_time, "timeZone": $time_zone, "webIdType": $web_id_type} | compact), body: null}
 }
 
 # Returns values of attributes for the specified streams over the specified time range suitable for plotting over the number of intervals (typically represents pixels).
@@ -11434,7 +11792,7 @@ export def "streamsets-plot update-stream-get-ad-hoc" [
   let full_url = (build-url $base "/streamsets/plot" $qp)
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"webId": $web_id, "endTime": $end_time, "intervals": $intervals, "selectedFields": $selected_fields, "sortField": $sort_field, "sortOrder": $sort_order, "startTime": $start_time, "timeZone": $time_zone, "webIdType": $web_id_type} | compact), body: null}
 }
 
 # Returns recorded values of the specified streams.
@@ -11471,14 +11829,14 @@ export def "streamsets-recorded update-stream-get-ad-hoc" [
   let full_url = (build-url $base "/streamsets/recorded" $qp)
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"webId": $web_id, "boundaryType": $boundary_type, "endTime": $end_time, "filterExpression": $filter_expression, "includeFilteredValues": $include_filtered_values, "maxCount": $max_count, "selectedFields": $selected_fields, "sortField": $sort_field, "sortOrder": $sort_order, "startTime": $start_time, "timeZone": $time_zone, "webIdType": $web_id_type} | compact), body: null}
 }
 
 # Updates multiple values for the specified streams.
 #
 # POST /streamsets/recorded
 # operationId: StreamSet_UpdateValuesAdHoc
-export def "streamsets-recorded update-stream-update-values-ad-hoc" [
+export def "streamsets-recorded update-stream-values-ad-hoc" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -11502,7 +11860,7 @@ export def "streamsets-recorded update-stream-update-values-ad-hoc" [
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else if (($input | is-not-empty) and ($req_body | is-empty)) { $input } else { $req_body }
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: ({"bufferOption": $buffer_option, "updateOption": $update_option} | compact), body: $req_body}
 }
 
 # Returns recorded values based on the passed time and retrieval mode.
@@ -11533,7 +11891,7 @@ export def "streamsets-recordedattime update-stream-get-recorded-at-time-ad-hoc"
   let full_url = (build-url $base "/streamsets/recordedattime" $qp)
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"time": $time, "webId": $web_id, "retrievalMode": $retrieval_mode, "selectedFields": $selected_fields, "timeZone": $time_zone, "webIdType": $web_id_type} | compact), body: null}
 }
 
 # Returns recorded values of the specified streams at the specified times.
@@ -11565,7 +11923,7 @@ export def "streamsets-recordedattimes update-stream-get-recorded-at-times-ad-ho
   let full_url = (build-url $base "/streamsets/recordedattimes" $qp)
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"time": $time, "webId": $web_id, "retrievalMode": $retrieval_mode, "selectedFields": $selected_fields, "sortOrder": $sort_order, "timeZone": $time_zone, "webIdType": $web_id_type} | compact), body: null}
 }
 
 # Returns summary values of the specified streams.
@@ -11603,14 +11961,14 @@ export def "streamsets-summary update-stream-get-summaries-ad-hoc" [
   let full_url = (build-url $base "/streamsets/summary" $qp)
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"webId": $web_id, "calculationBasis": $calculation_basis, "endTime": $end_time, "filterExpression": $filter_expression, "sampleInterval": $sample_interval, "sampleType": $sample_type, "selectedFields": $selected_fields, "startTime": $start_time, "summaryDuration": $summary_duration, "summaryType": $summary_type, "timeType": $time_type, "timeZone": $time_zone, "webIdType": $web_id_type} | compact), body: null}
 }
 
 # Receive stream updates
 #
 # GET /streamsets/updates
 # operationId: StreamSet_RetrieveStreamSetUpdates
-export def "streamsets-updates update-stream-get-stream-update" [
+export def "streamsets-updates update-stream-get-stream" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -11631,14 +11989,14 @@ export def "streamsets-updates update-stream-get-stream-update" [
   let full_url = (build-url $base "/streamsets/updates" $qp)
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"marker": $marker, "selectedFields": $selected_fields, "webIdType": $web_id_type} | compact), body: null}
 }
 
 # Register for stream updates
 #
 # POST /streamsets/updates
 # operationId: StreamSet_RegisterStreamSetUpdates
-export def "streamsets-updates update-stream-create-stream-update" [
+export def "streamsets-updates update-stream-create-stream" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -11659,7 +12017,7 @@ export def "streamsets-updates update-stream-create-stream-update" [
   let full_url = (build-url $base "/streamsets/updates" $qp)
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"webId": $web_id, "selectedFields": $selected_fields, "webIdType": $web_id_type} | compact), body: null}
 }
 
 # Returns values of the specified streams.
@@ -11691,14 +12049,14 @@ export def "streamsets-value update-stream-get-ad-hoc" [
   let full_url = (build-url $base "/streamsets/value" $qp)
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"webId": $web_id, "selectedFields": $selected_fields, "sortField": $sort_field, "sortOrder": $sort_order, "time": $time, "timeZone": $time_zone, "webIdType": $web_id_type} | compact), body: null}
 }
 
 # Updates a single value for the specified streams.
 #
 # POST /streamsets/value
 # operationId: StreamSet_UpdateValueAdHoc
-export def "streamsets-value update-stream-update-ad-hoc" [
+export def "streamsets-value update-stream-ad-hoc" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -11722,7 +12080,7 @@ export def "streamsets-value update-stream-update-ad-hoc" [
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else if (($input | is-not-empty) and ($req_body | is-empty)) { $input } else { $req_body }
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: ({"bufferOption": $buffer_option, "updateOption": $update_option} | compact), body: $req_body}
 }
 
 # Opens a channel that will send messages about any value changes for the attributes of an Element, Event Frame, or Attribute.
@@ -11753,11 +12111,12 @@ export def "streamsets-channel update-stream-get" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($web_id | is-empty) { error make --unspanned { msg: "path parameter 'webId' must be non-empty" } }
   let qp = [(serialize-qp "categoryName" $category_name "scalar") (serialize-qp "heartbeatRate" $heartbeat_rate "scalar") (serialize-qp "includeInitialValues" $include_initial_values "scalar") (serialize-qp "nameFilter" $name_filter "scalar") (serialize-qp "searchFullHierarchy" $search_full_hierarchy "scalar") (serialize-qp "showExcluded" $show_excluded "scalar") (serialize-qp "showHidden" $show_hidden "scalar") (serialize-qp "templateName" $template_name "scalar") (serialize-qp "webIdType" $web_id_type "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({web_id: (encode-path-segment $web_id)} | format pattern "/streamsets/{web_id}/channel") $qp)
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"categoryName": $category_name, "heartbeatRate": $heartbeat_rate, "includeInitialValues": $include_initial_values, "nameFilter": $name_filter, "searchFullHierarchy": $search_full_hierarchy, "showExcluded": $show_excluded, "showHidden": $show_hidden, "templateName": $template_name, "webIdType": $web_id_type} | compact), body: null}
 }
 
 # Returns End of stream values of the attributes for an Element, Event Frame or Attribute
@@ -11789,11 +12148,12 @@ export def "streamsets-end update-stream-get" [
 ]: nothing -> record<Items: table<Links: record, Name: string, Path: string, Value: record, WebException: record, WebId: string>, Links: record<First: string, Last: string, Next: string, Previous: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($web_id | is-empty) { error make --unspanned { msg: "path parameter 'webId' must be non-empty" } }
   let qp = [(serialize-qp "categoryName" $category_name "scalar") (serialize-qp "nameFilter" $name_filter "scalar") (serialize-qp "searchFullHierarchy" $search_full_hierarchy "scalar") (serialize-qp "selectedFields" $selected_fields "scalar") (serialize-qp "showExcluded" $show_excluded "scalar") (serialize-qp "showHidden" $show_hidden "scalar") (serialize-qp "sortField" $sort_field "scalar") (serialize-qp "sortOrder" $sort_order "scalar") (serialize-qp "templateName" $template_name "scalar") (serialize-qp "webIdType" $web_id_type "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({web_id: (encode-path-segment $web_id)} | format pattern "/streamsets/{web_id}/end") $qp)
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"categoryName": $category_name, "nameFilter": $name_filter, "searchFullHierarchy": $search_full_hierarchy, "selectedFields": $selected_fields, "showExcluded": $show_excluded, "showHidden": $show_hidden, "sortField": $sort_field, "sortOrder": $sort_order, "templateName": $template_name, "webIdType": $web_id_type} | compact), body: null}
 }
 
 # Returns interpolated values of attributes for an element, event frame or attribute over the specified time range at the specified sampling interval.
@@ -11833,11 +12193,12 @@ export def "streamsets-interpolated update-stream-get" [
 ]: nothing -> record<Items: table<Items: list, Links: record, Name: string, Path: string, UnitsAbbreviation: string, WebException: record, WebId: string>, Links: record<First: string, Last: string, Next: string, Previous: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($web_id | is-empty) { error make --unspanned { msg: "path parameter 'webId' must be non-empty" } }
   let qp = [(serialize-qp "categoryName" $category_name "scalar") (serialize-qp "endTime" $end_time "scalar") (serialize-qp "filterExpression" $filter_expression "scalar") (serialize-qp "includeFilteredValues" $include_filtered_values "scalar") (serialize-qp "interval" $interval "scalar") (serialize-qp "nameFilter" $name_filter "scalar") (serialize-qp "searchFullHierarchy" $search_full_hierarchy "scalar") (serialize-qp "selectedFields" $selected_fields "scalar") (serialize-qp "showExcluded" $show_excluded "scalar") (serialize-qp "showHidden" $show_hidden "scalar") (serialize-qp "sortField" $sort_field "scalar") (serialize-qp "sortOrder" $sort_order "scalar") (serialize-qp "startTime" $start_time "scalar") (serialize-qp "syncTime" $sync_time "scalar") (serialize-qp "syncTimeBoundaryType" $sync_time_boundary_type "scalar") (serialize-qp "templateName" $template_name "scalar") (serialize-qp "timeZone" $time_zone "scalar") (serialize-qp "webIdType" $web_id_type "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({web_id: (encode-path-segment $web_id)} | format pattern "/streamsets/{web_id}/interpolated") $qp)
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"categoryName": $category_name, "endTime": $end_time, "filterExpression": $filter_expression, "includeFilteredValues": $include_filtered_values, "interval": $interval, "nameFilter": $name_filter, "searchFullHierarchy": $search_full_hierarchy, "selectedFields": $selected_fields, "showExcluded": $show_excluded, "showHidden": $show_hidden, "sortField": $sort_field, "sortOrder": $sort_order, "startTime": $start_time, "syncTime": $sync_time, "syncTimeBoundaryType": $sync_time_boundary_type, "templateName": $template_name, "timeZone": $time_zone, "webIdType": $web_id_type} | compact), body: null}
 }
 
 # Returns interpolated values of attributes for an element, event frame or attribute at the specified times.
@@ -11872,11 +12233,12 @@ export def "streamsets-interpolatedattimes update-stream-get-interpolated-at-tim
 ]: nothing -> record<Items: table<Items: list, Links: record, Name: string, Path: string, UnitsAbbreviation: string, WebException: record, WebId: string>, Links: record<First: string, Last: string, Next: string, Previous: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($web_id | is-empty) { error make --unspanned { msg: "path parameter 'webId' must be non-empty" } }
   let qp = [(serialize-qp "time" $time "multi") (serialize-qp "categoryName" $category_name "scalar") (serialize-qp "filterExpression" $filter_expression "scalar") (serialize-qp "includeFilteredValues" $include_filtered_values "scalar") (serialize-qp "nameFilter" $name_filter "scalar") (serialize-qp "searchFullHierarchy" $search_full_hierarchy "scalar") (serialize-qp "selectedFields" $selected_fields "scalar") (serialize-qp "showExcluded" $show_excluded "scalar") (serialize-qp "showHidden" $show_hidden "scalar") (serialize-qp "sortOrder" $sort_order "scalar") (serialize-qp "templateName" $template_name "scalar") (serialize-qp "timeZone" $time_zone "scalar") (serialize-qp "webIdType" $web_id_type "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({web_id: (encode-path-segment $web_id)} | format pattern "/streamsets/{web_id}/interpolatedattimes") $qp)
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"time": $time, "categoryName": $category_name, "filterExpression": $filter_expression, "includeFilteredValues": $include_filtered_values, "nameFilter": $name_filter, "searchFullHierarchy": $search_full_hierarchy, "selectedFields": $selected_fields, "showExcluded": $show_excluded, "showHidden": $show_hidden, "sortOrder": $sort_order, "templateName": $template_name, "timeZone": $time_zone, "webIdType": $web_id_type} | compact), body: null}
 }
 
 # Returns values of attributes for an element, event frame or attribute over the specified time range suitable for plotting over the number of intervals (typically represents pixels).
@@ -11912,11 +12274,12 @@ export def "streamsets-plot update-stream-get" [
 ]: nothing -> record<Items: table<Items: list, Links: record, Name: string, Path: string, UnitsAbbreviation: string, WebException: record, WebId: string>, Links: record<First: string, Last: string, Next: string, Previous: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($web_id | is-empty) { error make --unspanned { msg: "path parameter 'webId' must be non-empty" } }
   let qp = [(serialize-qp "categoryName" $category_name "scalar") (serialize-qp "endTime" $end_time "scalar") (serialize-qp "intervals" $intervals "scalar") (serialize-qp "nameFilter" $name_filter "scalar") (serialize-qp "searchFullHierarchy" $search_full_hierarchy "scalar") (serialize-qp "selectedFields" $selected_fields "scalar") (serialize-qp "showExcluded" $show_excluded "scalar") (serialize-qp "showHidden" $show_hidden "scalar") (serialize-qp "sortField" $sort_field "scalar") (serialize-qp "sortOrder" $sort_order "scalar") (serialize-qp "startTime" $start_time "scalar") (serialize-qp "templateName" $template_name "scalar") (serialize-qp "timeZone" $time_zone "scalar") (serialize-qp "webIdType" $web_id_type "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({web_id: (encode-path-segment $web_id)} | format pattern "/streamsets/{web_id}/plot") $qp)
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"categoryName": $category_name, "endTime": $end_time, "intervals": $intervals, "nameFilter": $name_filter, "searchFullHierarchy": $search_full_hierarchy, "selectedFields": $selected_fields, "showExcluded": $show_excluded, "showHidden": $show_hidden, "sortField": $sort_field, "sortOrder": $sort_order, "startTime": $start_time, "templateName": $template_name, "timeZone": $time_zone, "webIdType": $web_id_type} | compact), body: null}
 }
 
 # Returns recorded values of the attributes for an element, event frame, or attribute.
@@ -11955,18 +12318,19 @@ export def "streamsets-recorded update-stream-get" [
 ]: nothing -> record<Items: table<Items: list, Links: record, Name: string, Path: string, UnitsAbbreviation: string, WebException: record, WebId: string>, Links: record<First: string, Last: string, Next: string, Previous: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($web_id | is-empty) { error make --unspanned { msg: "path parameter 'webId' must be non-empty" } }
   let qp = [(serialize-qp "boundaryType" $boundary_type "scalar") (serialize-qp "categoryName" $category_name "scalar") (serialize-qp "endTime" $end_time "scalar") (serialize-qp "filterExpression" $filter_expression "scalar") (serialize-qp "includeFilteredValues" $include_filtered_values "scalar") (serialize-qp "maxCount" $max_count "scalar") (serialize-qp "nameFilter" $name_filter "scalar") (serialize-qp "searchFullHierarchy" $search_full_hierarchy "scalar") (serialize-qp "selectedFields" $selected_fields "scalar") (serialize-qp "showExcluded" $show_excluded "scalar") (serialize-qp "showHidden" $show_hidden "scalar") (serialize-qp "sortField" $sort_field "scalar") (serialize-qp "sortOrder" $sort_order "scalar") (serialize-qp "startTime" $start_time "scalar") (serialize-qp "templateName" $template_name "scalar") (serialize-qp "timeZone" $time_zone "scalar") (serialize-qp "webIdType" $web_id_type "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({web_id: (encode-path-segment $web_id)} | format pattern "/streamsets/{web_id}/recorded") $qp)
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"boundaryType": $boundary_type, "categoryName": $category_name, "endTime": $end_time, "filterExpression": $filter_expression, "includeFilteredValues": $include_filtered_values, "maxCount": $max_count, "nameFilter": $name_filter, "searchFullHierarchy": $search_full_hierarchy, "selectedFields": $selected_fields, "showExcluded": $show_excluded, "showHidden": $show_hidden, "sortField": $sort_field, "sortOrder": $sort_order, "startTime": $start_time, "templateName": $template_name, "timeZone": $time_zone, "webIdType": $web_id_type} | compact), body: null}
 }
 
 # Updates multiple values for the specified streams.
 #
 # POST /streamsets/{webId}/recorded
 # operationId: StreamSet_UpdateValues
-export def "streamsets-recorded update-stream-update-values" [
+export def "streamsets-recorded update-stream-values" [
   web_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -11985,13 +12349,14 @@ export def "streamsets-recorded update-stream-update-values" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($web_id | is-empty) { error make --unspanned { msg: "path parameter 'webId' must be non-empty" } }
   let qp = [(serialize-qp "bufferOption" $buffer_option "scalar") (serialize-qp "updateOption" $update_option "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({web_id: (encode-path-segment $web_id)} | format pattern "/streamsets/{web_id}/recorded") $qp)
   let req_body = $body
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else if (($input | is-not-empty) and ($req_body | is-empty)) { $input } else { $req_body }
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: ({"bufferOption": $buffer_option, "updateOption": $update_option} | compact), body: $req_body}
 }
 
 # Returns recorded values of the attributes for an element, event frame, or attribute.
@@ -12024,11 +12389,12 @@ export def "streamsets-recordedattime update-stream-get-recorded-at-time" [
 ]: nothing -> record<Items: table<Links: record, Name: string, Path: string, Value: record, WebException: record, WebId: string>, Links: record<First: string, Last: string, Next: string, Previous: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($web_id | is-empty) { error make --unspanned { msg: "path parameter 'webId' must be non-empty" } }
   let qp = [(serialize-qp "time" $time "scalar") (serialize-qp "categoryName" $category_name "scalar") (serialize-qp "nameFilter" $name_filter "scalar") (serialize-qp "retrievalMode" $retrieval_mode "scalar") (serialize-qp "searchFullHierarchy" $search_full_hierarchy "scalar") (serialize-qp "selectedFields" $selected_fields "scalar") (serialize-qp "showExcluded" $show_excluded "scalar") (serialize-qp "showHidden" $show_hidden "scalar") (serialize-qp "templateName" $template_name "scalar") (serialize-qp "timeZone" $time_zone "scalar") (serialize-qp "webIdType" $web_id_type "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({web_id: (encode-path-segment $web_id)} | format pattern "/streamsets/{web_id}/recordedattime") $qp)
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"time": $time, "categoryName": $category_name, "nameFilter": $name_filter, "retrievalMode": $retrieval_mode, "searchFullHierarchy": $search_full_hierarchy, "selectedFields": $selected_fields, "showExcluded": $show_excluded, "showHidden": $show_hidden, "templateName": $template_name, "timeZone": $time_zone, "webIdType": $web_id_type} | compact), body: null}
 }
 
 # Returns recorded values of attributes for an element, event frame or attribute at the specified times.
@@ -12062,11 +12428,12 @@ export def "streamsets-recordedattimes update-stream-get-recorded-at-times" [
 ]: nothing -> record<Items: table<Items: list, Links: record, Name: string, Path: string, UnitsAbbreviation: string, WebException: record, WebId: string>, Links: record<First: string, Last: string, Next: string, Previous: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($web_id | is-empty) { error make --unspanned { msg: "path parameter 'webId' must be non-empty" } }
   let qp = [(serialize-qp "time" $time "multi") (serialize-qp "categoryName" $category_name "scalar") (serialize-qp "nameFilter" $name_filter "scalar") (serialize-qp "retrievalMode" $retrieval_mode "scalar") (serialize-qp "searchFullHierarchy" $search_full_hierarchy "scalar") (serialize-qp "selectedFields" $selected_fields "scalar") (serialize-qp "showExcluded" $show_excluded "scalar") (serialize-qp "showHidden" $show_hidden "scalar") (serialize-qp "sortOrder" $sort_order "scalar") (serialize-qp "templateName" $template_name "scalar") (serialize-qp "timeZone" $time_zone "scalar") (serialize-qp "webIdType" $web_id_type "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({web_id: (encode-path-segment $web_id)} | format pattern "/streamsets/{web_id}/recordedattimes") $qp)
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"time": $time, "categoryName": $category_name, "nameFilter": $name_filter, "retrievalMode": $retrieval_mode, "searchFullHierarchy": $search_full_hierarchy, "selectedFields": $selected_fields, "showExcluded": $show_excluded, "showHidden": $show_hidden, "sortOrder": $sort_order, "templateName": $template_name, "timeZone": $time_zone, "webIdType": $web_id_type} | compact), body: null}
 }
 
 # Returns summary values of the attributes for an element, event frame or attribute.
@@ -12106,11 +12473,12 @@ export def "streamsets-summary update-stream-get-summaries" [
 ]: nothing -> record<Items: table<Items: list, Links: record, Name: string, Path: string, WebException: record, WebId: string>, Links: record<First: string, Last: string, Next: string, Previous: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($web_id | is-empty) { error make --unspanned { msg: "path parameter 'webId' must be non-empty" } }
   let qp = [(serialize-qp "calculationBasis" $calculation_basis "scalar") (serialize-qp "categoryName" $category_name "scalar") (serialize-qp "endTime" $end_time "scalar") (serialize-qp "filterExpression" $filter_expression "scalar") (serialize-qp "nameFilter" $name_filter "scalar") (serialize-qp "sampleInterval" $sample_interval "scalar") (serialize-qp "sampleType" $sample_type "scalar") (serialize-qp "searchFullHierarchy" $search_full_hierarchy "scalar") (serialize-qp "selectedFields" $selected_fields "scalar") (serialize-qp "showExcluded" $show_excluded "scalar") (serialize-qp "showHidden" $show_hidden "scalar") (serialize-qp "startTime" $start_time "scalar") (serialize-qp "summaryDuration" $summary_duration "scalar") (serialize-qp "summaryType" $summary_type "multi") (serialize-qp "templateName" $template_name "scalar") (serialize-qp "timeType" $time_type "scalar") (serialize-qp "timeZone" $time_zone "scalar") (serialize-qp "webIdType" $web_id_type "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({web_id: (encode-path-segment $web_id)} | format pattern "/streamsets/{web_id}/summary") $qp)
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"calculationBasis": $calculation_basis, "categoryName": $category_name, "endTime": $end_time, "filterExpression": $filter_expression, "nameFilter": $name_filter, "sampleInterval": $sample_interval, "sampleType": $sample_type, "searchFullHierarchy": $search_full_hierarchy, "selectedFields": $selected_fields, "showExcluded": $show_excluded, "showHidden": $show_hidden, "startTime": $start_time, "summaryDuration": $summary_duration, "summaryType": $summary_type, "templateName": $template_name, "timeType": $time_type, "timeZone": $time_zone, "webIdType": $web_id_type} | compact), body: null}
 }
 
 # Returns values of the attributes for an Element, Event Frame or Attribute at the specified time.
@@ -12144,18 +12512,19 @@ export def "streamsets-value update-stream-get" [
 ]: nothing -> record<Items: table<Links: record, Name: string, Path: string, Value: record, WebException: record, WebId: string>, Links: record<First: string, Last: string, Next: string, Previous: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($web_id | is-empty) { error make --unspanned { msg: "path parameter 'webId' must be non-empty" } }
   let qp = [(serialize-qp "categoryName" $category_name "scalar") (serialize-qp "nameFilter" $name_filter "scalar") (serialize-qp "searchFullHierarchy" $search_full_hierarchy "scalar") (serialize-qp "selectedFields" $selected_fields "scalar") (serialize-qp "showExcluded" $show_excluded "scalar") (serialize-qp "showHidden" $show_hidden "scalar") (serialize-qp "sortField" $sort_field "scalar") (serialize-qp "sortOrder" $sort_order "scalar") (serialize-qp "templateName" $template_name "scalar") (serialize-qp "time" $time "scalar") (serialize-qp "timeZone" $time_zone "scalar") (serialize-qp "webIdType" $web_id_type "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({web_id: (encode-path-segment $web_id)} | format pattern "/streamsets/{web_id}/value") $qp)
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"categoryName": $category_name, "nameFilter": $name_filter, "searchFullHierarchy": $search_full_hierarchy, "selectedFields": $selected_fields, "showExcluded": $show_excluded, "showHidden": $show_hidden, "sortField": $sort_field, "sortOrder": $sort_order, "templateName": $template_name, "time": $time, "timeZone": $time_zone, "webIdType": $web_id_type} | compact), body: null}
 }
 
 # Updates a single value for the specified streams.
 #
 # POST /streamsets/{webId}/value
 # operationId: StreamSet_UpdateValue
-export def "streamsets-value update-stream-update" [
+export def "streamsets-value update-stream" [
   web_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -12174,13 +12543,14 @@ export def "streamsets-value update-stream-update" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($web_id | is-empty) { error make --unspanned { msg: "path parameter 'webId' must be non-empty" } }
   let qp = [(serialize-qp "bufferOption" $buffer_option "scalar") (serialize-qp "updateOption" $update_option "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({web_id: (encode-path-segment $web_id)} | format pattern "/streamsets/{web_id}/value") $qp)
   let req_body = $body
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else if (($input | is-not-empty) and ($req_body | is-empty)) { $input } else { $req_body }
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: ({"bufferOption": $buffer_option, "updateOption": $update_option} | compact), body: $req_body}
 }
 
 # Get system links for this PI System Web API instance.
@@ -12204,7 +12574,7 @@ export def "system get-landing" [
   let full_url = (build-url $base "/system")
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
 }
 
 # Get AF cache instances currently in use by the system. These are caches from which user requests are serviced. The number of instances depends on the number of users connected to the service, the service's authentication method, and the cache instance configuration.
@@ -12228,7 +12598,7 @@ export def "system-cacheinstances get-cache-instances" [
   let full_url = (build-url $base "/system/cacheinstances")
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
 }
 
 # Get the current system configuration.
@@ -12252,7 +12622,7 @@ export def "system-configuration list" [
   let full_url = (build-url $base "/system/configuration")
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
 }
 
 # Delete a configuration item.
@@ -12274,10 +12644,11 @@ export def "system-configuration delete" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($key | is-empty) { error make --unspanned { msg: "path parameter 'key' must be non-empty" } }
   let full_url = (build-url $base ({key: (encode-path-segment $key)} | format pattern "/system/configuration/{key}"))
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
 }
 
 # Get the value of a configuration item.
@@ -12299,10 +12670,11 @@ export def "system-configuration get" [
 ]: nothing -> record {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($key | is-empty) { error make --unspanned { msg: "path parameter 'key' must be non-empty" } }
   let full_url = (build-url $base ({key: (encode-path-segment $key)} | format pattern "/system/configuration/{key}"))
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
 }
 
 # Get information about this PI Web API instance. Examples of information returned include the system uptime, the number of cache instances for this PI System Web API instance, and the system run state.
@@ -12326,7 +12698,7 @@ export def "system-status get" [
   let full_url = (build-url $base "/system/status")
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
 }
 
 # Get information about the Windows identity used to fulfill the request. This depends on the service's authentication method and the credentials passed by the client. The impersonation level of the Windows identity is included.
@@ -12350,7 +12722,7 @@ export def "system-userinfo get-user" [
   let full_url = (build-url $base "/system/userinfo")
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
 }
 
 # Get the current versions of the PI Web API instance and all external plugins.
@@ -12374,7 +12746,7 @@ export def "system-versions get" [
   let full_url = (build-url $base "/system/versions")
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
 }
 
 # Retrieve a table category by path.
@@ -12402,7 +12774,7 @@ export def "tablecategories get-table-category-by-path" [
   let full_url = (build-url $base "/tablecategories" $qp)
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"path": $path, "selectedFields": $selected_fields, "webIdType": $web_id_type} | compact), body: null}
 }
 
 # Delete a table category.
@@ -12424,10 +12796,11 @@ export def "tablecategories delete-table-category" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($web_id | is-empty) { error make --unspanned { msg: "path parameter 'webId' must be non-empty" } }
   let full_url = (build-url $base ({web_id: (encode-path-segment $web_id)} | format pattern "/tablecategories/{web_id}"))
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
 }
 
 # Retrieve a table category.
@@ -12451,11 +12824,12 @@ export def "tablecategories get-table-category" [
 ]: nothing -> record<Description: string, Id: string, Links: record<Database: string, Security: string, SecurityEntries: string, Self: string>, Name: string, Path: string, WebException: record<Errors: list<string>, StatusCode: int>, WebId: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($web_id | is-empty) { error make --unspanned { msg: "path parameter 'webId' must be non-empty" } }
   let qp = [(serialize-qp "selectedFields" $selected_fields "scalar") (serialize-qp "webIdType" $web_id_type "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({web_id: (encode-path-segment $web_id)} | format pattern "/tablecategories/{web_id}") $qp)
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"selectedFields": $selected_fields, "webIdType": $web_id_type} | compact), body: null}
 }
 
 # Update a table category by replacing items in its definition.
@@ -12487,12 +12861,13 @@ export def "tablecategories update-table-category" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($web_id | is-empty) { error make --unspanned { msg: "path parameter 'webId' must be non-empty" } }
   let full_url = (build-url $base ({web_id: (encode-path-segment $web_id)} | format pattern "/tablecategories/{web_id}"))
   let req_body = {"Description": $description, "Id": $id, "Links": $links, "Name": $name, "Path": $path, "WebException": $web_exception, "WebId": $body_web_id} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "patch" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body
+  do-request "patch" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: {}, body: $req_body}
 }
 
 # Get the security information of the specified security item associated with the table category for a specified user.
@@ -12518,11 +12893,12 @@ export def "tablecategories-security get-table-category" [
 ]: nothing -> record<Items: table<CanAnnotate: bool, CanDelete: bool, CanExecute: bool, CanRead: bool, CanReadData: bool, CanSubscribe: bool, CanSubscribeOthers: bool, CanWrite: bool, CanWriteData: bool, HasAdmin: bool, Links: record, OwnerWebId: string, Rights: list, SecurityItem: string, UserIdentity: string, WebException: record>, Links: record<First: string, Last: string, Next: string, Previous: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($web_id | is-empty) { error make --unspanned { msg: "path parameter 'webId' must be non-empty" } }
   let qp = [(serialize-qp "userIdentity" $user_identity "multi") (serialize-qp "forceRefresh" $force_refresh "scalar") (serialize-qp "selectedFields" $selected_fields "scalar") (serialize-qp "webIdType" $web_id_type "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({web_id: (encode-path-segment $web_id)} | format pattern "/tablecategories/{web_id}/security") $qp)
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"userIdentity": $user_identity, "forceRefresh": $force_refresh, "selectedFields": $selected_fields, "webIdType": $web_id_type} | compact), body: null}
 }
 
 # Retrieve the security entries associated with the table category based on the specified criteria. By default, all security entries for this table category are returned.
@@ -12547,11 +12923,12 @@ export def "tablecategories-securityentries get-table-category-security-entries"
 ]: nothing -> record<Items: table<AllowRights: list, DenyRights: list, Links: record, Name: string, SecurityIdentityName: string, WebException: record>, Links: record<First: string, Last: string, Next: string, Previous: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($web_id | is-empty) { error make --unspanned { msg: "path parameter 'webId' must be non-empty" } }
   let qp = [(serialize-qp "nameFilter" $name_filter "scalar") (serialize-qp "selectedFields" $selected_fields "scalar") (serialize-qp "webIdType" $web_id_type "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({web_id: (encode-path-segment $web_id)} | format pattern "/tablecategories/{web_id}/securityentries") $qp)
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"nameFilter": $name_filter, "selectedFields": $selected_fields, "webIdType": $web_id_type} | compact), body: null}
 }
 
 # Create a security entry owned by the table category.
@@ -12584,13 +12961,14 @@ export def "tablecategories-securityentries create-table-category-security-entry
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($web_id | is-empty) { error make --unspanned { msg: "path parameter 'webId' must be non-empty" } }
   let qp = [(serialize-qp "applyToChildren" $apply_to_children "scalar") (serialize-qp "webIdType" $web_id_type "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({web_id: (encode-path-segment $web_id)} | format pattern "/tablecategories/{web_id}/securityentries") $qp)
   let req_body = {"AllowRights": $allow_rights, "DenyRights": $deny_rights, "Links": $links, "Name": $name, "SecurityIdentityName": $security_identity_name, "WebException": $web_exception} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: ({"applyToChildren": $apply_to_children, "webIdType": $web_id_type} | compact), body: $req_body}
 }
 
 # Delete a security entry owned by the table category.
@@ -12614,11 +12992,13 @@ export def "tablecategories-securityentries delete-table-category-security-entry
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($web_id | is-empty) { error make --unspanned { msg: "path parameter 'webId' must be non-empty" } }
+  if ($name | is-empty) { error make --unspanned { msg: "path parameter 'name' must be non-empty" } }
   let qp = [(serialize-qp "applyToChildren" $apply_to_children "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({web_id: (encode-path-segment $web_id), name: (encode-path-segment $name)} | format pattern "/tablecategories/{web_id}/securityentries/{name}") $qp)
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"applyToChildren": $apply_to_children} | compact), body: null}
 }
 
 # Retrieve the security entry associated with the table category with the specified name.
@@ -12643,11 +13023,13 @@ export def "tablecategories-securityentries get-table-category-security-entry" [
 ]: nothing -> record<AllowRights: list<string>, DenyRights: list<string>, Links: record<SecurableObject: string, SecurityIdentity: string, Self: string>, Name: string, SecurityIdentityName: string, WebException: record<Errors: list<string>, StatusCode: int>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($web_id | is-empty) { error make --unspanned { msg: "path parameter 'webId' must be non-empty" } }
+  if ($name | is-empty) { error make --unspanned { msg: "path parameter 'name' must be non-empty" } }
   let qp = [(serialize-qp "selectedFields" $selected_fields "scalar") (serialize-qp "webIdType" $web_id_type "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({web_id: (encode-path-segment $web_id), name: (encode-path-segment $name)} | format pattern "/tablecategories/{web_id}/securityentries/{name}") $qp)
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"selectedFields": $selected_fields, "webIdType": $web_id_type} | compact), body: null}
 }
 
 # Update a security entry owned by the table category.
@@ -12680,13 +13062,15 @@ export def "tablecategories-securityentries update-table-category-security-entry
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($web_id | is-empty) { error make --unspanned { msg: "path parameter 'webId' must be non-empty" } }
+  if ($name | is-empty) { error make --unspanned { msg: "path parameter 'name' must be non-empty" } }
   let qp = [(serialize-qp "applyToChildren" $apply_to_children "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({web_id: (encode-path-segment $web_id), name: (encode-path-segment $name)} | format pattern "/tablecategories/{web_id}/securityentries/{name}") $qp)
   let req_body = {"AllowRights": $allow_rights, "DenyRights": $deny_rights, "Links": $links, "Name": $body_name, "SecurityIdentityName": $security_identity_name, "WebException": $web_exception} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: ({"applyToChildren": $apply_to_children} | compact), body: $req_body}
 }
 
 # Retrieve a table by path.
@@ -12714,7 +13098,7 @@ export def "tables get-by-path" [
   let full_url = (build-url $base "/tables" $qp)
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"path": $path, "selectedFields": $selected_fields, "webIdType": $web_id_type} | compact), body: null}
 }
 
 # Delete a table.
@@ -12736,10 +13120,11 @@ export def "tables delete" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($web_id | is-empty) { error make --unspanned { msg: "path parameter 'webId' must be non-empty" } }
   let full_url = (build-url $base ({web_id: (encode-path-segment $web_id)} | format pattern "/tables/{web_id}"))
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
 }
 
 # Retrieve a table.
@@ -12763,11 +13148,12 @@ export def "tables get" [
 ]: nothing -> record<CategoryNames: list<string>, ConvertToLocalTime: bool, Description: string, Id: string, Links: record<Categories: string, Data: string, Database: string, Security: string, SecurityEntries: string, Self: string>, Name: string, Path: string, TimeZone: string, WebException: record<Errors: list<string>, StatusCode: int>, WebId: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($web_id | is-empty) { error make --unspanned { msg: "path parameter 'webId' must be non-empty" } }
   let qp = [(serialize-qp "selectedFields" $selected_fields "scalar") (serialize-qp "webIdType" $web_id_type "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({web_id: (encode-path-segment $web_id)} | format pattern "/tables/{web_id}") $qp)
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"selectedFields": $selected_fields, "webIdType": $web_id_type} | compact), body: null}
 }
 
 # Update a table by replacing items in its definition.
@@ -12802,12 +13188,13 @@ export def "tables update" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($web_id | is-empty) { error make --unspanned { msg: "path parameter 'webId' must be non-empty" } }
   let full_url = (build-url $base ({web_id: (encode-path-segment $web_id)} | format pattern "/tables/{web_id}"))
   let req_body = {"CategoryNames": $category_names, "ConvertToLocalTime": $convert_to_local_time, "Description": $description, "Id": $id, "Links": $links, "Name": $name, "Path": $path, "TimeZone": $time_zone, "WebException": $web_exception, "WebId": $body_web_id} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "patch" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body
+  do-request "patch" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: {}, body: $req_body}
 }
 
 # Get a table's categories.
@@ -12831,11 +13218,12 @@ export def "tables-categories get" [
 ]: nothing -> record<Items: table<Description: string, Id: string, Links: record, Name: string, Path: string, WebException: record, WebId: string>, Links: record<First: string, Last: string, Next: string, Previous: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($web_id | is-empty) { error make --unspanned { msg: "path parameter 'webId' must be non-empty" } }
   let qp = [(serialize-qp "selectedFields" $selected_fields "scalar") (serialize-qp "webIdType" $web_id_type "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({web_id: (encode-path-segment $web_id)} | format pattern "/tables/{web_id}/categories") $qp)
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"selectedFields": $selected_fields, "webIdType": $web_id_type} | compact), body: null}
 }
 
 # Get the table's data.
@@ -12858,11 +13246,12 @@ export def "tables-data get" [
 ]: nothing -> record<Columns: record, Rows: list<record>, WebException: record<Errors: list<string>, StatusCode: int>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($web_id | is-empty) { error make --unspanned { msg: "path parameter 'webId' must be non-empty" } }
   let qp = [(serialize-qp "selectedFields" $selected_fields "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({web_id: (encode-path-segment $web_id)} | format pattern "/tables/{web_id}/data") $qp)
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"selectedFields": $selected_fields} | compact), body: null}
 }
 
 # Update the table's data.
@@ -12889,12 +13278,13 @@ export def "tables-data update" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($web_id | is-empty) { error make --unspanned { msg: "path parameter 'webId' must be non-empty" } }
   let full_url = (build-url $base ({web_id: (encode-path-segment $web_id)} | format pattern "/tables/{web_id}/data"))
   let req_body = {"Columns": $columns, "Rows": $rows, "WebException": $web_exception} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: {}, body: $req_body}
 }
 
 # Get the security information of the specified security item associated with the table for a specified user.
@@ -12920,11 +13310,12 @@ export def "tables-security get" [
 ]: nothing -> record<Items: table<CanAnnotate: bool, CanDelete: bool, CanExecute: bool, CanRead: bool, CanReadData: bool, CanSubscribe: bool, CanSubscribeOthers: bool, CanWrite: bool, CanWriteData: bool, HasAdmin: bool, Links: record, OwnerWebId: string, Rights: list, SecurityItem: string, UserIdentity: string, WebException: record>, Links: record<First: string, Last: string, Next: string, Previous: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($web_id | is-empty) { error make --unspanned { msg: "path parameter 'webId' must be non-empty" } }
   let qp = [(serialize-qp "userIdentity" $user_identity "multi") (serialize-qp "forceRefresh" $force_refresh "scalar") (serialize-qp "selectedFields" $selected_fields "scalar") (serialize-qp "webIdType" $web_id_type "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({web_id: (encode-path-segment $web_id)} | format pattern "/tables/{web_id}/security") $qp)
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"userIdentity": $user_identity, "forceRefresh": $force_refresh, "selectedFields": $selected_fields, "webIdType": $web_id_type} | compact), body: null}
 }
 
 # Retrieve the security entries associated with the table based on the specified criteria. By default, all security entries for this table are returned.
@@ -12949,11 +13340,12 @@ export def "tables-securityentries get-security-entries" [
 ]: nothing -> record<Items: table<AllowRights: list, DenyRights: list, Links: record, Name: string, SecurityIdentityName: string, WebException: record>, Links: record<First: string, Last: string, Next: string, Previous: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($web_id | is-empty) { error make --unspanned { msg: "path parameter 'webId' must be non-empty" } }
   let qp = [(serialize-qp "nameFilter" $name_filter "scalar") (serialize-qp "selectedFields" $selected_fields "scalar") (serialize-qp "webIdType" $web_id_type "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({web_id: (encode-path-segment $web_id)} | format pattern "/tables/{web_id}/securityentries") $qp)
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"nameFilter": $name_filter, "selectedFields": $selected_fields, "webIdType": $web_id_type} | compact), body: null}
 }
 
 # Create a security entry owned by the table.
@@ -12986,13 +13378,14 @@ export def "tables-securityentries create-security-entry" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($web_id | is-empty) { error make --unspanned { msg: "path parameter 'webId' must be non-empty" } }
   let qp = [(serialize-qp "applyToChildren" $apply_to_children "scalar") (serialize-qp "webIdType" $web_id_type "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({web_id: (encode-path-segment $web_id)} | format pattern "/tables/{web_id}/securityentries") $qp)
   let req_body = {"AllowRights": $allow_rights, "DenyRights": $deny_rights, "Links": $links, "Name": $name, "SecurityIdentityName": $security_identity_name, "WebException": $web_exception} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: ({"applyToChildren": $apply_to_children, "webIdType": $web_id_type} | compact), body: $req_body}
 }
 
 # Delete a security entry owned by the table.
@@ -13016,11 +13409,13 @@ export def "tables-securityentries delete-security-entry" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($web_id | is-empty) { error make --unspanned { msg: "path parameter 'webId' must be non-empty" } }
+  if ($name | is-empty) { error make --unspanned { msg: "path parameter 'name' must be non-empty" } }
   let qp = [(serialize-qp "applyToChildren" $apply_to_children "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({web_id: (encode-path-segment $web_id), name: (encode-path-segment $name)} | format pattern "/tables/{web_id}/securityentries/{name}") $qp)
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"applyToChildren": $apply_to_children} | compact), body: null}
 }
 
 # Retrieve the security entry associated with the table with the specified name.
@@ -13045,11 +13440,13 @@ export def "tables-securityentries get-security-entry" [
 ]: nothing -> record<AllowRights: list<string>, DenyRights: list<string>, Links: record<SecurableObject: string, SecurityIdentity: string, Self: string>, Name: string, SecurityIdentityName: string, WebException: record<Errors: list<string>, StatusCode: int>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($web_id | is-empty) { error make --unspanned { msg: "path parameter 'webId' must be non-empty" } }
+  if ($name | is-empty) { error make --unspanned { msg: "path parameter 'name' must be non-empty" } }
   let qp = [(serialize-qp "selectedFields" $selected_fields "scalar") (serialize-qp "webIdType" $web_id_type "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({web_id: (encode-path-segment $web_id), name: (encode-path-segment $name)} | format pattern "/tables/{web_id}/securityentries/{name}") $qp)
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"selectedFields": $selected_fields, "webIdType": $web_id_type} | compact), body: null}
 }
 
 # Update a security entry owned by the table.
@@ -13082,13 +13479,15 @@ export def "tables-securityentries update-security-entry" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($web_id | is-empty) { error make --unspanned { msg: "path parameter 'webId' must be non-empty" } }
+  if ($name | is-empty) { error make --unspanned { msg: "path parameter 'name' must be non-empty" } }
   let qp = [(serialize-qp "applyToChildren" $apply_to_children "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({web_id: (encode-path-segment $web_id), name: (encode-path-segment $name)} | format pattern "/tables/{web_id}/securityentries/{name}") $qp)
   let req_body = {"AllowRights": $allow_rights, "DenyRights": $deny_rights, "Links": $links, "Name": $body_name, "SecurityIdentityName": $security_identity_name, "WebException": $web_exception} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: ({"applyToChildren": $apply_to_children} | compact), body: $req_body}
 }
 
 # Retrieve a Time Rule Plug-in by path.
@@ -13116,7 +13515,7 @@ export def "timeruleplugins get-time-rule-plug-in-by-path" [
   let full_url = (build-url $base "/timeruleplugins" $qp)
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"path": $path, "selectedFields": $selected_fields, "webIdType": $web_id_type} | compact), body: null}
 }
 
 # Retrieve a Time Rule Plug-in.
@@ -13140,11 +13539,12 @@ export def "timeruleplugins get-time-rule-plug-in" [
 ]: nothing -> record<AssemblyFileName: string, AssemblyID: string, AssemblyLoadProperties: list<string>, AssemblyTime: string, CompatibilityVersion: int, Description: string, Id: string, IsBrowsable: bool, IsNonEditableConfig: bool, Links: record<AssetServer: string, Self: string>, LoadedAssemblyTime: string, LoadedVersion: string, Name: string, Path: string, Version: string, WebException: record<Errors: list<string>, StatusCode: int>, WebId: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($web_id | is-empty) { error make --unspanned { msg: "path parameter 'webId' must be non-empty" } }
   let qp = [(serialize-qp "selectedFields" $selected_fields "scalar") (serialize-qp "webIdType" $web_id_type "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({web_id: (encode-path-segment $web_id)} | format pattern "/timeruleplugins/{web_id}") $qp)
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"selectedFields": $selected_fields, "webIdType": $web_id_type} | compact), body: null}
 }
 
 # Retrieve a Time Rule by path.
@@ -13172,7 +13572,7 @@ export def "timerules get-time-rule-by-path" [
   let full_url = (build-url $base "/timerules" $qp)
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"path": $path, "selectedFields": $selected_fields, "webIdType": $web_id_type} | compact), body: null}
 }
 
 # Delete a Time Rule.
@@ -13194,10 +13594,11 @@ export def "timerules delete-time-rule" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($web_id | is-empty) { error make --unspanned { msg: "path parameter 'webId' must be non-empty" } }
   let full_url = (build-url $base ({web_id: (encode-path-segment $web_id)} | format pattern "/timerules/{web_id}"))
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
 }
 
 # Retrieve a Time Rule.
@@ -13221,11 +13622,12 @@ export def "timerules get-time-rule" [
 ]: nothing -> record<ConfigString: string, ConfigStringStored: string, Description: string, DisplayString: string, EditorType: string, Id: string, IsConfigured: bool, IsInitializing: bool, Links: record<Analysis: string, AnalysisTemplate: string, PlugIn: string, Self: string>, MergeDuplicatedItems: bool, Name: string, Path: string, PlugInName: string, WebException: record<Errors: list<string>, StatusCode: int>, WebId: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($web_id | is-empty) { error make --unspanned { msg: "path parameter 'webId' must be non-empty" } }
   let qp = [(serialize-qp "selectedFields" $selected_fields "scalar") (serialize-qp "webIdType" $web_id_type "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({web_id: (encode-path-segment $web_id)} | format pattern "/timerules/{web_id}") $qp)
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"selectedFields": $selected_fields, "webIdType": $web_id_type} | compact), body: null}
 }
 
 # Update a Time Rule by replacing items in its definition.
@@ -13265,12 +13667,13 @@ export def "timerules update-time-rule" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($web_id | is-empty) { error make --unspanned { msg: "path parameter 'webId' must be non-empty" } }
   let full_url = (build-url $base ({web_id: (encode-path-segment $web_id)} | format pattern "/timerules/{web_id}"))
   let req_body = {"ConfigString": $config_string, "ConfigStringStored": $config_string_stored, "Description": $description, "DisplayString": $display_string, "EditorType": $editor_type, "Id": $id, "IsConfigured": $is_configured, "IsInitializing": $is_initializing, "Links": $links, "MergeDuplicatedItems": $merge_duplicated_items, "Name": $name, "Path": $path, "PlugInName": $plug_in_name, "WebException": $web_exception, "WebId": $body_web_id} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "patch" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body
+  do-request "patch" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: {}, body: $req_body}
 }
 
 # Retrieve a unit class by path.
@@ -13298,7 +13701,7 @@ export def "unitclasses get-unit-class-by-path" [
   let full_url = (build-url $base "/unitclasses" $qp)
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"path": $path, "selectedFields": $selected_fields, "webIdType": $web_id_type} | compact), body: null}
 }
 
 # Delete a unit class.
@@ -13320,10 +13723,11 @@ export def "unitclasses delete-unit-class" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($web_id | is-empty) { error make --unspanned { msg: "path parameter 'webId' must be non-empty" } }
   let full_url = (build-url $base ({web_id: (encode-path-segment $web_id)} | format pattern "/unitclasses/{web_id}"))
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
 }
 
 # Retrieve a unit class.
@@ -13347,11 +13751,12 @@ export def "unitclasses get-unit-class" [
 ]: nothing -> record<CanonicalUnitAbbreviation: string, CanonicalUnitName: string, Description: string, Id: string, Links: record<AssetServer: string, CanonicalUnit: string, Self: string, Units: string>, Name: string, Path: string, WebException: record<Errors: list<string>, StatusCode: int>, WebId: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($web_id | is-empty) { error make --unspanned { msg: "path parameter 'webId' must be non-empty" } }
   let qp = [(serialize-qp "selectedFields" $selected_fields "scalar") (serialize-qp "webIdType" $web_id_type "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({web_id: (encode-path-segment $web_id)} | format pattern "/unitclasses/{web_id}") $qp)
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"selectedFields": $selected_fields, "webIdType": $web_id_type} | compact), body: null}
 }
 
 # Update a unit class.
@@ -13385,12 +13790,13 @@ export def "unitclasses update-unit-class" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($web_id | is-empty) { error make --unspanned { msg: "path parameter 'webId' must be non-empty" } }
   let full_url = (build-url $base ({web_id: (encode-path-segment $web_id)} | format pattern "/unitclasses/{web_id}"))
   let req_body = {"CanonicalUnitAbbreviation": $canonical_unit_abbreviation, "CanonicalUnitName": $canonical_unit_name, "Description": $description, "Id": $id, "Links": $links, "Name": $name, "Path": $path, "WebException": $web_exception, "WebId": $body_web_id} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "patch" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body
+  do-request "patch" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: {}, body: $req_body}
 }
 
 # Get the canonical unit of a unit class.
@@ -13414,11 +13820,12 @@ export def "unitclasses-canonicalunit get-unit-class-canonical-unit" [
 ]: nothing -> record<Abbreviation: string, Description: string, Factor: float, Id: string, Links: record<Class: string, ReferenceUnit: string, Self: string>, Name: string, Offset: float, Path: string, ReferenceFactor: float, ReferenceOffset: float, ReferenceUnitAbbreviation: string, WebException: record<Errors: list<string>, StatusCode: int>, WebId: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($web_id | is-empty) { error make --unspanned { msg: "path parameter 'webId' must be non-empty" } }
   let qp = [(serialize-qp "selectedFields" $selected_fields "scalar") (serialize-qp "webIdType" $web_id_type "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({web_id: (encode-path-segment $web_id)} | format pattern "/unitclasses/{web_id}/canonicalunit") $qp)
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"selectedFields": $selected_fields, "webIdType": $web_id_type} | compact), body: null}
 }
 
 # Get a list of all units belonging to the unit class.
@@ -13442,11 +13849,12 @@ export def "unitclasses-units get-class" [
 ]: nothing -> record<Abbreviation: string, Description: string, Factor: float, Id: string, Links: record<Class: string, ReferenceUnit: string, Self: string>, Name: string, Offset: float, Path: string, ReferenceFactor: float, ReferenceOffset: float, ReferenceUnitAbbreviation: string, WebException: record<Errors: list<string>, StatusCode: int>, WebId: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($web_id | is-empty) { error make --unspanned { msg: "path parameter 'webId' must be non-empty" } }
   let qp = [(serialize-qp "selectedFields" $selected_fields "scalar") (serialize-qp "webIdType" $web_id_type "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({web_id: (encode-path-segment $web_id)} | format pattern "/unitclasses/{web_id}/units") $qp)
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"selectedFields": $selected_fields, "webIdType": $web_id_type} | compact), body: null}
 }
 
 # Create a unit in the specified Unit Class.
@@ -13485,13 +13893,14 @@ export def "unitclasses-units create-class" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($web_id | is-empty) { error make --unspanned { msg: "path parameter 'webId' must be non-empty" } }
   let qp = [(serialize-qp "webIdType" $web_id_type "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({web_id: (encode-path-segment $web_id)} | format pattern "/unitclasses/{web_id}/units") $qp)
   let req_body = {"Abbreviation": $abbreviation, "Description": $description, "Factor": $factor, "Id": $id, "Links": $links, "Name": $name, "Offset": $offset, "Path": $path, "ReferenceFactor": $reference_factor, "ReferenceOffset": $reference_offset, "ReferenceUnitAbbreviation": $reference_unit_abbreviation, "WebException": $web_exception, "WebId": $body_web_id} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: ({"webIdType": $web_id_type} | compact), body: $req_body}
 }
 
 # Retrieve a unit by path.
@@ -13519,7 +13928,7 @@ export def "units get-by-path" [
   let full_url = (build-url $base "/units" $qp)
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"path": $path, "selectedFields": $selected_fields, "webIdType": $web_id_type} | compact), body: null}
 }
 
 # Delete a unit.
@@ -13541,10 +13950,11 @@ export def "units delete" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($web_id | is-empty) { error make --unspanned { msg: "path parameter 'webId' must be non-empty" } }
   let full_url = (build-url $base ({web_id: (encode-path-segment $web_id)} | format pattern "/units/{web_id}"))
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
 }
 
 # Retrieve a unit.
@@ -13568,11 +13978,12 @@ export def "units get" [
 ]: nothing -> record<Abbreviation: string, Description: string, Factor: float, Id: string, Links: record<Class: string, ReferenceUnit: string, Self: string>, Name: string, Offset: float, Path: string, ReferenceFactor: float, ReferenceOffset: float, ReferenceUnitAbbreviation: string, WebException: record<Errors: list<string>, StatusCode: int>, WebId: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($web_id | is-empty) { error make --unspanned { msg: "path parameter 'webId' must be non-empty" } }
   let qp = [(serialize-qp "selectedFields" $selected_fields "scalar") (serialize-qp "webIdType" $web_id_type "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({web_id: (encode-path-segment $web_id)} | format pattern "/units/{web_id}") $qp)
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"selectedFields": $selected_fields, "webIdType": $web_id_type} | compact), body: null}
 }
 
 # Update a unit.
@@ -13610,10 +14021,11 @@ export def "units update" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($web_id | is-empty) { error make --unspanned { msg: "path parameter 'webId' must be non-empty" } }
   let full_url = (build-url $base ({web_id: (encode-path-segment $web_id)} | format pattern "/units/{web_id}"))
   let req_body = {"Abbreviation": $abbreviation, "Description": $description, "Factor": $factor, "Id": $id, "Links": $links, "Name": $name, "Offset": $offset, "Path": $path, "ReferenceFactor": $reference_factor, "ReferenceOffset": $reference_offset, "ReferenceUnitAbbreviation": $reference_unit_abbreviation, "WebException": $web_exception, "WebId": $body_web_id} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "patch" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body
+  do-request "patch" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: {}, body: $req_body}
 }

@@ -3,19 +3,20 @@
 # Auth: --token flag or $env.OPENDATASOFT_TOKEN
 
 const BASE_URL = "https://public.opendatasoft.com/api/v2"
-const DEFAULT_AUTH = "query-apikey"
 
-# Build auth: returns {headers: record, query: string}
+# Build auth: returns {scheme: string, headers: record, query: string, location: string}.
+# `location` is "header" | "query" | "cookie" | "none" and tells dry-run callers
+# where the token went without inspecting headers/query themselves.
 def build-auth [token?: string, auth_scheme?: string]: nothing -> record {
   let token_val = if ($token != null) and ($token | is-not-empty) { $token } else { $env | get -o OPENDATASOFT_TOKEN | default "" }
   let scheme = ($auth_scheme | default "bearer")
-  if ($scheme == "none") or ($token_val | is-empty) { return {headers: {}, query: ""} }
+  if ($scheme == "none") or ($token_val | is-empty) { return {scheme: $scheme, headers: {}, query: "", location: "none"} }
   match $scheme {
-    "query-apikey" => { {headers: {}, query: $"(encode-path-segment "apikey")=(encode-path-segment $token_val)"} }
-    "basic" => { {headers: {Authorization: $"Basic ($token_val)"}, query: ""} }
-    "basic-credentials" => { {headers: {Authorization: $"Basic ($token_val | encode base64)"}, query: ""} }
-    "none" => { {headers: {}, query: ""} }
-    _ => { {headers: {Authorization: $"Bearer ($token_val)"}, query: ""} }
+    "query-apikey" => { {scheme: $scheme, headers: {}, query: $"(encode-path-segment "apikey")=(encode-path-segment $token_val)", location: "query"} }
+    "basic" => { {scheme: $scheme, headers: {Authorization: $"Basic ($token_val)"}, query: "", location: "header"} }
+    "basic-credentials" => { {scheme: $scheme, headers: {Authorization: $"Basic ($token_val | encode base64)"}, query: "", location: "header"} }
+    "none" => { {scheme: $scheme, headers: {}, query: "", location: "none"} }
+    _ => { {scheme: $scheme, headers: {Authorization: $"Bearer ($token_val)"}, query: "", location: "header"} }
   }
 }
 
@@ -24,8 +25,9 @@ def build-auth [token?: string, auth_scheme?: string]: nothing -> record {
 # ([A-Za-z0-9-._~]) stay literal; everything else gets %XX.
 def serialize-qp [name: string, value: any, style: string]: nothing -> list<string> {
   if ($value == null) { return [] }
-  let n = (encode-path-segment $name)
   let is_list = ($value | describe | str starts-with "list")
+  if $is_list and ($value | is-empty) { return [] }
+  let n = (encode-path-segment $name)
   if ($value | describe | str starts-with "record") { return ($value | transpose k v | each { $"($n)[(encode-path-segment $in.k)]=(encode-path-segment $in.v)" }) }
   if not $is_list { return [$"($n)=(encode-path-segment $value)"] }
   match $style {
@@ -56,22 +58,42 @@ def build-url [base: string, path: string, query?: string]: nothing -> string {
   if ($query != null) and ($query | is-not-empty) { $result | upsert query $query | url join } else { $result | url join }
 }
 
+# Build the dry-run record returned by --dry-run. Shape:
+#   {dry_run: true, method, url, query: <record>, headers, body, content_type, timeout,
+#    auth: {scheme, location}}
+# `meta` carries logical-form data (the query record by spec name, the pre-serialization
+# body) that do-request itself cannot reconstruct from its wire-format args.
+def build-dry-run-record [method: string, url: string, auth: record, content_type: string, timeout: duration, meta?: record]: nothing -> record {
+  let m = ($meta | default {})
+  {
+    dry_run: true
+    method: $method
+    url: $url
+    query: ($m | get -o query | default {})
+    headers: $auth.headers
+    body: ($m | get -o body)
+    content_type: $content_type
+    timeout: $timeout
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+}
+
 # Execute HTTP request with method dispatch
-def do-request [method: string, url: string, auth: record, insecure: bool, raw: bool, dry_run: bool, max_time?: duration, allow_errors?: bool, full?: bool, content_type?: string, body?: any]: nothing -> any {
+def do-request [method: string, url: string, auth: record, insecure: bool, raw: bool, dry_run: bool, max_time?: duration, allow_errors?: bool, full?: bool, content_type?: string, body?: any, dry_run_meta?: record]: nothing -> any {
   let req_url = if ($auth.query | is-not-empty) { if ($url | str contains "?") { $"($url)&($auth.query)" } else { $"($url)?($auth.query)" } } else { $url }
   let timeout = ($max_time | default 30min)
   let ct = ($content_type | default "application/json")
-  if $dry_run { return {method: $method, url: $req_url, headers: $auth.headers, query_string: $auth.query, content_type: $ct, timeout: $timeout, body: $body} }
+  if $dry_run { return (build-dry-run-record $method $req_url $auth $ct $timeout $dry_run_meta) }
   let resp = match $method {
     "get" => { http get --headers $auth.headers --full --allow-errors --max-time $timeout --insecure=$insecure --raw=$raw $req_url }
-    "head" => { http head --headers $auth.headers --max-time $timeout --insecure=$insecure $req_url }
-    "options" => { http options --headers $auth.headers --max-time $timeout --insecure=$insecure $req_url }
+    "head" => { http head --headers $auth.headers --full --allow-errors --max-time $timeout --insecure=$insecure $req_url }
+    "options" => { http options --headers $auth.headers --full --allow-errors --max-time $timeout --insecure=$insecure $req_url }
     "post" => { if ($body | is-empty) { http post --headers $auth.headers --full --allow-errors --max-time $timeout --insecure=$insecure --raw=$raw $req_url "" } else { http post --headers $auth.headers --content-type $ct --full --allow-errors --max-time $timeout --insecure=$insecure --raw=$raw $req_url $body } }
     "put" => { if ($body | is-empty) { http put --headers $auth.headers --full --allow-errors --max-time $timeout --insecure=$insecure --raw=$raw $req_url "" } else { http put --headers $auth.headers --content-type $ct --full --allow-errors --max-time $timeout --insecure=$insecure --raw=$raw $req_url $body } }
     "patch" => { if ($body | is-empty) { http patch --headers $auth.headers --full --allow-errors --max-time $timeout --insecure=$insecure --raw=$raw $req_url "" } else { http patch --headers $auth.headers --content-type $ct --full --allow-errors --max-time $timeout --insecure=$insecure --raw=$raw $req_url $body } }
     "delete" => { if ($body | is-empty) { http delete --headers $auth.headers --full --allow-errors --max-time $timeout --insecure=$insecure --raw=$raw $req_url } else { http delete --headers $auth.headers --content-type $ct --data $body --full --allow-errors --max-time $timeout --insecure=$insecure --raw=$raw $req_url } }
   }
-  if ($method in ["head" "options"]) { return $resp }
+  if ($method == "head") and (not $full) and (not $allow_errors) and $resp.status < 400 { return $resp.headers }
   if $allow_errors { $resp } else if $resp.status >= 400 { error make --unspanned { msg: $"HTTP ($resp.status): ($resp.body)" } } else if $full { {status: $resp.status, headers: $resp.headers, body: $resp.body} } else if $resp.status == 204 { null } else { $resp.body }
 }
 
@@ -124,7 +146,7 @@ export def "root get" [
   let full_url = (build-url $base "/")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
 }
 
 # List of all pages from this portal.
@@ -147,7 +169,7 @@ export def "pages list" [
   let full_url = (build-url $base "/pages")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
 }
 
 # A single page's metadata from this portal
@@ -168,10 +190,11 @@ export def "pages get" [
 ]: nothing -> record<links: table<href: string, rel: string>, page: record<description: string, slug: string, title: record<en: string, fr: string>>> {
   let auth = (build-auth $token ($auth_scheme | default "query-apikey"))
   let base = ($base_url | default $BASE_URL)
+  if ($slug | is-empty) { error make --unspanned { msg: "path parameter 'slug' must be non-empty" } }
   let full_url = (build-url $base ({slug: (encode-path-segment $slug)} | format pattern "/pages/{slug}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
 }
 
 # Source entry points Provides links for the source's datasets and metadata.
@@ -192,10 +215,11 @@ export def "catalog get" [
 ]: nothing -> record<links: table<href: string, rel: string>> {
   let auth = (build-auth $token ($auth_scheme | default "query-apikey"))
   let base = ($base_url | default $BASE_URL)
+  if ($source | is-empty) { error make --unspanned { msg: "path parameter 'source' must be non-empty" } }
   let full_url = (build-url $base ({source: (encode-path-segment $source)} | format pattern "/{source}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
 }
 
 # **Deprecated, use `/datasets` instead.**
@@ -225,11 +249,12 @@ export def "aggregates get-datasets" [
 ]: nothing -> record<aggregations: list<record>, links: table<href: string, rel: string>> {
   let auth = (build-auth $token ($auth_scheme | default "query-apikey"))
   let base = ($base_url | default $BASE_URL)
+  if ($source | is-empty) { error make --unspanned { msg: "path parameter 'source' must be non-empty" } }
   let qp = [(serialize-qp "select" $select "scalar") (serialize-qp "where" $qp_where "multi") (serialize-qp "group_by" $group_by "scalar") (serialize-qp "order_by" $order_by "csv") (serialize-qp "limit" $limit "scalar") (serialize-qp "offset" $offset "scalar") (serialize-qp "facet" $facet "multi") (serialize-qp "refine" $refine "multi") (serialize-qp "exclude" $exclude "multi")] | flatten | str join "&"
   let full_url = (build-url $base ({source: (encode-path-segment $source)} | format pattern "/{source}/aggregates") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"select": $select, "where": $qp_where, "group_by": $group_by, "order_by": $order_by, "limit": $limit, "offset": $offset, "facet": $facet, "refine": $refine, "exclude": $exclude} | compact), body: null}
 }
 
 # List of available datasets, each with their endpoints, paginated. Links provided: * previous page * next page * last page * first page
@@ -264,11 +289,12 @@ export def "datasets list" [
 ]: nothing -> record<datasets: table<dataset: record, links: list>, links: table<href: string, rel: string>, total_count: int> {
   let auth = (build-auth $token ($auth_scheme | default "query-apikey"))
   let base = ($base_url | default $BASE_URL)
+  if ($source | is-empty) { error make --unspanned { msg: "path parameter 'source' must be non-empty" } }
   let qp = [(serialize-qp "select" $select "scalar") (serialize-qp "where" $qp_where "multi") (serialize-qp "group_by" $group_by "scalar") (serialize-qp "sort" $qp_sort "csv") (serialize-qp "order_by" $order_by "csv") (serialize-qp "limit" $limit "scalar") (serialize-qp "offset" $offset "scalar") (serialize-qp "search" $search "multi") (serialize-qp "facet" $facet "multi") (serialize-qp "refine" $refine "multi") (serialize-qp "exclude" $exclude "multi") (serialize-qp "pretty" $pretty "scalar") (serialize-qp "timezone" $timezone "scalar") (serialize-qp "include_app_metas" $include_app_metas "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({source: (encode-path-segment $source)} | format pattern "/{source}/datasets") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"select": $select, "where": $qp_where, "group_by": $group_by, "sort": $qp_sort, "order_by": $order_by, "limit": $limit, "offset": $offset, "search": $search, "facet": $facet, "refine": $refine, "exclude": $exclude, "pretty": $pretty, "timezone": $timezone, "include_app_metas": $include_app_metas} | compact), body: null}
 }
 
 # List of available endpoints for the specified dataset, with metadata and endpoints. Will provide links for: * the attachments endpoint * the files endpoint * the records endpoint * the catalog endpoint
@@ -294,11 +320,13 @@ export def "datasets get" [
 ]: nothing -> record<dataset: record<attachments: list<record>, data_visible: bool, dataset_id: string, features: list<string>, fields: list<record>, has_records: bool, metas: record>, links: table<href: string, rel: string>> {
   let auth = (build-auth $token ($auth_scheme | default "query-apikey"))
   let base = ($base_url | default $BASE_URL)
+  if ($source | is-empty) { error make --unspanned { msg: "path parameter 'source' must be non-empty" } }
+  if ($dataset_id | is-empty) { error make --unspanned { msg: "path parameter 'dataset_id' must be non-empty" } }
   let qp = [(serialize-qp "select" $select "scalar") (serialize-qp "pretty" $pretty "scalar") (serialize-qp "timezone" $timezone "scalar") (serialize-qp "include_app_metas" $include_app_metas "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({source: (encode-path-segment $source), dataset_id: (encode-path-segment $dataset_id)} | format pattern "/{source}/datasets/{dataset_id}") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"select": $select, "pretty": $pretty, "timezone": $timezone, "include_app_metas": $include_app_metas} | compact), body: null}
 }
 
 # **Deprecated, use `/records` instead.**
@@ -329,11 +357,13 @@ export def "datasets-aggregates get-records" [
 ]: nothing -> record<aggregations: list<record>, links: table<href: string, rel: string>> {
   let auth = (build-auth $token ($auth_scheme | default "query-apikey"))
   let base = ($base_url | default $BASE_URL)
+  if ($source | is-empty) { error make --unspanned { msg: "path parameter 'source' must be non-empty" } }
+  if ($dataset_id | is-empty) { error make --unspanned { msg: "path parameter 'dataset_id' must be non-empty" } }
   let qp = [(serialize-qp "select" $select "scalar") (serialize-qp "where" $qp_where "multi") (serialize-qp "group_by" $group_by "scalar") (serialize-qp "order_by" $order_by "csv") (serialize-qp "limit" $limit "scalar") (serialize-qp "offset" $offset "scalar") (serialize-qp "facet" $facet "multi") (serialize-qp "refine" $refine "multi") (serialize-qp "exclude" $exclude "multi")] | flatten | str join "&"
   let full_url = (build-url $base ({source: (encode-path-segment $source), dataset_id: (encode-path-segment $dataset_id)} | format pattern "/{source}/datasets/{dataset_id}/aggregates") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"select": $select, "where": $qp_where, "group_by": $group_by, "order_by": $order_by, "limit": $limit, "offset": $offset, "facet": $facet, "refine": $refine, "exclude": $exclude} | compact), body: null}
 }
 
 # Get list of all available attachments
@@ -355,10 +385,12 @@ export def "datasets-attachments get-attachements" [
 ]: nothing -> record<attachments: table<href: string, metas: record>, links: table<href: string, rel: string>> {
   let auth = (build-auth $token ($auth_scheme | default "query-apikey"))
   let base = ($base_url | default $BASE_URL)
+  if ($source | is-empty) { error make --unspanned { msg: "path parameter 'source' must be non-empty" } }
+  if ($dataset_id | is-empty) { error make --unspanned { msg: "path parameter 'dataset_id' must be non-empty" } }
   let full_url = (build-url $base ({source: (encode-path-segment $source), dataset_id: (encode-path-segment $dataset_id)} | format pattern "/{source}/datasets/{dataset_id}/attachments"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
 }
 
 # Download attachment
@@ -381,10 +413,13 @@ export def "datasets-attachments download-attachement" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "query-apikey"))
   let base = ($base_url | default $BASE_URL)
+  if ($source | is-empty) { error make --unspanned { msg: "path parameter 'source' must be non-empty" } }
+  if ($dataset_id | is-empty) { error make --unspanned { msg: "path parameter 'dataset_id' must be non-empty" } }
+  if ($attachment_id | is-empty) { error make --unspanned { msg: "path parameter 'attachment_id' must be non-empty" } }
   let full_url = (build-url $base ({source: (encode-path-segment $source), dataset_id: (encode-path-segment $dataset_id), attachment_id: (encode-path-segment $attachment_id)} | format pattern "/{source}/datasets/{dataset_id}/attachments/{attachment_id}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
 }
 
 # Export dataset in CSV format
@@ -417,11 +452,13 @@ export def "datasets-exports-csv export-records" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "query-apikey"))
   let base = ($base_url | default $BASE_URL)
+  if ($source | is-empty) { error make --unspanned { msg: "path parameter 'source' must be non-empty" } }
+  if ($dataset_id | is-empty) { error make --unspanned { msg: "path parameter 'dataset_id' must be non-empty" } }
   let qp = [(serialize-qp "select" $select "scalar") (serialize-qp "where" $qp_where "multi") (serialize-qp "sort" $qp_sort "csv") (serialize-qp "order_by" $order_by "csv") (serialize-qp "limit" $limit "scalar") (serialize-qp "offset" $offset "scalar") (serialize-qp "facet" $facet "multi") (serialize-qp "refine" $refine "multi") (serialize-qp "exclude" $exclude "multi") (serialize-qp "timezone" $timezone "scalar") (serialize-qp "delimiter" $delimiter "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({source: (encode-path-segment $source), dataset_id: (encode-path-segment $dataset_id)} | format pattern "/{source}/datasets/{dataset_id}/exports/csv") $qp)
   let accept_val = "text/csv"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"select": $select, "where": $qp_where, "sort": $qp_sort, "order_by": $order_by, "limit": $limit, "offset": $offset, "facet": $facet, "refine": $refine, "exclude": $exclude, "timezone": $timezone, "delimiter": $delimiter} | compact), body: null}
 }
 
 # Export dataset in GEOJSON format
@@ -455,11 +492,13 @@ export def "datasets-exports-geojson export-records" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "query-apikey"))
   let base = ($base_url | default $BASE_URL)
+  if ($source | is-empty) { error make --unspanned { msg: "path parameter 'source' must be non-empty" } }
+  if ($dataset_id | is-empty) { error make --unspanned { msg: "path parameter 'dataset_id' must be non-empty" } }
   let qp = [(serialize-qp "select" $select "scalar") (serialize-qp "where" $qp_where "multi") (serialize-qp "sort" $qp_sort "csv") (serialize-qp "order_by" $order_by "csv") (serialize-qp "limit" $limit "scalar") (serialize-qp "offset" $offset "scalar") (serialize-qp "search" $search "multi") (serialize-qp "facet" $facet "multi") (serialize-qp "refine" $refine "multi") (serialize-qp "exclude" $exclude "multi") (serialize-qp "timezone" $timezone "scalar") (serialize-qp "pretty" $pretty "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({source: (encode-path-segment $source), dataset_id: (encode-path-segment $dataset_id)} | format pattern "/{source}/datasets/{dataset_id}/exports/geojson") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"select": $select, "where": $qp_where, "sort": $qp_sort, "order_by": $order_by, "limit": $limit, "offset": $offset, "search": $search, "facet": $facet, "refine": $refine, "exclude": $exclude, "timezone": $timezone, "pretty": $pretty} | compact), body: null}
 }
 
 # Export dataset in ICAL format
@@ -492,11 +531,13 @@ export def "datasets-exports-ical export-records" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "query-apikey"))
   let base = ($base_url | default $BASE_URL)
+  if ($source | is-empty) { error make --unspanned { msg: "path parameter 'source' must be non-empty" } }
+  if ($dataset_id | is-empty) { error make --unspanned { msg: "path parameter 'dataset_id' must be non-empty" } }
   let qp = [(serialize-qp "select" $select "scalar") (serialize-qp "where" $qp_where "multi") (serialize-qp "sort" $qp_sort "csv") (serialize-qp "order_by" $order_by "csv") (serialize-qp "limit" $limit "scalar") (serialize-qp "offset" $offset "scalar") (serialize-qp "search" $search "multi") (serialize-qp "facet" $facet "multi") (serialize-qp "refine" $refine "multi") (serialize-qp "exclude" $exclude "multi") (serialize-qp "timezone" $timezone "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({source: (encode-path-segment $source), dataset_id: (encode-path-segment $dataset_id)} | format pattern "/{source}/datasets/{dataset_id}/exports/ical") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"select": $select, "where": $qp_where, "sort": $qp_sort, "order_by": $order_by, "limit": $limit, "offset": $offset, "search": $search, "facet": $facet, "refine": $refine, "exclude": $exclude, "timezone": $timezone} | compact), body: null}
 }
 
 # Export dataset in JSON format
@@ -530,11 +571,13 @@ export def "datasets-exports-json export-records" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "query-apikey"))
   let base = ($base_url | default $BASE_URL)
+  if ($source | is-empty) { error make --unspanned { msg: "path parameter 'source' must be non-empty" } }
+  if ($dataset_id | is-empty) { error make --unspanned { msg: "path parameter 'dataset_id' must be non-empty" } }
   let qp = [(serialize-qp "select" $select "scalar") (serialize-qp "where" $qp_where "multi") (serialize-qp "sort" $qp_sort "csv") (serialize-qp "order_by" $order_by "csv") (serialize-qp "limit" $limit "scalar") (serialize-qp "offset" $offset "scalar") (serialize-qp "search" $search "multi") (serialize-qp "facet" $facet "multi") (serialize-qp "refine" $refine "multi") (serialize-qp "exclude" $exclude "multi") (serialize-qp "pretty" $pretty "scalar") (serialize-qp "timezone" $timezone "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({source: (encode-path-segment $source), dataset_id: (encode-path-segment $dataset_id)} | format pattern "/{source}/datasets/{dataset_id}/exports/json") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"select": $select, "where": $qp_where, "sort": $qp_sort, "order_by": $order_by, "limit": $limit, "offset": $offset, "search": $search, "facet": $facet, "refine": $refine, "exclude": $exclude, "pretty": $pretty, "timezone": $timezone} | compact), body: null}
 }
 
 # Export dataset in OV2 format
@@ -567,11 +610,13 @@ export def "datasets-exports-ov2 export-records" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "query-apikey"))
   let base = ($base_url | default $BASE_URL)
+  if ($source | is-empty) { error make --unspanned { msg: "path parameter 'source' must be non-empty" } }
+  if ($dataset_id | is-empty) { error make --unspanned { msg: "path parameter 'dataset_id' must be non-empty" } }
   let qp = [(serialize-qp "select" $select "scalar") (serialize-qp "where" $qp_where "multi") (serialize-qp "sort" $qp_sort "csv") (serialize-qp "order_by" $order_by "csv") (serialize-qp "limit" $limit "scalar") (serialize-qp "offset" $offset "scalar") (serialize-qp "search" $search "multi") (serialize-qp "facet" $facet "multi") (serialize-qp "refine" $refine "multi") (serialize-qp "exclude" $exclude "multi") (serialize-qp "timezone" $timezone "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({source: (encode-path-segment $source), dataset_id: (encode-path-segment $dataset_id)} | format pattern "/{source}/datasets/{dataset_id}/exports/ov2") $qp)
   let accept_val = "text/plain"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"select": $select, "where": $qp_where, "sort": $qp_sort, "order_by": $order_by, "limit": $limit, "offset": $offset, "search": $search, "facet": $facet, "refine": $refine, "exclude": $exclude, "timezone": $timezone} | compact), body: null}
 }
 
 # Export dataset in Esri shapefile (shp) format
@@ -604,11 +649,13 @@ export def "datasets-exports-shp export-records" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "query-apikey"))
   let base = ($base_url | default $BASE_URL)
+  if ($source | is-empty) { error make --unspanned { msg: "path parameter 'source' must be non-empty" } }
+  if ($dataset_id | is-empty) { error make --unspanned { msg: "path parameter 'dataset_id' must be non-empty" } }
   let qp = [(serialize-qp "select" $select "scalar") (serialize-qp "where" $qp_where "multi") (serialize-qp "sort" $qp_sort "csv") (serialize-qp "order_by" $order_by "csv") (serialize-qp "limit" $limit "scalar") (serialize-qp "offset" $offset "scalar") (serialize-qp "search" $search "multi") (serialize-qp "facet" $facet "multi") (serialize-qp "refine" $refine "multi") (serialize-qp "exclude" $exclude "multi") (serialize-qp "timezone" $timezone "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({source: (encode-path-segment $source), dataset_id: (encode-path-segment $dataset_id)} | format pattern "/{source}/datasets/{dataset_id}/exports/shp") $qp)
   let accept_val = "application/zip"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"select": $select, "where": $qp_where, "sort": $qp_sort, "order_by": $order_by, "limit": $limit, "offset": $offset, "search": $search, "facet": $facet, "refine": $refine, "exclude": $exclude, "timezone": $timezone} | compact), body: null}
 }
 
 # Export dataset in XLS (Excel) format
@@ -641,11 +688,13 @@ export def "datasets-exports-xls export-records" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "query-apikey"))
   let base = ($base_url | default $BASE_URL)
+  if ($source | is-empty) { error make --unspanned { msg: "path parameter 'source' must be non-empty" } }
+  if ($dataset_id | is-empty) { error make --unspanned { msg: "path parameter 'dataset_id' must be non-empty" } }
   let qp = [(serialize-qp "select" $select "scalar") (serialize-qp "where" $qp_where "multi") (serialize-qp "sort" $qp_sort "csv") (serialize-qp "order_by" $order_by "csv") (serialize-qp "limit" $limit "scalar") (serialize-qp "offset" $offset "scalar") (serialize-qp "search" $search "multi") (serialize-qp "facet" $facet "multi") (serialize-qp "refine" $refine "multi") (serialize-qp "exclude" $exclude "multi") (serialize-qp "timezone" $timezone "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({source: (encode-path-segment $source), dataset_id: (encode-path-segment $dataset_id)} | format pattern "/{source}/datasets/{dataset_id}/exports/xls") $qp)
   let accept_val = "xls"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"select": $select, "where": $qp_where, "sort": $qp_sort, "order_by": $order_by, "limit": $limit, "offset": $offset, "search": $search, "facet": $facet, "refine": $refine, "exclude": $exclude, "timezone": $timezone} | compact), body: null}
 }
 
 # Enumerate facets values for records and return a list of values for each facet. Can be used to implement guided navigation in large result sets. Read [the facets documentation](https://help.opendatasoft.com/apis/ods-search-v2/#enumerating-facets-values) for more details.
@@ -673,11 +722,13 @@ export def "datasets-facets get-records" [
 ]: nothing -> record<facets: table<facets: list, name: string>> {
   let auth = (build-auth $token ($auth_scheme | default "query-apikey"))
   let base = ($base_url | default $BASE_URL)
+  if ($source | is-empty) { error make --unspanned { msg: "path parameter 'source' must be non-empty" } }
+  if ($dataset_id | is-empty) { error make --unspanned { msg: "path parameter 'dataset_id' must be non-empty" } }
   let qp = [(serialize-qp "where" $qp_where "multi") (serialize-qp "facet" $facet "multi") (serialize-qp "refine" $refine "multi") (serialize-qp "exclude" $exclude "multi") (serialize-qp "search" $search "multi") (serialize-qp "timezone" $timezone "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({source: (encode-path-segment $source), dataset_id: (encode-path-segment $dataset_id)} | format pattern "/{source}/datasets/{dataset_id}/facets") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"where": $qp_where, "facet": $facet, "refine": $refine, "exclude": $exclude, "search": $search, "timezone": $timezone} | compact), body: null}
 }
 
 # Create new feedback entry.
@@ -704,12 +755,14 @@ export def "datasets-feedback send" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "query-apikey"))
   let base = ($base_url | default $BASE_URL)
+  if ($source | is-empty) { error make --unspanned { msg: "path parameter 'source' must be non-empty" } }
+  if ($dataset_id | is-empty) { error make --unspanned { msg: "path parameter 'dataset_id' must be non-empty" } }
   let full_url = (build-url $base ({source: (encode-path-segment $source), dataset_id: (encode-path-segment $dataset_id)} | format pattern "/{source}/datasets/{dataset_id}/feedback"))
   let req_body = {"comment": $comment, "newValues": $new_values, "recordid": $recordid, "schema": $schema} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: {}, body: $req_body}
 }
 
 # Download file
@@ -733,11 +786,14 @@ export def "datasets-files get" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "query-apikey"))
   let base = ($base_url | default $BASE_URL)
+  if ($source | is-empty) { error make --unspanned { msg: "path parameter 'source' must be non-empty" } }
+  if ($dataset_id | is-empty) { error make --unspanned { msg: "path parameter 'dataset_id' must be non-empty" } }
+  if ($file_id | is-empty) { error make --unspanned { msg: "path parameter 'file_id' must be non-empty" } }
   let qp = [(serialize-qp "thumbnail_size" $thumbnail_size "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({source: (encode-path-segment $source), dataset_id: (encode-path-segment $dataset_id), file_id: (encode-path-segment $file_id)} | format pattern "/{source}/datasets/{dataset_id}/files/{file_id}") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"thumbnail_size": $thumbnail_size} | compact), body: null}
 }
 
 # Search dataset's records.
@@ -772,11 +828,13 @@ export def "datasets-records list" [
 ]: nothing -> record<links: table<href: string, rel: string>, records: table<links: list, record: record>, total_count: int> {
   let auth = (build-auth $token ($auth_scheme | default "query-apikey"))
   let base = ($base_url | default $BASE_URL)
+  if ($source | is-empty) { error make --unspanned { msg: "path parameter 'source' must be non-empty" } }
+  if ($dataset_id | is-empty) { error make --unspanned { msg: "path parameter 'dataset_id' must be non-empty" } }
   let qp = [(serialize-qp "select" $select "scalar") (serialize-qp "where" $qp_where "multi") (serialize-qp "group_by" $group_by "scalar") (serialize-qp "sort" $qp_sort "csv") (serialize-qp "order_by" $order_by "csv") (serialize-qp "limit" $limit "scalar") (serialize-qp "offset" $offset "scalar") (serialize-qp "search" $search "multi") (serialize-qp "facet" $facet "multi") (serialize-qp "refine" $refine "multi") (serialize-qp "exclude" $exclude "multi") (serialize-qp "pretty" $pretty "scalar") (serialize-qp "timezone" $timezone "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({source: (encode-path-segment $source), dataset_id: (encode-path-segment $dataset_id)} | format pattern "/{source}/datasets/{dataset_id}/records") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"select": $select, "where": $qp_where, "group_by": $group_by, "sort": $qp_sort, "order_by": $order_by, "limit": $limit, "offset": $offset, "search": $search, "facet": $facet, "refine": $refine, "exclude": $exclude, "pretty": $pretty, "timezone": $timezone} | compact), body: null}
 }
 
 # Retrieve a single record based on its ID.
@@ -802,11 +860,14 @@ export def "datasets-records get" [
 ]: nothing -> record<links: table<href: string, rel: string>, record: record<fields: record, id: string, size: int, timestamp: string>> {
   let auth = (build-auth $token ($auth_scheme | default "query-apikey"))
   let base = ($base_url | default $BASE_URL)
+  if ($source | is-empty) { error make --unspanned { msg: "path parameter 'source' must be non-empty" } }
+  if ($dataset_id | is-empty) { error make --unspanned { msg: "path parameter 'dataset_id' must be non-empty" } }
+  if ($record_id | is-empty) { error make --unspanned { msg: "path parameter 'record_id' must be non-empty" } }
   let qp = [(serialize-qp "select" $select "scalar") (serialize-qp "pretty" $pretty "scalar") (serialize-qp "timezone" $timezone "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({source: (encode-path-segment $source), dataset_id: (encode-path-segment $dataset_id), record_id: (encode-path-segment $record_id)} | format pattern "/{source}/datasets/{dataset_id}/records/{record_id}") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"select": $select, "pretty": $pretty, "timezone": $timezone} | compact), body: null}
 }
 
 # Get list of reuses
@@ -831,11 +892,13 @@ export def "datasets-reuses list" [
 ]: nothing -> record<links: table<href: string, rel: string>, reuses: table<created_at: string, description: any, id: string, thumbnail: string, title: string, url: string, user: record>> {
   let auth = (build-auth $token ($auth_scheme | default "query-apikey"))
   let base = ($base_url | default $BASE_URL)
+  if ($source | is-empty) { error make --unspanned { msg: "path parameter 'source' must be non-empty" } }
+  if ($dataset_id | is-empty) { error make --unspanned { msg: "path parameter 'dataset_id' must be non-empty" } }
   let qp = [(serialize-qp "limit" $limit "scalar") (serialize-qp "offset" $offset "scalar") (serialize-qp "timezone" $timezone "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({source: (encode-path-segment $source), dataset_id: (encode-path-segment $dataset_id)} | format pattern "/{source}/datasets/{dataset_id}/reuses") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"limit": $limit, "offset": $offset, "timezone": $timezone} | compact), body: null}
 }
 
 # Retrieve a single reuse based on its ID.
@@ -859,11 +922,14 @@ export def "datasets-reuses get" [
 ]: nothing -> record<links: table<href: string, rel: string>, reuse: record<created_at: string, description: any, id: string, thumbnail: string, title: string, url: string, user: record<first_name: string, last_name: string, username: string>>> {
   let auth = (build-auth $token ($auth_scheme | default "query-apikey"))
   let base = ($base_url | default $BASE_URL)
+  if ($source | is-empty) { error make --unspanned { msg: "path parameter 'source' must be non-empty" } }
+  if ($dataset_id | is-empty) { error make --unspanned { msg: "path parameter 'dataset_id' must be non-empty" } }
+  if ($reuse_id | is-empty) { error make --unspanned { msg: "path parameter 'reuse_id' must be non-empty" } }
   let qp = [(serialize-qp "timezone" $timezone "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({source: (encode-path-segment $source), dataset_id: (encode-path-segment $dataset_id), reuse_id: (encode-path-segment $reuse_id)} | format pattern "/{source}/datasets/{dataset_id}/reuses/{reuse_id}") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"timezone": $timezone} | compact), body: null}
 }
 
 # List of all snapshots for this dataset.
@@ -886,11 +952,13 @@ export def "datasets-snapshots get" [
 ]: nothing -> record<links: table<href: string, rel: string>, snapshots: table<created_at: string, description: string, href: string, snapshot_id: string>> {
   let auth = (build-auth $token ($auth_scheme | default "query-apikey"))
   let base = ($base_url | default $BASE_URL)
+  if ($source | is-empty) { error make --unspanned { msg: "path parameter 'source' must be non-empty" } }
+  if ($dataset_id | is-empty) { error make --unspanned { msg: "path parameter 'dataset_id' must be non-empty" } }
   let qp = [(serialize-qp "timezone" $timezone "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({source: (encode-path-segment $source), dataset_id: (encode-path-segment $dataset_id)} | format pattern "/{source}/datasets/{dataset_id}/snapshots") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"timezone": $timezone} | compact), body: null}
 }
 
 # List of all snapshots for this dataset.
@@ -914,11 +982,14 @@ export def "datasets-snapshots download" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "query-apikey"))
   let base = ($base_url | default $BASE_URL)
+  if ($source | is-empty) { error make --unspanned { msg: "path parameter 'source' must be non-empty" } }
+  if ($dataset_id | is-empty) { error make --unspanned { msg: "path parameter 'dataset_id' must be non-empty" } }
+  if ($snapshot_id | is-empty) { error make --unspanned { msg: "path parameter 'snapshot_id' must be non-empty" } }
   let qp = [(serialize-qp "timezone" $timezone "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({source: (encode-path-segment $source), dataset_id: (encode-path-segment $dataset_id), snapshot_id: (encode-path-segment $snapshot_id)} | format pattern "/{source}/datasets/{dataset_id}/snapshots/{snapshot_id}") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"timezone": $timezone} | compact), body: null}
 }
 
 # Export catalog (source) in CSV format
@@ -949,11 +1020,12 @@ export def "exports-csv export-datasets" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "query-apikey"))
   let base = ($base_url | default $BASE_URL)
+  if ($source | is-empty) { error make --unspanned { msg: "path parameter 'source' must be non-empty" } }
   let qp = [(serialize-qp "where" $qp_where "multi") (serialize-qp "limit" $limit "scalar") (serialize-qp "offset" $offset "scalar") (serialize-qp "search" $search "multi") (serialize-qp "facet" $facet "multi") (serialize-qp "refine" $refine "multi") (serialize-qp "exclude" $exclude "multi") (serialize-qp "timezone" $timezone "scalar") (serialize-qp "include_app_metas" $include_app_metas "scalar") (serialize-qp "delimiter" $delimiter "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({source: (encode-path-segment $source)} | format pattern "/{source}/exports/csv") $qp)
   let accept_val = "text/csv"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"where": $qp_where, "limit": $limit, "offset": $offset, "search": $search, "facet": $facet, "refine": $refine, "exclude": $exclude, "timezone": $timezone, "include_app_metas": $include_app_metas, "delimiter": $delimiter} | compact), body: null}
 }
 
 # Export catalog (source) in JSON format
@@ -984,11 +1056,12 @@ export def "exports-json export-datasets" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "query-apikey"))
   let base = ($base_url | default $BASE_URL)
+  if ($source | is-empty) { error make --unspanned { msg: "path parameter 'source' must be non-empty" } }
   let qp = [(serialize-qp "where" $qp_where "multi") (serialize-qp "limit" $limit "scalar") (serialize-qp "offset" $offset "scalar") (serialize-qp "search" $search "multi") (serialize-qp "facet" $facet "multi") (serialize-qp "refine" $refine "multi") (serialize-qp "exclude" $exclude "multi") (serialize-qp "pretty" $pretty "scalar") (serialize-qp "timezone" $timezone "scalar") (serialize-qp "include_app_metas" $include_app_metas "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({source: (encode-path-segment $source)} | format pattern "/{source}/exports/json") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"where": $qp_where, "limit": $limit, "offset": $offset, "search": $search, "facet": $facet, "refine": $refine, "exclude": $exclude, "pretty": $pretty, "timezone": $timezone, "include_app_metas": $include_app_metas} | compact), body: null}
 }
 
 # Export catalog (source) in RDF/XML format
@@ -1018,11 +1091,12 @@ export def "exports-rdf export-datasets" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "query-apikey"))
   let base = ($base_url | default $BASE_URL)
+  if ($source | is-empty) { error make --unspanned { msg: "path parameter 'source' must be non-empty" } }
   let qp = [(serialize-qp "where" $qp_where "multi") (serialize-qp "limit" $limit "scalar") (serialize-qp "offset" $offset "scalar") (serialize-qp "search" $search "multi") (serialize-qp "facet" $facet "multi") (serialize-qp "refine" $refine "multi") (serialize-qp "exclude" $exclude "multi") (serialize-qp "timezone" $timezone "scalar") (serialize-qp "include_app_metas" $include_app_metas "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({source: (encode-path-segment $source)} | format pattern "/{source}/exports/rdf") $qp)
   let accept_val = "application/rdf+xml"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"where": $qp_where, "limit": $limit, "offset": $offset, "search": $search, "facet": $facet, "refine": $refine, "exclude": $exclude, "timezone": $timezone, "include_app_metas": $include_app_metas} | compact), body: null}
 }
 
 # Export catalog (source) in RSS format
@@ -1052,11 +1126,12 @@ export def "exports-rss export-datasets" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "query-apikey"))
   let base = ($base_url | default $BASE_URL)
+  if ($source | is-empty) { error make --unspanned { msg: "path parameter 'source' must be non-empty" } }
   let qp = [(serialize-qp "where" $qp_where "multi") (serialize-qp "limit" $limit "scalar") (serialize-qp "offset" $offset "scalar") (serialize-qp "search" $search "multi") (serialize-qp "facet" $facet "multi") (serialize-qp "refine" $refine "multi") (serialize-qp "exclude" $exclude "multi") (serialize-qp "timezone" $timezone "scalar") (serialize-qp "include_app_metas" $include_app_metas "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({source: (encode-path-segment $source)} | format pattern "/{source}/exports/rss") $qp)
   let accept_val = "text/xml"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"where": $qp_where, "limit": $limit, "offset": $offset, "search": $search, "facet": $facet, "refine": $refine, "exclude": $exclude, "timezone": $timezone, "include_app_metas": $include_app_metas} | compact), body: null}
 }
 
 # Export catalog (source) in TTL (turtle/rdf) format
@@ -1086,11 +1161,12 @@ export def "exports-ttl export-datasets" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "query-apikey"))
   let base = ($base_url | default $BASE_URL)
+  if ($source | is-empty) { error make --unspanned { msg: "path parameter 'source' must be non-empty" } }
   let qp = [(serialize-qp "where" $qp_where "multi") (serialize-qp "limit" $limit "scalar") (serialize-qp "offset" $offset "scalar") (serialize-qp "search" $search "multi") (serialize-qp "facet" $facet "multi") (serialize-qp "refine" $refine "multi") (serialize-qp "exclude" $exclude "multi") (serialize-qp "timezone" $timezone "scalar") (serialize-qp "include_app_metas" $include_app_metas "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({source: (encode-path-segment $source)} | format pattern "/{source}/exports/ttl") $qp)
   let accept_val = "text/turtle"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"where": $qp_where, "limit": $limit, "offset": $offset, "search": $search, "facet": $facet, "refine": $refine, "exclude": $exclude, "timezone": $timezone, "include_app_metas": $include_app_metas} | compact), body: null}
 }
 
 # Export catalog (source) in XLS (Excel) format
@@ -1120,11 +1196,12 @@ export def "exports-xls export-datasets" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "query-apikey"))
   let base = ($base_url | default $BASE_URL)
+  if ($source | is-empty) { error make --unspanned { msg: "path parameter 'source' must be non-empty" } }
   let qp = [(serialize-qp "where" $qp_where "multi") (serialize-qp "limit" $limit "scalar") (serialize-qp "offset" $offset "scalar") (serialize-qp "search" $search "multi") (serialize-qp "facet" $facet "multi") (serialize-qp "refine" $refine "multi") (serialize-qp "exclude" $exclude "multi") (serialize-qp "timezone" $timezone "scalar") (serialize-qp "include_app_metas" $include_app_metas "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({source: (encode-path-segment $source)} | format pattern "/{source}/exports/xls") $qp)
   let accept_val = "xls"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"where": $qp_where, "limit": $limit, "offset": $offset, "search": $search, "facet": $facet, "refine": $refine, "exclude": $exclude, "timezone": $timezone, "include_app_metas": $include_app_metas} | compact), body: null}
 }
 
 # Enumerate facets values for datasets and return a list of values for each facet. Can be used to implement guided navigation in large result sets. Read [the facets documentation](https://help.opendatasoft.com/apis/ods-search-v2/#enumerating-facets-values) for more details.
@@ -1151,11 +1228,12 @@ export def "facets get-datasets" [
 ]: nothing -> record<facets: table<facets: list, name: string>> {
   let auth = (build-auth $token ($auth_scheme | default "query-apikey"))
   let base = ($base_url | default $BASE_URL)
+  if ($source | is-empty) { error make --unspanned { msg: "path parameter 'source' must be non-empty" } }
   let qp = [(serialize-qp "facet" $facet "multi") (serialize-qp "refine" $refine "multi") (serialize-qp "exclude" $exclude "multi") (serialize-qp "where" $qp_where "multi") (serialize-qp "search" $search "multi") (serialize-qp "timezone" $timezone "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({source: (encode-path-segment $source)} | format pattern "/{source}/facets") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"facet": $facet, "refine": $refine, "exclude": $exclude, "where": $qp_where, "search": $search, "timezone": $timezone} | compact), body: null}
 }
 
 # List of available metadata templates types, each with their endpoints.
@@ -1176,10 +1254,11 @@ export def "metadata-templates get-types" [
 ]: nothing -> record<links: table<href: string, rel: string>> {
   let auth = (build-auth $token ($auth_scheme | default "query-apikey"))
   let base = ($base_url | default $BASE_URL)
+  if ($source | is-empty) { error make --unspanned { msg: "path parameter 'source' must be non-empty" } }
   let full_url = (build-url $base ({source: (encode-path-segment $source)} | format pattern "/{source}/metadata_templates"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
 }
 
 # List of metadata templates available for this type.
@@ -1201,10 +1280,12 @@ export def "metadata-templates list" [
 ]: nothing -> record<links: table<href: string, rel: string>, metadata_templates: table<links: list, metadata_template: record>> {
   let auth = (build-auth $token ($auth_scheme | default "query-apikey"))
   let base = ($base_url | default $BASE_URL)
+  if ($source | is-empty) { error make --unspanned { msg: "path parameter 'source' must be non-empty" } }
+  if ($metadata_template_type | is-empty) { error make --unspanned { msg: "path parameter 'metadata_template_type' must be non-empty" } }
   let full_url = (build-url $base ({source: (encode-path-segment $source), metadata_template_type: (encode-path-segment $metadata_template_type)} | format pattern "/{source}/metadata_templates/{metadata_template_type}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
 }
 
 # A single metadata_template
@@ -1227,8 +1308,11 @@ export def "metadata-templates get" [
 ]: nothing -> record<links: table<href: string, rel: string>, metadata_template: record<name: string, schema: list<record>, type: string>> {
   let auth = (build-auth $token ($auth_scheme | default "query-apikey"))
   let base = ($base_url | default $BASE_URL)
+  if ($source | is-empty) { error make --unspanned { msg: "path parameter 'source' must be non-empty" } }
+  if ($metadata_template_type | is-empty) { error make --unspanned { msg: "path parameter 'metadata_template_type' must be non-empty" } }
+  if ($metadata_template_name | is-empty) { error make --unspanned { msg: "path parameter 'metadata_template_name' must be non-empty" } }
   let full_url = (build-url $base ({source: (encode-path-segment $source), metadata_template_type: (encode-path-segment $metadata_template_type), metadata_template_name: (encode-path-segment $metadata_template_name)} | format pattern "/{source}/metadata_templates/{metadata_template_type}/{metadata_template_name}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
 }

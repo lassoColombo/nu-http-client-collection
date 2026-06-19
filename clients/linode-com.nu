@@ -3,17 +3,18 @@
 # Auth: --token flag or $env.LINODE_API_TOKEN
 
 const BASE_URL = "https://api.linode.com/v4"
-const DEFAULT_AUTH = "bearer"
 
-# Build auth: returns {headers: record, query: string}
+# Build auth: returns {scheme: string, headers: record, query: string, location: string}.
+# `location` is "header" | "query" | "cookie" | "none" and tells dry-run callers
+# where the token went without inspecting headers/query themselves.
 def build-auth [token?: string, auth_scheme?: string]: nothing -> record {
   let token_val = if ($token != null) and ($token | is-not-empty) { $token } else { $env | get -o LINODE_API_TOKEN | default "" }
   let scheme = ($auth_scheme | default "bearer")
-  if ($scheme == "none") or ($token_val | is-empty) { return {headers: {}, query: ""} }
+  if ($scheme == "none") or ($token_val | is-empty) { return {scheme: $scheme, headers: {}, query: "", location: "none"} }
   match $scheme {
-    "bearer" => { {headers: {Authorization: $"Bearer ($token_val)"}, query: ""} }
-    "none" => { {headers: {}, query: ""} }
-    _ => { {headers: {Authorization: $"Bearer ($token_val)"}, query: ""} }
+    "bearer" => { {scheme: $scheme, headers: {Authorization: $"Bearer ($token_val)"}, query: "", location: "header"} }
+    "none" => { {scheme: $scheme, headers: {}, query: "", location: "none"} }
+    _ => { {scheme: $scheme, headers: {Authorization: $"Bearer ($token_val)"}, query: "", location: "header"} }
   }
 }
 
@@ -22,8 +23,9 @@ def build-auth [token?: string, auth_scheme?: string]: nothing -> record {
 # ([A-Za-z0-9-._~]) stay literal; everything else gets %XX.
 def serialize-qp [name: string, value: any, style: string]: nothing -> list<string> {
   if ($value == null) { return [] }
-  let n = (encode-path-segment $name)
   let is_list = ($value | describe | str starts-with "list")
+  if $is_list and ($value | is-empty) { return [] }
+  let n = (encode-path-segment $name)
   if ($value | describe | str starts-with "record") { return ($value | transpose k v | each { $"($n)[(encode-path-segment $in.k)]=(encode-path-segment $in.v)" }) }
   if not $is_list { return [$"($n)=(encode-path-segment $value)"] }
   match $style {
@@ -54,22 +56,42 @@ def build-url [base: string, path: string, query?: string]: nothing -> string {
   if ($query != null) and ($query | is-not-empty) { $result | upsert query $query | url join } else { $result | url join }
 }
 
+# Build the dry-run record returned by --dry-run. Shape:
+#   {dry_run: true, method, url, query: <record>, headers, body, content_type, timeout,
+#    auth: {scheme, location}}
+# `meta` carries logical-form data (the query record by spec name, the pre-serialization
+# body) that do-request itself cannot reconstruct from its wire-format args.
+def build-dry-run-record [method: string, url: string, auth: record, content_type: string, timeout: duration, meta?: record]: nothing -> record {
+  let m = ($meta | default {})
+  {
+    dry_run: true
+    method: $method
+    url: $url
+    query: ($m | get -o query | default {})
+    headers: $auth.headers
+    body: ($m | get -o body)
+    content_type: $content_type
+    timeout: $timeout
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+}
+
 # Execute HTTP request with method dispatch
-def do-request [method: string, url: string, auth: record, insecure: bool, raw: bool, dry_run: bool, max_time?: duration, allow_errors?: bool, full?: bool, content_type?: string, body?: any]: nothing -> any {
+def do-request [method: string, url: string, auth: record, insecure: bool, raw: bool, dry_run: bool, max_time?: duration, allow_errors?: bool, full?: bool, content_type?: string, body?: any, dry_run_meta?: record]: nothing -> any {
   let req_url = if ($auth.query | is-not-empty) { if ($url | str contains "?") { $"($url)&($auth.query)" } else { $"($url)?($auth.query)" } } else { $url }
   let timeout = ($max_time | default 30min)
   let ct = ($content_type | default "application/json")
-  if $dry_run { return {method: $method, url: $req_url, headers: $auth.headers, query_string: $auth.query, content_type: $ct, timeout: $timeout, body: $body} }
+  if $dry_run { return (build-dry-run-record $method $req_url $auth $ct $timeout $dry_run_meta) }
   let resp = match $method {
     "get" => { http get --headers $auth.headers --full --allow-errors --max-time $timeout --insecure=$insecure --raw=$raw $req_url }
-    "head" => { http head --headers $auth.headers --max-time $timeout --insecure=$insecure $req_url }
-    "options" => { http options --headers $auth.headers --max-time $timeout --insecure=$insecure $req_url }
+    "head" => { http head --headers $auth.headers --full --allow-errors --max-time $timeout --insecure=$insecure $req_url }
+    "options" => { http options --headers $auth.headers --full --allow-errors --max-time $timeout --insecure=$insecure $req_url }
     "post" => { if ($body | is-empty) { http post --headers $auth.headers --full --allow-errors --max-time $timeout --insecure=$insecure --raw=$raw $req_url "" } else { http post --headers $auth.headers --content-type $ct --full --allow-errors --max-time $timeout --insecure=$insecure --raw=$raw $req_url $body } }
     "put" => { if ($body | is-empty) { http put --headers $auth.headers --full --allow-errors --max-time $timeout --insecure=$insecure --raw=$raw $req_url "" } else { http put --headers $auth.headers --content-type $ct --full --allow-errors --max-time $timeout --insecure=$insecure --raw=$raw $req_url $body } }
     "patch" => { if ($body | is-empty) { http patch --headers $auth.headers --full --allow-errors --max-time $timeout --insecure=$insecure --raw=$raw $req_url "" } else { http patch --headers $auth.headers --content-type $ct --full --allow-errors --max-time $timeout --insecure=$insecure --raw=$raw $req_url $body } }
     "delete" => { if ($body | is-empty) { http delete --headers $auth.headers --full --allow-errors --max-time $timeout --insecure=$insecure --raw=$raw $req_url } else { http delete --headers $auth.headers --content-type $ct --data $body --full --allow-errors --max-time $timeout --insecure=$insecure --raw=$raw $req_url } }
   }
-  if ($method in ["head" "options"]) { return $resp }
+  if ($method == "head") and (not $full) and (not $allow_errors) and $resp.status < 400 { return $resp.headers }
   if $allow_errors { $resp } else if $resp.status >= 400 { error make --unspanned { msg: $"HTTP ($resp.status): ($resp.body)" } } else if $full { {status: $resp.status, headers: $resp.headers, body: $resp.body} } else if $resp.status == 204 { null } else { $resp.body }
 }
 
@@ -178,7 +200,7 @@ export def "account get" [
   let full_url = (build-url $base "/account")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
 }
 
 # Account Update
@@ -218,7 +240,7 @@ export def "account update" [
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: {}, body: $req_body}
 }
 
 # Account Cancel
@@ -245,7 +267,7 @@ export def "account-cancel cancel" [
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: {}, body: $req_body}
 }
 
 # Credit Card Add/Edit
@@ -277,7 +299,7 @@ export def "account-credit-card create" [
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: {}, body: $req_body}
 }
 
 # Entity Transfers List
@@ -305,7 +327,7 @@ export def "account-entity-transfers list" [
   let full_url = (build-url $base "/account/entity-transfers" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"page": $page, "page_size": $page_size} | compact), body: null}
 }
 
 # Entity Transfer Create
@@ -335,7 +357,7 @@ export def "account-entity-transfers create" [
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: {}, body: $req_body}
 }
 
 # Entity Transfer Cancel
@@ -358,10 +380,11 @@ export def "account-entity-transfers delete" [
 ]: nothing -> record {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($token_arg | is-empty) { error make --unspanned { msg: "path parameter 'token' must be non-empty" } }
   let full_url = (build-url $base ({token_arg: (encode-path-segment $token_arg)} | format pattern "/account/entity-transfers/{token_arg}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
 }
 
 # Entity Transfer View
@@ -384,10 +407,11 @@ export def "account-entity-transfers get" [
 ]: nothing -> record<created: string, entities: record<linodes: list<int>>, expiry: string, is_sender: bool, status: string, token: string, updated: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($token_arg | is-empty) { error make --unspanned { msg: "path parameter 'token' must be non-empty" } }
   let full_url = (build-url $base ({token_arg: (encode-path-segment $token_arg)} | format pattern "/account/entity-transfers/{token_arg}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
 }
 
 # Entity Transfer Accept
@@ -410,10 +434,11 @@ export def "account-entity-transfers-accept create" [
 ]: nothing -> record {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($token_arg | is-empty) { error make --unspanned { msg: "path parameter 'token' must be non-empty" } }
   let full_url = (build-url $base ({token_arg: (encode-path-segment $token_arg)} | format pattern "/account/entity-transfers/{token_arg}/accept"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
 }
 
 # Events List
@@ -439,7 +464,7 @@ export def "account-events list" [
   let full_url = (build-url $base "/account/events" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"page": $page, "page_size": $page_size} | compact), body: null}
 }
 
 # Event View
@@ -460,10 +485,11 @@ export def "account-events get" [
 ]: nothing -> record<action: string, created: string, duration: float, entity: record<id: int, label: string, type: string, url: string>, id: int, message: string, percent_complete: int, rate: string, read: bool, secondary_entity: record<id: string, label: string, type: string, url: string>, seen: bool, status: string, time_remaining: string, username: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($event_id | is-empty) { error make --unspanned { msg: "path parameter 'eventId' must be non-empty" } }
   let full_url = (build-url $base ({event_id: (encode-path-segment $event_id)} | format pattern "/account/events/{event_id}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
 }
 
 # Event Mark as Read
@@ -484,10 +510,11 @@ export def "account-events-read get" [
 ]: nothing -> record {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($event_id | is-empty) { error make --unspanned { msg: "path parameter 'eventId' must be non-empty" } }
   let full_url = (build-url $base ({event_id: (encode-path-segment $event_id)} | format pattern "/account/events/{event_id}/read"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
 }
 
 # Event Mark as Seen
@@ -508,10 +535,11 @@ export def "account-events-seen create" [
 ]: nothing -> record {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($event_id | is-empty) { error make --unspanned { msg: "path parameter 'eventId' must be non-empty" } }
   let full_url = (build-url $base ({event_id: (encode-path-segment $event_id)} | format pattern "/account/events/{event_id}/seen"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
 }
 
 # Invoices List
@@ -537,7 +565,7 @@ export def "account-invoices list" [
   let full_url = (build-url $base "/account/invoices" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"page": $page, "page_size": $page_size} | compact), body: null}
 }
 
 # Invoice View
@@ -558,10 +586,11 @@ export def "account-invoices get" [
 ]: nothing -> record<date: string, id: int, label: string, subtotal: float, tax: float, tax_summary: table<name: string, tax: float>, total: float> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($invoice_id | is-empty) { error make --unspanned { msg: "path parameter 'invoiceId' must be non-empty" } }
   let full_url = (build-url $base ({invoice_id: (encode-path-segment $invoice_id)} | format pattern "/account/invoices/{invoice_id}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
 }
 
 # Invoice Items List
@@ -584,11 +613,12 @@ export def "account-invoices-items get" [
 ]: nothing -> record<data: table<amount: float, from: string, label: string, quantity: int, tax: float, to: string, total: float, type: string, unit_price: string>, page: int, pages: int, results: int> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($invoice_id | is-empty) { error make --unspanned { msg: "path parameter 'invoiceId' must be non-empty" } }
   let qp = [(serialize-qp "page" $page "scalar") (serialize-qp "page_size" $page_size "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({invoice_id: (encode-path-segment $invoice_id)} | format pattern "/account/invoices/{invoice_id}/items") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"page": $page, "page_size": $page_size} | compact), body: null}
 }
 
 # User Logins List All
@@ -611,7 +641,7 @@ export def "account-logins list" [
   let full_url = (build-url $base "/account/logins")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
 }
 
 # Login View
@@ -632,10 +662,11 @@ export def "account-logins get" [
 ]: nothing -> record<datetime: string, id: int, ip: string, restricted: bool, username: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($login_id | is-empty) { error make --unspanned { msg: "path parameter 'loginId' must be non-empty" } }
   let full_url = (build-url $base ({login_id: (encode-path-segment $login_id)} | format pattern "/account/logins/{login_id}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
 }
 
 # Maintenance List
@@ -658,7 +689,7 @@ export def "account-maintenance get" [
   let full_url = (build-url $base "/account/maintenance")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
 }
 
 # Notifications List
@@ -681,7 +712,7 @@ export def "account-notifications get" [
   let full_url = (build-url $base "/account/notifications")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
 }
 
 # OAuth Clients List
@@ -707,7 +738,7 @@ export def "account-oauth-clients list" [
   let full_url = (build-url $base "/account/oauth-clients" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"page": $page, "page_size": $page_size} | compact), body: null}
 }
 
 # OAuth Client Create
@@ -736,7 +767,7 @@ export def "account-oauth-clients create" [
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: {}, body: $req_body}
 }
 
 # OAuth Client Delete
@@ -757,10 +788,11 @@ export def "account-oauth-clients delete" [
 ]: nothing -> record {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($client_id | is-empty) { error make --unspanned { msg: "path parameter 'clientId' must be non-empty" } }
   let full_url = (build-url $base ({client_id: (encode-path-segment $client_id)} | format pattern "/account/oauth-clients/{client_id}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
 }
 
 # OAuth Client View
@@ -781,10 +813,11 @@ export def "account-oauth-clients get" [
 ]: nothing -> record<id: string, label: string, public: bool, redirect_uri: string, secret: string, status: string, thumbnail_url: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($client_id | is-empty) { error make --unspanned { msg: "path parameter 'clientId' must be non-empty" } }
   let full_url = (build-url $base ({client_id: (encode-path-segment $client_id)} | format pattern "/account/oauth-clients/{client_id}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
 }
 
 # OAuth Client Update
@@ -809,12 +842,13 @@ export def "account-oauth-clients update" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($client_id | is-empty) { error make --unspanned { msg: "path parameter 'clientId' must be non-empty" } }
   let full_url = (build-url $base ({client_id: (encode-path-segment $client_id)} | format pattern "/account/oauth-clients/{client_id}"))
   let req_body = {"label": $label, "public": $public, "redirect_uri": $redirect_uri} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: {}, body: $req_body}
 }
 
 # OAuth Client Secret Reset
@@ -835,10 +869,11 @@ export def "account-oauth-clients-reset-secret reset" [
 ]: nothing -> record<id: string, label: string, public: bool, redirect_uri: string, secret: string, status: string, thumbnail_url: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($client_id | is-empty) { error make --unspanned { msg: "path parameter 'clientId' must be non-empty" } }
   let full_url = (build-url $base ({client_id: (encode-path-segment $client_id)} | format pattern "/account/oauth-clients/{client_id}/reset-secret"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
 }
 
 # OAuth Client Thumbnail View
@@ -859,10 +894,11 @@ export def "account-oauth-clients-thumbnail get" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($client_id | is-empty) { error make --unspanned { msg: "path parameter 'clientId' must be non-empty" } }
   let full_url = (build-url $base ({client_id: (encode-path-segment $client_id)} | format pattern "/account/oauth-clients/{client_id}/thumbnail"))
   let accept_val = "image/png"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
 }
 
 # OAuth Client Thumbnail Update
@@ -885,12 +921,13 @@ export def "account-oauth-clients-thumbnail update" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($client_id | is-empty) { error make --unspanned { msg: "path parameter 'clientId' must be non-empty" } }
   let full_url = (build-url $base ({client_id: (encode-path-segment $client_id)} | format pattern "/account/oauth-clients/{client_id}/thumbnail"))
   let req_body = $body
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else if (($input | is-not-empty) and ($req_body | is-empty)) { $input } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "image/png" $req_body
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "image/png" $req_body {query: {}, body: $req_body}
 }
 
 # Payment Methods List
@@ -916,7 +953,7 @@ export def "account-payment-methods list" [
   let full_url = (build-url $base "/account/payment-methods" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"page": $page, "page_size": $page_size} | compact), body: null}
 }
 
 # Payment Method Add
@@ -946,7 +983,7 @@ export def "account-payment-methods create" [
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: {}, body: $req_body}
 }
 
 # Payment Method Delete
@@ -967,10 +1004,11 @@ export def "account-payment-methods delete" [
 ]: nothing -> record {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($payment_method_id | is-empty) { error make --unspanned { msg: "path parameter 'paymentMethodId' must be non-empty" } }
   let full_url = (build-url $base ({payment_method_id: (encode-path-segment $payment_method_id)} | format pattern "/account/payment-methods/{payment_method_id}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
 }
 
 # Payment Method View
@@ -991,10 +1029,11 @@ export def "account-payment-methods get" [
 ]: nothing -> record<created: string, data: any, id: int, is_default: bool, type: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default "https://api.linode.com/v4")
+  if ($payment_method_id | is-empty) { error make --unspanned { msg: "path parameter 'paymentMethodId' must be non-empty" } }
   let full_url = (build-url $base ({payment_method_id: (encode-path-segment $payment_method_id)} | format pattern "/account/payment-methods/{payment_method_id}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
 }
 
 # Payment Method Make Default
@@ -1015,10 +1054,11 @@ export def "account-payment-methods-make-default create" [
 ]: nothing -> record {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default "https://api.linode.com/v4")
+  if ($payment_method_id | is-empty) { error make --unspanned { msg: "path parameter 'paymentMethodId' must be non-empty" } }
   let full_url = (build-url $base ({payment_method_id: (encode-path-segment $payment_method_id)} | format pattern "/account/payment-methods/{payment_method_id}/make-default"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
 }
 
 # Payments List
@@ -1044,7 +1084,7 @@ export def "account-payments list" [
   let full_url = (build-url $base "/account/payments" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"page": $page, "page_size": $page_size} | compact), body: null}
 }
 
 # Payment Make
@@ -1073,7 +1113,7 @@ export def "account-payments create" [
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: {}, body: $req_body}
 }
 
 # PayPal Payment Stage
@@ -1104,7 +1144,7 @@ export def "account-payments-paypal create-pay-pal" [
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: {}, body: $req_body}
 }
 
 # Staged/Approved PayPal Payment Execute
@@ -1134,7 +1174,7 @@ export def "account-payments-paypal-execute create-pay-pal" [
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: {}, body: $req_body}
 }
 
 # Payment View
@@ -1155,10 +1195,11 @@ export def "account-payments get" [
 ]: nothing -> record<date: string, id: int, usd: int> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($payment_id | is-empty) { error make --unspanned { msg: "path parameter 'paymentId' must be non-empty" } }
   let full_url = (build-url $base ({payment_id: (encode-path-segment $payment_id)} | format pattern "/account/payments/{payment_id}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
 }
 
 # Promo Credit Add
@@ -1185,7 +1226,7 @@ export def "account-promo-codes create-credit" [
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: {}, body: $req_body}
 }
 
 # Service Transfers List
@@ -1211,7 +1252,7 @@ export def "account-service-transfers list" [
   let full_url = (build-url $base "/account/service-transfers" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"page": $page, "page_size": $page_size} | compact), body: null}
 }
 
 # Service Transfer Create
@@ -1239,7 +1280,7 @@ export def "account-service-transfers create" [
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: {}, body: $req_body}
 }
 
 # Service Transfer Cancel
@@ -1260,10 +1301,11 @@ export def "account-service-transfers delete" [
 ]: nothing -> record {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($token_arg | is-empty) { error make --unspanned { msg: "path parameter 'token' must be non-empty" } }
   let full_url = (build-url $base ({token_arg: (encode-path-segment $token_arg)} | format pattern "/account/service-transfers/{token_arg}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
 }
 
 # Service Transfer View
@@ -1284,10 +1326,11 @@ export def "account-service-transfers get" [
 ]: nothing -> record<created: string, entities: record<linodes: list<int>>, expiry: string, is_sender: bool, status: string, token: string, updated: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($token_arg | is-empty) { error make --unspanned { msg: "path parameter 'token' must be non-empty" } }
   let full_url = (build-url $base ({token_arg: (encode-path-segment $token_arg)} | format pattern "/account/service-transfers/{token_arg}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
 }
 
 # Service Transfer Accept
@@ -1308,10 +1351,11 @@ export def "account-service-transfers-accept create" [
 ]: nothing -> record {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($token_arg | is-empty) { error make --unspanned { msg: "path parameter 'token' must be non-empty" } }
   let full_url = (build-url $base ({token_arg: (encode-path-segment $token_arg)} | format pattern "/account/service-transfers/{token_arg}/accept"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
 }
 
 # Account Settings View
@@ -1334,7 +1378,7 @@ export def "account-settings get" [
   let full_url = (build-url $base "/account/settings")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
 }
 
 # Account Settings Update
@@ -1362,7 +1406,7 @@ export def "account-settings update" [
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: {}, body: $req_body}
 }
 
 # Linode Managed Enable
@@ -1385,7 +1429,7 @@ export def "account-settings-managed-enable enable" [
   let full_url = (build-url $base "/account/settings/managed-enable")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
 }
 
 # Network Utilization View
@@ -1408,7 +1452,7 @@ export def "account-transfer get" [
   let full_url = (build-url $base "/account/transfer")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
 }
 
 # Users List
@@ -1434,7 +1478,7 @@ export def "account-users list" [
   let full_url = (build-url $base "/account/users" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"page": $page, "page_size": $page_size} | compact), body: null}
 }
 
 # User Create
@@ -1463,7 +1507,7 @@ export def "account-users create" [
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: {}, body: $req_body}
 }
 
 # User Delete
@@ -1484,10 +1528,11 @@ export def "account-users delete" [
 ]: nothing -> record {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($username | is-empty) { error make --unspanned { msg: "path parameter 'username' must be non-empty" } }
   let full_url = (build-url $base ({username: (encode-path-segment $username)} | format pattern "/account/users/{username}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
 }
 
 # User View
@@ -1508,10 +1553,11 @@ export def "account-users get" [
 ]: nothing -> record<email: string, restricted: bool, ssh_keys: list<string>, tfa_enabled: bool, username: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($username | is-empty) { error make --unspanned { msg: "path parameter 'username' must be non-empty" } }
   let full_url = (build-url $base ({username: (encode-path-segment $username)} | format pattern "/account/users/{username}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
 }
 
 # User Update
@@ -1536,12 +1582,13 @@ export def "account-users update" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($username | is-empty) { error make --unspanned { msg: "path parameter 'username' must be non-empty" } }
   let full_url = (build-url $base ({username: (encode-path-segment $username)} | format pattern "/account/users/{username}"))
   let req_body = {"email": $email, "restricted": $restricted, "username": $body_username} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: {}, body: $req_body}
 }
 
 # User's Grants View
@@ -1562,10 +1609,11 @@ export def "account-users-grants get" [
 ]: nothing -> record<database: table<id: int, label: string, permissions: string>, domain: table<id: int, label: string, permissions: string>, global: record<account_access: string, add_databases: bool, add_domains: bool, add_firewalls: bool, add_images: bool, add_linodes: bool, add_longview: bool, add_nodebalancers: bool, add_stackscripts: bool, add_volumes: bool, cancel_account: bool, longview_subscription: bool>, image: table<id: int, label: string, permissions: string>, linode: table<id: int, label: string, permissions: string>, longview: table<id: int, label: string, permissions: string>, nodebalancer: table<id: int, label: string, permissions: string>, stackscript: table<id: int, label: string, permissions: string>, volume: table<id: int, label: string, permissions: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($username | is-empty) { error make --unspanned { msg: "path parameter 'username' must be non-empty" } }
   let full_url = (build-url $base ({username: (encode-path-segment $username)} | format pattern "/account/users/{username}/grants"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
 }
 
 # User's Grants Update
@@ -1605,12 +1653,13 @@ export def "account-users-grants update" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($username | is-empty) { error make --unspanned { msg: "path parameter 'username' must be non-empty" } }
   let full_url = (build-url $base ({username: (encode-path-segment $username)} | format pattern "/account/users/{username}/grants"))
   let req_body = {"database": $database, "domain": $domain, "global": $global, "image": $image, "linode": $linode, "longview": $longview, "nodebalancer": $nodebalancer, "stackscript": $stackscript, "volume": $volume} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: {}, body: $req_body}
 }
 
 # Managed Database Engines List
@@ -1636,7 +1685,7 @@ export def "databases-engines list" [
   let full_url = (build-url $base "/databases/engines" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"page": $page, "page_size": $page_size} | compact), body: null}
 }
 
 # Managed Database Engine View
@@ -1659,11 +1708,12 @@ export def "databases-engines get" [
 ]: nothing -> record<engine: string, id: string, version: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default "https://api.linode.com/v4")
+  if ($engine_id | is-empty) { error make --unspanned { msg: "path parameter 'engineId' must be non-empty" } }
   let qp = [(serialize-qp "page" $page "scalar") (serialize-qp "page_size" $page_size "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({engine_id: (encode-path-segment $engine_id)} | format pattern "/databases/engines/{engine_id}") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"page": $page, "page_size": $page_size} | compact), body: null}
 }
 
 # Managed Databases List All
@@ -1689,7 +1739,7 @@ export def "databases-instances get" [
   let full_url = (build-url $base "/databases/instances" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"page": $page, "page_size": $page_size} | compact), body: null}
 }
 
 # Managed MongoDB Databases List
@@ -1715,7 +1765,7 @@ export def "databases-mongodb-instances list" [
   let full_url = (build-url $base "/databases/mongodb/instances" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"page": $page, "page_size": $page_size} | compact), body: null}
 }
 
 # Managed MongoDB Database Delete
@@ -1736,10 +1786,11 @@ export def "databases-mongodb-instances delete-mongo-db" [
 ]: nothing -> record {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default "https://api.linode.com/v4")
+  if ($instance_id | is-empty) { error make --unspanned { msg: "path parameter 'instanceId' must be non-empty" } }
   let full_url = (build-url $base ({instance_id: (encode-path-segment $instance_id)} | format pattern "/databases/mongodb/instances/{instance_id}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
 }
 
 # Managed MongoDB Database View
@@ -1760,10 +1811,11 @@ export def "databases-mongodb-instances get-mongo-db" [
 ]: nothing -> record<allow_list: list<string>, cluster_size: int, compression_type: string, created: string, encrypted: bool, engine: string, hosts: record<primary: string, secondary: string>, id: int, label: string, peers: list<string>, port: int, region: string, replica_set: string, ssl_connection: bool, status: string, storage_engine: string, type: string, updated: string, updates: record<day_of_week: int, duration: int, frequency: string, hour_of_day: int, week_of_month: int>, version: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default "https://api.linode.com/v4")
+  if ($instance_id | is-empty) { error make --unspanned { msg: "path parameter 'instanceId' must be non-empty" } }
   let full_url = (build-url $base ({instance_id: (encode-path-segment $instance_id)} | format pattern "/databases/mongodb/instances/{instance_id}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
 }
 
 # Managed MongoDB Database Update
@@ -1788,12 +1840,13 @@ export def "databases-mongodb-instances update-mongo-db" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default "https://api.linode.com/v4")
+  if ($instance_id | is-empty) { error make --unspanned { msg: "path parameter 'instanceId' must be non-empty" } }
   let full_url = (build-url $base ({instance_id: (encode-path-segment $instance_id)} | format pattern "/databases/mongodb/instances/{instance_id}"))
   let req_body = {"allow_list": $allow_list, "label": $label, "updates": $updates} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: {}, body: $req_body}
 }
 
 # Managed MongoDB Database Backups List
@@ -1816,11 +1869,12 @@ export def "databases-mongodb-instances-backups list" [
 ]: nothing -> record<page: int, pages: int, results: int, data: table<created: string, id: int, label: string, type: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default "https://api.linode.com/v4")
+  if ($instance_id | is-empty) { error make --unspanned { msg: "path parameter 'instanceId' must be non-empty" } }
   let qp = [(serialize-qp "page" $page "scalar") (serialize-qp "page_size" $page_size "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({instance_id: (encode-path-segment $instance_id)} | format pattern "/databases/mongodb/instances/{instance_id}/backups") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"page": $page, "page_size": $page_size} | compact), body: null}
 }
 
 # Managed MongoDB Database Backup Snapshot Create
@@ -1844,12 +1898,13 @@ export def "databases-mongodb-instances-backups create-mongo-db" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default "https://api.linode.com/v4")
+  if ($instance_id | is-empty) { error make --unspanned { msg: "path parameter 'instanceId' must be non-empty" } }
   let full_url = (build-url $base ({instance_id: (encode-path-segment $instance_id)} | format pattern "/databases/mongodb/instances/{instance_id}/backups"))
   let req_body = {"label": $label, "target": $target} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: {}, body: $req_body}
 }
 
 # Managed MongoDB Database Backup Delete
@@ -1871,10 +1926,12 @@ export def "databases-mongodb-instances-backups delete-mongo-db" [
 ]: nothing -> record {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default "https://api.linode.com/v4")
+  if ($instance_id | is-empty) { error make --unspanned { msg: "path parameter 'instanceId' must be non-empty" } }
+  if ($backup_id | is-empty) { error make --unspanned { msg: "path parameter 'backupId' must be non-empty" } }
   let full_url = (build-url $base ({instance_id: (encode-path-segment $instance_id), backup_id: (encode-path-segment $backup_id)} | format pattern "/databases/mongodb/instances/{instance_id}/backups/{backup_id}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
 }
 
 # Managed MongoDB Database Backup View
@@ -1896,10 +1953,12 @@ export def "databases-mongodb-instances-backups get-mongo-db" [
 ]: nothing -> record<created: string, id: int, label: string, type: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default "https://api.linode.com/v4")
+  if ($instance_id | is-empty) { error make --unspanned { msg: "path parameter 'instanceId' must be non-empty" } }
+  if ($backup_id | is-empty) { error make --unspanned { msg: "path parameter 'backupId' must be non-empty" } }
   let full_url = (build-url $base ({instance_id: (encode-path-segment $instance_id), backup_id: (encode-path-segment $backup_id)} | format pattern "/databases/mongodb/instances/{instance_id}/backups/{backup_id}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
 }
 
 # Managed MongoDB Database Backup Restore
@@ -1921,10 +1980,12 @@ export def "databases-mongodb-instances-backups-restore create-mongo-db" [
 ]: nothing -> record {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default "https://api.linode.com/v4")
+  if ($instance_id | is-empty) { error make --unspanned { msg: "path parameter 'instanceId' must be non-empty" } }
+  if ($backup_id | is-empty) { error make --unspanned { msg: "path parameter 'backupId' must be non-empty" } }
   let full_url = (build-url $base ({instance_id: (encode-path-segment $instance_id), backup_id: (encode-path-segment $backup_id)} | format pattern "/databases/mongodb/instances/{instance_id}/backups/{backup_id}/restore"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
 }
 
 # Managed MongoDB Database Credentials View
@@ -1945,10 +2006,11 @@ export def "databases-mongodb-instances-credentials get-mongo-db" [
 ]: nothing -> record<password: string, username: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default "https://api.linode.com/v4")
+  if ($instance_id | is-empty) { error make --unspanned { msg: "path parameter 'instanceId' must be non-empty" } }
   let full_url = (build-url $base ({instance_id: (encode-path-segment $instance_id)} | format pattern "/databases/mongodb/instances/{instance_id}/credentials"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
 }
 
 # Managed MongoDB Database Credentials Reset
@@ -1969,10 +2031,11 @@ export def "databases-mongodb-instances-credentials-reset create-mongo-db" [
 ]: nothing -> record {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default "https://api.linode.com/v4")
+  if ($instance_id | is-empty) { error make --unspanned { msg: "path parameter 'instanceId' must be non-empty" } }
   let full_url = (build-url $base ({instance_id: (encode-path-segment $instance_id)} | format pattern "/databases/mongodb/instances/{instance_id}/credentials/reset"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
 }
 
 # Managed MongoDB Database Patch
@@ -1993,10 +2056,11 @@ export def "databases-mongodb-instances-patch create-mongo-db" [
 ]: nothing -> record {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default "https://api.linode.com/v4")
+  if ($instance_id | is-empty) { error make --unspanned { msg: "path parameter 'instanceId' must be non-empty" } }
   let full_url = (build-url $base ({instance_id: (encode-path-segment $instance_id)} | format pattern "/databases/mongodb/instances/{instance_id}/patch"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
 }
 
 # Managed MongoDB Database SSL Certificate View
@@ -2017,10 +2081,11 @@ export def "databases-mongodb-instances-ssl get-mongo-db" [
 ]: nothing -> record<ca_certificate: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default "https://api.linode.com/v4")
+  if ($instance_id | is-empty) { error make --unspanned { msg: "path parameter 'instanceId' must be non-empty" } }
   let full_url = (build-url $base ({instance_id: (encode-path-segment $instance_id)} | format pattern "/databases/mongodb/instances/{instance_id}/ssl"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
 }
 
 # Managed MySQL Databases List
@@ -2046,7 +2111,7 @@ export def "databases-mysql-instances list" [
   let full_url = (build-url $base "/databases/mysql/instances" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"page": $page, "page_size": $page_size} | compact), body: null}
 }
 
 # Managed MySQL Database Create
@@ -2081,7 +2146,7 @@ export def "databases-mysql-instances create-my-sql" [
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: {}, body: $req_body}
 }
 
 # Managed MySQL Database Delete
@@ -2102,10 +2167,11 @@ export def "databases-mysql-instances delete-my-sql" [
 ]: nothing -> record {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default "https://api.linode.com/v4")
+  if ($instance_id | is-empty) { error make --unspanned { msg: "path parameter 'instanceId' must be non-empty" } }
   let full_url = (build-url $base ({instance_id: (encode-path-segment $instance_id)} | format pattern "/databases/mysql/instances/{instance_id}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
 }
 
 # Managed MySQL Database View
@@ -2126,10 +2192,11 @@ export def "databases-mysql-instances get-my-sql" [
 ]: nothing -> record<allow_list: list<string>, cluster_size: int, created: string, encrypted: bool, engine: string, hosts: record<primary: string, secondary: string>, id: int, label: string, port: int, region: string, replication_type: string, ssl_connection: bool, status: string, type: string, updated: string, updates: record<day_of_week: int, duration: int, frequency: string, hour_of_day: int, week_of_month: int>, version: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default "https://api.linode.com/v4")
+  if ($instance_id | is-empty) { error make --unspanned { msg: "path parameter 'instanceId' must be non-empty" } }
   let full_url = (build-url $base ({instance_id: (encode-path-segment $instance_id)} | format pattern "/databases/mysql/instances/{instance_id}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
 }
 
 # Managed MySQL Database Update
@@ -2154,12 +2221,13 @@ export def "databases-mysql-instances update-my-sql" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default "https://api.linode.com/v4")
+  if ($instance_id | is-empty) { error make --unspanned { msg: "path parameter 'instanceId' must be non-empty" } }
   let full_url = (build-url $base ({instance_id: (encode-path-segment $instance_id)} | format pattern "/databases/mysql/instances/{instance_id}"))
   let req_body = {"allow_list": $allow_list, "label": $label, "updates": $updates} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: {}, body: $req_body}
 }
 
 # Managed MySQL Database Backups List
@@ -2182,11 +2250,12 @@ export def "databases-mysql-instances-backups list" [
 ]: nothing -> record<page: int, pages: int, results: int, data: table<created: string, id: int, label: string, type: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default "https://api.linode.com/v4")
+  if ($instance_id | is-empty) { error make --unspanned { msg: "path parameter 'instanceId' must be non-empty" } }
   let qp = [(serialize-qp "page" $page "scalar") (serialize-qp "page_size" $page_size "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({instance_id: (encode-path-segment $instance_id)} | format pattern "/databases/mysql/instances/{instance_id}/backups") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"page": $page, "page_size": $page_size} | compact), body: null}
 }
 
 # Managed MySQL Database Backup Snapshot Create
@@ -2210,12 +2279,13 @@ export def "databases-mysql-instances-backups create-my-sql" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default "https://api.linode.com/v4")
+  if ($instance_id | is-empty) { error make --unspanned { msg: "path parameter 'instanceId' must be non-empty" } }
   let full_url = (build-url $base ({instance_id: (encode-path-segment $instance_id)} | format pattern "/databases/mysql/instances/{instance_id}/backups"))
   let req_body = {"label": $label, "target": $target} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: {}, body: $req_body}
 }
 
 # Managed MySQL Database Backup Delete
@@ -2237,10 +2307,12 @@ export def "databases-mysql-instances-backups delete-my-sql" [
 ]: nothing -> record {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default "https://api.linode.com/v4")
+  if ($instance_id | is-empty) { error make --unspanned { msg: "path parameter 'instanceId' must be non-empty" } }
+  if ($backup_id | is-empty) { error make --unspanned { msg: "path parameter 'backupId' must be non-empty" } }
   let full_url = (build-url $base ({instance_id: (encode-path-segment $instance_id), backup_id: (encode-path-segment $backup_id)} | format pattern "/databases/mysql/instances/{instance_id}/backups/{backup_id}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
 }
 
 # Managed MySQL Database Backup View
@@ -2262,10 +2334,12 @@ export def "databases-mysql-instances-backups get-my-sql" [
 ]: nothing -> record<created: string, id: int, label: string, type: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default "https://api.linode.com/v4")
+  if ($instance_id | is-empty) { error make --unspanned { msg: "path parameter 'instanceId' must be non-empty" } }
+  if ($backup_id | is-empty) { error make --unspanned { msg: "path parameter 'backupId' must be non-empty" } }
   let full_url = (build-url $base ({instance_id: (encode-path-segment $instance_id), backup_id: (encode-path-segment $backup_id)} | format pattern "/databases/mysql/instances/{instance_id}/backups/{backup_id}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
 }
 
 # Managed MySQL Database Backup Restore
@@ -2287,10 +2361,12 @@ export def "databases-mysql-instances-backups-restore create-my-sql" [
 ]: nothing -> record {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default "https://api.linode.com/v4")
+  if ($instance_id | is-empty) { error make --unspanned { msg: "path parameter 'instanceId' must be non-empty" } }
+  if ($backup_id | is-empty) { error make --unspanned { msg: "path parameter 'backupId' must be non-empty" } }
   let full_url = (build-url $base ({instance_id: (encode-path-segment $instance_id), backup_id: (encode-path-segment $backup_id)} | format pattern "/databases/mysql/instances/{instance_id}/backups/{backup_id}/restore"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
 }
 
 # Managed MySQL Database Credentials View
@@ -2311,10 +2387,11 @@ export def "databases-mysql-instances-credentials get-my-sql" [
 ]: nothing -> record<password: string, username: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default "https://api.linode.com/v4")
+  if ($instance_id | is-empty) { error make --unspanned { msg: "path parameter 'instanceId' must be non-empty" } }
   let full_url = (build-url $base ({instance_id: (encode-path-segment $instance_id)} | format pattern "/databases/mysql/instances/{instance_id}/credentials"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
 }
 
 # Managed MySQL Database Credentials Reset
@@ -2335,10 +2412,11 @@ export def "databases-mysql-instances-credentials-reset create-my-sql" [
 ]: nothing -> record {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default "https://api.linode.com/v4")
+  if ($instance_id | is-empty) { error make --unspanned { msg: "path parameter 'instanceId' must be non-empty" } }
   let full_url = (build-url $base ({instance_id: (encode-path-segment $instance_id)} | format pattern "/databases/mysql/instances/{instance_id}/credentials/reset"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
 }
 
 # Managed MySQL Database Patch
@@ -2359,10 +2437,11 @@ export def "databases-mysql-instances-patch create-my-sql" [
 ]: nothing -> record {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default "https://api.linode.com/v4")
+  if ($instance_id | is-empty) { error make --unspanned { msg: "path parameter 'instanceId' must be non-empty" } }
   let full_url = (build-url $base ({instance_id: (encode-path-segment $instance_id)} | format pattern "/databases/mysql/instances/{instance_id}/patch"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
 }
 
 # Managed MySQL Database SSL Certificate View
@@ -2383,10 +2462,11 @@ export def "databases-mysql-instances-ssl get-my-sql" [
 ]: nothing -> record<ca_certificate: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default "https://api.linode.com/v4")
+  if ($instance_id | is-empty) { error make --unspanned { msg: "path parameter 'instanceId' must be non-empty" } }
   let full_url = (build-url $base ({instance_id: (encode-path-segment $instance_id)} | format pattern "/databases/mysql/instances/{instance_id}/ssl"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
 }
 
 # Managed PostgreSQL Databases List
@@ -2412,7 +2492,7 @@ export def "databases-postgresql-instances list" [
   let full_url = (build-url $base "/databases/postgresql/instances" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"page": $page, "page_size": $page_size} | compact), body: null}
 }
 
 # Managed PostgreSQL Database Create
@@ -2448,7 +2528,7 @@ export def "databases-postgresql-instances create-postgre-sql" [
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: {}, body: $req_body}
 }
 
 # Managed PostgreSQL Database Delete
@@ -2469,10 +2549,11 @@ export def "databases-postgresql-instances delete-postgre-sql" [
 ]: nothing -> record {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default "https://api.linode.com/v4")
+  if ($instance_id | is-empty) { error make --unspanned { msg: "path parameter 'instanceId' must be non-empty" } }
   let full_url = (build-url $base ({instance_id: (encode-path-segment $instance_id)} | format pattern "/databases/postgresql/instances/{instance_id}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
 }
 
 # Managed PostgreSQL Database View
@@ -2493,10 +2574,11 @@ export def "databases-postgresql-instances get-postgre-sql" [
 ]: nothing -> record<allow_list: list<string>, cluster_size: int, created: string, encrypted: bool, engine: string, hosts: record<primary: string, secondary: string>, id: int, label: string, port: int, region: string, replication_commit_type: string, replication_type: string, ssl_connection: bool, status: string, type: string, updated: string, updates: record<day_of_week: int, duration: int, frequency: string, hour_of_day: int, week_of_month: int>, version: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default "https://api.linode.com/v4")
+  if ($instance_id | is-empty) { error make --unspanned { msg: "path parameter 'instanceId' must be non-empty" } }
   let full_url = (build-url $base ({instance_id: (encode-path-segment $instance_id)} | format pattern "/databases/postgresql/instances/{instance_id}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
 }
 
 # Managed PostgreSQL Database Update
@@ -2521,12 +2603,13 @@ export def "databases-postgresql-instances update-postgre-sql" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default "https://api.linode.com/v4")
+  if ($instance_id | is-empty) { error make --unspanned { msg: "path parameter 'instanceId' must be non-empty" } }
   let full_url = (build-url $base ({instance_id: (encode-path-segment $instance_id)} | format pattern "/databases/postgresql/instances/{instance_id}"))
   let req_body = {"allow_list": $allow_list, "label": $label, "updates": $updates} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: {}, body: $req_body}
 }
 
 # Managed PostgreSQL Database Backups List
@@ -2549,11 +2632,12 @@ export def "databases-postgresql-instances-backups list" [
 ]: nothing -> record<page: int, pages: int, results: int, data: table<created: string, id: int, label: string, type: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default "https://api.linode.com/v4")
+  if ($instance_id | is-empty) { error make --unspanned { msg: "path parameter 'instanceId' must be non-empty" } }
   let qp = [(serialize-qp "page" $page "scalar") (serialize-qp "page_size" $page_size "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({instance_id: (encode-path-segment $instance_id)} | format pattern "/databases/postgresql/instances/{instance_id}/backups") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"page": $page, "page_size": $page_size} | compact), body: null}
 }
 
 # Managed PostgreSQL Database Backup Snapshot Create
@@ -2577,12 +2661,13 @@ export def "databases-postgresql-instances-backups create-postgre-sql" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default "https://api.linode.com/v4")
+  if ($instance_id | is-empty) { error make --unspanned { msg: "path parameter 'instanceId' must be non-empty" } }
   let full_url = (build-url $base ({instance_id: (encode-path-segment $instance_id)} | format pattern "/databases/postgresql/instances/{instance_id}/backups"))
   let req_body = {"label": $label, "target": $target} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: {}, body: $req_body}
 }
 
 # Managed PostgreSQL Database Backup Delete
@@ -2604,10 +2689,12 @@ export def "databases-postgresql-instances-backups delete-postgre-sql" [
 ]: nothing -> record {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default "https://api.linode.com/v4")
+  if ($instance_id | is-empty) { error make --unspanned { msg: "path parameter 'instanceId' must be non-empty" } }
+  if ($backup_id | is-empty) { error make --unspanned { msg: "path parameter 'backupId' must be non-empty" } }
   let full_url = (build-url $base ({instance_id: (encode-path-segment $instance_id), backup_id: (encode-path-segment $backup_id)} | format pattern "/databases/postgresql/instances/{instance_id}/backups/{backup_id}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
 }
 
 # Managed PostgreSQL Database Backup View
@@ -2629,10 +2716,12 @@ export def "databases-postgresql-instances-backups get-postgre-sql" [
 ]: nothing -> record<created: string, id: int, label: string, type: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default "https://api.linode.com/v4")
+  if ($instance_id | is-empty) { error make --unspanned { msg: "path parameter 'instanceId' must be non-empty" } }
+  if ($backup_id | is-empty) { error make --unspanned { msg: "path parameter 'backupId' must be non-empty" } }
   let full_url = (build-url $base ({instance_id: (encode-path-segment $instance_id), backup_id: (encode-path-segment $backup_id)} | format pattern "/databases/postgresql/instances/{instance_id}/backups/{backup_id}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
 }
 
 # Managed PostgreSQL Database Backup Restore
@@ -2654,10 +2743,12 @@ export def "databases-postgresql-instances-backups-restore create-postgre-sql" [
 ]: nothing -> record {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default "https://api.linode.com/v4")
+  if ($instance_id | is-empty) { error make --unspanned { msg: "path parameter 'instanceId' must be non-empty" } }
+  if ($backup_id | is-empty) { error make --unspanned { msg: "path parameter 'backupId' must be non-empty" } }
   let full_url = (build-url $base ({instance_id: (encode-path-segment $instance_id), backup_id: (encode-path-segment $backup_id)} | format pattern "/databases/postgresql/instances/{instance_id}/backups/{backup_id}/restore"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
 }
 
 # Managed PostgreSQL Database Credentials View
@@ -2678,10 +2769,11 @@ export def "databases-postgresql-instances-credentials get-postgre-sql" [
 ]: nothing -> record<password: string, username: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default "https://api.linode.com/v4")
+  if ($instance_id | is-empty) { error make --unspanned { msg: "path parameter 'instanceId' must be non-empty" } }
   let full_url = (build-url $base ({instance_id: (encode-path-segment $instance_id)} | format pattern "/databases/postgresql/instances/{instance_id}/credentials"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
 }
 
 # Managed PostgreSQL Database Credentials Reset
@@ -2702,10 +2794,11 @@ export def "databases-postgresql-instances-credentials-reset create-postgre-sql"
 ]: nothing -> record {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default "https://api.linode.com/v4")
+  if ($instance_id | is-empty) { error make --unspanned { msg: "path parameter 'instanceId' must be non-empty" } }
   let full_url = (build-url $base ({instance_id: (encode-path-segment $instance_id)} | format pattern "/databases/postgresql/instances/{instance_id}/credentials/reset"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
 }
 
 # Managed PostgreSQL Database Patch
@@ -2726,10 +2819,11 @@ export def "databases-postgresql-instances-patch create-postgre-sql" [
 ]: nothing -> record {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default "https://api.linode.com/v4")
+  if ($instance_id | is-empty) { error make --unspanned { msg: "path parameter 'instanceId' must be non-empty" } }
   let full_url = (build-url $base ({instance_id: (encode-path-segment $instance_id)} | format pattern "/databases/postgresql/instances/{instance_id}/patch"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
 }
 
 # Managed PostgreSQL Database SSL Certificate View
@@ -2750,10 +2844,11 @@ export def "databases-postgresql-instances-ssl get-postgre-sql" [
 ]: nothing -> record<ca_certificate: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default "https://api.linode.com/v4")
+  if ($instance_id | is-empty) { error make --unspanned { msg: "path parameter 'instanceId' must be non-empty" } }
   let full_url = (build-url $base ({instance_id: (encode-path-segment $instance_id)} | format pattern "/databases/postgresql/instances/{instance_id}/ssl"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
 }
 
 # Managed Database Types List
@@ -2779,7 +2874,7 @@ export def "databases-types list" [
   let full_url = (build-url $base "/databases/types" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"page": $page, "page_size": $page_size} | compact), body: null}
 }
 
 # Managed Database Type View
@@ -2802,11 +2897,12 @@ export def "databases-types get" [
 ]: nothing -> record<class: string, deprecated: bool, disk: int, engines: record<mongodb: list<record>, mysql: list<record>, postgresql: list<record>>, id: string, label: string, memory: int, vcpus: int> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default "https://api.linode.com/v4")
+  if ($type_id | is-empty) { error make --unspanned { msg: "path parameter 'typeId' must be non-empty" } }
   let qp = [(serialize-qp "page" $page "scalar") (serialize-qp "page_size" $page_size "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({type_id: (encode-path-segment $type_id)} | format pattern "/databases/types/{type_id}") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"page": $page, "page_size": $page_size} | compact), body: null}
 }
 
 # Domains List
@@ -2832,7 +2928,7 @@ export def "domains list" [
   let full_url = (build-url $base "/domains" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"page": $page, "page_size": $page_size} | compact), body: null}
 }
 
 # Domain Create
@@ -2872,7 +2968,7 @@ export def "domains create" [
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: {}, body: $req_body}
 }
 
 # Domain Import
@@ -2900,7 +2996,7 @@ export def "domains-import import" [
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: {}, body: $req_body}
 }
 
 # Domain Delete
@@ -2921,10 +3017,11 @@ export def "domains delete" [
 ]: nothing -> record {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($domain_id | is-empty) { error make --unspanned { msg: "path parameter 'domainId' must be non-empty" } }
   let full_url = (build-url $base ({domain_id: (encode-path-segment $domain_id)} | format pattern "/domains/{domain_id}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
 }
 
 # Domain View
@@ -2945,10 +3042,11 @@ export def "domains get" [
 ]: nothing -> record<axfr_ips: list<string>, description: string, domain: string, expire_sec: int, group: string, id: int, master_ips: list<string>, refresh_sec: int, retry_sec: int, soa_email: string, status: string, tags: list<string>, ttl_sec: int, type: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($domain_id | is-empty) { error make --unspanned { msg: "path parameter 'domainId' must be non-empty" } }
   let full_url = (build-url $base ({domain_id: (encode-path-segment $domain_id)} | format pattern "/domains/{domain_id}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
 }
 
 # Domain Update
@@ -2984,12 +3082,13 @@ export def "domains update" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($domain_id | is-empty) { error make --unspanned { msg: "path parameter 'domainId' must be non-empty" } }
   let full_url = (build-url $base ({domain_id: (encode-path-segment $domain_id)} | format pattern "/domains/{domain_id}"))
   let req_body = {"axfr_ips": $axfr_ips, "description": $description, "domain": $domain, "expire_sec": $expire_sec, "group": $group, "master_ips": $master_ips, "refresh_sec": $refresh_sec, "retry_sec": $retry_sec, "soa_email": $soa_email, "status": $status, "tags": $tags, "ttl_sec": $ttl_sec, "type": $type} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: {}, body: $req_body}
 }
 
 # Domain Clone
@@ -3012,12 +3111,13 @@ export def "domains-clone clone" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($domain_id | is-empty) { error make --unspanned { msg: "path parameter 'domainId' must be non-empty" } }
   let full_url = (build-url $base ({domain_id: (encode-path-segment $domain_id)} | format pattern "/domains/{domain_id}/clone"))
   let req_body = {"domain": $domain} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: {}, body: $req_body}
 }
 
 # Domain Records List
@@ -3040,11 +3140,12 @@ export def "domains-records list" [
 ]: nothing -> record<data: table<created: string, id: int, name: string, port: int, priority: int, protocol: string, service: string, tag: string, target: string, ttl_sec: int, type: string, updated: string, weight: int>, page: int, pages: int, results: int> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($domain_id | is-empty) { error make --unspanned { msg: "path parameter 'domainId' must be non-empty" } }
   let qp = [(serialize-qp "page" $page "scalar") (serialize-qp "page_size" $page_size "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({domain_id: (encode-path-segment $domain_id)} | format pattern "/domains/{domain_id}/records") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"page": $page, "page_size": $page_size} | compact), body: null}
 }
 
 # Domain Record Create
@@ -3076,12 +3177,13 @@ export def "domains-records create" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($domain_id | is-empty) { error make --unspanned { msg: "path parameter 'domainId' must be non-empty" } }
   let full_url = (build-url $base ({domain_id: (encode-path-segment $domain_id)} | format pattern "/domains/{domain_id}/records"))
   let req_body = {"name": $name, "port": $port, "priority": $priority, "protocol": $protocol, "service": $service, "tag": $tag, "target": $target, "ttl_sec": $ttl_sec, "type": $type, "weight": $weight} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: {}, body: $req_body}
 }
 
 # Domain Record Delete
@@ -3103,10 +3205,12 @@ export def "domains-records delete" [
 ]: nothing -> record {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($domain_id | is-empty) { error make --unspanned { msg: "path parameter 'domainId' must be non-empty" } }
+  if ($record_id | is-empty) { error make --unspanned { msg: "path parameter 'recordId' must be non-empty" } }
   let full_url = (build-url $base ({domain_id: (encode-path-segment $domain_id), record_id: (encode-path-segment $record_id)} | format pattern "/domains/{domain_id}/records/{record_id}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
 }
 
 # Domain Record View
@@ -3128,10 +3232,12 @@ export def "domains-records get" [
 ]: nothing -> record<created: string, id: int, name: string, port: int, priority: int, protocol: string, service: string, tag: string, target: string, ttl_sec: int, type: string, updated: string, weight: int> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($domain_id | is-empty) { error make --unspanned { msg: "path parameter 'domainId' must be non-empty" } }
+  if ($record_id | is-empty) { error make --unspanned { msg: "path parameter 'recordId' must be non-empty" } }
   let full_url = (build-url $base ({domain_id: (encode-path-segment $domain_id), record_id: (encode-path-segment $record_id)} | format pattern "/domains/{domain_id}/records/{record_id}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
 }
 
 # Domain Record Update
@@ -3163,12 +3269,14 @@ export def "domains-records update" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($domain_id | is-empty) { error make --unspanned { msg: "path parameter 'domainId' must be non-empty" } }
+  if ($record_id | is-empty) { error make --unspanned { msg: "path parameter 'recordId' must be non-empty" } }
   let full_url = (build-url $base ({domain_id: (encode-path-segment $domain_id), record_id: (encode-path-segment $record_id)} | format pattern "/domains/{domain_id}/records/{record_id}"))
   let req_body = {"name": $name, "port": $port, "priority": $priority, "protocol": $protocol, "service": $service, "tag": $tag, "target": $target, "ttl_sec": $ttl_sec, "weight": $weight} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: {}, body: $req_body}
 }
 
 # Domain Zone File View
@@ -3189,10 +3297,11 @@ export def "domains-zone-file get" [
 ]: nothing -> record<zone_file: list<string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($domain_id | is-empty) { error make --unspanned { msg: "path parameter 'domainId' must be non-empty" } }
   let full_url = (build-url $base ({domain_id: (encode-path-segment $domain_id)} | format pattern "/domains/{domain_id}/zone-file"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
 }
 
 # Images List
@@ -3218,7 +3327,7 @@ export def "images list" [
   let full_url = (build-url $base "/images" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"page": $page, "page_size": $page_size} | compact), body: null}
 }
 
 # Image Create
@@ -3247,7 +3356,7 @@ export def "images create" [
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: {}, body: $req_body}
 }
 
 # Image Upload
@@ -3275,7 +3384,7 @@ export def "images-upload create" [
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: {}, body: $req_body}
 }
 
 # Image Delete
@@ -3296,10 +3405,11 @@ export def "images delete" [
 ]: nothing -> record {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($image_id | is-empty) { error make --unspanned { msg: "path parameter 'imageId' must be non-empty" } }
   let full_url = (build-url $base ({image_id: (encode-path-segment $image_id)} | format pattern "/images/{image_id}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
 }
 
 # Image View
@@ -3320,10 +3430,11 @@ export def "images get" [
 ]: nothing -> record<created: string, created_by: string, deprecated: bool, description: string, eol: string, expiry: string, id: string, is_public: bool, label: string, size: int, status: string, type: string, updated: string, vendor: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($image_id | is-empty) { error make --unspanned { msg: "path parameter 'imageId' must be non-empty" } }
   let full_url = (build-url $base ({image_id: (encode-path-segment $image_id)} | format pattern "/images/{image_id}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
 }
 
 # Image Update
@@ -3347,12 +3458,13 @@ export def "images update" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($image_id | is-empty) { error make --unspanned { msg: "path parameter 'imageId' must be non-empty" } }
   let full_url = (build-url $base ({image_id: (encode-path-segment $image_id)} | format pattern "/images/{image_id}"))
   let req_body = {"description": $description, "label": $label} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: {}, body: $req_body}
 }
 
 # Linodes List
@@ -3378,7 +3490,7 @@ export def "linode-instances list" [
   let full_url = (build-url $base "/linode/instances" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"page": $page, "page_size": $page_size} | compact), body: null}
 }
 
 # Linode Create
@@ -3423,7 +3535,7 @@ export def "linode-instances create" [
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: {}, body: $req_body}
 }
 
 # Linode Delete
@@ -3444,10 +3556,11 @@ export def "linode-instances delete" [
 ]: nothing -> record {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($linode_id | is-empty) { error make --unspanned { msg: "path parameter 'linodeId' must be non-empty" } }
   let full_url = (build-url $base ({linode_id: (encode-path-segment $linode_id)} | format pattern "/linode/instances/{linode_id}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
 }
 
 # Linode View
@@ -3468,10 +3581,11 @@ export def "linode-instances get" [
 ]: nothing -> record<alerts: record<cpu: int, io: int, network_in: int, network_out: int, transfer_quota: int>, backups: record<available: bool, enabled: bool, last_successful: string, schedule: record<day: string, window: string>>, created: string, group: string, host_uuid: string, hypervisor: string, id: int, image: record, ipv4: list<string>, ipv6: string, label: string, region: string, specs: record<disk: int, memory: int, transfer: int, vcpus: int>, status: string, tags: list<string>, type: string, updated: string, watchdog_enabled: bool> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($linode_id | is-empty) { error make --unspanned { msg: "path parameter 'linodeId' must be non-empty" } }
   let full_url = (build-url $base ({linode_id: (encode-path-segment $linode_id)} | format pattern "/linode/instances/{linode_id}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
 }
 
 # Linode Update
@@ -3502,12 +3616,13 @@ export def "linode-instances update" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($linode_id | is-empty) { error make --unspanned { msg: "path parameter 'linodeId' must be non-empty" } }
   let full_url = (build-url $base ({linode_id: (encode-path-segment $linode_id)} | format pattern "/linode/instances/{linode_id}"))
   let req_body = {"alerts": $alerts, "backups": $backups, "group": $group, "label": $label, "tags": $tags, "watchdog_enabled": $watchdog_enabled} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: {}, body: $req_body}
 }
 
 # Backups List
@@ -3528,10 +3643,11 @@ export def "linode-instances-backups list" [
 ]: nothing -> record<automatic: table<available: bool, configs: list, created: string, disks: list, finished: string, id: int, label: string, status: string, type: string, updated: string>, snapshot: record<current: record<available: bool, configs: list, created: string, disks: list, finished: string, id: int, label: string, status: string, type: string, updated: string>, in_progress: record<available: bool, configs: list, created: string, disks: list, finished: string, id: int, label: string, status: string, type: string, updated: string>>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($linode_id | is-empty) { error make --unspanned { msg: "path parameter 'linodeId' must be non-empty" } }
   let full_url = (build-url $base ({linode_id: (encode-path-segment $linode_id)} | format pattern "/linode/instances/{linode_id}/backups"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
 }
 
 # Snapshot Create
@@ -3554,12 +3670,13 @@ export def "linode-instances-backups create-snapshot" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($linode_id | is-empty) { error make --unspanned { msg: "path parameter 'linodeId' must be non-empty" } }
   let full_url = (build-url $base ({linode_id: (encode-path-segment $linode_id)} | format pattern "/linode/instances/{linode_id}/backups"))
   let req_body = {"label": $label} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: {}, body: $req_body}
 }
 
 # Backups Cancel
@@ -3580,10 +3697,11 @@ export def "linode-instances-backups-cancel cancel" [
 ]: nothing -> record {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($linode_id | is-empty) { error make --unspanned { msg: "path parameter 'linodeId' must be non-empty" } }
   let full_url = (build-url $base ({linode_id: (encode-path-segment $linode_id)} | format pattern "/linode/instances/{linode_id}/backups/cancel"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
 }
 
 # Backups Enable
@@ -3604,10 +3722,11 @@ export def "linode-instances-backups-enable enable" [
 ]: nothing -> record {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($linode_id | is-empty) { error make --unspanned { msg: "path parameter 'linodeId' must be non-empty" } }
   let full_url = (build-url $base ({linode_id: (encode-path-segment $linode_id)} | format pattern "/linode/instances/{linode_id}/backups/enable"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
 }
 
 # Backup View
@@ -3629,10 +3748,12 @@ export def "linode-instances-backups get" [
 ]: nothing -> record<available: bool, configs: list<string>, created: string, disks: table<filesystem: string, label: string, size: int>, finished: string, id: int, label: string, status: string, type: string, updated: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($linode_id | is-empty) { error make --unspanned { msg: "path parameter 'linodeId' must be non-empty" } }
+  if ($backup_id | is-empty) { error make --unspanned { msg: "path parameter 'backupId' must be non-empty" } }
   let full_url = (build-url $base ({linode_id: (encode-path-segment $linode_id), backup_id: (encode-path-segment $backup_id)} | format pattern "/linode/instances/{linode_id}/backups/{backup_id}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
 }
 
 # Backup Restore
@@ -3657,12 +3778,14 @@ export def "linode-instances-backups-restore create" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($linode_id | is-empty) { error make --unspanned { msg: "path parameter 'linodeId' must be non-empty" } }
+  if ($backup_id | is-empty) { error make --unspanned { msg: "path parameter 'backupId' must be non-empty" } }
   let full_url = (build-url $base ({linode_id: (encode-path-segment $linode_id), backup_id: (encode-path-segment $backup_id)} | format pattern "/linode/instances/{linode_id}/backups/{backup_id}/restore"))
   let req_body = {"linode_id": $body_linode_id, "overwrite": $overwrite} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: {}, body: $req_body}
 }
 
 # Linode Boot
@@ -3685,12 +3808,13 @@ export def "linode-instances-boot create" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($linode_id | is-empty) { error make --unspanned { msg: "path parameter 'linodeId' must be non-empty" } }
   let full_url = (build-url $base ({linode_id: (encode-path-segment $linode_id)} | format pattern "/linode/instances/{linode_id}/boot"))
   let req_body = {"config_id": $config_id} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: {}, body: $req_body}
 }
 
 # Linode Clone
@@ -3722,12 +3846,13 @@ export def "linode-instances-clone clone" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($linode_id | is-empty) { error make --unspanned { msg: "path parameter 'linodeId' must be non-empty" } }
   let full_url = (build-url $base ({linode_id: (encode-path-segment $linode_id)} | format pattern "/linode/instances/{linode_id}/clone"))
   let req_body = {"backups_enabled": $backups_enabled, "configs": $configs, "disks": $disks, "group": $group, "label": $label, "linode_id": $body_linode_id, "private_ip": $private_ip, "region": $region, "type": $type} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: {}, body: $req_body}
 }
 
 # Configuration Profiles List
@@ -3750,11 +3875,12 @@ export def "linode-instances-configs list" [
 ]: nothing -> record<data: table<comments: string, devices: record, helpers: record, id: int, interfaces: list, kernel: string, label: string, memory_limit: int, root_device: string, run_level: string, virt_mode: string>, page: int, pages: int, results: int> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($linode_id | is-empty) { error make --unspanned { msg: "path parameter 'linodeId' must be non-empty" } }
   let qp = [(serialize-qp "page" $page "scalar") (serialize-qp "page_size" $page_size "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({linode_id: (encode-path-segment $linode_id)} | format pattern "/linode/instances/{linode_id}/configs") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"page": $page, "page_size": $page_size} | compact), body: null}
 }
 
 # Configuration Profile Create
@@ -3789,12 +3915,13 @@ export def "linode-instances-configs create" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($linode_id | is-empty) { error make --unspanned { msg: "path parameter 'linodeId' must be non-empty" } }
   let full_url = (build-url $base ({linode_id: (encode-path-segment $linode_id)} | format pattern "/linode/instances/{linode_id}/configs"))
   let req_body = {"comments": $comments, "devices": $devices, "helpers": $helpers, "interfaces": $interfaces, "kernel": $kernel, "label": $label, "memory_limit": $memory_limit, "root_device": $root_device, "run_level": $run_level, "virt_mode": $virt_mode} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: {}, body: $req_body}
 }
 
 # Configuration Profile Delete
@@ -3816,10 +3943,12 @@ export def "linode-instances-configs delete" [
 ]: nothing -> record {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($linode_id | is-empty) { error make --unspanned { msg: "path parameter 'linodeId' must be non-empty" } }
+  if ($config_id | is-empty) { error make --unspanned { msg: "path parameter 'configId' must be non-empty" } }
   let full_url = (build-url $base ({linode_id: (encode-path-segment $linode_id), config_id: (encode-path-segment $config_id)} | format pattern "/linode/instances/{linode_id}/configs/{config_id}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
 }
 
 # Configuration Profile View
@@ -3841,10 +3970,12 @@ export def "linode-instances-configs get" [
 ]: nothing -> record<comments: string, devices: record<sda: record<disk_id: int, volume_id: int>, sdb: record<disk_id: int, volume_id: int>, sdc: record<disk_id: int, volume_id: int>, sdd: record<disk_id: int, volume_id: int>, sde: record<disk_id: int, volume_id: int>, sdf: record<disk_id: int, volume_id: int>, sdg: record<disk_id: int, volume_id: int>, sdh: record<disk_id: int, volume_id: int>>, helpers: record<devtmpfs_automount: bool, distro: bool, modules_dep: bool, network: bool, updatedb_disabled: bool>, id: int, interfaces: table<ipam_address: string, label: string, purpose: string>, kernel: string, label: string, memory_limit: int, root_device: string, run_level: string, virt_mode: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($linode_id | is-empty) { error make --unspanned { msg: "path parameter 'linodeId' must be non-empty" } }
+  if ($config_id | is-empty) { error make --unspanned { msg: "path parameter 'configId' must be non-empty" } }
   let full_url = (build-url $base ({linode_id: (encode-path-segment $linode_id), config_id: (encode-path-segment $config_id)} | format pattern "/linode/instances/{linode_id}/configs/{config_id}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
 }
 
 # Configuration Profile Update
@@ -3880,12 +4011,14 @@ export def "linode-instances-configs update" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($linode_id | is-empty) { error make --unspanned { msg: "path parameter 'linodeId' must be non-empty" } }
+  if ($config_id | is-empty) { error make --unspanned { msg: "path parameter 'configId' must be non-empty" } }
   let full_url = (build-url $base ({linode_id: (encode-path-segment $linode_id), config_id: (encode-path-segment $config_id)} | format pattern "/linode/instances/{linode_id}/configs/{config_id}"))
   let req_body = {"comments": $comments, "devices": $devices, "helpers": $helpers, "interfaces": $interfaces, "kernel": $kernel, "label": $label, "memory_limit": $memory_limit, "root_device": $root_device, "run_level": $run_level, "virt_mode": $virt_mode} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: {}, body: $req_body}
 }
 
 # Disks List
@@ -3908,11 +4041,12 @@ export def "linode-instances-disks list" [
 ]: nothing -> record<data: table<created: string, filesystem: string, id: int, label: string, size: int, status: string, updated: string>, page: int, pages: int, results: int> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($linode_id | is-empty) { error make --unspanned { msg: "path parameter 'linodeId' must be non-empty" } }
   let qp = [(serialize-qp "page" $page "scalar") (serialize-qp "page_size" $page_size "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({linode_id: (encode-path-segment $linode_id)} | format pattern "/linode/instances/{linode_id}/disks") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"page": $page, "page_size": $page_size} | compact), body: null}
 }
 
 # Disk Create
@@ -3943,12 +4077,13 @@ export def "linode-instances-disks create" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($linode_id | is-empty) { error make --unspanned { msg: "path parameter 'linodeId' must be non-empty" } }
   let full_url = (build-url $base ({linode_id: (encode-path-segment $linode_id)} | format pattern "/linode/instances/{linode_id}/disks"))
   let req_body = {"authorized_keys": $authorized_keys, "authorized_users": $authorized_users, "filesystem": $filesystem, "image": $image, "label": $label, "root_pass": $root_pass, "size": $size, "stackscript_data": $stackscript_data, "stackscript_id": $stackscript_id} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: {}, body: $req_body}
 }
 
 # Disk Delete
@@ -3970,10 +4105,12 @@ export def "linode-instances-disks delete" [
 ]: nothing -> record {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($linode_id | is-empty) { error make --unspanned { msg: "path parameter 'linodeId' must be non-empty" } }
+  if ($disk_id | is-empty) { error make --unspanned { msg: "path parameter 'diskId' must be non-empty" } }
   let full_url = (build-url $base ({linode_id: (encode-path-segment $linode_id), disk_id: (encode-path-segment $disk_id)} | format pattern "/linode/instances/{linode_id}/disks/{disk_id}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
 }
 
 # Disk View
@@ -3995,10 +4132,12 @@ export def "linode-instances-disks get" [
 ]: nothing -> record<created: string, filesystem: string, id: int, label: string, size: int, status: string, updated: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($linode_id | is-empty) { error make --unspanned { msg: "path parameter 'linodeId' must be non-empty" } }
+  if ($disk_id | is-empty) { error make --unspanned { msg: "path parameter 'diskId' must be non-empty" } }
   let full_url = (build-url $base ({linode_id: (encode-path-segment $linode_id), disk_id: (encode-path-segment $disk_id)} | format pattern "/linode/instances/{linode_id}/disks/{disk_id}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
 }
 
 # Disk Update
@@ -4024,12 +4163,14 @@ export def "linode-instances-disks update" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($linode_id | is-empty) { error make --unspanned { msg: "path parameter 'linodeId' must be non-empty" } }
+  if ($disk_id | is-empty) { error make --unspanned { msg: "path parameter 'diskId' must be non-empty" } }
   let full_url = (build-url $base ({linode_id: (encode-path-segment $linode_id), disk_id: (encode-path-segment $disk_id)} | format pattern "/linode/instances/{linode_id}/disks/{disk_id}"))
   let req_body = {"filesystem": $filesystem, "label": $label, "size": $size} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: {}, body: $req_body}
 }
 
 # Disk Clone
@@ -4051,10 +4192,12 @@ export def "linode-instances-disks-clone clone" [
 ]: nothing -> record<created: string, filesystem: string, id: int, label: string, size: int, status: string, updated: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($linode_id | is-empty) { error make --unspanned { msg: "path parameter 'linodeId' must be non-empty" } }
+  if ($disk_id | is-empty) { error make --unspanned { msg: "path parameter 'diskId' must be non-empty" } }
   let full_url = (build-url $base ({linode_id: (encode-path-segment $linode_id), disk_id: (encode-path-segment $disk_id)} | format pattern "/linode/instances/{linode_id}/disks/{disk_id}/clone"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
 }
 
 # Disk Root Password Reset
@@ -4078,12 +4221,14 @@ export def "linode-instances-disks-password reset" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($linode_id | is-empty) { error make --unspanned { msg: "path parameter 'linodeId' must be non-empty" } }
+  if ($disk_id | is-empty) { error make --unspanned { msg: "path parameter 'diskId' must be non-empty" } }
   let full_url = (build-url $base ({linode_id: (encode-path-segment $linode_id), disk_id: (encode-path-segment $disk_id)} | format pattern "/linode/instances/{linode_id}/disks/{disk_id}/password"))
   let req_body = {"password": $password} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: {}, body: $req_body}
 }
 
 # Disk Resize
@@ -4107,12 +4252,14 @@ export def "linode-instances-disks-resize resize" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($linode_id | is-empty) { error make --unspanned { msg: "path parameter 'linodeId' must be non-empty" } }
+  if ($disk_id | is-empty) { error make --unspanned { msg: "path parameter 'diskId' must be non-empty" } }
   let full_url = (build-url $base ({linode_id: (encode-path-segment $linode_id), disk_id: (encode-path-segment $disk_id)} | format pattern "/linode/instances/{linode_id}/disks/{disk_id}/resize"))
   let req_body = {"size": $size} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: {}, body: $req_body}
 }
 
 # Firewalls List
@@ -4135,11 +4282,12 @@ export def "linode-instances-firewalls get" [
 ]: nothing -> record<data: table<created: string, id: int, label: string, rules: record, status: string, tags: list, updated: string>, page: int, pages: int, results: int> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($linode_id | is-empty) { error make --unspanned { msg: "path parameter 'linodeId' must be non-empty" } }
   let qp = [(serialize-qp "page" $page "scalar") (serialize-qp "page_size" $page_size "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({linode_id: (encode-path-segment $linode_id)} | format pattern "/linode/instances/{linode_id}/firewalls") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"page": $page, "page_size": $page_size} | compact), body: null}
 }
 
 # Networking Information List
@@ -4160,10 +4308,11 @@ export def "linode-instances-ips get-i-ps" [
 ]: nothing -> record<ipv4: record<private: list<record>, public: list<record>, reserved: list<record>, shared: list<record>>, ipv6: record<global: record<prefix: int, range: string, region: string, route_target: string>, link_local: record<address: string, gateway: string, linode_id: int, prefix: int, public: bool, rdns: string, region: string, subnet_mask: string, type: string>, slaac: record<address: string, gateway: string, linode_id: int, prefix: int, public: bool, rdns: string, region: string, subnet_mask: string, type: string>>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($linode_id | is-empty) { error make --unspanned { msg: "path parameter 'linodeId' must be non-empty" } }
   let full_url = (build-url $base ({linode_id: (encode-path-segment $linode_id)} | format pattern "/linode/instances/{linode_id}/ips"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
 }
 
 # IPv4 Address Allocate
@@ -4187,12 +4336,13 @@ export def "linode-instances-ips create" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($linode_id | is-empty) { error make --unspanned { msg: "path parameter 'linodeId' must be non-empty" } }
   let full_url = (build-url $base ({linode_id: (encode-path-segment $linode_id)} | format pattern "/linode/instances/{linode_id}/ips"))
   let req_body = {"public": $public, "type": $type} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: {}, body: $req_body}
 }
 
 # IPv4 Address Delete
@@ -4214,10 +4364,12 @@ export def "linode-instances-ips delete" [
 ]: nothing -> record {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($linode_id | is-empty) { error make --unspanned { msg: "path parameter 'linodeId' must be non-empty" } }
+  if ($address | is-empty) { error make --unspanned { msg: "path parameter 'address' must be non-empty" } }
   let full_url = (build-url $base ({linode_id: (encode-path-segment $linode_id), address: (encode-path-segment $address)} | format pattern "/linode/instances/{linode_id}/ips/{address}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
 }
 
 # IP Address View
@@ -4239,10 +4391,12 @@ export def "linode-instances-ips get" [
 ]: nothing -> record<address: string, gateway: string, linode_id: int, prefix: int, public: bool, rdns: string, region: string, subnet_mask: string, type: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($linode_id | is-empty) { error make --unspanned { msg: "path parameter 'linodeId' must be non-empty" } }
+  if ($address | is-empty) { error make --unspanned { msg: "path parameter 'address' must be non-empty" } }
   let full_url = (build-url $base ({linode_id: (encode-path-segment $linode_id), address: (encode-path-segment $address)} | format pattern "/linode/instances/{linode_id}/ips/{address}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
 }
 
 # IP Address Update
@@ -4266,12 +4420,14 @@ export def "linode-instances-ips update" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($linode_id | is-empty) { error make --unspanned { msg: "path parameter 'linodeId' must be non-empty" } }
+  if ($address | is-empty) { error make --unspanned { msg: "path parameter 'address' must be non-empty" } }
   let full_url = (build-url $base ({linode_id: (encode-path-segment $linode_id), address: (encode-path-segment $address)} | format pattern "/linode/instances/{linode_id}/ips/{address}"))
   let req_body = {"rdns": $rdns} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: {}, body: $req_body}
 }
 
 # DC Migration/Pending Host Migration Initiate
@@ -4295,12 +4451,13 @@ export def "linode-instances-migrate create" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($linode_id | is-empty) { error make --unspanned { msg: "path parameter 'linodeId' must be non-empty" } }
   let full_url = (build-url $base ({linode_id: (encode-path-segment $linode_id)} | format pattern "/linode/instances/{linode_id}/migrate"))
   let req_body = {"region": $region, "upgrade": $upgrade} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: {}, body: $req_body}
 }
 
 # Linode Upgrade
@@ -4323,12 +4480,13 @@ export def "linode-instances-mutate create" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($linode_id | is-empty) { error make --unspanned { msg: "path parameter 'linodeId' must be non-empty" } }
   let full_url = (build-url $base ({linode_id: (encode-path-segment $linode_id)} | format pattern "/linode/instances/{linode_id}/mutate"))
   let req_body = {"allow_auto_disk_resize": $allow_auto_disk_resize} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: {}, body: $req_body}
 }
 
 # Linode NodeBalancers View
@@ -4349,10 +4507,11 @@ export def "linode-instances-nodebalancers get-node-balancers" [
 ]: nothing -> record<data: table<client_conn_throttle: int, created: string, hostname: string, id: int, ipv4: string, ipv6: string, label: string, region: string, tags: list, transfer: record, updated: string>, page: int, pages: int, results: int> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($linode_id | is-empty) { error make --unspanned { msg: "path parameter 'linodeId' must be non-empty" } }
   let full_url = (build-url $base ({linode_id: (encode-path-segment $linode_id)} | format pattern "/linode/instances/{linode_id}/nodebalancers"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
 }
 
 # Linode Root Password Reset
@@ -4375,12 +4534,13 @@ export def "linode-instances-password reset" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($linode_id | is-empty) { error make --unspanned { msg: "path parameter 'linodeId' must be non-empty" } }
   let full_url = (build-url $base ({linode_id: (encode-path-segment $linode_id)} | format pattern "/linode/instances/{linode_id}/password"))
   let req_body = {"root_pass": $root_pass} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: {}, body: $req_body}
 }
 
 # Linode Reboot
@@ -4403,12 +4563,13 @@ export def "linode-instances-reboot create" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($linode_id | is-empty) { error make --unspanned { msg: "path parameter 'linodeId' must be non-empty" } }
   let full_url = (build-url $base ({linode_id: (encode-path-segment $linode_id)} | format pattern "/linode/instances/{linode_id}/reboot"))
   let req_body = {"config_id": $config_id} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: {}, body: $req_body}
 }
 
 # Linode Rebuild
@@ -4437,12 +4598,13 @@ export def "linode-instances-rebuild create" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($linode_id | is-empty) { error make --unspanned { msg: "path parameter 'linodeId' must be non-empty" } }
   let full_url = (build-url $base ({linode_id: (encode-path-segment $linode_id)} | format pattern "/linode/instances/{linode_id}/rebuild"))
   let req_body = {"authorized_keys": $authorized_keys, "authorized_users": $authorized_users, "booted": $booted, "image": $image, "root_pass": $root_pass, "stackscript_data": $stackscript_data, "stackscript_id": $stackscript_id} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: {}, body: $req_body}
 }
 
 # Linode Boot into Rescue Mode
@@ -4466,12 +4628,13 @@ export def "linode-instances-rescue create" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($linode_id | is-empty) { error make --unspanned { msg: "path parameter 'linodeId' must be non-empty" } }
   let full_url = (build-url $base ({linode_id: (encode-path-segment $linode_id)} | format pattern "/linode/instances/{linode_id}/rescue"))
   let req_body = {"devices": $devices} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: {}, body: $req_body}
 }
 
 # Linode Resize
@@ -4495,12 +4658,13 @@ export def "linode-instances-resize resize" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($linode_id | is-empty) { error make --unspanned { msg: "path parameter 'linodeId' must be non-empty" } }
   let full_url = (build-url $base ({linode_id: (encode-path-segment $linode_id)} | format pattern "/linode/instances/{linode_id}/resize"))
   let req_body = {"allow_auto_disk_resize": $allow_auto_disk_resize, "type": $type} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: {}, body: $req_body}
 }
 
 # Linode Shut Down
@@ -4521,17 +4685,18 @@ export def "linode-instances-shutdown create" [
 ]: nothing -> record {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($linode_id | is-empty) { error make --unspanned { msg: "path parameter 'linodeId' must be non-empty" } }
   let full_url = (build-url $base ({linode_id: (encode-path-segment $linode_id)} | format pattern "/linode/instances/{linode_id}/shutdown"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
 }
 
 # Linode Statistics View
 #
 # GET /linode/instances/{linodeId}/stats
 # operationId: getLinodeStats
-export def "linode-instances-stats get-by-linodeId" [
+export def "linode-instances-stats get-by-linode-id" [
   linode_id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -4545,17 +4710,18 @@ export def "linode-instances-stats get-by-linodeId" [
 ]: nothing -> record<cpu: list<list<float>>, io: record<io: list<list>, swap: list<list>>, netv4: record<in: list<list>, out: list<list>, private_in: list<list>, private_out: list<list>>, netv6: record<in: list<list>, out: list<list>, private_in: list<list>, private_out: list<list>>, title: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($linode_id | is-empty) { error make --unspanned { msg: "path parameter 'linodeId' must be non-empty" } }
   let full_url = (build-url $base ({linode_id: (encode-path-segment $linode_id)} | format pattern "/linode/instances/{linode_id}/stats"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
 }
 
 # Statistics View (year/month)
 #
 # GET /linode/instances/{linodeId}/stats/{year}/{month}
 # operationId: getLinodeStatsByYearMonth
-export def "linode-instances-stats get-by-linodeId-year-month" [
+export def "linode-instances-stats get-by-linode-id-year-month" [
   linode_id: int
   year: int
   month: int
@@ -4571,17 +4737,20 @@ export def "linode-instances-stats get-by-linodeId-year-month" [
 ]: nothing -> record<cpu: list<list<float>>, io: record<io: list<list>, swap: list<list>>, netv4: record<in: list<list>, out: list<list>, private_in: list<list>, private_out: list<list>>, netv6: record<in: list<list>, out: list<list>, private_in: list<list>, private_out: list<list>>, title: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($linode_id | is-empty) { error make --unspanned { msg: "path parameter 'linodeId' must be non-empty" } }
+  if ($year | is-empty) { error make --unspanned { msg: "path parameter 'year' must be non-empty" } }
+  if ($month | is-empty) { error make --unspanned { msg: "path parameter 'month' must be non-empty" } }
   let full_url = (build-url $base ({linode_id: (encode-path-segment $linode_id), year: (encode-path-segment $year), month: (encode-path-segment $month)} | format pattern "/linode/instances/{linode_id}/stats/{year}/{month}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
 }
 
 # Network Transfer View
 #
 # GET /linode/instances/{linodeId}/transfer
 # operationId: getLinodeTransfer
-export def "linode-instances-transfer get-by-linodeId" [
+export def "linode-instances-transfer get-by-linode-id" [
   linode_id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -4595,17 +4764,18 @@ export def "linode-instances-transfer get-by-linodeId" [
 ]: nothing -> record<billable: int, quota: int, used: int> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($linode_id | is-empty) { error make --unspanned { msg: "path parameter 'linodeId' must be non-empty" } }
   let full_url = (build-url $base ({linode_id: (encode-path-segment $linode_id)} | format pattern "/linode/instances/{linode_id}/transfer"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
 }
 
 # Network Transfer View (year/month)
 #
 # GET /linode/instances/{linodeId}/transfer/{year}/{month}
 # operationId: getLinodeTransferByYearMonth
-export def "linode-instances-transfer get-by-linodeId-year-month" [
+export def "linode-instances-transfer get-by-linode-id-year-month" [
   linode_id: int
   year: int
   month: int
@@ -4621,10 +4791,13 @@ export def "linode-instances-transfer get-by-linodeId-year-month" [
 ]: nothing -> record<bytes_in: int, bytes_out: int, bytes_total: int> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($linode_id | is-empty) { error make --unspanned { msg: "path parameter 'linodeId' must be non-empty" } }
+  if ($year | is-empty) { error make --unspanned { msg: "path parameter 'year' must be non-empty" } }
+  if ($month | is-empty) { error make --unspanned { msg: "path parameter 'month' must be non-empty" } }
   let full_url = (build-url $base ({linode_id: (encode-path-segment $linode_id), year: (encode-path-segment $year), month: (encode-path-segment $month)} | format pattern "/linode/instances/{linode_id}/transfer/{year}/{month}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
 }
 
 # Linode's Volumes List
@@ -4647,11 +4820,12 @@ export def "linode-instances-volumes get" [
 ]: nothing -> record<data: table<created: string, filesystem_path: string, hardware_type: string, id: int, label: string, linode_id: int, linode_label: string, region: string, size: int, status: string, tags: list, updated: string>, page: int, pages: int, results: int> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($linode_id | is-empty) { error make --unspanned { msg: "path parameter 'linodeId' must be non-empty" } }
   let qp = [(serialize-qp "page" $page "scalar") (serialize-qp "page_size" $page_size "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({linode_id: (encode-path-segment $linode_id)} | format pattern "/linode/instances/{linode_id}/volumes") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"page": $page, "page_size": $page_size} | compact), body: null}
 }
 
 # Kernels List
@@ -4677,7 +4851,7 @@ export def "linode-kernels list" [
   let full_url = (build-url $base "/linode/kernels" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"page": $page, "page_size": $page_size} | compact), body: null}
 }
 
 # Kernel View
@@ -4698,10 +4872,11 @@ export def "linode-kernels get" [
 ]: nothing -> record<architecture: string, built: string, deprecated: bool, id: string, kvm: bool, label: string, pvops: bool, version: string, xen: bool> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($kernel_id | is-empty) { error make --unspanned { msg: "path parameter 'kernelId' must be non-empty" } }
   let full_url = (build-url $base ({kernel_id: (encode-path-segment $kernel_id)} | format pattern "/linode/kernels/{kernel_id}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
 }
 
 # StackScripts List
@@ -4727,7 +4902,7 @@ export def "linode-stackscripts get-stack-scripts" [
   let full_url = (build-url $base "/linode/stackscripts" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"page": $page, "page_size": $page_size} | compact), body: null}
 }
 
 # StackScript Create
@@ -4759,7 +4934,7 @@ export def "linode-stackscripts create-stack-script" [
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: {}, body: $req_body}
 }
 
 # StackScript Delete
@@ -4780,10 +4955,11 @@ export def "linode-stackscripts delete-stack-script" [
 ]: nothing -> record {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($stackscript_id | is-empty) { error make --unspanned { msg: "path parameter 'stackscriptId' must be non-empty" } }
   let full_url = (build-url $base ({stackscript_id: (encode-path-segment $stackscript_id)} | format pattern "/linode/stackscripts/{stackscript_id}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
 }
 
 # StackScript View
@@ -4804,10 +4980,11 @@ export def "linode-stackscripts get-stack-script" [
 ]: nothing -> record<created: string, deployments_active: int, deployments_total: int, description: string, id: int, images: list<string>, is_public: bool, label: string, mine: bool, rev_note: string, script: string, updated: string, user_defined_fields: table<default: string, example: string, label: string, manyOf: string, name: string, oneOf: string>, user_gravatar_id: string, username: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($stackscript_id | is-empty) { error make --unspanned { msg: "path parameter 'stackscriptId' must be non-empty" } }
   let full_url = (build-url $base ({stackscript_id: (encode-path-segment $stackscript_id)} | format pattern "/linode/stackscripts/{stackscript_id}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
 }
 
 # StackScript Update
@@ -4835,12 +5012,13 @@ export def "linode-stackscripts update-stack-script" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($stackscript_id | is-empty) { error make --unspanned { msg: "path parameter 'stackscriptId' must be non-empty" } }
   let full_url = (build-url $base ({stackscript_id: (encode-path-segment $stackscript_id)} | format pattern "/linode/stackscripts/{stackscript_id}"))
   let req_body = {"description": $description, "images": $images, "is_public": $is_public, "label": $label, "rev_note": $rev_note, "script": $script} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: {}, body: $req_body}
 }
 
 # Types List
@@ -4863,7 +5041,7 @@ export def "linode-types list" [
   let full_url = (build-url $base "/linode/types")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
 }
 
 # Type View
@@ -4884,10 +5062,11 @@ export def "linode-types get" [
 ]: nothing -> record<addons: record<backups: record<price: record>>, class: string, disk: int, gpus: int, id: string, label: string, memory: int, network_out: int, price: record<hourly: int, monthly: int>, successor: string, transfer: int, vcpus: int> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($type_id | is-empty) { error make --unspanned { msg: "path parameter 'typeId' must be non-empty" } }
   let full_url = (build-url $base ({type_id: (encode-path-segment $type_id)} | format pattern "/linode/types/{type_id}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
 }
 
 # Kubernetes Clusters List
@@ -4910,7 +5089,7 @@ export def "lke-clusters list" [
   let full_url = (build-url $base "/lke/clusters")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
 }
 
 # Kubernetes Cluster Create
@@ -4944,7 +5123,7 @@ export def "lke-clusters create" [
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: {}, body: $req_body}
 }
 
 # Kubernetes Cluster Delete
@@ -4965,10 +5144,11 @@ export def "lke-clusters delete" [
 ]: nothing -> record {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($cluster_id | is-empty) { error make --unspanned { msg: "path parameter 'clusterId' must be non-empty" } }
   let full_url = (build-url $base ({cluster_id: (encode-path-segment $cluster_id)} | format pattern "/lke/clusters/{cluster_id}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
 }
 
 # Kubernetes Cluster View
@@ -4989,10 +5169,11 @@ export def "lke-clusters get" [
 ]: nothing -> record<control_plane: record<high_availability: bool>, created: string, id: int, k8s_version: string, label: string, region: string, tags: list<string>, updated: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($cluster_id | is-empty) { error make --unspanned { msg: "path parameter 'clusterId' must be non-empty" } }
   let full_url = (build-url $base ({cluster_id: (encode-path-segment $cluster_id)} | format pattern "/lke/clusters/{cluster_id}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
 }
 
 # Kubernetes Cluster Update
@@ -5019,12 +5200,13 @@ export def "lke-clusters update" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($cluster_id | is-empty) { error make --unspanned { msg: "path parameter 'clusterId' must be non-empty" } }
   let full_url = (build-url $base ({cluster_id: (encode-path-segment $cluster_id)} | format pattern "/lke/clusters/{cluster_id}"))
   let req_body = {"control_plane": $control_plane, "k8s_version": $k8s_version, "label": $label, "tags": $tags} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: {}, body: $req_body}
 }
 
 # Kubernetes API Endpoints List
@@ -5045,10 +5227,11 @@ export def "lke-clusters-api-endpoints get" [
 ]: nothing -> record<data: table<endpoint: string>, page: int, pages: int, results: int> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($cluster_id | is-empty) { error make --unspanned { msg: "path parameter 'clusterId' must be non-empty" } }
   let full_url = (build-url $base ({cluster_id: (encode-path-segment $cluster_id)} | format pattern "/lke/clusters/{cluster_id}/api-endpoints"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
 }
 
 # Kubernetes Cluster Dashboard URL View
@@ -5069,10 +5252,11 @@ export def "lke-clusters-dashboard get" [
 ]: nothing -> record<url: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($cluster_id | is-empty) { error make --unspanned { msg: "path parameter 'clusterId' must be non-empty" } }
   let full_url = (build-url $base ({cluster_id: (encode-path-segment $cluster_id)} | format pattern "/lke/clusters/{cluster_id}/dashboard"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
 }
 
 # Kubeconfig Delete
@@ -5093,10 +5277,11 @@ export def "lke-clusters-kubeconfig delete" [
 ]: nothing -> record {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($cluster_id | is-empty) { error make --unspanned { msg: "path parameter 'clusterId' must be non-empty" } }
   let full_url = (build-url $base ({cluster_id: (encode-path-segment $cluster_id)} | format pattern "/lke/clusters/{cluster_id}/kubeconfig"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
 }
 
 # Kubeconfig View
@@ -5117,10 +5302,11 @@ export def "lke-clusters-kubeconfig get" [
 ]: nothing -> record<kubeconfig: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($cluster_id | is-empty) { error make --unspanned { msg: "path parameter 'clusterId' must be non-empty" } }
   let full_url = (build-url $base ({cluster_id: (encode-path-segment $cluster_id)} | format pattern "/lke/clusters/{cluster_id}/kubeconfig"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
 }
 
 # Node Delete
@@ -5142,10 +5328,12 @@ export def "lke-clusters-nodes delete" [
 ]: nothing -> record {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($cluster_id | is-empty) { error make --unspanned { msg: "path parameter 'clusterId' must be non-empty" } }
+  if ($node_id | is-empty) { error make --unspanned { msg: "path parameter 'nodeId' must be non-empty" } }
   let full_url = (build-url $base ({cluster_id: (encode-path-segment $cluster_id), node_id: (encode-path-segment $node_id)} | format pattern "/lke/clusters/{cluster_id}/nodes/{node_id}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
 }
 
 # Node View
@@ -5167,10 +5355,12 @@ export def "lke-clusters-nodes get" [
 ]: nothing -> record<id: string, instance_id: int, status: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($cluster_id | is-empty) { error make --unspanned { msg: "path parameter 'clusterId' must be non-empty" } }
+  if ($node_id | is-empty) { error make --unspanned { msg: "path parameter 'nodeId' must be non-empty" } }
   let full_url = (build-url $base ({cluster_id: (encode-path-segment $cluster_id), node_id: (encode-path-segment $node_id)} | format pattern "/lke/clusters/{cluster_id}/nodes/{node_id}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
 }
 
 # Node Recycle
@@ -5192,10 +5382,12 @@ export def "lke-clusters-nodes-recycle create" [
 ]: nothing -> record {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($cluster_id | is-empty) { error make --unspanned { msg: "path parameter 'clusterId' must be non-empty" } }
+  if ($node_id | is-empty) { error make --unspanned { msg: "path parameter 'nodeId' must be non-empty" } }
   let full_url = (build-url $base ({cluster_id: (encode-path-segment $cluster_id), node_id: (encode-path-segment $node_id)} | format pattern "/lke/clusters/{cluster_id}/nodes/{node_id}/recycle"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
 }
 
 # Node Pools List
@@ -5216,10 +5408,11 @@ export def "lke-clusters-pools get" [
 ]: nothing -> record<data: table<autoscaler: record, count: int, disks: list, id: int, nodes: list, tags: list, type: string>, page: int, pages: int, results: int> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($cluster_id | is-empty) { error make --unspanned { msg: "path parameter 'clusterId' must be non-empty" } }
   let full_url = (build-url $base ({cluster_id: (encode-path-segment $cluster_id)} | format pattern "/lke/clusters/{cluster_id}/pools"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
 }
 
 # Node Pool Create
@@ -5248,12 +5441,13 @@ export def "lke-clusters-pools create" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($cluster_id | is-empty) { error make --unspanned { msg: "path parameter 'clusterId' must be non-empty" } }
   let full_url = (build-url $base ({cluster_id: (encode-path-segment $cluster_id)} | format pattern "/lke/clusters/{cluster_id}/pools"))
   let req_body = {"autoscaler": $autoscaler, "count": $count, "disks": $disks, "tags": $tags, "type": $type} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: {}, body: $req_body}
 }
 
 # Node Pool Delete
@@ -5275,10 +5469,12 @@ export def "lke-clusters-pools delete-node" [
 ]: nothing -> record {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($cluster_id | is-empty) { error make --unspanned { msg: "path parameter 'clusterId' must be non-empty" } }
+  if ($pool_id | is-empty) { error make --unspanned { msg: "path parameter 'poolId' must be non-empty" } }
   let full_url = (build-url $base ({cluster_id: (encode-path-segment $cluster_id), pool_id: (encode-path-segment $pool_id)} | format pattern "/lke/clusters/{cluster_id}/pools/{pool_id}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
 }
 
 # Node Pool View
@@ -5300,10 +5496,12 @@ export def "lke-clusters-pools get-node" [
 ]: nothing -> record<autoscaler: record<enabled: bool, max: int, min: int>, count: int, disks: table<size: int, type: string>, id: int, nodes: table<id: string, instance_id: string, status: string>, tags: list<string>, type: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($cluster_id | is-empty) { error make --unspanned { msg: "path parameter 'clusterId' must be non-empty" } }
+  if ($pool_id | is-empty) { error make --unspanned { msg: "path parameter 'poolId' must be non-empty" } }
   let full_url = (build-url $base ({cluster_id: (encode-path-segment $cluster_id), pool_id: (encode-path-segment $pool_id)} | format pattern "/lke/clusters/{cluster_id}/pools/{pool_id}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
 }
 
 # Node Pool Update
@@ -5329,12 +5527,14 @@ export def "lke-clusters-pools update-node" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($cluster_id | is-empty) { error make --unspanned { msg: "path parameter 'clusterId' must be non-empty" } }
+  if ($pool_id | is-empty) { error make --unspanned { msg: "path parameter 'poolId' must be non-empty" } }
   let full_url = (build-url $base ({cluster_id: (encode-path-segment $cluster_id), pool_id: (encode-path-segment $pool_id)} | format pattern "/lke/clusters/{cluster_id}/pools/{pool_id}"))
   let req_body = {"autoscaler": $autoscaler, "count": $count} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: {}, body: $req_body}
 }
 
 # Node Pool Recycle
@@ -5356,10 +5556,12 @@ export def "lke-clusters-pools-recycle create" [
 ]: nothing -> record {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($cluster_id | is-empty) { error make --unspanned { msg: "path parameter 'clusterId' must be non-empty" } }
+  if ($pool_id | is-empty) { error make --unspanned { msg: "path parameter 'poolId' must be non-empty" } }
   let full_url = (build-url $base ({cluster_id: (encode-path-segment $cluster_id), pool_id: (encode-path-segment $pool_id)} | format pattern "/lke/clusters/{cluster_id}/pools/{pool_id}/recycle"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
 }
 
 # Cluster Nodes Recycle
@@ -5380,10 +5582,11 @@ export def "lke-clusters-recycle create" [
 ]: nothing -> record {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($cluster_id | is-empty) { error make --unspanned { msg: "path parameter 'clusterId' must be non-empty" } }
   let full_url = (build-url $base ({cluster_id: (encode-path-segment $cluster_id)} | format pattern "/lke/clusters/{cluster_id}/recycle"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
 }
 
 # Kubernetes Cluster Regenerate
@@ -5407,12 +5610,13 @@ export def "lke-clusters-regenerate create" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($cluster_id | is-empty) { error make --unspanned { msg: "path parameter 'clusterId' must be non-empty" } }
   let full_url = (build-url $base ({cluster_id: (encode-path-segment $cluster_id)} | format pattern "/lke/clusters/{cluster_id}/regenerate"))
   let req_body = {"kubeconfig": $kubeconfig, "servicetoken": $servicetoken} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: {}, body: $req_body}
 }
 
 # Service Token Delete
@@ -5433,10 +5637,11 @@ export def "lke-clusters-servicetoken create-lkec-service-token-delete" [
 ]: nothing -> record {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($cluster_id | is-empty) { error make --unspanned { msg: "path parameter 'clusterId' must be non-empty" } }
   let full_url = (build-url $base ({cluster_id: (encode-path-segment $cluster_id)} | format pattern "/lke/clusters/{cluster_id}/servicetoken"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
 }
 
 # Kubernetes Versions List
@@ -5459,7 +5664,7 @@ export def "lke-versions list" [
   let full_url = (build-url $base "/lke/versions")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
 }
 
 # Kubernetes Version View
@@ -5480,10 +5685,11 @@ export def "lke-versions get" [
 ]: nothing -> record<id: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($version | is-empty) { error make --unspanned { msg: "path parameter 'version' must be non-empty" } }
   let full_url = (build-url $base ({version: (encode-path-segment $version)} | format pattern "/lke/versions/{version}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
 }
 
 # Longview Clients List
@@ -5509,7 +5715,7 @@ export def "longview-clients list" [
   let full_url = (build-url $base "/longview/clients" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"page": $page, "page_size": $page_size} | compact), body: null}
 }
 
 # Longview Client Create
@@ -5536,7 +5742,7 @@ export def "longview-clients create" [
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: {}, body: $req_body}
 }
 
 # Longview Client Delete
@@ -5557,10 +5763,11 @@ export def "longview-clients delete" [
 ]: nothing -> record {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($client_id | is-empty) { error make --unspanned { msg: "path parameter 'clientId' must be non-empty" } }
   let full_url = (build-url $base ({client_id: (encode-path-segment $client_id)} | format pattern "/longview/clients/{client_id}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
 }
 
 # Longview Client View
@@ -5581,10 +5788,11 @@ export def "longview-clients get" [
 ]: nothing -> record<api_key: string, apps: record<apache: bool, mysql: bool, nginx: bool>, created: string, id: int, install_code: string, label: string, updated: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($client_id | is-empty) { error make --unspanned { msg: "path parameter 'clientId' must be non-empty" } }
   let full_url = (build-url $base ({client_id: (encode-path-segment $client_id)} | format pattern "/longview/clients/{client_id}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
 }
 
 # Longview Client Update
@@ -5607,12 +5815,13 @@ export def "longview-clients update" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($client_id | is-empty) { error make --unspanned { msg: "path parameter 'clientId' must be non-empty" } }
   let full_url = (build-url $base ({client_id: (encode-path-segment $client_id)} | format pattern "/longview/clients/{client_id}"))
   let req_body = {"label": $label} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: {}, body: $req_body}
 }
 
 # Longview Plan View
@@ -5635,7 +5844,7 @@ export def "longview-plan get" [
   let full_url = (build-url $base "/longview/plan")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
 }
 
 # Longview Plan Update
@@ -5662,7 +5871,7 @@ export def "longview-plan update" [
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: {}, body: $req_body}
 }
 
 # Longview Subscriptions List
@@ -5688,7 +5897,7 @@ export def "longview-subscriptions list" [
   let full_url = (build-url $base "/longview/subscriptions" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"page": $page, "page_size": $page_size} | compact), body: null}
 }
 
 # Longview Subscription View
@@ -5709,10 +5918,11 @@ export def "longview-subscriptions get" [
 ]: nothing -> record<clients_included: int, id: string, label: string, price: record<hourly: float, monthly: float>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($subscription_id | is-empty) { error make --unspanned { msg: "path parameter 'subscriptionId' must be non-empty" } }
   let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id)} | format pattern "/longview/subscriptions/{subscription_id}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
 }
 
 # Managed Contacts List
@@ -5738,7 +5948,7 @@ export def "managed-contacts list" [
   let full_url = (build-url $base "/managed/contacts" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"page": $page, "page_size": $page_size} | compact), body: null}
 }
 
 # Managed Contact Create
@@ -5769,7 +5979,7 @@ export def "managed-contacts create" [
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: {}, body: $req_body}
 }
 
 # Managed Contact Delete
@@ -5790,10 +6000,11 @@ export def "managed-contacts delete" [
 ]: nothing -> record {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($contact_id | is-empty) { error make --unspanned { msg: "path parameter 'contactId' must be non-empty" } }
   let full_url = (build-url $base ({contact_id: (encode-path-segment $contact_id)} | format pattern "/managed/contacts/{contact_id}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
 }
 
 # Managed Contact View
@@ -5814,10 +6025,11 @@ export def "managed-contacts get" [
 ]: nothing -> record<email: string, group: string, id: int, name: string, phone: record<primary: string, secondary: string>, updated: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($contact_id | is-empty) { error make --unspanned { msg: "path parameter 'contactId' must be non-empty" } }
   let full_url = (build-url $base ({contact_id: (encode-path-segment $contact_id)} | format pattern "/managed/contacts/{contact_id}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
 }
 
 # Managed Contact Update
@@ -5844,12 +6056,13 @@ export def "managed-contacts update" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($contact_id | is-empty) { error make --unspanned { msg: "path parameter 'contactId' must be non-empty" } }
   let full_url = (build-url $base ({contact_id: (encode-path-segment $contact_id)} | format pattern "/managed/contacts/{contact_id}"))
   let req_body = {"email": $email, "group": $group, "name": $name, "phone": $phone} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: {}, body: $req_body}
 }
 
 # Managed Credentials List
@@ -5875,7 +6088,7 @@ export def "managed-credentials list" [
   let full_url = (build-url $base "/managed/credentials" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"page": $page, "page_size": $page_size} | compact), body: null}
 }
 
 # Managed Credential Create
@@ -5904,7 +6117,7 @@ export def "managed-credentials create" [
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: {}, body: $req_body}
 }
 
 # Managed SSH Key View
@@ -5927,7 +6140,7 @@ export def "managed-credentials-sshkey get-view-ssh-key" [
   let full_url = (build-url $base "/managed/credentials/sshkey")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
 }
 
 # Managed Credential View
@@ -5948,10 +6161,11 @@ export def "managed-credentials get" [
 ]: nothing -> record<id: int, label: string, last_decrypted: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($credential_id | is-empty) { error make --unspanned { msg: "path parameter 'credentialId' must be non-empty" } }
   let full_url = (build-url $base ({credential_id: (encode-path-segment $credential_id)} | format pattern "/managed/credentials/{credential_id}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
 }
 
 # Managed Credential Update
@@ -5974,12 +6188,13 @@ export def "managed-credentials update" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($credential_id | is-empty) { error make --unspanned { msg: "path parameter 'credentialId' must be non-empty" } }
   let full_url = (build-url $base ({credential_id: (encode-path-segment $credential_id)} | format pattern "/managed/credentials/{credential_id}"))
   let req_body = {"label": $label} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: {}, body: $req_body}
 }
 
 # Managed Credential Delete
@@ -6000,10 +6215,11 @@ export def "managed-credentials-revoke delete" [
 ]: nothing -> record {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($credential_id | is-empty) { error make --unspanned { msg: "path parameter 'credentialId' must be non-empty" } }
   let full_url = (build-url $base ({credential_id: (encode-path-segment $credential_id)} | format pattern "/managed/credentials/{credential_id}/revoke"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
 }
 
 # Managed Credential Username and Password Update
@@ -6027,12 +6243,13 @@ export def "managed-credentials-update update-username-password" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($credential_id | is-empty) { error make --unspanned { msg: "path parameter 'credentialId' must be non-empty" } }
   let full_url = (build-url $base ({credential_id: (encode-path-segment $credential_id)} | format pattern "/managed/credentials/{credential_id}/update"))
   let req_body = {"password": $password, "username": $username} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: {}, body: $req_body}
 }
 
 # Managed Issues List
@@ -6058,7 +6275,7 @@ export def "managed-issues list" [
   let full_url = (build-url $base "/managed/issues" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"page": $page, "page_size": $page_size} | compact), body: null}
 }
 
 # Managed Issue View
@@ -6079,10 +6296,11 @@ export def "managed-issues get" [
 ]: nothing -> record<created: string, entity: record<id: int, label: string, type: string, url: string>, id: int, services: list<int>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($issue_id | is-empty) { error make --unspanned { msg: "path parameter 'issueId' must be non-empty" } }
   let full_url = (build-url $base ({issue_id: (encode-path-segment $issue_id)} | format pattern "/managed/issues/{issue_id}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
 }
 
 # Managed Linode Settings List
@@ -6108,7 +6326,7 @@ export def "managed-linode-settings list" [
   let full_url = (build-url $base "/managed/linode-settings" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"page": $page, "page_size": $page_size} | compact), body: null}
 }
 
 # Linode's Managed Settings View
@@ -6129,10 +6347,11 @@ export def "managed-linode-settings get" [
 ]: nothing -> record<group: string, id: int, label: string, ssh: record<access: bool, ip: string, port: int, user: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($linode_id | is-empty) { error make --unspanned { msg: "path parameter 'linodeId' must be non-empty" } }
   let full_url = (build-url $base ({linode_id: (encode-path-segment $linode_id)} | format pattern "/managed/linode-settings/{linode_id}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
 }
 
 # Linode's Managed Settings Update
@@ -6156,12 +6375,13 @@ export def "managed-linode-settings update" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($linode_id | is-empty) { error make --unspanned { msg: "path parameter 'linodeId' must be non-empty" } }
   let full_url = (build-url $base ({linode_id: (encode-path-segment $linode_id)} | format pattern "/managed/linode-settings/{linode_id}"))
   let req_body = {"ssh": $ssh} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: {}, body: $req_body}
 }
 
 # Managed Services List
@@ -6184,7 +6404,7 @@ export def "managed-services list" [
   let full_url = (build-url $base "/managed/services")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
 }
 
 # Managed Service Create
@@ -6219,7 +6439,7 @@ export def "managed-services create" [
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: {}, body: $req_body}
 }
 
 # Managed Service Delete
@@ -6240,10 +6460,11 @@ export def "managed-services delete" [
 ]: nothing -> record {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($service_id | is-empty) { error make --unspanned { msg: "path parameter 'serviceId' must be non-empty" } }
   let full_url = (build-url $base ({service_id: (encode-path-segment $service_id)} | format pattern "/managed/services/{service_id}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
 }
 
 # Managed Service View
@@ -6264,10 +6485,11 @@ export def "managed-services get" [
 ]: nothing -> record<address: string, body: string, consultation_group: string, created: string, credentials: list<int>, id: int, label: string, notes: string, region: string, service_type: string, status: string, timeout: int, updated: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($service_id | is-empty) { error make --unspanned { msg: "path parameter 'serviceId' must be non-empty" } }
   let full_url = (build-url $base ({service_id: (encode-path-segment $service_id)} | format pattern "/managed/services/{service_id}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
 }
 
 # Managed Service Update
@@ -6298,12 +6520,13 @@ export def "managed-services update" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($service_id | is-empty) { error make --unspanned { msg: "path parameter 'serviceId' must be non-empty" } }
   let full_url = (build-url $base ({service_id: (encode-path-segment $service_id)} | format pattern "/managed/services/{service_id}"))
   let req_body = {"address": $address, "body": $body, "consultation_group": $consultation_group, "credentials": $credentials, "label": $label, "notes": $notes, "region": $region, "service_type": $service_type, "timeout": $timeout} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: {}, body: $req_body}
 }
 
 # Managed Service Disable
@@ -6324,10 +6547,11 @@ export def "managed-services-disable disable" [
 ]: nothing -> record<address: string, body: string, consultation_group: string, created: string, credentials: list<int>, id: int, label: string, notes: string, region: string, service_type: string, status: string, timeout: int, updated: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($service_id | is-empty) { error make --unspanned { msg: "path parameter 'serviceId' must be non-empty" } }
   let full_url = (build-url $base ({service_id: (encode-path-segment $service_id)} | format pattern "/managed/services/{service_id}/disable"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
 }
 
 # Managed Service Enable
@@ -6348,10 +6572,11 @@ export def "managed-services-enable enable" [
 ]: nothing -> record<address: string, body: string, consultation_group: string, created: string, credentials: list<int>, id: int, label: string, notes: string, region: string, service_type: string, status: string, timeout: int, updated: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($service_id | is-empty) { error make --unspanned { msg: "path parameter 'serviceId' must be non-empty" } }
   let full_url = (build-url $base ({service_id: (encode-path-segment $service_id)} | format pattern "/managed/services/{service_id}/enable"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
 }
 
 # Managed Stats List
@@ -6374,7 +6599,7 @@ export def "managed-stats get" [
   let full_url = (build-url $base "/managed/stats")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
 }
 
 # Firewalls List
@@ -6400,7 +6625,7 @@ export def "networking-firewalls list" [
   let full_url = (build-url $base "/networking/firewalls" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"page": $page, "page_size": $page_size} | compact), body: null}
 }
 
 # Firewall Create
@@ -6432,7 +6657,7 @@ export def "networking-firewalls create" [
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: {}, body: $req_body}
 }
 
 # Firewall Delete
@@ -6453,10 +6678,11 @@ export def "networking-firewalls delete" [
 ]: nothing -> record {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default "https://api.linode.com/v4")
+  if ($firewall_id | is-empty) { error make --unspanned { msg: "path parameter 'firewallId' must be non-empty" } }
   let full_url = (build-url $base ({firewall_id: (encode-path-segment $firewall_id)} | format pattern "/networking/firewalls/{firewall_id}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
 }
 
 # Firewall View
@@ -6477,10 +6703,11 @@ export def "networking-firewalls get" [
 ]: nothing -> record<created: string, id: int, label: string, rules: record<inbound: list<record>, inbound_policy: string, outbound: list<record>, outbound_policy: string>, status: string, tags: list<string>, updated: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default "https://api.linode.com/v4")
+  if ($firewall_id | is-empty) { error make --unspanned { msg: "path parameter 'firewallId' must be non-empty" } }
   let full_url = (build-url $base ({firewall_id: (encode-path-segment $firewall_id)} | format pattern "/networking/firewalls/{firewall_id}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
 }
 
 # Firewall Update
@@ -6505,12 +6732,13 @@ export def "networking-firewalls update" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default "https://api.linode.com/v4")
+  if ($firewall_id | is-empty) { error make --unspanned { msg: "path parameter 'firewallId' must be non-empty" } }
   let full_url = (build-url $base ({firewall_id: (encode-path-segment $firewall_id)} | format pattern "/networking/firewalls/{firewall_id}"))
   let req_body = {"label": $label, "status": $status, "tags": $tags} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: {}, body: $req_body}
 }
 
 # Firewall Devices List
@@ -6533,11 +6761,12 @@ export def "networking-firewalls-devices list" [
 ]: nothing -> record<data: table<created: string, entity: record, id: int, updated: string>, page: int, pages: int, results: int> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default "https://api.linode.com/v4")
+  if ($firewall_id | is-empty) { error make --unspanned { msg: "path parameter 'firewallId' must be non-empty" } }
   let qp = [(serialize-qp "page" $page "scalar") (serialize-qp "page_size" $page_size "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({firewall_id: (encode-path-segment $firewall_id)} | format pattern "/networking/firewalls/{firewall_id}/devices") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"page": $page, "page_size": $page_size} | compact), body: null}
 }
 
 # Firewall Device Create
@@ -6561,12 +6790,13 @@ export def "networking-firewalls-devices create" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default "https://api.linode.com/v4")
+  if ($firewall_id | is-empty) { error make --unspanned { msg: "path parameter 'firewallId' must be non-empty" } }
   let full_url = (build-url $base ({firewall_id: (encode-path-segment $firewall_id)} | format pattern "/networking/firewalls/{firewall_id}/devices"))
   let req_body = {"id": $id, "type": $type} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: {}, body: $req_body}
 }
 
 # Firewall Device Delete
@@ -6588,10 +6818,12 @@ export def "networking-firewalls-devices delete" [
 ]: nothing -> record {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default "https://api.linode.com/v4")
+  if ($firewall_id | is-empty) { error make --unspanned { msg: "path parameter 'firewallId' must be non-empty" } }
+  if ($device_id | is-empty) { error make --unspanned { msg: "path parameter 'deviceId' must be non-empty" } }
   let full_url = (build-url $base ({firewall_id: (encode-path-segment $firewall_id), device_id: (encode-path-segment $device_id)} | format pattern "/networking/firewalls/{firewall_id}/devices/{device_id}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
 }
 
 # Firewall Device View
@@ -6613,10 +6845,12 @@ export def "networking-firewalls-devices get" [
 ]: nothing -> record<created: string, entity: record<id: int, label: string, type: string, url: string>, id: int, updated: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default "https://api.linode.com/v4")
+  if ($firewall_id | is-empty) { error make --unspanned { msg: "path parameter 'firewallId' must be non-empty" } }
+  if ($device_id | is-empty) { error make --unspanned { msg: "path parameter 'deviceId' must be non-empty" } }
   let full_url = (build-url $base ({firewall_id: (encode-path-segment $firewall_id), device_id: (encode-path-segment $device_id)} | format pattern "/networking/firewalls/{firewall_id}/devices/{device_id}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
 }
 
 # Firewall Rules List
@@ -6637,10 +6871,11 @@ export def "networking-firewalls-rules get" [
 ]: nothing -> record<inbound: table<action: string, addresses: record, description: string, label: string, ports: string, protocol: string>, inbound_policy: string, outbound: table<action: string, addresses: record, description: string, label: string, ports: string, protocol: string>, outbound_policy: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default "https://api.linode.com/v4")
+  if ($firewall_id | is-empty) { error make --unspanned { msg: "path parameter 'firewallId' must be non-empty" } }
   let full_url = (build-url $base ({firewall_id: (encode-path-segment $firewall_id)} | format pattern "/networking/firewalls/{firewall_id}/rules"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
 }
 
 # Firewall Rules Update
@@ -6668,12 +6903,13 @@ export def "networking-firewalls-rules update" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default "https://api.linode.com/v4")
+  if ($firewall_id | is-empty) { error make --unspanned { msg: "path parameter 'firewallId' must be non-empty" } }
   let full_url = (build-url $base ({firewall_id: (encode-path-segment $firewall_id)} | format pattern "/networking/firewalls/{firewall_id}/rules"))
   let req_body = {"inbound": $inbound, "outbound": $outbound, "inbound_policy": $inbound_policy, "outbound_policy": $outbound_policy} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: {}, body: $req_body}
 }
 
 # IP Addresses List
@@ -6696,7 +6932,7 @@ export def "networking-ips get-i-ps" [
   let full_url = (build-url $base "/networking/ips")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
 }
 
 # IP Address Allocate
@@ -6725,7 +6961,7 @@ export def "networking-ips create-allocate" [
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: {}, body: $req_body}
 }
 
 # IP Addresses Assign
@@ -6754,7 +6990,7 @@ export def "networking-ips-assign assign-i-ps" [
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: {}, body: $req_body}
 }
 
 # IP Addresses Share
@@ -6782,7 +7018,7 @@ export def "networking-ips-share create-i-ps" [
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: {}, body: $req_body}
 }
 
 # IP Address View
@@ -6803,10 +7039,11 @@ export def "networking-ips get" [
 ]: nothing -> record<address: string, gateway: string, linode_id: int, prefix: int, public: bool, rdns: string, region: string, subnet_mask: string, type: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($address | is-empty) { error make --unspanned { msg: "path parameter 'address' must be non-empty" } }
   let full_url = (build-url $base ({address: (encode-path-segment $address)} | format pattern "/networking/ips/{address}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
 }
 
 # IP Address RDNS Update
@@ -6829,12 +7066,13 @@ export def "networking-ips update" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($address | is-empty) { error make --unspanned { msg: "path parameter 'address' must be non-empty" } }
   let full_url = (build-url $base ({address: (encode-path-segment $address)} | format pattern "/networking/ips/{address}"))
   let req_body = {"rdns": $rdns} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: {}, body: $req_body}
 }
 
 # Linodes Assign IPv4s
@@ -6863,7 +7101,7 @@ export def "networking-ipv4-assign assign-i-pv4s" [
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: {}, body: $req_body}
 }
 
 # IPv4 Sharing Configure
@@ -6891,7 +7129,7 @@ export def "networking-ipv4-share create-i-pv4s" [
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: {}, body: $req_body}
 }
 
 # IPv6 Pools List
@@ -6917,7 +7155,7 @@ export def "networking-ipv6-pools get-i-pv6" [
   let full_url = (build-url $base "/networking/ipv6/pools" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"page": $page, "page_size": $page_size} | compact), body: null}
 }
 
 # IPv6 Ranges List
@@ -6943,7 +7181,7 @@ export def "networking-ipv6-ranges list" [
   let full_url = (build-url $base "/networking/ipv6/ranges" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"page": $page, "page_size": $page_size} | compact), body: null}
 }
 
 # IPv6 Range Create
@@ -6972,7 +7210,7 @@ export def "networking-ipv6-ranges create-i-pv6" [
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: {}, body: $req_body}
 }
 
 # IPv6 Range Delete
@@ -6993,10 +7231,11 @@ export def "networking-ipv6-ranges delete-i-pv6" [
 ]: nothing -> record {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($range | is-empty) { error make --unspanned { msg: "path parameter 'range' must be non-empty" } }
   let full_url = (build-url $base ({range: (encode-path-segment $range)} | format pattern "/networking/ipv6/ranges/{range}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
 }
 
 # IPv6 Range View
@@ -7017,10 +7256,11 @@ export def "networking-ipv6-ranges get-i-pv6" [
 ]: nothing -> record<is_bgp: bool, linodes: list<int>, prefix: int, range: string, region: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($range | is-empty) { error make --unspanned { msg: "path parameter 'range' must be non-empty" } }
   let full_url = (build-url $base ({range: (encode-path-segment $range)} | format pattern "/networking/ipv6/ranges/{range}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
 }
 
 # VLANs List
@@ -7046,7 +7286,7 @@ export def "networking-vlans get-vla-ns" [
   let full_url = (build-url $base "/networking/vlans" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"page": $page, "page_size": $page_size} | compact), body: null}
 }
 
 # NodeBalancers List
@@ -7072,7 +7312,7 @@ export def "nodebalancers get-node-balancers" [
   let full_url = (build-url $base "/nodebalancers" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"page": $page, "page_size": $page_size} | compact), body: null}
 }
 
 # NodeBalancer Create
@@ -7103,7 +7343,7 @@ export def "nodebalancers create-node-balancer" [
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: {}, body: $req_body}
 }
 
 # NodeBalancer Delete
@@ -7124,10 +7364,11 @@ export def "nodebalancers delete-node-balancer" [
 ]: nothing -> record {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($node_balancer_id | is-empty) { error make --unspanned { msg: "path parameter 'nodeBalancerId' must be non-empty" } }
   let full_url = (build-url $base ({node_balancer_id: (encode-path-segment $node_balancer_id)} | format pattern "/nodebalancers/{node_balancer_id}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
 }
 
 # NodeBalancer View
@@ -7148,10 +7389,11 @@ export def "nodebalancers get-node-balancer" [
 ]: nothing -> record<client_conn_throttle: int, created: string, hostname: string, id: int, ipv4: string, ipv6: string, label: string, region: string, tags: list<string>, transfer: record<in: float, out: float, total: float>, updated: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($node_balancer_id | is-empty) { error make --unspanned { msg: "path parameter 'nodeBalancerId' must be non-empty" } }
   let full_url = (build-url $base ({node_balancer_id: (encode-path-segment $node_balancer_id)} | format pattern "/nodebalancers/{node_balancer_id}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
 }
 
 # NodeBalancer Update
@@ -7176,12 +7418,13 @@ export def "nodebalancers update-node-balancer" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($node_balancer_id | is-empty) { error make --unspanned { msg: "path parameter 'nodeBalancerId' must be non-empty" } }
   let full_url = (build-url $base ({node_balancer_id: (encode-path-segment $node_balancer_id)} | format pattern "/nodebalancers/{node_balancer_id}"))
   let req_body = {"client_conn_throttle": $client_conn_throttle, "label": $label, "tags": $tags} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: {}, body: $req_body}
 }
 
 # Configs List
@@ -7204,11 +7447,12 @@ export def "nodebalancers-configs list" [
 ]: nothing -> record<data: table<algorithm: string, check: string, check_attempts: int, check_body: string, check_interval: int, check_passive: bool, check_path: string, check_timeout: int, cipher_suite: string, id: int, nodebalancer_id: int, nodes_status: record, port: int, protocol: string, proxy_protocol: string, ssl_cert: string, ssl_commonname: string, ssl_fingerprint: string, ssl_key: string, stickiness: string>, page: int, pages: int, results: int> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($node_balancer_id | is-empty) { error make --unspanned { msg: "path parameter 'nodeBalancerId' must be non-empty" } }
   let qp = [(serialize-qp "page" $page "scalar") (serialize-qp "page_size" $page_size "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({node_balancer_id: (encode-path-segment $node_balancer_id)} | format pattern "/nodebalancers/{node_balancer_id}/configs") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"page": $page, "page_size": $page_size} | compact), body: null}
 }
 
 # Config Create
@@ -7245,12 +7489,13 @@ export def "nodebalancers-configs create-node-balancer" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($node_balancer_id | is-empty) { error make --unspanned { msg: "path parameter 'nodeBalancerId' must be non-empty" } }
   let full_url = (build-url $base ({node_balancer_id: (encode-path-segment $node_balancer_id)} | format pattern "/nodebalancers/{node_balancer_id}/configs"))
   let req_body = {"algorithm": $algorithm, "check": $check, "check_attempts": $check_attempts, "check_body": $check_body, "check_interval": $check_interval, "check_passive": $check_passive, "check_path": $check_path, "check_timeout": $check_timeout, "cipher_suite": $cipher_suite, "port": $port, "protocol": $protocol, "proxy_protocol": $proxy_protocol, "ssl_cert": $ssl_cert, "ssl_key": $ssl_key, "stickiness": $stickiness} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: {}, body: $req_body}
 }
 
 # Config Delete
@@ -7272,10 +7517,12 @@ export def "nodebalancers-configs delete-node-balancer" [
 ]: nothing -> record {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($node_balancer_id | is-empty) { error make --unspanned { msg: "path parameter 'nodeBalancerId' must be non-empty" } }
+  if ($config_id | is-empty) { error make --unspanned { msg: "path parameter 'configId' must be non-empty" } }
   let full_url = (build-url $base ({node_balancer_id: (encode-path-segment $node_balancer_id), config_id: (encode-path-segment $config_id)} | format pattern "/nodebalancers/{node_balancer_id}/configs/{config_id}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
 }
 
 # Config View
@@ -7297,10 +7544,12 @@ export def "nodebalancers-configs get-node-balancer" [
 ]: nothing -> record<algorithm: string, check: string, check_attempts: int, check_body: string, check_interval: int, check_passive: bool, check_path: string, check_timeout: int, cipher_suite: string, id: int, nodebalancer_id: int, nodes_status: record<down: int, up: int>, port: int, protocol: string, proxy_protocol: string, ssl_cert: string, ssl_commonname: string, ssl_fingerprint: string, ssl_key: string, stickiness: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($node_balancer_id | is-empty) { error make --unspanned { msg: "path parameter 'nodeBalancerId' must be non-empty" } }
+  if ($config_id | is-empty) { error make --unspanned { msg: "path parameter 'configId' must be non-empty" } }
   let full_url = (build-url $base ({node_balancer_id: (encode-path-segment $node_balancer_id), config_id: (encode-path-segment $config_id)} | format pattern "/nodebalancers/{node_balancer_id}/configs/{config_id}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
 }
 
 # Config Update
@@ -7338,12 +7587,14 @@ export def "nodebalancers-configs update-node-balancer" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($node_balancer_id | is-empty) { error make --unspanned { msg: "path parameter 'nodeBalancerId' must be non-empty" } }
+  if ($config_id | is-empty) { error make --unspanned { msg: "path parameter 'configId' must be non-empty" } }
   let full_url = (build-url $base ({node_balancer_id: (encode-path-segment $node_balancer_id), config_id: (encode-path-segment $config_id)} | format pattern "/nodebalancers/{node_balancer_id}/configs/{config_id}"))
   let req_body = {"algorithm": $algorithm, "check": $check, "check_attempts": $check_attempts, "check_body": $check_body, "check_interval": $check_interval, "check_passive": $check_passive, "check_path": $check_path, "check_timeout": $check_timeout, "cipher_suite": $cipher_suite, "port": $port, "protocol": $protocol, "proxy_protocol": $proxy_protocol, "ssl_cert": $ssl_cert, "ssl_key": $ssl_key, "stickiness": $stickiness} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: {}, body: $req_body}
 }
 
 # Nodes List
@@ -7367,11 +7618,13 @@ export def "nodebalancers-configs-nodes list" [
 ]: nothing -> record<data: table<address: string, config_id: int, id: int, label: string, mode: string, nodebalancer_id: int, status: string, weight: int>, page: int, pages: int, results: int> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($node_balancer_id | is-empty) { error make --unspanned { msg: "path parameter 'nodeBalancerId' must be non-empty" } }
+  if ($config_id | is-empty) { error make --unspanned { msg: "path parameter 'configId' must be non-empty" } }
   let qp = [(serialize-qp "page" $page "scalar") (serialize-qp "page_size" $page_size "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({node_balancer_id: (encode-path-segment $node_balancer_id), config_id: (encode-path-segment $config_id)} | format pattern "/nodebalancers/{node_balancer_id}/configs/{config_id}/nodes") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"page": $page, "page_size": $page_size} | compact), body: null}
 }
 
 # Node Create
@@ -7398,12 +7651,14 @@ export def "nodebalancers-configs-nodes create-balancer" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($node_balancer_id | is-empty) { error make --unspanned { msg: "path parameter 'nodeBalancerId' must be non-empty" } }
+  if ($config_id | is-empty) { error make --unspanned { msg: "path parameter 'configId' must be non-empty" } }
   let full_url = (build-url $base ({node_balancer_id: (encode-path-segment $node_balancer_id), config_id: (encode-path-segment $config_id)} | format pattern "/nodebalancers/{node_balancer_id}/configs/{config_id}/nodes"))
   let req_body = {"address": $address, "label": $label, "mode": $mode, "weight": $weight} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: {}, body: $req_body}
 }
 
 # Node Delete
@@ -7426,10 +7681,13 @@ export def "nodebalancers-configs-nodes delete-balancer" [
 ]: nothing -> record {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($node_balancer_id | is-empty) { error make --unspanned { msg: "path parameter 'nodeBalancerId' must be non-empty" } }
+  if ($config_id | is-empty) { error make --unspanned { msg: "path parameter 'configId' must be non-empty" } }
+  if ($node_id | is-empty) { error make --unspanned { msg: "path parameter 'nodeId' must be non-empty" } }
   let full_url = (build-url $base ({node_balancer_id: (encode-path-segment $node_balancer_id), config_id: (encode-path-segment $config_id), node_id: (encode-path-segment $node_id)} | format pattern "/nodebalancers/{node_balancer_id}/configs/{config_id}/nodes/{node_id}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
 }
 
 # Node View
@@ -7452,10 +7710,13 @@ export def "nodebalancers-configs-nodes get-balancer" [
 ]: nothing -> record<address: string, config_id: int, id: int, label: string, mode: string, nodebalancer_id: int, status: string, weight: int> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($node_balancer_id | is-empty) { error make --unspanned { msg: "path parameter 'nodeBalancerId' must be non-empty" } }
+  if ($config_id | is-empty) { error make --unspanned { msg: "path parameter 'configId' must be non-empty" } }
+  if ($node_id | is-empty) { error make --unspanned { msg: "path parameter 'nodeId' must be non-empty" } }
   let full_url = (build-url $base ({node_balancer_id: (encode-path-segment $node_balancer_id), config_id: (encode-path-segment $config_id), node_id: (encode-path-segment $node_id)} | format pattern "/nodebalancers/{node_balancer_id}/configs/{config_id}/nodes/{node_id}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
 }
 
 # Node Update
@@ -7483,12 +7744,15 @@ export def "nodebalancers-configs-nodes update-balancer" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($node_balancer_id | is-empty) { error make --unspanned { msg: "path parameter 'nodeBalancerId' must be non-empty" } }
+  if ($config_id | is-empty) { error make --unspanned { msg: "path parameter 'configId' must be non-empty" } }
+  if ($node_id | is-empty) { error make --unspanned { msg: "path parameter 'nodeId' must be non-empty" } }
   let full_url = (build-url $base ({node_balancer_id: (encode-path-segment $node_balancer_id), config_id: (encode-path-segment $config_id), node_id: (encode-path-segment $node_id)} | format pattern "/nodebalancers/{node_balancer_id}/configs/{config_id}/nodes/{node_id}"))
   let req_body = {"address": $address, "label": $label, "mode": $mode, "weight": $weight} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: {}, body: $req_body}
 }
 
 # Config Rebuild
@@ -7528,12 +7792,14 @@ export def "nodebalancers-configs-rebuild create-node-balancer" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($node_balancer_id | is-empty) { error make --unspanned { msg: "path parameter 'nodeBalancerId' must be non-empty" } }
+  if ($config_id | is-empty) { error make --unspanned { msg: "path parameter 'configId' must be non-empty" } }
   let full_url = (build-url $base ({node_balancer_id: (encode-path-segment $node_balancer_id), config_id: (encode-path-segment $config_id)} | format pattern "/nodebalancers/{node_balancer_id}/configs/{config_id}/rebuild"))
   let req_body = {"algorithm": $algorithm, "check": $check, "check_attempts": $check_attempts, "check_body": $check_body, "check_interval": $check_interval, "check_passive": $check_passive, "check_path": $check_path, "check_timeout": $check_timeout, "cipher_suite": $cipher_suite, "port": $port, "protocol": $protocol, "proxy_protocol": $proxy_protocol, "ssl_cert": $ssl_cert, "ssl_key": $ssl_key, "stickiness": $stickiness, "nodes": $nodes} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: {}, body: $req_body}
 }
 
 # NodeBalancer Statistics View
@@ -7553,10 +7819,11 @@ export def "nodebalancers-stats get" [
 ]: nothing -> record<data: record<connections: list<float>, traffic: record<in: list, out: list>>, title: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($node_balancer_id | is-empty) { error make --unspanned { msg: "path parameter 'nodeBalancerId' must be non-empty" } }
   let full_url = (build-url $base ({node_balancer_id: (encode-path-segment $node_balancer_id)} | format pattern "/nodebalancers/{node_balancer_id}/stats"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
 }
 
 # Object Storage Buckets List
@@ -7579,7 +7846,7 @@ export def "object-storage-buckets get" [
   let full_url = (build-url $base "/object-storage/buckets")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
 }
 
 # Object Storage Bucket Create
@@ -7609,7 +7876,7 @@ export def "object-storage-buckets create" [
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: {}, body: $req_body}
 }
 
 # Object Storage Buckets in Cluster List
@@ -7630,10 +7897,11 @@ export def "object-storage-buckets get-bucketin" [
 ]: nothing -> record<data: table<cluster: string, created: string, hostname: string, label: string, objects: int, size: int>, page: int, pages: int, results: int> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default "https://api.linode.com/v4")
+  if ($cluster_id | is-empty) { error make --unspanned { msg: "path parameter 'clusterId' must be non-empty" } }
   let full_url = (build-url $base ({cluster_id: (encode-path-segment $cluster_id)} | format pattern "/object-storage/buckets/{cluster_id}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
 }
 
 # Object Storage Bucket Remove
@@ -7655,17 +7923,19 @@ export def "object-storage-buckets delete" [
 ]: nothing -> record {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default "https://api.linode.com/v4")
+  if ($cluster_id | is-empty) { error make --unspanned { msg: "path parameter 'clusterId' must be non-empty" } }
+  if ($bucket | is-empty) { error make --unspanned { msg: "path parameter 'bucket' must be non-empty" } }
   let full_url = (build-url $base ({cluster_id: (encode-path-segment $cluster_id), bucket: (encode-path-segment $bucket)} | format pattern "/object-storage/buckets/{cluster_id}/{bucket}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
 }
 
 # Object Storage Bucket View
 #
 # GET /object-storage/buckets/{clusterId}/{bucket}
 # operationId: getObjectStorageBucket
-export def "object-storage-buckets get-by-clusterId-bucket" [
+export def "object-storage-buckets get-by-cluster-id-bucket" [
   cluster_id: string
   bucket: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -7680,10 +7950,12 @@ export def "object-storage-buckets get-by-clusterId-bucket" [
 ]: nothing -> record<cluster: string, created: string, hostname: string, label: string, objects: int, size: int> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default "https://api.linode.com/v4")
+  if ($cluster_id | is-empty) { error make --unspanned { msg: "path parameter 'clusterId' must be non-empty" } }
+  if ($bucket | is-empty) { error make --unspanned { msg: "path parameter 'bucket' must be non-empty" } }
   let full_url = (build-url $base ({cluster_id: (encode-path-segment $cluster_id), bucket: (encode-path-segment $bucket)} | format pattern "/object-storage/buckets/{cluster_id}/{bucket}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
 }
 
 # Object Storage Bucket Access Modify
@@ -7708,12 +7980,14 @@ export def "object-storage-buckets-access create-modify" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default "https://api.linode.com/v4")
+  if ($cluster_id | is-empty) { error make --unspanned { msg: "path parameter 'clusterId' must be non-empty" } }
+  if ($bucket | is-empty) { error make --unspanned { msg: "path parameter 'bucket' must be non-empty" } }
   let full_url = (build-url $base ({cluster_id: (encode-path-segment $cluster_id), bucket: (encode-path-segment $bucket)} | format pattern "/object-storage/buckets/{cluster_id}/{bucket}/access"))
   let req_body = {"acl": $acl, "cors_enabled": $cors_enabled} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: {}, body: $req_body}
 }
 
 # Object Storage Bucket Access Update
@@ -7738,12 +8012,14 @@ export def "object-storage-buckets-access update" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default "https://api.linode.com/v4")
+  if ($cluster_id | is-empty) { error make --unspanned { msg: "path parameter 'clusterId' must be non-empty" } }
+  if ($bucket | is-empty) { error make --unspanned { msg: "path parameter 'bucket' must be non-empty" } }
   let full_url = (build-url $base ({cluster_id: (encode-path-segment $cluster_id), bucket: (encode-path-segment $bucket)} | format pattern "/object-storage/buckets/{cluster_id}/{bucket}/access"))
   let req_body = {"acl": $acl, "cors_enabled": $cors_enabled} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: {}, body: $req_body}
 }
 
 # Object Storage Object ACL Config View
@@ -7766,11 +8042,13 @@ export def "object-storage-buckets-object-acl get-view" [
 ]: nothing -> record<acl: string, acl_xml: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default "https://api.linode.com/v4")
+  if ($cluster_id | is-empty) { error make --unspanned { msg: "path parameter 'clusterId' must be non-empty" } }
+  if ($bucket | is-empty) { error make --unspanned { msg: "path parameter 'bucket' must be non-empty" } }
   let qp = [(serialize-qp "name" $name "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({cluster_id: (encode-path-segment $cluster_id), bucket: (encode-path-segment $bucket)} | format pattern "/object-storage/buckets/{cluster_id}/{bucket}/object-acl") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"name": $name} | compact), body: null}
 }
 
 # Object Storage Object ACL Config Update
@@ -7795,12 +8073,14 @@ export def "object-storage-buckets-object-acl update" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default "https://api.linode.com/v4")
+  if ($cluster_id | is-empty) { error make --unspanned { msg: "path parameter 'clusterId' must be non-empty" } }
+  if ($bucket | is-empty) { error make --unspanned { msg: "path parameter 'bucket' must be non-empty" } }
   let full_url = (build-url $base ({cluster_id: (encode-path-segment $cluster_id), bucket: (encode-path-segment $bucket)} | format pattern "/object-storage/buckets/{cluster_id}/{bucket}/object-acl"))
   let req_body = {"acl": $acl, "name": $name} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: {}, body: $req_body}
 }
 
 # Object Storage Bucket Contents List
@@ -7826,11 +8106,13 @@ export def "object-storage-buckets-object-list get-content" [
 ]: nothing -> record<data: table<etag: string, is_truncated: bool, last_modified: string, name: string, next_marker: string, owner: string, size: int>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default "https://api.linode.com/v4")
+  if ($cluster_id | is-empty) { error make --unspanned { msg: "path parameter 'clusterId' must be non-empty" } }
+  if ($bucket | is-empty) { error make --unspanned { msg: "path parameter 'bucket' must be non-empty" } }
   let qp = [(serialize-qp "marker" $marker "scalar") (serialize-qp "delimiter" $delimiter "scalar") (serialize-qp "prefix" $prefix "scalar") (serialize-qp "page_size" $page_size "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({cluster_id: (encode-path-segment $cluster_id), bucket: (encode-path-segment $bucket)} | format pattern "/object-storage/buckets/{cluster_id}/{bucket}/object-list") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"marker": $marker, "delimiter": $delimiter, "prefix": $prefix, "page_size": $page_size} | compact), body: null}
 }
 
 # Object Storage Object URL Create
@@ -7857,12 +8139,14 @@ export def "object-storage-buckets-object-url create" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default "https://api.linode.com/v4")
+  if ($cluster_id | is-empty) { error make --unspanned { msg: "path parameter 'clusterId' must be non-empty" } }
+  if ($bucket | is-empty) { error make --unspanned { msg: "path parameter 'bucket' must be non-empty" } }
   let full_url = (build-url $base ({cluster_id: (encode-path-segment $cluster_id), bucket: (encode-path-segment $bucket)} | format pattern "/object-storage/buckets/{cluster_id}/{bucket}/object-url"))
   let req_body = {"content_type": $content_type, "expires_in": $expires_in, "method": $method, "name": $name} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: {}, body: $req_body}
 }
 
 # Object Storage TLS/SSL Cert Delete
@@ -7884,10 +8168,12 @@ export def "object-storage-buckets-ssl delete" [
 ]: nothing -> record {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default "https://api.linode.com/v4")
+  if ($cluster_id | is-empty) { error make --unspanned { msg: "path parameter 'clusterId' must be non-empty" } }
+  if ($bucket | is-empty) { error make --unspanned { msg: "path parameter 'bucket' must be non-empty" } }
   let full_url = (build-url $base ({cluster_id: (encode-path-segment $cluster_id), bucket: (encode-path-segment $bucket)} | format pattern "/object-storage/buckets/{cluster_id}/{bucket}/ssl"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
 }
 
 # Object Storage TLS/SSL Cert View
@@ -7909,10 +8195,12 @@ export def "object-storage-buckets-ssl get" [
 ]: nothing -> record<ssl: bool> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default "https://api.linode.com/v4")
+  if ($cluster_id | is-empty) { error make --unspanned { msg: "path parameter 'clusterId' must be non-empty" } }
+  if ($bucket | is-empty) { error make --unspanned { msg: "path parameter 'bucket' must be non-empty" } }
   let full_url = (build-url $base ({cluster_id: (encode-path-segment $cluster_id), bucket: (encode-path-segment $bucket)} | format pattern "/object-storage/buckets/{cluster_id}/{bucket}/ssl"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
 }
 
 # Object Storage TLS/SSL Cert Upload
@@ -7937,12 +8225,14 @@ export def "object-storage-buckets-ssl create" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default "https://api.linode.com/v4")
+  if ($cluster_id | is-empty) { error make --unspanned { msg: "path parameter 'clusterId' must be non-empty" } }
+  if ($bucket | is-empty) { error make --unspanned { msg: "path parameter 'bucket' must be non-empty" } }
   let full_url = (build-url $base ({cluster_id: (encode-path-segment $cluster_id), bucket: (encode-path-segment $bucket)} | format pattern "/object-storage/buckets/{cluster_id}/{bucket}/ssl"))
   let req_body = {"certificate": $certificate, "private_key": $private_key} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: {}, body: $req_body}
 }
 
 # Object Storage Cancel
@@ -7965,7 +8255,7 @@ export def "object-storage-cancel cancel" [
   let full_url = (build-url $base "/object-storage/cancel")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
 }
 
 # Clusters List
@@ -7988,7 +8278,7 @@ export def "object-storage-clusters list" [
   let full_url = (build-url $base "/object-storage/clusters")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
 }
 
 # Cluster View
@@ -8009,10 +8299,11 @@ export def "object-storage-clusters get" [
 ]: nothing -> record<domain: string, id: string, region: string, static_site_domain: string, status: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default "https://api.linode.com/v4")
+  if ($cluster_id | is-empty) { error make --unspanned { msg: "path parameter 'clusterId' must be non-empty" } }
   let full_url = (build-url $base ({cluster_id: (encode-path-segment $cluster_id)} | format pattern "/object-storage/clusters/{cluster_id}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
 }
 
 # Object Storage Keys List
@@ -8035,7 +8326,7 @@ export def "object-storage-keys list" [
   let full_url = (build-url $base "/object-storage/keys")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
 }
 
 # Object Storage Key Create
@@ -8064,7 +8355,7 @@ export def "object-storage-keys create" [
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: {}, body: $req_body}
 }
 
 # Object Storage Key Revoke
@@ -8085,10 +8376,11 @@ export def "object-storage-keys delete" [
 ]: nothing -> record {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default "https://api.linode.com/v4")
+  if ($key_id | is-empty) { error make --unspanned { msg: "path parameter 'keyId' must be non-empty" } }
   let full_url = (build-url $base ({key_id: (encode-path-segment $key_id)} | format pattern "/object-storage/keys/{key_id}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
 }
 
 # Object Storage Key View
@@ -8109,10 +8401,11 @@ export def "object-storage-keys get" [
 ]: nothing -> record<access_key: string, bucket_access: table<bucket_name: string, cluster: string, permissions: string>, id: int, label: string, limited: bool, secret_key: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default "https://api.linode.com/v4")
+  if ($key_id | is-empty) { error make --unspanned { msg: "path parameter 'keyId' must be non-empty" } }
   let full_url = (build-url $base ({key_id: (encode-path-segment $key_id)} | format pattern "/object-storage/keys/{key_id}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
 }
 
 # Object Storage Key Update
@@ -8135,12 +8428,13 @@ export def "object-storage-keys update" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default "https://api.linode.com/v4")
+  if ($key_id | is-empty) { error make --unspanned { msg: "path parameter 'keyId' must be non-empty" } }
   let full_url = (build-url $base ({key_id: (encode-path-segment $key_id)} | format pattern "/object-storage/keys/{key_id}"))
   let req_body = {"label": $label} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: {}, body: $req_body}
 }
 
 # Object Storage Transfer View
@@ -8163,7 +8457,7 @@ export def "object-storage-transfer get" [
   let full_url = (build-url $base "/object-storage/transfer")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
 }
 
 # Profile View
@@ -8186,7 +8480,7 @@ export def "profile get" [
   let full_url = (build-url $base "/profile")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
 }
 
 # Profile Update
@@ -8221,7 +8515,7 @@ export def "profile update" [
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: {}, body: $req_body}
 }
 
 # Authorized Apps List
@@ -8247,7 +8541,7 @@ export def "profile-apps list" [
   let full_url = (build-url $base "/profile/apps" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"page": $page, "page_size": $page_size} | compact), body: null}
 }
 
 # App Access Revoke
@@ -8268,10 +8562,11 @@ export def "profile-apps delete" [
 ]: nothing -> record {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($app_id | is-empty) { error make --unspanned { msg: "path parameter 'appId' must be non-empty" } }
   let full_url = (build-url $base ({app_id: (encode-path-segment $app_id)} | format pattern "/profile/apps/{app_id}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
 }
 
 # Authorized App View
@@ -8292,10 +8587,11 @@ export def "profile-apps get" [
 ]: nothing -> record<created: string, expiry: string, id: int, label: string, scopes: string, thumbnail_url: string, website: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($app_id | is-empty) { error make --unspanned { msg: "path parameter 'appId' must be non-empty" } }
   let full_url = (build-url $base ({app_id: (encode-path-segment $app_id)} | format pattern "/profile/apps/{app_id}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
 }
 
 # Trusted Devices List
@@ -8318,7 +8614,7 @@ export def "profile-devices get" [
   let full_url = (build-url $base "/profile/devices")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
 }
 
 # Trusted Device Revoke
@@ -8339,10 +8635,11 @@ export def "profile-devices delete-trusted" [
 ]: nothing -> record {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($device_id | is-empty) { error make --unspanned { msg: "path parameter 'deviceId' must be non-empty" } }
   let full_url = (build-url $base ({device_id: (encode-path-segment $device_id)} | format pattern "/profile/devices/{device_id}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
 }
 
 # Trusted Device View
@@ -8363,10 +8660,11 @@ export def "profile-devices get-trusted" [
 ]: nothing -> record<created: string, expiry: string, id: int, last_authenticated: string, last_remote_addr: string, user_agent: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($device_id | is-empty) { error make --unspanned { msg: "path parameter 'deviceId' must be non-empty" } }
   let full_url = (build-url $base ({device_id: (encode-path-segment $device_id)} | format pattern "/profile/devices/{device_id}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
 }
 
 # Grants List
@@ -8389,7 +8687,7 @@ export def "profile-grants get" [
   let full_url = (build-url $base "/profile/grants")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
 }
 
 # Logins List
@@ -8412,7 +8710,7 @@ export def "profile-logins list" [
   let full_url = (build-url $base "/profile/logins")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
 }
 
 # Login View
@@ -8433,10 +8731,11 @@ export def "profile-logins get" [
 ]: nothing -> record<datetime: string, id: int, ip: string, restricted: bool, username: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($login_id | is-empty) { error make --unspanned { msg: "path parameter 'loginId' must be non-empty" } }
   let full_url = (build-url $base ({login_id: (encode-path-segment $login_id)} | format pattern "/profile/logins/{login_id}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
 }
 
 # Phone Number Delete
@@ -8459,7 +8758,7 @@ export def "profile-phone-number delete" [
   let full_url = (build-url $base "/profile/phone-number")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
 }
 
 # Phone Number Verification Code Send
@@ -8487,7 +8786,7 @@ export def "profile-phone-number create" [
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: {}, body: $req_body}
 }
 
 # Phone Number Verify
@@ -8514,7 +8813,7 @@ export def "profile-phone-number-verify create" [
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: {}, body: $req_body}
 }
 
 # User Preferences View
@@ -8537,7 +8836,7 @@ export def "profile-preferences get-user" [
   let full_url = (build-url $base "/profile/preferences")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
 }
 
 # User Preferences Update
@@ -8564,7 +8863,7 @@ export def "profile-preferences update-user" [
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: {}, body: $req_body}
 }
 
 # Security Questions List
@@ -8587,7 +8886,7 @@ export def "profile-security-questions get" [
   let full_url = (build-url $base "/profile/security-questions")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
 }
 
 # Security Questions Answer
@@ -8615,7 +8914,7 @@ export def "profile-security-questions create" [
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: {}, body: $req_body}
 }
 
 # SSH Keys List
@@ -8641,7 +8940,7 @@ export def "profile-sshkeys get-ssh-keys" [
   let full_url = (build-url $base "/profile/sshkeys" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"page": $page, "page_size": $page_size} | compact), body: null}
 }
 
 # SSH Key Add
@@ -8669,7 +8968,7 @@ export def "profile-sshkeys create-ssh-key" [
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: {}, body: $req_body}
 }
 
 # SSH Key Delete
@@ -8690,10 +8989,11 @@ export def "profile-sshkeys delete-ssh-key" [
 ]: nothing -> record {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($ssh_key_id | is-empty) { error make --unspanned { msg: "path parameter 'sshKeyId' must be non-empty" } }
   let full_url = (build-url $base ({ssh_key_id: (encode-path-segment $ssh_key_id)} | format pattern "/profile/sshkeys/{ssh_key_id}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
 }
 
 # SSH Key View
@@ -8714,10 +9014,11 @@ export def "profile-sshkeys get-ssh-key" [
 ]: nothing -> record<created: string, id: int, label: string, ssh_key: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($ssh_key_id | is-empty) { error make --unspanned { msg: "path parameter 'sshKeyId' must be non-empty" } }
   let full_url = (build-url $base ({ssh_key_id: (encode-path-segment $ssh_key_id)} | format pattern "/profile/sshkeys/{ssh_key_id}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
 }
 
 # SSH Key Update
@@ -8740,12 +9041,13 @@ export def "profile-sshkeys update-ssh-key" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($ssh_key_id | is-empty) { error make --unspanned { msg: "path parameter 'sshKeyId' must be non-empty" } }
   let full_url = (build-url $base ({ssh_key_id: (encode-path-segment $ssh_key_id)} | format pattern "/profile/sshkeys/{ssh_key_id}"))
   let req_body = {"label": $label} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: {}, body: $req_body}
 }
 
 # Two Factor Authentication Disable
@@ -8768,7 +9070,7 @@ export def "profile-tfa-disable disable" [
   let full_url = (build-url $base "/profile/tfa-disable")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
 }
 
 # Two Factor Secret Create
@@ -8791,7 +9093,7 @@ export def "profile-tfa-enable enable" [
   let full_url = (build-url $base "/profile/tfa-enable")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
 }
 
 # Two Factor Authentication Confirm/Enable
@@ -8818,7 +9120,7 @@ export def "profile-tfa-enable-confirm confirm" [
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: {}, body: $req_body}
 }
 
 # Personal Access Tokens List
@@ -8841,7 +9143,7 @@ export def "profile-tokens list" [
   let full_url = (build-url $base "/profile/tokens")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
 }
 
 # Personal Access Token Create
@@ -8870,7 +9172,7 @@ export def "profile-tokens create-personal-access" [
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: {}, body: $req_body}
 }
 
 # Personal Access Token Revoke
@@ -8891,10 +9193,11 @@ export def "profile-tokens delete-personal-access" [
 ]: nothing -> record {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($token_id | is-empty) { error make --unspanned { msg: "path parameter 'tokenId' must be non-empty" } }
   let full_url = (build-url $base ({token_id: (encode-path-segment $token_id)} | format pattern "/profile/tokens/{token_id}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
 }
 
 # Personal Access Token View
@@ -8915,10 +9218,11 @@ export def "profile-tokens get-personal-access" [
 ]: nothing -> record<created: string, expiry: string, id: int, label: string, scopes: string, token: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($token_id | is-empty) { error make --unspanned { msg: "path parameter 'tokenId' must be non-empty" } }
   let full_url = (build-url $base ({token_id: (encode-path-segment $token_id)} | format pattern "/profile/tokens/{token_id}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
 }
 
 # Personal Access Token Update
@@ -8941,12 +9245,13 @@ export def "profile-tokens update-personal-access" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($token_id | is-empty) { error make --unspanned { msg: "path parameter 'tokenId' must be non-empty" } }
   let full_url = (build-url $base ({token_id: (encode-path-segment $token_id)} | format pattern "/profile/tokens/{token_id}"))
   let req_body = {"label": $label} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: {}, body: $req_body}
 }
 
 # Regions List
@@ -8969,7 +9274,7 @@ export def "regions list" [
   let full_url = (build-url $base "/regions")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
 }
 
 # Region View
@@ -8990,10 +9295,11 @@ export def "regions get" [
 ]: nothing -> record<capabilities: list<string>, country: string, id: string, label: string, resolvers: record<ipv4: string, ipv6: string>, status: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($region_id | is-empty) { error make --unspanned { msg: "path parameter 'regionId' must be non-empty" } }
   let full_url = (build-url $base ({region_id: (encode-path-segment $region_id)} | format pattern "/regions/{region_id}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
 }
 
 # Support Tickets List
@@ -9019,7 +9325,7 @@ export def "support-tickets list" [
   let full_url = (build-url $base "/support/tickets" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"page": $page, "page_size": $page_size} | compact), body: null}
 }
 
 # Support Ticket Open
@@ -9058,7 +9364,7 @@ export def "support-tickets create" [
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: {}, body: $req_body}
 }
 
 # Support Ticket View
@@ -9079,10 +9385,11 @@ export def "support-tickets get" [
 ]: nothing -> record<attachments: list<string>, closable: bool, closed: string, description: string, entity: record<id: int, label: string, type: string, url: string>, gravatar_id: string, id: int, opened: string, opened_by: string, status: string, summary: string, updated: string, updated_by: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($ticket_id | is-empty) { error make --unspanned { msg: "path parameter 'ticketId' must be non-empty" } }
   let full_url = (build-url $base ({ticket_id: (encode-path-segment $ticket_id)} | format pattern "/support/tickets/{ticket_id}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
 }
 
 # Support Ticket Attachment Create
@@ -9105,6 +9412,7 @@ export def "support-tickets-attachments create" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($ticket_id | is-empty) { error make --unspanned { msg: "path parameter 'ticketId' must be non-empty" } }
   let full_url = (build-url $base ({ticket_id: (encode-path-segment $ticket_id)} | format pattern "/support/tickets/{ticket_id}/attachments"))
   let req_body = {"file": $file} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
@@ -9112,7 +9420,7 @@ export def "support-tickets-attachments create" [
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let req_body = if ($req_body | describe | str starts-with "record") { $req_body } else { {} }
   let mp = (build-multipart-body $req_body [] $dry_run)
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full $mp.content_type $mp.body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full $mp.content_type $mp.body {query: {}, body: $req_body}
 }
 
 # Support Ticket Close
@@ -9133,10 +9441,11 @@ export def "support-tickets-close close" [
 ]: nothing -> record {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($ticket_id | is-empty) { error make --unspanned { msg: "path parameter 'ticketId' must be non-empty" } }
   let full_url = (build-url $base ({ticket_id: (encode-path-segment $ticket_id)} | format pattern "/support/tickets/{ticket_id}/close"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
 }
 
 # Replies List
@@ -9159,11 +9468,12 @@ export def "support-tickets-replies get" [
 ]: nothing -> record<data: table<created: string, created_by: string, description: string, from_linode: bool, gravatar_id: string, id: int>, page: int, pages: int, results: int> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($ticket_id | is-empty) { error make --unspanned { msg: "path parameter 'ticketId' must be non-empty" } }
   let qp = [(serialize-qp "page" $page "scalar") (serialize-qp "page_size" $page_size "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({ticket_id: (encode-path-segment $ticket_id)} | format pattern "/support/tickets/{ticket_id}/replies") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"page": $page, "page_size": $page_size} | compact), body: null}
 }
 
 # Reply Create
@@ -9186,12 +9496,13 @@ export def "support-tickets-replies create-reply" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($ticket_id | is-empty) { error make --unspanned { msg: "path parameter 'ticketId' must be non-empty" } }
   let full_url = (build-url $base ({ticket_id: (encode-path-segment $ticket_id)} | format pattern "/support/tickets/{ticket_id}/replies"))
   let req_body = {"description": $description} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: {}, body: $req_body}
 }
 
 # Tags List
@@ -9217,7 +9528,7 @@ export def "tags get" [
   let full_url = (build-url $base "/tags" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"page": $page, "page_size": $page_size} | compact), body: null}
 }
 
 # New Tag Create
@@ -9248,7 +9559,7 @@ export def "tags create" [
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: {}, body: $req_body}
 }
 
 # Tag Delete
@@ -9269,10 +9580,11 @@ export def "tags delete" [
 ]: nothing -> record {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($label | is-empty) { error make --unspanned { msg: "path parameter 'label' must be non-empty" } }
   let full_url = (build-url $base ({label: (encode-path-segment $label)} | format pattern "/tags/{label}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
 }
 
 # Tagged Objects List
@@ -9295,11 +9607,12 @@ export def "tags get-tagged-objects" [
 ]: nothing -> record<data: table<data: any, type: string>, page: int, pages: int, results: int> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($label | is-empty) { error make --unspanned { msg: "path parameter 'label' must be non-empty" } }
   let qp = [(serialize-qp "page" $page "scalar") (serialize-qp "page_size" $page_size "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({label: (encode-path-segment $label)} | format pattern "/tags/{label}") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"page": $page, "page_size": $page_size} | compact), body: null}
 }
 
 # Volumes List
@@ -9325,7 +9638,7 @@ export def "volumes list" [
   let full_url = (build-url $base "/volumes" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"page": $page, "page_size": $page_size} | compact), body: null}
 }
 
 # Volume Create
@@ -9357,7 +9670,7 @@ export def "volumes create" [
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: {}, body: $req_body}
 }
 
 # Volume Delete
@@ -9378,10 +9691,11 @@ export def "volumes delete" [
 ]: nothing -> record {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($volume_id | is-empty) { error make --unspanned { msg: "path parameter 'volumeId' must be non-empty" } }
   let full_url = (build-url $base ({volume_id: (encode-path-segment $volume_id)} | format pattern "/volumes/{volume_id}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
 }
 
 # Volume View
@@ -9404,11 +9718,12 @@ export def "volumes get" [
 ]: nothing -> record<created: string, filesystem_path: string, hardware_type: string, id: int, label: string, linode_id: int, linode_label: string, region: string, size: int, status: string, tags: list<string>, updated: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($volume_id | is-empty) { error make --unspanned { msg: "path parameter 'volumeId' must be non-empty" } }
   let qp = [(serialize-qp "page" $page "scalar") (serialize-qp "page_size" $page_size "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({volume_id: (encode-path-segment $volume_id)} | format pattern "/volumes/{volume_id}") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"page": $page, "page_size": $page_size} | compact), body: null}
 }
 
 # Volume Update
@@ -9432,12 +9747,13 @@ export def "volumes update" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($volume_id | is-empty) { error make --unspanned { msg: "path parameter 'volumeId' must be non-empty" } }
   let full_url = (build-url $base ({volume_id: (encode-path-segment $volume_id)} | format pattern "/volumes/{volume_id}"))
   let req_body = {"label": $label, "tags": $tags} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: {}, body: $req_body}
 }
 
 # Volume Attach
@@ -9462,12 +9778,13 @@ export def "volumes-attach attach" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($volume_id | is-empty) { error make --unspanned { msg: "path parameter 'volumeId' must be non-empty" } }
   let full_url = (build-url $base ({volume_id: (encode-path-segment $volume_id)} | format pattern "/volumes/{volume_id}/attach"))
   let req_body = {"config_id": $config_id, "linode_id": $linode_id, "persist_across_boots": $persist_across_boots} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: {}, body: $req_body}
 }
 
 # Volume Clone
@@ -9490,12 +9807,13 @@ export def "volumes-clone clone" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($volume_id | is-empty) { error make --unspanned { msg: "path parameter 'volumeId' must be non-empty" } }
   let full_url = (build-url $base ({volume_id: (encode-path-segment $volume_id)} | format pattern "/volumes/{volume_id}/clone"))
   let req_body = {"label": $label} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: {}, body: $req_body}
 }
 
 # Volume Detach
@@ -9516,10 +9834,11 @@ export def "volumes-detach create" [
 ]: nothing -> record {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($volume_id | is-empty) { error make --unspanned { msg: "path parameter 'volumeId' must be non-empty" } }
   let full_url = (build-url $base ({volume_id: (encode-path-segment $volume_id)} | format pattern "/volumes/{volume_id}/detach"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
 }
 
 # Volume Resize
@@ -9542,10 +9861,11 @@ export def "volumes-resize resize" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($volume_id | is-empty) { error make --unspanned { msg: "path parameter 'volumeId' must be non-empty" } }
   let full_url = (build-url $base ({volume_id: (encode-path-segment $volume_id)} | format pattern "/volumes/{volume_id}/resize"))
   let req_body = {"size": $size} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: {}, body: $req_body}
 }

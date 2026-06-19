@@ -3,17 +3,18 @@
 # Auth: --token flag or $env.QNAMAKER_CLIENT_TOKEN
 
 const BASE_URL = "https://azure.local"
-const DEFAULT_AUTH = "ocp-apim-subscription-key"
 
-# Build auth: returns {headers: record, query: string}
+# Build auth: returns {scheme: string, headers: record, query: string, location: string}.
+# `location` is "header" | "query" | "cookie" | "none" and tells dry-run callers
+# where the token went without inspecting headers/query themselves.
 def build-auth [token?: string, auth_scheme?: string]: nothing -> record {
   let token_val = if ($token != null) and ($token | is-not-empty) { $token } else { $env | get -o QNAMAKER_CLIENT_TOKEN | default "" }
   let scheme = ($auth_scheme | default "bearer")
-  if ($scheme == "none") or ($token_val | is-empty) { return {headers: {}, query: ""} }
+  if ($scheme == "none") or ($token_val | is-empty) { return {scheme: $scheme, headers: {}, query: "", location: "none"} }
   match $scheme {
-    "ocp-apim-subscription-key" => { {headers: {Ocp-Apim-Subscription-Key: $token_val}, query: ""} }
-    "none" => { {headers: {}, query: ""} }
-    _ => { {headers: {Authorization: $"Bearer ($token_val)"}, query: ""} }
+    "ocp-apim-subscription-key" => { {scheme: $scheme, headers: {Ocp-Apim-Subscription-Key: $token_val}, query: "", location: "header"} }
+    "none" => { {scheme: $scheme, headers: {}, query: "", location: "none"} }
+    _ => { {scheme: $scheme, headers: {Authorization: $"Bearer ($token_val)"}, query: "", location: "header"} }
   }
 }
 
@@ -22,8 +23,9 @@ def build-auth [token?: string, auth_scheme?: string]: nothing -> record {
 # ([A-Za-z0-9-._~]) stay literal; everything else gets %XX.
 def serialize-qp [name: string, value: any, style: string]: nothing -> list<string> {
   if ($value == null) { return [] }
-  let n = (encode-path-segment $name)
   let is_list = ($value | describe | str starts-with "list")
+  if $is_list and ($value | is-empty) { return [] }
+  let n = (encode-path-segment $name)
   if ($value | describe | str starts-with "record") { return ($value | transpose k v | each { $"($n)[(encode-path-segment $in.k)]=(encode-path-segment $in.v)" }) }
   if not $is_list { return [$"($n)=(encode-path-segment $value)"] }
   match $style {
@@ -54,22 +56,42 @@ def build-url [base: string, path: string, query?: string]: nothing -> string {
   if ($query != null) and ($query | is-not-empty) { $result | upsert query $query | url join } else { $result | url join }
 }
 
+# Build the dry-run record returned by --dry-run. Shape:
+#   {dry_run: true, method, url, query: <record>, headers, body, content_type, timeout,
+#    auth: {scheme, location}}
+# `meta` carries logical-form data (the query record by spec name, the pre-serialization
+# body) that do-request itself cannot reconstruct from its wire-format args.
+def build-dry-run-record [method: string, url: string, auth: record, content_type: string, timeout: duration, meta?: record]: nothing -> record {
+  let m = ($meta | default {})
+  {
+    dry_run: true
+    method: $method
+    url: $url
+    query: ($m | get -o query | default {})
+    headers: $auth.headers
+    body: ($m | get -o body)
+    content_type: $content_type
+    timeout: $timeout
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+}
+
 # Execute HTTP request with method dispatch
-def do-request [method: string, url: string, auth: record, insecure: bool, raw: bool, dry_run: bool, max_time?: duration, allow_errors?: bool, full?: bool, content_type?: string, body?: any]: nothing -> any {
+def do-request [method: string, url: string, auth: record, insecure: bool, raw: bool, dry_run: bool, max_time?: duration, allow_errors?: bool, full?: bool, content_type?: string, body?: any, dry_run_meta?: record]: nothing -> any {
   let req_url = if ($auth.query | is-not-empty) { if ($url | str contains "?") { $"($url)&($auth.query)" } else { $"($url)?($auth.query)" } } else { $url }
   let timeout = ($max_time | default 30min)
   let ct = ($content_type | default "application/json")
-  if $dry_run { return {method: $method, url: $req_url, headers: $auth.headers, query_string: $auth.query, content_type: $ct, timeout: $timeout, body: $body} }
+  if $dry_run { return (build-dry-run-record $method $req_url $auth $ct $timeout $dry_run_meta) }
   let resp = match $method {
     "get" => { http get --headers $auth.headers --full --allow-errors --max-time $timeout --insecure=$insecure --raw=$raw $req_url }
-    "head" => { http head --headers $auth.headers --max-time $timeout --insecure=$insecure $req_url }
-    "options" => { http options --headers $auth.headers --max-time $timeout --insecure=$insecure $req_url }
+    "head" => { http head --headers $auth.headers --full --allow-errors --max-time $timeout --insecure=$insecure $req_url }
+    "options" => { http options --headers $auth.headers --full --allow-errors --max-time $timeout --insecure=$insecure $req_url }
     "post" => { if ($body | is-empty) { http post --headers $auth.headers --full --allow-errors --max-time $timeout --insecure=$insecure --raw=$raw $req_url "" } else { http post --headers $auth.headers --content-type $ct --full --allow-errors --max-time $timeout --insecure=$insecure --raw=$raw $req_url $body } }
     "put" => { if ($body | is-empty) { http put --headers $auth.headers --full --allow-errors --max-time $timeout --insecure=$insecure --raw=$raw $req_url "" } else { http put --headers $auth.headers --content-type $ct --full --allow-errors --max-time $timeout --insecure=$insecure --raw=$raw $req_url $body } }
     "patch" => { if ($body | is-empty) { http patch --headers $auth.headers --full --allow-errors --max-time $timeout --insecure=$insecure --raw=$raw $req_url "" } else { http patch --headers $auth.headers --content-type $ct --full --allow-errors --max-time $timeout --insecure=$insecure --raw=$raw $req_url $body } }
     "delete" => { if ($body | is-empty) { http delete --headers $auth.headers --full --allow-errors --max-time $timeout --insecure=$insecure --raw=$raw $req_url } else { http delete --headers $auth.headers --content-type $ct --data $body --full --allow-errors --max-time $timeout --insecure=$insecure --raw=$raw $req_url } }
   }
-  if ($method in ["head" "options"]) { return $resp }
+  if ($method == "head") and (not $full) and (not $allow_errors) and $resp.status < 400 { return $resp.headers }
   if $allow_errors { $resp } else if $resp.status >= 400 { error make --unspanned { msg: $"HTTP ($resp.status): ($resp.body)" } } else if $full { {status: $resp.status, headers: $resp.headers, body: $resp.body} } else if $resp.status == 204 { null } else { $resp.body }
 }
 
@@ -120,13 +142,14 @@ export def "alterations get" [
   let full_url = (build-url $base "/alterations")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
 }
 
 # Replace alterations data.
 #
 # PUT /alterations
 # operationId: Alterations_Replace
+# --wordAlterations item shape: {alterations: list<string>}
 export def "alterations update" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -137,13 +160,17 @@ export def "alterations update" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> record<error: record<code: string, details: list<record>, innerError: record<code: string, innerError: any>, message: string, target: string>> {
+  word_alterations: list # Collection of word alterations. — item shape: {alterations: list<string>}
+]: any -> record<error: record<code: string, details: list<record>, innerError: record<code: string, innerError: any>, message: string, target: string>> {
+  let input = $in
   let auth = (build-auth $token ($auth_scheme | default "ocp-apim-subscription-key"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/alterations")
+  let req_body = {"wordAlterations": $word_alterations} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: {}, body: $req_body}
 }
 
 # Gets endpoint settings for an endpoint.
@@ -166,7 +193,7 @@ export def "endpoint-settings get" [
   let full_url = (build-url $base "/endpointSettings")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
 }
 
 # Updates endpoint settings for an endpoint.
@@ -183,13 +210,17 @@ export def "endpoint-settings update" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> string {
+  --active-learning: any # Active Learning settings of the endpoint.
+]: any -> string {
+  let input = $in
   let auth = (build-auth $token ($auth_scheme | default "ocp-apim-subscription-key"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/endpointSettings")
+  let req_body = {"activeLearning": $active_learning} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "patch" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "patch" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: {}, body: $req_body}
 }
 
 # Gets endpoint keys for an endpoint
@@ -212,7 +243,7 @@ export def "endpointkeys get-endpoint-keys-keys" [
   let full_url = (build-url $base "/endpointkeys")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
 }
 
 # Re-generates an endpoint key.
@@ -233,17 +264,18 @@ export def "endpointkeys refresh-endpoint-keys-keys" [
 ]: nothing -> record<installedVersion: string, language: string, lastStableVersion: string, primaryEndpointKey: string, secondaryEndpointKey: string> {
   let auth = (build-auth $token ($auth_scheme | default "ocp-apim-subscription-key"))
   let base = ($base_url | default $BASE_URL)
+  if ($key_type | is-empty) { error make --unspanned { msg: "path parameter 'keyType' must be non-empty" } }
   let full_url = (build-url $base ({key_type: (encode-path-segment $key_type)} | format pattern "/endpointkeys/{key_type}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "patch" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "patch" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
 }
 
 # Gets all knowledgebases for a user.
 #
 # GET /knowledgebases
 # operationId: Knowledgebase_ListAll
-export def "knowledgebases list-list" [
+export def "knowledgebases list" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -259,13 +291,15 @@ export def "knowledgebases list-list" [
   let full_url = (build-url $base "/knowledgebases")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
 }
 
 # Asynchronous operation to create a new knowledgebase.
 #
 # POST /knowledgebases/create
 # operationId: Knowledgebase_Create
+# --files item shape: {fileName: string, fileUri: string}
+# --qnaList item shape: {answer: string, context?: any, id?: int, metadata?: list, questions: list<string>, source?: string}
 export def "knowledgebases-create create" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -276,13 +310,23 @@ export def "knowledgebases-create create" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> record<createdTimestamp: string, errorResponse: record<error: record<code: string, details: list, innerError: record, message: string, target: string>>, lastActionTimestamp: string, operationId: string, operationState: string, resourceLocation: string, userId: string> {
+  --default-answer-used-for-extraction: string # Text string to be used as the answer in any Q-A which has no extracted answer from the document but has a hierarchy. Required when EnableHierarchicalExtraction field is set to True.
+  --enable-hierarchical-extraction: oneof<nothing, bool> # Enable hierarchical extraction of Q-A from files and urls. Value to be considered False if this field is not present.
+  --files: list # List of files from which to Extract Q-A. — item shape: {fileName: string, fileUri: string}
+  --language: string # Language of the knowledgebase.
+  name: string # Friendly name for the knowledgebase.
+  --qna-list: list # List of Q-A (QnADTO) to be added to the knowledgebase. Q-A Ids are assigned by the service and should be omitted. — item shape: {answer: string, context?: any, id?: int, metadata?: list, questions: list<string>, source?: string}
+  --urls: list<string> # List of URLs to be used for extracting Q-A.
+]: any -> record<createdTimestamp: string, errorResponse: record<error: record<code: string, details: list, innerError: record, message: string, target: string>>, lastActionTimestamp: string, operationId: string, operationState: string, resourceLocation: string, userId: string> {
+  let input = $in
   let auth = (build-auth $token ($auth_scheme | default "ocp-apim-subscription-key"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/knowledgebases/create")
+  let req_body = {"defaultAnswerUsedForExtraction": $default_answer_used_for_extraction, "enableHierarchicalExtraction": $enable_hierarchical_extraction, "files": $files, "language": $language, "name": $name, "qnaList": $qna_list, "urls": $urls} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: {}, body: $req_body}
 }
 
 # Deletes the knowledgebase and all its data.
@@ -303,10 +347,11 @@ export def "knowledgebases delete" [
 ]: nothing -> record<error: record<code: string, details: list<record>, innerError: record<code: string, innerError: any>, message: string, target: string>> {
   let auth = (build-auth $token ($auth_scheme | default "ocp-apim-subscription-key"))
   let base = ($base_url | default $BASE_URL)
+  if ($kb_id | is-empty) { error make --unspanned { msg: "path parameter 'kbId' must be non-empty" } }
   let full_url = (build-url $base ({kb_id: (encode-path-segment $kb_id)} | format pattern "/knowledgebases/{kb_id}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
 }
 
 # Gets details of a specific knowledgebase.
@@ -327,17 +372,18 @@ export def "knowledgebases get-details" [
 ]: nothing -> record<hostName: string, id: string, lastAccessedTimestamp: string, lastChangedTimestamp: string, lastPublishedTimestamp: string, name: string, sources: list<string>, urls: list<string>, userId: string> {
   let auth = (build-auth $token ($auth_scheme | default "ocp-apim-subscription-key"))
   let base = ($base_url | default $BASE_URL)
+  if ($kb_id | is-empty) { error make --unspanned { msg: "path parameter 'kbId' must be non-empty" } }
   let full_url = (build-url $base ({kb_id: (encode-path-segment $kb_id)} | format pattern "/knowledgebases/{kb_id}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
 }
 
 # Asynchronous operation to modify a knowledgebase.
 #
 # PATCH /knowledgebases/{kbId}
 # operationId: Knowledgebase_Update
-export def "knowledgebases update-by-kbId" [
+export def "knowledgebases update-by-kb-id" [
   kb_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -348,13 +394,22 @@ export def "knowledgebases update-by-kbId" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> record<createdTimestamp: string, errorResponse: record<error: record<code: string, details: list, innerError: record, message: string, target: string>>, lastActionTimestamp: string, operationId: string, operationState: string, resourceLocation: string, userId: string> {
+  --add: any # An instance of CreateKbInputDTO for add operation
+  --default-answer-used-for-extraction: string # Text string to be used as the answer in any Q-A which has no extracted answer from the document but has a hierarchy. Required when EnableHierarchicalExtraction field is set to True.
+  --delete: any # An instance of DeleteKbContentsDTO for delete Operation
+  --enable-hierarchical-extraction: oneof<nothing, bool> # Enable hierarchical extraction of Q-A from files and urls. The value set during KB creation will be used if this field is not present.
+  --update: any # An instance of UpdateKbContentsDTO for Update Operation
+]: any -> record<createdTimestamp: string, errorResponse: record<error: record<code: string, details: list, innerError: record, message: string, target: string>>, lastActionTimestamp: string, operationId: string, operationState: string, resourceLocation: string, userId: string> {
+  let input = $in
   let auth = (build-auth $token ($auth_scheme | default "ocp-apim-subscription-key"))
   let base = ($base_url | default $BASE_URL)
+  if ($kb_id | is-empty) { error make --unspanned { msg: "path parameter 'kbId' must be non-empty" } }
   let full_url = (build-url $base ({kb_id: (encode-path-segment $kb_id)} | format pattern "/knowledgebases/{kb_id}"))
+  let req_body = {"add": $add, "defaultAnswerUsedForExtraction": $default_answer_used_for_extraction, "delete": $delete, "enableHierarchicalExtraction": $enable_hierarchical_extraction, "update": $update} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "patch" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "patch" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: {}, body: $req_body}
 }
 
 # Publishes all changes in test index of a knowledgebase to its prod index.
@@ -375,17 +430,19 @@ export def "knowledgebases publish" [
 ]: nothing -> record<error: record<code: string, details: list<record>, innerError: record<code: string, innerError: any>, message: string, target: string>> {
   let auth = (build-auth $token ($auth_scheme | default "ocp-apim-subscription-key"))
   let base = ($base_url | default $BASE_URL)
+  if ($kb_id | is-empty) { error make --unspanned { msg: "path parameter 'kbId' must be non-empty" } }
   let full_url = (build-url $base ({kb_id: (encode-path-segment $kb_id)} | format pattern "/knowledgebases/{kb_id}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
 }
 
 # Replace knowledgebase contents.
 #
 # PUT /knowledgebases/{kbId}
 # operationId: Knowledgebase_Replace
-export def "knowledgebases update-by-kbId-1" [
+# --qnAList item shape: {answer: string, context?: any, id?: int, metadata?: list, questions: list<string>, source?: string}
+export def "knowledgebases update-by-kb-id-1" [
   kb_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -396,13 +453,18 @@ export def "knowledgebases update-by-kbId-1" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> record<error: record<code: string, details: list<record>, innerError: record<code: string, innerError: any>, message: string, target: string>> {
+  qn_a_list: list # List of Q-A (QnADTO) to be added to the knowledgebase. Q-A Ids are assigned by the service and should be omitted. — item shape: {answer: string, context?: any, id?: int, metadata?: list, questions: list<string>, source?: string}
+]: any -> record<error: record<code: string, details: list<record>, innerError: record<code: string, innerError: any>, message: string, target: string>> {
+  let input = $in
   let auth = (build-auth $token ($auth_scheme | default "ocp-apim-subscription-key"))
   let base = ($base_url | default $BASE_URL)
+  if ($kb_id | is-empty) { error make --unspanned { msg: "path parameter 'kbId' must be non-empty" } }
   let full_url = (build-url $base ({kb_id: (encode-path-segment $kb_id)} | format pattern "/knowledgebases/{kb_id}"))
+  let req_body = {"qnAList": $qn_a_list} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: {}, body: $req_body}
 }
 
 # Download the knowledgebase.
@@ -424,10 +486,12 @@ export def "knowledgebases-qna download" [
 ]: nothing -> record<qnaDocuments: table<answer: string, context: record, id: int, metadata: list, questions: list, source: string>> {
   let auth = (build-auth $token ($auth_scheme | default "ocp-apim-subscription-key"))
   let base = ($base_url | default $BASE_URL)
+  if ($kb_id | is-empty) { error make --unspanned { msg: "path parameter 'kbId' must be non-empty" } }
+  if ($environment | is-empty) { error make --unspanned { msg: "path parameter 'environment' must be non-empty" } }
   let full_url = (build-url $base ({kb_id: (encode-path-segment $kb_id), environment: (encode-path-segment $environment)} | format pattern "/knowledgebases/{kb_id}/{environment}/qna"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
 }
 
 # Gets details of a specific long running operation.
@@ -448,8 +512,9 @@ export def "operations get-details" [
 ]: nothing -> record<createdTimestamp: string, errorResponse: record<error: record<code: string, details: list, innerError: record, message: string, target: string>>, lastActionTimestamp: string, operationId: string, operationState: string, resourceLocation: string, userId: string> {
   let auth = (build-auth $token ($auth_scheme | default "ocp-apim-subscription-key"))
   let base = ($base_url | default $BASE_URL)
+  if ($operation_id | is-empty) { error make --unspanned { msg: "path parameter 'operationId' must be non-empty" } }
   let full_url = (build-url $base ({operation_id: (encode-path-segment $operation_id)} | format pattern "/operations/{operation_id}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
 }

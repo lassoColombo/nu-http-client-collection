@@ -3,16 +3,17 @@
 # Auth: --token flag or $env.MEMBERS_API_TOKEN
 
 const BASE_URL = "http://localhost"
-const DEFAULT_AUTH = "bearer"
 
-# Build auth: returns {headers: record, query: string}
+# Build auth: returns {scheme: string, headers: record, query: string, location: string}.
+# `location` is "header" | "query" | "cookie" | "none" and tells dry-run callers
+# where the token went without inspecting headers/query themselves.
 def build-auth [token?: string, auth_scheme?: string]: nothing -> record {
   let token_val = if ($token != null) and ($token | is-not-empty) { $token } else { $env | get -o MEMBERS_API_TOKEN | default "" }
   let scheme = ($auth_scheme | default "bearer")
-  if ($scheme == "none") or ($token_val | is-empty) { return {headers: {}, query: ""} }
+  if ($scheme == "none") or ($token_val | is-empty) { return {scheme: $scheme, headers: {}, query: "", location: "none"} }
   match $scheme {
-    "none" => { {headers: {}, query: ""} }
-    _ => { {headers: {Authorization: $"Bearer ($token_val)"}, query: ""} }
+    "none" => { {scheme: $scheme, headers: {}, query: "", location: "none"} }
+    _ => { {scheme: $scheme, headers: {Authorization: $"Bearer ($token_val)"}, query: "", location: "header"} }
   }
 }
 
@@ -21,8 +22,9 @@ def build-auth [token?: string, auth_scheme?: string]: nothing -> record {
 # ([A-Za-z0-9-._~]) stay literal; everything else gets %XX.
 def serialize-qp [name: string, value: any, style: string]: nothing -> list<string> {
   if ($value == null) { return [] }
-  let n = (encode-path-segment $name)
   let is_list = ($value | describe | str starts-with "list")
+  if $is_list and ($value | is-empty) { return [] }
+  let n = (encode-path-segment $name)
   if ($value | describe | str starts-with "record") { return ($value | transpose k v | each { $"($n)[(encode-path-segment $in.k)]=(encode-path-segment $in.v)" }) }
   if not $is_list { return [$"($n)=(encode-path-segment $value)"] }
   match $style {
@@ -53,22 +55,42 @@ def build-url [base: string, path: string, query?: string]: nothing -> string {
   if ($query != null) and ($query | is-not-empty) { $result | upsert query $query | url join } else { $result | url join }
 }
 
+# Build the dry-run record returned by --dry-run. Shape:
+#   {dry_run: true, method, url, query: <record>, headers, body, content_type, timeout,
+#    auth: {scheme, location}}
+# `meta` carries logical-form data (the query record by spec name, the pre-serialization
+# body) that do-request itself cannot reconstruct from its wire-format args.
+def build-dry-run-record [method: string, url: string, auth: record, content_type: string, timeout: duration, meta?: record]: nothing -> record {
+  let m = ($meta | default {})
+  {
+    dry_run: true
+    method: $method
+    url: $url
+    query: ($m | get -o query | default {})
+    headers: $auth.headers
+    body: ($m | get -o body)
+    content_type: $content_type
+    timeout: $timeout
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+}
+
 # Execute HTTP request with method dispatch
-def do-request [method: string, url: string, auth: record, insecure: bool, raw: bool, dry_run: bool, max_time?: duration, allow_errors?: bool, full?: bool, content_type?: string, body?: any]: nothing -> any {
+def do-request [method: string, url: string, auth: record, insecure: bool, raw: bool, dry_run: bool, max_time?: duration, allow_errors?: bool, full?: bool, content_type?: string, body?: any, dry_run_meta?: record]: nothing -> any {
   let req_url = if ($auth.query | is-not-empty) { if ($url | str contains "?") { $"($url)&($auth.query)" } else { $"($url)?($auth.query)" } } else { $url }
   let timeout = ($max_time | default 30min)
   let ct = ($content_type | default "application/json")
-  if $dry_run { return {method: $method, url: $req_url, headers: $auth.headers, query_string: $auth.query, content_type: $ct, timeout: $timeout, body: $body} }
+  if $dry_run { return (build-dry-run-record $method $req_url $auth $ct $timeout $dry_run_meta) }
   let resp = match $method {
     "get" => { http get --headers $auth.headers --full --allow-errors --max-time $timeout --insecure=$insecure --raw=$raw $req_url }
-    "head" => { http head --headers $auth.headers --max-time $timeout --insecure=$insecure $req_url }
-    "options" => { http options --headers $auth.headers --max-time $timeout --insecure=$insecure $req_url }
+    "head" => { http head --headers $auth.headers --full --allow-errors --max-time $timeout --insecure=$insecure $req_url }
+    "options" => { http options --headers $auth.headers --full --allow-errors --max-time $timeout --insecure=$insecure $req_url }
     "post" => { if ($body | is-empty) { http post --headers $auth.headers --full --allow-errors --max-time $timeout --insecure=$insecure --raw=$raw $req_url "" } else { http post --headers $auth.headers --content-type $ct --full --allow-errors --max-time $timeout --insecure=$insecure --raw=$raw $req_url $body } }
     "put" => { if ($body | is-empty) { http put --headers $auth.headers --full --allow-errors --max-time $timeout --insecure=$insecure --raw=$raw $req_url "" } else { http put --headers $auth.headers --content-type $ct --full --allow-errors --max-time $timeout --insecure=$insecure --raw=$raw $req_url $body } }
     "patch" => { if ($body | is-empty) { http patch --headers $auth.headers --full --allow-errors --max-time $timeout --insecure=$insecure --raw=$raw $req_url "" } else { http patch --headers $auth.headers --content-type $ct --full --allow-errors --max-time $timeout --insecure=$insecure --raw=$raw $req_url $body } }
     "delete" => { if ($body | is-empty) { http delete --headers $auth.headers --full --allow-errors --max-time $timeout --insecure=$insecure --raw=$raw $req_url } else { http delete --headers $auth.headers --content-type $ct --data $body --full --allow-errors --max-time $timeout --insecure=$insecure --raw=$raw $req_url } }
   }
-  if ($method in ["head" "options"]) { return $resp }
+  if ($method == "head") and (not $full) and (not $allow_errors) and $resp.status < 400 { return $resp.headers }
   if $allow_errors { $resp } else if $resp.status >= 400 { error make --unspanned { msg: $"HTTP ($resp.status): ($resp.body)" } } else if $full { {status: $resp.status, headers: $resp.headers, body: $resp.body} } else if $resp.status == 204 { null } else { $resp.body }
 }
 
@@ -123,10 +145,12 @@ export def "location-browse get" [
 ]: nothing -> record<links: table<href: string, method: string, rel: string>, value: record<childContexts: list<record>, context: record<id: int, name: string, type: int, typeName: string>, parentContext: record<id: int, name: string, type: int, typeName: string>, stateOfTheParties: list<record>>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($location_type | is-empty) { error make --unspanned { msg: "path parameter 'locationType' must be non-empty" } }
+  if ($location_name | is-empty) { error make --unspanned { msg: "path parameter 'locationName' must be non-empty" } }
   let full_url = (build-url $base ({location_type: (encode-path-segment $location_type), location_name: (encode-path-segment $location_name)} | format pattern "/api/Location/Browse/{location_type}/{location_name}"))
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
 }
 
 # Returns a list of constituencies
@@ -153,7 +177,7 @@ export def "location-constituency-search get" [
   let full_url = (build-url $base "/api/Location/Constituency/Search" $qp)
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"searchText": $search_text, "skip": $skip, "take": $take} | compact), body: null}
 }
 
 # Returns a constituency by ID
@@ -174,10 +198,11 @@ export def "location-constituency get" [
 ]: nothing -> record<links: table<href: string, method: string, rel: string>, value: record<currentRepresentation: record<member: record, representation: record>, endDate: string, id: int, name: string, startDate: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
   let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/api/Location/Constituency/{id}"))
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
 }
 
 # Returns latest election result by constituency id
@@ -198,10 +223,11 @@ export def "location-constituency-election-result-latest get" [
 ]: nothing -> record<links: table<href: string, method: string, rel: string>, value: record<candidates: list<record>, constituencyName: string, electionDate: string, electionId: int, electionTitle: string, electorate: int, isGeneralElection: bool, isNotional: bool, majority: int, result: string, turnout: int, winningParty: record<abbreviation: string, backgroundColour: string, foregroundColour: string, governmentType: int, id: int, isIndependentParty: bool, isLordsMainParty: bool, isLordsSpiritualParty: bool, name: string>>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
   let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/api/Location/Constituency/{id}/ElectionResult/Latest"))
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
 }
 
 # Returns an election result by constituency and election id
@@ -223,10 +249,12 @@ export def "location-constituency-election-result get" [
 ]: nothing -> record<links: table<href: string, method: string, rel: string>, value: record<candidates: list<record>, constituencyName: string, electionDate: string, electionId: int, electionTitle: string, electorate: int, isGeneralElection: bool, isNotional: bool, majority: int, result: string, turnout: int, winningParty: record<abbreviation: string, backgroundColour: string, foregroundColour: string, governmentType: int, id: int, isIndependentParty: bool, isLordsMainParty: bool, isLordsSpiritualParty: bool, name: string>>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
+  if ($election_id | is-empty) { error make --unspanned { msg: "path parameter 'electionId' must be non-empty" } }
   let full_url = (build-url $base ({id: (encode-path-segment $id), election_id: (encode-path-segment $election_id)} | format pattern "/api/Location/Constituency/{id}/ElectionResult/{election_id}"))
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
 }
 
 # Returns a list of election results by constituency ID
@@ -247,10 +275,11 @@ export def "location-constituency-election-results get" [
 ]: nothing -> record<links: table<href: string, method: string, rel: string>, value: table<candidates: list, constituencyName: string, electionDate: string, electionId: int, electionTitle: string, electorate: int, isGeneralElection: bool, isNotional: bool, majority: int, result: string, turnout: int, winningParty: record>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
   let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/api/Location/Constituency/{id}/ElectionResults"))
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
 }
 
 # Returns geometry by constituency ID
@@ -271,10 +300,11 @@ export def "location-constituency-geometry get" [
 ]: nothing -> record<links: table<href: string, method: string, rel: string>, value: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
   let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/api/Location/Constituency/{id}/Geometry"))
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
 }
 
 # Returns a list of representations by constituency ID
@@ -295,10 +325,11 @@ export def "location-constituency-representations get" [
 ]: nothing -> record<links: table<href: string, method: string, rel: string>, value: table<member: record, representation: record>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
   let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/api/Location/Constituency/{id}/Representations"))
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
 }
 
 # Returns a synopsis by constituency ID
@@ -319,10 +350,11 @@ export def "location-constituency-synopsis get" [
 ]: nothing -> record<links: table<href: string, method: string, rel: string>, value: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
   let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/api/Location/Constituency/{id}/Synopsis"))
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
 }
 
 # Returns a list of registered interests
@@ -349,7 +381,7 @@ export def "lords-interests-register get" [
   let full_url = (build-url $base "/api/LordsInterests/Register" $qp)
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"searchTerm": $search_term, "page": $page, "includeDeleted": $include_deleted} | compact), body: null}
 }
 
 # Returns a list of staff
@@ -375,7 +407,7 @@ export def "lords-interests-staff get" [
   let full_url = (build-url $base "/api/LordsInterests/Staff" $qp)
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"searchTerm": $search_term, "page": $page} | compact), body: null}
 }
 
 # Return members by ID with list of their historical names, parties and memberships
@@ -400,7 +432,7 @@ export def "members-history get" [
   let full_url = (build-url $base "/api/Members/History" $qp)
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"ids": $ids} | compact), body: null}
 }
 
 # Returns a list of current members of the Commons or Lords
@@ -444,7 +476,7 @@ export def "members-search get" [
   let full_url = (build-url $base "/api/Members/Search" $qp)
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"Name": $name, "Location": $location, "PostTitle": $post_title, "PartyId": $party_id, "House": $house, "ConstituencyId": $constituency_id, "NameStartsWith": $name_starts_with, "Gender": $gender, "MembershipStartedSince": $membership_started_since, "MembershipEnded.MembershipEndedSince": $membership_ended_membership_ended_since, "MembershipEnded.MembershipEndReasonIds": $membership_ended_membership_end_reason_ids, "MembershipInDateRange.WasMemberOnOrAfter": $membership_in_date_range_was_member_on_or_after, "MembershipInDateRange.WasMemberOnOrBefore": $membership_in_date_range_was_member_on_or_before, "MembershipInDateRange.WasMemberOfHouse": $membership_in_date_range_was_member_of_house, "IsEligible": $is_eligible, "IsCurrentMember": $is_current_member, "PolicyInterestId": $policy_interest_id, "Experience": $experience, "skip": $skip, "take": $take} | compact), body: null}
 }
 
 # Returns a list of members of the Commons or Lords
@@ -472,7 +504,7 @@ export def "members-search-historical get" [
   let full_url = (build-url $base "/api/Members/SearchHistorical" $qp)
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"name": $name, "dateToSearchFor": $date_to_search_for, "skip": $skip, "take": $take} | compact), body: null}
 }
 
 # Return member by ID
@@ -494,11 +526,12 @@ export def "members get" [
 ]: nothing -> record<links: table<href: string, method: string, rel: string>, value: record<gender: string, id: int, latestHouseMembership: record<house: int, membershipEndDate: string, membershipEndReason: string, membershipEndReasonId: int, membershipEndReasonNotes: string, membershipFrom: string, membershipFromId: int, membershipStartDate: string, membershipStatus: record>, latestParty: record<abbreviation: string, backgroundColour: string, foregroundColour: string, governmentType: int, id: int, isIndependentParty: bool, isLordsMainParty: bool, isLordsSpiritualParty: bool, name: string>, nameAddressAs: string, nameDisplayAs: string, nameFullTitle: string, nameListAs: string, thumbnailUrl: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
   let qp = [(serialize-qp "detailsForDate" $details_for_date "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/api/Members/{id}") $qp)
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"detailsForDate": $details_for_date} | compact), body: null}
 }
 
 # Return biography of member by ID
@@ -519,10 +552,11 @@ export def "members-biography get" [
 ]: nothing -> record<links: table<href: string, method: string, rel: string>, value: record<committeeMemberships: list<record>, electionsContested: list<record>, governmentPosts: list<record>, houseMemberships: list<record>, oppositionPosts: list<record>, otherPosts: list<record>, partyAffiliations: list<record>, representations: list<record>>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
   let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/api/Members/{id}/Biography"))
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
 }
 
 # Return list of contact details of member by ID
@@ -543,10 +577,11 @@ export def "members-contact get" [
 ]: nothing -> record<links: table<href: string, method: string, rel: string>, value: table<email: string, fax: string, isPreferred: bool, isWebAddress: bool, line1: string, line2: string, line3: string, line4: string, line5: string, notes: string, phone: string, postcode: string, type: string, typeDescription: string, typeId: int>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
   let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/api/Members/{id}/Contact"))
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
 }
 
 # Return contribution summary of member by ID
@@ -568,11 +603,12 @@ export def "members-contribution-summary get" [
 ]: nothing -> record<items: table<links: list, value: record>, links: table<href: string, method: string, rel: string>, resultContext: string, skip: int, take: int, totalResults: int> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
   let qp = [(serialize-qp "page" $page "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/api/Members/{id}/ContributionSummary") $qp)
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"page": $page} | compact), body: null}
 }
 
 # Return list of early day motions of member by ID
@@ -594,11 +630,12 @@ export def "members-edms get" [
 ]: nothing -> record<items: table<links: list, value: record>, links: table<href: string, method: string, rel: string>, resultContext: string, skip: int, take: int, totalResults: int> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
   let qp = [(serialize-qp "page" $page "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/api/Members/{id}/Edms") $qp)
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"page": $page} | compact), body: null}
 }
 
 # Return experience of member by ID
@@ -619,10 +656,11 @@ export def "members-experience get" [
 ]: nothing -> record<links: table<href: string, method: string, rel: string>, value: table<endMonth: int, endYear: int, id: int, organisation: string, startMonth: int, startYear: int, title: string, type: string, typeId: int>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
   let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/api/Members/{id}/Experience"))
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
 }
 
 # Return list of areas of focus of member by ID
@@ -643,10 +681,11 @@ export def "members-focus get" [
 ]: nothing -> record<links: table<href: string, method: string, rel: string>, value: table<category: string, focus: list>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
   let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/api/Members/{id}/Focus"))
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
 }
 
 # Return latest election result of member by ID
@@ -667,10 +706,11 @@ export def "members-latest-election-result get" [
 ]: nothing -> record<links: table<href: string, method: string, rel: string>, value: record<candidates: list<record>, constituencyName: string, electionDate: string, electionId: int, electionTitle: string, electorate: int, isGeneralElection: bool, isNotional: bool, majority: int, result: string, turnout: int, winningParty: record<abbreviation: string, backgroundColour: string, foregroundColour: string, governmentType: int, id: int, isIndependentParty: bool, isLordsMainParty: bool, isLordsSpiritualParty: bool, name: string>>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
   let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/api/Members/{id}/LatestElectionResult"))
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
 }
 
 # Return portrait of member by ID
@@ -692,11 +732,12 @@ export def "members-portrait get" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
   let qp = [(serialize-qp "cropType" $crop_type "scalar") (serialize-qp "webVersion" $web_version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/api/Members/{id}/Portrait") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"cropType": $crop_type, "webVersion": $web_version} | compact), body: null}
 }
 
 # Return portrait url of member by ID
@@ -717,10 +758,11 @@ export def "members-portrait-url get" [
 ]: nothing -> record<links: table<href: string, method: string, rel: string>, value: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
   let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/api/Members/{id}/PortraitUrl"))
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
 }
 
 # Return list of registered interests of member by ID
@@ -742,11 +784,12 @@ export def "members-registered-interests get" [
 ]: nothing -> record<links: table<href: string, method: string, rel: string>, value: table<id: int, interests: list, name: string, sortOrder: int>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
   let qp = [(serialize-qp "house" $house "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/api/Members/{id}/RegisteredInterests") $qp)
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"house": $house} | compact), body: null}
 }
 
 # Return list of staff of member by ID
@@ -767,10 +810,11 @@ export def "members-staff get" [
 ]: nothing -> record<links: table<href: string, method: string, rel: string>, value: table<details: string, forename: string, surname: string, title: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
   let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/api/Members/{id}/Staff"))
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
 }
 
 # Return synopsis of member by ID
@@ -791,10 +835,11 @@ export def "members-synopsis get" [
 ]: nothing -> record<links: table<href: string, method: string, rel: string>, value: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
   let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/api/Members/{id}/Synopsis"))
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
 }
 
 # Return thumbnail of member by ID
@@ -814,10 +859,11 @@ export def "members-thumbnail get" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
   let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/api/Members/{id}/Thumbnail"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
 }
 
 # Return thumbnail url of member by ID
@@ -838,10 +884,11 @@ export def "members-thumbnail-url get" [
 ]: nothing -> record<links: table<href: string, method: string, rel: string>, value: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
   let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/api/Members/{id}/ThumbnailUrl"))
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
 }
 
 # Return list of votes by member by ID
@@ -864,11 +911,12 @@ export def "members-voting get" [
 ]: nothing -> record<items: table<links: list, value: record>, links: table<href: string, method: string, rel: string>, resultContext: string, skip: int, take: int, totalResults: int> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
   let qp = [(serialize-qp "house" $house "scalar") (serialize-qp "page" $page "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/api/Members/{id}/Voting") $qp)
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"house": $house, "page": $page} | compact), body: null}
 }
 
 # Return list of written questions by member by ID
@@ -890,11 +938,12 @@ export def "members-written-questions get" [
 ]: nothing -> record<items: table<links: list, value: record>, links: table<href: string, method: string, rel: string>, resultContext: string, skip: int, take: int, totalResults: int> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
   let qp = [(serialize-qp "page" $page "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/api/Members/{id}/WrittenQuestions") $qp)
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"page": $page} | compact), body: null}
 }
 
 # Returns a list of current parties with at least one active member.
@@ -915,10 +964,11 @@ export def "parties-get-active get" [
 ]: nothing -> record<items: table<links: list, value: record>, links: table<href: string, method: string, rel: string>, resultContext: string, skip: int, take: int, totalResults: int> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($house | is-empty) { error make --unspanned { msg: "path parameter 'house' must be non-empty" } }
   let full_url = (build-url $base ({house: (encode-path-segment $house)} | format pattern "/api/Parties/GetActive/{house}"))
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
 }
 
 # Returns the composition of the House of Lords by peerage type.
@@ -939,10 +989,11 @@ export def "parties-lords-by-type get" [
 ]: nothing -> record<items: table<links: list, value: record>, links: table<href: string, method: string, rel: string>, resultContext: string, skip: int, take: int, totalResults: int> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($for_date | is-empty) { error make --unspanned { msg: "path parameter 'forDate' must be non-empty" } }
   let full_url = (build-url $base ({for_date: (encode-path-segment $for_date)} | format pattern "/api/Parties/LordsByType/{for_date}"))
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
 }
 
 # Returns current state of parties
@@ -964,10 +1015,12 @@ export def "parties-state-of-the-parties get" [
 ]: nothing -> record<items: table<links: list, value: record>, links: table<href: string, method: string, rel: string>, resultContext: string, skip: int, take: int, totalResults: int> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($house | is-empty) { error make --unspanned { msg: "path parameter 'house' must be non-empty" } }
+  if ($for_date | is-empty) { error make --unspanned { msg: "path parameter 'forDate' must be non-empty" } }
   let full_url = (build-url $base ({house: (encode-path-segment $house), for_date: (encode-path-segment $for_date)} | format pattern "/api/Parties/StateOfTheParties/{house}/{for_date}"))
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
 }
 
 # Returns a list of departments.
@@ -988,10 +1041,11 @@ export def "posts-departments get" [
 ]: nothing -> table<id: int, imageUrl: string, name: string, url: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($type | is-empty) { error make --unspanned { msg: "path parameter 'type' must be non-empty" } }
   let full_url = (build-url $base ({type: (encode-path-segment $type)} | format pattern "/api/Posts/Departments/{type}"))
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
 }
 
 # Returns a list of government posts.
@@ -1016,7 +1070,7 @@ export def "posts-government-posts get" [
   let full_url = (build-url $base "/api/Posts/GovernmentPosts" $qp)
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"departmentId": $department_id} | compact), body: null}
 }
 
 # Returns a list of opposition posts.
@@ -1041,7 +1095,7 @@ export def "posts-opposition-posts get" [
   let full_url = (build-url $base "/api/Posts/OppositionPosts" $qp)
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"departmentId": $department_id} | compact), body: null}
 }
 
 # Returns a list containing the speaker and deputy speakers.
@@ -1062,10 +1116,11 @@ export def "posts-speaker-and-deputies get" [
 ]: nothing -> table<links: list<record>, value: record<gender: string, id: int, latestHouseMembership: record, latestParty: record, nameAddressAs: string, nameDisplayAs: string, nameFullTitle: string, nameListAs: string, thumbnailUrl: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($for_date | is-empty) { error make --unspanned { msg: "path parameter 'forDate' must be non-empty" } }
   let full_url = (build-url $base ({for_date: (encode-path-segment $for_date)} | format pattern "/api/Posts/SpeakerAndDeputies/{for_date}"))
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
 }
 
 # Returns a list of spokespersons.
@@ -1090,7 +1145,7 @@ export def "posts-spokespersons get" [
   let full_url = (build-url $base "/api/Posts/Spokespersons" $qp)
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"partyId": $party_id} | compact), body: null}
 }
 
 # Returns a list of answering bodies.
@@ -1116,7 +1171,7 @@ export def "reference-answering-bodies get" [
   let full_url = (build-url $base "/api/Reference/AnsweringBodies" $qp)
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"id": $id, "nameContains": $name_contains} | compact), body: null}
 }
 
 # Returns a list of departments.
@@ -1142,7 +1197,7 @@ export def "reference-departments get" [
   let full_url = (build-url $base "/api/Reference/Departments" $qp)
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"id": $id, "nameContains": $name_contains} | compact), body: null}
 }
 
 # Returns department logo.
@@ -1162,10 +1217,11 @@ export def "reference-departments-logo get" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
   let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/api/Reference/Departments/{id}/Logo"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
 }
 
 # Returns a list of policy interest.
@@ -1188,5 +1244,5 @@ export def "reference-policy-interests get" [
   let full_url = (build-url $base "/api/Reference/PolicyInterests")
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
 }

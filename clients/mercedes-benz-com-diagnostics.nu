@@ -3,16 +3,17 @@
 # Auth: --token flag or $env.REMOTE_DIAGNOSTIC_SUPPORT_TOKEN
 
 const BASE_URL = "https://api.mercedes-benz.com/remotediagnostic_tryout/v1"
-const DEFAULT_AUTH = "bearer"
 
-# Build auth: returns {headers: record, query: string}
+# Build auth: returns {scheme: string, headers: record, query: string, location: string}.
+# `location` is "header" | "query" | "cookie" | "none" and tells dry-run callers
+# where the token went without inspecting headers/query themselves.
 def build-auth [token?: string, auth_scheme?: string]: nothing -> record {
   let token_val = if ($token != null) and ($token | is-not-empty) { $token } else { $env | get -o REMOTE_DIAGNOSTIC_SUPPORT_TOKEN | default "" }
   let scheme = ($auth_scheme | default "bearer")
-  if ($scheme == "none") or ($token_val | is-empty) { return {headers: {}, query: ""} }
+  if ($scheme == "none") or ($token_val | is-empty) { return {scheme: $scheme, headers: {}, query: "", location: "none"} }
   match $scheme {
-    "none" => { {headers: {}, query: ""} }
-    _ => { {headers: {Authorization: $"Bearer ($token_val)"}, query: ""} }
+    "none" => { {scheme: $scheme, headers: {}, query: "", location: "none"} }
+    _ => { {scheme: $scheme, headers: {Authorization: $"Bearer ($token_val)"}, query: "", location: "header"} }
   }
 }
 
@@ -21,8 +22,9 @@ def build-auth [token?: string, auth_scheme?: string]: nothing -> record {
 # ([A-Za-z0-9-._~]) stay literal; everything else gets %XX.
 def serialize-qp [name: string, value: any, style: string]: nothing -> list<string> {
   if ($value == null) { return [] }
-  let n = (encode-path-segment $name)
   let is_list = ($value | describe | str starts-with "list")
+  if $is_list and ($value | is-empty) { return [] }
+  let n = (encode-path-segment $name)
   if ($value | describe | str starts-with "record") { return ($value | transpose k v | each { $"($n)[(encode-path-segment $in.k)]=(encode-path-segment $in.v)" }) }
   if not $is_list { return [$"($n)=(encode-path-segment $value)"] }
   match $style {
@@ -53,22 +55,42 @@ def build-url [base: string, path: string, query?: string]: nothing -> string {
   if ($query != null) and ($query | is-not-empty) { $result | upsert query $query | url join } else { $result | url join }
 }
 
+# Build the dry-run record returned by --dry-run. Shape:
+#   {dry_run: true, method, url, query: <record>, headers, body, content_type, timeout,
+#    auth: {scheme, location}}
+# `meta` carries logical-form data (the query record by spec name, the pre-serialization
+# body) that do-request itself cannot reconstruct from its wire-format args.
+def build-dry-run-record [method: string, url: string, auth: record, content_type: string, timeout: duration, meta?: record]: nothing -> record {
+  let m = ($meta | default {})
+  {
+    dry_run: true
+    method: $method
+    url: $url
+    query: ($m | get -o query | default {})
+    headers: $auth.headers
+    body: ($m | get -o body)
+    content_type: $content_type
+    timeout: $timeout
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+}
+
 # Execute HTTP request with method dispatch
-def do-request [method: string, url: string, auth: record, insecure: bool, raw: bool, dry_run: bool, max_time?: duration, allow_errors?: bool, full?: bool, content_type?: string, body?: any]: nothing -> any {
+def do-request [method: string, url: string, auth: record, insecure: bool, raw: bool, dry_run: bool, max_time?: duration, allow_errors?: bool, full?: bool, content_type?: string, body?: any, dry_run_meta?: record]: nothing -> any {
   let req_url = if ($auth.query | is-not-empty) { if ($url | str contains "?") { $"($url)&($auth.query)" } else { $"($url)?($auth.query)" } } else { $url }
   let timeout = ($max_time | default 30min)
   let ct = ($content_type | default "application/json")
-  if $dry_run { return {method: $method, url: $req_url, headers: $auth.headers, query_string: $auth.query, content_type: $ct, timeout: $timeout, body: $body} }
+  if $dry_run { return (build-dry-run-record $method $req_url $auth $ct $timeout $dry_run_meta) }
   let resp = match $method {
     "get" => { http get --headers $auth.headers --full --allow-errors --max-time $timeout --insecure=$insecure --raw=$raw $req_url }
-    "head" => { http head --headers $auth.headers --max-time $timeout --insecure=$insecure $req_url }
-    "options" => { http options --headers $auth.headers --max-time $timeout --insecure=$insecure $req_url }
+    "head" => { http head --headers $auth.headers --full --allow-errors --max-time $timeout --insecure=$insecure $req_url }
+    "options" => { http options --headers $auth.headers --full --allow-errors --max-time $timeout --insecure=$insecure $req_url }
     "post" => { if ($body | is-empty) { http post --headers $auth.headers --full --allow-errors --max-time $timeout --insecure=$insecure --raw=$raw $req_url "" } else { http post --headers $auth.headers --content-type $ct --full --allow-errors --max-time $timeout --insecure=$insecure --raw=$raw $req_url $body } }
     "put" => { if ($body | is-empty) { http put --headers $auth.headers --full --allow-errors --max-time $timeout --insecure=$insecure --raw=$raw $req_url "" } else { http put --headers $auth.headers --content-type $ct --full --allow-errors --max-time $timeout --insecure=$insecure --raw=$raw $req_url $body } }
     "patch" => { if ($body | is-empty) { http patch --headers $auth.headers --full --allow-errors --max-time $timeout --insecure=$insecure --raw=$raw $req_url "" } else { http patch --headers $auth.headers --content-type $ct --full --allow-errors --max-time $timeout --insecure=$insecure --raw=$raw $req_url $body } }
     "delete" => { if ($body | is-empty) { http delete --headers $auth.headers --full --allow-errors --max-time $timeout --insecure=$insecure --raw=$raw $req_url } else { http delete --headers $auth.headers --content-type $ct --data $body --full --allow-errors --max-time $timeout --insecure=$insecure --raw=$raw $req_url } }
   }
-  if ($method in ["head" "options"]) { return $resp }
+  if ($method == "head") and (not $full) and (not $allow_errors) and $resp.status < 400 { return $resp.headers }
   if $allow_errors { $resp } else if $resp.status >= 400 { error make --unspanned { msg: $"HTTP ($resp.status): ($resp.body)" } } else if $full { {status: $resp.status, headers: $resp.headers, body: $resp.body} } else if $resp.status == 204 { null } else { $resp.body }
 }
 
@@ -125,11 +147,12 @@ export def "vehicles-dtc-readouts get-data-list-by-ecu-using-create" [
 ]: nothing -> record<dtcReadout: record<asyncEstimatedComplete: string, asyncProgress: int, asyncStatus: string, asyncWait: int, exveErrorId: string, exveErrorMsg: string, exveErrorRef: string, exveNote: string, id: string, messageTimestamp: string, receivedTimestamp: string, vehicleId: string, dtcs: list<record>>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($vehicle_id | is-empty) { error make --unspanned { msg: "path parameter 'vehicleId' must be non-empty" } }
   let qp = [(serialize-qp "ecuId" $ecu_id "scalar") (serialize-qp "dtcStatus" $dtc_status "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({vehicle_id: (encode-path-segment $vehicle_id)} | format pattern "/vehicles/{vehicle_id}/dtcReadouts") $qp)
   let accept_val = ($accept | default "application/x.exve.org.dtcreadout.v1+json;charset=utf-8")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"ecuId": $ecu_id, "dtcStatus": $dtc_status} | compact), body: null}
 }
 
 # View the List of DTC Snapshot for specific vehicleId.
@@ -153,10 +176,13 @@ export def "vehicles-ecu-id-dtc-id-dtc-snapshot-readouts get-using-create" [
 ]: nothing -> record<dtcSnapshotReadout: record<asyncEstimatedComplete: string, asyncProgress: int, asyncStatus: string, asyncWait: int, exveErrorId: string, exveErrorMsg: string, exveErrorRef: string, exveNote: string, id: string, messageTimestamp: string, receivedTimestamp: string, vehicleId: string, dtcId: string, dtcSnapshotParameters: list<record>, ecuId: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($vehicle_id | is-empty) { error make --unspanned { msg: "path parameter 'vehicleId' must be non-empty" } }
+  if ($ecu_id | is-empty) { error make --unspanned { msg: "path parameter 'ecuId' must be non-empty" } }
+  if ($dtc_id | is-empty) { error make --unspanned { msg: "path parameter 'dtcId' must be non-empty" } }
   let full_url = (build-url $base ({vehicle_id: (encode-path-segment $vehicle_id), ecu_id: (encode-path-segment $ecu_id), dtc_id: (encode-path-segment $dtc_id)} | format pattern "/vehicles/{vehicle_id}/ecuId/{ecu_id}/dtcId/{dtc_id}/dtcSnapshotReadouts"))
   let accept_val = ($accept | default "application/x.exve.org.dtcSnapshotReadout.v1+json;charset=utf-8")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
 }
 
 # View the List of ECU for specific vehicleId.
@@ -179,11 +205,12 @@ export def "vehicles-ecu-readouts get-data-list-by-using-create" [
 ]: nothing -> record<ecuReadout: record<asyncEstimatedComplete: string, asyncProgress: int, asyncStatus: string, asyncWait: int, exveErrorId: string, exveErrorMsg: string, exveErrorRef: string, exveNote: string, id: string, messageTimestamp: string, receivedTimestamp: string, vehicleId: string, ecus: list<record>>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($vehicle_id | is-empty) { error make --unspanned { msg: "path parameter 'vehicleId' must be non-empty" } }
   let qp = [(serialize-qp "ecuId" $ecu_id "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({vehicle_id: (encode-path-segment $vehicle_id)} | format pattern "/vehicles/{vehicle_id}/ecuReadouts") $qp)
   let accept_val = ($accept | default "application/x.exve.org.ecureadout.v1+json;charset=utf-8")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"ecuId": $ecu_id} | compact), body: null}
 }
 
 # View the List of resources
@@ -205,8 +232,9 @@ export def "vehicles-resource-readouts get-using-create" [
 ]: nothing -> record<resourceReadout: record<asyncEstimatedComplete: string, asyncProgress: int, asyncStatus: string, asyncWait: int, exveErrorId: string, exveErrorMsg: string, exveErrorRef: string, exveNote: string, id: string, messageTimestamp: string, receivedTimestamp: string, vehicleId: string, resources: list<record>>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($vehicle_id | is-empty) { error make --unspanned { msg: "path parameter 'vehicleId' must be non-empty" } }
   let full_url = (build-url $base ({vehicle_id: (encode-path-segment $vehicle_id)} | format pattern "/vehicles/{vehicle_id}/resourceReadouts"))
   let accept_val = ($accept | default "application/x.exve.org.resourceReadout.v1+json;charset=utf-8")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
 }

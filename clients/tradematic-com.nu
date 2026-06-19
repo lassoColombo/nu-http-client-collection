@@ -3,17 +3,18 @@
 # Auth: --token flag or $env.TRADEMATIC_CLOUD_API_TOKEN
 
 const BASE_URL = "https://api.tradematic.com"
-const DEFAULT_AUTH = "x-api-key"
 
-# Build auth: returns {headers: record, query: string}
+# Build auth: returns {scheme: string, headers: record, query: string, location: string}.
+# `location` is "header" | "query" | "cookie" | "none" and tells dry-run callers
+# where the token went without inspecting headers/query themselves.
 def build-auth [token?: string, auth_scheme?: string]: nothing -> record {
   let token_val = if ($token != null) and ($token | is-not-empty) { $token } else { $env | get -o TRADEMATIC_CLOUD_API_TOKEN | default "" }
   let scheme = ($auth_scheme | default "bearer")
-  if ($scheme == "none") or ($token_val | is-empty) { return {headers: {}, query: ""} }
+  if ($scheme == "none") or ($token_val | is-empty) { return {scheme: $scheme, headers: {}, query: "", location: "none"} }
   match $scheme {
-    "x-api-key" => { {headers: {X-API-Key: $token_val}, query: ""} }
-    "none" => { {headers: {}, query: ""} }
-    _ => { {headers: {Authorization: $"Bearer ($token_val)"}, query: ""} }
+    "x-api-key" => { {scheme: $scheme, headers: {X-API-Key: $token_val}, query: "", location: "header"} }
+    "none" => { {scheme: $scheme, headers: {}, query: "", location: "none"} }
+    _ => { {scheme: $scheme, headers: {Authorization: $"Bearer ($token_val)"}, query: "", location: "header"} }
   }
 }
 
@@ -22,8 +23,9 @@ def build-auth [token?: string, auth_scheme?: string]: nothing -> record {
 # ([A-Za-z0-9-._~]) stay literal; everything else gets %XX.
 def serialize-qp [name: string, value: any, style: string]: nothing -> list<string> {
   if ($value == null) { return [] }
-  let n = (encode-path-segment $name)
   let is_list = ($value | describe | str starts-with "list")
+  if $is_list and ($value | is-empty) { return [] }
+  let n = (encode-path-segment $name)
   if ($value | describe | str starts-with "record") { return ($value | transpose k v | each { $"($n)[(encode-path-segment $in.k)]=(encode-path-segment $in.v)" }) }
   if not $is_list { return [$"($n)=(encode-path-segment $value)"] }
   match $style {
@@ -54,22 +56,42 @@ def build-url [base: string, path: string, query?: string]: nothing -> string {
   if ($query != null) and ($query | is-not-empty) { $result | upsert query $query | url join } else { $result | url join }
 }
 
+# Build the dry-run record returned by --dry-run. Shape:
+#   {dry_run: true, method, url, query: <record>, headers, body, content_type, timeout,
+#    auth: {scheme, location}}
+# `meta` carries logical-form data (the query record by spec name, the pre-serialization
+# body) that do-request itself cannot reconstruct from its wire-format args.
+def build-dry-run-record [method: string, url: string, auth: record, content_type: string, timeout: duration, meta?: record]: nothing -> record {
+  let m = ($meta | default {})
+  {
+    dry_run: true
+    method: $method
+    url: $url
+    query: ($m | get -o query | default {})
+    headers: $auth.headers
+    body: ($m | get -o body)
+    content_type: $content_type
+    timeout: $timeout
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+}
+
 # Execute HTTP request with method dispatch
-def do-request [method: string, url: string, auth: record, insecure: bool, raw: bool, dry_run: bool, max_time?: duration, allow_errors?: bool, full?: bool, content_type?: string, body?: any]: nothing -> any {
+def do-request [method: string, url: string, auth: record, insecure: bool, raw: bool, dry_run: bool, max_time?: duration, allow_errors?: bool, full?: bool, content_type?: string, body?: any, dry_run_meta?: record]: nothing -> any {
   let req_url = if ($auth.query | is-not-empty) { if ($url | str contains "?") { $"($url)&($auth.query)" } else { $"($url)?($auth.query)" } } else { $url }
   let timeout = ($max_time | default 30min)
   let ct = ($content_type | default "application/json")
-  if $dry_run { return {method: $method, url: $req_url, headers: $auth.headers, query_string: $auth.query, content_type: $ct, timeout: $timeout, body: $body} }
+  if $dry_run { return (build-dry-run-record $method $req_url $auth $ct $timeout $dry_run_meta) }
   let resp = match $method {
     "get" => { http get --headers $auth.headers --full --allow-errors --max-time $timeout --insecure=$insecure --raw=$raw $req_url }
-    "head" => { http head --headers $auth.headers --max-time $timeout --insecure=$insecure $req_url }
-    "options" => { http options --headers $auth.headers --max-time $timeout --insecure=$insecure $req_url }
+    "head" => { http head --headers $auth.headers --full --allow-errors --max-time $timeout --insecure=$insecure $req_url }
+    "options" => { http options --headers $auth.headers --full --allow-errors --max-time $timeout --insecure=$insecure $req_url }
     "post" => { if ($body | is-empty) { http post --headers $auth.headers --full --allow-errors --max-time $timeout --insecure=$insecure --raw=$raw $req_url "" } else { http post --headers $auth.headers --content-type $ct --full --allow-errors --max-time $timeout --insecure=$insecure --raw=$raw $req_url $body } }
     "put" => { if ($body | is-empty) { http put --headers $auth.headers --full --allow-errors --max-time $timeout --insecure=$insecure --raw=$raw $req_url "" } else { http put --headers $auth.headers --content-type $ct --full --allow-errors --max-time $timeout --insecure=$insecure --raw=$raw $req_url $body } }
     "patch" => { if ($body | is-empty) { http patch --headers $auth.headers --full --allow-errors --max-time $timeout --insecure=$insecure --raw=$raw $req_url "" } else { http patch --headers $auth.headers --content-type $ct --full --allow-errors --max-time $timeout --insecure=$insecure --raw=$raw $req_url $body } }
     "delete" => { if ($body | is-empty) { http delete --headers $auth.headers --full --allow-errors --max-time $timeout --insecure=$insecure --raw=$raw $req_url } else { http delete --headers $auth.headers --content-type $ct --data $body --full --allow-errors --max-time $timeout --insecure=$insecure --raw=$raw $req_url } }
   }
-  if ($method in ["head" "options"]) { return $resp }
+  if ($method == "head") and (not $full) and (not $allow_errors) and $resp.status < 400 { return $resp.headers }
   if $allow_errors { $resp } else if $resp.status >= 400 { error make --unspanned { msg: $"HTTP ($resp.status): ($resp.body)" } } else if $full { {status: $resp.status, headers: $resp.headers, body: $resp.body} } else if $resp.status == 204 { null } else { $resp.body }
 }
 
@@ -119,7 +141,7 @@ export def "autofollow-strategies list" [
   let full_url = (build-url $base "/autofollow/strategies")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
 }
 
 # Create new autofollow strategy
@@ -146,7 +168,7 @@ export def "autofollow-strategies create" [
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: {}, body: $req_body}
 }
 
 # Get autofollow strategy by ID
@@ -166,10 +188,11 @@ export def "autofollow-strategies get" [
 ]: nothing -> record<apr: string, author: string, brokername: string, code: string, datascale: string, description: string, drawdown: string, folder: string, guid: string, image: string, limitorder: string, marketname: string, multiposition: string, name: string, owner: string, permissions: string, positionsize: string, risklevelcode: string, risklevelid: string, risklevelname: string, rules: record<longentry: list<record>, longexit: list<record>>, strategyid: string, strategytypeid: string, symbols: list<string>, taskfolder: string, taskid: string, taskresult: record<apr: string, curMonthProfit: string, curYearProfit: string, drawdown: string, halfYearProfit: string, monthProfit: string, prevMonthProfit: string, totalProfit: string, weekProfit: string, yearProfit: string>, timeframe: string, updatedate: string, url: string> {
   let auth = (build-auth $token ($auth_scheme | default "x-api-key"))
   let base = ($base_url | default $BASE_URL)
+  if ($strategyid | is-empty) { error make --unspanned { msg: "path parameter 'strategyid' must be non-empty" } }
   let full_url = (build-url $base ({strategyid: (encode-path-segment $strategyid)} | format pattern "/autofollow/strategies/{strategyid}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
 }
 
 # Update autofollow strategy
@@ -192,12 +215,13 @@ export def "autofollow-strategies update" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "x-api-key"))
   let base = ($base_url | default $BASE_URL)
+  if ($strategyid | is-empty) { error make --unspanned { msg: "path parameter 'strategyid' must be non-empty" } }
   let full_url = (build-url $base ({strategyid: (encode-path-segment $strategyid)} | format pattern "/autofollow/strategies/{strategyid}"))
   let req_body = {"strategy": $strategy} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: {}, body: $req_body}
 }
 
 # Update rules for strategy that was created with strategy builder
@@ -220,12 +244,13 @@ export def "autofollow-strategies-content update" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "x-api-key"))
   let base = ($base_url | default $BASE_URL)
+  if ($strategyid | is-empty) { error make --unspanned { msg: "path parameter 'strategyid' must be non-empty" } }
   let full_url = (build-url $base ({strategyid: (encode-path-segment $strategyid)} | format pattern "/autofollow/strategies/{strategyid}/content"))
   let req_body = {"strategy": $strategy} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: {}, body: $req_body}
 }
 
 # Get positions for strategy
@@ -245,10 +270,11 @@ export def "autofollow-strategies-positions get" [
 ]: nothing -> table<date: string, price: string, size: string, symbol: string> {
   let auth = (build-auth $token ($auth_scheme | default "x-api-key"))
   let base = ($base_url | default $BASE_URL)
+  if ($strategyid | is-empty) { error make --unspanned { msg: "path parameter 'strategyid' must be non-empty" } }
   let full_url = (build-url $base ({strategyid: (encode-path-segment $strategyid)} | format pattern "/autofollow/strategies/{strategyid}/positions"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
 }
 
 # Get trading signals for strategy
@@ -269,11 +295,12 @@ export def "autofollow-strategies-signals get" [
 ]: nothing -> table<position: string, price: string, shares: string, signalid: string, size: string, symbol: string, timestamp: string, type: string> {
   let auth = (build-auth $token ($auth_scheme | default "x-api-key"))
   let base = ($base_url | default $BASE_URL)
+  if ($strategyid | is-empty) { error make --unspanned { msg: "path parameter 'strategyid' must be non-empty" } }
   let qp = [(serialize-qp "count" $count "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({strategyid: (encode-path-segment $strategyid)} | format pattern "/autofollow/strategies/{strategyid}/signals") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"count": $count} | compact), body: null}
 }
 
 # Send a new signal for autofollow strategy
@@ -296,12 +323,13 @@ export def "autofollow-strategies-signals create" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "x-api-key"))
   let base = ($base_url | default $BASE_URL)
+  if ($strategyid | is-empty) { error make --unspanned { msg: "path parameter 'strategyid' must be non-empty" } }
   let full_url = (build-url $base ({strategyid: (encode-path-segment $strategyid)} | format pattern "/autofollow/strategies/{strategyid}/signals"))
   let req_body = {"signal": $signal} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: {}, body: $req_body}
 }
 
 # Get strategy builder rules list
@@ -323,7 +351,7 @@ export def "builder-rules list" [
   let full_url = (build-url $base "/builder/rules")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
 }
 
 # Get strategy builder rules by ID
@@ -343,10 +371,11 @@ export def "builder-rules get" [
 ]: nothing -> table<category: string, description: string, guid: string, name: string, parameters: list<record>, ruletype: string, validnot: string, validor: string> {
   let auth = (build-auth $token ($auth_scheme | default "x-api-key"))
   let base = ($base_url | default $BASE_URL)
+  if ($ruleid | is-empty) { error make --unspanned { msg: "path parameter 'ruleid' must be non-empty" } }
   let full_url = (build-url $base ({ruleid: (encode-path-segment $ruleid)} | format pattern "/builder/rules/{ruleid}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
 }
 
 # Get API keys
@@ -368,7 +397,7 @@ export def "client-apikeys get" [
   let full_url = (build-url $base "/client/apikeys")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
 }
 
 # Create new API key
@@ -390,7 +419,7 @@ export def "client-apikeys create" [
   let full_url = (build-url $base "/client/apikeys")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
 }
 
 # Delete API key
@@ -410,10 +439,11 @@ export def "client-apikeys delete" [
 ]: nothing -> record<keyid: int> {
   let auth = (build-auth $token ($auth_scheme | default "x-api-key"))
   let base = ($base_url | default $BASE_URL)
+  if ($keyid | is-empty) { error make --unspanned { msg: "path parameter 'keyid' must be non-empty" } }
   let full_url = (build-url $base ({keyid: (encode-path-segment $keyid)} | format pattern "/client/apikeys/{keyid}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
 }
 
 # Get users list
@@ -435,7 +465,7 @@ export def "client-users list" [
   let full_url = (build-url $base "/client/users")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
 }
 
 # Logs user into the system
@@ -457,7 +487,7 @@ export def "client-users-login create" [
   let full_url = (build-url $base "/client/users/login")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
 }
 
 # Register a new user
@@ -484,7 +514,7 @@ export def "client-users-register create" [
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: {}, body: $req_body}
 }
 
 # Get user by ID
@@ -504,10 +534,11 @@ export def "client-users get" [
 ]: nothing -> record<comments: string, createdby: string, name: string, regdate: string, userid: string, username: string> {
   let auth = (build-auth $token ($auth_scheme | default "x-api-key"))
   let base = ($base_url | default $BASE_URL)
+  if ($userid | is-empty) { error make --unspanned { msg: "path parameter 'userid' must be non-empty" } }
   let full_url = (build-url $base ({userid: (encode-path-segment $userid)} | format pattern "/client/users/{userid}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
 }
 
 # Get trading accounts list
@@ -529,7 +560,7 @@ export def "cloud-accounts list" [
   let full_url = (build-url $base "/cloud/accounts")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
 }
 
 # Get trading account by ID
@@ -549,10 +580,11 @@ export def "cloud-accounts get" [
 ]: nothing -> record<account: string, accountid: string, accounttypename: string, cash: string, change: string, changepercent: string, comments: string, computer: string, currencyid: string, currencytext: string, hwid: string, positions: record, positionspercent: record, sessionid: string, typeid: string, value: string> {
   let auth = (build-auth $token ($auth_scheme | default "x-api-key"))
   let base = ($base_url | default $BASE_URL)
+  if ($accountid | is-empty) { error make --unspanned { msg: "path parameter 'accountid' must be non-empty" } }
   let full_url = (build-url $base ({accountid: (encode-path-segment $accountid)} | format pattern "/cloud/accounts/{accountid}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
 }
 
 # Close all positions by account
@@ -572,10 +604,11 @@ export def "cloud-accounts-closeall create" [
 ]: nothing -> record<commandid: int> {
   let auth = (build-auth $token ($auth_scheme | default "x-api-key"))
   let base = ($base_url | default $BASE_URL)
+  if ($accountid | is-empty) { error make --unspanned { msg: "path parameter 'accountid' must be non-empty" } }
   let full_url = (build-url $base ({accountid: (encode-path-segment $accountid)} | format pattern "/cloud/accounts/{accountid}/closeall"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
 }
 
 # Get orders list by account
@@ -595,10 +628,11 @@ export def "cloud-accounts-orders get" [
 ]: nothing -> table<account: string, buy: string, message: string, number: string, orderid: string, price: string, shares: string, status: string, statusname: string, symbol: string, timestamp: string> {
   let auth = (build-auth $token ($auth_scheme | default "x-api-key"))
   let base = ($base_url | default $BASE_URL)
+  if ($accountid | is-empty) { error make --unspanned { msg: "path parameter 'accountid' must be non-empty" } }
   let full_url = (build-url $base ({accountid: (encode-path-segment $accountid)} | format pattern "/cloud/accounts/{accountid}/orders"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
 }
 
 # Place a new order
@@ -621,12 +655,13 @@ export def "cloud-accounts-orders create" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "x-api-key"))
   let base = ($base_url | default $BASE_URL)
+  if ($accountid | is-empty) { error make --unspanned { msg: "path parameter 'accountid' must be non-empty" } }
   let full_url = (build-url $base ({accountid: (encode-path-segment $accountid)} | format pattern "/cloud/accounts/{accountid}/orders"))
   let req_body = {"order": $order} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: {}, body: $req_body}
 }
 
 # Cancel an order by ID
@@ -647,10 +682,12 @@ export def "cloud-accounts-orders delete" [
 ]: nothing -> record<commandid: int> {
   let auth = (build-auth $token ($auth_scheme | default "x-api-key"))
   let base = ($base_url | default $BASE_URL)
+  if ($accountid | is-empty) { error make --unspanned { msg: "path parameter 'accountid' must be non-empty" } }
+  if ($orderid | is-empty) { error make --unspanned { msg: "path parameter 'orderid' must be non-empty" } }
   let full_url = (build-url $base ({accountid: (encode-path-segment $accountid), orderid: (encode-path-segment $orderid)} | format pattern "/cloud/accounts/{accountid}/orders/{orderid}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
 }
 
 # Get account equity and cash snapshots
@@ -670,10 +707,11 @@ export def "cloud-accounts-snapshots get" [
 ]: nothing -> table<cash: string, daynum: string, snapshotid: string, timestamp: string, value: string> {
   let auth = (build-auth $token ($auth_scheme | default "x-api-key"))
   let base = ($base_url | default $BASE_URL)
+  if ($accountid | is-empty) { error make --unspanned { msg: "path parameter 'accountid' must be non-empty" } }
   let full_url = (build-url $base ({accountid: (encode-path-segment $accountid)} | format pattern "/cloud/accounts/{accountid}/snapshots"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
 }
 
 # Syhchronize an account with account active strategies
@@ -693,10 +731,11 @@ export def "cloud-accounts-sync create" [
 ]: nothing -> record<commandid: int> {
   let auth = (build-auth $token ($auth_scheme | default "x-api-key"))
   let base = ($base_url | default $BASE_URL)
+  if ($accountid | is-empty) { error make --unspanned { msg: "path parameter 'accountid' must be non-empty" } }
   let full_url = (build-url $base ({accountid: (encode-path-segment $accountid)} | format pattern "/cloud/accounts/{accountid}/sync"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
 }
 
 # Get trades list by account
@@ -716,10 +755,11 @@ export def "cloud-accounts-trades get" [
 ]: nothing -> table<account: string, buy: string, number: string, price: string, shares: string, symbol: string, timestamp: string, tradeid: string> {
   let auth = (build-auth $token ($auth_scheme | default "x-api-key"))
   let base = ($base_url | default $BASE_URL)
+  if ($accountid | is-empty) { error make --unspanned { msg: "path parameter 'accountid' must be non-empty" } }
   let full_url = (build-url $base ({accountid: (encode-path-segment $accountid)} | format pattern "/cloud/accounts/{accountid}/trades"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
 }
 
 # Get commands list
@@ -741,7 +781,7 @@ export def "cloud-commands list" [
   let full_url = (build-url $base "/cloud/commands")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
 }
 
 # Get command by ID
@@ -761,10 +801,11 @@ export def "cloud-commands get" [
 ]: nothing -> record<account: string, accountid: string, commanddate: string, commandid: string, commandstatusname: string, commandtypename: string, computer: string, hwid: string, message: string, parameters: record, status: string, timestamp: string, type: string> {
   let auth = (build-auth $token ($auth_scheme | default "x-api-key"))
   let base = ($base_url | default $BASE_URL)
+  if ($commandid | is-empty) { error make --unspanned { msg: "path parameter 'commandid' must be non-empty" } }
   let full_url = (build-url $base ({commandid: (encode-path-segment $commandid)} | format pattern "/cloud/commands/{commandid}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
 }
 
 # Get connections list
@@ -786,7 +827,7 @@ export def "cloud-connections list" [
   let full_url = (build-url $base "/cloud/connections")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
 }
 
 # Create a new connection
@@ -813,7 +854,7 @@ export def "cloud-connections create" [
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: {}, body: $req_body}
 }
 
 # Delete connection by ID
@@ -833,10 +874,11 @@ export def "cloud-connections delete" [
 ]: nothing -> record<connectionid: int> {
   let auth = (build-auth $token ($auth_scheme | default "x-api-key"))
   let base = ($base_url | default $BASE_URL)
+  if ($connectionid | is-empty) { error make --unspanned { msg: "path parameter 'connectionid' must be non-empty" } }
   let full_url = (build-url $base ({connectionid: (encode-path-segment $connectionid)} | format pattern "/cloud/connections/{connectionid}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
 }
 
 # Get connection by ID
@@ -856,10 +898,11 @@ export def "cloud-connections get" [
 ]: nothing -> record<active: string, connectionid: string, connectionstring: string, connectorcode: string, connectorid: string, connectorname: string, connectortypename: string, creationdate: string, host: string, login: string, password: string, port: string, sessionid: string, updatedate: string> {
   let auth = (build-auth $token ($auth_scheme | default "x-api-key"))
   let base = ($base_url | default $BASE_URL)
+  if ($connectionid | is-empty) { error make --unspanned { msg: "path parameter 'connectionid' must be non-empty" } }
   let full_url = (build-url $base ({connectionid: (encode-path-segment $connectionid)} | format pattern "/cloud/connections/{connectionid}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
 }
 
 # Update existing connection
@@ -882,12 +925,13 @@ export def "cloud-connections update" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "x-api-key"))
   let base = ($base_url | default $BASE_URL)
+  if ($connectionid | is-empty) { error make --unspanned { msg: "path parameter 'connectionid' must be non-empty" } }
   let full_url = (build-url $base ({connectionid: (encode-path-segment $connectionid)} | format pattern "/cloud/connections/{connectionid}"))
   let req_body = {"connection": $connection} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: {}, body: $req_body}
 }
 
 # Get available connectors list
@@ -909,7 +953,7 @@ export def "cloud-connectors list" [
   let full_url = (build-url $base "/cloud/connectors")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
 }
 
 # Get connector by ID
@@ -929,10 +973,11 @@ export def "cloud-connectors get" [
 ]: nothing -> record<code: string, connectorid: string, connectortypename: string, name: string, typeid: string> {
   let auth = (build-auth $token ($auth_scheme | default "x-api-key"))
   let base = ($base_url | default $BASE_URL)
+  if ($connectorid | is-empty) { error make --unspanned { msg: "path parameter 'connectorid' must be non-empty" } }
   let full_url = (build-url $base ({connectorid: (encode-path-segment $connectorid)} | format pattern "/cloud/connectors/{connectorid}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
 }
 
 # Get sessions list
@@ -954,7 +999,7 @@ export def "cloud-sessions list" [
   let full_url = (build-url $base "/cloud/sessions")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
 }
 
 # Get session by ID
@@ -974,10 +1019,11 @@ export def "cloud-sessions get" [
 ]: nothing -> record<computer: string, hwid: string, login: string, mode: string, sessionid: string, sessionmodename: string, sessionstatusname: string, status: string, timestamp: string, type: string, userid: string> {
   let auth = (build-auth $token ($auth_scheme | default "x-api-key"))
   let base = ($base_url | default $BASE_URL)
+  if ($sessionid | is-empty) { error make --unspanned { msg: "path parameter 'sessionid' must be non-empty" } }
   let full_url = (build-url $base ({sessionid: (encode-path-segment $sessionid)} | format pattern "/cloud/sessions/{sessionid}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
 }
 
 # Get list of active (executing) strategies
@@ -999,7 +1045,7 @@ export def "cloud-strategies list" [
   let full_url = (build-url $base "/cloud/strategies")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
 }
 
 # Start a strategy execution for account
@@ -1026,7 +1072,7 @@ export def "cloud-strategies-start create" [
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: {}, body: $req_body}
 }
 
 # Get active (executing) strategy by ID
@@ -1046,10 +1092,11 @@ export def "cloud-strategies get" [
 ]: nothing -> table<account: string, computer: string, hwid: string, message: string, status: string, strategy: string, strategyid: string, strategystatusname: string> {
   let auth = (build-auth $token ($auth_scheme | default "x-api-key"))
   let base = ($base_url | default $BASE_URL)
+  if ($strategyid | is-empty) { error make --unspanned { msg: "path parameter 'strategyid' must be non-empty" } }
   let full_url = (build-url $base ({strategyid: (encode-path-segment $strategyid)} | format pattern "/cloud/strategies/{strategyid}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
 }
 
 # Stop a strategy execution by ID
@@ -1069,10 +1116,11 @@ export def "cloud-strategies-stop create" [
 ]: nothing -> record<commandid: int> {
   let auth = (build-auth $token ($auth_scheme | default "x-api-key"))
   let base = ($base_url | default $BASE_URL)
+  if ($strategyid | is-empty) { error make --unspanned { msg: "path parameter 'strategyid' must be non-empty" } }
   let full_url = (build-url $base ({strategyid: (encode-path-segment $strategyid)} | format pattern "/cloud/strategies/{strategyid}/stop"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
 }
 
 # Get markets list
@@ -1094,7 +1142,7 @@ export def "marketdata-markets list" [
   let full_url = (build-url $base "/marketdata/markets")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
 }
 
 # Get market by ID
@@ -1114,10 +1162,11 @@ export def "marketdata-markets get" [
 ]: nothing -> record<code: string, countryid: string, marketid: string, name: string> {
   let auth = (build-auth $token ($auth_scheme | default "x-api-key"))
   let base = ($base_url | default $BASE_URL)
+  if ($marketid | is-empty) { error make --unspanned { msg: "path parameter 'marketid' must be non-empty" } }
   let full_url = (build-url $base ({marketid: (encode-path-segment $marketid)} | format pattern "/marketdata/markets/{marketid}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
 }
 
 # Get symbols list
@@ -1142,7 +1191,7 @@ export def "marketdata-symbols list" [
   let full_url = (build-url $base "/marketdata/symbols" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"marketid": $marketid, "filter": $filter} | compact), body: null}
 }
 
 # Get symbol by ID
@@ -1162,10 +1211,11 @@ export def "marketdata-symbols get" [
 ]: nothing -> string {
   let auth = (build-auth $token ($auth_scheme | default "x-api-key"))
   let base = ($base_url | default $BASE_URL)
+  if ($symbolid | is-empty) { error make --unspanned { msg: "path parameter 'symbolid' must be non-empty" } }
   let full_url = (build-url $base ({symbolid: (encode-path-segment $symbolid)} | format pattern "/marketdata/symbols/{symbolid}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
 }
 
 # Get historical data for instrument
@@ -1188,11 +1238,12 @@ export def "marketdata-symbols-histdata get" [
 ]: nothing -> record<adjusted: bool, queryCount: int, results: table<c: float, h: float, l: float, n: int, o: float, t: int, v: int>, resultsCount: int, status: string, ticker: string> {
   let auth = (build-auth $token ($auth_scheme | default "x-api-key"))
   let base = ($base_url | default $BASE_URL)
+  if ($symbolid | is-empty) { error make --unspanned { msg: "path parameter 'symbolid' must be non-empty" } }
   let qp = [(serialize-qp "tf" $tf "scalar") (serialize-qp "from" $qp_from "scalar") (serialize-qp "to" $qp_to "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({symbolid: (encode-path-segment $symbolid)} | format pattern "/marketdata/symbols/{symbolid}/histdata") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"tf": $tf, "from": $qp_from, "to": $qp_to} | compact), body: null}
 }
 
 # Get news list
@@ -1214,7 +1265,7 @@ export def "news-news list" [
   let full_url = (build-url $base "/news/news")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
 }
 
 # Get news by ID
@@ -1234,10 +1285,11 @@ export def "news-news get" [
 ]: nothing -> record<body: string, newsid: string, source: string, timestamp: string, title: string> {
   let auth = (build-auth $token ($auth_scheme | default "x-api-key"))
   let base = ($base_url | default $BASE_URL)
+  if ($newsid | is-empty) { error make --unspanned { msg: "path parameter 'newsid' must be non-empty" } }
   let full_url = (build-url $base ({newsid: (encode-path-segment $newsid)} | format pattern "/news/news/{newsid}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
 }
 
 # Ping
@@ -1259,7 +1311,7 @@ export def "ping get" [
   let full_url = (build-url $base "/ping")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
 }
 
 # Get tasks list
@@ -1281,7 +1333,7 @@ export def "taskmanager-tasks list" [
   let full_url = (build-url $base "/taskmanager/tasks")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
 }
 
 # Create a new task
@@ -1308,7 +1360,7 @@ export def "taskmanager-tasks create" [
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: {}, body: $req_body}
 }
 
 # Get task by ID
@@ -1328,10 +1380,11 @@ export def "taskmanager-tasks get" [
 ]: nothing -> record<isbenchmark: string, name: string, status: string, statusupdatedate: string, strategyid: string, taskid: string, usestaticdata: string> {
   let auth = (build-auth $token ($auth_scheme | default "x-api-key"))
   let base = ($base_url | default $BASE_URL)
+  if ($taskid | is-empty) { error make --unspanned { msg: "path parameter 'taskid' must be non-empty" } }
   let full_url = (build-url $base ({taskid: (encode-path-segment $taskid)} | format pattern "/taskmanager/tasks/{taskid}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
 }
 
 # Get backtest data for equity chart, grouped by months
@@ -1351,10 +1404,11 @@ export def "taskmanager-tasks-bymonths get" [
 ]: nothing -> table<equitypct: string, period: string> {
   let auth = (build-auth $token ($auth_scheme | default "x-api-key"))
   let base = ($base_url | default $BASE_URL)
+  if ($taskid | is-empty) { error make --unspanned { msg: "path parameter 'taskid' must be non-empty" } }
   let full_url = (build-url $base ({taskid: (encode-path-segment $taskid)} | format pattern "/taskmanager/tasks/{taskid}/bymonths"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
 }
 
 # Get backtest data for equity chart, grouped by quarters
@@ -1374,10 +1428,11 @@ export def "taskmanager-tasks-byquarters get" [
 ]: nothing -> table<equitypct: string, period: string> {
   let auth = (build-auth $token ($auth_scheme | default "x-api-key"))
   let base = ($base_url | default $BASE_URL)
+  if ($taskid | is-empty) { error make --unspanned { msg: "path parameter 'taskid' must be non-empty" } }
   let full_url = (build-url $base ({taskid: (encode-path-segment $taskid)} | format pattern "/taskmanager/tasks/{taskid}/byquarters"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
 }
 
 # Get backtest data for equity chart, grouped by years
@@ -1397,10 +1452,11 @@ export def "taskmanager-tasks-byyears get" [
 ]: nothing -> table<equitypct: string, period: string> {
   let auth = (build-auth $token ($auth_scheme | default "x-api-key"))
   let base = ($base_url | default $BASE_URL)
+  if ($taskid | is-empty) { error make --unspanned { msg: "path parameter 'taskid' must be non-empty" } }
   let full_url = (build-url $base ({taskid: (encode-path-segment $taskid)} | format pattern "/taskmanager/tasks/{taskid}/byyears"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
 }
 
 # Get backtest symbol contribution data
@@ -1420,10 +1476,11 @@ export def "taskmanager-tasks-contribution get" [
 ]: nothing -> table<pandl: string, share: string, symbol: string> {
   let auth = (build-auth $token ($auth_scheme | default "x-api-key"))
   let base = ($base_url | default $BASE_URL)
+  if ($taskid | is-empty) { error make --unspanned { msg: "path parameter 'taskid' must be non-empty" } }
   let full_url = (build-url $base ({taskid: (encode-path-segment $taskid)} | format pattern "/taskmanager/tasks/{taskid}/contribution"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
 }
 
 # Get data for drawdown chart
@@ -1443,10 +1500,11 @@ export def "taskmanager-tasks-drawdown get" [
 ]: nothing -> table<drawdownpct: string, timestamp: string> {
   let auth = (build-auth $token ($auth_scheme | default "x-api-key"))
   let base = ($base_url | default $BASE_URL)
+  if ($taskid | is-empty) { error make --unspanned { msg: "path parameter 'taskid' must be non-empty" } }
   let full_url = (build-url $base ({taskid: (encode-path-segment $taskid)} | format pattern "/taskmanager/tasks/{taskid}/drawdown"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
 }
 
 # Get data for equity chart
@@ -1466,10 +1524,11 @@ export def "taskmanager-tasks-equity get" [
 ]: nothing -> table<cash: string, equity: string, timestamp: string> {
   let auth = (build-auth $token ($auth_scheme | default "x-api-key"))
   let base = ($base_url | default $BASE_URL)
+  if ($taskid | is-empty) { error make --unspanned { msg: "path parameter 'taskid' must be non-empty" } }
   let full_url = (build-url $base ({taskid: (encode-path-segment $taskid)} | format pattern "/taskmanager/tasks/{taskid}/equity"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
 }
 
 # Get data for equity chart (%)
@@ -1489,10 +1548,11 @@ export def "taskmanager-tasks-equitypct get" [
 ]: nothing -> table<buyandhold: string, equity: string, timestamp: string> {
   let auth = (build-auth $token ($auth_scheme | default "x-api-key"))
   let base = ($base_url | default $BASE_URL)
+  if ($taskid | is-empty) { error make --unspanned { msg: "path parameter 'taskid' must be non-empty" } }
   let full_url = (build-url $base ({taskid: (encode-path-segment $taskid)} | format pattern "/taskmanager/tasks/{taskid}/equitypct"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
 }
 
 # Get spared data for equity chart (%)
@@ -1512,10 +1572,11 @@ export def "taskmanager-tasks-equitypctsm get" [
 ]: nothing -> table<buyandhold: string, equity: string, timestamp: string> {
   let auth = (build-auth $token ($auth_scheme | default "x-api-key"))
   let base = ($base_url | default $BASE_URL)
+  if ($taskid | is-empty) { error make --unspanned { msg: "path parameter 'taskid' must be non-empty" } }
   let full_url = (build-url $base ({taskid: (encode-path-segment $taskid)} | format pattern "/taskmanager/tasks/{taskid}/equitypctsm"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
 }
 
 # Get task result folder name
@@ -1535,10 +1596,11 @@ export def "taskmanager-tasks-folder get" [
 ]: nothing -> record<folder: string> {
   let auth = (build-auth $token ($auth_scheme | default "x-api-key"))
   let base = ($base_url | default $BASE_URL)
+  if ($taskid | is-empty) { error make --unspanned { msg: "path parameter 'taskid' must be non-empty" } }
   let full_url = (build-url $base ({taskid: (encode-path-segment $taskid)} | format pattern "/taskmanager/tasks/{taskid}/folder"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
 }
 
 # Get backtest statistics
@@ -1558,10 +1620,11 @@ export def "taskmanager-tasks-performance get" [
 ]: nothing -> record<buyandhold: record<apr: string, avgbarsheld: string, avgloss: string, avglossbarsheld: string, avglosspct: string, avgprofit: string, avgprofitavgloss: string, avgprofitbarsheld: string, avgprofitpct: string, endcapital: string, exposure: string, grossloss: string, grossprofit: string, losingtrades: string, losingtradespct: string, mar: string, margininterest: string, maxconsecloss: string, maxconsecwin: string, maxdrawdown: string, maxdrawdowndate: string, maxdrawdownlength: string, maxdrawdownpct: string, maxdrawdownpctdate: string, mpr: string, netprofit: string, netprofitpct: string, profitabletrades: string, profitabletradespct: string, profitfactor: string, profitriskratio: string, rar: string, recoveryfactor: string, sharperatio: string, sortinoratio: string, startcapital: string, totalcommission: string, totaltrades: string, totalvolume: string, turnover: string>, long: record<apr: string, avgbarsheld: string, avgloss: string, avglossbarsheld: string, avglosspct: string, avgprofit: string, avgprofitavgloss: string, avgprofitbarsheld: string, avgprofitpct: string, endcapital: string, exposure: string, grossloss: string, grossprofit: string, losingtrades: string, losingtradespct: string, mar: string, margininterest: string, maxconsecloss: string, maxconsecwin: string, maxdrawdown: string, maxdrawdowndate: string, maxdrawdownlength: string, maxdrawdownpct: string, maxdrawdownpctdate: string, mpr: string, netprofit: string, netprofitpct: string, profitabletrades: string, profitabletradespct: string, profitfactor: string, profitriskratio: string, rar: string, recoveryfactor: string, sharperatio: string, sortinoratio: string, startcapital: string, totalcommission: string, totaltrades: string, totalvolume: string, turnover: string>, longshort: record<apr: string, avgbarsheld: string, avgloss: string, avglossbarsheld: string, avglosspct: string, avgprofit: string, avgprofitavgloss: string, avgprofitbarsheld: string, avgprofitpct: string, endcapital: string, exposure: string, grossloss: string, grossprofit: string, losingtrades: string, losingtradespct: string, mar: string, margininterest: string, maxconsecloss: string, maxconsecwin: string, maxdrawdown: string, maxdrawdowndate: string, maxdrawdownlength: string, maxdrawdownpct: string, maxdrawdownpctdate: string, mpr: string, netprofit: string, netprofitpct: string, profitabletrades: string, profitabletradespct: string, profitfactor: string, profitriskratio: string, rar: string, recoveryfactor: string, sharperatio: string, sortinoratio: string, startcapital: string, totalcommission: string, totaltrades: string, totalvolume: string, turnover: string>, short: record<apr: string, avgbarsheld: string, avgloss: string, avglossbarsheld: string, avglosspct: string, avgprofit: string, avgprofitavgloss: string, avgprofitbarsheld: string, avgprofitpct: string, endcapital: string, exposure: string, grossloss: string, grossprofit: string, losingtrades: string, losingtradespct: string, mar: string, margininterest: string, maxconsecloss: string, maxconsecwin: string, maxdrawdown: string, maxdrawdowndate: string, maxdrawdownlength: string, maxdrawdownpct: string, maxdrawdownpctdate: string, mpr: string, netprofit: string, netprofitpct: string, profitabletrades: string, profitabletradespct: string, profitfactor: string, profitriskratio: string, rar: string, recoveryfactor: string, sharperatio: string, sortinoratio: string, startcapital: string, totalcommission: string, totaltrades: string, totalvolume: string, turnover: string>> {
   let auth = (build-auth $token ($auth_scheme | default "x-api-key"))
   let base = ($base_url | default $BASE_URL)
+  if ($taskid | is-empty) { error make --unspanned { msg: "path parameter 'taskid' must be non-empty" } }
   let full_url = (build-url $base ({taskid: (encode-path-segment $taskid)} | format pattern "/taskmanager/tasks/{taskid}/performance"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
 }
 
 # Get task result
@@ -1581,10 +1644,11 @@ export def "taskmanager-tasks-result get" [
 ]: nothing -> record<bymonths_csv: string, bymonths_png: string, byquarters_csv: string, byquarters_png: string, byyears_csv: string, byyears_png: string, contribution_csv: string, contribution_png: string, drawdown_csv: string, drawdown_png: string, equity_csv: string, equity_png: string, equitypct_csv: string, equitypct_png: string, equitypctnofill_csv: string, equitypctnofill_png: string, equitypctsm: string, equitypctsm_csv: string, equitypctsm_png: string, performance_csv: string, performance_png: string, trades_csv: string, trades_png: string> {
   let auth = (build-auth $token ($auth_scheme | default "x-api-key"))
   let base = ($base_url | default $BASE_URL)
+  if ($taskid | is-empty) { error make --unspanned { msg: "path parameter 'taskid' must be non-empty" } }
   let full_url = (build-url $base ({taskid: (encode-path-segment $taskid)} | format pattern "/taskmanager/tasks/{taskid}/result"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
 }
 
 # Get task result (version 2)
@@ -1604,10 +1668,11 @@ export def "taskmanager-tasks-result2 get" [
 ]: nothing -> record<apr: string, curMonthProfit: string, curYearProfit: string, drawdown: string, halfYearProfit: string, monthProfit: string, prevMonthProfit: string, totalProfit: string, weekProfit: string, yearProfit: string> {
   let auth = (build-auth $token ($auth_scheme | default "x-api-key"))
   let base = ($base_url | default $BASE_URL)
+  if ($taskid | is-empty) { error make --unspanned { msg: "path parameter 'taskid' must be non-empty" } }
   let full_url = (build-url $base ({taskid: (encode-path-segment $taskid)} | format pattern "/taskmanager/tasks/{taskid}/result2"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
 }
 
 # Get task status
@@ -1627,10 +1692,11 @@ export def "taskmanager-tasks-status get" [
 ]: nothing -> record<status: string> {
   let auth = (build-auth $token ($auth_scheme | default "x-api-key"))
   let base = ($base_url | default $BASE_URL)
+  if ($taskid | is-empty) { error make --unspanned { msg: "path parameter 'taskid' must be non-empty" } }
   let full_url = (build-url $base ({taskid: (encode-path-segment $taskid)} | format pattern "/taskmanager/tasks/{taskid}/status"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
 }
 
 # Get backtest trades list
@@ -1650,10 +1716,11 @@ export def "taskmanager-tasks-trades get" [
 ]: nothing -> table<barsheld: string, changepct: string, commission: string, entrydatetime: string, entryprice: string, entrysignal: string, exitdatetime: string, exitprice: string, exitsignal: string, mae: string, mfe: string, pandl: string, position: string, shares: string, size: string, symbol: string> {
   let auth = (build-auth $token ($auth_scheme | default "x-api-key"))
   let base = ($base_url | default $BASE_URL)
+  if ($taskid | is-empty) { error make --unspanned { msg: "path parameter 'taskid' must be non-empty" } }
   let full_url = (build-url $base ({taskid: (encode-path-segment $taskid)} | format pattern "/taskmanager/tasks/{taskid}/trades"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
 }
 
 # Get current server time
@@ -1675,5 +1742,5 @@ export def "time get" [
   let full_url = (build-url $base "/time")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
 }

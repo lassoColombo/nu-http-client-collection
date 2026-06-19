@@ -3,16 +3,17 @@
 # Auth: --token flag or $env.GITHUB_V3_REST_API_TOKEN
 
 const BASE_URL = "http://HOSTNAME/api/v3"
-const DEFAULT_AUTH = "bearer"
 
-# Build auth: returns {headers: record, query: string}
+# Build auth: returns {scheme: string, headers: record, query: string, location: string}.
+# `location` is "header" | "query" | "cookie" | "none" and tells dry-run callers
+# where the token went without inspecting headers/query themselves.
 def build-auth [token?: string, auth_scheme?: string]: nothing -> record {
   let token_val = if ($token != null) and ($token | is-not-empty) { $token } else { $env | get -o GITHUB_V3_REST_API_TOKEN | default "" }
   let scheme = ($auth_scheme | default "bearer")
-  if ($scheme == "none") or ($token_val | is-empty) { return {headers: {}, query: ""} }
+  if ($scheme == "none") or ($token_val | is-empty) { return {scheme: $scheme, headers: {}, query: "", location: "none"} }
   match $scheme {
-    "none" => { {headers: {}, query: ""} }
-    _ => { {headers: {Authorization: $"Bearer ($token_val)"}, query: ""} }
+    "none" => { {scheme: $scheme, headers: {}, query: "", location: "none"} }
+    _ => { {scheme: $scheme, headers: {Authorization: $"Bearer ($token_val)"}, query: "", location: "header"} }
   }
 }
 
@@ -21,8 +22,9 @@ def build-auth [token?: string, auth_scheme?: string]: nothing -> record {
 # ([A-Za-z0-9-._~]) stay literal; everything else gets %XX.
 def serialize-qp [name: string, value: any, style: string]: nothing -> list<string> {
   if ($value == null) { return [] }
-  let n = (encode-path-segment $name)
   let is_list = ($value | describe | str starts-with "list")
+  if $is_list and ($value | is-empty) { return [] }
+  let n = (encode-path-segment $name)
   if ($value | describe | str starts-with "record") { return ($value | transpose k v | each { $"($n)[(encode-path-segment $in.k)]=(encode-path-segment $in.v)" }) }
   if not $is_list { return [$"($n)=(encode-path-segment $value)"] }
   match $style {
@@ -53,22 +55,42 @@ def build-url [base: string, path: string, query?: string]: nothing -> string {
   if ($query != null) and ($query | is-not-empty) { $result | upsert query $query | url join } else { $result | url join }
 }
 
+# Build the dry-run record returned by --dry-run. Shape:
+#   {dry_run: true, method, url, query: <record>, headers, body, content_type, timeout,
+#    auth: {scheme, location}}
+# `meta` carries logical-form data (the query record by spec name, the pre-serialization
+# body) that do-request itself cannot reconstruct from its wire-format args.
+def build-dry-run-record [method: string, url: string, auth: record, content_type: string, timeout: duration, meta?: record]: nothing -> record {
+  let m = ($meta | default {})
+  {
+    dry_run: true
+    method: $method
+    url: $url
+    query: ($m | get -o query | default {})
+    headers: $auth.headers
+    body: ($m | get -o body)
+    content_type: $content_type
+    timeout: $timeout
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+}
+
 # Execute HTTP request with method dispatch
-def do-request [method: string, url: string, auth: record, insecure: bool, raw: bool, dry_run: bool, max_time?: duration, allow_errors?: bool, full?: bool, content_type?: string, body?: any]: nothing -> any {
+def do-request [method: string, url: string, auth: record, insecure: bool, raw: bool, dry_run: bool, max_time?: duration, allow_errors?: bool, full?: bool, content_type?: string, body?: any, dry_run_meta?: record]: nothing -> any {
   let req_url = if ($auth.query | is-not-empty) { if ($url | str contains "?") { $"($url)&($auth.query)" } else { $"($url)?($auth.query)" } } else { $url }
   let timeout = ($max_time | default 30min)
   let ct = ($content_type | default "application/json")
-  if $dry_run { return {method: $method, url: $req_url, headers: $auth.headers, query_string: $auth.query, content_type: $ct, timeout: $timeout, body: $body} }
+  if $dry_run { return (build-dry-run-record $method $req_url $auth $ct $timeout $dry_run_meta) }
   let resp = match $method {
     "get" => { http get --headers $auth.headers --full --allow-errors --max-time $timeout --insecure=$insecure --raw=$raw $req_url }
-    "head" => { http head --headers $auth.headers --max-time $timeout --insecure=$insecure $req_url }
-    "options" => { http options --headers $auth.headers --max-time $timeout --insecure=$insecure $req_url }
+    "head" => { http head --headers $auth.headers --full --allow-errors --max-time $timeout --insecure=$insecure $req_url }
+    "options" => { http options --headers $auth.headers --full --allow-errors --max-time $timeout --insecure=$insecure $req_url }
     "post" => { if ($body | is-empty) { http post --headers $auth.headers --full --allow-errors --max-time $timeout --insecure=$insecure --raw=$raw $req_url "" } else { http post --headers $auth.headers --content-type $ct --full --allow-errors --max-time $timeout --insecure=$insecure --raw=$raw $req_url $body } }
     "put" => { if ($body | is-empty) { http put --headers $auth.headers --full --allow-errors --max-time $timeout --insecure=$insecure --raw=$raw $req_url "" } else { http put --headers $auth.headers --content-type $ct --full --allow-errors --max-time $timeout --insecure=$insecure --raw=$raw $req_url $body } }
     "patch" => { if ($body | is-empty) { http patch --headers $auth.headers --full --allow-errors --max-time $timeout --insecure=$insecure --raw=$raw $req_url "" } else { http patch --headers $auth.headers --content-type $ct --full --allow-errors --max-time $timeout --insecure=$insecure --raw=$raw $req_url $body } }
     "delete" => { if ($body | is-empty) { http delete --headers $auth.headers --full --allow-errors --max-time $timeout --insecure=$insecure --raw=$raw $req_url } else { http delete --headers $auth.headers --content-type $ct --data $body --full --allow-errors --max-time $timeout --insecure=$insecure --raw=$raw $req_url } }
   }
-  if ($method in ["head" "options"]) { return $resp }
+  if ($method == "head") and (not $full) and (not $allow_errors) and $resp.status < 400 { return $resp.headers }
   if $allow_errors { $resp } else if $resp.status >= 400 { error make --unspanned { msg: $"HTTP ($resp.status): ($resp.body)" } } else if $full { {status: $resp.status, headers: $resp.headers, body: $resp.body} } else if $resp.status == 204 { null } else { $resp.body }
 }
 
@@ -182,7 +204,7 @@ export def "meta get-root" [
   let full_url = (build-url $base "/")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
 }
 
 # List global webhooks
@@ -212,7 +234,7 @@ export def "admin-hooks list-enterprise-global-webhooks" [
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"accept": $hdr_accept} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"per_page": $per_page, "page": $page} | compact), body: null}
 }
 
 # Create a global webhook
@@ -247,7 +269,7 @@ export def "admin-hooks create-enterprise-global-webhook" [
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"accept": $hdr_accept} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: {}, body: $req_body}
 }
 
 # Delete a global webhook
@@ -270,12 +292,13 @@ export def "admin-hooks delete-enterprise-global-webhook" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($hook_id | is-empty) { error make --unspanned { msg: "path parameter 'hook_id' must be non-empty" } }
   let full_url = (build-url $base ({hook_id: (encode-path-segment $hook_id)} | format pattern "/admin/hooks/{hook_id}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"accept": $hdr_accept} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
 }
 
 # Get a global webhook
@@ -298,12 +321,13 @@ export def "admin-hooks get-enterprise-global-webhook" [
 ]: nothing -> record<active: bool, config: record<content_type: string, insecure_ssl: string, secret: string, url: string>, created_at: string, events: list<string>, id: int, name: string, ping_url: string, type: string, updated_at: string, url: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($hook_id | is-empty) { error make --unspanned { msg: "path parameter 'hook_id' must be non-empty" } }
   let full_url = (build-url $base ({hook_id: (encode-path-segment $hook_id)} | format pattern "/admin/hooks/{hook_id}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"accept": $hdr_accept} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
 }
 
 # Update a global webhook
@@ -331,6 +355,7 @@ export def "admin-hooks update-enterprise-global-webhook" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($hook_id | is-empty) { error make --unspanned { msg: "path parameter 'hook_id' must be non-empty" } }
   let full_url = (build-url $base ({hook_id: (encode-path-segment $hook_id)} | format pattern "/admin/hooks/{hook_id}"))
   let req_body = {"active": $active, "config": $config, "events": $events} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
@@ -338,7 +363,7 @@ export def "admin-hooks update-enterprise-global-webhook" [
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"accept": $hdr_accept} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "patch" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body
+  do-request "patch" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: {}, body: $req_body}
 }
 
 # Ping a global webhook
@@ -361,12 +386,13 @@ export def "admin-hooks-pings ping-enterprise-global-webhook" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($hook_id | is-empty) { error make --unspanned { msg: "path parameter 'hook_id' must be non-empty" } }
   let full_url = (build-url $base ({hook_id: (encode-path-segment $hook_id)} | format pattern "/admin/hooks/{hook_id}/pings"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"accept": $hdr_accept} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
 }
 
 # List public keys
@@ -396,7 +422,7 @@ export def "admin-keys list-enterprise-public" [
   let full_url = (build-url $base "/admin/keys" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"per_page": $per_page, "page": $page, "direction": $direction, "sort": $qp_sort, "since": $since} | compact), body: null}
 }
 
 # Delete a public key
@@ -418,10 +444,11 @@ export def "admin-keys delete-enterprise-public" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($key_ids | is-empty) { error make --unspanned { msg: "path parameter 'key_ids' must be non-empty" } }
   let full_url = (build-url $base ({key_ids: (encode-path-segment $key_ids)} | format pattern "/admin/keys/{key_ids}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
 }
 
 # Update LDAP mapping for a team
@@ -445,12 +472,13 @@ export def "admin-ldap-teams-mapping update-enterprise" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($team_id | is-empty) { error make --unspanned { msg: "path parameter 'team_id' must be non-empty" } }
   let full_url = (build-url $base ({team_id: (encode-path-segment $team_id)} | format pattern "/admin/ldap/teams/{team_id}/mapping"))
   let req_body = {"ldap_dn": $ldap_dn} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "patch" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body
+  do-request "patch" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: {}, body: $req_body}
 }
 
 # Sync LDAP mapping for a team
@@ -472,10 +500,11 @@ export def "admin-ldap-teams-sync sync-enterprise-mapping" [
 ]: nothing -> record<status: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($team_id | is-empty) { error make --unspanned { msg: "path parameter 'team_id' must be non-empty" } }
   let full_url = (build-url $base ({team_id: (encode-path-segment $team_id)} | format pattern "/admin/ldap/teams/{team_id}/sync"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
 }
 
 # Update LDAP mapping for a user
@@ -499,12 +528,13 @@ export def "admin-ldap-users-mapping update-enterprise" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($username | is-empty) { error make --unspanned { msg: "path parameter 'username' must be non-empty" } }
   let full_url = (build-url $base ({username: (encode-path-segment $username)} | format pattern "/admin/ldap/users/{username}/mapping"))
   let req_body = {"ldap_dn": $ldap_dn} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "patch" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body
+  do-request "patch" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: {}, body: $req_body}
 }
 
 # Sync LDAP mapping for a user
@@ -526,10 +556,11 @@ export def "admin-ldap-users-sync sync-enterprise-mapping" [
 ]: nothing -> record<status: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($username | is-empty) { error make --unspanned { msg: "path parameter 'username' must be non-empty" } }
   let full_url = (build-url $base ({username: (encode-path-segment $username)} | format pattern "/admin/ldap/users/{username}/sync"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
 }
 
 # Create an organization
@@ -559,7 +590,7 @@ export def "admin-organizations create-enterprise-org" [
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: {}, body: $req_body}
 }
 
 # Update an organization name
@@ -583,12 +614,13 @@ export def "admin-organizations update-enterprise-name" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($org | is-empty) { error make --unspanned { msg: "path parameter 'org' must be non-empty" } }
   let full_url = (build-url $base ({org: (encode-path-segment $org)} | format pattern "/admin/organizations/{org}"))
   let req_body = {"login": $login} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "patch" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body
+  do-request "patch" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: {}, body: $req_body}
 }
 
 # List pre-receive environments
@@ -617,7 +649,7 @@ export def "admin-pre-receive-environments list-enterprise" [
   let full_url = (build-url $base "/admin/pre-receive-environments" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"per_page": $per_page, "page": $page, "direction": $direction, "sort": $qp_sort} | compact), body: null}
 }
 
 # Create a pre-receive environment
@@ -646,7 +678,7 @@ export def "admin-pre-receive-environments create-enterprise" [
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: {}, body: $req_body}
 }
 
 # Delete a pre-receive environment
@@ -668,10 +700,11 @@ export def "admin-pre-receive-environments delete-enterprise" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($pre_receive_environment_id | is-empty) { error make --unspanned { msg: "path parameter 'pre_receive_environment_id' must be non-empty" } }
   let full_url = (build-url $base ({pre_receive_environment_id: (encode-path-segment $pre_receive_environment_id)} | format pattern "/admin/pre-receive-environments/{pre_receive_environment_id}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
 }
 
 # Get a pre-receive environment
@@ -693,10 +726,11 @@ export def "admin-pre-receive-environments get-enterprise" [
 ]: nothing -> record<created_at: string, default_environment: bool, download: record<downloaded_at: string, message: string, state: string, url: string>, hooks_count: int, html_url: string, id: int, image_url: string, name: string, url: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($pre_receive_environment_id | is-empty) { error make --unspanned { msg: "path parameter 'pre_receive_environment_id' must be non-empty" } }
   let full_url = (build-url $base ({pre_receive_environment_id: (encode-path-segment $pre_receive_environment_id)} | format pattern "/admin/pre-receive-environments/{pre_receive_environment_id}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
 }
 
 # Update a pre-receive environment
@@ -721,12 +755,13 @@ export def "admin-pre-receive-environments update-enterprise" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($pre_receive_environment_id | is-empty) { error make --unspanned { msg: "path parameter 'pre_receive_environment_id' must be non-empty" } }
   let full_url = (build-url $base ({pre_receive_environment_id: (encode-path-segment $pre_receive_environment_id)} | format pattern "/admin/pre-receive-environments/{pre_receive_environment_id}"))
   let req_body = {"image_url": $image_url, "name": $name} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "patch" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body
+  do-request "patch" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: {}, body: $req_body}
 }
 
 # Start a pre-receive environment download
@@ -748,10 +783,11 @@ export def "admin-pre-receive-environments-downloads start-enterprise" [
 ]: nothing -> record<downloaded_at: string, message: string, state: string, url: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($pre_receive_environment_id | is-empty) { error make --unspanned { msg: "path parameter 'pre_receive_environment_id' must be non-empty" } }
   let full_url = (build-url $base ({pre_receive_environment_id: (encode-path-segment $pre_receive_environment_id)} | format pattern "/admin/pre-receive-environments/{pre_receive_environment_id}/downloads"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
 }
 
 # Get the download status for a pre-receive environment
@@ -773,10 +809,11 @@ export def "admin-pre-receive-environments-downloads-latest get-enterprise-statu
 ]: nothing -> record<downloaded_at: string, message: string, state: string, url: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($pre_receive_environment_id | is-empty) { error make --unspanned { msg: "path parameter 'pre_receive_environment_id' must be non-empty" } }
   let full_url = (build-url $base ({pre_receive_environment_id: (encode-path-segment $pre_receive_environment_id)} | format pattern "/admin/pre-receive-environments/{pre_receive_environment_id}/downloads/latest"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
 }
 
 # List pre-receive hooks
@@ -805,7 +842,7 @@ export def "admin-pre-receive-hooks list-enterprise" [
   let full_url = (build-url $base "/admin/pre-receive-hooks" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"per_page": $per_page, "page": $page, "direction": $direction, "sort": $qp_sort} | compact), body: null}
 }
 
 # Create a pre-receive hook
@@ -838,7 +875,7 @@ export def "admin-pre-receive-hooks create-enterprise" [
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: {}, body: $req_body}
 }
 
 # Delete a pre-receive hook
@@ -860,10 +897,11 @@ export def "admin-pre-receive-hooks delete-enterprise" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($pre_receive_hook_id | is-empty) { error make --unspanned { msg: "path parameter 'pre_receive_hook_id' must be non-empty" } }
   let full_url = (build-url $base ({pre_receive_hook_id: (encode-path-segment $pre_receive_hook_id)} | format pattern "/admin/pre-receive-hooks/{pre_receive_hook_id}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
 }
 
 # Get a pre-receive hook
@@ -885,10 +923,11 @@ export def "admin-pre-receive-hooks get-enterprise" [
 ]: nothing -> record<allow_downstream_configuration: bool, enforcement: string, environment: record<created_at: string, default_environment: bool, download: record<downloaded_at: string, message: string, state: string, url: string>, hooks_count: int, html_url: string, id: int, image_url: string, name: string, url: string>, id: int, name: string, script: string, script_repository: record<full_name: string, html_url: string, id: int, url: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($pre_receive_hook_id | is-empty) { error make --unspanned { msg: "path parameter 'pre_receive_hook_id' must be non-empty" } }
   let full_url = (build-url $base ({pre_receive_hook_id: (encode-path-segment $pre_receive_hook_id)} | format pattern "/admin/pre-receive-hooks/{pre_receive_hook_id}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
 }
 
 # Update a pre-receive hook
@@ -917,12 +956,13 @@ export def "admin-pre-receive-hooks update-enterprise" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($pre_receive_hook_id | is-empty) { error make --unspanned { msg: "path parameter 'pre_receive_hook_id' must be non-empty" } }
   let full_url = (build-url $base ({pre_receive_hook_id: (encode-path-segment $pre_receive_hook_id)} | format pattern "/admin/pre-receive-hooks/{pre_receive_hook_id}"))
   let req_body = {"allow_downstream_configuration": $allow_downstream_configuration, "enforcement": $enforcement, "environment": $environment, "name": $name, "script": $script, "script_repository": $script_repository} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "patch" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body
+  do-request "patch" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: {}, body: $req_body}
 }
 
 # List personal access tokens
@@ -949,7 +989,7 @@ export def "admin-tokens list-enterprise-personal-access" [
   let full_url = (build-url $base "/admin/tokens" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"per_page": $per_page, "page": $page} | compact), body: null}
 }
 
 # Delete a personal access token
@@ -971,10 +1011,11 @@ export def "admin-tokens delete-enterprise-personal-access" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($token_id | is-empty) { error make --unspanned { msg: "path parameter 'token_id' must be non-empty" } }
   let full_url = (build-url $base ({token_id: (encode-path-segment $token_id)} | format pattern "/admin/tokens/{token_id}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
 }
 
 # Create a user
@@ -1003,7 +1044,7 @@ export def "admin-users create-enterprise" [
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: {}, body: $req_body}
 }
 
 # Delete a user
@@ -1025,10 +1066,11 @@ export def "admin-users delete-enterprise" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($username | is-empty) { error make --unspanned { msg: "path parameter 'username' must be non-empty" } }
   let full_url = (build-url $base ({username: (encode-path-segment $username)} | format pattern "/admin/users/{username}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
 }
 
 # Update the username for a user
@@ -1052,12 +1094,13 @@ export def "admin-users update-enterprise" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($username | is-empty) { error make --unspanned { msg: "path parameter 'username' must be non-empty" } }
   let full_url = (build-url $base ({username: (encode-path-segment $username)} | format pattern "/admin/users/{username}"))
   let req_body = {"login": $login} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "patch" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body
+  do-request "patch" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: {}, body: $req_body}
 }
 
 # Delete an impersonation OAuth token
@@ -1079,10 +1122,11 @@ export def "admin-users-authorizations delete-enterprise-impersonation-o-auth-to
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($username | is-empty) { error make --unspanned { msg: "path parameter 'username' must be non-empty" } }
   let full_url = (build-url $base ({username: (encode-path-segment $username)} | format pattern "/admin/users/{username}/authorizations"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
 }
 
 # Create an impersonation OAuth token
@@ -1106,12 +1150,13 @@ export def "admin-users-authorizations create-enterprise-impersonation-o-auth-to
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($username | is-empty) { error make --unspanned { msg: "path parameter 'username' must be non-empty" } }
   let full_url = (build-url $base ({username: (encode-path-segment $username)} | format pattern "/admin/users/{username}/authorizations"))
   let req_body = {"scopes": $scopes} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: {}, body: $req_body}
 }
 
 # Get the authenticated app
@@ -1135,7 +1180,7 @@ export def "app get-authenticated" [
   let full_url = (build-url $base "/app")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
 }
 
 # Create a GitHub App from a manifest
@@ -1159,12 +1204,13 @@ export def "app-manifests-conversions create" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($code | is-empty) { error make --unspanned { msg: "path parameter 'code' must be non-empty" } }
   let full_url = (build-url $base ({code: (encode-path-segment $code)} | format pattern "/app-manifests/{code}/conversions"))
   let req_body = $body
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: {}, body: $req_body}
 }
 
 # List installations for the authenticated app
@@ -1194,7 +1240,7 @@ export def "app-installations list" [
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"accept": $hdr_accept} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"per_page": $per_page, "page": $page} | compact), body: null}
 }
 
 # Delete an installation for the authenticated app
@@ -1217,12 +1263,13 @@ export def "app-installations delete" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($installation_id | is-empty) { error make --unspanned { msg: "path parameter 'installation_id' must be non-empty" } }
   let full_url = (build-url $base ({installation_id: (encode-path-segment $installation_id)} | format pattern "/app/installations/{installation_id}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"accept": $hdr_accept} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
 }
 
 # Get an installation for the authenticated app
@@ -1245,12 +1292,13 @@ export def "app-installations get" [
 ]: nothing -> record<access_tokens_url: string, account: any, app_id: int, app_slug: string, contact_email: string, created_at: string, events: list<string>, html_url: string, id: int, permissions: record<checks: string, contents: string, deployments: string, issues: string, metadata: string, organization_administration: string, pull_requests: string, statuses: string>, repositories_url: string, repository_selection: string, single_file_name: string, suspended_at: string, suspended_by: record<avatar_url: string, email: string, events_url: string, followers_url: string, following_url: string, gists_url: string, gravatar_id: string, html_url: string, id: int, login: string, name: string, node_id: string, organizations_url: string, received_events_url: string, repos_url: string, site_admin: bool, starred_at: string, starred_url: string, subscriptions_url: string, type: string, url: string>, target_id: int, target_type: string, updated_at: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($installation_id | is-empty) { error make --unspanned { msg: "path parameter 'installation_id' must be non-empty" } }
   let full_url = (build-url $base ({installation_id: (encode-path-segment $installation_id)} | format pattern "/app/installations/{installation_id}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"accept": $hdr_accept} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
 }
 
 # Create an installation access token for an app
@@ -1278,6 +1326,7 @@ export def "app-installations-access-tokens create" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($installation_id | is-empty) { error make --unspanned { msg: "path parameter 'installation_id' must be non-empty" } }
   let full_url = (build-url $base ({installation_id: (encode-path-segment $installation_id)} | format pattern "/app/installations/{installation_id}/access_tokens"))
   let req_body = {"permissions": $permissions, "repositories": $repositories, "repository_ids": $repository_ids} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
@@ -1285,7 +1334,7 @@ export def "app-installations-access-tokens create" [
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"accept": $hdr_accept} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: {}, body: $req_body}
 }
 
 # List your grants
@@ -1315,7 +1364,7 @@ export def "applications-grants list-oauth-authorizations" [
   let full_url = (build-url $base "/applications/grants" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"per_page": $per_page, "page": $page, "client_id": $client_id} | compact), body: null}
 }
 
 # Delete a grant
@@ -1339,10 +1388,11 @@ export def "applications-grants delete-oauth-authorizations" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($grant_id | is-empty) { error make --unspanned { msg: "path parameter 'grant_id' must be non-empty" } }
   let full_url = (build-url $base ({grant_id: (encode-path-segment $grant_id)} | format pattern "/applications/grants/{grant_id}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
 }
 
 # Get a single grant
@@ -1366,10 +1416,11 @@ export def "applications-grants get-oauth-authorizations" [
 ]: nothing -> record<app: record<client_id: string, name: string, url: string>, created_at: string, id: int, scopes: list<string>, updated_at: string, url: string, user: record<avatar_url: string, email: string, events_url: string, followers_url: string, following_url: string, gists_url: string, gravatar_id: string, html_url: string, id: int, login: string, name: string, node_id: string, organizations_url: string, received_events_url: string, repos_url: string, site_admin: bool, starred_at: string, starred_url: string, subscriptions_url: string, type: string, url: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($grant_id | is-empty) { error make --unspanned { msg: "path parameter 'grant_id' must be non-empty" } }
   let full_url = (build-url $base ({grant_id: (encode-path-segment $grant_id)} | format pattern "/applications/grants/{grant_id}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
 }
 
 # Delete an app authorization
@@ -1393,12 +1444,13 @@ export def "applications-grant delete-apps-authorization" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($client_id | is-empty) { error make --unspanned { msg: "path parameter 'client_id' must be non-empty" } }
   let full_url = (build-url $base ({client_id: (encode-path-segment $client_id)} | format pattern "/applications/{client_id}/grant"))
   let req_body = {"access_token": $access_token} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: {}, body: $req_body}
 }
 
 # Revoke a grant for an application
@@ -1423,10 +1475,12 @@ export def "applications-grants delete-apps" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($client_id | is-empty) { error make --unspanned { msg: "path parameter 'client_id' must be non-empty" } }
+  if ($access_token | is-empty) { error make --unspanned { msg: "path parameter 'access_token' must be non-empty" } }
   let full_url = (build-url $base ({client_id: (encode-path-segment $client_id), access_token: (encode-path-segment $access_token)} | format pattern "/applications/{client_id}/grants/{access_token}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
 }
 
 # Delete an app token
@@ -1450,12 +1504,13 @@ export def "applications-token delete-apps" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($client_id | is-empty) { error make --unspanned { msg: "path parameter 'client_id' must be non-empty" } }
   let full_url = (build-url $base ({client_id: (encode-path-segment $client_id)} | format pattern "/applications/{client_id}/token"))
   let req_body = {"access_token": $access_token} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: {}, body: $req_body}
 }
 
 # Reset a token
@@ -1479,12 +1534,13 @@ export def "applications-token reset-apps" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($client_id | is-empty) { error make --unspanned { msg: "path parameter 'client_id' must be non-empty" } }
   let full_url = (build-url $base ({client_id: (encode-path-segment $client_id)} | format pattern "/applications/{client_id}/token"))
   let req_body = {"access_token": $access_token} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "patch" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body
+  do-request "patch" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: {}, body: $req_body}
 }
 
 # Check a token
@@ -1508,12 +1564,13 @@ export def "applications-token check-apps" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($client_id | is-empty) { error make --unspanned { msg: "path parameter 'client_id' must be non-empty" } }
   let full_url = (build-url $base ({client_id: (encode-path-segment $client_id)} | format pattern "/applications/{client_id}/token"))
   let req_body = {"access_token": $access_token} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: {}, body: $req_body}
 }
 
 # Revoke an authorization for an application
@@ -1538,10 +1595,12 @@ export def "applications-tokens delete-apps-authorization" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($client_id | is-empty) { error make --unspanned { msg: "path parameter 'client_id' must be non-empty" } }
+  if ($access_token | is-empty) { error make --unspanned { msg: "path parameter 'access_token' must be non-empty" } }
   let full_url = (build-url $base ({client_id: (encode-path-segment $client_id), access_token: (encode-path-segment $access_token)} | format pattern "/applications/{client_id}/tokens/{access_token}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
 }
 
 # Check an authorization
@@ -1566,10 +1625,12 @@ export def "applications-tokens check-apps-authorization" [
 ]: nothing -> record<app: record<client_id: string, name: string, url: string>, created_at: string, fingerprint: string, hashed_token: string, id: int, installation: record<account: record<avatar_url: string, email: string, events_url: string, followers_url: string, following_url: string, gists_url: string, gravatar_id: string, html_url: string, id: int, login: string, name: string, node_id: string, organizations_url: string, received_events_url: string, repos_url: string, site_admin: bool, starred_at: string, starred_url: string, subscriptions_url: string, type: string, url: string>, has_multiple_single_files: bool, permissions: record<actions: string, administration: string, checks: string, content_references: string, contents: string, deployments: string, environments: string, issues: string, members: string, metadata: string, organization_administration: string, organization_hooks: string, organization_packages: string, organization_plan: string, organization_projects: string, organization_secrets: string, organization_self_hosted_runners: string, organization_user_blocking: string, packages: string, pages: string, pull_requests: string, repository_hooks: string, repository_projects: string, secret_scanning_alerts: string, secrets: string, security_events: string, single_file: string, statuses: string, team_discussions: string, vulnerability_alerts: string, workflows: string>, repositories_url: string, repository_selection: string, single_file_name: string, single_file_paths: list<string>>, note: string, note_url: string, scopes: list<string>, token: string, token_last_eight: string, updated_at: string, url: string, user: record<avatar_url: string, email: string, events_url: string, followers_url: string, following_url: string, gists_url: string, gravatar_id: string, html_url: string, id: int, login: string, name: string, node_id: string, organizations_url: string, received_events_url: string, repos_url: string, site_admin: bool, starred_at: string, starred_url: string, subscriptions_url: string, type: string, url: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($client_id | is-empty) { error make --unspanned { msg: "path parameter 'client_id' must be non-empty" } }
+  if ($access_token | is-empty) { error make --unspanned { msg: "path parameter 'access_token' must be non-empty" } }
   let full_url = (build-url $base ({client_id: (encode-path-segment $client_id), access_token: (encode-path-segment $access_token)} | format pattern "/applications/{client_id}/tokens/{access_token}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
 }
 
 # Reset an authorization
@@ -1594,10 +1655,12 @@ export def "applications-tokens reset-apps-authorization" [
 ]: nothing -> record<app: record<client_id: string, name: string, url: string>, created_at: string, fingerprint: string, hashed_token: string, id: int, installation: record<account: record<avatar_url: string, email: string, events_url: string, followers_url: string, following_url: string, gists_url: string, gravatar_id: string, html_url: string, id: int, login: string, name: string, node_id: string, organizations_url: string, received_events_url: string, repos_url: string, site_admin: bool, starred_at: string, starred_url: string, subscriptions_url: string, type: string, url: string>, has_multiple_single_files: bool, permissions: record<actions: string, administration: string, checks: string, content_references: string, contents: string, deployments: string, environments: string, issues: string, members: string, metadata: string, organization_administration: string, organization_hooks: string, organization_packages: string, organization_plan: string, organization_projects: string, organization_secrets: string, organization_self_hosted_runners: string, organization_user_blocking: string, packages: string, pages: string, pull_requests: string, repository_hooks: string, repository_projects: string, secret_scanning_alerts: string, secrets: string, security_events: string, single_file: string, statuses: string, team_discussions: string, vulnerability_alerts: string, workflows: string>, repositories_url: string, repository_selection: string, single_file_name: string, single_file_paths: list<string>>, note: string, note_url: string, scopes: list<string>, token: string, token_last_eight: string, updated_at: string, url: string, user: record<avatar_url: string, email: string, events_url: string, followers_url: string, following_url: string, gists_url: string, gravatar_id: string, html_url: string, id: int, login: string, name: string, node_id: string, organizations_url: string, received_events_url: string, repos_url: string, site_admin: bool, starred_at: string, starred_url: string, subscriptions_url: string, type: string, url: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($client_id | is-empty) { error make --unspanned { msg: "path parameter 'client_id' must be non-empty" } }
+  if ($access_token | is-empty) { error make --unspanned { msg: "path parameter 'access_token' must be non-empty" } }
   let full_url = (build-url $base ({client_id: (encode-path-segment $client_id), access_token: (encode-path-segment $access_token)} | format pattern "/applications/{client_id}/tokens/{access_token}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
 }
 
 # Get an app
@@ -1619,10 +1682,11 @@ export def "apps get" [
 ]: nothing -> record<client_id: string, client_secret: string, created_at: string, description: string, events: list<string>, external_url: string, html_url: string, id: int, installations_count: int, name: string, node_id: string, owner: record<avatar_url: string, email: string, events_url: string, followers_url: string, following_url: string, gists_url: string, gravatar_id: string, html_url: string, id: int, login: string, name: string, node_id: string, organizations_url: string, received_events_url: string, repos_url: string, site_admin: bool, starred_at: string, starred_url: string, subscriptions_url: string, type: string, url: string>, pem: string, permissions: record<checks: string, contents: string, deployments: string, issues: string, metadata: string>, slug: string, updated_at: string, webhook_secret: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($app_slug | is-empty) { error make --unspanned { msg: "path parameter 'app_slug' must be non-empty" } }
   let full_url = (build-url $base ({app_slug: (encode-path-segment $app_slug)} | format pattern "/apps/{app_slug}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
 }
 
 # List your authorizations
@@ -1652,7 +1716,7 @@ export def "authorizations list-oauth" [
   let full_url = (build-url $base "/authorizations" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"per_page": $per_page, "page": $page, "client_id": $client_id} | compact), body: null}
 }
 
 # Create a new authorization
@@ -1687,7 +1751,7 @@ export def "authorizations create-oauth" [
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: {}, body: $req_body}
 }
 
 # Get-or-create an authorization for a specific app
@@ -1717,12 +1781,13 @@ export def "authorizations-clients get-oauth-or-create-for-app" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($client_id | is-empty) { error make --unspanned { msg: "path parameter 'client_id' must be non-empty" } }
   let full_url = (build-url $base ({client_id: (encode-path-segment $client_id)} | format pattern "/authorizations/clients/{client_id}"))
   let req_body = {"client_secret": $client_secret, "fingerprint": $fingerprint, "note": $note, "note_url": $note_url, "scopes": $scopes} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: {}, body: $req_body}
 }
 
 # Get-or-create an authorization for a specific app and fingerprint
@@ -1752,12 +1817,14 @@ export def "authorizations-clients get-oauth-or-create-for-app-and" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($client_id | is-empty) { error make --unspanned { msg: "path parameter 'client_id' must be non-empty" } }
+  if ($fingerprint | is-empty) { error make --unspanned { msg: "path parameter 'fingerprint' must be non-empty" } }
   let full_url = (build-url $base ({client_id: (encode-path-segment $client_id), fingerprint: (encode-path-segment $fingerprint)} | format pattern "/authorizations/clients/{client_id}/{fingerprint}"))
   let req_body = {"client_secret": $client_secret, "note": $note, "note_url": $note_url, "scopes": $scopes} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: {}, body: $req_body}
 }
 
 # Delete an authorization
@@ -1781,10 +1848,11 @@ export def "authorizations delete-oauth" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($authorization_id | is-empty) { error make --unspanned { msg: "path parameter 'authorization_id' must be non-empty" } }
   let full_url = (build-url $base ({authorization_id: (encode-path-segment $authorization_id)} | format pattern "/authorizations/{authorization_id}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
 }
 
 # Get a single authorization
@@ -1808,10 +1876,11 @@ export def "authorizations get-oauth" [
 ]: nothing -> record<app: record<client_id: string, name: string, url: string>, created_at: string, fingerprint: string, hashed_token: string, id: int, installation: record<account: record<avatar_url: string, email: string, events_url: string, followers_url: string, following_url: string, gists_url: string, gravatar_id: string, html_url: string, id: int, login: string, name: string, node_id: string, organizations_url: string, received_events_url: string, repos_url: string, site_admin: bool, starred_at: string, starred_url: string, subscriptions_url: string, type: string, url: string>, has_multiple_single_files: bool, permissions: record<actions: string, administration: string, checks: string, content_references: string, contents: string, deployments: string, environments: string, issues: string, members: string, metadata: string, organization_administration: string, organization_hooks: string, organization_packages: string, organization_plan: string, organization_projects: string, organization_secrets: string, organization_self_hosted_runners: string, organization_user_blocking: string, packages: string, pages: string, pull_requests: string, repository_hooks: string, repository_projects: string, secret_scanning_alerts: string, secrets: string, security_events: string, single_file: string, statuses: string, team_discussions: string, vulnerability_alerts: string, workflows: string>, repositories_url: string, repository_selection: string, single_file_name: string, single_file_paths: list<string>>, note: string, note_url: string, scopes: list<string>, token: string, token_last_eight: string, updated_at: string, url: string, user: record<avatar_url: string, email: string, events_url: string, followers_url: string, following_url: string, gists_url: string, gravatar_id: string, html_url: string, id: int, login: string, name: string, node_id: string, organizations_url: string, received_events_url: string, repos_url: string, site_admin: bool, starred_at: string, starred_url: string, subscriptions_url: string, type: string, url: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($authorization_id | is-empty) { error make --unspanned { msg: "path parameter 'authorization_id' must be non-empty" } }
   let full_url = (build-url $base ({authorization_id: (encode-path-segment $authorization_id)} | format pattern "/authorizations/{authorization_id}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
 }
 
 # Update an existing authorization
@@ -1842,12 +1911,13 @@ export def "authorizations update-oauth" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($authorization_id | is-empty) { error make --unspanned { msg: "path parameter 'authorization_id' must be non-empty" } }
   let full_url = (build-url $base ({authorization_id: (encode-path-segment $authorization_id)} | format pattern "/authorizations/{authorization_id}"))
   let req_body = {"add_scopes": $add_scopes, "fingerprint": $fingerprint, "note": $note, "note_url": $note_url, "remove_scopes": $remove_scopes, "scopes": $scopes} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "patch" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body
+  do-request "patch" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: {}, body: $req_body}
 }
 
 # Get all codes of conduct
@@ -1871,7 +1941,7 @@ export def "codes-of-conduct get-list" [
   let full_url = (build-url $base "/codes_of_conduct")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
 }
 
 # Get a code of conduct
@@ -1893,10 +1963,11 @@ export def "codes-of-conduct get" [
 ]: nothing -> record<body: string, html_url: string, key: string, name: string, url: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($key | is-empty) { error make --unspanned { msg: "path parameter 'key' must be non-empty" } }
   let full_url = (build-url $base ({key: (encode-path-segment $key)} | format pattern "/codes_of_conduct/{key}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
 }
 
 # Get emojis
@@ -1920,7 +1991,7 @@ export def "emojis get" [
   let full_url = (build-url $base "/emojis")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
 }
 
 # Get license information
@@ -1944,7 +2015,7 @@ export def "enterprise-settings-license get-admin-information" [
   let full_url = (build-url $base "/enterprise/settings/license")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
 }
 
 # Get all statistics
@@ -1968,7 +2039,7 @@ export def "enterprise-stats-all get-admin" [
   let full_url = (build-url $base "/enterprise/stats/all")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
 }
 
 # Get comment statistics
@@ -1992,7 +2063,7 @@ export def "enterprise-stats-comments get-admin" [
   let full_url = (build-url $base "/enterprise/stats/comments")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
 }
 
 # Get gist statistics
@@ -2015,7 +2086,7 @@ export def "enterprise-stats-gists get" [
   let full_url = (build-url $base "/enterprise/stats/gists")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
 }
 
 # Get hooks statistics
@@ -2039,7 +2110,7 @@ export def "enterprise-stats-hooks get-admin" [
   let full_url = (build-url $base "/enterprise/stats/hooks")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
 }
 
 # Get issue statistics
@@ -2063,7 +2134,7 @@ export def "enterprise-stats-issues get-admin" [
   let full_url = (build-url $base "/enterprise/stats/issues")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
 }
 
 # Get milestone statistics
@@ -2087,7 +2158,7 @@ export def "enterprise-stats-milestones get-admin" [
   let full_url = (build-url $base "/enterprise/stats/milestones")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
 }
 
 # Get organization statistics
@@ -2111,7 +2182,7 @@ export def "enterprise-stats-orgs get-admin" [
   let full_url = (build-url $base "/enterprise/stats/orgs")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
 }
 
 # Get pages statistics
@@ -2135,7 +2206,7 @@ export def "enterprise-stats-pages get-admin" [
   let full_url = (build-url $base "/enterprise/stats/pages")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
 }
 
 # Get pull request statistics
@@ -2159,7 +2230,7 @@ export def "enterprise-stats-pulls get-admin-request" [
   let full_url = (build-url $base "/enterprise/stats/pulls")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
 }
 
 # Get repository statistics
@@ -2183,7 +2254,7 @@ export def "enterprise-stats-repos get-admin" [
   let full_url = (build-url $base "/enterprise/stats/repos")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
 }
 
 # Get users statistics
@@ -2207,7 +2278,7 @@ export def "enterprise-stats-users get-admin" [
   let full_url = (build-url $base "/enterprise/stats/users")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
 }
 
 # List public events
@@ -2234,7 +2305,7 @@ export def "events list-activity-public" [
   let full_url = (build-url $base "/events" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"per_page": $per_page, "page": $page} | compact), body: null}
 }
 
 # Get feeds
@@ -2258,7 +2329,7 @@ export def "feeds get-activity" [
   let full_url = (build-url $base "/feeds")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
 }
 
 # List gists for the authenticated user
@@ -2286,7 +2357,7 @@ export def "gists list" [
   let full_url = (build-url $base "/gists" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"since": $since, "per_page": $per_page, "page": $page} | compact), body: null}
 }
 
 # Create a gist
@@ -2316,7 +2387,7 @@ export def "gists create" [
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: {}, body: $req_body}
 }
 
 # List public gists
@@ -2344,7 +2415,7 @@ export def "gists-public list" [
   let full_url = (build-url $base "/gists/public" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"since": $since, "per_page": $per_page, "page": $page} | compact), body: null}
 }
 
 # List starred gists
@@ -2372,7 +2443,7 @@ export def "gists-starred list" [
   let full_url = (build-url $base "/gists/starred" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"since": $since, "per_page": $per_page, "page": $page} | compact), body: null}
 }
 
 # Delete a gist
@@ -2394,10 +2465,11 @@ export def "gists delete" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($gist_id | is-empty) { error make --unspanned { msg: "path parameter 'gist_id' must be non-empty" } }
   let full_url = (build-url $base ({gist_id: (encode-path-segment $gist_id)} | format pattern "/gists/{gist_id}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
 }
 
 # Get a gist
@@ -2419,10 +2491,11 @@ export def "gists get" [
 ]: nothing -> record<comments: int, comments_url: string, commits_url: string, created_at: string, description: string, files: record, fork_of: record<comments: int, comments_url: string, commits_url: string, created_at: string, description: string, files: record, forks: list<any>, forks_url: string, git_pull_url: string, git_push_url: string, history: list<any>, html_url: string, id: string, node_id: string, owner: record<avatar_url: string, email: string, events_url: string, followers_url: string, following_url: string, gists_url: string, gravatar_id: string, html_url: string, id: int, login: string, name: string, node_id: string, organizations_url: string, received_events_url: string, repos_url: string, site_admin: bool, starred_at: string, starred_url: string, subscriptions_url: string, type: string, url: string>, public: bool, truncated: bool, updated_at: string, url: string, user: record<avatar_url: string, email: string, events_url: string, followers_url: string, following_url: string, gists_url: string, gravatar_id: string, html_url: string, id: int, login: string, name: string, node_id: string, organizations_url: string, received_events_url: string, repos_url: string, site_admin: bool, starred_at: string, starred_url: string, subscriptions_url: string, type: string, url: string>>, forks: table<created_at: string, id: string, updated_at: string, url: string, user: record>, forks_url: string, git_pull_url: string, git_push_url: string, history: table<change_status: record, committed_at: string, url: string, user: record, version: string>, html_url: string, id: string, node_id: string, owner: record<avatar_url: string, email: string, events_url: string, followers_url: string, following_url: string, gists_url: string, gravatar_id: string, html_url: string, id: int, login: string, name: string, node_id: string, organizations_url: string, received_events_url: string, repos_url: string, site_admin: bool, starred_at: string, starred_url: string, subscriptions_url: string, type: string, url: string>, public: bool, truncated: bool, updated_at: string, url: string, user: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($gist_id | is-empty) { error make --unspanned { msg: "path parameter 'gist_id' must be non-empty" } }
   let full_url = (build-url $base ({gist_id: (encode-path-segment $gist_id)} | format pattern "/gists/{gist_id}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
 }
 
 # Update a gist
@@ -2447,12 +2520,13 @@ export def "gists update" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($gist_id | is-empty) { error make --unspanned { msg: "path parameter 'gist_id' must be non-empty" } }
   let full_url = (build-url $base ({gist_id: (encode-path-segment $gist_id)} | format pattern "/gists/{gist_id}"))
   let req_body = {"description": $description, "files": $files} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "patch" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body
+  do-request "patch" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: {}, body: $req_body}
 }
 
 # List gist comments
@@ -2476,11 +2550,12 @@ export def "gists-comments list" [
 ]: nothing -> table<author_association: string, body: string, created_at: string, id: int, node_id: string, updated_at: string, url: string, user: record<avatar_url: string, email: string, events_url: string, followers_url: string, following_url: string, gists_url: string, gravatar_id: string, html_url: string, id: int, login: string, name: string, node_id: string, organizations_url: string, received_events_url: string, repos_url: string, site_admin: bool, starred_at: string, starred_url: string, subscriptions_url: string, type: string, url: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($gist_id | is-empty) { error make --unspanned { msg: "path parameter 'gist_id' must be non-empty" } }
   let qp = [(serialize-qp "per_page" $per_page "scalar") (serialize-qp "page" $page "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({gist_id: (encode-path-segment $gist_id)} | format pattern "/gists/{gist_id}/comments") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"per_page": $per_page, "page": $page} | compact), body: null}
 }
 
 # Create a gist comment
@@ -2504,12 +2579,13 @@ export def "gists-comments create" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($gist_id | is-empty) { error make --unspanned { msg: "path parameter 'gist_id' must be non-empty" } }
   let full_url = (build-url $base ({gist_id: (encode-path-segment $gist_id)} | format pattern "/gists/{gist_id}/comments"))
   let req_body = {"body": $body} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: {}, body: $req_body}
 }
 
 # Delete a gist comment
@@ -2532,10 +2608,12 @@ export def "gists-comments delete" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($gist_id | is-empty) { error make --unspanned { msg: "path parameter 'gist_id' must be non-empty" } }
+  if ($comment_id | is-empty) { error make --unspanned { msg: "path parameter 'comment_id' must be non-empty" } }
   let full_url = (build-url $base ({gist_id: (encode-path-segment $gist_id), comment_id: (encode-path-segment $comment_id)} | format pattern "/gists/{gist_id}/comments/{comment_id}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
 }
 
 # Get a gist comment
@@ -2558,10 +2636,12 @@ export def "gists-comments get" [
 ]: nothing -> record<author_association: string, body: string, created_at: string, id: int, node_id: string, updated_at: string, url: string, user: record<avatar_url: string, email: string, events_url: string, followers_url: string, following_url: string, gists_url: string, gravatar_id: string, html_url: string, id: int, login: string, name: string, node_id: string, organizations_url: string, received_events_url: string, repos_url: string, site_admin: bool, starred_at: string, starred_url: string, subscriptions_url: string, type: string, url: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($gist_id | is-empty) { error make --unspanned { msg: "path parameter 'gist_id' must be non-empty" } }
+  if ($comment_id | is-empty) { error make --unspanned { msg: "path parameter 'comment_id' must be non-empty" } }
   let full_url = (build-url $base ({gist_id: (encode-path-segment $gist_id), comment_id: (encode-path-segment $comment_id)} | format pattern "/gists/{gist_id}/comments/{comment_id}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
 }
 
 # Update a gist comment
@@ -2586,12 +2666,14 @@ export def "gists-comments update" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($gist_id | is-empty) { error make --unspanned { msg: "path parameter 'gist_id' must be non-empty" } }
+  if ($comment_id | is-empty) { error make --unspanned { msg: "path parameter 'comment_id' must be non-empty" } }
   let full_url = (build-url $base ({gist_id: (encode-path-segment $gist_id), comment_id: (encode-path-segment $comment_id)} | format pattern "/gists/{gist_id}/comments/{comment_id}"))
   let req_body = {"body": $body} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "patch" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body
+  do-request "patch" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: {}, body: $req_body}
 }
 
 # List gist commits
@@ -2615,11 +2697,12 @@ export def "gists-commits list" [
 ]: nothing -> table<change_status: record<additions: int, deletions: int, total: int>, committed_at: string, url: string, user: record<avatar_url: string, email: string, events_url: string, followers_url: string, following_url: string, gists_url: string, gravatar_id: string, html_url: string, id: int, login: string, name: string, node_id: string, organizations_url: string, received_events_url: string, repos_url: string, site_admin: bool, starred_at: string, starred_url: string, subscriptions_url: string, type: string, url: string>, version: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($gist_id | is-empty) { error make --unspanned { msg: "path parameter 'gist_id' must be non-empty" } }
   let qp = [(serialize-qp "per_page" $per_page "scalar") (serialize-qp "page" $page "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({gist_id: (encode-path-segment $gist_id)} | format pattern "/gists/{gist_id}/commits") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"per_page": $per_page, "page": $page} | compact), body: null}
 }
 
 # List gist forks
@@ -2643,11 +2726,12 @@ export def "gists-forks list" [
 ]: nothing -> table<comments: int, comments_url: string, commits_url: string, created_at: string, description: string, files: record, fork_of: record<comments: int, comments_url: string, commits_url: string, created_at: string, description: string, files: record, forks: list, forks_url: string, git_pull_url: string, git_push_url: string, history: list, html_url: string, id: string, node_id: string, owner: record, public: bool, truncated: bool, updated_at: string, url: string, user: record>, forks: list<record>, forks_url: string, git_pull_url: string, git_push_url: string, history: list<record>, html_url: string, id: string, node_id: string, owner: record<avatar_url: string, email: string, events_url: string, followers_url: string, following_url: string, gists_url: string, gravatar_id: string, html_url: string, id: int, login: string, name: string, node_id: string, organizations_url: string, received_events_url: string, repos_url: string, site_admin: bool, starred_at: string, starred_url: string, subscriptions_url: string, type: string, url: string>, public: bool, truncated: bool, updated_at: string, url: string, user: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($gist_id | is-empty) { error make --unspanned { msg: "path parameter 'gist_id' must be non-empty" } }
   let qp = [(serialize-qp "per_page" $per_page "scalar") (serialize-qp "page" $page "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({gist_id: (encode-path-segment $gist_id)} | format pattern "/gists/{gist_id}/forks") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"per_page": $per_page, "page": $page} | compact), body: null}
 }
 
 # Fork a gist
@@ -2669,10 +2753,11 @@ export def "gists-forks create" [
 ]: nothing -> record<comments: int, comments_url: string, commits_url: string, created_at: string, description: string, files: record, forks: list<any>, forks_url: string, git_pull_url: string, git_push_url: string, history: list<any>, html_url: string, id: string, node_id: string, owner: record<avatar_url: string, email: string, events_url: string, followers_url: string, following_url: string, gists_url: string, gravatar_id: string, html_url: string, id: int, login: string, name: string, node_id: string, organizations_url: string, received_events_url: string, repos_url: string, site_admin: bool, starred_at: string, starred_url: string, subscriptions_url: string, type: string, url: string>, public: bool, truncated: bool, updated_at: string, url: string, user: record<avatar_url: string, email: string, events_url: string, followers_url: string, following_url: string, gists_url: string, gravatar_id: string, html_url: string, id: int, login: string, name: string, node_id: string, organizations_url: string, received_events_url: string, repos_url: string, site_admin: bool, starred_at: string, starred_url: string, subscriptions_url: string, type: string, url: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($gist_id | is-empty) { error make --unspanned { msg: "path parameter 'gist_id' must be non-empty" } }
   let full_url = (build-url $base ({gist_id: (encode-path-segment $gist_id)} | format pattern "/gists/{gist_id}/forks"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
 }
 
 # Unstar a gist
@@ -2694,10 +2779,11 @@ export def "gists-star delete-unstar" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($gist_id | is-empty) { error make --unspanned { msg: "path parameter 'gist_id' must be non-empty" } }
   let full_url = (build-url $base ({gist_id: (encode-path-segment $gist_id)} | format pattern "/gists/{gist_id}/star"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
 }
 
 # Check if a gist is starred
@@ -2719,10 +2805,11 @@ export def "gists-star check-is-starred" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($gist_id | is-empty) { error make --unspanned { msg: "path parameter 'gist_id' must be non-empty" } }
   let full_url = (build-url $base ({gist_id: (encode-path-segment $gist_id)} | format pattern "/gists/{gist_id}/star"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
 }
 
 # Star a gist
@@ -2744,10 +2831,11 @@ export def "gists-star update" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($gist_id | is-empty) { error make --unspanned { msg: "path parameter 'gist_id' must be non-empty" } }
   let full_url = (build-url $base ({gist_id: (encode-path-segment $gist_id)} | format pattern "/gists/{gist_id}/star"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
 }
 
 # Get a gist revision
@@ -2770,10 +2858,12 @@ export def "gists get-revision" [
 ]: nothing -> record<comments: int, comments_url: string, commits_url: string, created_at: string, description: string, files: record, fork_of: record<comments: int, comments_url: string, commits_url: string, created_at: string, description: string, files: record, forks: list<any>, forks_url: string, git_pull_url: string, git_push_url: string, history: list<any>, html_url: string, id: string, node_id: string, owner: record<avatar_url: string, email: string, events_url: string, followers_url: string, following_url: string, gists_url: string, gravatar_id: string, html_url: string, id: int, login: string, name: string, node_id: string, organizations_url: string, received_events_url: string, repos_url: string, site_admin: bool, starred_at: string, starred_url: string, subscriptions_url: string, type: string, url: string>, public: bool, truncated: bool, updated_at: string, url: string, user: record<avatar_url: string, email: string, events_url: string, followers_url: string, following_url: string, gists_url: string, gravatar_id: string, html_url: string, id: int, login: string, name: string, node_id: string, organizations_url: string, received_events_url: string, repos_url: string, site_admin: bool, starred_at: string, starred_url: string, subscriptions_url: string, type: string, url: string>>, forks: table<created_at: string, id: string, updated_at: string, url: string, user: record>, forks_url: string, git_pull_url: string, git_push_url: string, history: table<change_status: record, committed_at: string, url: string, user: record, version: string>, html_url: string, id: string, node_id: string, owner: record<avatar_url: string, email: string, events_url: string, followers_url: string, following_url: string, gists_url: string, gravatar_id: string, html_url: string, id: int, login: string, name: string, node_id: string, organizations_url: string, received_events_url: string, repos_url: string, site_admin: bool, starred_at: string, starred_url: string, subscriptions_url: string, type: string, url: string>, public: bool, truncated: bool, updated_at: string, url: string, user: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($gist_id | is-empty) { error make --unspanned { msg: "path parameter 'gist_id' must be non-empty" } }
+  if ($sha | is-empty) { error make --unspanned { msg: "path parameter 'sha' must be non-empty" } }
   let full_url = (build-url $base ({gist_id: (encode-path-segment $gist_id), sha: (encode-path-segment $sha)} | format pattern "/gists/{gist_id}/{sha}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
 }
 
 # Get all gitignore templates
@@ -2797,7 +2887,7 @@ export def "gitignore-templates get-list" [
   let full_url = (build-url $base "/gitignore/templates")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
 }
 
 # Get a gitignore template
@@ -2819,10 +2909,11 @@ export def "gitignore-templates get" [
 ]: nothing -> record<name: string, source: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($name | is-empty) { error make --unspanned { msg: "path parameter 'name' must be non-empty" } }
   let full_url = (build-url $base ({name: (encode-path-segment $name)} | format pattern "/gitignore/templates/{name}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
 }
 
 # List repositories accessible to the app installation
@@ -2852,7 +2943,7 @@ export def "installation-repositories list-apps-repos-accessible" [
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"accept": $hdr_accept} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"per_page": $per_page, "page": $page} | compact), body: null}
 }
 
 # Revoke an installation access token
@@ -2876,7 +2967,7 @@ export def "installation-token delete-apps-access" [
   let full_url = (build-url $base "/installation/token")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
 }
 
 # List issues assigned to the authenticated user
@@ -2913,7 +3004,7 @@ export def "issues list" [
   let full_url = (build-url $base "/issues" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"filter": $filter, "state": $state, "labels": $labels, "sort": $qp_sort, "direction": $direction, "since": $since, "collab": $collab, "orgs": $orgs, "owned": $owned, "pulls": $pulls, "per_page": $per_page, "page": $page} | compact), body: null}
 }
 
 # Get all commonly used licenses
@@ -2941,7 +3032,7 @@ export def "licenses get-list-commonly-used" [
   let full_url = (build-url $base "/licenses" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"featured": $featured, "per_page": $per_page, "page": $page} | compact), body: null}
 }
 
 # Get a license
@@ -2963,10 +3054,11 @@ export def "licenses get" [
 ]: nothing -> record<body: string, conditions: list<string>, description: string, featured: bool, html_url: string, implementation: string, key: string, limitations: list<string>, name: string, node_id: string, permissions: list<string>, spdx_id: string, url: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($license | is-empty) { error make --unspanned { msg: "path parameter 'license' must be non-empty" } }
   let full_url = (build-url $base ({license: (encode-path-segment $license)} | format pattern "/licenses/{license}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
 }
 
 # Render a Markdown document
@@ -2996,7 +3088,7 @@ export def "markdown create-render" [
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "text/html"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: {}, body: $req_body}
 }
 
 # Render a Markdown document in raw mode
@@ -3024,7 +3116,7 @@ export def "markdown-raw create-render" [
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else if (($input | is-not-empty) and ($req_body | is-empty)) { $input } else { $req_body }
   let accept_val = "text/html"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "text/plain" $req_body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "text/plain" $req_body {query: {}, body: $req_body}
 }
 
 # Get GitHub Enterprise Server meta information
@@ -3048,7 +3140,7 @@ export def "meta get" [
   let full_url = (build-url $base "/meta")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
 }
 
 # List public events for a network of repositories
@@ -3073,11 +3165,13 @@ export def "networks-events list-activity-public" [
 ]: nothing -> table<actor: record<avatar_url: string, display_login: string, gravatar_id: string, id: int, login: string, url: string>, created_at: string, id: string, org: record<avatar_url: string, display_login: string, gravatar_id: string, id: int, login: string, url: string>, payload: record<action: string, comment: record, issue: record, pages: list>, public: bool, repo: record<id: int, name: string, url: string>, type: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($owner | is-empty) { error make --unspanned { msg: "path parameter 'owner' must be non-empty" } }
+  if ($repo | is-empty) { error make --unspanned { msg: "path parameter 'repo' must be non-empty" } }
   let qp = [(serialize-qp "per_page" $per_page "scalar") (serialize-qp "page" $page "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({owner: (encode-path-segment $owner), repo: (encode-path-segment $repo)} | format pattern "/networks/{owner}/{repo}/events") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"per_page": $per_page, "page": $page} | compact), body: null}
 }
 
 # List notifications for the authenticated user
@@ -3108,7 +3202,7 @@ export def "notifications list-activity-for-authenticated-user" [
   let full_url = (build-url $base "/notifications" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"all": $all, "participating": $participating, "since": $since, "before": $before, "per_page": $per_page, "page": $page} | compact), body: null}
 }
 
 # Mark notifications as read
@@ -3137,7 +3231,7 @@ export def "notifications get-activity-mark-as" [
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: {}, body: $req_body}
 }
 
 # Get a thread
@@ -3159,10 +3253,11 @@ export def "notifications-threads get-activity" [
 ]: nothing -> record<id: string, last_read_at: string, reason: string, repository: record<allow_forking: bool, anonymous_access_enabled: bool, archive_url: string, archived: bool, assignees_url: string, blobs_url: string, branches_url: string, clone_url: string, code_of_conduct: record<body: string, html_url: string, key: string, name: string, url: string>, collaborators_url: string, comments_url: string, commits_url: string, compare_url: string, contents_url: string, contributors_url: string, created_at: string, default_branch: string, delete_branch_on_merge: bool, deployments_url: string, description: string, disabled: bool, downloads_url: string, events_url: string, fork: bool, forks: int, forks_count: int, forks_url: string, full_name: string, git_commits_url: string, git_refs_url: string, git_tags_url: string, git_url: string, has_downloads: bool, has_issues: bool, has_pages: bool, has_projects: bool, has_wiki: bool, homepage: string, hooks_url: string, html_url: string, id: int, is_template: bool, issue_comment_url: string, issue_events_url: string, issues_url: string, keys_url: string, labels_url: string, language: string, languages_url: string, license: record<key: string, name: string, node_id: string, spdx_id: string, url: string>, merges_url: string, milestones_url: string, mirror_url: string, name: string, network_count: int, node_id: string, notifications_url: string, open_issues: int, open_issues_count: int, owner: record<avatar_url: string, email: string, events_url: string, followers_url: string, following_url: string, gists_url: string, gravatar_id: string, html_url: string, id: int, login: string, name: string, node_id: string, organizations_url: string, received_events_url: string, repos_url: string, site_admin: bool, starred_at: string, starred_url: string, subscriptions_url: string, type: string, url: string>, permissions: record<admin: bool, maintain: bool, pull: bool, push: bool, triage: bool>, private: bool, pulls_url: string, pushed_at: string, releases_url: string, size: int, ssh_url: string, stargazers_count: int, stargazers_url: string, statuses_url: string, subscribers_count: int, subscribers_url: string, subscription_url: string, svn_url: string, tags_url: string, teams_url: string, template_repository: record<allow_forking: bool, allow_merge_commit: bool, allow_rebase_merge: bool, allow_squash_merge: bool, anonymous_access_enabled: bool, archive_url: string, archived: bool, assignees_url: string, blobs_url: string, branches_url: string, clone_url: string, collaborators_url: string, comments_url: string, commits_url: string, compare_url: string, contents_url: string, contributors_url: string, created_at: string, default_branch: string, delete_branch_on_merge: bool, deployments_url: string, description: string, disabled: bool, downloads_url: string, events_url: string, fork: bool, forks: int, forks_count: int, forks_url: string, full_name: string, git_commits_url: string, git_refs_url: string, git_tags_url: string, git_url: string, has_downloads: bool, has_issues: bool, has_pages: bool, has_projects: bool, has_wiki: bool, homepage: string, hooks_url: string, html_url: string, id: int, is_template: bool, issue_comment_url: string, issue_events_url: string, issues_url: string, keys_url: string, labels_url: string, language: string, languages_url: string, license: record, master_branch: string, merges_url: string, milestones_url: string, mirror_url: string, name: string, network_count: int, node_id: string, notifications_url: string, open_issues: int, open_issues_count: int, organization: record, owner: record, permissions: record, private: bool, pulls_url: string, pushed_at: string, releases_url: string, size: int, ssh_url: string, stargazers_count: int, stargazers_url: string, starred_at: string, statuses_url: string, subscribers_count: int, subscribers_url: string, subscription_url: string, svn_url: string, tags_url: string, teams_url: string, template_repository: record, topics: list, trees_url: string, updated_at: string, url: string, visibility: string, watchers: int, watchers_count: int>, topics: list<string>, trees_url: string, updated_at: string, url: string, visibility: string, watchers: int, watchers_count: int>, subject: record<latest_comment_url: string, title: string, type: string, url: string>, subscription_url: string, unread: bool, updated_at: string, url: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($thread_id | is-empty) { error make --unspanned { msg: "path parameter 'thread_id' must be non-empty" } }
   let full_url = (build-url $base ({thread_id: (encode-path-segment $thread_id)} | format pattern "/notifications/threads/{thread_id}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
 }
 
 # Mark a thread as read
@@ -3184,10 +3279,11 @@ export def "notifications-threads get-activity-mark-as" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($thread_id | is-empty) { error make --unspanned { msg: "path parameter 'thread_id' must be non-empty" } }
   let full_url = (build-url $base ({thread_id: (encode-path-segment $thread_id)} | format pattern "/notifications/threads/{thread_id}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "patch" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "patch" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
 }
 
 # Delete a thread subscription
@@ -3209,10 +3305,11 @@ export def "notifications-threads-subscription delete-activity" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($thread_id | is-empty) { error make --unspanned { msg: "path parameter 'thread_id' must be non-empty" } }
   let full_url = (build-url $base ({thread_id: (encode-path-segment $thread_id)} | format pattern "/notifications/threads/{thread_id}/subscription"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
 }
 
 # Get a thread subscription for the authenticated user
@@ -3234,10 +3331,11 @@ export def "notifications-threads-subscription get-activity-for-authenticated-us
 ]: nothing -> record<created_at: string, ignored: bool, reason: string, repository_url: string, subscribed: bool, thread_url: string, url: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($thread_id | is-empty) { error make --unspanned { msg: "path parameter 'thread_id' must be non-empty" } }
   let full_url = (build-url $base ({thread_id: (encode-path-segment $thread_id)} | format pattern "/notifications/threads/{thread_id}/subscription"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
 }
 
 # Set a thread subscription
@@ -3261,12 +3359,13 @@ export def "notifications-threads-subscription update-activity" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($thread_id | is-empty) { error make --unspanned { msg: "path parameter 'thread_id' must be non-empty" } }
   let full_url = (build-url $base ({thread_id: (encode-path-segment $thread_id)} | format pattern "/notifications/threads/{thread_id}/subscription"))
   let req_body = {"ignored": $ignored} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: {}, body: $req_body}
 }
 
 # Get Octocat
@@ -3292,7 +3391,7 @@ export def "octocat get-meta" [
   let full_url = (build-url $base "/octocat" $qp)
   let accept_val = "application/octocat-stream"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"s": $s} | compact), body: null}
 }
 
 # List organizations
@@ -3319,7 +3418,7 @@ export def "organizations list-orgs" [
   let full_url = (build-url $base "/organizations" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"since": $since, "per_page": $per_page} | compact), body: null}
 }
 
 # Get an organization
@@ -3341,10 +3440,11 @@ export def "orgs get" [
 ]: nothing -> record<avatar_url: string, billing_email: string, blog: string, collaborators: int, company: string, created_at: string, default_repository_permission: string, description: string, disk_usage: int, email: string, events_url: string, followers: int, following: int, has_organization_projects: bool, has_repository_projects: bool, hooks_url: string, html_url: string, id: int, issues_url: string, location: string, login: string, members_allowed_repository_creation_type: string, members_can_create_internal_repositories: bool, members_can_create_pages: bool, members_can_create_private_pages: bool, members_can_create_private_repositories: bool, members_can_create_public_pages: bool, members_can_create_public_repositories: bool, members_can_create_repositories: bool, members_url: string, name: string, node_id: string, owned_private_repos: int, plan: record<filled_seats: int, name: string, private_repos: int, seats: int, space: int>, private_gists: int, public_gists: int, public_members_url: string, public_repos: int, repos_url: string, total_private_repos: int, two_factor_requirement_enabled: bool, type: string, updated_at: string, url: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($org | is-empty) { error make --unspanned { msg: "path parameter 'org' must be non-empty" } }
   let full_url = (build-url $base ({org: (encode-path-segment $org)} | format pattern "/orgs/{org}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
 }
 
 # Update an organization
@@ -3383,12 +3483,13 @@ export def "orgs update" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($org | is-empty) { error make --unspanned { msg: "path parameter 'org' must be non-empty" } }
   let full_url = (build-url $base ({org: (encode-path-segment $org)} | format pattern "/orgs/{org}"))
   let req_body = {"billing_email": $billing_email, "blog": $blog, "company": $company, "default_repository_permission": $default_repository_permission, "description": $description, "email": $email, "has_organization_projects": $has_organization_projects, "has_repository_projects": $has_repository_projects, "location": $location, "members_allowed_repository_creation_type": $members_allowed_repository_creation_type, "members_can_create_internal_repositories": $members_can_create_internal_repositories, "members_can_create_private_repositories": $members_can_create_private_repositories, "members_can_create_public_repositories": $members_can_create_public_repositories, "members_can_create_repositories": $members_can_create_repositories, "name": $name, "twitter_username": $twitter_username} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "patch" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body
+  do-request "patch" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: {}, body: $req_body}
 }
 
 # List public organization events
@@ -3412,11 +3513,12 @@ export def "orgs-events list-activity-public" [
 ]: nothing -> table<actor: record<avatar_url: string, display_login: string, gravatar_id: string, id: int, login: string, url: string>, created_at: string, id: string, org: record<avatar_url: string, display_login: string, gravatar_id: string, id: int, login: string, url: string>, payload: record<action: string, comment: record, issue: record, pages: list>, public: bool, repo: record<id: int, name: string, url: string>, type: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($org | is-empty) { error make --unspanned { msg: "path parameter 'org' must be non-empty" } }
   let qp = [(serialize-qp "per_page" $per_page "scalar") (serialize-qp "page" $page "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({org: (encode-path-segment $org)} | format pattern "/orgs/{org}/events") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"per_page": $per_page, "page": $page} | compact), body: null}
 }
 
 # List organization webhooks
@@ -3440,11 +3542,12 @@ export def "orgs-hooks list-webhooks" [
 ]: nothing -> table<active: bool, config: record<content_type: string, insecure_ssl: string, secret: string, url: string>, created_at: string, events: list<string>, id: int, name: string, ping_url: string, type: string, updated_at: string, url: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($org | is-empty) { error make --unspanned { msg: "path parameter 'org' must be non-empty" } }
   let qp = [(serialize-qp "per_page" $per_page "scalar") (serialize-qp "page" $page "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({org: (encode-path-segment $org)} | format pattern "/orgs/{org}/hooks") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"per_page": $per_page, "page": $page} | compact), body: null}
 }
 
 # Create an organization webhook
@@ -3472,12 +3575,13 @@ export def "orgs-hooks create-webhook" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($org | is-empty) { error make --unspanned { msg: "path parameter 'org' must be non-empty" } }
   let full_url = (build-url $base ({org: (encode-path-segment $org)} | format pattern "/orgs/{org}/hooks"))
   let req_body = {"active": $active, "config": $config, "events": $events, "name": $name} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: {}, body: $req_body}
 }
 
 # Delete an organization webhook
@@ -3500,10 +3604,12 @@ export def "orgs-hooks delete-webhook" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($org | is-empty) { error make --unspanned { msg: "path parameter 'org' must be non-empty" } }
+  if ($hook_id | is-empty) { error make --unspanned { msg: "path parameter 'hook_id' must be non-empty" } }
   let full_url = (build-url $base ({org: (encode-path-segment $org), hook_id: (encode-path-segment $hook_id)} | format pattern "/orgs/{org}/hooks/{hook_id}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
 }
 
 # Get an organization webhook
@@ -3526,10 +3632,12 @@ export def "orgs-hooks get-webhook" [
 ]: nothing -> record<active: bool, config: record<content_type: string, insecure_ssl: string, secret: string, url: string>, created_at: string, events: list<string>, id: int, name: string, ping_url: string, type: string, updated_at: string, url: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($org | is-empty) { error make --unspanned { msg: "path parameter 'org' must be non-empty" } }
+  if ($hook_id | is-empty) { error make --unspanned { msg: "path parameter 'hook_id' must be non-empty" } }
   let full_url = (build-url $base ({org: (encode-path-segment $org), hook_id: (encode-path-segment $hook_id)} | format pattern "/orgs/{org}/hooks/{hook_id}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
 }
 
 # Update an organization webhook
@@ -3558,12 +3666,14 @@ export def "orgs-hooks update-webhook" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($org | is-empty) { error make --unspanned { msg: "path parameter 'org' must be non-empty" } }
+  if ($hook_id | is-empty) { error make --unspanned { msg: "path parameter 'hook_id' must be non-empty" } }
   let full_url = (build-url $base ({org: (encode-path-segment $org), hook_id: (encode-path-segment $hook_id)} | format pattern "/orgs/{org}/hooks/{hook_id}"))
   let req_body = {"active": $active, "config": $config, "events": $events, "name": $name} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "patch" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body
+  do-request "patch" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: {}, body: $req_body}
 }
 
 # Ping an organization webhook
@@ -3586,10 +3696,12 @@ export def "orgs-hooks-pings ping-webhook" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($org | is-empty) { error make --unspanned { msg: "path parameter 'org' must be non-empty" } }
+  if ($hook_id | is-empty) { error make --unspanned { msg: "path parameter 'hook_id' must be non-empty" } }
   let full_url = (build-url $base ({org: (encode-path-segment $org), hook_id: (encode-path-segment $hook_id)} | format pattern "/orgs/{org}/hooks/{hook_id}/pings"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
 }
 
 # Get an organization installation for the authenticated app
@@ -3612,12 +3724,13 @@ export def "orgs-installation get-apps" [
 ]: nothing -> record<access_tokens_url: string, account: any, app_id: int, app_slug: string, contact_email: string, created_at: string, events: list<string>, html_url: string, id: int, permissions: record<checks: string, contents: string, deployments: string, issues: string, metadata: string, organization_administration: string, pull_requests: string, statuses: string>, repositories_url: string, repository_selection: string, single_file_name: string, suspended_at: string, suspended_by: record<avatar_url: string, email: string, events_url: string, followers_url: string, following_url: string, gists_url: string, gravatar_id: string, html_url: string, id: int, login: string, name: string, node_id: string, organizations_url: string, received_events_url: string, repos_url: string, site_admin: bool, starred_at: string, starred_url: string, subscriptions_url: string, type: string, url: string>, target_id: int, target_type: string, updated_at: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($org | is-empty) { error make --unspanned { msg: "path parameter 'org' must be non-empty" } }
   let full_url = (build-url $base ({org: (encode-path-segment $org)} | format pattern "/orgs/{org}/installation"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"accept": $hdr_accept} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
 }
 
 # List app installations for an organization
@@ -3642,13 +3755,14 @@ export def "orgs-installations list-app" [
 ]: nothing -> record<installations: table<access_tokens_url: string, account: any, app_id: int, app_slug: string, contact_email: string, created_at: string, events: list, html_url: string, id: int, permissions: record, repositories_url: string, repository_selection: string, single_file_name: string, suspended_at: string, suspended_by: record, target_id: int, target_type: string, updated_at: string>, total_count: int> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($org | is-empty) { error make --unspanned { msg: "path parameter 'org' must be non-empty" } }
   let qp = [(serialize-qp "per_page" $per_page "scalar") (serialize-qp "page" $page "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({org: (encode-path-segment $org)} | format pattern "/orgs/{org}/installations") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"accept": $hdr_accept} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"per_page": $per_page, "page": $page} | compact), body: null}
 }
 
 # List organization issues assigned to the authenticated user
@@ -3678,11 +3792,12 @@ export def "orgs-issues list" [
 ]: nothing -> table<active_lock_reason: string, assignee: record<avatar_url: string, email: string, events_url: string, followers_url: string, following_url: string, gists_url: string, gravatar_id: string, html_url: string, id: int, login: string, name: string, node_id: string, organizations_url: string, received_events_url: string, repos_url: string, site_admin: bool, starred_at: string, starred_url: string, subscriptions_url: string, type: string, url: string>, assignees: list<record>, author_association: string, body: string, body_html: string, body_text: string, closed_at: string, closed_by: record<avatar_url: string, email: string, events_url: string, followers_url: string, following_url: string, gists_url: string, gravatar_id: string, html_url: string, id: int, login: string, name: string, node_id: string, organizations_url: string, received_events_url: string, repos_url: string, site_admin: bool, starred_at: string, starred_url: string, subscriptions_url: string, type: string, url: string>, comments: int, comments_url: string, created_at: string, events_url: string, html_url: string, id: int, labels: list<any>, labels_url: string, locked: bool, milestone: record<closed_at: string, closed_issues: int, created_at: string, creator: record, description: string, due_on: string, html_url: string, id: int, labels_url: string, node_id: string, number: int, open_issues: int, state: string, title: string, updated_at: string, url: string>, node_id: string, number: int, performed_via_github_app: record<client_id: string, client_secret: string, created_at: string, description: string, events: list, external_url: string, html_url: string, id: int, installations_count: int, name: string, node_id: string, owner: record, pem: string, permissions: record, slug: string, updated_at: string, webhook_secret: string>, pull_request: record<diff_url: string, html_url: string, merged_at: string, patch_url: string, url: string>, reactions: record<_1: int, _1: int, confused: int, eyes: int, heart: int, hooray: int, laugh: int, rocket: int, total_count: int, url: string>, repository: record<allow_forking: bool, allow_merge_commit: bool, allow_rebase_merge: bool, allow_squash_merge: bool, anonymous_access_enabled: bool, archive_url: string, archived: bool, assignees_url: string, blobs_url: string, branches_url: string, clone_url: string, collaborators_url: string, comments_url: string, commits_url: string, compare_url: string, contents_url: string, contributors_url: string, created_at: string, default_branch: string, delete_branch_on_merge: bool, deployments_url: string, description: string, disabled: bool, downloads_url: string, events_url: string, fork: bool, forks: int, forks_count: int, forks_url: string, full_name: string, git_commits_url: string, git_refs_url: string, git_tags_url: string, git_url: string, has_downloads: bool, has_issues: bool, has_pages: bool, has_projects: bool, has_wiki: bool, homepage: string, hooks_url: string, html_url: string, id: int, is_template: bool, issue_comment_url: string, issue_events_url: string, issues_url: string, keys_url: string, labels_url: string, language: string, languages_url: string, license: record, master_branch: string, merges_url: string, milestones_url: string, mirror_url: string, name: string, network_count: int, node_id: string, notifications_url: string, open_issues: int, open_issues_count: int, organization: record, owner: record, permissions: record, private: bool, pulls_url: string, pushed_at: string, releases_url: string, size: int, ssh_url: string, stargazers_count: int, stargazers_url: string, starred_at: string, statuses_url: string, subscribers_count: int, subscribers_url: string, subscription_url: string, svn_url: string, tags_url: string, teams_url: string, template_repository: record, topics: list, trees_url: string, updated_at: string, url: string, visibility: string, watchers: int, watchers_count: int>, repository_url: string, state: string, timeline_url: string, title: string, updated_at: string, url: string, user: record<avatar_url: string, email: string, events_url: string, followers_url: string, following_url: string, gists_url: string, gravatar_id: string, html_url: string, id: int, login: string, name: string, node_id: string, organizations_url: string, received_events_url: string, repos_url: string, site_admin: bool, starred_at: string, starred_url: string, subscriptions_url: string, type: string, url: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($org | is-empty) { error make --unspanned { msg: "path parameter 'org' must be non-empty" } }
   let qp = [(serialize-qp "filter" $filter "scalar") (serialize-qp "state" $state "scalar") (serialize-qp "labels" $labels "scalar") (serialize-qp "sort" $qp_sort "scalar") (serialize-qp "direction" $direction "scalar") (serialize-qp "since" $since "scalar") (serialize-qp "per_page" $per_page "scalar") (serialize-qp "page" $page "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({org: (encode-path-segment $org)} | format pattern "/orgs/{org}/issues") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"filter": $filter, "state": $state, "labels": $labels, "sort": $qp_sort, "direction": $direction, "since": $since, "per_page": $per_page, "page": $page} | compact), body: null}
 }
 
 # List organization members
@@ -3708,11 +3823,12 @@ export def "orgs-members list" [
 ]: nothing -> table<avatar_url: string, email: string, events_url: string, followers_url: string, following_url: string, gists_url: string, gravatar_id: string, html_url: string, id: int, login: string, name: string, node_id: string, organizations_url: string, received_events_url: string, repos_url: string, site_admin: bool, starred_at: string, starred_url: string, subscriptions_url: string, type: string, url: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($org | is-empty) { error make --unspanned { msg: "path parameter 'org' must be non-empty" } }
   let qp = [(serialize-qp "filter" $filter "scalar") (serialize-qp "role" $role "scalar") (serialize-qp "per_page" $per_page "scalar") (serialize-qp "page" $page "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({org: (encode-path-segment $org)} | format pattern "/orgs/{org}/members") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"filter": $filter, "role": $role, "per_page": $per_page, "page": $page} | compact), body: null}
 }
 
 # Remove an organization member
@@ -3735,10 +3851,12 @@ export def "orgs-members delete" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($org | is-empty) { error make --unspanned { msg: "path parameter 'org' must be non-empty" } }
+  if ($username | is-empty) { error make --unspanned { msg: "path parameter 'username' must be non-empty" } }
   let full_url = (build-url $base ({org: (encode-path-segment $org), username: (encode-path-segment $username)} | format pattern "/orgs/{org}/members/{username}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
 }
 
 # Check organization membership for a user
@@ -3761,10 +3879,12 @@ export def "orgs-members check-membership-for-user" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($org | is-empty) { error make --unspanned { msg: "path parameter 'org' must be non-empty" } }
+  if ($username | is-empty) { error make --unspanned { msg: "path parameter 'username' must be non-empty" } }
   let full_url = (build-url $base ({org: (encode-path-segment $org), username: (encode-path-segment $username)} | format pattern "/orgs/{org}/members/{username}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
 }
 
 # Remove organization membership for a user
@@ -3787,10 +3907,12 @@ export def "orgs-memberships delete-for-user" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($org | is-empty) { error make --unspanned { msg: "path parameter 'org' must be non-empty" } }
+  if ($username | is-empty) { error make --unspanned { msg: "path parameter 'username' must be non-empty" } }
   let full_url = (build-url $base ({org: (encode-path-segment $org), username: (encode-path-segment $username)} | format pattern "/orgs/{org}/memberships/{username}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
 }
 
 # Get organization membership for a user
@@ -3813,10 +3935,12 @@ export def "orgs-memberships get-for-user" [
 ]: nothing -> record<organization: record<avatar_url: string, description: string, events_url: string, hooks_url: string, id: int, issues_url: string, login: string, members_url: string, node_id: string, public_members_url: string, repos_url: string, url: string>, organization_url: string, permissions: record<can_create_repository: bool>, role: string, state: string, url: string, user: record<avatar_url: string, email: string, events_url: string, followers_url: string, following_url: string, gists_url: string, gravatar_id: string, html_url: string, id: int, login: string, name: string, node_id: string, organizations_url: string, received_events_url: string, repos_url: string, site_admin: bool, starred_at: string, starred_url: string, subscriptions_url: string, type: string, url: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($org | is-empty) { error make --unspanned { msg: "path parameter 'org' must be non-empty" } }
+  if ($username | is-empty) { error make --unspanned { msg: "path parameter 'username' must be non-empty" } }
   let full_url = (build-url $base ({org: (encode-path-segment $org), username: (encode-path-segment $username)} | format pattern "/orgs/{org}/memberships/{username}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
 }
 
 # Set organization membership for a user
@@ -3841,12 +3965,14 @@ export def "orgs-memberships update-for-user" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($org | is-empty) { error make --unspanned { msg: "path parameter 'org' must be non-empty" } }
+  if ($username | is-empty) { error make --unspanned { msg: "path parameter 'username' must be non-empty" } }
   let full_url = (build-url $base ({org: (encode-path-segment $org), username: (encode-path-segment $username)} | format pattern "/orgs/{org}/memberships/{username}"))
   let req_body = {"role": $role} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: {}, body: $req_body}
 }
 
 # List outside collaborators for an organization
@@ -3871,11 +3997,12 @@ export def "orgs-outside-collaborators list" [
 ]: nothing -> table<avatar_url: string, email: string, events_url: string, followers_url: string, following_url: string, gists_url: string, gravatar_id: string, html_url: string, id: int, login: string, name: string, node_id: string, organizations_url: string, received_events_url: string, repos_url: string, site_admin: bool, starred_at: string, starred_url: string, subscriptions_url: string, type: string, url: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($org | is-empty) { error make --unspanned { msg: "path parameter 'org' must be non-empty" } }
   let qp = [(serialize-qp "filter" $filter "scalar") (serialize-qp "per_page" $per_page "scalar") (serialize-qp "page" $page "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({org: (encode-path-segment $org)} | format pattern "/orgs/{org}/outside_collaborators") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"filter": $filter, "per_page": $per_page, "page": $page} | compact), body: null}
 }
 
 # Remove outside collaborator from an organization
@@ -3898,10 +4025,12 @@ export def "orgs-outside-collaborators delete" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($org | is-empty) { error make --unspanned { msg: "path parameter 'org' must be non-empty" } }
+  if ($username | is-empty) { error make --unspanned { msg: "path parameter 'username' must be non-empty" } }
   let full_url = (build-url $base ({org: (encode-path-segment $org), username: (encode-path-segment $username)} | format pattern "/orgs/{org}/outside_collaborators/{username}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
 }
 
 # Convert an organization member to outside collaborator
@@ -3924,10 +4053,12 @@ export def "orgs-outside-collaborators update-convert-member" [
 ]: nothing -> record {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($org | is-empty) { error make --unspanned { msg: "path parameter 'org' must be non-empty" } }
+  if ($username | is-empty) { error make --unspanned { msg: "path parameter 'username' must be non-empty" } }
   let full_url = (build-url $base ({org: (encode-path-segment $org), username: (encode-path-segment $username)} | format pattern "/orgs/{org}/outside_collaborators/{username}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
 }
 
 # List pre-receive hooks for an organization
@@ -3953,11 +4084,12 @@ export def "orgs-pre-receive-hooks list-enterprise-admin" [
 ]: nothing -> table<allow_downstream_configuration: bool, configuration_url: string, enforcement: string, id: int, name: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($org | is-empty) { error make --unspanned { msg: "path parameter 'org' must be non-empty" } }
   let qp = [(serialize-qp "per_page" $per_page "scalar") (serialize-qp "page" $page "scalar") (serialize-qp "direction" $direction "scalar") (serialize-qp "sort" $qp_sort "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({org: (encode-path-segment $org)} | format pattern "/orgs/{org}/pre-receive-hooks") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"per_page": $per_page, "page": $page, "direction": $direction, "sort": $qp_sort} | compact), body: null}
 }
 
 # Remove pre-receive hook enforcement for an organization
@@ -3980,10 +4112,12 @@ export def "orgs-pre-receive-hooks delete-enterprise-admin-enforcement" [
 ]: nothing -> record<allow_downstream_configuration: bool, configuration_url: string, enforcement: string, id: int, name: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($org | is-empty) { error make --unspanned { msg: "path parameter 'org' must be non-empty" } }
+  if ($pre_receive_hook_id | is-empty) { error make --unspanned { msg: "path parameter 'pre_receive_hook_id' must be non-empty" } }
   let full_url = (build-url $base ({org: (encode-path-segment $org), pre_receive_hook_id: (encode-path-segment $pre_receive_hook_id)} | format pattern "/orgs/{org}/pre-receive-hooks/{pre_receive_hook_id}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
 }
 
 # Get a pre-receive hook for an organization
@@ -4006,10 +4140,12 @@ export def "orgs-pre-receive-hooks get-enterprise-admin" [
 ]: nothing -> record<allow_downstream_configuration: bool, configuration_url: string, enforcement: string, id: int, name: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($org | is-empty) { error make --unspanned { msg: "path parameter 'org' must be non-empty" } }
+  if ($pre_receive_hook_id | is-empty) { error make --unspanned { msg: "path parameter 'pre_receive_hook_id' must be non-empty" } }
   let full_url = (build-url $base ({org: (encode-path-segment $org), pre_receive_hook_id: (encode-path-segment $pre_receive_hook_id)} | format pattern "/orgs/{org}/pre-receive-hooks/{pre_receive_hook_id}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
 }
 
 # Update pre-receive hook enforcement for an organization
@@ -4035,12 +4171,14 @@ export def "orgs-pre-receive-hooks update-enterprise-admin-enforcement" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($org | is-empty) { error make --unspanned { msg: "path parameter 'org' must be non-empty" } }
+  if ($pre_receive_hook_id | is-empty) { error make --unspanned { msg: "path parameter 'pre_receive_hook_id' must be non-empty" } }
   let full_url = (build-url $base ({org: (encode-path-segment $org), pre_receive_hook_id: (encode-path-segment $pre_receive_hook_id)} | format pattern "/orgs/{org}/pre-receive-hooks/{pre_receive_hook_id}"))
   let req_body = {"allow_downstream_configuration": $allow_downstream_configuration, "enforcement": $enforcement} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "patch" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body
+  do-request "patch" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: {}, body: $req_body}
 }
 
 # List organization projects
@@ -4065,11 +4203,12 @@ export def "orgs-projects list" [
 ]: nothing -> table<body: string, columns_url: string, created_at: string, creator: record<avatar_url: string, email: string, events_url: string, followers_url: string, following_url: string, gists_url: string, gravatar_id: string, html_url: string, id: int, login: string, name: string, node_id: string, organizations_url: string, received_events_url: string, repos_url: string, site_admin: bool, starred_at: string, starred_url: string, subscriptions_url: string, type: string, url: string>, html_url: string, id: int, name: string, node_id: string, number: int, organization_permission: string, owner_url: string, private: bool, state: string, updated_at: string, url: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($org | is-empty) { error make --unspanned { msg: "path parameter 'org' must be non-empty" } }
   let qp = [(serialize-qp "state" $state "scalar") (serialize-qp "per_page" $per_page "scalar") (serialize-qp "page" $page "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({org: (encode-path-segment $org)} | format pattern "/orgs/{org}/projects") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"state": $state, "per_page": $per_page, "page": $page} | compact), body: null}
 }
 
 # Create an organization project
@@ -4094,12 +4233,13 @@ export def "orgs-projects create" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($org | is-empty) { error make --unspanned { msg: "path parameter 'org' must be non-empty" } }
   let full_url = (build-url $base ({org: (encode-path-segment $org)} | format pattern "/orgs/{org}/projects"))
   let req_body = {"body": $body, "name": $name} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: {}, body: $req_body}
 }
 
 # List public organization members
@@ -4123,11 +4263,12 @@ export def "orgs-public-members list" [
 ]: nothing -> table<avatar_url: string, email: string, events_url: string, followers_url: string, following_url: string, gists_url: string, gravatar_id: string, html_url: string, id: int, login: string, name: string, node_id: string, organizations_url: string, received_events_url: string, repos_url: string, site_admin: bool, starred_at: string, starred_url: string, subscriptions_url: string, type: string, url: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($org | is-empty) { error make --unspanned { msg: "path parameter 'org' must be non-empty" } }
   let qp = [(serialize-qp "per_page" $per_page "scalar") (serialize-qp "page" $page "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({org: (encode-path-segment $org)} | format pattern "/orgs/{org}/public_members") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"per_page": $per_page, "page": $page} | compact), body: null}
 }
 
 # Remove public organization membership for the authenticated user
@@ -4150,10 +4291,12 @@ export def "orgs-public-members delete-membership-for-authenticated-user" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($org | is-empty) { error make --unspanned { msg: "path parameter 'org' must be non-empty" } }
+  if ($username | is-empty) { error make --unspanned { msg: "path parameter 'username' must be non-empty" } }
   let full_url = (build-url $base ({org: (encode-path-segment $org), username: (encode-path-segment $username)} | format pattern "/orgs/{org}/public_members/{username}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
 }
 
 # Check public organization membership for a user
@@ -4176,10 +4319,12 @@ export def "orgs-public-members check-membership-for-user" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($org | is-empty) { error make --unspanned { msg: "path parameter 'org' must be non-empty" } }
+  if ($username | is-empty) { error make --unspanned { msg: "path parameter 'username' must be non-empty" } }
   let full_url = (build-url $base ({org: (encode-path-segment $org), username: (encode-path-segment $username)} | format pattern "/orgs/{org}/public_members/{username}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
 }
 
 # Set public organization membership for the authenticated user
@@ -4202,10 +4347,12 @@ export def "orgs-public-members update-membership-for-authenticated-user" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($org | is-empty) { error make --unspanned { msg: "path parameter 'org' must be non-empty" } }
+  if ($username | is-empty) { error make --unspanned { msg: "path parameter 'username' must be non-empty" } }
   let full_url = (build-url $base ({org: (encode-path-segment $org), username: (encode-path-segment $username)} | format pattern "/orgs/{org}/public_members/{username}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
 }
 
 # List organization repositories
@@ -4232,11 +4379,12 @@ export def "orgs-repos list" [
 ]: nothing -> table<allow_forking: bool, anonymous_access_enabled: bool, archive_url: string, archived: bool, assignees_url: string, blobs_url: string, branches_url: string, clone_url: string, code_of_conduct: record<body: string, html_url: string, key: string, name: string, url: string>, collaborators_url: string, comments_url: string, commits_url: string, compare_url: string, contents_url: string, contributors_url: string, created_at: string, default_branch: string, delete_branch_on_merge: bool, deployments_url: string, description: string, disabled: bool, downloads_url: string, events_url: string, fork: bool, forks: int, forks_count: int, forks_url: string, full_name: string, git_commits_url: string, git_refs_url: string, git_tags_url: string, git_url: string, has_downloads: bool, has_issues: bool, has_pages: bool, has_projects: bool, has_wiki: bool, homepage: string, hooks_url: string, html_url: string, id: int, is_template: bool, issue_comment_url: string, issue_events_url: string, issues_url: string, keys_url: string, labels_url: string, language: string, languages_url: string, license: record<key: string, name: string, node_id: string, spdx_id: string, url: string>, merges_url: string, milestones_url: string, mirror_url: string, name: string, network_count: int, node_id: string, notifications_url: string, open_issues: int, open_issues_count: int, owner: record<avatar_url: string, email: string, events_url: string, followers_url: string, following_url: string, gists_url: string, gravatar_id: string, html_url: string, id: int, login: string, name: string, node_id: string, organizations_url: string, received_events_url: string, repos_url: string, site_admin: bool, starred_at: string, starred_url: string, subscriptions_url: string, type: string, url: string>, permissions: record<admin: bool, maintain: bool, pull: bool, push: bool, triage: bool>, private: bool, pulls_url: string, pushed_at: string, releases_url: string, size: int, ssh_url: string, stargazers_count: int, stargazers_url: string, statuses_url: string, subscribers_count: int, subscribers_url: string, subscription_url: string, svn_url: string, tags_url: string, teams_url: string, template_repository: record<allow_forking: bool, allow_merge_commit: bool, allow_rebase_merge: bool, allow_squash_merge: bool, anonymous_access_enabled: bool, archive_url: string, archived: bool, assignees_url: string, blobs_url: string, branches_url: string, clone_url: string, collaborators_url: string, comments_url: string, commits_url: string, compare_url: string, contents_url: string, contributors_url: string, created_at: string, default_branch: string, delete_branch_on_merge: bool, deployments_url: string, description: string, disabled: bool, downloads_url: string, events_url: string, fork: bool, forks: int, forks_count: int, forks_url: string, full_name: string, git_commits_url: string, git_refs_url: string, git_tags_url: string, git_url: string, has_downloads: bool, has_issues: bool, has_pages: bool, has_projects: bool, has_wiki: bool, homepage: string, hooks_url: string, html_url: string, id: int, is_template: bool, issue_comment_url: string, issue_events_url: string, issues_url: string, keys_url: string, labels_url: string, language: string, languages_url: string, license: record, master_branch: string, merges_url: string, milestones_url: string, mirror_url: string, name: string, network_count: int, node_id: string, notifications_url: string, open_issues: int, open_issues_count: int, organization: record, owner: record, permissions: record, private: bool, pulls_url: string, pushed_at: string, releases_url: string, size: int, ssh_url: string, stargazers_count: int, stargazers_url: string, starred_at: string, statuses_url: string, subscribers_count: int, subscribers_url: string, subscription_url: string, svn_url: string, tags_url: string, teams_url: string, template_repository: record, topics: list, trees_url: string, updated_at: string, url: string, visibility: string, watchers: int, watchers_count: int>, topics: list<string>, trees_url: string, updated_at: string, url: string, visibility: string, watchers: int, watchers_count: int> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($org | is-empty) { error make --unspanned { msg: "path parameter 'org' must be non-empty" } }
   let qp = [(serialize-qp "type" $type "scalar") (serialize-qp "sort" $qp_sort "scalar") (serialize-qp "direction" $direction "scalar") (serialize-qp "per_page" $per_page "scalar") (serialize-qp "page" $page "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({org: (encode-path-segment $org)} | format pattern "/orgs/{org}/repos") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"type": $type, "sort": $qp_sort, "direction": $direction, "per_page": $per_page, "page": $page} | compact), body: null}
 }
 
 # Create an organization repository
@@ -4276,12 +4424,13 @@ export def "orgs-repos create" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($org | is-empty) { error make --unspanned { msg: "path parameter 'org' must be non-empty" } }
   let full_url = (build-url $base ({org: (encode-path-segment $org)} | format pattern "/orgs/{org}/repos"))
   let req_body = {"allow_merge_commit": $allow_merge_commit, "allow_rebase_merge": $allow_rebase_merge, "allow_squash_merge": $allow_squash_merge, "auto_init": $auto_init, "delete_branch_on_merge": $delete_branch_on_merge, "description": $description, "gitignore_template": $gitignore_template, "has_issues": $has_issues, "has_projects": $has_projects, "has_wiki": $has_wiki, "homepage": $homepage, "is_template": $is_template, "license_template": $license_template, "name": $name, "private": $private, "team_id": $team_id, "visibility": $visibility} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: {}, body: $req_body}
 }
 
 # List teams
@@ -4305,11 +4454,12 @@ export def "orgs-teams list" [
 ]: nothing -> table<description: string, html_url: string, id: int, members_url: string, name: string, node_id: string, parent: record<description: string, html_url: string, id: int, ldap_dn: string, members_url: string, name: string, node_id: string, permission: string, privacy: string, repositories_url: string, slug: string, url: string>, permission: string, permissions: record<admin: bool, maintain: bool, pull: bool, push: bool, triage: bool>, privacy: string, repositories_url: string, slug: string, url: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($org | is-empty) { error make --unspanned { msg: "path parameter 'org' must be non-empty" } }
   let qp = [(serialize-qp "per_page" $per_page "scalar") (serialize-qp "page" $page "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({org: (encode-path-segment $org)} | format pattern "/orgs/{org}/teams") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"per_page": $per_page, "page": $page} | compact), body: null}
 }
 
 # Create a team
@@ -4339,12 +4489,13 @@ export def "orgs-teams create" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($org | is-empty) { error make --unspanned { msg: "path parameter 'org' must be non-empty" } }
   let full_url = (build-url $base ({org: (encode-path-segment $org)} | format pattern "/orgs/{org}/teams"))
   let req_body = {"description": $description, "maintainers": $maintainers, "name": $name, "parent_team_id": $parent_team_id, "permission": $permission, "privacy": $privacy, "repo_names": $repo_names} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: {}, body: $req_body}
 }
 
 # Delete a team
@@ -4367,10 +4518,12 @@ export def "orgs-teams delete" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($org | is-empty) { error make --unspanned { msg: "path parameter 'org' must be non-empty" } }
+  if ($team_slug | is-empty) { error make --unspanned { msg: "path parameter 'team_slug' must be non-empty" } }
   let full_url = (build-url $base ({org: (encode-path-segment $org), team_slug: (encode-path-segment $team_slug)} | format pattern "/orgs/{org}/teams/{team_slug}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
 }
 
 # Get a team by name
@@ -4393,10 +4546,12 @@ export def "orgs-teams get-by-name" [
 ]: nothing -> record<created_at: string, description: string, html_url: string, id: int, ldap_dn: string, members_count: int, members_url: string, name: string, node_id: string, organization: record<avatar_url: string, billing_email: string, blog: string, collaborators: int, company: string, created_at: string, default_repository_permission: string, description: string, disk_usage: int, email: string, events_url: string, followers: int, following: int, has_organization_projects: bool, has_repository_projects: bool, hooks_url: string, html_url: string, id: int, issues_url: string, location: string, login: string, members_allowed_repository_creation_type: string, members_can_create_internal_repositories: bool, members_can_create_pages: bool, members_can_create_private_pages: bool, members_can_create_private_repositories: bool, members_can_create_public_pages: bool, members_can_create_public_repositories: bool, members_can_create_repositories: bool, members_url: string, name: string, node_id: string, owned_private_repos: int, plan: record<filled_seats: int, name: string, private_repos: int, seats: int, space: int>, private_gists: int, public_gists: int, public_members_url: string, public_repos: int, repos_url: string, total_private_repos: int, two_factor_requirement_enabled: bool, type: string, updated_at: string, url: string>, parent: record<description: string, html_url: string, id: int, ldap_dn: string, members_url: string, name: string, node_id: string, permission: string, privacy: string, repositories_url: string, slug: string, url: string>, permission: string, privacy: string, repos_count: int, repositories_url: string, slug: string, updated_at: string, url: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($org | is-empty) { error make --unspanned { msg: "path parameter 'org' must be non-empty" } }
+  if ($team_slug | is-empty) { error make --unspanned { msg: "path parameter 'team_slug' must be non-empty" } }
   let full_url = (build-url $base ({org: (encode-path-segment $org), team_slug: (encode-path-segment $team_slug)} | format pattern "/orgs/{org}/teams/{team_slug}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
 }
 
 # Update a team
@@ -4425,12 +4580,14 @@ export def "orgs-teams update" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($org | is-empty) { error make --unspanned { msg: "path parameter 'org' must be non-empty" } }
+  if ($team_slug | is-empty) { error make --unspanned { msg: "path parameter 'team_slug' must be non-empty" } }
   let full_url = (build-url $base ({org: (encode-path-segment $org), team_slug: (encode-path-segment $team_slug)} | format pattern "/orgs/{org}/teams/{team_slug}"))
   let req_body = {"description": $description, "name": $name, "parent_team_id": $parent_team_id, "permission": $permission, "privacy": $privacy} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "patch" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body
+  do-request "patch" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: {}, body: $req_body}
 }
 
 # List discussions
@@ -4457,11 +4614,13 @@ export def "orgs-teams-discussions list" [
 ]: nothing -> table<author: record<avatar_url: string, email: string, events_url: string, followers_url: string, following_url: string, gists_url: string, gravatar_id: string, html_url: string, id: int, login: string, name: string, node_id: string, organizations_url: string, received_events_url: string, repos_url: string, site_admin: bool, starred_at: string, starred_url: string, subscriptions_url: string, type: string, url: string>, body: string, body_html: string, body_version: string, comments_count: int, comments_url: string, created_at: string, html_url: string, last_edited_at: string, node_id: string, number: int, pinned: bool, private: bool, reactions: record<_1: int, _1: int, confused: int, eyes: int, heart: int, hooray: int, laugh: int, rocket: int, total_count: int, url: string>, team_url: string, title: string, updated_at: string, url: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($org | is-empty) { error make --unspanned { msg: "path parameter 'org' must be non-empty" } }
+  if ($team_slug | is-empty) { error make --unspanned { msg: "path parameter 'team_slug' must be non-empty" } }
   let qp = [(serialize-qp "direction" $direction "scalar") (serialize-qp "per_page" $per_page "scalar") (serialize-qp "page" $page "scalar") (serialize-qp "pinned" $pinned "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({org: (encode-path-segment $org), team_slug: (encode-path-segment $team_slug)} | format pattern "/orgs/{org}/teams/{team_slug}/discussions") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"direction": $direction, "per_page": $per_page, "page": $page, "pinned": $pinned} | compact), body: null}
 }
 
 # Create a discussion
@@ -4488,12 +4647,14 @@ export def "orgs-teams-discussions create" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($org | is-empty) { error make --unspanned { msg: "path parameter 'org' must be non-empty" } }
+  if ($team_slug | is-empty) { error make --unspanned { msg: "path parameter 'team_slug' must be non-empty" } }
   let full_url = (build-url $base ({org: (encode-path-segment $org), team_slug: (encode-path-segment $team_slug)} | format pattern "/orgs/{org}/teams/{team_slug}/discussions"))
   let req_body = {"body": $body, "private": $private, "title": $title} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: {}, body: $req_body}
 }
 
 # Delete a discussion
@@ -4517,10 +4678,13 @@ export def "orgs-teams-discussions delete" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($org | is-empty) { error make --unspanned { msg: "path parameter 'org' must be non-empty" } }
+  if ($team_slug | is-empty) { error make --unspanned { msg: "path parameter 'team_slug' must be non-empty" } }
+  if ($discussion_number | is-empty) { error make --unspanned { msg: "path parameter 'discussion_number' must be non-empty" } }
   let full_url = (build-url $base ({org: (encode-path-segment $org), team_slug: (encode-path-segment $team_slug), discussion_number: (encode-path-segment $discussion_number)} | format pattern "/orgs/{org}/teams/{team_slug}/discussions/{discussion_number}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
 }
 
 # Get a discussion
@@ -4544,10 +4708,13 @@ export def "orgs-teams-discussions get" [
 ]: nothing -> record<author: record<avatar_url: string, email: string, events_url: string, followers_url: string, following_url: string, gists_url: string, gravatar_id: string, html_url: string, id: int, login: string, name: string, node_id: string, organizations_url: string, received_events_url: string, repos_url: string, site_admin: bool, starred_at: string, starred_url: string, subscriptions_url: string, type: string, url: string>, body: string, body_html: string, body_version: string, comments_count: int, comments_url: string, created_at: string, html_url: string, last_edited_at: string, node_id: string, number: int, pinned: bool, private: bool, reactions: record<_1: int, _1: int, confused: int, eyes: int, heart: int, hooray: int, laugh: int, rocket: int, total_count: int, url: string>, team_url: string, title: string, updated_at: string, url: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($org | is-empty) { error make --unspanned { msg: "path parameter 'org' must be non-empty" } }
+  if ($team_slug | is-empty) { error make --unspanned { msg: "path parameter 'team_slug' must be non-empty" } }
+  if ($discussion_number | is-empty) { error make --unspanned { msg: "path parameter 'discussion_number' must be non-empty" } }
   let full_url = (build-url $base ({org: (encode-path-segment $org), team_slug: (encode-path-segment $team_slug), discussion_number: (encode-path-segment $discussion_number)} | format pattern "/orgs/{org}/teams/{team_slug}/discussions/{discussion_number}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
 }
 
 # Update a discussion
@@ -4574,12 +4741,15 @@ export def "orgs-teams-discussions update" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($org | is-empty) { error make --unspanned { msg: "path parameter 'org' must be non-empty" } }
+  if ($team_slug | is-empty) { error make --unspanned { msg: "path parameter 'team_slug' must be non-empty" } }
+  if ($discussion_number | is-empty) { error make --unspanned { msg: "path parameter 'discussion_number' must be non-empty" } }
   let full_url = (build-url $base ({org: (encode-path-segment $org), team_slug: (encode-path-segment $team_slug), discussion_number: (encode-path-segment $discussion_number)} | format pattern "/orgs/{org}/teams/{team_slug}/discussions/{discussion_number}"))
   let req_body = {"body": $body, "title": $title} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "patch" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body
+  do-request "patch" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: {}, body: $req_body}
 }
 
 # List discussion comments
@@ -4606,11 +4776,14 @@ export def "orgs-teams-discussions-comments list" [
 ]: nothing -> table<author: record<avatar_url: string, email: string, events_url: string, followers_url: string, following_url: string, gists_url: string, gravatar_id: string, html_url: string, id: int, login: string, name: string, node_id: string, organizations_url: string, received_events_url: string, repos_url: string, site_admin: bool, starred_at: string, starred_url: string, subscriptions_url: string, type: string, url: string>, body: string, body_html: string, body_version: string, created_at: string, discussion_url: string, html_url: string, last_edited_at: string, node_id: string, number: int, reactions: record<_1: int, _1: int, confused: int, eyes: int, heart: int, hooray: int, laugh: int, rocket: int, total_count: int, url: string>, updated_at: string, url: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($org | is-empty) { error make --unspanned { msg: "path parameter 'org' must be non-empty" } }
+  if ($team_slug | is-empty) { error make --unspanned { msg: "path parameter 'team_slug' must be non-empty" } }
+  if ($discussion_number | is-empty) { error make --unspanned { msg: "path parameter 'discussion_number' must be non-empty" } }
   let qp = [(serialize-qp "direction" $direction "scalar") (serialize-qp "per_page" $per_page "scalar") (serialize-qp "page" $page "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({org: (encode-path-segment $org), team_slug: (encode-path-segment $team_slug), discussion_number: (encode-path-segment $discussion_number)} | format pattern "/orgs/{org}/teams/{team_slug}/discussions/{discussion_number}/comments") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"direction": $direction, "per_page": $per_page, "page": $page} | compact), body: null}
 }
 
 # Create a discussion comment
@@ -4636,12 +4809,15 @@ export def "orgs-teams-discussions-comments create" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($org | is-empty) { error make --unspanned { msg: "path parameter 'org' must be non-empty" } }
+  if ($team_slug | is-empty) { error make --unspanned { msg: "path parameter 'team_slug' must be non-empty" } }
+  if ($discussion_number | is-empty) { error make --unspanned { msg: "path parameter 'discussion_number' must be non-empty" } }
   let full_url = (build-url $base ({org: (encode-path-segment $org), team_slug: (encode-path-segment $team_slug), discussion_number: (encode-path-segment $discussion_number)} | format pattern "/orgs/{org}/teams/{team_slug}/discussions/{discussion_number}/comments"))
   let req_body = {"body": $body} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: {}, body: $req_body}
 }
 
 # Delete a discussion comment
@@ -4666,10 +4842,14 @@ export def "orgs-teams-discussions-comments delete" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($org | is-empty) { error make --unspanned { msg: "path parameter 'org' must be non-empty" } }
+  if ($team_slug | is-empty) { error make --unspanned { msg: "path parameter 'team_slug' must be non-empty" } }
+  if ($discussion_number | is-empty) { error make --unspanned { msg: "path parameter 'discussion_number' must be non-empty" } }
+  if ($comment_number | is-empty) { error make --unspanned { msg: "path parameter 'comment_number' must be non-empty" } }
   let full_url = (build-url $base ({org: (encode-path-segment $org), team_slug: (encode-path-segment $team_slug), discussion_number: (encode-path-segment $discussion_number), comment_number: (encode-path-segment $comment_number)} | format pattern "/orgs/{org}/teams/{team_slug}/discussions/{discussion_number}/comments/{comment_number}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
 }
 
 # Get a discussion comment
@@ -4694,10 +4874,14 @@ export def "orgs-teams-discussions-comments get" [
 ]: nothing -> record<author: record<avatar_url: string, email: string, events_url: string, followers_url: string, following_url: string, gists_url: string, gravatar_id: string, html_url: string, id: int, login: string, name: string, node_id: string, organizations_url: string, received_events_url: string, repos_url: string, site_admin: bool, starred_at: string, starred_url: string, subscriptions_url: string, type: string, url: string>, body: string, body_html: string, body_version: string, created_at: string, discussion_url: string, html_url: string, last_edited_at: string, node_id: string, number: int, reactions: record<_1: int, _1: int, confused: int, eyes: int, heart: int, hooray: int, laugh: int, rocket: int, total_count: int, url: string>, updated_at: string, url: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($org | is-empty) { error make --unspanned { msg: "path parameter 'org' must be non-empty" } }
+  if ($team_slug | is-empty) { error make --unspanned { msg: "path parameter 'team_slug' must be non-empty" } }
+  if ($discussion_number | is-empty) { error make --unspanned { msg: "path parameter 'discussion_number' must be non-empty" } }
+  if ($comment_number | is-empty) { error make --unspanned { msg: "path parameter 'comment_number' must be non-empty" } }
   let full_url = (build-url $base ({org: (encode-path-segment $org), team_slug: (encode-path-segment $team_slug), discussion_number: (encode-path-segment $discussion_number), comment_number: (encode-path-segment $comment_number)} | format pattern "/orgs/{org}/teams/{team_slug}/discussions/{discussion_number}/comments/{comment_number}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
 }
 
 # Update a discussion comment
@@ -4724,12 +4908,16 @@ export def "orgs-teams-discussions-comments update" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($org | is-empty) { error make --unspanned { msg: "path parameter 'org' must be non-empty" } }
+  if ($team_slug | is-empty) { error make --unspanned { msg: "path parameter 'team_slug' must be non-empty" } }
+  if ($discussion_number | is-empty) { error make --unspanned { msg: "path parameter 'discussion_number' must be non-empty" } }
+  if ($comment_number | is-empty) { error make --unspanned { msg: "path parameter 'comment_number' must be non-empty" } }
   let full_url = (build-url $base ({org: (encode-path-segment $org), team_slug: (encode-path-segment $team_slug), discussion_number: (encode-path-segment $discussion_number), comment_number: (encode-path-segment $comment_number)} | format pattern "/orgs/{org}/teams/{team_slug}/discussions/{discussion_number}/comments/{comment_number}"))
   let req_body = {"body": $body} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "patch" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body
+  do-request "patch" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: {}, body: $req_body}
 }
 
 # List reactions for a team discussion comment
@@ -4757,11 +4945,15 @@ export def "orgs-teams-discussions-comments-reactions list-for" [
 ]: nothing -> table<content: string, created_at: string, id: int, node_id: string, user: record<avatar_url: string, email: string, events_url: string, followers_url: string, following_url: string, gists_url: string, gravatar_id: string, html_url: string, id: int, login: string, name: string, node_id: string, organizations_url: string, received_events_url: string, repos_url: string, site_admin: bool, starred_at: string, starred_url: string, subscriptions_url: string, type: string, url: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($org | is-empty) { error make --unspanned { msg: "path parameter 'org' must be non-empty" } }
+  if ($team_slug | is-empty) { error make --unspanned { msg: "path parameter 'team_slug' must be non-empty" } }
+  if ($discussion_number | is-empty) { error make --unspanned { msg: "path parameter 'discussion_number' must be non-empty" } }
+  if ($comment_number | is-empty) { error make --unspanned { msg: "path parameter 'comment_number' must be non-empty" } }
   let qp = [(serialize-qp "content" $content "scalar") (serialize-qp "per_page" $per_page "scalar") (serialize-qp "page" $page "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({org: (encode-path-segment $org), team_slug: (encode-path-segment $team_slug), discussion_number: (encode-path-segment $discussion_number), comment_number: (encode-path-segment $comment_number)} | format pattern "/orgs/{org}/teams/{team_slug}/discussions/{discussion_number}/comments/{comment_number}/reactions") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"content": $content, "per_page": $per_page, "page": $page} | compact), body: null}
 }
 
 # Create reaction for a team discussion comment
@@ -4788,12 +4980,16 @@ export def "orgs-teams-discussions-comments-reactions create-for" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($org | is-empty) { error make --unspanned { msg: "path parameter 'org' must be non-empty" } }
+  if ($team_slug | is-empty) { error make --unspanned { msg: "path parameter 'team_slug' must be non-empty" } }
+  if ($discussion_number | is-empty) { error make --unspanned { msg: "path parameter 'discussion_number' must be non-empty" } }
+  if ($comment_number | is-empty) { error make --unspanned { msg: "path parameter 'comment_number' must be non-empty" } }
   let full_url = (build-url $base ({org: (encode-path-segment $org), team_slug: (encode-path-segment $team_slug), discussion_number: (encode-path-segment $discussion_number), comment_number: (encode-path-segment $comment_number)} | format pattern "/orgs/{org}/teams/{team_slug}/discussions/{discussion_number}/comments/{comment_number}/reactions"))
   let req_body = {"content": $content} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: {}, body: $req_body}
 }
 
 # Delete team discussion comment reaction
@@ -4819,10 +5015,15 @@ export def "orgs-teams-discussions-comments-reactions delete" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($org | is-empty) { error make --unspanned { msg: "path parameter 'org' must be non-empty" } }
+  if ($team_slug | is-empty) { error make --unspanned { msg: "path parameter 'team_slug' must be non-empty" } }
+  if ($discussion_number | is-empty) { error make --unspanned { msg: "path parameter 'discussion_number' must be non-empty" } }
+  if ($comment_number | is-empty) { error make --unspanned { msg: "path parameter 'comment_number' must be non-empty" } }
+  if ($reaction_id | is-empty) { error make --unspanned { msg: "path parameter 'reaction_id' must be non-empty" } }
   let full_url = (build-url $base ({org: (encode-path-segment $org), team_slug: (encode-path-segment $team_slug), discussion_number: (encode-path-segment $discussion_number), comment_number: (encode-path-segment $comment_number), reaction_id: (encode-path-segment $reaction_id)} | format pattern "/orgs/{org}/teams/{team_slug}/discussions/{discussion_number}/comments/{comment_number}/reactions/{reaction_id}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
 }
 
 # List reactions for a team discussion
@@ -4849,11 +5050,14 @@ export def "orgs-teams-discussions-reactions list-for" [
 ]: nothing -> table<content: string, created_at: string, id: int, node_id: string, user: record<avatar_url: string, email: string, events_url: string, followers_url: string, following_url: string, gists_url: string, gravatar_id: string, html_url: string, id: int, login: string, name: string, node_id: string, organizations_url: string, received_events_url: string, repos_url: string, site_admin: bool, starred_at: string, starred_url: string, subscriptions_url: string, type: string, url: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($org | is-empty) { error make --unspanned { msg: "path parameter 'org' must be non-empty" } }
+  if ($team_slug | is-empty) { error make --unspanned { msg: "path parameter 'team_slug' must be non-empty" } }
+  if ($discussion_number | is-empty) { error make --unspanned { msg: "path parameter 'discussion_number' must be non-empty" } }
   let qp = [(serialize-qp "content" $content "scalar") (serialize-qp "per_page" $per_page "scalar") (serialize-qp "page" $page "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({org: (encode-path-segment $org), team_slug: (encode-path-segment $team_slug), discussion_number: (encode-path-segment $discussion_number)} | format pattern "/orgs/{org}/teams/{team_slug}/discussions/{discussion_number}/reactions") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"content": $content, "per_page": $per_page, "page": $page} | compact), body: null}
 }
 
 # Create reaction for a team discussion
@@ -4879,12 +5083,15 @@ export def "orgs-teams-discussions-reactions create-for" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($org | is-empty) { error make --unspanned { msg: "path parameter 'org' must be non-empty" } }
+  if ($team_slug | is-empty) { error make --unspanned { msg: "path parameter 'team_slug' must be non-empty" } }
+  if ($discussion_number | is-empty) { error make --unspanned { msg: "path parameter 'discussion_number' must be non-empty" } }
   let full_url = (build-url $base ({org: (encode-path-segment $org), team_slug: (encode-path-segment $team_slug), discussion_number: (encode-path-segment $discussion_number)} | format pattern "/orgs/{org}/teams/{team_slug}/discussions/{discussion_number}/reactions"))
   let req_body = {"content": $content} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: {}, body: $req_body}
 }
 
 # Delete team discussion reaction
@@ -4909,10 +5116,14 @@ export def "orgs-teams-discussions-reactions delete" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($org | is-empty) { error make --unspanned { msg: "path parameter 'org' must be non-empty" } }
+  if ($team_slug | is-empty) { error make --unspanned { msg: "path parameter 'team_slug' must be non-empty" } }
+  if ($discussion_number | is-empty) { error make --unspanned { msg: "path parameter 'discussion_number' must be non-empty" } }
+  if ($reaction_id | is-empty) { error make --unspanned { msg: "path parameter 'reaction_id' must be non-empty" } }
   let full_url = (build-url $base ({org: (encode-path-segment $org), team_slug: (encode-path-segment $team_slug), discussion_number: (encode-path-segment $discussion_number), reaction_id: (encode-path-segment $reaction_id)} | format pattern "/orgs/{org}/teams/{team_slug}/discussions/{discussion_number}/reactions/{reaction_id}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
 }
 
 # List team members
@@ -4938,11 +5149,13 @@ export def "orgs-teams-members list" [
 ]: nothing -> table<avatar_url: string, email: string, events_url: string, followers_url: string, following_url: string, gists_url: string, gravatar_id: string, html_url: string, id: int, login: string, name: string, node_id: string, organizations_url: string, received_events_url: string, repos_url: string, site_admin: bool, starred_at: string, starred_url: string, subscriptions_url: string, type: string, url: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($org | is-empty) { error make --unspanned { msg: "path parameter 'org' must be non-empty" } }
+  if ($team_slug | is-empty) { error make --unspanned { msg: "path parameter 'team_slug' must be non-empty" } }
   let qp = [(serialize-qp "role" $role "scalar") (serialize-qp "per_page" $per_page "scalar") (serialize-qp "page" $page "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({org: (encode-path-segment $org), team_slug: (encode-path-segment $team_slug)} | format pattern "/orgs/{org}/teams/{team_slug}/members") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"role": $role, "per_page": $per_page, "page": $page} | compact), body: null}
 }
 
 # Remove team membership for a user
@@ -4966,10 +5179,13 @@ export def "orgs-teams-memberships delete-for-user" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($org | is-empty) { error make --unspanned { msg: "path parameter 'org' must be non-empty" } }
+  if ($team_slug | is-empty) { error make --unspanned { msg: "path parameter 'team_slug' must be non-empty" } }
+  if ($username | is-empty) { error make --unspanned { msg: "path parameter 'username' must be non-empty" } }
   let full_url = (build-url $base ({org: (encode-path-segment $org), team_slug: (encode-path-segment $team_slug), username: (encode-path-segment $username)} | format pattern "/orgs/{org}/teams/{team_slug}/memberships/{username}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
 }
 
 # Get team membership for a user
@@ -4993,10 +5209,13 @@ export def "orgs-teams-memberships get-for-user" [
 ]: nothing -> record<role: string, state: string, url: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($org | is-empty) { error make --unspanned { msg: "path parameter 'org' must be non-empty" } }
+  if ($team_slug | is-empty) { error make --unspanned { msg: "path parameter 'team_slug' must be non-empty" } }
+  if ($username | is-empty) { error make --unspanned { msg: "path parameter 'username' must be non-empty" } }
   let full_url = (build-url $base ({org: (encode-path-segment $org), team_slug: (encode-path-segment $team_slug), username: (encode-path-segment $username)} | format pattern "/orgs/{org}/teams/{team_slug}/memberships/{username}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
 }
 
 # Add or update team membership for a user
@@ -5022,12 +5241,15 @@ export def "orgs-teams-memberships create-or-update-for-user" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($org | is-empty) { error make --unspanned { msg: "path parameter 'org' must be non-empty" } }
+  if ($team_slug | is-empty) { error make --unspanned { msg: "path parameter 'team_slug' must be non-empty" } }
+  if ($username | is-empty) { error make --unspanned { msg: "path parameter 'username' must be non-empty" } }
   let full_url = (build-url $base ({org: (encode-path-segment $org), team_slug: (encode-path-segment $team_slug), username: (encode-path-segment $username)} | format pattern "/orgs/{org}/teams/{team_slug}/memberships/{username}"))
   let req_body = {"role": $role} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: {}, body: $req_body}
 }
 
 # List team projects
@@ -5052,11 +5274,13 @@ export def "orgs-teams-projects list" [
 ]: nothing -> table<body: string, columns_url: string, created_at: string, creator: record<avatar_url: string, email: string, events_url: string, followers_url: string, following_url: string, gists_url: string, gravatar_id: string, html_url: string, id: int, login: string, name: string, node_id: string, organizations_url: string, received_events_url: string, repos_url: string, site_admin: bool, starred_at: string, starred_url: string, subscriptions_url: string, type: string, url: string>, html_url: string, id: int, name: string, node_id: string, number: int, organization_permission: string, owner_url: string, permissions: record<admin: bool, read: bool, write: bool>, private: bool, state: string, updated_at: string, url: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($org | is-empty) { error make --unspanned { msg: "path parameter 'org' must be non-empty" } }
+  if ($team_slug | is-empty) { error make --unspanned { msg: "path parameter 'team_slug' must be non-empty" } }
   let qp = [(serialize-qp "per_page" $per_page "scalar") (serialize-qp "page" $page "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({org: (encode-path-segment $org), team_slug: (encode-path-segment $team_slug)} | format pattern "/orgs/{org}/teams/{team_slug}/projects") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"per_page": $per_page, "page": $page} | compact), body: null}
 }
 
 # Remove a project from a team
@@ -5080,10 +5304,13 @@ export def "orgs-teams-projects delete" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($org | is-empty) { error make --unspanned { msg: "path parameter 'org' must be non-empty" } }
+  if ($team_slug | is-empty) { error make --unspanned { msg: "path parameter 'team_slug' must be non-empty" } }
+  if ($project_id | is-empty) { error make --unspanned { msg: "path parameter 'project_id' must be non-empty" } }
   let full_url = (build-url $base ({org: (encode-path-segment $org), team_slug: (encode-path-segment $team_slug), project_id: (encode-path-segment $project_id)} | format pattern "/orgs/{org}/teams/{team_slug}/projects/{project_id}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
 }
 
 # Check team permissions for a project
@@ -5107,10 +5334,13 @@ export def "orgs-teams-projects check-permissions-for" [
 ]: nothing -> record<body: string, columns_url: string, created_at: string, creator: record<avatar_url: string, email: string, events_url: string, followers_url: string, following_url: string, gists_url: string, gravatar_id: string, html_url: string, id: int, login: string, name: string, node_id: string, organizations_url: string, received_events_url: string, repos_url: string, site_admin: bool, starred_at: string, starred_url: string, subscriptions_url: string, type: string, url: string>, html_url: string, id: int, name: string, node_id: string, number: int, organization_permission: string, owner_url: string, permissions: record<admin: bool, read: bool, write: bool>, private: bool, state: string, updated_at: string, url: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($org | is-empty) { error make --unspanned { msg: "path parameter 'org' must be non-empty" } }
+  if ($team_slug | is-empty) { error make --unspanned { msg: "path parameter 'team_slug' must be non-empty" } }
+  if ($project_id | is-empty) { error make --unspanned { msg: "path parameter 'project_id' must be non-empty" } }
   let full_url = (build-url $base ({org: (encode-path-segment $org), team_slug: (encode-path-segment $team_slug), project_id: (encode-path-segment $project_id)} | format pattern "/orgs/{org}/teams/{team_slug}/projects/{project_id}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
 }
 
 # Add or update team project permissions
@@ -5136,12 +5366,15 @@ export def "orgs-teams-projects create-or-update-permissions" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($org | is-empty) { error make --unspanned { msg: "path parameter 'org' must be non-empty" } }
+  if ($team_slug | is-empty) { error make --unspanned { msg: "path parameter 'team_slug' must be non-empty" } }
+  if ($project_id | is-empty) { error make --unspanned { msg: "path parameter 'project_id' must be non-empty" } }
   let full_url = (build-url $base ({org: (encode-path-segment $org), team_slug: (encode-path-segment $team_slug), project_id: (encode-path-segment $project_id)} | format pattern "/orgs/{org}/teams/{team_slug}/projects/{project_id}"))
   let req_body = {"permission": $permission} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: {}, body: $req_body}
 }
 
 # List team repositories
@@ -5166,11 +5399,13 @@ export def "orgs-teams-repos list" [
 ]: nothing -> table<allow_forking: bool, anonymous_access_enabled: bool, archive_url: string, archived: bool, assignees_url: string, blobs_url: string, branches_url: string, clone_url: string, code_of_conduct: record<body: string, html_url: string, key: string, name: string, url: string>, collaborators_url: string, comments_url: string, commits_url: string, compare_url: string, contents_url: string, contributors_url: string, created_at: string, default_branch: string, delete_branch_on_merge: bool, deployments_url: string, description: string, disabled: bool, downloads_url: string, events_url: string, fork: bool, forks: int, forks_count: int, forks_url: string, full_name: string, git_commits_url: string, git_refs_url: string, git_tags_url: string, git_url: string, has_downloads: bool, has_issues: bool, has_pages: bool, has_projects: bool, has_wiki: bool, homepage: string, hooks_url: string, html_url: string, id: int, is_template: bool, issue_comment_url: string, issue_events_url: string, issues_url: string, keys_url: string, labels_url: string, language: string, languages_url: string, license: record<key: string, name: string, node_id: string, spdx_id: string, url: string>, merges_url: string, milestones_url: string, mirror_url: string, name: string, network_count: int, node_id: string, notifications_url: string, open_issues: int, open_issues_count: int, owner: record<avatar_url: string, email: string, events_url: string, followers_url: string, following_url: string, gists_url: string, gravatar_id: string, html_url: string, id: int, login: string, name: string, node_id: string, organizations_url: string, received_events_url: string, repos_url: string, site_admin: bool, starred_at: string, starred_url: string, subscriptions_url: string, type: string, url: string>, permissions: record<admin: bool, maintain: bool, pull: bool, push: bool, triage: bool>, private: bool, pulls_url: string, pushed_at: string, releases_url: string, size: int, ssh_url: string, stargazers_count: int, stargazers_url: string, statuses_url: string, subscribers_count: int, subscribers_url: string, subscription_url: string, svn_url: string, tags_url: string, teams_url: string, template_repository: record<allow_forking: bool, allow_merge_commit: bool, allow_rebase_merge: bool, allow_squash_merge: bool, anonymous_access_enabled: bool, archive_url: string, archived: bool, assignees_url: string, blobs_url: string, branches_url: string, clone_url: string, collaborators_url: string, comments_url: string, commits_url: string, compare_url: string, contents_url: string, contributors_url: string, created_at: string, default_branch: string, delete_branch_on_merge: bool, deployments_url: string, description: string, disabled: bool, downloads_url: string, events_url: string, fork: bool, forks: int, forks_count: int, forks_url: string, full_name: string, git_commits_url: string, git_refs_url: string, git_tags_url: string, git_url: string, has_downloads: bool, has_issues: bool, has_pages: bool, has_projects: bool, has_wiki: bool, homepage: string, hooks_url: string, html_url: string, id: int, is_template: bool, issue_comment_url: string, issue_events_url: string, issues_url: string, keys_url: string, labels_url: string, language: string, languages_url: string, license: record, master_branch: string, merges_url: string, milestones_url: string, mirror_url: string, name: string, network_count: int, node_id: string, notifications_url: string, open_issues: int, open_issues_count: int, organization: record, owner: record, permissions: record, private: bool, pulls_url: string, pushed_at: string, releases_url: string, size: int, ssh_url: string, stargazers_count: int, stargazers_url: string, starred_at: string, statuses_url: string, subscribers_count: int, subscribers_url: string, subscription_url: string, svn_url: string, tags_url: string, teams_url: string, template_repository: record, topics: list, trees_url: string, updated_at: string, url: string, visibility: string, watchers: int, watchers_count: int>, topics: list<string>, trees_url: string, updated_at: string, url: string, visibility: string, watchers: int, watchers_count: int> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($org | is-empty) { error make --unspanned { msg: "path parameter 'org' must be non-empty" } }
+  if ($team_slug | is-empty) { error make --unspanned { msg: "path parameter 'team_slug' must be non-empty" } }
   let qp = [(serialize-qp "per_page" $per_page "scalar") (serialize-qp "page" $page "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({org: (encode-path-segment $org), team_slug: (encode-path-segment $team_slug)} | format pattern "/orgs/{org}/teams/{team_slug}/repos") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"per_page": $per_page, "page": $page} | compact), body: null}
 }
 
 # Remove a repository from a team
@@ -5195,10 +5430,14 @@ export def "orgs-teams-repos delete" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($org | is-empty) { error make --unspanned { msg: "path parameter 'org' must be non-empty" } }
+  if ($team_slug | is-empty) { error make --unspanned { msg: "path parameter 'team_slug' must be non-empty" } }
+  if ($owner | is-empty) { error make --unspanned { msg: "path parameter 'owner' must be non-empty" } }
+  if ($repo | is-empty) { error make --unspanned { msg: "path parameter 'repo' must be non-empty" } }
   let full_url = (build-url $base ({org: (encode-path-segment $org), team_slug: (encode-path-segment $team_slug), owner: (encode-path-segment $owner), repo: (encode-path-segment $repo)} | format pattern "/orgs/{org}/teams/{team_slug}/repos/{owner}/{repo}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
 }
 
 # Check team permissions for a repository
@@ -5223,10 +5462,14 @@ export def "orgs-teams-repos check-permissions-for" [
 ]: nothing -> record<allow_forking: bool, allow_merge_commit: bool, allow_rebase_merge: bool, allow_squash_merge: bool, anonymous_access_enabled: bool, archive_url: string, archived: bool, assignees_url: string, blobs_url: string, branches_url: string, clone_url: string, collaborators_url: string, comments_url: string, commits_url: string, compare_url: string, contents_url: string, contributors_url: string, created_at: string, default_branch: string, delete_branch_on_merge: bool, deployments_url: string, description: string, disabled: bool, downloads_url: string, events_url: string, fork: bool, forks: int, forks_count: int, forks_url: string, full_name: string, git_commits_url: string, git_refs_url: string, git_tags_url: string, git_url: string, has_downloads: bool, has_issues: bool, has_pages: bool, has_projects: bool, has_wiki: bool, homepage: string, hooks_url: string, html_url: string, id: int, is_template: bool, issue_comment_url: string, issue_events_url: string, issues_url: string, keys_url: string, labels_url: string, language: string, languages_url: string, license: record<html_url: string, key: string, name: string, node_id: string, spdx_id: string, url: string>, master_branch: string, merges_url: string, milestones_url: string, mirror_url: string, name: string, network_count: int, node_id: string, notifications_url: string, open_issues: int, open_issues_count: int, owner: record<avatar_url: string, email: string, events_url: string, followers_url: string, following_url: string, gists_url: string, gravatar_id: string, html_url: string, id: int, login: string, name: string, node_id: string, organizations_url: string, received_events_url: string, repos_url: string, site_admin: bool, starred_at: string, starred_url: string, subscriptions_url: string, type: string, url: string>, permissions: record<admin: bool, maintain: bool, pull: bool, push: bool, triage: bool>, private: bool, pulls_url: string, pushed_at: string, releases_url: string, size: int, ssh_url: string, stargazers_count: int, stargazers_url: string, statuses_url: string, subscribers_count: int, subscribers_url: string, subscription_url: string, svn_url: string, tags_url: string, teams_url: string, template_repository: record<allow_forking: bool, allow_merge_commit: bool, allow_rebase_merge: bool, allow_squash_merge: bool, anonymous_access_enabled: bool, archive_url: string, archived: bool, assignees_url: string, blobs_url: string, branches_url: string, clone_url: string, collaborators_url: string, comments_url: string, commits_url: string, compare_url: string, contents_url: string, contributors_url: string, created_at: string, default_branch: string, delete_branch_on_merge: bool, deployments_url: string, description: string, disabled: bool, downloads_url: string, events_url: string, fork: bool, forks: int, forks_count: int, forks_url: string, full_name: string, git_commits_url: string, git_refs_url: string, git_tags_url: string, git_url: string, has_downloads: bool, has_issues: bool, has_pages: bool, has_projects: bool, has_wiki: bool, homepage: string, hooks_url: string, html_url: string, id: int, is_template: bool, issue_comment_url: string, issue_events_url: string, issues_url: string, keys_url: string, labels_url: string, language: string, languages_url: string, license: record<html_url: string, key: string, name: string, node_id: string, spdx_id: string, url: string>, master_branch: string, merges_url: string, milestones_url: string, mirror_url: string, name: string, network_count: int, node_id: string, notifications_url: string, open_issues: int, open_issues_count: int, organization: record<avatar_url: string, email: string, events_url: string, followers_url: string, following_url: string, gists_url: string, gravatar_id: string, html_url: string, id: int, login: string, name: string, node_id: string, organizations_url: string, received_events_url: string, repos_url: string, site_admin: bool, starred_at: string, starred_url: string, subscriptions_url: string, type: string, url: string>, owner: record<avatar_url: string, email: string, events_url: string, followers_url: string, following_url: string, gists_url: string, gravatar_id: string, html_url: string, id: int, login: string, name: string, node_id: string, organizations_url: string, received_events_url: string, repos_url: string, site_admin: bool, starred_at: string, starred_url: string, subscriptions_url: string, type: string, url: string>, permissions: record<admin: bool, maintain: bool, pull: bool, push: bool, triage: bool>, private: bool, pulls_url: string, pushed_at: string, releases_url: string, size: int, ssh_url: string, stargazers_count: int, stargazers_url: string, starred_at: string, statuses_url: string, subscribers_count: int, subscribers_url: string, subscription_url: string, svn_url: string, tags_url: string, teams_url: string, template_repository: record<allow_merge_commit: bool, allow_rebase_merge: bool, allow_squash_merge: bool, anonymous_access_enabled: bool, archive_url: string, archived: bool, assignees_url: string, blobs_url: string, branches_url: string, clone_url: string, collaborators_url: string, comments_url: string, commits_url: string, compare_url: string, contents_url: string, contributors_url: string, created_at: string, default_branch: string, delete_branch_on_merge: bool, deployments_url: string, description: string, disabled: bool, downloads_url: string, events_url: string, fork: bool, forks_count: int, forks_url: string, full_name: string, git_commits_url: string, git_refs_url: string, git_tags_url: string, git_url: string, has_downloads: bool, has_issues: bool, has_pages: bool, has_projects: bool, has_wiki: bool, homepage: string, hooks_url: string, html_url: string, id: int, is_template: bool, issue_comment_url: string, issue_events_url: string, issues_url: string, keys_url: string, labels_url: string, language: string, languages_url: string, merges_url: string, milestones_url: string, mirror_url: string, name: string, network_count: int, node_id: string, notifications_url: string, open_issues_count: int, owner: record, permissions: record, private: bool, pulls_url: string, pushed_at: string, releases_url: string, size: int, ssh_url: string, stargazers_count: int, stargazers_url: string, statuses_url: string, subscribers_count: int, subscribers_url: string, subscription_url: string, svn_url: string, tags_url: string, teams_url: string, topics: list, trees_url: string, updated_at: string, url: string, visibility: string, watchers_count: int>, topics: list<string>, trees_url: string, updated_at: string, url: string, visibility: string, watchers: int, watchers_count: int>, topics: list<string>, trees_url: string, updated_at: string, url: string, visibility: string, watchers: int, watchers_count: int> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($org | is-empty) { error make --unspanned { msg: "path parameter 'org' must be non-empty" } }
+  if ($team_slug | is-empty) { error make --unspanned { msg: "path parameter 'team_slug' must be non-empty" } }
+  if ($owner | is-empty) { error make --unspanned { msg: "path parameter 'owner' must be non-empty" } }
+  if ($repo | is-empty) { error make --unspanned { msg: "path parameter 'repo' must be non-empty" } }
   let full_url = (build-url $base ({org: (encode-path-segment $org), team_slug: (encode-path-segment $team_slug), owner: (encode-path-segment $owner), repo: (encode-path-segment $repo)} | format pattern "/orgs/{org}/teams/{team_slug}/repos/{owner}/{repo}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
 }
 
 # Add or update team repository permissions
@@ -5253,12 +5496,16 @@ export def "orgs-teams-repos create-or-update-permissions" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($org | is-empty) { error make --unspanned { msg: "path parameter 'org' must be non-empty" } }
+  if ($team_slug | is-empty) { error make --unspanned { msg: "path parameter 'team_slug' must be non-empty" } }
+  if ($owner | is-empty) { error make --unspanned { msg: "path parameter 'owner' must be non-empty" } }
+  if ($repo | is-empty) { error make --unspanned { msg: "path parameter 'repo' must be non-empty" } }
   let full_url = (build-url $base ({org: (encode-path-segment $org), team_slug: (encode-path-segment $team_slug), owner: (encode-path-segment $owner), repo: (encode-path-segment $repo)} | format pattern "/orgs/{org}/teams/{team_slug}/repos/{owner}/{repo}"))
   let req_body = {"permission": $permission} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: {}, body: $req_body}
 }
 
 # List child teams
@@ -5283,11 +5530,13 @@ export def "orgs-teams-teams list-child" [
 ]: nothing -> table<description: string, html_url: string, id: int, members_url: string, name: string, node_id: string, parent: record<description: string, html_url: string, id: int, ldap_dn: string, members_url: string, name: string, node_id: string, permission: string, privacy: string, repositories_url: string, slug: string, url: string>, permission: string, permissions: record<admin: bool, maintain: bool, pull: bool, push: bool, triage: bool>, privacy: string, repositories_url: string, slug: string, url: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($org | is-empty) { error make --unspanned { msg: "path parameter 'org' must be non-empty" } }
+  if ($team_slug | is-empty) { error make --unspanned { msg: "path parameter 'team_slug' must be non-empty" } }
   let qp = [(serialize-qp "per_page" $per_page "scalar") (serialize-qp "page" $page "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({org: (encode-path-segment $org), team_slug: (encode-path-segment $team_slug)} | format pattern "/orgs/{org}/teams/{team_slug}/teams") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"per_page": $per_page, "page": $page} | compact), body: null}
 }
 
 # Delete a project card
@@ -5309,10 +5558,11 @@ export def "projects-columns-cards delete" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($card_id | is-empty) { error make --unspanned { msg: "path parameter 'card_id' must be non-empty" } }
   let full_url = (build-url $base ({card_id: (encode-path-segment $card_id)} | format pattern "/projects/columns/cards/{card_id}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
 }
 
 # Get a project card
@@ -5334,10 +5584,11 @@ export def "projects-columns-cards get" [
 ]: nothing -> record<archived: bool, column_name: string, column_url: string, content_url: string, created_at: string, creator: record<avatar_url: string, email: string, events_url: string, followers_url: string, following_url: string, gists_url: string, gravatar_id: string, html_url: string, id: int, login: string, name: string, node_id: string, organizations_url: string, received_events_url: string, repos_url: string, site_admin: bool, starred_at: string, starred_url: string, subscriptions_url: string, type: string, url: string>, id: int, node_id: string, note: string, project_id: string, project_url: string, updated_at: string, url: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($card_id | is-empty) { error make --unspanned { msg: "path parameter 'card_id' must be non-empty" } }
   let full_url = (build-url $base ({card_id: (encode-path-segment $card_id)} | format pattern "/projects/columns/cards/{card_id}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
 }
 
 # Update an existing project card
@@ -5362,12 +5613,13 @@ export def "projects-columns-cards update" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($card_id | is-empty) { error make --unspanned { msg: "path parameter 'card_id' must be non-empty" } }
   let full_url = (build-url $base ({card_id: (encode-path-segment $card_id)} | format pattern "/projects/columns/cards/{card_id}"))
   let req_body = {"archived": $archived, "note": $note} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "patch" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body
+  do-request "patch" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: {}, body: $req_body}
 }
 
 # Move a project card
@@ -5392,12 +5644,13 @@ export def "projects-columns-cards-moves move" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($card_id | is-empty) { error make --unspanned { msg: "path parameter 'card_id' must be non-empty" } }
   let full_url = (build-url $base ({card_id: (encode-path-segment $card_id)} | format pattern "/projects/columns/cards/{card_id}/moves"))
   let req_body = {"column_id": $column_id, "position": $position} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: {}, body: $req_body}
 }
 
 # Delete a project column
@@ -5419,10 +5672,11 @@ export def "projects-columns delete" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($column_id | is-empty) { error make --unspanned { msg: "path parameter 'column_id' must be non-empty" } }
   let full_url = (build-url $base ({column_id: (encode-path-segment $column_id)} | format pattern "/projects/columns/{column_id}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
 }
 
 # Get a project column
@@ -5444,10 +5698,11 @@ export def "projects-columns get" [
 ]: nothing -> record<cards_url: string, created_at: string, id: int, name: string, node_id: string, project_url: string, updated_at: string, url: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($column_id | is-empty) { error make --unspanned { msg: "path parameter 'column_id' must be non-empty" } }
   let full_url = (build-url $base ({column_id: (encode-path-segment $column_id)} | format pattern "/projects/columns/{column_id}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
 }
 
 # Update an existing project column
@@ -5471,12 +5726,13 @@ export def "projects-columns update" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($column_id | is-empty) { error make --unspanned { msg: "path parameter 'column_id' must be non-empty" } }
   let full_url = (build-url $base ({column_id: (encode-path-segment $column_id)} | format pattern "/projects/columns/{column_id}"))
   let req_body = {"name": $name} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "patch" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body
+  do-request "patch" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: {}, body: $req_body}
 }
 
 # List project cards
@@ -5501,11 +5757,12 @@ export def "projects-columns-cards list" [
 ]: nothing -> table<archived: bool, column_name: string, column_url: string, content_url: string, created_at: string, creator: record<avatar_url: string, email: string, events_url: string, followers_url: string, following_url: string, gists_url: string, gravatar_id: string, html_url: string, id: int, login: string, name: string, node_id: string, organizations_url: string, received_events_url: string, repos_url: string, site_admin: bool, starred_at: string, starred_url: string, subscriptions_url: string, type: string, url: string>, id: int, node_id: string, note: string, project_id: string, project_url: string, updated_at: string, url: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($column_id | is-empty) { error make --unspanned { msg: "path parameter 'column_id' must be non-empty" } }
   let qp = [(serialize-qp "archived_state" $archived_state "scalar") (serialize-qp "per_page" $per_page "scalar") (serialize-qp "page" $page "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({column_id: (encode-path-segment $column_id)} | format pattern "/projects/columns/{column_id}/cards") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"archived_state": $archived_state, "per_page": $per_page, "page": $page} | compact), body: null}
 }
 
 # Create a project card
@@ -5531,12 +5788,13 @@ export def "projects-columns-cards create" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($column_id | is-empty) { error make --unspanned { msg: "path parameter 'column_id' must be non-empty" } }
   let full_url = (build-url $base ({column_id: (encode-path-segment $column_id)} | format pattern "/projects/columns/{column_id}/cards"))
   let req_body = {"note": $note, "content_id": $content_id, "content_type": $content_type} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: {}, body: $req_body}
 }
 
 # Move a project column
@@ -5560,12 +5818,13 @@ export def "projects-columns-moves move" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($column_id | is-empty) { error make --unspanned { msg: "path parameter 'column_id' must be non-empty" } }
   let full_url = (build-url $base ({column_id: (encode-path-segment $column_id)} | format pattern "/projects/columns/{column_id}/moves"))
   let req_body = {"position": $position} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: {}, body: $req_body}
 }
 
 # Delete a project
@@ -5587,10 +5846,11 @@ export def "projects delete" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($project_id | is-empty) { error make --unspanned { msg: "path parameter 'project_id' must be non-empty" } }
   let full_url = (build-url $base ({project_id: (encode-path-segment $project_id)} | format pattern "/projects/{project_id}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
 }
 
 # Get a project
@@ -5612,10 +5872,11 @@ export def "projects get" [
 ]: nothing -> record<body: string, columns_url: string, created_at: string, creator: record<avatar_url: string, email: string, events_url: string, followers_url: string, following_url: string, gists_url: string, gravatar_id: string, html_url: string, id: int, login: string, name: string, node_id: string, organizations_url: string, received_events_url: string, repos_url: string, site_admin: bool, starred_at: string, starred_url: string, subscriptions_url: string, type: string, url: string>, html_url: string, id: int, name: string, node_id: string, number: int, organization_permission: string, owner_url: string, private: bool, state: string, updated_at: string, url: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($project_id | is-empty) { error make --unspanned { msg: "path parameter 'project_id' must be non-empty" } }
   let full_url = (build-url $base ({project_id: (encode-path-segment $project_id)} | format pattern "/projects/{project_id}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
 }
 
 # Update a project
@@ -5643,12 +5904,13 @@ export def "projects update" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($project_id | is-empty) { error make --unspanned { msg: "path parameter 'project_id' must be non-empty" } }
   let full_url = (build-url $base ({project_id: (encode-path-segment $project_id)} | format pattern "/projects/{project_id}"))
   let req_body = {"body": $body, "name": $name, "organization_permission": $organization_permission, "private": $private, "state": $state} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "patch" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body
+  do-request "patch" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: {}, body: $req_body}
 }
 
 # List project collaborators
@@ -5673,11 +5935,12 @@ export def "projects-collaborators list" [
 ]: nothing -> table<avatar_url: string, email: string, events_url: string, followers_url: string, following_url: string, gists_url: string, gravatar_id: string, html_url: string, id: int, login: string, name: string, node_id: string, organizations_url: string, received_events_url: string, repos_url: string, site_admin: bool, starred_at: string, starred_url: string, subscriptions_url: string, type: string, url: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($project_id | is-empty) { error make --unspanned { msg: "path parameter 'project_id' must be non-empty" } }
   let qp = [(serialize-qp "affiliation" $affiliation "scalar") (serialize-qp "per_page" $per_page "scalar") (serialize-qp "page" $page "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({project_id: (encode-path-segment $project_id)} | format pattern "/projects/{project_id}/collaborators") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"affiliation": $affiliation, "per_page": $per_page, "page": $page} | compact), body: null}
 }
 
 # Remove user as a collaborator
@@ -5700,10 +5963,12 @@ export def "projects-collaborators delete" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($project_id | is-empty) { error make --unspanned { msg: "path parameter 'project_id' must be non-empty" } }
+  if ($username | is-empty) { error make --unspanned { msg: "path parameter 'username' must be non-empty" } }
   let full_url = (build-url $base ({project_id: (encode-path-segment $project_id), username: (encode-path-segment $username)} | format pattern "/projects/{project_id}/collaborators/{username}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
 }
 
 # Add project collaborator
@@ -5728,12 +5993,14 @@ export def "projects-collaborators create" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($project_id | is-empty) { error make --unspanned { msg: "path parameter 'project_id' must be non-empty" } }
+  if ($username | is-empty) { error make --unspanned { msg: "path parameter 'username' must be non-empty" } }
   let full_url = (build-url $base ({project_id: (encode-path-segment $project_id), username: (encode-path-segment $username)} | format pattern "/projects/{project_id}/collaborators/{username}"))
   let req_body = {"permission": $permission} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: {}, body: $req_body}
 }
 
 # Get project permission for a user
@@ -5756,10 +6023,12 @@ export def "projects-collaborators-permission get-for-user" [
 ]: nothing -> record<permission: string, user: record<avatar_url: string, email: string, events_url: string, followers_url: string, following_url: string, gists_url: string, gravatar_id: string, html_url: string, id: int, login: string, name: string, node_id: string, organizations_url: string, received_events_url: string, repos_url: string, site_admin: bool, starred_at: string, starred_url: string, subscriptions_url: string, type: string, url: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($project_id | is-empty) { error make --unspanned { msg: "path parameter 'project_id' must be non-empty" } }
+  if ($username | is-empty) { error make --unspanned { msg: "path parameter 'username' must be non-empty" } }
   let full_url = (build-url $base ({project_id: (encode-path-segment $project_id), username: (encode-path-segment $username)} | format pattern "/projects/{project_id}/collaborators/{username}/permission"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
 }
 
 # List project columns
@@ -5783,11 +6052,12 @@ export def "projects-columns list" [
 ]: nothing -> table<cards_url: string, created_at: string, id: int, name: string, node_id: string, project_url: string, updated_at: string, url: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($project_id | is-empty) { error make --unspanned { msg: "path parameter 'project_id' must be non-empty" } }
   let qp = [(serialize-qp "per_page" $per_page "scalar") (serialize-qp "page" $page "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({project_id: (encode-path-segment $project_id)} | format pattern "/projects/{project_id}/columns") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"per_page": $per_page, "page": $page} | compact), body: null}
 }
 
 # Create a project column
@@ -5811,12 +6081,13 @@ export def "projects-columns create" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($project_id | is-empty) { error make --unspanned { msg: "path parameter 'project_id' must be non-empty" } }
   let full_url = (build-url $base ({project_id: (encode-path-segment $project_id)} | format pattern "/projects/{project_id}/columns"))
   let req_body = {"name": $name} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: {}, body: $req_body}
 }
 
 # Get rate limit status for the authenticated user
@@ -5840,7 +6111,7 @@ export def "rate-limit get" [
   let full_url = (build-url $base "/rate_limit")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
 }
 
 # Delete a reaction (Legacy)
@@ -5864,10 +6135,11 @@ export def "reactions delete-legacy" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($reaction_id | is-empty) { error make --unspanned { msg: "path parameter 'reaction_id' must be non-empty" } }
   let full_url = (build-url $base ({reaction_id: (encode-path-segment $reaction_id)} | format pattern "/reactions/{reaction_id}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
 }
 
 # Delete a repository
@@ -5890,10 +6162,12 @@ export def "repos delete" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($owner | is-empty) { error make --unspanned { msg: "path parameter 'owner' must be non-empty" } }
+  if ($repo | is-empty) { error make --unspanned { msg: "path parameter 'repo' must be non-empty" } }
   let full_url = (build-url $base ({owner: (encode-path-segment $owner), repo: (encode-path-segment $repo)} | format pattern "/repos/{owner}/{repo}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
 }
 
 # Get a repository
@@ -5916,10 +6190,12 @@ export def "repos get" [
 ]: nothing -> record<allow_forking: bool, allow_merge_commit: bool, allow_rebase_merge: bool, allow_squash_merge: bool, anonymous_access_enabled: bool, archive_url: string, archived: bool, assignees_url: string, blobs_url: string, branches_url: string, clone_url: string, code_of_conduct: record<html_url: string, key: string, name: string, url: string>, collaborators_url: string, comments_url: string, commits_url: string, compare_url: string, contents_url: string, contributors_url: string, created_at: string, default_branch: string, delete_branch_on_merge: bool, deployments_url: string, description: string, disabled: bool, downloads_url: string, events_url: string, fork: bool, forks: int, forks_count: int, forks_url: string, full_name: string, git_commits_url: string, git_refs_url: string, git_tags_url: string, git_url: string, has_downloads: bool, has_issues: bool, has_pages: bool, has_projects: bool, has_wiki: bool, homepage: string, hooks_url: string, html_url: string, id: int, is_template: bool, issue_comment_url: string, issue_events_url: string, issues_url: string, keys_url: string, labels_url: string, language: string, languages_url: string, license: record<html_url: string, key: string, name: string, node_id: string, spdx_id: string, url: string>, master_branch: string, merges_url: string, milestones_url: string, mirror_url: string, name: string, network_count: int, node_id: string, notifications_url: string, open_issues: int, open_issues_count: int, organization: record<avatar_url: string, email: string, events_url: string, followers_url: string, following_url: string, gists_url: string, gravatar_id: string, html_url: string, id: int, login: string, name: string, node_id: string, organizations_url: string, received_events_url: string, repos_url: string, site_admin: bool, starred_at: string, starred_url: string, subscriptions_url: string, type: string, url: string>, owner: record<avatar_url: string, email: string, events_url: string, followers_url: string, following_url: string, gists_url: string, gravatar_id: string, html_url: string, id: int, login: string, name: string, node_id: string, organizations_url: string, received_events_url: string, repos_url: string, site_admin: bool, starred_at: string, starred_url: string, subscriptions_url: string, type: string, url: string>, parent: record<allow_forking: bool, allow_merge_commit: bool, allow_rebase_merge: bool, allow_squash_merge: bool, anonymous_access_enabled: bool, archive_url: string, archived: bool, assignees_url: string, blobs_url: string, branches_url: string, clone_url: string, collaborators_url: string, comments_url: string, commits_url: string, compare_url: string, contents_url: string, contributors_url: string, created_at: string, default_branch: string, delete_branch_on_merge: bool, deployments_url: string, description: string, disabled: bool, downloads_url: string, events_url: string, fork: bool, forks: int, forks_count: int, forks_url: string, full_name: string, git_commits_url: string, git_refs_url: string, git_tags_url: string, git_url: string, has_downloads: bool, has_issues: bool, has_pages: bool, has_projects: bool, has_wiki: bool, homepage: string, hooks_url: string, html_url: string, id: int, is_template: bool, issue_comment_url: string, issue_events_url: string, issues_url: string, keys_url: string, labels_url: string, language: string, languages_url: string, license: record<html_url: string, key: string, name: string, node_id: string, spdx_id: string, url: string>, master_branch: string, merges_url: string, milestones_url: string, mirror_url: string, name: string, network_count: int, node_id: string, notifications_url: string, open_issues: int, open_issues_count: int, organization: record<avatar_url: string, email: string, events_url: string, followers_url: string, following_url: string, gists_url: string, gravatar_id: string, html_url: string, id: int, login: string, name: string, node_id: string, organizations_url: string, received_events_url: string, repos_url: string, site_admin: bool, starred_at: string, starred_url: string, subscriptions_url: string, type: string, url: string>, owner: record<avatar_url: string, email: string, events_url: string, followers_url: string, following_url: string, gists_url: string, gravatar_id: string, html_url: string, id: int, login: string, name: string, node_id: string, organizations_url: string, received_events_url: string, repos_url: string, site_admin: bool, starred_at: string, starred_url: string, subscriptions_url: string, type: string, url: string>, permissions: record<admin: bool, maintain: bool, pull: bool, push: bool, triage: bool>, private: bool, pulls_url: string, pushed_at: string, releases_url: string, size: int, ssh_url: string, stargazers_count: int, stargazers_url: string, starred_at: string, statuses_url: string, subscribers_count: int, subscribers_url: string, subscription_url: string, svn_url: string, tags_url: string, teams_url: string, template_repository: record<allow_merge_commit: bool, allow_rebase_merge: bool, allow_squash_merge: bool, anonymous_access_enabled: bool, archive_url: string, archived: bool, assignees_url: string, blobs_url: string, branches_url: string, clone_url: string, collaborators_url: string, comments_url: string, commits_url: string, compare_url: string, contents_url: string, contributors_url: string, created_at: string, default_branch: string, delete_branch_on_merge: bool, deployments_url: string, description: string, disabled: bool, downloads_url: string, events_url: string, fork: bool, forks_count: int, forks_url: string, full_name: string, git_commits_url: string, git_refs_url: string, git_tags_url: string, git_url: string, has_downloads: bool, has_issues: bool, has_pages: bool, has_projects: bool, has_wiki: bool, homepage: string, hooks_url: string, html_url: string, id: int, is_template: bool, issue_comment_url: string, issue_events_url: string, issues_url: string, keys_url: string, labels_url: string, language: string, languages_url: string, merges_url: string, milestones_url: string, mirror_url: string, name: string, network_count: int, node_id: string, notifications_url: string, open_issues_count: int, owner: record, permissions: record, private: bool, pulls_url: string, pushed_at: string, releases_url: string, size: int, ssh_url: string, stargazers_count: int, stargazers_url: string, statuses_url: string, subscribers_count: int, subscribers_url: string, subscription_url: string, svn_url: string, tags_url: string, teams_url: string, topics: list, trees_url: string, updated_at: string, url: string, visibility: string, watchers_count: int>, topics: list<string>, trees_url: string, updated_at: string, url: string, visibility: string, watchers: int, watchers_count: int>, permissions: record<admin: bool, maintain: bool, pull: bool, push: bool, triage: bool>, private: bool, pulls_url: string, pushed_at: string, releases_url: string, size: int, source: record<allow_forking: bool, allow_merge_commit: bool, allow_rebase_merge: bool, allow_squash_merge: bool, anonymous_access_enabled: bool, archive_url: string, archived: bool, assignees_url: string, blobs_url: string, branches_url: string, clone_url: string, collaborators_url: string, comments_url: string, commits_url: string, compare_url: string, contents_url: string, contributors_url: string, created_at: string, default_branch: string, delete_branch_on_merge: bool, deployments_url: string, description: string, disabled: bool, downloads_url: string, events_url: string, fork: bool, forks: int, forks_count: int, forks_url: string, full_name: string, git_commits_url: string, git_refs_url: string, git_tags_url: string, git_url: string, has_downloads: bool, has_issues: bool, has_pages: bool, has_projects: bool, has_wiki: bool, homepage: string, hooks_url: string, html_url: string, id: int, is_template: bool, issue_comment_url: string, issue_events_url: string, issues_url: string, keys_url: string, labels_url: string, language: string, languages_url: string, license: record<html_url: string, key: string, name: string, node_id: string, spdx_id: string, url: string>, master_branch: string, merges_url: string, milestones_url: string, mirror_url: string, name: string, network_count: int, node_id: string, notifications_url: string, open_issues: int, open_issues_count: int, organization: record<avatar_url: string, email: string, events_url: string, followers_url: string, following_url: string, gists_url: string, gravatar_id: string, html_url: string, id: int, login: string, name: string, node_id: string, organizations_url: string, received_events_url: string, repos_url: string, site_admin: bool, starred_at: string, starred_url: string, subscriptions_url: string, type: string, url: string>, owner: record<avatar_url: string, email: string, events_url: string, followers_url: string, following_url: string, gists_url: string, gravatar_id: string, html_url: string, id: int, login: string, name: string, node_id: string, organizations_url: string, received_events_url: string, repos_url: string, site_admin: bool, starred_at: string, starred_url: string, subscriptions_url: string, type: string, url: string>, permissions: record<admin: bool, maintain: bool, pull: bool, push: bool, triage: bool>, private: bool, pulls_url: string, pushed_at: string, releases_url: string, size: int, ssh_url: string, stargazers_count: int, stargazers_url: string, starred_at: string, statuses_url: string, subscribers_count: int, subscribers_url: string, subscription_url: string, svn_url: string, tags_url: string, teams_url: string, template_repository: record<allow_merge_commit: bool, allow_rebase_merge: bool, allow_squash_merge: bool, anonymous_access_enabled: bool, archive_url: string, archived: bool, assignees_url: string, blobs_url: string, branches_url: string, clone_url: string, collaborators_url: string, comments_url: string, commits_url: string, compare_url: string, contents_url: string, contributors_url: string, created_at: string, default_branch: string, delete_branch_on_merge: bool, deployments_url: string, description: string, disabled: bool, downloads_url: string, events_url: string, fork: bool, forks_count: int, forks_url: string, full_name: string, git_commits_url: string, git_refs_url: string, git_tags_url: string, git_url: string, has_downloads: bool, has_issues: bool, has_pages: bool, has_projects: bool, has_wiki: bool, homepage: string, hooks_url: string, html_url: string, id: int, is_template: bool, issue_comment_url: string, issue_events_url: string, issues_url: string, keys_url: string, labels_url: string, language: string, languages_url: string, merges_url: string, milestones_url: string, mirror_url: string, name: string, network_count: int, node_id: string, notifications_url: string, open_issues_count: int, owner: record, permissions: record, private: bool, pulls_url: string, pushed_at: string, releases_url: string, size: int, ssh_url: string, stargazers_count: int, stargazers_url: string, statuses_url: string, subscribers_count: int, subscribers_url: string, subscription_url: string, svn_url: string, tags_url: string, teams_url: string, topics: list, trees_url: string, updated_at: string, url: string, visibility: string, watchers_count: int>, topics: list<string>, trees_url: string, updated_at: string, url: string, visibility: string, watchers: int, watchers_count: int>, ssh_url: string, stargazers_count: int, stargazers_url: string, statuses_url: string, subscribers_count: int, subscribers_url: string, subscription_url: string, svn_url: string, tags_url: string, teams_url: string, template_repository: record<allow_forking: bool, allow_merge_commit: bool, allow_rebase_merge: bool, allow_squash_merge: bool, anonymous_access_enabled: bool, archive_url: string, archived: bool, assignees_url: string, blobs_url: string, branches_url: string, clone_url: string, collaborators_url: string, comments_url: string, commits_url: string, compare_url: string, contents_url: string, contributors_url: string, created_at: string, default_branch: string, delete_branch_on_merge: bool, deployments_url: string, description: string, disabled: bool, downloads_url: string, events_url: string, fork: bool, forks: int, forks_count: int, forks_url: string, full_name: string, git_commits_url: string, git_refs_url: string, git_tags_url: string, git_url: string, has_downloads: bool, has_issues: bool, has_pages: bool, has_projects: bool, has_wiki: bool, homepage: string, hooks_url: string, html_url: string, id: int, is_template: bool, issue_comment_url: string, issue_events_url: string, issues_url: string, keys_url: string, labels_url: string, language: string, languages_url: string, license: record<html_url: string, key: string, name: string, node_id: string, spdx_id: string, url: string>, master_branch: string, merges_url: string, milestones_url: string, mirror_url: string, name: string, network_count: int, node_id: string, notifications_url: string, open_issues: int, open_issues_count: int, organization: record<avatar_url: string, email: string, events_url: string, followers_url: string, following_url: string, gists_url: string, gravatar_id: string, html_url: string, id: int, login: string, name: string, node_id: string, organizations_url: string, received_events_url: string, repos_url: string, site_admin: bool, starred_at: string, starred_url: string, subscriptions_url: string, type: string, url: string>, owner: record<avatar_url: string, email: string, events_url: string, followers_url: string, following_url: string, gists_url: string, gravatar_id: string, html_url: string, id: int, login: string, name: string, node_id: string, organizations_url: string, received_events_url: string, repos_url: string, site_admin: bool, starred_at: string, starred_url: string, subscriptions_url: string, type: string, url: string>, permissions: record<admin: bool, maintain: bool, pull: bool, push: bool, triage: bool>, private: bool, pulls_url: string, pushed_at: string, releases_url: string, size: int, ssh_url: string, stargazers_count: int, stargazers_url: string, starred_at: string, statuses_url: string, subscribers_count: int, subscribers_url: string, subscription_url: string, svn_url: string, tags_url: string, teams_url: string, template_repository: record<allow_merge_commit: bool, allow_rebase_merge: bool, allow_squash_merge: bool, anonymous_access_enabled: bool, archive_url: string, archived: bool, assignees_url: string, blobs_url: string, branches_url: string, clone_url: string, collaborators_url: string, comments_url: string, commits_url: string, compare_url: string, contents_url: string, contributors_url: string, created_at: string, default_branch: string, delete_branch_on_merge: bool, deployments_url: string, description: string, disabled: bool, downloads_url: string, events_url: string, fork: bool, forks_count: int, forks_url: string, full_name: string, git_commits_url: string, git_refs_url: string, git_tags_url: string, git_url: string, has_downloads: bool, has_issues: bool, has_pages: bool, has_projects: bool, has_wiki: bool, homepage: string, hooks_url: string, html_url: string, id: int, is_template: bool, issue_comment_url: string, issue_events_url: string, issues_url: string, keys_url: string, labels_url: string, language: string, languages_url: string, merges_url: string, milestones_url: string, mirror_url: string, name: string, network_count: int, node_id: string, notifications_url: string, open_issues_count: int, owner: record, permissions: record, private: bool, pulls_url: string, pushed_at: string, releases_url: string, size: int, ssh_url: string, stargazers_count: int, stargazers_url: string, statuses_url: string, subscribers_count: int, subscribers_url: string, subscription_url: string, svn_url: string, tags_url: string, teams_url: string, topics: list, trees_url: string, updated_at: string, url: string, visibility: string, watchers_count: int>, topics: list<string>, trees_url: string, updated_at: string, url: string, visibility: string, watchers: int, watchers_count: int>, topics: list<string>, trees_url: string, updated_at: string, url: string, visibility: string, watchers: int, watchers_count: int> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($owner | is-empty) { error make --unspanned { msg: "path parameter 'owner' must be non-empty" } }
+  if ($repo | is-empty) { error make --unspanned { msg: "path parameter 'repo' must be non-empty" } }
   let full_url = (build-url $base ({owner: (encode-path-segment $owner), repo: (encode-path-segment $repo)} | format pattern "/repos/{owner}/{repo}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
 }
 
 # Update a repository
@@ -5959,12 +6235,14 @@ export def "repos update" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($owner | is-empty) { error make --unspanned { msg: "path parameter 'owner' must be non-empty" } }
+  if ($repo | is-empty) { error make --unspanned { msg: "path parameter 'repo' must be non-empty" } }
   let full_url = (build-url $base ({owner: (encode-path-segment $owner), repo: (encode-path-segment $repo)} | format pattern "/repos/{owner}/{repo}"))
   let req_body = {"allow_forking": $allow_forking, "allow_merge_commit": $allow_merge_commit, "allow_rebase_merge": $allow_rebase_merge, "allow_squash_merge": $allow_squash_merge, "archived": $archived, "default_branch": $default_branch, "delete_branch_on_merge": $delete_branch_on_merge, "description": $description, "has_issues": $has_issues, "has_projects": $has_projects, "has_wiki": $has_wiki, "homepage": $homepage, "is_template": $is_template, "name": $name, "private": $private, "visibility": $visibility} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "patch" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body
+  do-request "patch" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: {}, body: $req_body}
 }
 
 # List assignees
@@ -5989,11 +6267,13 @@ export def "repos-assignees list-issues" [
 ]: nothing -> table<avatar_url: string, email: string, events_url: string, followers_url: string, following_url: string, gists_url: string, gravatar_id: string, html_url: string, id: int, login: string, name: string, node_id: string, organizations_url: string, received_events_url: string, repos_url: string, site_admin: bool, starred_at: string, starred_url: string, subscriptions_url: string, type: string, url: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($owner | is-empty) { error make --unspanned { msg: "path parameter 'owner' must be non-empty" } }
+  if ($repo | is-empty) { error make --unspanned { msg: "path parameter 'repo' must be non-empty" } }
   let qp = [(serialize-qp "per_page" $per_page "scalar") (serialize-qp "page" $page "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({owner: (encode-path-segment $owner), repo: (encode-path-segment $repo)} | format pattern "/repos/{owner}/{repo}/assignees") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"per_page": $per_page, "page": $page} | compact), body: null}
 }
 
 # Check if a user can be assigned
@@ -6017,10 +6297,13 @@ export def "repos-assignees check-issues-user-can-be-assigned" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($owner | is-empty) { error make --unspanned { msg: "path parameter 'owner' must be non-empty" } }
+  if ($repo | is-empty) { error make --unspanned { msg: "path parameter 'repo' must be non-empty" } }
+  if ($assignee | is-empty) { error make --unspanned { msg: "path parameter 'assignee' must be non-empty" } }
   let full_url = (build-url $base ({owner: (encode-path-segment $owner), repo: (encode-path-segment $repo), assignee: (encode-path-segment $assignee)} | format pattern "/repos/{owner}/{repo}/assignees/{assignee}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
 }
 
 # List branches
@@ -6046,11 +6329,13 @@ export def "repos-branches list" [
 ]: nothing -> table<commit: record<sha: string, url: string>, name: string, protected: bool, protection: record<allow_deletions: record, allow_force_pushes: record, enabled: bool, enforce_admins: record, name: string, protection_url: string, required_conversation_resolution: record, required_linear_history: record, required_pull_request_reviews: record, required_signatures: record, required_status_checks: record, restrictions: record, url: string>, protection_url: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($owner | is-empty) { error make --unspanned { msg: "path parameter 'owner' must be non-empty" } }
+  if ($repo | is-empty) { error make --unspanned { msg: "path parameter 'repo' must be non-empty" } }
   let qp = [(serialize-qp "protected" $protected "scalar") (serialize-qp "per_page" $per_page "scalar") (serialize-qp "page" $page "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({owner: (encode-path-segment $owner), repo: (encode-path-segment $repo)} | format pattern "/repos/{owner}/{repo}/branches") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"protected": $protected, "per_page": $per_page, "page": $page} | compact), body: null}
 }
 
 # Get a branch
@@ -6074,10 +6359,13 @@ export def "repos-branches get" [
 ]: nothing -> record<_links: record<html: string, self: string>, commit: record<author: record<avatar_url: string, email: string, events_url: string, followers_url: string, following_url: string, gists_url: string, gravatar_id: string, html_url: string, id: int, login: string, name: string, node_id: string, organizations_url: string, received_events_url: string, repos_url: string, site_admin: bool, starred_at: string, starred_url: string, subscriptions_url: string, type: string, url: string>, comments_url: string, commit: record<author: record, comment_count: int, committer: record, message: string, tree: record, url: string, verification: record>, committer: record<avatar_url: string, email: string, events_url: string, followers_url: string, following_url: string, gists_url: string, gravatar_id: string, html_url: string, id: int, login: string, name: string, node_id: string, organizations_url: string, received_events_url: string, repos_url: string, site_admin: bool, starred_at: string, starred_url: string, subscriptions_url: string, type: string, url: string>, files: list<record>, html_url: string, node_id: string, parents: list<record>, sha: string, stats: record<additions: int, deletions: int, total: int>, url: string>, name: string, pattern: string, protected: bool, protection: record<allow_deletions: record<enabled: bool>, allow_force_pushes: record<enabled: bool>, enabled: bool, enforce_admins: record<enabled: bool, url: string>, name: string, protection_url: string, required_conversation_resolution: record<enabled: bool>, required_linear_history: record<enabled: bool>, required_pull_request_reviews: record<dismiss_stale_reviews: bool, dismissal_restrictions: record, require_code_owner_reviews: bool, required_approving_review_count: int, url: string>, required_signatures: record<enabled: bool, url: string>, required_status_checks: record<contexts: list, contexts_url: string, enforcement_level: string, strict: bool, url: string>, restrictions: record<apps: list, apps_url: string, teams: list, teams_url: string, url: string, users: list, users_url: string>, url: string>, protection_url: string, required_approving_review_count: int> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($owner | is-empty) { error make --unspanned { msg: "path parameter 'owner' must be non-empty" } }
+  if ($repo | is-empty) { error make --unspanned { msg: "path parameter 'repo' must be non-empty" } }
+  if ($branch | is-empty) { error make --unspanned { msg: "path parameter 'branch' must be non-empty" } }
   let full_url = (build-url $base ({owner: (encode-path-segment $owner), repo: (encode-path-segment $repo), branch: (encode-path-segment $branch)} | format pattern "/repos/{owner}/{repo}/branches/{branch}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
 }
 
 # Delete branch protection
@@ -6101,10 +6389,13 @@ export def "repos-branches-protection delete" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($owner | is-empty) { error make --unspanned { msg: "path parameter 'owner' must be non-empty" } }
+  if ($repo | is-empty) { error make --unspanned { msg: "path parameter 'repo' must be non-empty" } }
+  if ($branch | is-empty) { error make --unspanned { msg: "path parameter 'branch' must be non-empty" } }
   let full_url = (build-url $base ({owner: (encode-path-segment $owner), repo: (encode-path-segment $repo), branch: (encode-path-segment $branch)} | format pattern "/repos/{owner}/{repo}/branches/{branch}/protection"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
 }
 
 # Get branch protection
@@ -6128,10 +6419,13 @@ export def "repos-branches-protection get" [
 ]: nothing -> record<allow_deletions: record<enabled: bool>, allow_force_pushes: record<enabled: bool>, enabled: bool, enforce_admins: record<enabled: bool, url: string>, name: string, protection_url: string, required_conversation_resolution: record<enabled: bool>, required_linear_history: record<enabled: bool>, required_pull_request_reviews: record<dismiss_stale_reviews: bool, dismissal_restrictions: record<teams: list, teams_url: string, url: string, users: list, users_url: string>, require_code_owner_reviews: bool, required_approving_review_count: int, url: string>, required_signatures: record<enabled: bool, url: string>, required_status_checks: record<contexts: list<string>, contexts_url: string, enforcement_level: string, strict: bool, url: string>, restrictions: record<apps: list<record>, apps_url: string, teams: list<record>, teams_url: string, url: string, users: list<record>, users_url: string>, url: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($owner | is-empty) { error make --unspanned { msg: "path parameter 'owner' must be non-empty" } }
+  if ($repo | is-empty) { error make --unspanned { msg: "path parameter 'repo' must be non-empty" } }
+  if ($branch | is-empty) { error make --unspanned { msg: "path parameter 'branch' must be non-empty" } }
   let full_url = (build-url $base ({owner: (encode-path-segment $owner), repo: (encode-path-segment $repo), branch: (encode-path-segment $branch)} | format pattern "/repos/{owner}/{repo}/branches/{branch}/protection"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
 }
 
 # Update branch protection
@@ -6167,12 +6461,15 @@ export def "repos-branches-protection update" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($owner | is-empty) { error make --unspanned { msg: "path parameter 'owner' must be non-empty" } }
+  if ($repo | is-empty) { error make --unspanned { msg: "path parameter 'repo' must be non-empty" } }
+  if ($branch | is-empty) { error make --unspanned { msg: "path parameter 'branch' must be non-empty" } }
   let full_url = (build-url $base ({owner: (encode-path-segment $owner), repo: (encode-path-segment $repo), branch: (encode-path-segment $branch)} | format pattern "/repos/{owner}/{repo}/branches/{branch}/protection"))
   let req_body = {"allow_deletions": $allow_deletions, "allow_force_pushes": $allow_force_pushes, "enforce_admins": $enforce_admins, "required_conversation_resolution": $required_conversation_resolution, "required_linear_history": $required_linear_history, "required_pull_request_reviews": $required_pull_request_reviews, "required_status_checks": $required_status_checks, "restrictions": $restrictions} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: {}, body: $req_body}
 }
 
 # Delete admin branch protection
@@ -6196,10 +6493,13 @@ export def "repos-branches-protection-enforce-admins delete" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($owner | is-empty) { error make --unspanned { msg: "path parameter 'owner' must be non-empty" } }
+  if ($repo | is-empty) { error make --unspanned { msg: "path parameter 'repo' must be non-empty" } }
+  if ($branch | is-empty) { error make --unspanned { msg: "path parameter 'branch' must be non-empty" } }
   let full_url = (build-url $base ({owner: (encode-path-segment $owner), repo: (encode-path-segment $repo), branch: (encode-path-segment $branch)} | format pattern "/repos/{owner}/{repo}/branches/{branch}/protection/enforce_admins"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
 }
 
 # Get admin branch protection
@@ -6223,10 +6523,13 @@ export def "repos-branches-protection-enforce-admins get" [
 ]: nothing -> record<enabled: bool, url: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($owner | is-empty) { error make --unspanned { msg: "path parameter 'owner' must be non-empty" } }
+  if ($repo | is-empty) { error make --unspanned { msg: "path parameter 'repo' must be non-empty" } }
+  if ($branch | is-empty) { error make --unspanned { msg: "path parameter 'branch' must be non-empty" } }
   let full_url = (build-url $base ({owner: (encode-path-segment $owner), repo: (encode-path-segment $repo), branch: (encode-path-segment $branch)} | format pattern "/repos/{owner}/{repo}/branches/{branch}/protection/enforce_admins"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
 }
 
 # Set admin branch protection
@@ -6250,10 +6553,13 @@ export def "repos-branches-protection-enforce-admins update" [
 ]: nothing -> record<enabled: bool, url: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($owner | is-empty) { error make --unspanned { msg: "path parameter 'owner' must be non-empty" } }
+  if ($repo | is-empty) { error make --unspanned { msg: "path parameter 'repo' must be non-empty" } }
+  if ($branch | is-empty) { error make --unspanned { msg: "path parameter 'branch' must be non-empty" } }
   let full_url = (build-url $base ({owner: (encode-path-segment $owner), repo: (encode-path-segment $repo), branch: (encode-path-segment $branch)} | format pattern "/repos/{owner}/{repo}/branches/{branch}/protection/enforce_admins"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
 }
 
 # Delete pull request review protection
@@ -6277,10 +6583,13 @@ export def "repos-branches-protection-required-pull-request-reviews delete" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($owner | is-empty) { error make --unspanned { msg: "path parameter 'owner' must be non-empty" } }
+  if ($repo | is-empty) { error make --unspanned { msg: "path parameter 'repo' must be non-empty" } }
+  if ($branch | is-empty) { error make --unspanned { msg: "path parameter 'branch' must be non-empty" } }
   let full_url = (build-url $base ({owner: (encode-path-segment $owner), repo: (encode-path-segment $repo), branch: (encode-path-segment $branch)} | format pattern "/repos/{owner}/{repo}/branches/{branch}/protection/required_pull_request_reviews"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
 }
 
 # Get pull request review protection
@@ -6304,10 +6613,13 @@ export def "repos-branches-protection-required-pull-request-reviews get" [
 ]: nothing -> record<dismiss_stale_reviews: bool, dismissal_restrictions: record<teams: list<record>, teams_url: string, url: string, users: list<record>, users_url: string>, require_code_owner_reviews: bool, required_approving_review_count: int, url: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($owner | is-empty) { error make --unspanned { msg: "path parameter 'owner' must be non-empty" } }
+  if ($repo | is-empty) { error make --unspanned { msg: "path parameter 'repo' must be non-empty" } }
+  if ($branch | is-empty) { error make --unspanned { msg: "path parameter 'branch' must be non-empty" } }
   let full_url = (build-url $base ({owner: (encode-path-segment $owner), repo: (encode-path-segment $repo), branch: (encode-path-segment $branch)} | format pattern "/repos/{owner}/{repo}/branches/{branch}/protection/required_pull_request_reviews"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
 }
 
 # Update pull request review protection
@@ -6337,12 +6649,15 @@ export def "repos-branches-protection-required-pull-request-reviews update" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($owner | is-empty) { error make --unspanned { msg: "path parameter 'owner' must be non-empty" } }
+  if ($repo | is-empty) { error make --unspanned { msg: "path parameter 'repo' must be non-empty" } }
+  if ($branch | is-empty) { error make --unspanned { msg: "path parameter 'branch' must be non-empty" } }
   let full_url = (build-url $base ({owner: (encode-path-segment $owner), repo: (encode-path-segment $repo), branch: (encode-path-segment $branch)} | format pattern "/repos/{owner}/{repo}/branches/{branch}/protection/required_pull_request_reviews"))
   let req_body = {"dismiss_stale_reviews": $dismiss_stale_reviews, "dismissal_restrictions": $dismissal_restrictions, "require_code_owner_reviews": $require_code_owner_reviews, "required_approving_review_count": $required_approving_review_count} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "patch" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body
+  do-request "patch" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: {}, body: $req_body}
 }
 
 # Delete commit signature protection
@@ -6366,10 +6681,13 @@ export def "repos-branches-protection-required-signatures delete-commit" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($owner | is-empty) { error make --unspanned { msg: "path parameter 'owner' must be non-empty" } }
+  if ($repo | is-empty) { error make --unspanned { msg: "path parameter 'repo' must be non-empty" } }
+  if ($branch | is-empty) { error make --unspanned { msg: "path parameter 'branch' must be non-empty" } }
   let full_url = (build-url $base ({owner: (encode-path-segment $owner), repo: (encode-path-segment $repo), branch: (encode-path-segment $branch)} | format pattern "/repos/{owner}/{repo}/branches/{branch}/protection/required_signatures"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
 }
 
 # Get commit signature protection
@@ -6393,10 +6711,13 @@ export def "repos-branches-protection-required-signatures get-commit" [
 ]: nothing -> record<enabled: bool, url: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($owner | is-empty) { error make --unspanned { msg: "path parameter 'owner' must be non-empty" } }
+  if ($repo | is-empty) { error make --unspanned { msg: "path parameter 'repo' must be non-empty" } }
+  if ($branch | is-empty) { error make --unspanned { msg: "path parameter 'branch' must be non-empty" } }
   let full_url = (build-url $base ({owner: (encode-path-segment $owner), repo: (encode-path-segment $repo), branch: (encode-path-segment $branch)} | format pattern "/repos/{owner}/{repo}/branches/{branch}/protection/required_signatures"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
 }
 
 # Create commit signature protection
@@ -6420,10 +6741,13 @@ export def "repos-branches-protection-required-signatures create-commit" [
 ]: nothing -> record<enabled: bool, url: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($owner | is-empty) { error make --unspanned { msg: "path parameter 'owner' must be non-empty" } }
+  if ($repo | is-empty) { error make --unspanned { msg: "path parameter 'repo' must be non-empty" } }
+  if ($branch | is-empty) { error make --unspanned { msg: "path parameter 'branch' must be non-empty" } }
   let full_url = (build-url $base ({owner: (encode-path-segment $owner), repo: (encode-path-segment $repo), branch: (encode-path-segment $branch)} | format pattern "/repos/{owner}/{repo}/branches/{branch}/protection/required_signatures"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
 }
 
 # Remove status check protection
@@ -6447,10 +6771,13 @@ export def "repos-branches-protection-required-status-checks delete" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($owner | is-empty) { error make --unspanned { msg: "path parameter 'owner' must be non-empty" } }
+  if ($repo | is-empty) { error make --unspanned { msg: "path parameter 'repo' must be non-empty" } }
+  if ($branch | is-empty) { error make --unspanned { msg: "path parameter 'branch' must be non-empty" } }
   let full_url = (build-url $base ({owner: (encode-path-segment $owner), repo: (encode-path-segment $repo), branch: (encode-path-segment $branch)} | format pattern "/repos/{owner}/{repo}/branches/{branch}/protection/required_status_checks"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
 }
 
 # Get status checks protection
@@ -6474,10 +6801,13 @@ export def "repos-branches-protection-required-status-checks get" [
 ]: nothing -> record<contexts: list<string>, contexts_url: string, strict: bool, url: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($owner | is-empty) { error make --unspanned { msg: "path parameter 'owner' must be non-empty" } }
+  if ($repo | is-empty) { error make --unspanned { msg: "path parameter 'repo' must be non-empty" } }
+  if ($branch | is-empty) { error make --unspanned { msg: "path parameter 'branch' must be non-empty" } }
   let full_url = (build-url $base ({owner: (encode-path-segment $owner), repo: (encode-path-segment $repo), branch: (encode-path-segment $branch)} | format pattern "/repos/{owner}/{repo}/branches/{branch}/protection/required_status_checks"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
 }
 
 # Update status check protection
@@ -6504,12 +6834,15 @@ export def "repos-branches-protection-required-status-checks update" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($owner | is-empty) { error make --unspanned { msg: "path parameter 'owner' must be non-empty" } }
+  if ($repo | is-empty) { error make --unspanned { msg: "path parameter 'repo' must be non-empty" } }
+  if ($branch | is-empty) { error make --unspanned { msg: "path parameter 'branch' must be non-empty" } }
   let full_url = (build-url $base ({owner: (encode-path-segment $owner), repo: (encode-path-segment $repo), branch: (encode-path-segment $branch)} | format pattern "/repos/{owner}/{repo}/branches/{branch}/protection/required_status_checks"))
   let req_body = {"contexts": $contexts, "strict": $strict} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "patch" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body
+  do-request "patch" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: {}, body: $req_body}
 }
 
 # Remove status check contexts
@@ -6535,12 +6868,15 @@ export def "repos-branches-protection-required-status-checks-contexts delete" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($owner | is-empty) { error make --unspanned { msg: "path parameter 'owner' must be non-empty" } }
+  if ($repo | is-empty) { error make --unspanned { msg: "path parameter 'repo' must be non-empty" } }
+  if ($branch | is-empty) { error make --unspanned { msg: "path parameter 'branch' must be non-empty" } }
   let full_url = (build-url $base ({owner: (encode-path-segment $owner), repo: (encode-path-segment $repo), branch: (encode-path-segment $branch)} | format pattern "/repos/{owner}/{repo}/branches/{branch}/protection/required_status_checks/contexts"))
   let req_body = {"contexts": $contexts} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else if ($input | describe | str starts-with "list") { $input } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: {}, body: $req_body}
 }
 
 # Get all status check contexts
@@ -6564,10 +6900,13 @@ export def "repos-branches-protection-required-status-checks-contexts get-list" 
 ]: nothing -> list<string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($owner | is-empty) { error make --unspanned { msg: "path parameter 'owner' must be non-empty" } }
+  if ($repo | is-empty) { error make --unspanned { msg: "path parameter 'repo' must be non-empty" } }
+  if ($branch | is-empty) { error make --unspanned { msg: "path parameter 'branch' must be non-empty" } }
   let full_url = (build-url $base ({owner: (encode-path-segment $owner), repo: (encode-path-segment $repo), branch: (encode-path-segment $branch)} | format pattern "/repos/{owner}/{repo}/branches/{branch}/protection/required_status_checks/contexts"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
 }
 
 # Add status check contexts
@@ -6593,12 +6932,15 @@ export def "repos-branches-protection-required-status-checks-contexts create" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($owner | is-empty) { error make --unspanned { msg: "path parameter 'owner' must be non-empty" } }
+  if ($repo | is-empty) { error make --unspanned { msg: "path parameter 'repo' must be non-empty" } }
+  if ($branch | is-empty) { error make --unspanned { msg: "path parameter 'branch' must be non-empty" } }
   let full_url = (build-url $base ({owner: (encode-path-segment $owner), repo: (encode-path-segment $repo), branch: (encode-path-segment $branch)} | format pattern "/repos/{owner}/{repo}/branches/{branch}/protection/required_status_checks/contexts"))
   let req_body = {"contexts": $contexts} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else if ($input | describe | str starts-with "list") { $input } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: {}, body: $req_body}
 }
 
 # Set status check contexts
@@ -6624,12 +6966,15 @@ export def "repos-branches-protection-required-status-checks-contexts update" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($owner | is-empty) { error make --unspanned { msg: "path parameter 'owner' must be non-empty" } }
+  if ($repo | is-empty) { error make --unspanned { msg: "path parameter 'repo' must be non-empty" } }
+  if ($branch | is-empty) { error make --unspanned { msg: "path parameter 'branch' must be non-empty" } }
   let full_url = (build-url $base ({owner: (encode-path-segment $owner), repo: (encode-path-segment $repo), branch: (encode-path-segment $branch)} | format pattern "/repos/{owner}/{repo}/branches/{branch}/protection/required_status_checks/contexts"))
   let req_body = {"contexts": $contexts} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else if ($input | describe | str starts-with "list") { $input } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: {}, body: $req_body}
 }
 
 # Delete access restrictions
@@ -6653,10 +6998,13 @@ export def "repos-branches-protection-restrictions delete-access" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($owner | is-empty) { error make --unspanned { msg: "path parameter 'owner' must be non-empty" } }
+  if ($repo | is-empty) { error make --unspanned { msg: "path parameter 'repo' must be non-empty" } }
+  if ($branch | is-empty) { error make --unspanned { msg: "path parameter 'branch' must be non-empty" } }
   let full_url = (build-url $base ({owner: (encode-path-segment $owner), repo: (encode-path-segment $repo), branch: (encode-path-segment $branch)} | format pattern "/repos/{owner}/{repo}/branches/{branch}/protection/restrictions"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
 }
 
 # Get access restrictions
@@ -6680,10 +7028,13 @@ export def "repos-branches-protection-restrictions get-access" [
 ]: nothing -> record<apps: table<created_at: string, description: string, events: list, external_url: string, html_url: string, id: int, name: string, node_id: string, owner: record, permissions: record, slug: string, updated_at: string>, apps_url: string, teams: table<description: string, html_url: string, id: int, members_url: string, name: string, node_id: string, parent: string, permission: string, privacy: string, repositories_url: string, slug: string, url: string>, teams_url: string, url: string, users: table<avatar_url: string, events_url: string, followers_url: string, following_url: string, gists_url: string, gravatar_id: string, html_url: string, id: int, login: string, node_id: string, organizations_url: string, received_events_url: string, repos_url: string, site_admin: bool, starred_url: string, subscriptions_url: string, type: string, url: string>, users_url: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($owner | is-empty) { error make --unspanned { msg: "path parameter 'owner' must be non-empty" } }
+  if ($repo | is-empty) { error make --unspanned { msg: "path parameter 'repo' must be non-empty" } }
+  if ($branch | is-empty) { error make --unspanned { msg: "path parameter 'branch' must be non-empty" } }
   let full_url = (build-url $base ({owner: (encode-path-segment $owner), repo: (encode-path-segment $repo), branch: (encode-path-segment $branch)} | format pattern "/repos/{owner}/{repo}/branches/{branch}/protection/restrictions"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
 }
 
 # Remove app access restrictions
@@ -6709,12 +7060,15 @@ export def "repos-branches-protection-restrictions-apps delete-access" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($owner | is-empty) { error make --unspanned { msg: "path parameter 'owner' must be non-empty" } }
+  if ($repo | is-empty) { error make --unspanned { msg: "path parameter 'repo' must be non-empty" } }
+  if ($branch | is-empty) { error make --unspanned { msg: "path parameter 'branch' must be non-empty" } }
   let full_url = (build-url $base ({owner: (encode-path-segment $owner), repo: (encode-path-segment $repo), branch: (encode-path-segment $branch)} | format pattern "/repos/{owner}/{repo}/branches/{branch}/protection/restrictions/apps"))
   let req_body = {"apps": $apps} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else if ($input | describe | str starts-with "list") { $input } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: {}, body: $req_body}
 }
 
 # Get apps with access to the protected branch
@@ -6738,10 +7092,13 @@ export def "repos-branches-protection-restrictions-apps get-with-access-to-prote
 ]: nothing -> table<client_id: string, client_secret: string, created_at: string, description: string, events: list<string>, external_url: string, html_url: string, id: int, installations_count: int, name: string, node_id: string, owner: record<avatar_url: string, email: string, events_url: string, followers_url: string, following_url: string, gists_url: string, gravatar_id: string, html_url: string, id: int, login: string, name: string, node_id: string, organizations_url: string, received_events_url: string, repos_url: string, site_admin: bool, starred_at: string, starred_url: string, subscriptions_url: string, type: string, url: string>, pem: string, permissions: record<checks: string, contents: string, deployments: string, issues: string, metadata: string>, slug: string, updated_at: string, webhook_secret: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($owner | is-empty) { error make --unspanned { msg: "path parameter 'owner' must be non-empty" } }
+  if ($repo | is-empty) { error make --unspanned { msg: "path parameter 'repo' must be non-empty" } }
+  if ($branch | is-empty) { error make --unspanned { msg: "path parameter 'branch' must be non-empty" } }
   let full_url = (build-url $base ({owner: (encode-path-segment $owner), repo: (encode-path-segment $repo), branch: (encode-path-segment $branch)} | format pattern "/repos/{owner}/{repo}/branches/{branch}/protection/restrictions/apps"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
 }
 
 # Add app access restrictions
@@ -6767,12 +7124,15 @@ export def "repos-branches-protection-restrictions-apps create-access" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($owner | is-empty) { error make --unspanned { msg: "path parameter 'owner' must be non-empty" } }
+  if ($repo | is-empty) { error make --unspanned { msg: "path parameter 'repo' must be non-empty" } }
+  if ($branch | is-empty) { error make --unspanned { msg: "path parameter 'branch' must be non-empty" } }
   let full_url = (build-url $base ({owner: (encode-path-segment $owner), repo: (encode-path-segment $repo), branch: (encode-path-segment $branch)} | format pattern "/repos/{owner}/{repo}/branches/{branch}/protection/restrictions/apps"))
   let req_body = {"apps": $apps} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else if ($input | describe | str starts-with "list") { $input } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: {}, body: $req_body}
 }
 
 # Set app access restrictions
@@ -6798,12 +7158,15 @@ export def "repos-branches-protection-restrictions-apps update-access" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($owner | is-empty) { error make --unspanned { msg: "path parameter 'owner' must be non-empty" } }
+  if ($repo | is-empty) { error make --unspanned { msg: "path parameter 'repo' must be non-empty" } }
+  if ($branch | is-empty) { error make --unspanned { msg: "path parameter 'branch' must be non-empty" } }
   let full_url = (build-url $base ({owner: (encode-path-segment $owner), repo: (encode-path-segment $repo), branch: (encode-path-segment $branch)} | format pattern "/repos/{owner}/{repo}/branches/{branch}/protection/restrictions/apps"))
   let req_body = {"apps": $apps} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else if ($input | describe | str starts-with "list") { $input } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: {}, body: $req_body}
 }
 
 # Remove team access restrictions
@@ -6829,12 +7192,15 @@ export def "repos-branches-protection-restrictions-teams delete-access" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($owner | is-empty) { error make --unspanned { msg: "path parameter 'owner' must be non-empty" } }
+  if ($repo | is-empty) { error make --unspanned { msg: "path parameter 'repo' must be non-empty" } }
+  if ($branch | is-empty) { error make --unspanned { msg: "path parameter 'branch' must be non-empty" } }
   let full_url = (build-url $base ({owner: (encode-path-segment $owner), repo: (encode-path-segment $repo), branch: (encode-path-segment $branch)} | format pattern "/repos/{owner}/{repo}/branches/{branch}/protection/restrictions/teams"))
   let req_body = {"teams": $teams} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else if ($input | describe | str starts-with "list") { $input } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: {}, body: $req_body}
 }
 
 # Get teams with access to the protected branch
@@ -6858,10 +7224,13 @@ export def "repos-branches-protection-restrictions-teams get-with-access-to-prot
 ]: nothing -> table<description: string, html_url: string, id: int, members_url: string, name: string, node_id: string, parent: record<description: string, html_url: string, id: int, ldap_dn: string, members_url: string, name: string, node_id: string, permission: string, privacy: string, repositories_url: string, slug: string, url: string>, permission: string, permissions: record<admin: bool, maintain: bool, pull: bool, push: bool, triage: bool>, privacy: string, repositories_url: string, slug: string, url: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($owner | is-empty) { error make --unspanned { msg: "path parameter 'owner' must be non-empty" } }
+  if ($repo | is-empty) { error make --unspanned { msg: "path parameter 'repo' must be non-empty" } }
+  if ($branch | is-empty) { error make --unspanned { msg: "path parameter 'branch' must be non-empty" } }
   let full_url = (build-url $base ({owner: (encode-path-segment $owner), repo: (encode-path-segment $repo), branch: (encode-path-segment $branch)} | format pattern "/repos/{owner}/{repo}/branches/{branch}/protection/restrictions/teams"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
 }
 
 # Add team access restrictions
@@ -6887,12 +7256,15 @@ export def "repos-branches-protection-restrictions-teams create-access" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($owner | is-empty) { error make --unspanned { msg: "path parameter 'owner' must be non-empty" } }
+  if ($repo | is-empty) { error make --unspanned { msg: "path parameter 'repo' must be non-empty" } }
+  if ($branch | is-empty) { error make --unspanned { msg: "path parameter 'branch' must be non-empty" } }
   let full_url = (build-url $base ({owner: (encode-path-segment $owner), repo: (encode-path-segment $repo), branch: (encode-path-segment $branch)} | format pattern "/repos/{owner}/{repo}/branches/{branch}/protection/restrictions/teams"))
   let req_body = {"teams": $teams} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else if ($input | describe | str starts-with "list") { $input } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: {}, body: $req_body}
 }
 
 # Set team access restrictions
@@ -6918,12 +7290,15 @@ export def "repos-branches-protection-restrictions-teams update-access" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($owner | is-empty) { error make --unspanned { msg: "path parameter 'owner' must be non-empty" } }
+  if ($repo | is-empty) { error make --unspanned { msg: "path parameter 'repo' must be non-empty" } }
+  if ($branch | is-empty) { error make --unspanned { msg: "path parameter 'branch' must be non-empty" } }
   let full_url = (build-url $base ({owner: (encode-path-segment $owner), repo: (encode-path-segment $repo), branch: (encode-path-segment $branch)} | format pattern "/repos/{owner}/{repo}/branches/{branch}/protection/restrictions/teams"))
   let req_body = {"teams": $teams} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else if ($input | describe | str starts-with "list") { $input } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: {}, body: $req_body}
 }
 
 # Remove user access restrictions
@@ -6949,12 +7324,15 @@ export def "repos-branches-protection-restrictions-users delete-access" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($owner | is-empty) { error make --unspanned { msg: "path parameter 'owner' must be non-empty" } }
+  if ($repo | is-empty) { error make --unspanned { msg: "path parameter 'repo' must be non-empty" } }
+  if ($branch | is-empty) { error make --unspanned { msg: "path parameter 'branch' must be non-empty" } }
   let full_url = (build-url $base ({owner: (encode-path-segment $owner), repo: (encode-path-segment $repo), branch: (encode-path-segment $branch)} | format pattern "/repos/{owner}/{repo}/branches/{branch}/protection/restrictions/users"))
   let req_body = {"users": $users} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else if ($input | describe | str starts-with "list") { $input } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: {}, body: $req_body}
 }
 
 # Get users with access to the protected branch
@@ -6978,10 +7356,13 @@ export def "repos-branches-protection-restrictions-users get-with-access-to-prot
 ]: nothing -> table<avatar_url: string, email: string, events_url: string, followers_url: string, following_url: string, gists_url: string, gravatar_id: string, html_url: string, id: int, login: string, name: string, node_id: string, organizations_url: string, received_events_url: string, repos_url: string, site_admin: bool, starred_at: string, starred_url: string, subscriptions_url: string, type: string, url: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($owner | is-empty) { error make --unspanned { msg: "path parameter 'owner' must be non-empty" } }
+  if ($repo | is-empty) { error make --unspanned { msg: "path parameter 'repo' must be non-empty" } }
+  if ($branch | is-empty) { error make --unspanned { msg: "path parameter 'branch' must be non-empty" } }
   let full_url = (build-url $base ({owner: (encode-path-segment $owner), repo: (encode-path-segment $repo), branch: (encode-path-segment $branch)} | format pattern "/repos/{owner}/{repo}/branches/{branch}/protection/restrictions/users"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
 }
 
 # Add user access restrictions
@@ -7007,12 +7388,15 @@ export def "repos-branches-protection-restrictions-users create-access" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($owner | is-empty) { error make --unspanned { msg: "path parameter 'owner' must be non-empty" } }
+  if ($repo | is-empty) { error make --unspanned { msg: "path parameter 'repo' must be non-empty" } }
+  if ($branch | is-empty) { error make --unspanned { msg: "path parameter 'branch' must be non-empty" } }
   let full_url = (build-url $base ({owner: (encode-path-segment $owner), repo: (encode-path-segment $repo), branch: (encode-path-segment $branch)} | format pattern "/repos/{owner}/{repo}/branches/{branch}/protection/restrictions/users"))
   let req_body = {"users": $users} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else if ($input | describe | str starts-with "list") { $input } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: {}, body: $req_body}
 }
 
 # Set user access restrictions
@@ -7038,12 +7422,15 @@ export def "repos-branches-protection-restrictions-users update-access" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($owner | is-empty) { error make --unspanned { msg: "path parameter 'owner' must be non-empty" } }
+  if ($repo | is-empty) { error make --unspanned { msg: "path parameter 'repo' must be non-empty" } }
+  if ($branch | is-empty) { error make --unspanned { msg: "path parameter 'branch' must be non-empty" } }
   let full_url = (build-url $base ({owner: (encode-path-segment $owner), repo: (encode-path-segment $repo), branch: (encode-path-segment $branch)} | format pattern "/repos/{owner}/{repo}/branches/{branch}/protection/restrictions/users"))
   let req_body = {"users": $users} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else if ($input | describe | str starts-with "list") { $input } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: {}, body: $req_body}
 }
 
 # Create a check run
@@ -7079,12 +7466,14 @@ export def "repos-check-runs create" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($owner | is-empty) { error make --unspanned { msg: "path parameter 'owner' must be non-empty" } }
+  if ($repo | is-empty) { error make --unspanned { msg: "path parameter 'repo' must be non-empty" } }
   let full_url = (build-url $base ({owner: (encode-path-segment $owner), repo: (encode-path-segment $repo)} | format pattern "/repos/{owner}/{repo}/check-runs"))
   let req_body = {"actions": $actions, "completed_at": $completed_at, "conclusion": $conclusion, "details_url": $details_url, "external_id": $external_id, "head_sha": $head_sha, "name": $name, "output": $output, "started_at": $started_at, "status": $status} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: {}, body: $req_body}
 }
 
 # Get a check run
@@ -7108,10 +7497,13 @@ export def "repos-check-runs get" [
 ]: nothing -> record<app: record<client_id: string, client_secret: string, created_at: string, description: string, events: list<string>, external_url: string, html_url: string, id: int, installations_count: int, name: string, node_id: string, owner: record<avatar_url: string, email: string, events_url: string, followers_url: string, following_url: string, gists_url: string, gravatar_id: string, html_url: string, id: int, login: string, name: string, node_id: string, organizations_url: string, received_events_url: string, repos_url: string, site_admin: bool, starred_at: string, starred_url: string, subscriptions_url: string, type: string, url: string>, pem: string, permissions: record<checks: string, contents: string, deployments: string, issues: string, metadata: string>, slug: string, updated_at: string, webhook_secret: string>, check_suite: record<id: int>, completed_at: string, conclusion: string, deployment: record<created_at: string, description: string, environment: string, id: int, node_id: string, original_environment: string, performed_via_github_app: record<client_id: string, client_secret: string, created_at: string, description: string, events: list, external_url: string, html_url: string, id: int, installations_count: int, name: string, node_id: string, owner: record, pem: string, permissions: record, slug: string, updated_at: string, webhook_secret: string>, production_environment: bool, repository_url: string, statuses_url: string, task: string, transient_environment: bool, updated_at: string, url: string>, details_url: string, external_id: string, head_sha: string, html_url: string, id: int, name: string, node_id: string, output: record<annotations_count: int, annotations_url: string, summary: string, text: string, title: string>, pull_requests: list<record<base: record, head: record, id: int, number: int, url: string>>, started_at: string, status: string, url: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($owner | is-empty) { error make --unspanned { msg: "path parameter 'owner' must be non-empty" } }
+  if ($repo | is-empty) { error make --unspanned { msg: "path parameter 'repo' must be non-empty" } }
+  if ($check_run_id | is-empty) { error make --unspanned { msg: "path parameter 'check_run_id' must be non-empty" } }
   let full_url = (build-url $base ({owner: (encode-path-segment $owner), repo: (encode-path-segment $repo), check_run_id: (encode-path-segment $check_run_id)} | format pattern "/repos/{owner}/{repo}/check-runs/{check_run_id}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
 }
 
 # Update a check run
@@ -7147,12 +7539,15 @@ export def "repos-check-runs update" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($owner | is-empty) { error make --unspanned { msg: "path parameter 'owner' must be non-empty" } }
+  if ($repo | is-empty) { error make --unspanned { msg: "path parameter 'repo' must be non-empty" } }
+  if ($check_run_id | is-empty) { error make --unspanned { msg: "path parameter 'check_run_id' must be non-empty" } }
   let full_url = (build-url $base ({owner: (encode-path-segment $owner), repo: (encode-path-segment $repo), check_run_id: (encode-path-segment $check_run_id)} | format pattern "/repos/{owner}/{repo}/check-runs/{check_run_id}"))
   let req_body = {"actions": $actions, "completed_at": $completed_at, "conclusion": $conclusion, "details_url": $details_url, "external_id": $external_id, "name": $name, "output": $output, "started_at": $started_at, "status": $status} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "patch" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body
+  do-request "patch" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: {}, body: $req_body}
 }
 
 # List check run annotations
@@ -7178,11 +7573,14 @@ export def "repos-check-runs-annotations list" [
 ]: nothing -> table<annotation_level: string, blob_href: string, end_column: int, end_line: int, message: string, path: string, raw_details: string, start_column: int, start_line: int, title: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($owner | is-empty) { error make --unspanned { msg: "path parameter 'owner' must be non-empty" } }
+  if ($repo | is-empty) { error make --unspanned { msg: "path parameter 'repo' must be non-empty" } }
+  if ($check_run_id | is-empty) { error make --unspanned { msg: "path parameter 'check_run_id' must be non-empty" } }
   let qp = [(serialize-qp "per_page" $per_page "scalar") (serialize-qp "page" $page "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({owner: (encode-path-segment $owner), repo: (encode-path-segment $repo), check_run_id: (encode-path-segment $check_run_id)} | format pattern "/repos/{owner}/{repo}/check-runs/{check_run_id}/annotations") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"per_page": $per_page, "page": $page} | compact), body: null}
 }
 
 # Create a check suite
@@ -7207,12 +7605,14 @@ export def "repos-check-suites create" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($owner | is-empty) { error make --unspanned { msg: "path parameter 'owner' must be non-empty" } }
+  if ($repo | is-empty) { error make --unspanned { msg: "path parameter 'repo' must be non-empty" } }
   let full_url = (build-url $base ({owner: (encode-path-segment $owner), repo: (encode-path-segment $repo)} | format pattern "/repos/{owner}/{repo}/check-suites"))
   let req_body = {"head_sha": $head_sha} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: {}, body: $req_body}
 }
 
 # Update repository preferences for check suites
@@ -7238,12 +7638,14 @@ export def "repos-check-suites-preferences update" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($owner | is-empty) { error make --unspanned { msg: "path parameter 'owner' must be non-empty" } }
+  if ($repo | is-empty) { error make --unspanned { msg: "path parameter 'repo' must be non-empty" } }
   let full_url = (build-url $base ({owner: (encode-path-segment $owner), repo: (encode-path-segment $repo)} | format pattern "/repos/{owner}/{repo}/check-suites/preferences"))
   let req_body = {"auto_trigger_checks": $auto_trigger_checks} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "patch" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body
+  do-request "patch" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: {}, body: $req_body}
 }
 
 # Get a check suite
@@ -7267,10 +7669,13 @@ export def "repos-check-suites get" [
 ]: nothing -> record<after: string, app: record<client_id: string, client_secret: string, created_at: string, description: string, events: list<string>, external_url: string, html_url: string, id: int, installations_count: int, name: string, node_id: string, owner: record<avatar_url: string, email: string, events_url: string, followers_url: string, following_url: string, gists_url: string, gravatar_id: string, html_url: string, id: int, login: string, name: string, node_id: string, organizations_url: string, received_events_url: string, repos_url: string, site_admin: bool, starred_at: string, starred_url: string, subscriptions_url: string, type: string, url: string>, pem: string, permissions: record<checks: string, contents: string, deployments: string, issues: string, metadata: string>, slug: string, updated_at: string, webhook_secret: string>, before: string, check_runs_url: string, conclusion: string, created_at: string, head_branch: string, head_commit: record<author: record<email: string, name: string>, committer: record<email: string, name: string>, id: string, message: string, timestamp: string, tree_id: string>, head_sha: string, id: int, latest_check_runs_count: int, node_id: string, pull_requests: table<base: record, head: record, id: int, number: int, url: string>, repository: record<allow_forking: bool, anonymous_access_enabled: bool, archive_url: string, archived: bool, assignees_url: string, blobs_url: string, branches_url: string, clone_url: string, code_of_conduct: record<body: string, html_url: string, key: string, name: string, url: string>, collaborators_url: string, comments_url: string, commits_url: string, compare_url: string, contents_url: string, contributors_url: string, created_at: string, default_branch: string, delete_branch_on_merge: bool, deployments_url: string, description: string, disabled: bool, downloads_url: string, events_url: string, fork: bool, forks: int, forks_count: int, forks_url: string, full_name: string, git_commits_url: string, git_refs_url: string, git_tags_url: string, git_url: string, has_downloads: bool, has_issues: bool, has_pages: bool, has_projects: bool, has_wiki: bool, homepage: string, hooks_url: string, html_url: string, id: int, is_template: bool, issue_comment_url: string, issue_events_url: string, issues_url: string, keys_url: string, labels_url: string, language: string, languages_url: string, license: record<key: string, name: string, node_id: string, spdx_id: string, url: string>, merges_url: string, milestones_url: string, mirror_url: string, name: string, network_count: int, node_id: string, notifications_url: string, open_issues: int, open_issues_count: int, owner: record<avatar_url: string, email: string, events_url: string, followers_url: string, following_url: string, gists_url: string, gravatar_id: string, html_url: string, id: int, login: string, name: string, node_id: string, organizations_url: string, received_events_url: string, repos_url: string, site_admin: bool, starred_at: string, starred_url: string, subscriptions_url: string, type: string, url: string>, permissions: record<admin: bool, maintain: bool, pull: bool, push: bool, triage: bool>, private: bool, pulls_url: string, pushed_at: string, releases_url: string, size: int, ssh_url: string, stargazers_count: int, stargazers_url: string, statuses_url: string, subscribers_count: int, subscribers_url: string, subscription_url: string, svn_url: string, tags_url: string, teams_url: string, template_repository: record<allow_forking: bool, allow_merge_commit: bool, allow_rebase_merge: bool, allow_squash_merge: bool, anonymous_access_enabled: bool, archive_url: string, archived: bool, assignees_url: string, blobs_url: string, branches_url: string, clone_url: string, collaborators_url: string, comments_url: string, commits_url: string, compare_url: string, contents_url: string, contributors_url: string, created_at: string, default_branch: string, delete_branch_on_merge: bool, deployments_url: string, description: string, disabled: bool, downloads_url: string, events_url: string, fork: bool, forks: int, forks_count: int, forks_url: string, full_name: string, git_commits_url: string, git_refs_url: string, git_tags_url: string, git_url: string, has_downloads: bool, has_issues: bool, has_pages: bool, has_projects: bool, has_wiki: bool, homepage: string, hooks_url: string, html_url: string, id: int, is_template: bool, issue_comment_url: string, issue_events_url: string, issues_url: string, keys_url: string, labels_url: string, language: string, languages_url: string, license: record, master_branch: string, merges_url: string, milestones_url: string, mirror_url: string, name: string, network_count: int, node_id: string, notifications_url: string, open_issues: int, open_issues_count: int, organization: record, owner: record, permissions: record, private: bool, pulls_url: string, pushed_at: string, releases_url: string, size: int, ssh_url: string, stargazers_count: int, stargazers_url: string, starred_at: string, statuses_url: string, subscribers_count: int, subscribers_url: string, subscription_url: string, svn_url: string, tags_url: string, teams_url: string, template_repository: record, topics: list, trees_url: string, updated_at: string, url: string, visibility: string, watchers: int, watchers_count: int>, topics: list<string>, trees_url: string, updated_at: string, url: string, visibility: string, watchers: int, watchers_count: int>, status: string, updated_at: string, url: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($owner | is-empty) { error make --unspanned { msg: "path parameter 'owner' must be non-empty" } }
+  if ($repo | is-empty) { error make --unspanned { msg: "path parameter 'repo' must be non-empty" } }
+  if ($check_suite_id | is-empty) { error make --unspanned { msg: "path parameter 'check_suite_id' must be non-empty" } }
   let full_url = (build-url $base ({owner: (encode-path-segment $owner), repo: (encode-path-segment $repo), check_suite_id: (encode-path-segment $check_suite_id)} | format pattern "/repos/{owner}/{repo}/check-suites/{check_suite_id}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
 }
 
 # List check runs in a check suite
@@ -7299,11 +7704,14 @@ export def "repos-check-suites-check-runs list" [
 ]: nothing -> record<check_runs: table<app: record, check_suite: record, completed_at: string, conclusion: string, deployment: record, details_url: string, external_id: string, head_sha: string, html_url: string, id: int, name: string, node_id: string, output: record, pull_requests: list, started_at: string, status: string, url: string>, total_count: int> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($owner | is-empty) { error make --unspanned { msg: "path parameter 'owner' must be non-empty" } }
+  if ($repo | is-empty) { error make --unspanned { msg: "path parameter 'repo' must be non-empty" } }
+  if ($check_suite_id | is-empty) { error make --unspanned { msg: "path parameter 'check_suite_id' must be non-empty" } }
   let qp = [(serialize-qp "check_name" $check_name "scalar") (serialize-qp "status" $status "scalar") (serialize-qp "filter" $filter "scalar") (serialize-qp "per_page" $per_page "scalar") (serialize-qp "page" $page "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({owner: (encode-path-segment $owner), repo: (encode-path-segment $repo), check_suite_id: (encode-path-segment $check_suite_id)} | format pattern "/repos/{owner}/{repo}/check-suites/{check_suite_id}/check-runs") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"check_name": $check_name, "status": $status, "filter": $filter, "per_page": $per_page, "page": $page} | compact), body: null}
 }
 
 # Rerequest a check suite
@@ -7327,10 +7735,13 @@ export def "repos-check-suites-rerequest create" [
 ]: nothing -> record {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($owner | is-empty) { error make --unspanned { msg: "path parameter 'owner' must be non-empty" } }
+  if ($repo | is-empty) { error make --unspanned { msg: "path parameter 'repo' must be non-empty" } }
+  if ($check_suite_id | is-empty) { error make --unspanned { msg: "path parameter 'check_suite_id' must be non-empty" } }
   let full_url = (build-url $base ({owner: (encode-path-segment $owner), repo: (encode-path-segment $repo), check_suite_id: (encode-path-segment $check_suite_id)} | format pattern "/repos/{owner}/{repo}/check-suites/{check_suite_id}/rerequest"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
 }
 
 # List repository collaborators
@@ -7356,11 +7767,13 @@ export def "repos-collaborators list" [
 ]: nothing -> table<avatar_url: string, email: string, events_url: string, followers_url: string, following_url: string, gists_url: string, gravatar_id: string, html_url: string, id: int, login: string, name: string, node_id: string, organizations_url: string, permissions: record<admin: bool, maintain: bool, pull: bool, push: bool, triage: bool>, received_events_url: string, repos_url: string, site_admin: bool, starred_url: string, subscriptions_url: string, type: string, url: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($owner | is-empty) { error make --unspanned { msg: "path parameter 'owner' must be non-empty" } }
+  if ($repo | is-empty) { error make --unspanned { msg: "path parameter 'repo' must be non-empty" } }
   let qp = [(serialize-qp "affiliation" $affiliation "scalar") (serialize-qp "per_page" $per_page "scalar") (serialize-qp "page" $page "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({owner: (encode-path-segment $owner), repo: (encode-path-segment $repo)} | format pattern "/repos/{owner}/{repo}/collaborators") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"affiliation": $affiliation, "per_page": $per_page, "page": $page} | compact), body: null}
 }
 
 # Remove a repository collaborator
@@ -7384,10 +7797,13 @@ export def "repos-collaborators delete" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($owner | is-empty) { error make --unspanned { msg: "path parameter 'owner' must be non-empty" } }
+  if ($repo | is-empty) { error make --unspanned { msg: "path parameter 'repo' must be non-empty" } }
+  if ($username | is-empty) { error make --unspanned { msg: "path parameter 'username' must be non-empty" } }
   let full_url = (build-url $base ({owner: (encode-path-segment $owner), repo: (encode-path-segment $repo), username: (encode-path-segment $username)} | format pattern "/repos/{owner}/{repo}/collaborators/{username}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
 }
 
 # Check if a user is a repository collaborator
@@ -7411,10 +7827,13 @@ export def "repos-collaborators check" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($owner | is-empty) { error make --unspanned { msg: "path parameter 'owner' must be non-empty" } }
+  if ($repo | is-empty) { error make --unspanned { msg: "path parameter 'repo' must be non-empty" } }
+  if ($username | is-empty) { error make --unspanned { msg: "path parameter 'username' must be non-empty" } }
   let full_url = (build-url $base ({owner: (encode-path-segment $owner), repo: (encode-path-segment $repo), username: (encode-path-segment $username)} | format pattern "/repos/{owner}/{repo}/collaborators/{username}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
 }
 
 # Add a repository collaborator
@@ -7441,12 +7860,15 @@ export def "repos-collaborators create" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($owner | is-empty) { error make --unspanned { msg: "path parameter 'owner' must be non-empty" } }
+  if ($repo | is-empty) { error make --unspanned { msg: "path parameter 'repo' must be non-empty" } }
+  if ($username | is-empty) { error make --unspanned { msg: "path parameter 'username' must be non-empty" } }
   let full_url = (build-url $base ({owner: (encode-path-segment $owner), repo: (encode-path-segment $repo), username: (encode-path-segment $username)} | format pattern "/repos/{owner}/{repo}/collaborators/{username}"))
   let req_body = {"permission": $permission, "permissions": $permissions} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: {}, body: $req_body}
 }
 
 # Get repository permissions for a user
@@ -7470,10 +7892,13 @@ export def "repos-collaborators-permission get-level" [
 ]: nothing -> record<permission: string, user: record<avatar_url: string, email: string, events_url: string, followers_url: string, following_url: string, gists_url: string, gravatar_id: string, html_url: string, id: int, login: string, name: string, node_id: string, organizations_url: string, received_events_url: string, repos_url: string, site_admin: bool, starred_at: string, starred_url: string, subscriptions_url: string, type: string, url: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($owner | is-empty) { error make --unspanned { msg: "path parameter 'owner' must be non-empty" } }
+  if ($repo | is-empty) { error make --unspanned { msg: "path parameter 'repo' must be non-empty" } }
+  if ($username | is-empty) { error make --unspanned { msg: "path parameter 'username' must be non-empty" } }
   let full_url = (build-url $base ({owner: (encode-path-segment $owner), repo: (encode-path-segment $repo), username: (encode-path-segment $username)} | format pattern "/repos/{owner}/{repo}/collaborators/{username}/permission"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
 }
 
 # List commit comments for a repository
@@ -7498,11 +7923,13 @@ export def "repos-comments list-commit" [
 ]: nothing -> table<author_association: string, body: string, commit_id: string, created_at: string, html_url: string, id: int, line: int, node_id: string, path: string, position: int, reactions: record<_1: int, _1: int, confused: int, eyes: int, heart: int, hooray: int, laugh: int, rocket: int, total_count: int, url: string>, updated_at: string, url: string, user: record<avatar_url: string, email: string, events_url: string, followers_url: string, following_url: string, gists_url: string, gravatar_id: string, html_url: string, id: int, login: string, name: string, node_id: string, organizations_url: string, received_events_url: string, repos_url: string, site_admin: bool, starred_at: string, starred_url: string, subscriptions_url: string, type: string, url: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($owner | is-empty) { error make --unspanned { msg: "path parameter 'owner' must be non-empty" } }
+  if ($repo | is-empty) { error make --unspanned { msg: "path parameter 'repo' must be non-empty" } }
   let qp = [(serialize-qp "per_page" $per_page "scalar") (serialize-qp "page" $page "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({owner: (encode-path-segment $owner), repo: (encode-path-segment $repo)} | format pattern "/repos/{owner}/{repo}/comments") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"per_page": $per_page, "page": $page} | compact), body: null}
 }
 
 # Delete a commit comment
@@ -7526,10 +7953,13 @@ export def "repos-comments delete-commit" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($owner | is-empty) { error make --unspanned { msg: "path parameter 'owner' must be non-empty" } }
+  if ($repo | is-empty) { error make --unspanned { msg: "path parameter 'repo' must be non-empty" } }
+  if ($comment_id | is-empty) { error make --unspanned { msg: "path parameter 'comment_id' must be non-empty" } }
   let full_url = (build-url $base ({owner: (encode-path-segment $owner), repo: (encode-path-segment $repo), comment_id: (encode-path-segment $comment_id)} | format pattern "/repos/{owner}/{repo}/comments/{comment_id}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
 }
 
 # Get a commit comment
@@ -7553,10 +7983,13 @@ export def "repos-comments get-commit" [
 ]: nothing -> record<author_association: string, body: string, commit_id: string, created_at: string, html_url: string, id: int, line: int, node_id: string, path: string, position: int, reactions: record<_1: int, _1: int, confused: int, eyes: int, heart: int, hooray: int, laugh: int, rocket: int, total_count: int, url: string>, updated_at: string, url: string, user: record<avatar_url: string, email: string, events_url: string, followers_url: string, following_url: string, gists_url: string, gravatar_id: string, html_url: string, id: int, login: string, name: string, node_id: string, organizations_url: string, received_events_url: string, repos_url: string, site_admin: bool, starred_at: string, starred_url: string, subscriptions_url: string, type: string, url: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($owner | is-empty) { error make --unspanned { msg: "path parameter 'owner' must be non-empty" } }
+  if ($repo | is-empty) { error make --unspanned { msg: "path parameter 'repo' must be non-empty" } }
+  if ($comment_id | is-empty) { error make --unspanned { msg: "path parameter 'comment_id' must be non-empty" } }
   let full_url = (build-url $base ({owner: (encode-path-segment $owner), repo: (encode-path-segment $repo), comment_id: (encode-path-segment $comment_id)} | format pattern "/repos/{owner}/{repo}/comments/{comment_id}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
 }
 
 # Update a commit comment
@@ -7582,12 +8015,15 @@ export def "repos-comments update-commit" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($owner | is-empty) { error make --unspanned { msg: "path parameter 'owner' must be non-empty" } }
+  if ($repo | is-empty) { error make --unspanned { msg: "path parameter 'repo' must be non-empty" } }
+  if ($comment_id | is-empty) { error make --unspanned { msg: "path parameter 'comment_id' must be non-empty" } }
   let full_url = (build-url $base ({owner: (encode-path-segment $owner), repo: (encode-path-segment $repo), comment_id: (encode-path-segment $comment_id)} | format pattern "/repos/{owner}/{repo}/comments/{comment_id}"))
   let req_body = {"body": $body} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "patch" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body
+  do-request "patch" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: {}, body: $req_body}
 }
 
 # List reactions for a commit comment
@@ -7614,11 +8050,14 @@ export def "repos-comments-reactions list-for-commit" [
 ]: nothing -> table<content: string, created_at: string, id: int, node_id: string, user: record<avatar_url: string, email: string, events_url: string, followers_url: string, following_url: string, gists_url: string, gravatar_id: string, html_url: string, id: int, login: string, name: string, node_id: string, organizations_url: string, received_events_url: string, repos_url: string, site_admin: bool, starred_at: string, starred_url: string, subscriptions_url: string, type: string, url: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($owner | is-empty) { error make --unspanned { msg: "path parameter 'owner' must be non-empty" } }
+  if ($repo | is-empty) { error make --unspanned { msg: "path parameter 'repo' must be non-empty" } }
+  if ($comment_id | is-empty) { error make --unspanned { msg: "path parameter 'comment_id' must be non-empty" } }
   let qp = [(serialize-qp "content" $content "scalar") (serialize-qp "per_page" $per_page "scalar") (serialize-qp "page" $page "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({owner: (encode-path-segment $owner), repo: (encode-path-segment $repo), comment_id: (encode-path-segment $comment_id)} | format pattern "/repos/{owner}/{repo}/comments/{comment_id}/reactions") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"content": $content, "per_page": $per_page, "page": $page} | compact), body: null}
 }
 
 # Create reaction for a commit comment
@@ -7644,12 +8083,15 @@ export def "repos-comments-reactions create-for-commit" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($owner | is-empty) { error make --unspanned { msg: "path parameter 'owner' must be non-empty" } }
+  if ($repo | is-empty) { error make --unspanned { msg: "path parameter 'repo' must be non-empty" } }
+  if ($comment_id | is-empty) { error make --unspanned { msg: "path parameter 'comment_id' must be non-empty" } }
   let full_url = (build-url $base ({owner: (encode-path-segment $owner), repo: (encode-path-segment $repo), comment_id: (encode-path-segment $comment_id)} | format pattern "/repos/{owner}/{repo}/comments/{comment_id}/reactions"))
   let req_body = {"content": $content} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: {}, body: $req_body}
 }
 
 # Delete a commit comment reaction
@@ -7674,10 +8116,14 @@ export def "repos-comments-reactions delete-for-commit" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($owner | is-empty) { error make --unspanned { msg: "path parameter 'owner' must be non-empty" } }
+  if ($repo | is-empty) { error make --unspanned { msg: "path parameter 'repo' must be non-empty" } }
+  if ($comment_id | is-empty) { error make --unspanned { msg: "path parameter 'comment_id' must be non-empty" } }
+  if ($reaction_id | is-empty) { error make --unspanned { msg: "path parameter 'reaction_id' must be non-empty" } }
   let full_url = (build-url $base ({owner: (encode-path-segment $owner), repo: (encode-path-segment $repo), comment_id: (encode-path-segment $comment_id), reaction_id: (encode-path-segment $reaction_id)} | format pattern "/repos/{owner}/{repo}/comments/{comment_id}/reactions/{reaction_id}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
 }
 
 # List commits
@@ -7707,11 +8153,13 @@ export def "repos-commits list" [
 ]: nothing -> table<author: record<avatar_url: string, email: string, events_url: string, followers_url: string, following_url: string, gists_url: string, gravatar_id: string, html_url: string, id: int, login: string, name: string, node_id: string, organizations_url: string, received_events_url: string, repos_url: string, site_admin: bool, starred_at: string, starred_url: string, subscriptions_url: string, type: string, url: string>, comments_url: string, commit: record<author: record, comment_count: int, committer: record, message: string, tree: record, url: string, verification: record>, committer: record<avatar_url: string, email: string, events_url: string, followers_url: string, following_url: string, gists_url: string, gravatar_id: string, html_url: string, id: int, login: string, name: string, node_id: string, organizations_url: string, received_events_url: string, repos_url: string, site_admin: bool, starred_at: string, starred_url: string, subscriptions_url: string, type: string, url: string>, files: list<record>, html_url: string, node_id: string, parents: list<record>, sha: string, stats: record<additions: int, deletions: int, total: int>, url: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($owner | is-empty) { error make --unspanned { msg: "path parameter 'owner' must be non-empty" } }
+  if ($repo | is-empty) { error make --unspanned { msg: "path parameter 'repo' must be non-empty" } }
   let qp = [(serialize-qp "sha" $sha "scalar") (serialize-qp "path" $path "scalar") (serialize-qp "author" $author "scalar") (serialize-qp "since" $since "scalar") (serialize-qp "until" $until "scalar") (serialize-qp "per_page" $per_page "scalar") (serialize-qp "page" $page "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({owner: (encode-path-segment $owner), repo: (encode-path-segment $repo)} | format pattern "/repos/{owner}/{repo}/commits") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"sha": $sha, "path": $path, "author": $author, "since": $since, "until": $until, "per_page": $per_page, "page": $page} | compact), body: null}
 }
 
 # List branches for HEAD commit
@@ -7735,10 +8183,13 @@ export def "repos-commits-branches-where-head list" [
 ]: nothing -> table<commit: record<sha: string, url: string>, name: string, protected: bool> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($owner | is-empty) { error make --unspanned { msg: "path parameter 'owner' must be non-empty" } }
+  if ($repo | is-empty) { error make --unspanned { msg: "path parameter 'repo' must be non-empty" } }
+  if ($commit_sha | is-empty) { error make --unspanned { msg: "path parameter 'commit_sha' must be non-empty" } }
   let full_url = (build-url $base ({owner: (encode-path-segment $owner), repo: (encode-path-segment $repo), commit_sha: (encode-path-segment $commit_sha)} | format pattern "/repos/{owner}/{repo}/commits/{commit_sha}/branches-where-head"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
 }
 
 # List commit comments
@@ -7764,11 +8215,14 @@ export def "repos-commits-comments list" [
 ]: nothing -> table<author_association: string, body: string, commit_id: string, created_at: string, html_url: string, id: int, line: int, node_id: string, path: string, position: int, reactions: record<_1: int, _1: int, confused: int, eyes: int, heart: int, hooray: int, laugh: int, rocket: int, total_count: int, url: string>, updated_at: string, url: string, user: record<avatar_url: string, email: string, events_url: string, followers_url: string, following_url: string, gists_url: string, gravatar_id: string, html_url: string, id: int, login: string, name: string, node_id: string, organizations_url: string, received_events_url: string, repos_url: string, site_admin: bool, starred_at: string, starred_url: string, subscriptions_url: string, type: string, url: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($owner | is-empty) { error make --unspanned { msg: "path parameter 'owner' must be non-empty" } }
+  if ($repo | is-empty) { error make --unspanned { msg: "path parameter 'repo' must be non-empty" } }
+  if ($commit_sha | is-empty) { error make --unspanned { msg: "path parameter 'commit_sha' must be non-empty" } }
   let qp = [(serialize-qp "per_page" $per_page "scalar") (serialize-qp "page" $page "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({owner: (encode-path-segment $owner), repo: (encode-path-segment $repo), commit_sha: (encode-path-segment $commit_sha)} | format pattern "/repos/{owner}/{repo}/commits/{commit_sha}/comments") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"per_page": $per_page, "page": $page} | compact), body: null}
 }
 
 # Create a commit comment
@@ -7797,12 +8251,15 @@ export def "repos-commits-comments create" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($owner | is-empty) { error make --unspanned { msg: "path parameter 'owner' must be non-empty" } }
+  if ($repo | is-empty) { error make --unspanned { msg: "path parameter 'repo' must be non-empty" } }
+  if ($commit_sha | is-empty) { error make --unspanned { msg: "path parameter 'commit_sha' must be non-empty" } }
   let full_url = (build-url $base ({owner: (encode-path-segment $owner), repo: (encode-path-segment $repo), commit_sha: (encode-path-segment $commit_sha)} | format pattern "/repos/{owner}/{repo}/commits/{commit_sha}/comments"))
   let req_body = {"body": $body, "line": $line, "path": $path, "position": $position} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: {}, body: $req_body}
 }
 
 # List pull requests associated with a commit
@@ -7828,11 +8285,14 @@ export def "repos-commits-pulls list-requests-associated" [
 ]: nothing -> table<_links: record<comments: record, commits: record, html: record, issue: record, review_comment: record, review_comments: record, self: record, statuses: record>, active_lock_reason: string, assignee: record<avatar_url: string, email: string, events_url: string, followers_url: string, following_url: string, gists_url: string, gravatar_id: string, html_url: string, id: int, login: string, name: string, node_id: string, organizations_url: string, received_events_url: string, repos_url: string, site_admin: bool, starred_at: string, starred_url: string, subscriptions_url: string, type: string, url: string>, assignees: list<record>, author_association: string, base: record<label: string, ref: string, repo: record, sha: string, user: record>, body: string, closed_at: string, comments_url: string, commits_url: string, created_at: string, diff_url: string, draft: bool, head: record<label: string, ref: string, repo: record, sha: string, user: record>, html_url: string, id: int, issue_url: string, labels: list<record>, locked: bool, merge_commit_sha: string, merged_at: string, milestone: record<closed_at: string, closed_issues: int, created_at: string, creator: record, description: string, due_on: string, html_url: string, id: int, labels_url: string, node_id: string, number: int, open_issues: int, state: string, title: string, updated_at: string, url: string>, node_id: string, number: int, patch_url: string, requested_reviewers: list<record>, requested_teams: list<record>, review_comment_url: string, review_comments_url: string, state: string, statuses_url: string, title: string, updated_at: string, url: string, user: record<avatar_url: string, email: string, events_url: string, followers_url: string, following_url: string, gists_url: string, gravatar_id: string, html_url: string, id: int, login: string, name: string, node_id: string, organizations_url: string, received_events_url: string, repos_url: string, site_admin: bool, starred_at: string, starred_url: string, subscriptions_url: string, type: string, url: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($owner | is-empty) { error make --unspanned { msg: "path parameter 'owner' must be non-empty" } }
+  if ($repo | is-empty) { error make --unspanned { msg: "path parameter 'repo' must be non-empty" } }
+  if ($commit_sha | is-empty) { error make --unspanned { msg: "path parameter 'commit_sha' must be non-empty" } }
   let qp = [(serialize-qp "per_page" $per_page "scalar") (serialize-qp "page" $page "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({owner: (encode-path-segment $owner), repo: (encode-path-segment $repo), commit_sha: (encode-path-segment $commit_sha)} | format pattern "/repos/{owner}/{repo}/commits/{commit_sha}/pulls") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"per_page": $per_page, "page": $page} | compact), body: null}
 }
 
 # Get a commit
@@ -7858,11 +8318,14 @@ export def "repos-commits get" [
 ]: nothing -> record<author: record<avatar_url: string, email: string, events_url: string, followers_url: string, following_url: string, gists_url: string, gravatar_id: string, html_url: string, id: int, login: string, name: string, node_id: string, organizations_url: string, received_events_url: string, repos_url: string, site_admin: bool, starred_at: string, starred_url: string, subscriptions_url: string, type: string, url: string>, comments_url: string, commit: record<author: record<date: string, email: string, name: string>, comment_count: int, committer: record<date: string, email: string, name: string>, message: string, tree: record<sha: string, url: string>, url: string, verification: record<payload: string, reason: string, signature: string, verified: bool>>, committer: record<avatar_url: string, email: string, events_url: string, followers_url: string, following_url: string, gists_url: string, gravatar_id: string, html_url: string, id: int, login: string, name: string, node_id: string, organizations_url: string, received_events_url: string, repos_url: string, site_admin: bool, starred_at: string, starred_url: string, subscriptions_url: string, type: string, url: string>, files: table<additions: int, blob_url: string, changes: int, contents_url: string, deletions: int, filename: string, patch: string, previous_filename: string, raw_url: string, sha: string, status: string>, html_url: string, node_id: string, parents: table<html_url: string, sha: string, url: string>, sha: string, stats: record<additions: int, deletions: int, total: int>, url: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($owner | is-empty) { error make --unspanned { msg: "path parameter 'owner' must be non-empty" } }
+  if ($repo | is-empty) { error make --unspanned { msg: "path parameter 'repo' must be non-empty" } }
+  if ($ref | is-empty) { error make --unspanned { msg: "path parameter 'ref' must be non-empty" } }
   let qp = [(serialize-qp "page" $page "scalar") (serialize-qp "per_page" $per_page "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({owner: (encode-path-segment $owner), repo: (encode-path-segment $repo), ref: (encode-path-segment $ref)} | format pattern "/repos/{owner}/{repo}/commits/{ref}") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"page": $page, "per_page": $per_page} | compact), body: null}
 }
 
 # List check runs for a Git reference
@@ -7892,11 +8355,14 @@ export def "repos-commits-check-runs list" [
 ]: nothing -> record<check_runs: table<app: record, check_suite: record, completed_at: string, conclusion: string, deployment: record, details_url: string, external_id: string, head_sha: string, html_url: string, id: int, name: string, node_id: string, output: record, pull_requests: list, started_at: string, status: string, url: string>, total_count: int> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($owner | is-empty) { error make --unspanned { msg: "path parameter 'owner' must be non-empty" } }
+  if ($repo | is-empty) { error make --unspanned { msg: "path parameter 'repo' must be non-empty" } }
+  if ($ref | is-empty) { error make --unspanned { msg: "path parameter 'ref' must be non-empty" } }
   let qp = [(serialize-qp "check_name" $check_name "scalar") (serialize-qp "status" $status "scalar") (serialize-qp "filter" $filter "scalar") (serialize-qp "per_page" $per_page "scalar") (serialize-qp "page" $page "scalar") (serialize-qp "app_id" $app_id "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({owner: (encode-path-segment $owner), repo: (encode-path-segment $repo), ref: (encode-path-segment $ref)} | format pattern "/repos/{owner}/{repo}/commits/{ref}/check-runs") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"check_name": $check_name, "status": $status, "filter": $filter, "per_page": $per_page, "page": $page, "app_id": $app_id} | compact), body: null}
 }
 
 # List check suites for a Git reference
@@ -7924,11 +8390,14 @@ export def "repos-commits-check-suites list" [
 ]: nothing -> record<check_suites: table<after: string, app: record, before: string, check_runs_url: string, conclusion: string, created_at: string, head_branch: string, head_commit: record, head_sha: string, id: int, latest_check_runs_count: int, node_id: string, pull_requests: list, repository: record, status: string, updated_at: string, url: string>, total_count: int> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($owner | is-empty) { error make --unspanned { msg: "path parameter 'owner' must be non-empty" } }
+  if ($repo | is-empty) { error make --unspanned { msg: "path parameter 'repo' must be non-empty" } }
+  if ($ref | is-empty) { error make --unspanned { msg: "path parameter 'ref' must be non-empty" } }
   let qp = [(serialize-qp "app_id" $app_id "scalar") (serialize-qp "check_name" $check_name "scalar") (serialize-qp "per_page" $per_page "scalar") (serialize-qp "page" $page "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({owner: (encode-path-segment $owner), repo: (encode-path-segment $repo), ref: (encode-path-segment $ref)} | format pattern "/repos/{owner}/{repo}/commits/{ref}/check-suites") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"app_id": $app_id, "check_name": $check_name, "per_page": $per_page, "page": $page} | compact), body: null}
 }
 
 # Get the combined status for a specific reference
@@ -7954,11 +8423,14 @@ export def "repos-commits-status get-combined" [
 ]: nothing -> record<commit_url: string, repository: record<allow_forking: bool, anonymous_access_enabled: bool, archive_url: string, archived: bool, assignees_url: string, blobs_url: string, branches_url: string, clone_url: string, code_of_conduct: record<body: string, html_url: string, key: string, name: string, url: string>, collaborators_url: string, comments_url: string, commits_url: string, compare_url: string, contents_url: string, contributors_url: string, created_at: string, default_branch: string, delete_branch_on_merge: bool, deployments_url: string, description: string, disabled: bool, downloads_url: string, events_url: string, fork: bool, forks: int, forks_count: int, forks_url: string, full_name: string, git_commits_url: string, git_refs_url: string, git_tags_url: string, git_url: string, has_downloads: bool, has_issues: bool, has_pages: bool, has_projects: bool, has_wiki: bool, homepage: string, hooks_url: string, html_url: string, id: int, is_template: bool, issue_comment_url: string, issue_events_url: string, issues_url: string, keys_url: string, labels_url: string, language: string, languages_url: string, license: record<key: string, name: string, node_id: string, spdx_id: string, url: string>, merges_url: string, milestones_url: string, mirror_url: string, name: string, network_count: int, node_id: string, notifications_url: string, open_issues: int, open_issues_count: int, owner: record<avatar_url: string, email: string, events_url: string, followers_url: string, following_url: string, gists_url: string, gravatar_id: string, html_url: string, id: int, login: string, name: string, node_id: string, organizations_url: string, received_events_url: string, repos_url: string, site_admin: bool, starred_at: string, starred_url: string, subscriptions_url: string, type: string, url: string>, permissions: record<admin: bool, maintain: bool, pull: bool, push: bool, triage: bool>, private: bool, pulls_url: string, pushed_at: string, releases_url: string, size: int, ssh_url: string, stargazers_count: int, stargazers_url: string, statuses_url: string, subscribers_count: int, subscribers_url: string, subscription_url: string, svn_url: string, tags_url: string, teams_url: string, template_repository: record<allow_forking: bool, allow_merge_commit: bool, allow_rebase_merge: bool, allow_squash_merge: bool, anonymous_access_enabled: bool, archive_url: string, archived: bool, assignees_url: string, blobs_url: string, branches_url: string, clone_url: string, collaborators_url: string, comments_url: string, commits_url: string, compare_url: string, contents_url: string, contributors_url: string, created_at: string, default_branch: string, delete_branch_on_merge: bool, deployments_url: string, description: string, disabled: bool, downloads_url: string, events_url: string, fork: bool, forks: int, forks_count: int, forks_url: string, full_name: string, git_commits_url: string, git_refs_url: string, git_tags_url: string, git_url: string, has_downloads: bool, has_issues: bool, has_pages: bool, has_projects: bool, has_wiki: bool, homepage: string, hooks_url: string, html_url: string, id: int, is_template: bool, issue_comment_url: string, issue_events_url: string, issues_url: string, keys_url: string, labels_url: string, language: string, languages_url: string, license: record, master_branch: string, merges_url: string, milestones_url: string, mirror_url: string, name: string, network_count: int, node_id: string, notifications_url: string, open_issues: int, open_issues_count: int, organization: record, owner: record, permissions: record, private: bool, pulls_url: string, pushed_at: string, releases_url: string, size: int, ssh_url: string, stargazers_count: int, stargazers_url: string, starred_at: string, statuses_url: string, subscribers_count: int, subscribers_url: string, subscription_url: string, svn_url: string, tags_url: string, teams_url: string, template_repository: record, topics: list, trees_url: string, updated_at: string, url: string, visibility: string, watchers: int, watchers_count: int>, topics: list<string>, trees_url: string, updated_at: string, url: string, visibility: string, watchers: int, watchers_count: int>, sha: string, state: string, statuses: table<avatar_url: string, context: string, created_at: string, description: string, id: int, node_id: string, required: bool, state: string, target_url: string, updated_at: string, url: string>, total_count: int, url: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($owner | is-empty) { error make --unspanned { msg: "path parameter 'owner' must be non-empty" } }
+  if ($repo | is-empty) { error make --unspanned { msg: "path parameter 'repo' must be non-empty" } }
+  if ($ref | is-empty) { error make --unspanned { msg: "path parameter 'ref' must be non-empty" } }
   let qp = [(serialize-qp "per_page" $per_page "scalar") (serialize-qp "page" $page "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({owner: (encode-path-segment $owner), repo: (encode-path-segment $repo), ref: (encode-path-segment $ref)} | format pattern "/repos/{owner}/{repo}/commits/{ref}/status") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"per_page": $per_page, "page": $page} | compact), body: null}
 }
 
 # List commit statuses for a reference
@@ -7984,11 +8456,14 @@ export def "repos-commits-statuses list" [
 ]: nothing -> table<avatar_url: string, context: string, created_at: string, creator: record<avatar_url: string, email: string, events_url: string, followers_url: string, following_url: string, gists_url: string, gravatar_id: string, html_url: string, id: int, login: string, name: string, node_id: string, organizations_url: string, received_events_url: string, repos_url: string, site_admin: bool, starred_at: string, starred_url: string, subscriptions_url: string, type: string, url: string>, description: string, id: int, node_id: string, state: string, target_url: string, updated_at: string, url: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($owner | is-empty) { error make --unspanned { msg: "path parameter 'owner' must be non-empty" } }
+  if ($repo | is-empty) { error make --unspanned { msg: "path parameter 'repo' must be non-empty" } }
+  if ($ref | is-empty) { error make --unspanned { msg: "path parameter 'ref' must be non-empty" } }
   let qp = [(serialize-qp "per_page" $per_page "scalar") (serialize-qp "page" $page "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({owner: (encode-path-segment $owner), repo: (encode-path-segment $repo), ref: (encode-path-segment $ref)} | format pattern "/repos/{owner}/{repo}/commits/{ref}/statuses") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"per_page": $per_page, "page": $page} | compact), body: null}
 }
 
 # Compare two commits
@@ -8012,10 +8487,13 @@ export def "repos-compare get-commits" [
 ]: nothing -> record<ahead_by: int, base_commit: record<author: record<avatar_url: string, email: string, events_url: string, followers_url: string, following_url: string, gists_url: string, gravatar_id: string, html_url: string, id: int, login: string, name: string, node_id: string, organizations_url: string, received_events_url: string, repos_url: string, site_admin: bool, starred_at: string, starred_url: string, subscriptions_url: string, type: string, url: string>, comments_url: string, commit: record<author: record, comment_count: int, committer: record, message: string, tree: record, url: string, verification: record>, committer: record<avatar_url: string, email: string, events_url: string, followers_url: string, following_url: string, gists_url: string, gravatar_id: string, html_url: string, id: int, login: string, name: string, node_id: string, organizations_url: string, received_events_url: string, repos_url: string, site_admin: bool, starred_at: string, starred_url: string, subscriptions_url: string, type: string, url: string>, files: list<record>, html_url: string, node_id: string, parents: list<record>, sha: string, stats: record<additions: int, deletions: int, total: int>, url: string>, behind_by: int, commits: table<author: record, comments_url: string, commit: record, committer: record, files: list, html_url: string, node_id: string, parents: list, sha: string, stats: record, url: string>, diff_url: string, files: table<additions: int, blob_url: string, changes: int, contents_url: string, deletions: int, filename: string, patch: string, previous_filename: string, raw_url: string, sha: string, status: string>, html_url: string, merge_base_commit: record<author: record<avatar_url: string, email: string, events_url: string, followers_url: string, following_url: string, gists_url: string, gravatar_id: string, html_url: string, id: int, login: string, name: string, node_id: string, organizations_url: string, received_events_url: string, repos_url: string, site_admin: bool, starred_at: string, starred_url: string, subscriptions_url: string, type: string, url: string>, comments_url: string, commit: record<author: record, comment_count: int, committer: record, message: string, tree: record, url: string, verification: record>, committer: record<avatar_url: string, email: string, events_url: string, followers_url: string, following_url: string, gists_url: string, gravatar_id: string, html_url: string, id: int, login: string, name: string, node_id: string, organizations_url: string, received_events_url: string, repos_url: string, site_admin: bool, starred_at: string, starred_url: string, subscriptions_url: string, type: string, url: string>, files: list<record>, html_url: string, node_id: string, parents: list<record>, sha: string, stats: record<additions: int, deletions: int, total: int>, url: string>, patch_url: string, permalink_url: string, status: string, total_commits: int, url: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($owner | is-empty) { error make --unspanned { msg: "path parameter 'owner' must be non-empty" } }
+  if ($repo | is-empty) { error make --unspanned { msg: "path parameter 'repo' must be non-empty" } }
+  if ($basehead | is-empty) { error make --unspanned { msg: "path parameter 'basehead' must be non-empty" } }
   let full_url = (build-url $base ({owner: (encode-path-segment $owner), repo: (encode-path-segment $repo), basehead: (encode-path-segment $basehead)} | format pattern "/repos/{owner}/{repo}/compare/{basehead}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
 }
 
 # Create a content attachment
@@ -8042,12 +8520,15 @@ export def "repos-content-references-attachments create-apps" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($owner | is-empty) { error make --unspanned { msg: "path parameter 'owner' must be non-empty" } }
+  if ($repo | is-empty) { error make --unspanned { msg: "path parameter 'repo' must be non-empty" } }
+  if ($content_reference_id | is-empty) { error make --unspanned { msg: "path parameter 'content_reference_id' must be non-empty" } }
   let full_url = (build-url $base ({owner: (encode-path-segment $owner), repo: (encode-path-segment $repo), content_reference_id: (encode-path-segment $content_reference_id)} | format pattern "/repos/{owner}/{repo}/content_references/{content_reference_id}/attachments"))
   let req_body = {"body": $body, "title": $title} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: {}, body: $req_body}
 }
 
 # Delete a file
@@ -8079,12 +8560,15 @@ export def "repos-contents delete-file" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($owner | is-empty) { error make --unspanned { msg: "path parameter 'owner' must be non-empty" } }
+  if ($repo | is-empty) { error make --unspanned { msg: "path parameter 'repo' must be non-empty" } }
+  if ($path | is-empty) { error make --unspanned { msg: "path parameter 'path' must be non-empty" } }
   let full_url = (build-url $base ({owner: (encode-path-segment $owner), repo: (encode-path-segment $repo), path: (encode-path-segment $path)} | format pattern "/repos/{owner}/{repo}/contents/{path}"))
   let req_body = {"author": $author, "branch": $branch, "committer": $committer, "message": $message, "sha": $sha} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: {}, body: $req_body}
 }
 
 # Get repository content
@@ -8110,11 +8594,14 @@ export def "repos-contents get" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($owner | is-empty) { error make --unspanned { msg: "path parameter 'owner' must be non-empty" } }
+  if ($repo | is-empty) { error make --unspanned { msg: "path parameter 'repo' must be non-empty" } }
+  if ($path | is-empty) { error make --unspanned { msg: "path parameter 'path' must be non-empty" } }
   let qp = [(serialize-qp "ref" $ref "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({owner: (encode-path-segment $owner), repo: (encode-path-segment $repo), path: (encode-path-segment $path)} | format pattern "/repos/{owner}/{repo}/contents/{path}") $qp)
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"ref": $ref} | compact), body: null}
 }
 
 # Create or update file contents
@@ -8147,12 +8634,15 @@ export def "repos-contents create-or-update-file" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($owner | is-empty) { error make --unspanned { msg: "path parameter 'owner' must be non-empty" } }
+  if ($repo | is-empty) { error make --unspanned { msg: "path parameter 'repo' must be non-empty" } }
+  if ($path | is-empty) { error make --unspanned { msg: "path parameter 'path' must be non-empty" } }
   let full_url = (build-url $base ({owner: (encode-path-segment $owner), repo: (encode-path-segment $repo), path: (encode-path-segment $path)} | format pattern "/repos/{owner}/{repo}/contents/{path}"))
   let req_body = {"author": $author, "branch": $branch, "committer": $committer, "content": $content, "message": $message, "sha": $sha} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: {}, body: $req_body}
 }
 
 # List repository contributors
@@ -8178,11 +8668,13 @@ export def "repos-contributors list" [
 ]: nothing -> table<avatar_url: string, contributions: int, email: string, events_url: string, followers_url: string, following_url: string, gists_url: string, gravatar_id: string, html_url: string, id: int, login: string, name: string, node_id: string, organizations_url: string, received_events_url: string, repos_url: string, site_admin: bool, starred_url: string, subscriptions_url: string, type: string, url: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($owner | is-empty) { error make --unspanned { msg: "path parameter 'owner' must be non-empty" } }
+  if ($repo | is-empty) { error make --unspanned { msg: "path parameter 'repo' must be non-empty" } }
   let qp = [(serialize-qp "anon" $anon "scalar") (serialize-qp "per_page" $per_page "scalar") (serialize-qp "page" $page "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({owner: (encode-path-segment $owner), repo: (encode-path-segment $repo)} | format pattern "/repos/{owner}/{repo}/contributors") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"anon": $anon, "per_page": $per_page, "page": $page} | compact), body: null}
 }
 
 # List deployments
@@ -8211,11 +8703,13 @@ export def "repos-deployments list" [
 ]: nothing -> table<created_at: string, creator: record<avatar_url: string, email: string, events_url: string, followers_url: string, following_url: string, gists_url: string, gravatar_id: string, html_url: string, id: int, login: string, name: string, node_id: string, organizations_url: string, received_events_url: string, repos_url: string, site_admin: bool, starred_at: string, starred_url: string, subscriptions_url: string, type: string, url: string>, description: string, environment: string, id: int, node_id: string, original_environment: string, payload: any, performed_via_github_app: record<client_id: string, client_secret: string, created_at: string, description: string, events: list, external_url: string, html_url: string, id: int, installations_count: int, name: string, node_id: string, owner: record, pem: string, permissions: record, slug: string, updated_at: string, webhook_secret: string>, production_environment: bool, ref: string, repository_url: string, sha: string, statuses_url: string, task: string, transient_environment: bool, updated_at: string, url: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($owner | is-empty) { error make --unspanned { msg: "path parameter 'owner' must be non-empty" } }
+  if ($repo | is-empty) { error make --unspanned { msg: "path parameter 'repo' must be non-empty" } }
   let qp = [(serialize-qp "sha" $sha "scalar") (serialize-qp "ref" $ref "scalar") (serialize-qp "task" $task "scalar") (serialize-qp "environment" $environment "scalar") (serialize-qp "per_page" $per_page "scalar") (serialize-qp "page" $page "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({owner: (encode-path-segment $owner), repo: (encode-path-segment $repo)} | format pattern "/repos/{owner}/{repo}/deployments") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"sha": $sha, "ref": $ref, "task": $task, "environment": $environment, "per_page": $per_page, "page": $page} | compact), body: null}
 }
 
 # Create a deployment
@@ -8248,12 +8742,14 @@ export def "repos-deployments create" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($owner | is-empty) { error make --unspanned { msg: "path parameter 'owner' must be non-empty" } }
+  if ($repo | is-empty) { error make --unspanned { msg: "path parameter 'repo' must be non-empty" } }
   let full_url = (build-url $base ({owner: (encode-path-segment $owner), repo: (encode-path-segment $repo)} | format pattern "/repos/{owner}/{repo}/deployments"))
   let req_body = {"auto_merge": $auto_merge, "description": $description, "environment": $environment, "payload": $payload, "production_environment": $production_environment, "ref": $ref, "required_contexts": $required_contexts, "task": $task, "transient_environment": $transient_environment} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: {}, body: $req_body}
 }
 
 # Delete a deployment
@@ -8277,10 +8773,13 @@ export def "repos-deployments delete" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($owner | is-empty) { error make --unspanned { msg: "path parameter 'owner' must be non-empty" } }
+  if ($repo | is-empty) { error make --unspanned { msg: "path parameter 'repo' must be non-empty" } }
+  if ($deployment_id | is-empty) { error make --unspanned { msg: "path parameter 'deployment_id' must be non-empty" } }
   let full_url = (build-url $base ({owner: (encode-path-segment $owner), repo: (encode-path-segment $repo), deployment_id: (encode-path-segment $deployment_id)} | format pattern "/repos/{owner}/{repo}/deployments/{deployment_id}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
 }
 
 # Get a deployment
@@ -8304,10 +8803,13 @@ export def "repos-deployments get" [
 ]: nothing -> record<created_at: string, creator: record<avatar_url: string, email: string, events_url: string, followers_url: string, following_url: string, gists_url: string, gravatar_id: string, html_url: string, id: int, login: string, name: string, node_id: string, organizations_url: string, received_events_url: string, repos_url: string, site_admin: bool, starred_at: string, starred_url: string, subscriptions_url: string, type: string, url: string>, description: string, environment: string, id: int, node_id: string, original_environment: string, payload: any, performed_via_github_app: record<client_id: string, client_secret: string, created_at: string, description: string, events: list<string>, external_url: string, html_url: string, id: int, installations_count: int, name: string, node_id: string, owner: record<avatar_url: string, email: string, events_url: string, followers_url: string, following_url: string, gists_url: string, gravatar_id: string, html_url: string, id: int, login: string, name: string, node_id: string, organizations_url: string, received_events_url: string, repos_url: string, site_admin: bool, starred_at: string, starred_url: string, subscriptions_url: string, type: string, url: string>, pem: string, permissions: record<checks: string, contents: string, deployments: string, issues: string, metadata: string>, slug: string, updated_at: string, webhook_secret: string>, production_environment: bool, ref: string, repository_url: string, sha: string, statuses_url: string, task: string, transient_environment: bool, updated_at: string, url: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($owner | is-empty) { error make --unspanned { msg: "path parameter 'owner' must be non-empty" } }
+  if ($repo | is-empty) { error make --unspanned { msg: "path parameter 'repo' must be non-empty" } }
+  if ($deployment_id | is-empty) { error make --unspanned { msg: "path parameter 'deployment_id' must be non-empty" } }
   let full_url = (build-url $base ({owner: (encode-path-segment $owner), repo: (encode-path-segment $repo), deployment_id: (encode-path-segment $deployment_id)} | format pattern "/repos/{owner}/{repo}/deployments/{deployment_id}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
 }
 
 # List deployment statuses
@@ -8333,11 +8835,14 @@ export def "repos-deployments-statuses list" [
 ]: nothing -> table<created_at: string, creator: record<avatar_url: string, email: string, events_url: string, followers_url: string, following_url: string, gists_url: string, gravatar_id: string, html_url: string, id: int, login: string, name: string, node_id: string, organizations_url: string, received_events_url: string, repos_url: string, site_admin: bool, starred_at: string, starred_url: string, subscriptions_url: string, type: string, url: string>, deployment_url: string, description: string, environment: string, environment_url: string, id: int, log_url: string, node_id: string, performed_via_github_app: record<client_id: string, client_secret: string, created_at: string, description: string, events: list, external_url: string, html_url: string, id: int, installations_count: int, name: string, node_id: string, owner: record, pem: string, permissions: record, slug: string, updated_at: string, webhook_secret: string>, repository_url: string, state: string, target_url: string, updated_at: string, url: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($owner | is-empty) { error make --unspanned { msg: "path parameter 'owner' must be non-empty" } }
+  if ($repo | is-empty) { error make --unspanned { msg: "path parameter 'repo' must be non-empty" } }
+  if ($deployment_id | is-empty) { error make --unspanned { msg: "path parameter 'deployment_id' must be non-empty" } }
   let qp = [(serialize-qp "per_page" $per_page "scalar") (serialize-qp "page" $page "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({owner: (encode-path-segment $owner), repo: (encode-path-segment $repo), deployment_id: (encode-path-segment $deployment_id)} | format pattern "/repos/{owner}/{repo}/deployments/{deployment_id}/statuses") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"per_page": $per_page, "page": $page} | compact), body: null}
 }
 
 # Create a deployment status
@@ -8369,12 +8874,15 @@ export def "repos-deployments-statuses create-status" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($owner | is-empty) { error make --unspanned { msg: "path parameter 'owner' must be non-empty" } }
+  if ($repo | is-empty) { error make --unspanned { msg: "path parameter 'repo' must be non-empty" } }
+  if ($deployment_id | is-empty) { error make --unspanned { msg: "path parameter 'deployment_id' must be non-empty" } }
   let full_url = (build-url $base ({owner: (encode-path-segment $owner), repo: (encode-path-segment $repo), deployment_id: (encode-path-segment $deployment_id)} | format pattern "/repos/{owner}/{repo}/deployments/{deployment_id}/statuses"))
   let req_body = {"auto_inactive": $auto_inactive, "description": $description, "environment": $environment, "environment_url": $environment_url, "log_url": $log_url, "state": $state, "target_url": $target_url} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: {}, body: $req_body}
 }
 
 # Get a deployment status
@@ -8399,10 +8907,14 @@ export def "repos-deployments-statuses get" [
 ]: nothing -> record<created_at: string, creator: record<avatar_url: string, email: string, events_url: string, followers_url: string, following_url: string, gists_url: string, gravatar_id: string, html_url: string, id: int, login: string, name: string, node_id: string, organizations_url: string, received_events_url: string, repos_url: string, site_admin: bool, starred_at: string, starred_url: string, subscriptions_url: string, type: string, url: string>, deployment_url: string, description: string, environment: string, environment_url: string, id: int, log_url: string, node_id: string, performed_via_github_app: record<client_id: string, client_secret: string, created_at: string, description: string, events: list<string>, external_url: string, html_url: string, id: int, installations_count: int, name: string, node_id: string, owner: record<avatar_url: string, email: string, events_url: string, followers_url: string, following_url: string, gists_url: string, gravatar_id: string, html_url: string, id: int, login: string, name: string, node_id: string, organizations_url: string, received_events_url: string, repos_url: string, site_admin: bool, starred_at: string, starred_url: string, subscriptions_url: string, type: string, url: string>, pem: string, permissions: record<checks: string, contents: string, deployments: string, issues: string, metadata: string>, slug: string, updated_at: string, webhook_secret: string>, repository_url: string, state: string, target_url: string, updated_at: string, url: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($owner | is-empty) { error make --unspanned { msg: "path parameter 'owner' must be non-empty" } }
+  if ($repo | is-empty) { error make --unspanned { msg: "path parameter 'repo' must be non-empty" } }
+  if ($deployment_id | is-empty) { error make --unspanned { msg: "path parameter 'deployment_id' must be non-empty" } }
+  if ($status_id | is-empty) { error make --unspanned { msg: "path parameter 'status_id' must be non-empty" } }
   let full_url = (build-url $base ({owner: (encode-path-segment $owner), repo: (encode-path-segment $repo), deployment_id: (encode-path-segment $deployment_id), status_id: (encode-path-segment $status_id)} | format pattern "/repos/{owner}/{repo}/deployments/{deployment_id}/statuses/{status_id}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
 }
 
 # Create a repository dispatch event
@@ -8428,12 +8940,14 @@ export def "repos-dispatches create-dispatch-event" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($owner | is-empty) { error make --unspanned { msg: "path parameter 'owner' must be non-empty" } }
+  if ($repo | is-empty) { error make --unspanned { msg: "path parameter 'repo' must be non-empty" } }
   let full_url = (build-url $base ({owner: (encode-path-segment $owner), repo: (encode-path-segment $repo)} | format pattern "/repos/{owner}/{repo}/dispatches"))
   let req_body = {"client_payload": $client_payload, "event_type": $event_type} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: {}, body: $req_body}
 }
 
 # List repository events
@@ -8458,11 +8972,13 @@ export def "repos-events list-activity" [
 ]: nothing -> table<actor: record<avatar_url: string, display_login: string, gravatar_id: string, id: int, login: string, url: string>, created_at: string, id: string, org: record<avatar_url: string, display_login: string, gravatar_id: string, id: int, login: string, url: string>, payload: record<action: string, comment: record, issue: record, pages: list>, public: bool, repo: record<id: int, name: string, url: string>, type: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($owner | is-empty) { error make --unspanned { msg: "path parameter 'owner' must be non-empty" } }
+  if ($repo | is-empty) { error make --unspanned { msg: "path parameter 'repo' must be non-empty" } }
   let qp = [(serialize-qp "per_page" $per_page "scalar") (serialize-qp "page" $page "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({owner: (encode-path-segment $owner), repo: (encode-path-segment $repo)} | format pattern "/repos/{owner}/{repo}/events") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"per_page": $per_page, "page": $page} | compact), body: null}
 }
 
 # List forks
@@ -8488,11 +9004,13 @@ export def "repos-forks list" [
 ]: nothing -> table<allow_forking: bool, anonymous_access_enabled: bool, archive_url: string, archived: bool, assignees_url: string, blobs_url: string, branches_url: string, clone_url: string, code_of_conduct: record<body: string, html_url: string, key: string, name: string, url: string>, collaborators_url: string, comments_url: string, commits_url: string, compare_url: string, contents_url: string, contributors_url: string, created_at: string, default_branch: string, delete_branch_on_merge: bool, deployments_url: string, description: string, disabled: bool, downloads_url: string, events_url: string, fork: bool, forks: int, forks_count: int, forks_url: string, full_name: string, git_commits_url: string, git_refs_url: string, git_tags_url: string, git_url: string, has_downloads: bool, has_issues: bool, has_pages: bool, has_projects: bool, has_wiki: bool, homepage: string, hooks_url: string, html_url: string, id: int, is_template: bool, issue_comment_url: string, issue_events_url: string, issues_url: string, keys_url: string, labels_url: string, language: string, languages_url: string, license: record<key: string, name: string, node_id: string, spdx_id: string, url: string>, merges_url: string, milestones_url: string, mirror_url: string, name: string, network_count: int, node_id: string, notifications_url: string, open_issues: int, open_issues_count: int, owner: record<avatar_url: string, email: string, events_url: string, followers_url: string, following_url: string, gists_url: string, gravatar_id: string, html_url: string, id: int, login: string, name: string, node_id: string, organizations_url: string, received_events_url: string, repos_url: string, site_admin: bool, starred_at: string, starred_url: string, subscriptions_url: string, type: string, url: string>, permissions: record<admin: bool, maintain: bool, pull: bool, push: bool, triage: bool>, private: bool, pulls_url: string, pushed_at: string, releases_url: string, size: int, ssh_url: string, stargazers_count: int, stargazers_url: string, statuses_url: string, subscribers_count: int, subscribers_url: string, subscription_url: string, svn_url: string, tags_url: string, teams_url: string, template_repository: record<allow_forking: bool, allow_merge_commit: bool, allow_rebase_merge: bool, allow_squash_merge: bool, anonymous_access_enabled: bool, archive_url: string, archived: bool, assignees_url: string, blobs_url: string, branches_url: string, clone_url: string, collaborators_url: string, comments_url: string, commits_url: string, compare_url: string, contents_url: string, contributors_url: string, created_at: string, default_branch: string, delete_branch_on_merge: bool, deployments_url: string, description: string, disabled: bool, downloads_url: string, events_url: string, fork: bool, forks: int, forks_count: int, forks_url: string, full_name: string, git_commits_url: string, git_refs_url: string, git_tags_url: string, git_url: string, has_downloads: bool, has_issues: bool, has_pages: bool, has_projects: bool, has_wiki: bool, homepage: string, hooks_url: string, html_url: string, id: int, is_template: bool, issue_comment_url: string, issue_events_url: string, issues_url: string, keys_url: string, labels_url: string, language: string, languages_url: string, license: record, master_branch: string, merges_url: string, milestones_url: string, mirror_url: string, name: string, network_count: int, node_id: string, notifications_url: string, open_issues: int, open_issues_count: int, organization: record, owner: record, permissions: record, private: bool, pulls_url: string, pushed_at: string, releases_url: string, size: int, ssh_url: string, stargazers_count: int, stargazers_url: string, starred_at: string, statuses_url: string, subscribers_count: int, subscribers_url: string, subscription_url: string, svn_url: string, tags_url: string, teams_url: string, template_repository: record, topics: list, trees_url: string, updated_at: string, url: string, visibility: string, watchers: int, watchers_count: int>, topics: list<string>, trees_url: string, updated_at: string, url: string, visibility: string, watchers: int, watchers_count: int> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($owner | is-empty) { error make --unspanned { msg: "path parameter 'owner' must be non-empty" } }
+  if ($repo | is-empty) { error make --unspanned { msg: "path parameter 'repo' must be non-empty" } }
   let qp = [(serialize-qp "sort" $qp_sort "scalar") (serialize-qp "per_page" $per_page "scalar") (serialize-qp "page" $page "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({owner: (encode-path-segment $owner), repo: (encode-path-segment $repo)} | format pattern "/repos/{owner}/{repo}/forks") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"sort": $qp_sort, "per_page": $per_page, "page": $page} | compact), body: null}
 }
 
 # Create a fork
@@ -8517,12 +9035,14 @@ export def "repos-forks create" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($owner | is-empty) { error make --unspanned { msg: "path parameter 'owner' must be non-empty" } }
+  if ($repo | is-empty) { error make --unspanned { msg: "path parameter 'repo' must be non-empty" } }
   let full_url = (build-url $base ({owner: (encode-path-segment $owner), repo: (encode-path-segment $repo)} | format pattern "/repos/{owner}/{repo}/forks"))
   let req_body = {"organization": $organization} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: {}, body: $req_body}
 }
 
 # Create a blob
@@ -8548,12 +9068,14 @@ export def "repos-git-blobs create" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($owner | is-empty) { error make --unspanned { msg: "path parameter 'owner' must be non-empty" } }
+  if ($repo | is-empty) { error make --unspanned { msg: "path parameter 'repo' must be non-empty" } }
   let full_url = (build-url $base ({owner: (encode-path-segment $owner), repo: (encode-path-segment $repo)} | format pattern "/repos/{owner}/{repo}/git/blobs"))
   let req_body = {"content": $content, "encoding": $encoding} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: {}, body: $req_body}
 }
 
 # Get a blob
@@ -8577,10 +9099,13 @@ export def "repos-git-blobs get" [
 ]: nothing -> record<content: string, encoding: string, highlighted_content: string, node_id: string, sha: string, size: int, url: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($owner | is-empty) { error make --unspanned { msg: "path parameter 'owner' must be non-empty" } }
+  if ($repo | is-empty) { error make --unspanned { msg: "path parameter 'repo' must be non-empty" } }
+  if ($file_sha | is-empty) { error make --unspanned { msg: "path parameter 'file_sha' must be non-empty" } }
   let full_url = (build-url $base ({owner: (encode-path-segment $owner), repo: (encode-path-segment $repo), file_sha: (encode-path-segment $file_sha)} | format pattern "/repos/{owner}/{repo}/git/blobs/{file_sha}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
 }
 
 # Create a commit
@@ -8612,12 +9137,14 @@ export def "repos-git-commits create" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($owner | is-empty) { error make --unspanned { msg: "path parameter 'owner' must be non-empty" } }
+  if ($repo | is-empty) { error make --unspanned { msg: "path parameter 'repo' must be non-empty" } }
   let full_url = (build-url $base ({owner: (encode-path-segment $owner), repo: (encode-path-segment $repo)} | format pattern "/repos/{owner}/{repo}/git/commits"))
   let req_body = {"author": $author, "committer": $committer, "message": $message, "parents": $parents, "signature": $signature, "tree": $tree} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: {}, body: $req_body}
 }
 
 # Get a commit
@@ -8641,10 +9168,13 @@ export def "repos-git-commits get" [
 ]: nothing -> record<author: record<date: string, email: string, name: string>, committer: record<date: string, email: string, name: string>, html_url: string, message: string, node_id: string, parents: table<html_url: string, sha: string, url: string>, sha: string, tree: record<sha: string, url: string>, url: string, verification: record<payload: string, reason: string, signature: string, verified: bool>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($owner | is-empty) { error make --unspanned { msg: "path parameter 'owner' must be non-empty" } }
+  if ($repo | is-empty) { error make --unspanned { msg: "path parameter 'repo' must be non-empty" } }
+  if ($commit_sha | is-empty) { error make --unspanned { msg: "path parameter 'commit_sha' must be non-empty" } }
   let full_url = (build-url $base ({owner: (encode-path-segment $owner), repo: (encode-path-segment $repo), commit_sha: (encode-path-segment $commit_sha)} | format pattern "/repos/{owner}/{repo}/git/commits/{commit_sha}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
 }
 
 # List matching references
@@ -8670,11 +9200,14 @@ export def "repos-git-matching-refs list" [
 ]: nothing -> table<node_id: string, object: record<sha: string, type: string, url: string>, ref: string, url: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($owner | is-empty) { error make --unspanned { msg: "path parameter 'owner' must be non-empty" } }
+  if ($repo | is-empty) { error make --unspanned { msg: "path parameter 'repo' must be non-empty" } }
+  if ($ref | is-empty) { error make --unspanned { msg: "path parameter 'ref' must be non-empty" } }
   let qp = [(serialize-qp "per_page" $per_page "scalar") (serialize-qp "page" $page "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({owner: (encode-path-segment $owner), repo: (encode-path-segment $repo), ref: (encode-path-segment $ref)} | format pattern "/repos/{owner}/{repo}/git/matching-refs/{ref}") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"per_page": $per_page, "page": $page} | compact), body: null}
 }
 
 # Get a reference
@@ -8698,10 +9231,13 @@ export def "repos-git-ref get" [
 ]: nothing -> record<node_id: string, object: record<sha: string, type: string, url: string>, ref: string, url: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($owner | is-empty) { error make --unspanned { msg: "path parameter 'owner' must be non-empty" } }
+  if ($repo | is-empty) { error make --unspanned { msg: "path parameter 'repo' must be non-empty" } }
+  if ($ref | is-empty) { error make --unspanned { msg: "path parameter 'ref' must be non-empty" } }
   let full_url = (build-url $base ({owner: (encode-path-segment $owner), repo: (encode-path-segment $repo), ref: (encode-path-segment $ref)} | format pattern "/repos/{owner}/{repo}/git/ref/{ref}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
 }
 
 # Create a reference
@@ -8728,12 +9264,14 @@ export def "repos-git-refs create" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($owner | is-empty) { error make --unspanned { msg: "path parameter 'owner' must be non-empty" } }
+  if ($repo | is-empty) { error make --unspanned { msg: "path parameter 'repo' must be non-empty" } }
   let full_url = (build-url $base ({owner: (encode-path-segment $owner), repo: (encode-path-segment $repo)} | format pattern "/repos/{owner}/{repo}/git/refs"))
   let req_body = {"key": $key, "ref": $ref, "sha": $sha} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: {}, body: $req_body}
 }
 
 # Delete a reference
@@ -8757,10 +9295,13 @@ export def "repos-git-refs delete" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($owner | is-empty) { error make --unspanned { msg: "path parameter 'owner' must be non-empty" } }
+  if ($repo | is-empty) { error make --unspanned { msg: "path parameter 'repo' must be non-empty" } }
+  if ($ref | is-empty) { error make --unspanned { msg: "path parameter 'ref' must be non-empty" } }
   let full_url = (build-url $base ({owner: (encode-path-segment $owner), repo: (encode-path-segment $repo), ref: (encode-path-segment $ref)} | format pattern "/repos/{owner}/{repo}/git/refs/{ref}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
 }
 
 # Update a reference
@@ -8787,12 +9328,15 @@ export def "repos-git-refs update" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($owner | is-empty) { error make --unspanned { msg: "path parameter 'owner' must be non-empty" } }
+  if ($repo | is-empty) { error make --unspanned { msg: "path parameter 'repo' must be non-empty" } }
+  if ($ref | is-empty) { error make --unspanned { msg: "path parameter 'ref' must be non-empty" } }
   let full_url = (build-url $base ({owner: (encode-path-segment $owner), repo: (encode-path-segment $repo), ref: (encode-path-segment $ref)} | format pattern "/repos/{owner}/{repo}/git/refs/{ref}"))
   let req_body = {"force": $force, "sha": $sha} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "patch" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body
+  do-request "patch" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: {}, body: $req_body}
 }
 
 # Create a tag object
@@ -8822,12 +9366,14 @@ export def "repos-git-tags create" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($owner | is-empty) { error make --unspanned { msg: "path parameter 'owner' must be non-empty" } }
+  if ($repo | is-empty) { error make --unspanned { msg: "path parameter 'repo' must be non-empty" } }
   let full_url = (build-url $base ({owner: (encode-path-segment $owner), repo: (encode-path-segment $repo)} | format pattern "/repos/{owner}/{repo}/git/tags"))
   let req_body = {"message": $message, "object": $object, "tag": $tag, "tagger": $tagger, "type": $type} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: {}, body: $req_body}
 }
 
 # Get a tag
@@ -8851,10 +9397,13 @@ export def "repos-git-tags get" [
 ]: nothing -> record<message: string, node_id: string, object: record<sha: string, type: string, url: string>, sha: string, tag: string, tagger: record<date: string, email: string, name: string>, url: string, verification: record<payload: string, reason: string, signature: string, verified: bool>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($owner | is-empty) { error make --unspanned { msg: "path parameter 'owner' must be non-empty" } }
+  if ($repo | is-empty) { error make --unspanned { msg: "path parameter 'repo' must be non-empty" } }
+  if ($tag_sha | is-empty) { error make --unspanned { msg: "path parameter 'tag_sha' must be non-empty" } }
   let full_url = (build-url $base ({owner: (encode-path-segment $owner), repo: (encode-path-segment $repo), tag_sha: (encode-path-segment $tag_sha)} | format pattern "/repos/{owner}/{repo}/git/tags/{tag_sha}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
 }
 
 # Create a tree
@@ -8881,12 +9430,14 @@ export def "repos-git-trees create" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($owner | is-empty) { error make --unspanned { msg: "path parameter 'owner' must be non-empty" } }
+  if ($repo | is-empty) { error make --unspanned { msg: "path parameter 'repo' must be non-empty" } }
   let full_url = (build-url $base ({owner: (encode-path-segment $owner), repo: (encode-path-segment $repo)} | format pattern "/repos/{owner}/{repo}/git/trees"))
   let req_body = {"base_tree": $base_tree, "tree": $tree} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: {}, body: $req_body}
 }
 
 # Get a tree
@@ -8911,11 +9462,14 @@ export def "repos-git-trees get" [
 ]: nothing -> record<sha: string, tree: table<mode: string, path: string, sha: string, size: int, type: string, url: string>, truncated: bool, url: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($owner | is-empty) { error make --unspanned { msg: "path parameter 'owner' must be non-empty" } }
+  if ($repo | is-empty) { error make --unspanned { msg: "path parameter 'repo' must be non-empty" } }
+  if ($tree_sha | is-empty) { error make --unspanned { msg: "path parameter 'tree_sha' must be non-empty" } }
   let qp = [(serialize-qp "recursive" $recursive "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({owner: (encode-path-segment $owner), repo: (encode-path-segment $repo), tree_sha: (encode-path-segment $tree_sha)} | format pattern "/repos/{owner}/{repo}/git/trees/{tree_sha}") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"recursive": $recursive} | compact), body: null}
 }
 
 # List repository webhooks
@@ -8940,11 +9494,13 @@ export def "repos-hooks list-webhooks" [
 ]: nothing -> table<active: bool, config: record<content_type: string, digest: string, email: string, insecure_ssl: any, password: string, room: string, secret: string, subdomain: string, token: string, url: string>, created_at: string, events: list<string>, id: int, last_response: record<code: int, message: string, status: string>, name: string, ping_url: string, test_url: string, type: string, updated_at: string, url: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($owner | is-empty) { error make --unspanned { msg: "path parameter 'owner' must be non-empty" } }
+  if ($repo | is-empty) { error make --unspanned { msg: "path parameter 'repo' must be non-empty" } }
   let qp = [(serialize-qp "per_page" $per_page "scalar") (serialize-qp "page" $page "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({owner: (encode-path-segment $owner), repo: (encode-path-segment $repo)} | format pattern "/repos/{owner}/{repo}/hooks") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"per_page": $per_page, "page": $page} | compact), body: null}
 }
 
 # Create a repository webhook
@@ -8973,12 +9529,14 @@ export def "repos-hooks create-webhook" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($owner | is-empty) { error make --unspanned { msg: "path parameter 'owner' must be non-empty" } }
+  if ($repo | is-empty) { error make --unspanned { msg: "path parameter 'repo' must be non-empty" } }
   let full_url = (build-url $base ({owner: (encode-path-segment $owner), repo: (encode-path-segment $repo)} | format pattern "/repos/{owner}/{repo}/hooks"))
   let req_body = {"active": $active, "config": $config, "events": $events, "name": $name} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: {}, body: $req_body}
 }
 
 # Delete a repository webhook
@@ -9002,10 +9560,13 @@ export def "repos-hooks delete-webhook" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($owner | is-empty) { error make --unspanned { msg: "path parameter 'owner' must be non-empty" } }
+  if ($repo | is-empty) { error make --unspanned { msg: "path parameter 'repo' must be non-empty" } }
+  if ($hook_id | is-empty) { error make --unspanned { msg: "path parameter 'hook_id' must be non-empty" } }
   let full_url = (build-url $base ({owner: (encode-path-segment $owner), repo: (encode-path-segment $repo), hook_id: (encode-path-segment $hook_id)} | format pattern "/repos/{owner}/{repo}/hooks/{hook_id}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
 }
 
 # Get a repository webhook
@@ -9029,10 +9590,13 @@ export def "repos-hooks get-webhook" [
 ]: nothing -> record<active: bool, config: record<content_type: string, digest: string, email: string, insecure_ssl: any, password: string, room: string, secret: string, subdomain: string, token: string, url: string>, created_at: string, events: list<string>, id: int, last_response: record<code: int, message: string, status: string>, name: string, ping_url: string, test_url: string, type: string, updated_at: string, url: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($owner | is-empty) { error make --unspanned { msg: "path parameter 'owner' must be non-empty" } }
+  if ($repo | is-empty) { error make --unspanned { msg: "path parameter 'repo' must be non-empty" } }
+  if ($hook_id | is-empty) { error make --unspanned { msg: "path parameter 'hook_id' must be non-empty" } }
   let full_url = (build-url $base ({owner: (encode-path-segment $owner), repo: (encode-path-segment $repo), hook_id: (encode-path-segment $hook_id)} | format pattern "/repos/{owner}/{repo}/hooks/{hook_id}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
 }
 
 # Update a repository webhook
@@ -9063,12 +9627,15 @@ export def "repos-hooks update-webhook" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($owner | is-empty) { error make --unspanned { msg: "path parameter 'owner' must be non-empty" } }
+  if ($repo | is-empty) { error make --unspanned { msg: "path parameter 'repo' must be non-empty" } }
+  if ($hook_id | is-empty) { error make --unspanned { msg: "path parameter 'hook_id' must be non-empty" } }
   let full_url = (build-url $base ({owner: (encode-path-segment $owner), repo: (encode-path-segment $repo), hook_id: (encode-path-segment $hook_id)} | format pattern "/repos/{owner}/{repo}/hooks/{hook_id}"))
   let req_body = {"active": $active, "add_events": $add_events, "config": $config, "events": $events, "remove_events": $remove_events} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "patch" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body
+  do-request "patch" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: {}, body: $req_body}
 }
 
 # Ping a repository webhook
@@ -9092,10 +9659,13 @@ export def "repos-hooks-pings ping-webhook" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($owner | is-empty) { error make --unspanned { msg: "path parameter 'owner' must be non-empty" } }
+  if ($repo | is-empty) { error make --unspanned { msg: "path parameter 'repo' must be non-empty" } }
+  if ($hook_id | is-empty) { error make --unspanned { msg: "path parameter 'hook_id' must be non-empty" } }
   let full_url = (build-url $base ({owner: (encode-path-segment $owner), repo: (encode-path-segment $repo), hook_id: (encode-path-segment $hook_id)} | format pattern "/repos/{owner}/{repo}/hooks/{hook_id}/pings"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
 }
 
 # Test the push repository webhook
@@ -9119,10 +9689,13 @@ export def "repos-hooks-tests push-webhook" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($owner | is-empty) { error make --unspanned { msg: "path parameter 'owner' must be non-empty" } }
+  if ($repo | is-empty) { error make --unspanned { msg: "path parameter 'repo' must be non-empty" } }
+  if ($hook_id | is-empty) { error make --unspanned { msg: "path parameter 'hook_id' must be non-empty" } }
   let full_url = (build-url $base ({owner: (encode-path-segment $owner), repo: (encode-path-segment $repo), hook_id: (encode-path-segment $hook_id)} | format pattern "/repos/{owner}/{repo}/hooks/{hook_id}/tests"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
 }
 
 # Get a repository installation for the authenticated app
@@ -9146,12 +9719,14 @@ export def "repos-installation get-apps" [
 ]: nothing -> record<access_tokens_url: string, account: any, app_id: int, app_slug: string, contact_email: string, created_at: string, events: list<string>, html_url: string, id: int, permissions: record<checks: string, contents: string, deployments: string, issues: string, metadata: string, organization_administration: string, pull_requests: string, statuses: string>, repositories_url: string, repository_selection: string, single_file_name: string, suspended_at: string, suspended_by: record<avatar_url: string, email: string, events_url: string, followers_url: string, following_url: string, gists_url: string, gravatar_id: string, html_url: string, id: int, login: string, name: string, node_id: string, organizations_url: string, received_events_url: string, repos_url: string, site_admin: bool, starred_at: string, starred_url: string, subscriptions_url: string, type: string, url: string>, target_id: int, target_type: string, updated_at: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($owner | is-empty) { error make --unspanned { msg: "path parameter 'owner' must be non-empty" } }
+  if ($repo | is-empty) { error make --unspanned { msg: "path parameter 'repo' must be non-empty" } }
   let full_url = (build-url $base ({owner: (encode-path-segment $owner), repo: (encode-path-segment $repo)} | format pattern "/repos/{owner}/{repo}/installation"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"accept": $hdr_accept} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
 }
 
 # List repository invitations
@@ -9176,11 +9751,13 @@ export def "repos-invitations list" [
 ]: nothing -> table<created_at: string, expired: bool, html_url: string, id: int, invitee: record<avatar_url: string, email: string, events_url: string, followers_url: string, following_url: string, gists_url: string, gravatar_id: string, html_url: string, id: int, login: string, name: string, node_id: string, organizations_url: string, received_events_url: string, repos_url: string, site_admin: bool, starred_at: string, starred_url: string, subscriptions_url: string, type: string, url: string>, inviter: record<avatar_url: string, email: string, events_url: string, followers_url: string, following_url: string, gists_url: string, gravatar_id: string, html_url: string, id: int, login: string, name: string, node_id: string, organizations_url: string, received_events_url: string, repos_url: string, site_admin: bool, starred_at: string, starred_url: string, subscriptions_url: string, type: string, url: string>, node_id: string, permissions: string, repository: record<allow_forking: bool, anonymous_access_enabled: bool, archive_url: string, archived: bool, assignees_url: string, blobs_url: string, branches_url: string, clone_url: string, code_of_conduct: record, collaborators_url: string, comments_url: string, commits_url: string, compare_url: string, contents_url: string, contributors_url: string, created_at: string, default_branch: string, delete_branch_on_merge: bool, deployments_url: string, description: string, disabled: bool, downloads_url: string, events_url: string, fork: bool, forks: int, forks_count: int, forks_url: string, full_name: string, git_commits_url: string, git_refs_url: string, git_tags_url: string, git_url: string, has_downloads: bool, has_issues: bool, has_pages: bool, has_projects: bool, has_wiki: bool, homepage: string, hooks_url: string, html_url: string, id: int, is_template: bool, issue_comment_url: string, issue_events_url: string, issues_url: string, keys_url: string, labels_url: string, language: string, languages_url: string, license: record, merges_url: string, milestones_url: string, mirror_url: string, name: string, network_count: int, node_id: string, notifications_url: string, open_issues: int, open_issues_count: int, owner: record, permissions: record, private: bool, pulls_url: string, pushed_at: string, releases_url: string, size: int, ssh_url: string, stargazers_count: int, stargazers_url: string, statuses_url: string, subscribers_count: int, subscribers_url: string, subscription_url: string, svn_url: string, tags_url: string, teams_url: string, template_repository: record, topics: list, trees_url: string, updated_at: string, url: string, visibility: string, watchers: int, watchers_count: int>, url: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($owner | is-empty) { error make --unspanned { msg: "path parameter 'owner' must be non-empty" } }
+  if ($repo | is-empty) { error make --unspanned { msg: "path parameter 'repo' must be non-empty" } }
   let qp = [(serialize-qp "per_page" $per_page "scalar") (serialize-qp "page" $page "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({owner: (encode-path-segment $owner), repo: (encode-path-segment $repo)} | format pattern "/repos/{owner}/{repo}/invitations") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"per_page": $per_page, "page": $page} | compact), body: null}
 }
 
 # Delete a repository invitation
@@ -9204,10 +9781,13 @@ export def "repos-invitations delete" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($owner | is-empty) { error make --unspanned { msg: "path parameter 'owner' must be non-empty" } }
+  if ($repo | is-empty) { error make --unspanned { msg: "path parameter 'repo' must be non-empty" } }
+  if ($invitation_id | is-empty) { error make --unspanned { msg: "path parameter 'invitation_id' must be non-empty" } }
   let full_url = (build-url $base ({owner: (encode-path-segment $owner), repo: (encode-path-segment $repo), invitation_id: (encode-path-segment $invitation_id)} | format pattern "/repos/{owner}/{repo}/invitations/{invitation_id}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
 }
 
 # Update a repository invitation
@@ -9233,12 +9813,15 @@ export def "repos-invitations update" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($owner | is-empty) { error make --unspanned { msg: "path parameter 'owner' must be non-empty" } }
+  if ($repo | is-empty) { error make --unspanned { msg: "path parameter 'repo' must be non-empty" } }
+  if ($invitation_id | is-empty) { error make --unspanned { msg: "path parameter 'invitation_id' must be non-empty" } }
   let full_url = (build-url $base ({owner: (encode-path-segment $owner), repo: (encode-path-segment $repo), invitation_id: (encode-path-segment $invitation_id)} | format pattern "/repos/{owner}/{repo}/invitations/{invitation_id}"))
   let req_body = {"permissions": $permissions} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "patch" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body
+  do-request "patch" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: {}, body: $req_body}
 }
 
 # List repository issues
@@ -9272,11 +9855,13 @@ export def "repos-issues list" [
 ]: nothing -> table<active_lock_reason: string, assignee: record<avatar_url: string, email: string, events_url: string, followers_url: string, following_url: string, gists_url: string, gravatar_id: string, html_url: string, id: int, login: string, name: string, node_id: string, organizations_url: string, received_events_url: string, repos_url: string, site_admin: bool, starred_at: string, starred_url: string, subscriptions_url: string, type: string, url: string>, assignees: list<record>, author_association: string, body: string, body_html: string, body_text: string, closed_at: string, comments: int, comments_url: string, created_at: string, events_url: string, html_url: string, id: int, labels: list<record>, labels_url: string, locked: bool, milestone: record<closed_at: string, closed_issues: int, created_at: string, creator: record, description: string, due_on: string, html_url: string, id: int, labels_url: string, node_id: string, number: int, open_issues: int, state: string, title: string, updated_at: string, url: string>, node_id: string, number: int, performed_via_github_app: record<client_id: string, client_secret: string, created_at: string, description: string, events: list, external_url: string, html_url: string, id: int, installations_count: int, name: string, node_id: string, owner: record, pem: string, permissions: record, slug: string, updated_at: string, webhook_secret: string>, pull_request: record<diff_url: string, html_url: string, merged_at: string, patch_url: string, url: string>, repository: record<allow_forking: bool, allow_merge_commit: bool, allow_rebase_merge: bool, allow_squash_merge: bool, anonymous_access_enabled: bool, archive_url: string, archived: bool, assignees_url: string, blobs_url: string, branches_url: string, clone_url: string, collaborators_url: string, comments_url: string, commits_url: string, compare_url: string, contents_url: string, contributors_url: string, created_at: string, default_branch: string, delete_branch_on_merge: bool, deployments_url: string, description: string, disabled: bool, downloads_url: string, events_url: string, fork: bool, forks: int, forks_count: int, forks_url: string, full_name: string, git_commits_url: string, git_refs_url: string, git_tags_url: string, git_url: string, has_downloads: bool, has_issues: bool, has_pages: bool, has_projects: bool, has_wiki: bool, homepage: string, hooks_url: string, html_url: string, id: int, is_template: bool, issue_comment_url: string, issue_events_url: string, issues_url: string, keys_url: string, labels_url: string, language: string, languages_url: string, license: record, master_branch: string, merges_url: string, milestones_url: string, mirror_url: string, name: string, network_count: int, node_id: string, notifications_url: string, open_issues: int, open_issues_count: int, organization: record, owner: record, permissions: record, private: bool, pulls_url: string, pushed_at: string, releases_url: string, size: int, ssh_url: string, stargazers_count: int, stargazers_url: string, starred_at: string, statuses_url: string, subscribers_count: int, subscribers_url: string, subscription_url: string, svn_url: string, tags_url: string, teams_url: string, template_repository: record, topics: list, trees_url: string, updated_at: string, url: string, visibility: string, watchers: int, watchers_count: int>, repository_url: string, state: string, timeline_url: string, title: string, updated_at: string, url: string, user: record<avatar_url: string, email: string, events_url: string, followers_url: string, following_url: string, gists_url: string, gravatar_id: string, html_url: string, id: int, login: string, name: string, node_id: string, organizations_url: string, received_events_url: string, repos_url: string, site_admin: bool, starred_at: string, starred_url: string, subscriptions_url: string, type: string, url: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($owner | is-empty) { error make --unspanned { msg: "path parameter 'owner' must be non-empty" } }
+  if ($repo | is-empty) { error make --unspanned { msg: "path parameter 'repo' must be non-empty" } }
   let qp = [(serialize-qp "milestone" $milestone "scalar") (serialize-qp "state" $state "scalar") (serialize-qp "assignee" $assignee "scalar") (serialize-qp "creator" $creator "scalar") (serialize-qp "mentioned" $mentioned "scalar") (serialize-qp "labels" $labels "scalar") (serialize-qp "sort" $qp_sort "scalar") (serialize-qp "direction" $direction "scalar") (serialize-qp "since" $since "scalar") (serialize-qp "per_page" $per_page "scalar") (serialize-qp "page" $page "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({owner: (encode-path-segment $owner), repo: (encode-path-segment $repo)} | format pattern "/repos/{owner}/{repo}/issues") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"milestone": $milestone, "state": $state, "assignee": $assignee, "creator": $creator, "mentioned": $mentioned, "labels": $labels, "sort": $qp_sort, "direction": $direction, "since": $since, "per_page": $per_page, "page": $page} | compact), body: null}
 }
 
 # Create an issue
@@ -9306,12 +9891,14 @@ export def "repos-issues create" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($owner | is-empty) { error make --unspanned { msg: "path parameter 'owner' must be non-empty" } }
+  if ($repo | is-empty) { error make --unspanned { msg: "path parameter 'repo' must be non-empty" } }
   let full_url = (build-url $base ({owner: (encode-path-segment $owner), repo: (encode-path-segment $repo)} | format pattern "/repos/{owner}/{repo}/issues"))
   let req_body = {"assignee": $assignee, "assignees": $assignees, "body": $body, "labels": $labels, "milestone": $milestone, "title": $title} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: {}, body: $req_body}
 }
 
 # List issue comments for a repository
@@ -9339,11 +9926,13 @@ export def "repos-issues-comments list" [
 ]: nothing -> table<author_association: string, body: string, body_html: string, body_text: string, created_at: string, html_url: string, id: int, issue_url: string, node_id: string, performed_via_github_app: record<client_id: string, client_secret: string, created_at: string, description: string, events: list, external_url: string, html_url: string, id: int, installations_count: int, name: string, node_id: string, owner: record, pem: string, permissions: record, slug: string, updated_at: string, webhook_secret: string>, reactions: record<_1: int, _1: int, confused: int, eyes: int, heart: int, hooray: int, laugh: int, rocket: int, total_count: int, url: string>, updated_at: string, url: string, user: record<avatar_url: string, email: string, events_url: string, followers_url: string, following_url: string, gists_url: string, gravatar_id: string, html_url: string, id: int, login: string, name: string, node_id: string, organizations_url: string, received_events_url: string, repos_url: string, site_admin: bool, starred_at: string, starred_url: string, subscriptions_url: string, type: string, url: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($owner | is-empty) { error make --unspanned { msg: "path parameter 'owner' must be non-empty" } }
+  if ($repo | is-empty) { error make --unspanned { msg: "path parameter 'repo' must be non-empty" } }
   let qp = [(serialize-qp "sort" $qp_sort "scalar") (serialize-qp "direction" $direction "scalar") (serialize-qp "since" $since "scalar") (serialize-qp "per_page" $per_page "scalar") (serialize-qp "page" $page "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({owner: (encode-path-segment $owner), repo: (encode-path-segment $repo)} | format pattern "/repos/{owner}/{repo}/issues/comments") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"sort": $qp_sort, "direction": $direction, "since": $since, "per_page": $per_page, "page": $page} | compact), body: null}
 }
 
 # Delete an issue comment
@@ -9367,10 +9956,13 @@ export def "repos-issues-comments delete" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($owner | is-empty) { error make --unspanned { msg: "path parameter 'owner' must be non-empty" } }
+  if ($repo | is-empty) { error make --unspanned { msg: "path parameter 'repo' must be non-empty" } }
+  if ($comment_id | is-empty) { error make --unspanned { msg: "path parameter 'comment_id' must be non-empty" } }
   let full_url = (build-url $base ({owner: (encode-path-segment $owner), repo: (encode-path-segment $repo), comment_id: (encode-path-segment $comment_id)} | format pattern "/repos/{owner}/{repo}/issues/comments/{comment_id}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
 }
 
 # Get an issue comment
@@ -9394,10 +9986,13 @@ export def "repos-issues-comments get" [
 ]: nothing -> record<author_association: string, body: string, body_html: string, body_text: string, created_at: string, html_url: string, id: int, issue_url: string, node_id: string, performed_via_github_app: record<client_id: string, client_secret: string, created_at: string, description: string, events: list<string>, external_url: string, html_url: string, id: int, installations_count: int, name: string, node_id: string, owner: record<avatar_url: string, email: string, events_url: string, followers_url: string, following_url: string, gists_url: string, gravatar_id: string, html_url: string, id: int, login: string, name: string, node_id: string, organizations_url: string, received_events_url: string, repos_url: string, site_admin: bool, starred_at: string, starred_url: string, subscriptions_url: string, type: string, url: string>, pem: string, permissions: record<checks: string, contents: string, deployments: string, issues: string, metadata: string>, slug: string, updated_at: string, webhook_secret: string>, reactions: record<_1: int, _1: int, confused: int, eyes: int, heart: int, hooray: int, laugh: int, rocket: int, total_count: int, url: string>, updated_at: string, url: string, user: record<avatar_url: string, email: string, events_url: string, followers_url: string, following_url: string, gists_url: string, gravatar_id: string, html_url: string, id: int, login: string, name: string, node_id: string, organizations_url: string, received_events_url: string, repos_url: string, site_admin: bool, starred_at: string, starred_url: string, subscriptions_url: string, type: string, url: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($owner | is-empty) { error make --unspanned { msg: "path parameter 'owner' must be non-empty" } }
+  if ($repo | is-empty) { error make --unspanned { msg: "path parameter 'repo' must be non-empty" } }
+  if ($comment_id | is-empty) { error make --unspanned { msg: "path parameter 'comment_id' must be non-empty" } }
   let full_url = (build-url $base ({owner: (encode-path-segment $owner), repo: (encode-path-segment $repo), comment_id: (encode-path-segment $comment_id)} | format pattern "/repos/{owner}/{repo}/issues/comments/{comment_id}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
 }
 
 # Update an issue comment
@@ -9423,12 +10018,15 @@ export def "repos-issues-comments update" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($owner | is-empty) { error make --unspanned { msg: "path parameter 'owner' must be non-empty" } }
+  if ($repo | is-empty) { error make --unspanned { msg: "path parameter 'repo' must be non-empty" } }
+  if ($comment_id | is-empty) { error make --unspanned { msg: "path parameter 'comment_id' must be non-empty" } }
   let full_url = (build-url $base ({owner: (encode-path-segment $owner), repo: (encode-path-segment $repo), comment_id: (encode-path-segment $comment_id)} | format pattern "/repos/{owner}/{repo}/issues/comments/{comment_id}"))
   let req_body = {"body": $body} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "patch" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body
+  do-request "patch" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: {}, body: $req_body}
 }
 
 # List reactions for an issue comment
@@ -9455,11 +10053,14 @@ export def "repos-issues-comments-reactions list" [
 ]: nothing -> table<content: string, created_at: string, id: int, node_id: string, user: record<avatar_url: string, email: string, events_url: string, followers_url: string, following_url: string, gists_url: string, gravatar_id: string, html_url: string, id: int, login: string, name: string, node_id: string, organizations_url: string, received_events_url: string, repos_url: string, site_admin: bool, starred_at: string, starred_url: string, subscriptions_url: string, type: string, url: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($owner | is-empty) { error make --unspanned { msg: "path parameter 'owner' must be non-empty" } }
+  if ($repo | is-empty) { error make --unspanned { msg: "path parameter 'repo' must be non-empty" } }
+  if ($comment_id | is-empty) { error make --unspanned { msg: "path parameter 'comment_id' must be non-empty" } }
   let qp = [(serialize-qp "content" $content "scalar") (serialize-qp "per_page" $per_page "scalar") (serialize-qp "page" $page "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({owner: (encode-path-segment $owner), repo: (encode-path-segment $repo), comment_id: (encode-path-segment $comment_id)} | format pattern "/repos/{owner}/{repo}/issues/comments/{comment_id}/reactions") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"content": $content, "per_page": $per_page, "page": $page} | compact), body: null}
 }
 
 # Create reaction for an issue comment
@@ -9485,12 +10086,15 @@ export def "repos-issues-comments-reactions create" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($owner | is-empty) { error make --unspanned { msg: "path parameter 'owner' must be non-empty" } }
+  if ($repo | is-empty) { error make --unspanned { msg: "path parameter 'repo' must be non-empty" } }
+  if ($comment_id | is-empty) { error make --unspanned { msg: "path parameter 'comment_id' must be non-empty" } }
   let full_url = (build-url $base ({owner: (encode-path-segment $owner), repo: (encode-path-segment $repo), comment_id: (encode-path-segment $comment_id)} | format pattern "/repos/{owner}/{repo}/issues/comments/{comment_id}/reactions"))
   let req_body = {"content": $content} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: {}, body: $req_body}
 }
 
 # Delete an issue comment reaction
@@ -9515,10 +10119,14 @@ export def "repos-issues-comments-reactions delete" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($owner | is-empty) { error make --unspanned { msg: "path parameter 'owner' must be non-empty" } }
+  if ($repo | is-empty) { error make --unspanned { msg: "path parameter 'repo' must be non-empty" } }
+  if ($comment_id | is-empty) { error make --unspanned { msg: "path parameter 'comment_id' must be non-empty" } }
+  if ($reaction_id | is-empty) { error make --unspanned { msg: "path parameter 'reaction_id' must be non-empty" } }
   let full_url = (build-url $base ({owner: (encode-path-segment $owner), repo: (encode-path-segment $repo), comment_id: (encode-path-segment $comment_id), reaction_id: (encode-path-segment $reaction_id)} | format pattern "/repos/{owner}/{repo}/issues/comments/{comment_id}/reactions/{reaction_id}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
 }
 
 # List issue events for a repository
@@ -9543,11 +10151,13 @@ export def "repos-issues-events list" [
 ]: nothing -> table<actor: record<avatar_url: string, email: string, events_url: string, followers_url: string, following_url: string, gists_url: string, gravatar_id: string, html_url: string, id: int, login: string, name: string, node_id: string, organizations_url: string, received_events_url: string, repos_url: string, site_admin: bool, starred_at: string, starred_url: string, subscriptions_url: string, type: string, url: string>, assignee: record<avatar_url: string, email: string, events_url: string, followers_url: string, following_url: string, gists_url: string, gravatar_id: string, html_url: string, id: int, login: string, name: string, node_id: string, organizations_url: string, received_events_url: string, repos_url: string, site_admin: bool, starred_at: string, starred_url: string, subscriptions_url: string, type: string, url: string>, assigner: record<avatar_url: string, email: string, events_url: string, followers_url: string, following_url: string, gists_url: string, gravatar_id: string, html_url: string, id: int, login: string, name: string, node_id: string, organizations_url: string, received_events_url: string, repos_url: string, site_admin: bool, starred_at: string, starred_url: string, subscriptions_url: string, type: string, url: string>, author_association: string, commit_id: string, commit_url: string, created_at: string, dismissed_review: record<dismissal_commit_id: string, dismissal_message: string, review_id: int, state: string>, event: string, id: int, issue: record<active_lock_reason: string, assignee: record, assignees: list, author_association: string, body: string, body_html: string, body_text: string, closed_at: string, comments: int, comments_url: string, created_at: string, events_url: string, html_url: string, id: int, labels: list, labels_url: string, locked: bool, milestone: record, node_id: string, number: int, performed_via_github_app: record, pull_request: record, repository: record, repository_url: string, state: string, timeline_url: string, title: string, updated_at: string, url: string, user: record>, label: record<color: string, name: string>, lock_reason: string, milestone: record<title: string>, node_id: string, performed_via_github_app: record<client_id: string, client_secret: string, created_at: string, description: string, events: list, external_url: string, html_url: string, id: int, installations_count: int, name: string, node_id: string, owner: record, pem: string, permissions: record, slug: string, updated_at: string, webhook_secret: string>, project_card: record<column_name: string, id: int, previous_column_name: string, project_id: int, project_url: string, url: string>, rename: record<from: string, to: string>, requested_reviewer: record<avatar_url: string, email: string, events_url: string, followers_url: string, following_url: string, gists_url: string, gravatar_id: string, html_url: string, id: int, login: string, name: string, node_id: string, organizations_url: string, received_events_url: string, repos_url: string, site_admin: bool, starred_at: string, starred_url: string, subscriptions_url: string, type: string, url: string>, requested_team: record<description: string, html_url: string, id: int, members_url: string, name: string, node_id: string, parent: record, permission: string, permissions: record, privacy: string, repositories_url: string, slug: string, url: string>, review_requester: record<avatar_url: string, email: string, events_url: string, followers_url: string, following_url: string, gists_url: string, gravatar_id: string, html_url: string, id: int, login: string, name: string, node_id: string, organizations_url: string, received_events_url: string, repos_url: string, site_admin: bool, starred_at: string, starred_url: string, subscriptions_url: string, type: string, url: string>, url: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($owner | is-empty) { error make --unspanned { msg: "path parameter 'owner' must be non-empty" } }
+  if ($repo | is-empty) { error make --unspanned { msg: "path parameter 'repo' must be non-empty" } }
   let qp = [(serialize-qp "per_page" $per_page "scalar") (serialize-qp "page" $page "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({owner: (encode-path-segment $owner), repo: (encode-path-segment $repo)} | format pattern "/repos/{owner}/{repo}/issues/events") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"per_page": $per_page, "page": $page} | compact), body: null}
 }
 
 # Get an issue event
@@ -9571,10 +10181,13 @@ export def "repos-issues-events get" [
 ]: nothing -> record<actor: record<avatar_url: string, email: string, events_url: string, followers_url: string, following_url: string, gists_url: string, gravatar_id: string, html_url: string, id: int, login: string, name: string, node_id: string, organizations_url: string, received_events_url: string, repos_url: string, site_admin: bool, starred_at: string, starred_url: string, subscriptions_url: string, type: string, url: string>, assignee: record<avatar_url: string, email: string, events_url: string, followers_url: string, following_url: string, gists_url: string, gravatar_id: string, html_url: string, id: int, login: string, name: string, node_id: string, organizations_url: string, received_events_url: string, repos_url: string, site_admin: bool, starred_at: string, starred_url: string, subscriptions_url: string, type: string, url: string>, assigner: record<avatar_url: string, email: string, events_url: string, followers_url: string, following_url: string, gists_url: string, gravatar_id: string, html_url: string, id: int, login: string, name: string, node_id: string, organizations_url: string, received_events_url: string, repos_url: string, site_admin: bool, starred_at: string, starred_url: string, subscriptions_url: string, type: string, url: string>, author_association: string, commit_id: string, commit_url: string, created_at: string, dismissed_review: record<dismissal_commit_id: string, dismissal_message: string, review_id: int, state: string>, event: string, id: int, issue: record<active_lock_reason: string, assignee: record<avatar_url: string, email: string, events_url: string, followers_url: string, following_url: string, gists_url: string, gravatar_id: string, html_url: string, id: int, login: string, name: string, node_id: string, organizations_url: string, received_events_url: string, repos_url: string, site_admin: bool, starred_at: string, starred_url: string, subscriptions_url: string, type: string, url: string>, assignees: list<record>, author_association: string, body: string, body_html: string, body_text: string, closed_at: string, comments: int, comments_url: string, created_at: string, events_url: string, html_url: string, id: int, labels: list<record>, labels_url: string, locked: bool, milestone: record<closed_at: string, closed_issues: int, created_at: string, creator: record, description: string, due_on: string, html_url: string, id: int, labels_url: string, node_id: string, number: int, open_issues: int, state: string, title: string, updated_at: string, url: string>, node_id: string, number: int, performed_via_github_app: record<client_id: string, client_secret: string, created_at: string, description: string, events: list, external_url: string, html_url: string, id: int, installations_count: int, name: string, node_id: string, owner: record, pem: string, permissions: record, slug: string, updated_at: string, webhook_secret: string>, pull_request: record<diff_url: string, html_url: string, merged_at: string, patch_url: string, url: string>, repository: record<allow_forking: bool, allow_merge_commit: bool, allow_rebase_merge: bool, allow_squash_merge: bool, anonymous_access_enabled: bool, archive_url: string, archived: bool, assignees_url: string, blobs_url: string, branches_url: string, clone_url: string, collaborators_url: string, comments_url: string, commits_url: string, compare_url: string, contents_url: string, contributors_url: string, created_at: string, default_branch: string, delete_branch_on_merge: bool, deployments_url: string, description: string, disabled: bool, downloads_url: string, events_url: string, fork: bool, forks: int, forks_count: int, forks_url: string, full_name: string, git_commits_url: string, git_refs_url: string, git_tags_url: string, git_url: string, has_downloads: bool, has_issues: bool, has_pages: bool, has_projects: bool, has_wiki: bool, homepage: string, hooks_url: string, html_url: string, id: int, is_template: bool, issue_comment_url: string, issue_events_url: string, issues_url: string, keys_url: string, labels_url: string, language: string, languages_url: string, license: record, master_branch: string, merges_url: string, milestones_url: string, mirror_url: string, name: string, network_count: int, node_id: string, notifications_url: string, open_issues: int, open_issues_count: int, organization: record, owner: record, permissions: record, private: bool, pulls_url: string, pushed_at: string, releases_url: string, size: int, ssh_url: string, stargazers_count: int, stargazers_url: string, starred_at: string, statuses_url: string, subscribers_count: int, subscribers_url: string, subscription_url: string, svn_url: string, tags_url: string, teams_url: string, template_repository: record, topics: list, trees_url: string, updated_at: string, url: string, visibility: string, watchers: int, watchers_count: int>, repository_url: string, state: string, timeline_url: string, title: string, updated_at: string, url: string, user: record<avatar_url: string, email: string, events_url: string, followers_url: string, following_url: string, gists_url: string, gravatar_id: string, html_url: string, id: int, login: string, name: string, node_id: string, organizations_url: string, received_events_url: string, repos_url: string, site_admin: bool, starred_at: string, starred_url: string, subscriptions_url: string, type: string, url: string>>, label: record<color: string, name: string>, lock_reason: string, milestone: record<title: string>, node_id: string, performed_via_github_app: record<client_id: string, client_secret: string, created_at: string, description: string, events: list<string>, external_url: string, html_url: string, id: int, installations_count: int, name: string, node_id: string, owner: record<avatar_url: string, email: string, events_url: string, followers_url: string, following_url: string, gists_url: string, gravatar_id: string, html_url: string, id: int, login: string, name: string, node_id: string, organizations_url: string, received_events_url: string, repos_url: string, site_admin: bool, starred_at: string, starred_url: string, subscriptions_url: string, type: string, url: string>, pem: string, permissions: record<checks: string, contents: string, deployments: string, issues: string, metadata: string>, slug: string, updated_at: string, webhook_secret: string>, project_card: record<column_name: string, id: int, previous_column_name: string, project_id: int, project_url: string, url: string>, rename: record<from: string, to: string>, requested_reviewer: record<avatar_url: string, email: string, events_url: string, followers_url: string, following_url: string, gists_url: string, gravatar_id: string, html_url: string, id: int, login: string, name: string, node_id: string, organizations_url: string, received_events_url: string, repos_url: string, site_admin: bool, starred_at: string, starred_url: string, subscriptions_url: string, type: string, url: string>, requested_team: record<description: string, html_url: string, id: int, members_url: string, name: string, node_id: string, parent: record<description: string, html_url: string, id: int, ldap_dn: string, members_url: string, name: string, node_id: string, permission: string, privacy: string, repositories_url: string, slug: string, url: string>, permission: string, permissions: record<admin: bool, maintain: bool, pull: bool, push: bool, triage: bool>, privacy: string, repositories_url: string, slug: string, url: string>, review_requester: record<avatar_url: string, email: string, events_url: string, followers_url: string, following_url: string, gists_url: string, gravatar_id: string, html_url: string, id: int, login: string, name: string, node_id: string, organizations_url: string, received_events_url: string, repos_url: string, site_admin: bool, starred_at: string, starred_url: string, subscriptions_url: string, type: string, url: string>, url: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($owner | is-empty) { error make --unspanned { msg: "path parameter 'owner' must be non-empty" } }
+  if ($repo | is-empty) { error make --unspanned { msg: "path parameter 'repo' must be non-empty" } }
+  if ($event_id | is-empty) { error make --unspanned { msg: "path parameter 'event_id' must be non-empty" } }
   let full_url = (build-url $base ({owner: (encode-path-segment $owner), repo: (encode-path-segment $repo), event_id: (encode-path-segment $event_id)} | format pattern "/repos/{owner}/{repo}/issues/events/{event_id}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
 }
 
 # Get an issue
@@ -9598,10 +10211,13 @@ export def "repos-issues get" [
 ]: nothing -> record<active_lock_reason: string, assignee: record<avatar_url: string, email: string, events_url: string, followers_url: string, following_url: string, gists_url: string, gravatar_id: string, html_url: string, id: int, login: string, name: string, node_id: string, organizations_url: string, received_events_url: string, repos_url: string, site_admin: bool, starred_at: string, starred_url: string, subscriptions_url: string, type: string, url: string>, assignees: table<avatar_url: string, email: string, events_url: string, followers_url: string, following_url: string, gists_url: string, gravatar_id: string, html_url: string, id: int, login: string, name: string, node_id: string, organizations_url: string, received_events_url: string, repos_url: string, site_admin: bool, starred_at: string, starred_url: string, subscriptions_url: string, type: string, url: string>, author_association: string, body: string, body_html: string, body_text: string, closed_at: string, closed_by: record<avatar_url: string, email: string, events_url: string, followers_url: string, following_url: string, gists_url: string, gravatar_id: string, html_url: string, id: int, login: string, name: string, node_id: string, organizations_url: string, received_events_url: string, repos_url: string, site_admin: bool, starred_at: string, starred_url: string, subscriptions_url: string, type: string, url: string>, comments: int, comments_url: string, created_at: string, events_url: string, html_url: string, id: int, labels: list<any>, labels_url: string, locked: bool, milestone: record<closed_at: string, closed_issues: int, created_at: string, creator: record<avatar_url: string, email: string, events_url: string, followers_url: string, following_url: string, gists_url: string, gravatar_id: string, html_url: string, id: int, login: string, name: string, node_id: string, organizations_url: string, received_events_url: string, repos_url: string, site_admin: bool, starred_at: string, starred_url: string, subscriptions_url: string, type: string, url: string>, description: string, due_on: string, html_url: string, id: int, labels_url: string, node_id: string, number: int, open_issues: int, state: string, title: string, updated_at: string, url: string>, node_id: string, number: int, performed_via_github_app: record<client_id: string, client_secret: string, created_at: string, description: string, events: list<string>, external_url: string, html_url: string, id: int, installations_count: int, name: string, node_id: string, owner: record<avatar_url: string, email: string, events_url: string, followers_url: string, following_url: string, gists_url: string, gravatar_id: string, html_url: string, id: int, login: string, name: string, node_id: string, organizations_url: string, received_events_url: string, repos_url: string, site_admin: bool, starred_at: string, starred_url: string, subscriptions_url: string, type: string, url: string>, pem: string, permissions: record<checks: string, contents: string, deployments: string, issues: string, metadata: string>, slug: string, updated_at: string, webhook_secret: string>, pull_request: record<diff_url: string, html_url: string, merged_at: string, patch_url: string, url: string>, reactions: record<_1: int, _1: int, confused: int, eyes: int, heart: int, hooray: int, laugh: int, rocket: int, total_count: int, url: string>, repository: record<allow_forking: bool, allow_merge_commit: bool, allow_rebase_merge: bool, allow_squash_merge: bool, anonymous_access_enabled: bool, archive_url: string, archived: bool, assignees_url: string, blobs_url: string, branches_url: string, clone_url: string, collaborators_url: string, comments_url: string, commits_url: string, compare_url: string, contents_url: string, contributors_url: string, created_at: string, default_branch: string, delete_branch_on_merge: bool, deployments_url: string, description: string, disabled: bool, downloads_url: string, events_url: string, fork: bool, forks: int, forks_count: int, forks_url: string, full_name: string, git_commits_url: string, git_refs_url: string, git_tags_url: string, git_url: string, has_downloads: bool, has_issues: bool, has_pages: bool, has_projects: bool, has_wiki: bool, homepage: string, hooks_url: string, html_url: string, id: int, is_template: bool, issue_comment_url: string, issue_events_url: string, issues_url: string, keys_url: string, labels_url: string, language: string, languages_url: string, license: record<html_url: string, key: string, name: string, node_id: string, spdx_id: string, url: string>, master_branch: string, merges_url: string, milestones_url: string, mirror_url: string, name: string, network_count: int, node_id: string, notifications_url: string, open_issues: int, open_issues_count: int, organization: record<avatar_url: string, email: string, events_url: string, followers_url: string, following_url: string, gists_url: string, gravatar_id: string, html_url: string, id: int, login: string, name: string, node_id: string, organizations_url: string, received_events_url: string, repos_url: string, site_admin: bool, starred_at: string, starred_url: string, subscriptions_url: string, type: string, url: string>, owner: record<avatar_url: string, email: string, events_url: string, followers_url: string, following_url: string, gists_url: string, gravatar_id: string, html_url: string, id: int, login: string, name: string, node_id: string, organizations_url: string, received_events_url: string, repos_url: string, site_admin: bool, starred_at: string, starred_url: string, subscriptions_url: string, type: string, url: string>, permissions: record<admin: bool, maintain: bool, pull: bool, push: bool, triage: bool>, private: bool, pulls_url: string, pushed_at: string, releases_url: string, size: int, ssh_url: string, stargazers_count: int, stargazers_url: string, starred_at: string, statuses_url: string, subscribers_count: int, subscribers_url: string, subscription_url: string, svn_url: string, tags_url: string, teams_url: string, template_repository: record<allow_merge_commit: bool, allow_rebase_merge: bool, allow_squash_merge: bool, anonymous_access_enabled: bool, archive_url: string, archived: bool, assignees_url: string, blobs_url: string, branches_url: string, clone_url: string, collaborators_url: string, comments_url: string, commits_url: string, compare_url: string, contents_url: string, contributors_url: string, created_at: string, default_branch: string, delete_branch_on_merge: bool, deployments_url: string, description: string, disabled: bool, downloads_url: string, events_url: string, fork: bool, forks_count: int, forks_url: string, full_name: string, git_commits_url: string, git_refs_url: string, git_tags_url: string, git_url: string, has_downloads: bool, has_issues: bool, has_pages: bool, has_projects: bool, has_wiki: bool, homepage: string, hooks_url: string, html_url: string, id: int, is_template: bool, issue_comment_url: string, issue_events_url: string, issues_url: string, keys_url: string, labels_url: string, language: string, languages_url: string, merges_url: string, milestones_url: string, mirror_url: string, name: string, network_count: int, node_id: string, notifications_url: string, open_issues_count: int, owner: record, permissions: record, private: bool, pulls_url: string, pushed_at: string, releases_url: string, size: int, ssh_url: string, stargazers_count: int, stargazers_url: string, statuses_url: string, subscribers_count: int, subscribers_url: string, subscription_url: string, svn_url: string, tags_url: string, teams_url: string, topics: list, trees_url: string, updated_at: string, url: string, visibility: string, watchers_count: int>, topics: list<string>, trees_url: string, updated_at: string, url: string, visibility: string, watchers: int, watchers_count: int>, repository_url: string, state: string, timeline_url: string, title: string, updated_at: string, url: string, user: record<avatar_url: string, email: string, events_url: string, followers_url: string, following_url: string, gists_url: string, gravatar_id: string, html_url: string, id: int, login: string, name: string, node_id: string, organizations_url: string, received_events_url: string, repos_url: string, site_admin: bool, starred_at: string, starred_url: string, subscriptions_url: string, type: string, url: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($owner | is-empty) { error make --unspanned { msg: "path parameter 'owner' must be non-empty" } }
+  if ($repo | is-empty) { error make --unspanned { msg: "path parameter 'repo' must be non-empty" } }
+  if ($issue_number | is-empty) { error make --unspanned { msg: "path parameter 'issue_number' must be non-empty" } }
   let full_url = (build-url $base ({owner: (encode-path-segment $owner), repo: (encode-path-segment $repo), issue_number: (encode-path-segment $issue_number)} | format pattern "/repos/{owner}/{repo}/issues/{issue_number}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
 }
 
 # Update an issue
@@ -9633,12 +10249,15 @@ export def "repos-issues update" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($owner | is-empty) { error make --unspanned { msg: "path parameter 'owner' must be non-empty" } }
+  if ($repo | is-empty) { error make --unspanned { msg: "path parameter 'repo' must be non-empty" } }
+  if ($issue_number | is-empty) { error make --unspanned { msg: "path parameter 'issue_number' must be non-empty" } }
   let full_url = (build-url $base ({owner: (encode-path-segment $owner), repo: (encode-path-segment $repo), issue_number: (encode-path-segment $issue_number)} | format pattern "/repos/{owner}/{repo}/issues/{issue_number}"))
   let req_body = {"assignee": $assignee, "assignees": $assignees, "body": $body, "labels": $labels, "milestone": $milestone, "state": $state, "title": $title} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "patch" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body
+  do-request "patch" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: {}, body: $req_body}
 }
 
 # Remove assignees from an issue
@@ -9664,12 +10283,15 @@ export def "repos-issues-assignees delete" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($owner | is-empty) { error make --unspanned { msg: "path parameter 'owner' must be non-empty" } }
+  if ($repo | is-empty) { error make --unspanned { msg: "path parameter 'repo' must be non-empty" } }
+  if ($issue_number | is-empty) { error make --unspanned { msg: "path parameter 'issue_number' must be non-empty" } }
   let full_url = (build-url $base ({owner: (encode-path-segment $owner), repo: (encode-path-segment $repo), issue_number: (encode-path-segment $issue_number)} | format pattern "/repos/{owner}/{repo}/issues/{issue_number}/assignees"))
   let req_body = {"assignees": $assignees} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: {}, body: $req_body}
 }
 
 # Add assignees to an issue
@@ -9695,12 +10317,15 @@ export def "repos-issues-assignees create" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($owner | is-empty) { error make --unspanned { msg: "path parameter 'owner' must be non-empty" } }
+  if ($repo | is-empty) { error make --unspanned { msg: "path parameter 'repo' must be non-empty" } }
+  if ($issue_number | is-empty) { error make --unspanned { msg: "path parameter 'issue_number' must be non-empty" } }
   let full_url = (build-url $base ({owner: (encode-path-segment $owner), repo: (encode-path-segment $repo), issue_number: (encode-path-segment $issue_number)} | format pattern "/repos/{owner}/{repo}/issues/{issue_number}/assignees"))
   let req_body = {"assignees": $assignees} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: {}, body: $req_body}
 }
 
 # List issue comments
@@ -9727,11 +10352,14 @@ export def "repos-issues-comments list-1" [
 ]: nothing -> table<author_association: string, body: string, body_html: string, body_text: string, created_at: string, html_url: string, id: int, issue_url: string, node_id: string, performed_via_github_app: record<client_id: string, client_secret: string, created_at: string, description: string, events: list, external_url: string, html_url: string, id: int, installations_count: int, name: string, node_id: string, owner: record, pem: string, permissions: record, slug: string, updated_at: string, webhook_secret: string>, reactions: record<_1: int, _1: int, confused: int, eyes: int, heart: int, hooray: int, laugh: int, rocket: int, total_count: int, url: string>, updated_at: string, url: string, user: record<avatar_url: string, email: string, events_url: string, followers_url: string, following_url: string, gists_url: string, gravatar_id: string, html_url: string, id: int, login: string, name: string, node_id: string, organizations_url: string, received_events_url: string, repos_url: string, site_admin: bool, starred_at: string, starred_url: string, subscriptions_url: string, type: string, url: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($owner | is-empty) { error make --unspanned { msg: "path parameter 'owner' must be non-empty" } }
+  if ($repo | is-empty) { error make --unspanned { msg: "path parameter 'repo' must be non-empty" } }
+  if ($issue_number | is-empty) { error make --unspanned { msg: "path parameter 'issue_number' must be non-empty" } }
   let qp = [(serialize-qp "since" $since "scalar") (serialize-qp "per_page" $per_page "scalar") (serialize-qp "page" $page "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({owner: (encode-path-segment $owner), repo: (encode-path-segment $repo), issue_number: (encode-path-segment $issue_number)} | format pattern "/repos/{owner}/{repo}/issues/{issue_number}/comments") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"since": $since, "per_page": $per_page, "page": $page} | compact), body: null}
 }
 
 # Create an issue comment
@@ -9757,12 +10385,15 @@ export def "repos-issues-comments create" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($owner | is-empty) { error make --unspanned { msg: "path parameter 'owner' must be non-empty" } }
+  if ($repo | is-empty) { error make --unspanned { msg: "path parameter 'repo' must be non-empty" } }
+  if ($issue_number | is-empty) { error make --unspanned { msg: "path parameter 'issue_number' must be non-empty" } }
   let full_url = (build-url $base ({owner: (encode-path-segment $owner), repo: (encode-path-segment $repo), issue_number: (encode-path-segment $issue_number)} | format pattern "/repos/{owner}/{repo}/issues/{issue_number}/comments"))
   let req_body = {"body": $body} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: {}, body: $req_body}
 }
 
 # List issue events
@@ -9788,11 +10419,14 @@ export def "repos-issues-events list-1" [
 ]: nothing -> list<any> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($owner | is-empty) { error make --unspanned { msg: "path parameter 'owner' must be non-empty" } }
+  if ($repo | is-empty) { error make --unspanned { msg: "path parameter 'repo' must be non-empty" } }
+  if ($issue_number | is-empty) { error make --unspanned { msg: "path parameter 'issue_number' must be non-empty" } }
   let qp = [(serialize-qp "per_page" $per_page "scalar") (serialize-qp "page" $page "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({owner: (encode-path-segment $owner), repo: (encode-path-segment $repo), issue_number: (encode-path-segment $issue_number)} | format pattern "/repos/{owner}/{repo}/issues/{issue_number}/events") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"per_page": $per_page, "page": $page} | compact), body: null}
 }
 
 # Remove all labels from an issue
@@ -9816,10 +10450,13 @@ export def "repos-issues-labels delete-list" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($owner | is-empty) { error make --unspanned { msg: "path parameter 'owner' must be non-empty" } }
+  if ($repo | is-empty) { error make --unspanned { msg: "path parameter 'repo' must be non-empty" } }
+  if ($issue_number | is-empty) { error make --unspanned { msg: "path parameter 'issue_number' must be non-empty" } }
   let full_url = (build-url $base ({owner: (encode-path-segment $owner), repo: (encode-path-segment $repo), issue_number: (encode-path-segment $issue_number)} | format pattern "/repos/{owner}/{repo}/issues/{issue_number}/labels"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
 }
 
 # List labels for an issue
@@ -9845,11 +10482,14 @@ export def "repos-issues-labels list" [
 ]: nothing -> table<color: string, default: bool, description: string, id: int, name: string, node_id: string, url: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($owner | is-empty) { error make --unspanned { msg: "path parameter 'owner' must be non-empty" } }
+  if ($repo | is-empty) { error make --unspanned { msg: "path parameter 'repo' must be non-empty" } }
+  if ($issue_number | is-empty) { error make --unspanned { msg: "path parameter 'issue_number' must be non-empty" } }
   let qp = [(serialize-qp "per_page" $per_page "scalar") (serialize-qp "page" $page "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({owner: (encode-path-segment $owner), repo: (encode-path-segment $repo), issue_number: (encode-path-segment $issue_number)} | format pattern "/repos/{owner}/{repo}/issues/{issue_number}/labels") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"per_page": $per_page, "page": $page} | compact), body: null}
 }
 
 # Add labels to an issue
@@ -9875,12 +10515,15 @@ export def "repos-issues-labels create" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($owner | is-empty) { error make --unspanned { msg: "path parameter 'owner' must be non-empty" } }
+  if ($repo | is-empty) { error make --unspanned { msg: "path parameter 'repo' must be non-empty" } }
+  if ($issue_number | is-empty) { error make --unspanned { msg: "path parameter 'issue_number' must be non-empty" } }
   let full_url = (build-url $base ({owner: (encode-path-segment $owner), repo: (encode-path-segment $repo), issue_number: (encode-path-segment $issue_number)} | format pattern "/repos/{owner}/{repo}/issues/{issue_number}/labels"))
   let req_body = {"labels": $labels} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else if ($input | describe | str starts-with "list") { $input } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: {}, body: $req_body}
 }
 
 # Set labels for an issue
@@ -9906,12 +10549,15 @@ export def "repos-issues-labels update" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($owner | is-empty) { error make --unspanned { msg: "path parameter 'owner' must be non-empty" } }
+  if ($repo | is-empty) { error make --unspanned { msg: "path parameter 'repo' must be non-empty" } }
+  if ($issue_number | is-empty) { error make --unspanned { msg: "path parameter 'issue_number' must be non-empty" } }
   let full_url = (build-url $base ({owner: (encode-path-segment $owner), repo: (encode-path-segment $repo), issue_number: (encode-path-segment $issue_number)} | format pattern "/repos/{owner}/{repo}/issues/{issue_number}/labels"))
   let req_body = {"labels": $labels} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else if ($input | describe | str starts-with "list") { $input } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: {}, body: $req_body}
 }
 
 # Remove a label from an issue
@@ -9936,10 +10582,14 @@ export def "repos-issues-labels delete" [
 ]: nothing -> table<color: string, default: bool, description: string, id: int, name: string, node_id: string, url: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($owner | is-empty) { error make --unspanned { msg: "path parameter 'owner' must be non-empty" } }
+  if ($repo | is-empty) { error make --unspanned { msg: "path parameter 'repo' must be non-empty" } }
+  if ($issue_number | is-empty) { error make --unspanned { msg: "path parameter 'issue_number' must be non-empty" } }
+  if ($name | is-empty) { error make --unspanned { msg: "path parameter 'name' must be non-empty" } }
   let full_url = (build-url $base ({owner: (encode-path-segment $owner), repo: (encode-path-segment $repo), issue_number: (encode-path-segment $issue_number), name: (encode-path-segment $name)} | format pattern "/repos/{owner}/{repo}/issues/{issue_number}/labels/{name}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
 }
 
 # Unlock an issue
@@ -9963,10 +10613,13 @@ export def "repos-issues-lock unlock" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($owner | is-empty) { error make --unspanned { msg: "path parameter 'owner' must be non-empty" } }
+  if ($repo | is-empty) { error make --unspanned { msg: "path parameter 'repo' must be non-empty" } }
+  if ($issue_number | is-empty) { error make --unspanned { msg: "path parameter 'issue_number' must be non-empty" } }
   let full_url = (build-url $base ({owner: (encode-path-segment $owner), repo: (encode-path-segment $repo), issue_number: (encode-path-segment $issue_number)} | format pattern "/repos/{owner}/{repo}/issues/{issue_number}/lock"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
 }
 
 # Lock an issue
@@ -9992,12 +10645,15 @@ export def "repos-issues-lock lock" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($owner | is-empty) { error make --unspanned { msg: "path parameter 'owner' must be non-empty" } }
+  if ($repo | is-empty) { error make --unspanned { msg: "path parameter 'repo' must be non-empty" } }
+  if ($issue_number | is-empty) { error make --unspanned { msg: "path parameter 'issue_number' must be non-empty" } }
   let full_url = (build-url $base ({owner: (encode-path-segment $owner), repo: (encode-path-segment $repo), issue_number: (encode-path-segment $issue_number)} | format pattern "/repos/{owner}/{repo}/issues/{issue_number}/lock"))
   let req_body = {"lock_reason": $lock_reason} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: {}, body: $req_body}
 }
 
 # List reactions for an issue
@@ -10024,11 +10680,14 @@ export def "repos-issues-reactions list" [
 ]: nothing -> table<content: string, created_at: string, id: int, node_id: string, user: record<avatar_url: string, email: string, events_url: string, followers_url: string, following_url: string, gists_url: string, gravatar_id: string, html_url: string, id: int, login: string, name: string, node_id: string, organizations_url: string, received_events_url: string, repos_url: string, site_admin: bool, starred_at: string, starred_url: string, subscriptions_url: string, type: string, url: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($owner | is-empty) { error make --unspanned { msg: "path parameter 'owner' must be non-empty" } }
+  if ($repo | is-empty) { error make --unspanned { msg: "path parameter 'repo' must be non-empty" } }
+  if ($issue_number | is-empty) { error make --unspanned { msg: "path parameter 'issue_number' must be non-empty" } }
   let qp = [(serialize-qp "content" $content "scalar") (serialize-qp "per_page" $per_page "scalar") (serialize-qp "page" $page "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({owner: (encode-path-segment $owner), repo: (encode-path-segment $repo), issue_number: (encode-path-segment $issue_number)} | format pattern "/repos/{owner}/{repo}/issues/{issue_number}/reactions") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"content": $content, "per_page": $per_page, "page": $page} | compact), body: null}
 }
 
 # Create reaction for an issue
@@ -10054,12 +10713,15 @@ export def "repos-issues-reactions create" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($owner | is-empty) { error make --unspanned { msg: "path parameter 'owner' must be non-empty" } }
+  if ($repo | is-empty) { error make --unspanned { msg: "path parameter 'repo' must be non-empty" } }
+  if ($issue_number | is-empty) { error make --unspanned { msg: "path parameter 'issue_number' must be non-empty" } }
   let full_url = (build-url $base ({owner: (encode-path-segment $owner), repo: (encode-path-segment $repo), issue_number: (encode-path-segment $issue_number)} | format pattern "/repos/{owner}/{repo}/issues/{issue_number}/reactions"))
   let req_body = {"content": $content} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: {}, body: $req_body}
 }
 
 # Delete an issue reaction
@@ -10084,10 +10746,14 @@ export def "repos-issues-reactions delete" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($owner | is-empty) { error make --unspanned { msg: "path parameter 'owner' must be non-empty" } }
+  if ($repo | is-empty) { error make --unspanned { msg: "path parameter 'repo' must be non-empty" } }
+  if ($issue_number | is-empty) { error make --unspanned { msg: "path parameter 'issue_number' must be non-empty" } }
+  if ($reaction_id | is-empty) { error make --unspanned { msg: "path parameter 'reaction_id' must be non-empty" } }
   let full_url = (build-url $base ({owner: (encode-path-segment $owner), repo: (encode-path-segment $repo), issue_number: (encode-path-segment $issue_number), reaction_id: (encode-path-segment $reaction_id)} | format pattern "/repos/{owner}/{repo}/issues/{issue_number}/reactions/{reaction_id}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
 }
 
 # List timeline events for an issue
@@ -10113,11 +10779,14 @@ export def "repos-issues-timeline list-events" [
 ]: nothing -> list<record> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($owner | is-empty) { error make --unspanned { msg: "path parameter 'owner' must be non-empty" } }
+  if ($repo | is-empty) { error make --unspanned { msg: "path parameter 'repo' must be non-empty" } }
+  if ($issue_number | is-empty) { error make --unspanned { msg: "path parameter 'issue_number' must be non-empty" } }
   let qp = [(serialize-qp "per_page" $per_page "scalar") (serialize-qp "page" $page "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({owner: (encode-path-segment $owner), repo: (encode-path-segment $repo), issue_number: (encode-path-segment $issue_number)} | format pattern "/repos/{owner}/{repo}/issues/{issue_number}/timeline") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"per_page": $per_page, "page": $page} | compact), body: null}
 }
 
 # List deploy keys
@@ -10142,11 +10811,13 @@ export def "repos-keys list-deploy" [
 ]: nothing -> table<created_at: string, id: int, key: string, read_only: bool, title: string, url: string, verified: bool> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($owner | is-empty) { error make --unspanned { msg: "path parameter 'owner' must be non-empty" } }
+  if ($repo | is-empty) { error make --unspanned { msg: "path parameter 'repo' must be non-empty" } }
   let qp = [(serialize-qp "per_page" $per_page "scalar") (serialize-qp "page" $page "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({owner: (encode-path-segment $owner), repo: (encode-path-segment $repo)} | format pattern "/repos/{owner}/{repo}/keys") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"per_page": $per_page, "page": $page} | compact), body: null}
 }
 
 # Create a deploy key
@@ -10173,12 +10844,14 @@ export def "repos-keys create-deploy" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($owner | is-empty) { error make --unspanned { msg: "path parameter 'owner' must be non-empty" } }
+  if ($repo | is-empty) { error make --unspanned { msg: "path parameter 'repo' must be non-empty" } }
   let full_url = (build-url $base ({owner: (encode-path-segment $owner), repo: (encode-path-segment $repo)} | format pattern "/repos/{owner}/{repo}/keys"))
   let req_body = {"key": $key, "read_only": $read_only, "title": $title} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: {}, body: $req_body}
 }
 
 # Delete a deploy key
@@ -10202,10 +10875,13 @@ export def "repos-keys delete-deploy" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($owner | is-empty) { error make --unspanned { msg: "path parameter 'owner' must be non-empty" } }
+  if ($repo | is-empty) { error make --unspanned { msg: "path parameter 'repo' must be non-empty" } }
+  if ($key_id | is-empty) { error make --unspanned { msg: "path parameter 'key_id' must be non-empty" } }
   let full_url = (build-url $base ({owner: (encode-path-segment $owner), repo: (encode-path-segment $repo), key_id: (encode-path-segment $key_id)} | format pattern "/repos/{owner}/{repo}/keys/{key_id}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
 }
 
 # Get a deploy key
@@ -10229,10 +10905,13 @@ export def "repos-keys get-deploy" [
 ]: nothing -> record<created_at: string, id: int, key: string, read_only: bool, title: string, url: string, verified: bool> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($owner | is-empty) { error make --unspanned { msg: "path parameter 'owner' must be non-empty" } }
+  if ($repo | is-empty) { error make --unspanned { msg: "path parameter 'repo' must be non-empty" } }
+  if ($key_id | is-empty) { error make --unspanned { msg: "path parameter 'key_id' must be non-empty" } }
   let full_url = (build-url $base ({owner: (encode-path-segment $owner), repo: (encode-path-segment $repo), key_id: (encode-path-segment $key_id)} | format pattern "/repos/{owner}/{repo}/keys/{key_id}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
 }
 
 # List labels for a repository
@@ -10257,11 +10936,13 @@ export def "repos-labels list-issues" [
 ]: nothing -> table<color: string, default: bool, description: string, id: int, name: string, node_id: string, url: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($owner | is-empty) { error make --unspanned { msg: "path parameter 'owner' must be non-empty" } }
+  if ($repo | is-empty) { error make --unspanned { msg: "path parameter 'repo' must be non-empty" } }
   let qp = [(serialize-qp "per_page" $per_page "scalar") (serialize-qp "page" $page "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({owner: (encode-path-segment $owner), repo: (encode-path-segment $repo)} | format pattern "/repos/{owner}/{repo}/labels") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"per_page": $per_page, "page": $page} | compact), body: null}
 }
 
 # Create a label
@@ -10288,12 +10969,14 @@ export def "repos-labels create-issues" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($owner | is-empty) { error make --unspanned { msg: "path parameter 'owner' must be non-empty" } }
+  if ($repo | is-empty) { error make --unspanned { msg: "path parameter 'repo' must be non-empty" } }
   let full_url = (build-url $base ({owner: (encode-path-segment $owner), repo: (encode-path-segment $repo)} | format pattern "/repos/{owner}/{repo}/labels"))
   let req_body = {"color": $color, "description": $description, "name": $name} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: {}, body: $req_body}
 }
 
 # Delete a label
@@ -10317,10 +11000,13 @@ export def "repos-labels delete-issues" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($owner | is-empty) { error make --unspanned { msg: "path parameter 'owner' must be non-empty" } }
+  if ($repo | is-empty) { error make --unspanned { msg: "path parameter 'repo' must be non-empty" } }
+  if ($name | is-empty) { error make --unspanned { msg: "path parameter 'name' must be non-empty" } }
   let full_url = (build-url $base ({owner: (encode-path-segment $owner), repo: (encode-path-segment $repo), name: (encode-path-segment $name)} | format pattern "/repos/{owner}/{repo}/labels/{name}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
 }
 
 # Get a label
@@ -10344,10 +11030,13 @@ export def "repos-labels get-issues" [
 ]: nothing -> record<color: string, default: bool, description: string, id: int, name: string, node_id: string, url: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($owner | is-empty) { error make --unspanned { msg: "path parameter 'owner' must be non-empty" } }
+  if ($repo | is-empty) { error make --unspanned { msg: "path parameter 'repo' must be non-empty" } }
+  if ($name | is-empty) { error make --unspanned { msg: "path parameter 'name' must be non-empty" } }
   let full_url = (build-url $base ({owner: (encode-path-segment $owner), repo: (encode-path-segment $repo), name: (encode-path-segment $name)} | format pattern "/repos/{owner}/{repo}/labels/{name}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
 }
 
 # Update a label
@@ -10375,12 +11064,15 @@ export def "repos-labels update-issues" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($owner | is-empty) { error make --unspanned { msg: "path parameter 'owner' must be non-empty" } }
+  if ($repo | is-empty) { error make --unspanned { msg: "path parameter 'repo' must be non-empty" } }
+  if ($name | is-empty) { error make --unspanned { msg: "path parameter 'name' must be non-empty" } }
   let full_url = (build-url $base ({owner: (encode-path-segment $owner), repo: (encode-path-segment $repo), name: (encode-path-segment $name)} | format pattern "/repos/{owner}/{repo}/labels/{name}"))
   let req_body = {"color": $color, "description": $description, "new_name": $new_name} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "patch" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body
+  do-request "patch" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: {}, body: $req_body}
 }
 
 # List repository languages
@@ -10403,10 +11095,12 @@ export def "repos-languages list" [
 ]: nothing -> record {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($owner | is-empty) { error make --unspanned { msg: "path parameter 'owner' must be non-empty" } }
+  if ($repo | is-empty) { error make --unspanned { msg: "path parameter 'repo' must be non-empty" } }
   let full_url = (build-url $base ({owner: (encode-path-segment $owner), repo: (encode-path-segment $repo)} | format pattern "/repos/{owner}/{repo}/languages"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
 }
 
 # Get the license for a repository
@@ -10429,10 +11123,12 @@ export def "repos-license get" [
 ]: nothing -> record<_links: record<git: string, html: string, self: string>, content: string, download_url: string, encoding: string, git_url: string, html_url: string, license: record<html_url: string, key: string, name: string, node_id: string, spdx_id: string, url: string>, name: string, path: string, sha: string, size: int, type: string, url: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($owner | is-empty) { error make --unspanned { msg: "path parameter 'owner' must be non-empty" } }
+  if ($repo | is-empty) { error make --unspanned { msg: "path parameter 'repo' must be non-empty" } }
   let full_url = (build-url $base ({owner: (encode-path-segment $owner), repo: (encode-path-segment $repo)} | format pattern "/repos/{owner}/{repo}/license"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
 }
 
 # Merge a branch
@@ -10459,12 +11155,14 @@ export def "repos-merges create" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($owner | is-empty) { error make --unspanned { msg: "path parameter 'owner' must be non-empty" } }
+  if ($repo | is-empty) { error make --unspanned { msg: "path parameter 'repo' must be non-empty" } }
   let full_url = (build-url $base ({owner: (encode-path-segment $owner), repo: (encode-path-segment $repo)} | format pattern "/repos/{owner}/{repo}/merges"))
   let req_body = {"base": $body_base, "commit_message": $commit_message, "head": $head} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: {}, body: $req_body}
 }
 
 # List milestones
@@ -10492,11 +11190,13 @@ export def "repos-milestones list-issues" [
 ]: nothing -> table<closed_at: string, closed_issues: int, created_at: string, creator: record<avatar_url: string, email: string, events_url: string, followers_url: string, following_url: string, gists_url: string, gravatar_id: string, html_url: string, id: int, login: string, name: string, node_id: string, organizations_url: string, received_events_url: string, repos_url: string, site_admin: bool, starred_at: string, starred_url: string, subscriptions_url: string, type: string, url: string>, description: string, due_on: string, html_url: string, id: int, labels_url: string, node_id: string, number: int, open_issues: int, state: string, title: string, updated_at: string, url: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($owner | is-empty) { error make --unspanned { msg: "path parameter 'owner' must be non-empty" } }
+  if ($repo | is-empty) { error make --unspanned { msg: "path parameter 'repo' must be non-empty" } }
   let qp = [(serialize-qp "state" $state "scalar") (serialize-qp "sort" $qp_sort "scalar") (serialize-qp "direction" $direction "scalar") (serialize-qp "per_page" $per_page "scalar") (serialize-qp "page" $page "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({owner: (encode-path-segment $owner), repo: (encode-path-segment $repo)} | format pattern "/repos/{owner}/{repo}/milestones") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"state": $state, "sort": $qp_sort, "direction": $direction, "per_page": $per_page, "page": $page} | compact), body: null}
 }
 
 # Create a milestone
@@ -10524,12 +11224,14 @@ export def "repos-milestones create-issues" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($owner | is-empty) { error make --unspanned { msg: "path parameter 'owner' must be non-empty" } }
+  if ($repo | is-empty) { error make --unspanned { msg: "path parameter 'repo' must be non-empty" } }
   let full_url = (build-url $base ({owner: (encode-path-segment $owner), repo: (encode-path-segment $repo)} | format pattern "/repos/{owner}/{repo}/milestones"))
   let req_body = {"description": $description, "due_on": $due_on, "state": $state, "title": $title} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: {}, body: $req_body}
 }
 
 # Delete a milestone
@@ -10553,10 +11255,13 @@ export def "repos-milestones delete-issues" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($owner | is-empty) { error make --unspanned { msg: "path parameter 'owner' must be non-empty" } }
+  if ($repo | is-empty) { error make --unspanned { msg: "path parameter 'repo' must be non-empty" } }
+  if ($milestone_number | is-empty) { error make --unspanned { msg: "path parameter 'milestone_number' must be non-empty" } }
   let full_url = (build-url $base ({owner: (encode-path-segment $owner), repo: (encode-path-segment $repo), milestone_number: (encode-path-segment $milestone_number)} | format pattern "/repos/{owner}/{repo}/milestones/{milestone_number}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
 }
 
 # Get a milestone
@@ -10580,10 +11285,13 @@ export def "repos-milestones get-issues" [
 ]: nothing -> record<closed_at: string, closed_issues: int, created_at: string, creator: record<avatar_url: string, email: string, events_url: string, followers_url: string, following_url: string, gists_url: string, gravatar_id: string, html_url: string, id: int, login: string, name: string, node_id: string, organizations_url: string, received_events_url: string, repos_url: string, site_admin: bool, starred_at: string, starred_url: string, subscriptions_url: string, type: string, url: string>, description: string, due_on: string, html_url: string, id: int, labels_url: string, node_id: string, number: int, open_issues: int, state: string, title: string, updated_at: string, url: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($owner | is-empty) { error make --unspanned { msg: "path parameter 'owner' must be non-empty" } }
+  if ($repo | is-empty) { error make --unspanned { msg: "path parameter 'repo' must be non-empty" } }
+  if ($milestone_number | is-empty) { error make --unspanned { msg: "path parameter 'milestone_number' must be non-empty" } }
   let full_url = (build-url $base ({owner: (encode-path-segment $owner), repo: (encode-path-segment $repo), milestone_number: (encode-path-segment $milestone_number)} | format pattern "/repos/{owner}/{repo}/milestones/{milestone_number}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
 }
 
 # Update a milestone
@@ -10612,12 +11320,15 @@ export def "repos-milestones update-issues" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($owner | is-empty) { error make --unspanned { msg: "path parameter 'owner' must be non-empty" } }
+  if ($repo | is-empty) { error make --unspanned { msg: "path parameter 'repo' must be non-empty" } }
+  if ($milestone_number | is-empty) { error make --unspanned { msg: "path parameter 'milestone_number' must be non-empty" } }
   let full_url = (build-url $base ({owner: (encode-path-segment $owner), repo: (encode-path-segment $repo), milestone_number: (encode-path-segment $milestone_number)} | format pattern "/repos/{owner}/{repo}/milestones/{milestone_number}"))
   let req_body = {"description": $description, "due_on": $due_on, "state": $state, "title": $title} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "patch" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body
+  do-request "patch" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: {}, body: $req_body}
 }
 
 # List labels for issues in a milestone
@@ -10643,11 +11354,14 @@ export def "repos-milestones-labels list-issues" [
 ]: nothing -> table<color: string, default: bool, description: string, id: int, name: string, node_id: string, url: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($owner | is-empty) { error make --unspanned { msg: "path parameter 'owner' must be non-empty" } }
+  if ($repo | is-empty) { error make --unspanned { msg: "path parameter 'repo' must be non-empty" } }
+  if ($milestone_number | is-empty) { error make --unspanned { msg: "path parameter 'milestone_number' must be non-empty" } }
   let qp = [(serialize-qp "per_page" $per_page "scalar") (serialize-qp "page" $page "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({owner: (encode-path-segment $owner), repo: (encode-path-segment $repo), milestone_number: (encode-path-segment $milestone_number)} | format pattern "/repos/{owner}/{repo}/milestones/{milestone_number}/labels") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"per_page": $per_page, "page": $page} | compact), body: null}
 }
 
 # List repository notifications for the authenticated user
@@ -10676,11 +11390,13 @@ export def "repos-notifications list-activity-for-authenticated-user" [
 ]: nothing -> table<id: string, last_read_at: string, reason: string, repository: record<allow_forking: bool, anonymous_access_enabled: bool, archive_url: string, archived: bool, assignees_url: string, blobs_url: string, branches_url: string, clone_url: string, code_of_conduct: record, collaborators_url: string, comments_url: string, commits_url: string, compare_url: string, contents_url: string, contributors_url: string, created_at: string, default_branch: string, delete_branch_on_merge: bool, deployments_url: string, description: string, disabled: bool, downloads_url: string, events_url: string, fork: bool, forks: int, forks_count: int, forks_url: string, full_name: string, git_commits_url: string, git_refs_url: string, git_tags_url: string, git_url: string, has_downloads: bool, has_issues: bool, has_pages: bool, has_projects: bool, has_wiki: bool, homepage: string, hooks_url: string, html_url: string, id: int, is_template: bool, issue_comment_url: string, issue_events_url: string, issues_url: string, keys_url: string, labels_url: string, language: string, languages_url: string, license: record, merges_url: string, milestones_url: string, mirror_url: string, name: string, network_count: int, node_id: string, notifications_url: string, open_issues: int, open_issues_count: int, owner: record, permissions: record, private: bool, pulls_url: string, pushed_at: string, releases_url: string, size: int, ssh_url: string, stargazers_count: int, stargazers_url: string, statuses_url: string, subscribers_count: int, subscribers_url: string, subscription_url: string, svn_url: string, tags_url: string, teams_url: string, template_repository: record, topics: list, trees_url: string, updated_at: string, url: string, visibility: string, watchers: int, watchers_count: int>, subject: record<latest_comment_url: string, title: string, type: string, url: string>, subscription_url: string, unread: bool, updated_at: string, url: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($owner | is-empty) { error make --unspanned { msg: "path parameter 'owner' must be non-empty" } }
+  if ($repo | is-empty) { error make --unspanned { msg: "path parameter 'repo' must be non-empty" } }
   let qp = [(serialize-qp "all" $all "scalar") (serialize-qp "participating" $participating "scalar") (serialize-qp "since" $since "scalar") (serialize-qp "before" $before "scalar") (serialize-qp "per_page" $per_page "scalar") (serialize-qp "page" $page "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({owner: (encode-path-segment $owner), repo: (encode-path-segment $repo)} | format pattern "/repos/{owner}/{repo}/notifications") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"all": $all, "participating": $participating, "since": $since, "before": $before, "per_page": $per_page, "page": $page} | compact), body: null}
 }
 
 # Mark repository notifications as read
@@ -10705,12 +11421,14 @@ export def "repos-notifications get-activity-mark-as" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($owner | is-empty) { error make --unspanned { msg: "path parameter 'owner' must be non-empty" } }
+  if ($repo | is-empty) { error make --unspanned { msg: "path parameter 'repo' must be non-empty" } }
   let full_url = (build-url $base ({owner: (encode-path-segment $owner), repo: (encode-path-segment $repo)} | format pattern "/repos/{owner}/{repo}/notifications"))
   let req_body = {"last_read_at": $last_read_at} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: {}, body: $req_body}
 }
 
 # Delete a GitHub Enterprise Server Pages site
@@ -10733,10 +11451,12 @@ export def "repos-pages delete-site" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($owner | is-empty) { error make --unspanned { msg: "path parameter 'owner' must be non-empty" } }
+  if ($repo | is-empty) { error make --unspanned { msg: "path parameter 'repo' must be non-empty" } }
   let full_url = (build-url $base ({owner: (encode-path-segment $owner), repo: (encode-path-segment $repo)} | format pattern "/repos/{owner}/{repo}/pages"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
 }
 
 # Get a GitHub Enterprise Server Pages site
@@ -10759,10 +11479,12 @@ export def "repos-pages get" [
 ]: nothing -> record<cname: string, custom_404: bool, html_url: string, https_certificate: record<description: string, domains: list<any>, expires_at: string, state: string>, https_enforced: bool, public: bool, source: record<branch: string, path: string>, status: string, url: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($owner | is-empty) { error make --unspanned { msg: "path parameter 'owner' must be non-empty" } }
+  if ($repo | is-empty) { error make --unspanned { msg: "path parameter 'repo' must be non-empty" } }
   let full_url = (build-url $base ({owner: (encode-path-segment $owner), repo: (encode-path-segment $repo)} | format pattern "/repos/{owner}/{repo}/pages"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
 }
 
 # Create a GitHub Pages site
@@ -10788,12 +11510,14 @@ export def "repos-pages create-site" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($owner | is-empty) { error make --unspanned { msg: "path parameter 'owner' must be non-empty" } }
+  if ($repo | is-empty) { error make --unspanned { msg: "path parameter 'repo' must be non-empty" } }
   let full_url = (build-url $base ({owner: (encode-path-segment $owner), repo: (encode-path-segment $repo)} | format pattern "/repos/{owner}/{repo}/pages"))
   let req_body = {"source": $body_source} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: {}, body: $req_body}
 }
 
 # Update information about a GitHub Pages site
@@ -10820,12 +11544,14 @@ export def "repos-pages update-information-about-site" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($owner | is-empty) { error make --unspanned { msg: "path parameter 'owner' must be non-empty" } }
+  if ($repo | is-empty) { error make --unspanned { msg: "path parameter 'repo' must be non-empty" } }
   let full_url = (build-url $base ({owner: (encode-path-segment $owner), repo: (encode-path-segment $repo)} | format pattern "/repos/{owner}/{repo}/pages"))
   let req_body = {"https_enforced": $https_enforced, "public": $public, "source": $body_source} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: {}, body: $req_body}
 }
 
 # List GitHub Enterprise Server Pages builds
@@ -10850,11 +11576,13 @@ export def "repos-pages-builds list" [
 ]: nothing -> table<commit: string, created_at: string, duration: int, error: record<message: string>, pusher: record<avatar_url: string, email: string, events_url: string, followers_url: string, following_url: string, gists_url: string, gravatar_id: string, html_url: string, id: int, login: string, name: string, node_id: string, organizations_url: string, received_events_url: string, repos_url: string, site_admin: bool, starred_at: string, starred_url: string, subscriptions_url: string, type: string, url: string>, status: string, updated_at: string, url: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($owner | is-empty) { error make --unspanned { msg: "path parameter 'owner' must be non-empty" } }
+  if ($repo | is-empty) { error make --unspanned { msg: "path parameter 'repo' must be non-empty" } }
   let qp = [(serialize-qp "per_page" $per_page "scalar") (serialize-qp "page" $page "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({owner: (encode-path-segment $owner), repo: (encode-path-segment $repo)} | format pattern "/repos/{owner}/{repo}/pages/builds") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"per_page": $per_page, "page": $page} | compact), body: null}
 }
 
 # Request a GitHub Enterprise Server Pages build
@@ -10877,10 +11605,12 @@ export def "repos-pages-builds request" [
 ]: nothing -> record<status: string, url: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($owner | is-empty) { error make --unspanned { msg: "path parameter 'owner' must be non-empty" } }
+  if ($repo | is-empty) { error make --unspanned { msg: "path parameter 'repo' must be non-empty" } }
   let full_url = (build-url $base ({owner: (encode-path-segment $owner), repo: (encode-path-segment $repo)} | format pattern "/repos/{owner}/{repo}/pages/builds"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
 }
 
 # Get latest Pages build
@@ -10903,10 +11633,12 @@ export def "repos-pages-builds-latest get" [
 ]: nothing -> record<commit: string, created_at: string, duration: int, error: record<message: string>, pusher: record<avatar_url: string, email: string, events_url: string, followers_url: string, following_url: string, gists_url: string, gravatar_id: string, html_url: string, id: int, login: string, name: string, node_id: string, organizations_url: string, received_events_url: string, repos_url: string, site_admin: bool, starred_at: string, starred_url: string, subscriptions_url: string, type: string, url: string>, status: string, updated_at: string, url: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($owner | is-empty) { error make --unspanned { msg: "path parameter 'owner' must be non-empty" } }
+  if ($repo | is-empty) { error make --unspanned { msg: "path parameter 'repo' must be non-empty" } }
   let full_url = (build-url $base ({owner: (encode-path-segment $owner), repo: (encode-path-segment $repo)} | format pattern "/repos/{owner}/{repo}/pages/builds/latest"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
 }
 
 # Get GitHub Enterprise Server Pages build
@@ -10930,10 +11662,13 @@ export def "repos-pages-builds get" [
 ]: nothing -> record<commit: string, created_at: string, duration: int, error: record<message: string>, pusher: record<avatar_url: string, email: string, events_url: string, followers_url: string, following_url: string, gists_url: string, gravatar_id: string, html_url: string, id: int, login: string, name: string, node_id: string, organizations_url: string, received_events_url: string, repos_url: string, site_admin: bool, starred_at: string, starred_url: string, subscriptions_url: string, type: string, url: string>, status: string, updated_at: string, url: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($owner | is-empty) { error make --unspanned { msg: "path parameter 'owner' must be non-empty" } }
+  if ($repo | is-empty) { error make --unspanned { msg: "path parameter 'repo' must be non-empty" } }
+  if ($build_id | is-empty) { error make --unspanned { msg: "path parameter 'build_id' must be non-empty" } }
   let full_url = (build-url $base ({owner: (encode-path-segment $owner), repo: (encode-path-segment $repo), build_id: (encode-path-segment $build_id)} | format pattern "/repos/{owner}/{repo}/pages/builds/{build_id}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
 }
 
 # List pre-receive hooks for a repository
@@ -10960,11 +11695,13 @@ export def "repos-pre-receive-hooks list-enterprise-admin" [
 ]: nothing -> table<configuration_url: string, enforcement: string, id: int, name: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($owner | is-empty) { error make --unspanned { msg: "path parameter 'owner' must be non-empty" } }
+  if ($repo | is-empty) { error make --unspanned { msg: "path parameter 'repo' must be non-empty" } }
   let qp = [(serialize-qp "per_page" $per_page "scalar") (serialize-qp "page" $page "scalar") (serialize-qp "direction" $direction "scalar") (serialize-qp "sort" $qp_sort "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({owner: (encode-path-segment $owner), repo: (encode-path-segment $repo)} | format pattern "/repos/{owner}/{repo}/pre-receive-hooks") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"per_page": $per_page, "page": $page, "direction": $direction, "sort": $qp_sort} | compact), body: null}
 }
 
 # Remove pre-receive hook enforcement for a repository
@@ -10988,10 +11725,13 @@ export def "repos-pre-receive-hooks delete-enterprise-admin-enforcement" [
 ]: nothing -> record<configuration_url: string, enforcement: string, id: int, name: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($owner | is-empty) { error make --unspanned { msg: "path parameter 'owner' must be non-empty" } }
+  if ($repo | is-empty) { error make --unspanned { msg: "path parameter 'repo' must be non-empty" } }
+  if ($pre_receive_hook_id | is-empty) { error make --unspanned { msg: "path parameter 'pre_receive_hook_id' must be non-empty" } }
   let full_url = (build-url $base ({owner: (encode-path-segment $owner), repo: (encode-path-segment $repo), pre_receive_hook_id: (encode-path-segment $pre_receive_hook_id)} | format pattern "/repos/{owner}/{repo}/pre-receive-hooks/{pre_receive_hook_id}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
 }
 
 # Get a pre-receive hook for a repository
@@ -11015,10 +11755,13 @@ export def "repos-pre-receive-hooks get-enterprise-admin" [
 ]: nothing -> record<configuration_url: string, enforcement: string, id: int, name: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($owner | is-empty) { error make --unspanned { msg: "path parameter 'owner' must be non-empty" } }
+  if ($repo | is-empty) { error make --unspanned { msg: "path parameter 'repo' must be non-empty" } }
+  if ($pre_receive_hook_id | is-empty) { error make --unspanned { msg: "path parameter 'pre_receive_hook_id' must be non-empty" } }
   let full_url = (build-url $base ({owner: (encode-path-segment $owner), repo: (encode-path-segment $repo), pre_receive_hook_id: (encode-path-segment $pre_receive_hook_id)} | format pattern "/repos/{owner}/{repo}/pre-receive-hooks/{pre_receive_hook_id}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
 }
 
 # Update pre-receive hook enforcement for a repository
@@ -11044,12 +11787,15 @@ export def "repos-pre-receive-hooks update-enterprise-admin-enforcement" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($owner | is-empty) { error make --unspanned { msg: "path parameter 'owner' must be non-empty" } }
+  if ($repo | is-empty) { error make --unspanned { msg: "path parameter 'repo' must be non-empty" } }
+  if ($pre_receive_hook_id | is-empty) { error make --unspanned { msg: "path parameter 'pre_receive_hook_id' must be non-empty" } }
   let full_url = (build-url $base ({owner: (encode-path-segment $owner), repo: (encode-path-segment $repo), pre_receive_hook_id: (encode-path-segment $pre_receive_hook_id)} | format pattern "/repos/{owner}/{repo}/pre-receive-hooks/{pre_receive_hook_id}"))
   let req_body = {"enforcement": $enforcement} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "patch" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body
+  do-request "patch" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: {}, body: $req_body}
 }
 
 # List repository projects
@@ -11075,11 +11821,13 @@ export def "repos-projects list" [
 ]: nothing -> table<body: string, columns_url: string, created_at: string, creator: record<avatar_url: string, email: string, events_url: string, followers_url: string, following_url: string, gists_url: string, gravatar_id: string, html_url: string, id: int, login: string, name: string, node_id: string, organizations_url: string, received_events_url: string, repos_url: string, site_admin: bool, starred_at: string, starred_url: string, subscriptions_url: string, type: string, url: string>, html_url: string, id: int, name: string, node_id: string, number: int, organization_permission: string, owner_url: string, private: bool, state: string, updated_at: string, url: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($owner | is-empty) { error make --unspanned { msg: "path parameter 'owner' must be non-empty" } }
+  if ($repo | is-empty) { error make --unspanned { msg: "path parameter 'repo' must be non-empty" } }
   let qp = [(serialize-qp "state" $state "scalar") (serialize-qp "per_page" $per_page "scalar") (serialize-qp "page" $page "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({owner: (encode-path-segment $owner), repo: (encode-path-segment $repo)} | format pattern "/repos/{owner}/{repo}/projects") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"state": $state, "per_page": $per_page, "page": $page} | compact), body: null}
 }
 
 # Create a repository project
@@ -11105,12 +11853,14 @@ export def "repos-projects create" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($owner | is-empty) { error make --unspanned { msg: "path parameter 'owner' must be non-empty" } }
+  if ($repo | is-empty) { error make --unspanned { msg: "path parameter 'repo' must be non-empty" } }
   let full_url = (build-url $base ({owner: (encode-path-segment $owner), repo: (encode-path-segment $repo)} | format pattern "/repos/{owner}/{repo}/projects"))
   let req_body = {"body": $body, "name": $name} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: {}, body: $req_body}
 }
 
 # List pull requests
@@ -11140,11 +11890,13 @@ export def "repos-pulls list" [
 ]: nothing -> table<_links: record<comments: record, commits: record, html: record, issue: record, review_comment: record, review_comments: record, self: record, statuses: record>, active_lock_reason: string, assignee: record<avatar_url: string, email: string, events_url: string, followers_url: string, following_url: string, gists_url: string, gravatar_id: string, html_url: string, id: int, login: string, name: string, node_id: string, organizations_url: string, received_events_url: string, repos_url: string, site_admin: bool, starred_at: string, starred_url: string, subscriptions_url: string, type: string, url: string>, assignees: list<record>, author_association: string, base: record<label: string, ref: string, repo: record, sha: string, user: record>, body: string, closed_at: string, comments_url: string, commits_url: string, created_at: string, diff_url: string, draft: bool, head: record<label: string, ref: string, repo: record, sha: string, user: record>, html_url: string, id: int, issue_url: string, labels: list<record>, locked: bool, merge_commit_sha: string, merged_at: string, milestone: record<closed_at: string, closed_issues: int, created_at: string, creator: record, description: string, due_on: string, html_url: string, id: int, labels_url: string, node_id: string, number: int, open_issues: int, state: string, title: string, updated_at: string, url: string>, node_id: string, number: int, patch_url: string, requested_reviewers: list<record>, requested_teams: list<record>, review_comment_url: string, review_comments_url: string, state: string, statuses_url: string, title: string, updated_at: string, url: string, user: record<avatar_url: string, email: string, events_url: string, followers_url: string, following_url: string, gists_url: string, gravatar_id: string, html_url: string, id: int, login: string, name: string, node_id: string, organizations_url: string, received_events_url: string, repos_url: string, site_admin: bool, starred_at: string, starred_url: string, subscriptions_url: string, type: string, url: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($owner | is-empty) { error make --unspanned { msg: "path parameter 'owner' must be non-empty" } }
+  if ($repo | is-empty) { error make --unspanned { msg: "path parameter 'repo' must be non-empty" } }
   let qp = [(serialize-qp "state" $state "scalar") (serialize-qp "head" $head "scalar") (serialize-qp "base" $qp_base "scalar") (serialize-qp "sort" $qp_sort "scalar") (serialize-qp "direction" $direction "scalar") (serialize-qp "per_page" $per_page "scalar") (serialize-qp "page" $page "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({owner: (encode-path-segment $owner), repo: (encode-path-segment $repo)} | format pattern "/repos/{owner}/{repo}/pulls") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"state": $state, "head": $head, "base": $qp_base, "sort": $qp_sort, "direction": $direction, "per_page": $per_page, "page": $page} | compact), body: null}
 }
 
 # Create a pull request
@@ -11175,12 +11927,14 @@ export def "repos-pulls create" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($owner | is-empty) { error make --unspanned { msg: "path parameter 'owner' must be non-empty" } }
+  if ($repo | is-empty) { error make --unspanned { msg: "path parameter 'repo' must be non-empty" } }
   let full_url = (build-url $base ({owner: (encode-path-segment $owner), repo: (encode-path-segment $repo)} | format pattern "/repos/{owner}/{repo}/pulls"))
   let req_body = {"base": $body_base, "body": $body, "draft": $draft, "head": $head, "issue": $issue, "maintainer_can_modify": $maintainer_can_modify, "title": $title} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: {}, body: $req_body}
 }
 
 # List review comments in a repository
@@ -11208,11 +11962,13 @@ export def "repos-pulls-comments list" [
 ]: nothing -> table<_links: record<html: record, pull_request: record, self: record>, author_association: string, body: string, body_html: string, body_text: string, commit_id: string, created_at: string, diff_hunk: string, html_url: string, id: int, in_reply_to_id: int, line: int, node_id: string, original_commit_id: string, original_line: int, original_position: int, original_start_line: int, path: string, position: int, pull_request_review_id: int, pull_request_url: string, reactions: record<_1: int, _1: int, confused: int, eyes: int, heart: int, hooray: int, laugh: int, rocket: int, total_count: int, url: string>, side: string, start_line: int, start_side: string, updated_at: string, url: string, user: record<avatar_url: string, email: string, events_url: string, followers_url: string, following_url: string, gists_url: string, gravatar_id: string, html_url: string, id: int, login: string, name: string, node_id: string, organizations_url: string, received_events_url: string, repos_url: string, site_admin: bool, starred_at: string, starred_url: string, subscriptions_url: string, type: string, url: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($owner | is-empty) { error make --unspanned { msg: "path parameter 'owner' must be non-empty" } }
+  if ($repo | is-empty) { error make --unspanned { msg: "path parameter 'repo' must be non-empty" } }
   let qp = [(serialize-qp "sort" $qp_sort "scalar") (serialize-qp "direction" $direction "scalar") (serialize-qp "since" $since "scalar") (serialize-qp "per_page" $per_page "scalar") (serialize-qp "page" $page "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({owner: (encode-path-segment $owner), repo: (encode-path-segment $repo)} | format pattern "/repos/{owner}/{repo}/pulls/comments") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"sort": $qp_sort, "direction": $direction, "since": $since, "per_page": $per_page, "page": $page} | compact), body: null}
 }
 
 # Delete a review comment for a pull request
@@ -11236,10 +11992,13 @@ export def "repos-pulls-comments delete-review" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($owner | is-empty) { error make --unspanned { msg: "path parameter 'owner' must be non-empty" } }
+  if ($repo | is-empty) { error make --unspanned { msg: "path parameter 'repo' must be non-empty" } }
+  if ($comment_id | is-empty) { error make --unspanned { msg: "path parameter 'comment_id' must be non-empty" } }
   let full_url = (build-url $base ({owner: (encode-path-segment $owner), repo: (encode-path-segment $repo), comment_id: (encode-path-segment $comment_id)} | format pattern "/repos/{owner}/{repo}/pulls/comments/{comment_id}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
 }
 
 # Get a review comment for a pull request
@@ -11263,10 +12022,13 @@ export def "repos-pulls-comments get-review" [
 ]: nothing -> record<_links: record<html: record<href: string>, pull_request: record<href: string>, self: record<href: string>>, author_association: string, body: string, body_html: string, body_text: string, commit_id: string, created_at: string, diff_hunk: string, html_url: string, id: int, in_reply_to_id: int, line: int, node_id: string, original_commit_id: string, original_line: int, original_position: int, original_start_line: int, path: string, position: int, pull_request_review_id: int, pull_request_url: string, reactions: record<_1: int, _1: int, confused: int, eyes: int, heart: int, hooray: int, laugh: int, rocket: int, total_count: int, url: string>, side: string, start_line: int, start_side: string, updated_at: string, url: string, user: record<avatar_url: string, email: string, events_url: string, followers_url: string, following_url: string, gists_url: string, gravatar_id: string, html_url: string, id: int, login: string, name: string, node_id: string, organizations_url: string, received_events_url: string, repos_url: string, site_admin: bool, starred_at: string, starred_url: string, subscriptions_url: string, type: string, url: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($owner | is-empty) { error make --unspanned { msg: "path parameter 'owner' must be non-empty" } }
+  if ($repo | is-empty) { error make --unspanned { msg: "path parameter 'repo' must be non-empty" } }
+  if ($comment_id | is-empty) { error make --unspanned { msg: "path parameter 'comment_id' must be non-empty" } }
   let full_url = (build-url $base ({owner: (encode-path-segment $owner), repo: (encode-path-segment $repo), comment_id: (encode-path-segment $comment_id)} | format pattern "/repos/{owner}/{repo}/pulls/comments/{comment_id}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
 }
 
 # Update a review comment for a pull request
@@ -11292,12 +12054,15 @@ export def "repos-pulls-comments update-review" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($owner | is-empty) { error make --unspanned { msg: "path parameter 'owner' must be non-empty" } }
+  if ($repo | is-empty) { error make --unspanned { msg: "path parameter 'repo' must be non-empty" } }
+  if ($comment_id | is-empty) { error make --unspanned { msg: "path parameter 'comment_id' must be non-empty" } }
   let full_url = (build-url $base ({owner: (encode-path-segment $owner), repo: (encode-path-segment $repo), comment_id: (encode-path-segment $comment_id)} | format pattern "/repos/{owner}/{repo}/pulls/comments/{comment_id}"))
   let req_body = {"body": $body} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "patch" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body
+  do-request "patch" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: {}, body: $req_body}
 }
 
 # List reactions for a pull request review comment
@@ -11324,11 +12089,14 @@ export def "repos-pulls-comments-reactions list-for-request-review" [
 ]: nothing -> table<content: string, created_at: string, id: int, node_id: string, user: record<avatar_url: string, email: string, events_url: string, followers_url: string, following_url: string, gists_url: string, gravatar_id: string, html_url: string, id: int, login: string, name: string, node_id: string, organizations_url: string, received_events_url: string, repos_url: string, site_admin: bool, starred_at: string, starred_url: string, subscriptions_url: string, type: string, url: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($owner | is-empty) { error make --unspanned { msg: "path parameter 'owner' must be non-empty" } }
+  if ($repo | is-empty) { error make --unspanned { msg: "path parameter 'repo' must be non-empty" } }
+  if ($comment_id | is-empty) { error make --unspanned { msg: "path parameter 'comment_id' must be non-empty" } }
   let qp = [(serialize-qp "content" $content "scalar") (serialize-qp "per_page" $per_page "scalar") (serialize-qp "page" $page "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({owner: (encode-path-segment $owner), repo: (encode-path-segment $repo), comment_id: (encode-path-segment $comment_id)} | format pattern "/repos/{owner}/{repo}/pulls/comments/{comment_id}/reactions") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"content": $content, "per_page": $per_page, "page": $page} | compact), body: null}
 }
 
 # Create reaction for a pull request review comment
@@ -11354,12 +12122,15 @@ export def "repos-pulls-comments-reactions create-for-request-review" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($owner | is-empty) { error make --unspanned { msg: "path parameter 'owner' must be non-empty" } }
+  if ($repo | is-empty) { error make --unspanned { msg: "path parameter 'repo' must be non-empty" } }
+  if ($comment_id | is-empty) { error make --unspanned { msg: "path parameter 'comment_id' must be non-empty" } }
   let full_url = (build-url $base ({owner: (encode-path-segment $owner), repo: (encode-path-segment $repo), comment_id: (encode-path-segment $comment_id)} | format pattern "/repos/{owner}/{repo}/pulls/comments/{comment_id}/reactions"))
   let req_body = {"content": $content} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: {}, body: $req_body}
 }
 
 # Delete a pull request comment reaction
@@ -11384,10 +12155,14 @@ export def "repos-pulls-comments-reactions delete-for-request" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($owner | is-empty) { error make --unspanned { msg: "path parameter 'owner' must be non-empty" } }
+  if ($repo | is-empty) { error make --unspanned { msg: "path parameter 'repo' must be non-empty" } }
+  if ($comment_id | is-empty) { error make --unspanned { msg: "path parameter 'comment_id' must be non-empty" } }
+  if ($reaction_id | is-empty) { error make --unspanned { msg: "path parameter 'reaction_id' must be non-empty" } }
   let full_url = (build-url $base ({owner: (encode-path-segment $owner), repo: (encode-path-segment $repo), comment_id: (encode-path-segment $comment_id), reaction_id: (encode-path-segment $reaction_id)} | format pattern "/repos/{owner}/{repo}/pulls/comments/{comment_id}/reactions/{reaction_id}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
 }
 
 # Get a pull request
@@ -11411,10 +12186,13 @@ export def "repos-pulls get" [
 ]: nothing -> record<_links: record<comments: record<href: string>, commits: record<href: string>, html: record<href: string>, issue: record<href: string>, review_comment: record<href: string>, review_comments: record<href: string>, self: record<href: string>, statuses: record<href: string>>, active_lock_reason: string, additions: int, assignee: record<avatar_url: string, email: string, events_url: string, followers_url: string, following_url: string, gists_url: string, gravatar_id: string, html_url: string, id: int, login: string, name: string, node_id: string, organizations_url: string, received_events_url: string, repos_url: string, site_admin: bool, starred_at: string, starred_url: string, subscriptions_url: string, type: string, url: string>, assignees: table<avatar_url: string, email: string, events_url: string, followers_url: string, following_url: string, gists_url: string, gravatar_id: string, html_url: string, id: int, login: string, name: string, node_id: string, organizations_url: string, received_events_url: string, repos_url: string, site_admin: bool, starred_at: string, starred_url: string, subscriptions_url: string, type: string, url: string>, author_association: string, base: record<label: string, ref: string, repo: record<allow_forking: bool, allow_merge_commit: bool, allow_rebase_merge: bool, allow_squash_merge: bool, anonymous_access_enabled: bool, archive_url: string, archived: bool, assignees_url: string, blobs_url: string, branches_url: string, clone_url: string, collaborators_url: string, comments_url: string, commits_url: string, compare_url: string, contents_url: string, contributors_url: string, created_at: string, default_branch: string, deployments_url: string, description: string, disabled: bool, downloads_url: string, events_url: string, fork: bool, forks: int, forks_count: int, forks_url: string, full_name: string, git_commits_url: string, git_refs_url: string, git_tags_url: string, git_url: string, has_downloads: bool, has_issues: bool, has_pages: bool, has_projects: bool, has_wiki: bool, homepage: string, hooks_url: string, html_url: string, id: int, issue_comment_url: string, issue_events_url: string, issues_url: string, keys_url: string, labels_url: string, language: string, languages_url: string, license: record, master_branch: string, merges_url: string, milestones_url: string, mirror_url: string, name: string, node_id: string, notifications_url: string, open_issues: int, open_issues_count: int, owner: record, permissions: record, private: bool, pulls_url: string, pushed_at: string, releases_url: string, size: int, ssh_url: string, stargazers_count: int, stargazers_url: string, statuses_url: string, subscribers_url: string, subscription_url: string, svn_url: string, tags_url: string, teams_url: string, topics: list, trees_url: string, updated_at: string, url: string, watchers: int, watchers_count: int>, sha: string, user: record<avatar_url: string, events_url: string, followers_url: string, following_url: string, gists_url: string, gravatar_id: string, html_url: string, id: int, login: string, node_id: string, organizations_url: string, received_events_url: string, repos_url: string, site_admin: bool, starred_url: string, subscriptions_url: string, type: string, url: string>>, body: string, changed_files: int, closed_at: string, comments: int, comments_url: string, commits: int, commits_url: string, created_at: string, deletions: int, diff_url: string, draft: bool, head: record<label: string, ref: string, repo: record<allow_forking: bool, allow_merge_commit: bool, allow_rebase_merge: bool, allow_squash_merge: bool, anonymous_access_enabled: bool, archive_url: string, archived: bool, assignees_url: string, blobs_url: string, branches_url: string, clone_url: string, collaborators_url: string, comments_url: string, commits_url: string, compare_url: string, contents_url: string, contributors_url: string, created_at: string, default_branch: string, deployments_url: string, description: string, disabled: bool, downloads_url: string, events_url: string, fork: bool, forks: int, forks_count: int, forks_url: string, full_name: string, git_commits_url: string, git_refs_url: string, git_tags_url: string, git_url: string, has_downloads: bool, has_issues: bool, has_pages: bool, has_projects: bool, has_wiki: bool, homepage: string, hooks_url: string, html_url: string, id: int, issue_comment_url: string, issue_events_url: string, issues_url: string, keys_url: string, labels_url: string, language: string, languages_url: string, license: record, master_branch: string, merges_url: string, milestones_url: string, mirror_url: string, name: string, node_id: string, notifications_url: string, open_issues: int, open_issues_count: int, owner: record, permissions: record, private: bool, pulls_url: string, pushed_at: string, releases_url: string, size: int, ssh_url: string, stargazers_count: int, stargazers_url: string, statuses_url: string, subscribers_url: string, subscription_url: string, svn_url: string, tags_url: string, teams_url: string, topics: list, trees_url: string, updated_at: string, url: string, watchers: int, watchers_count: int>, sha: string, user: record<avatar_url: string, events_url: string, followers_url: string, following_url: string, gists_url: string, gravatar_id: string, html_url: string, id: int, login: string, node_id: string, organizations_url: string, received_events_url: string, repos_url: string, site_admin: bool, starred_url: string, subscriptions_url: string, type: string, url: string>>, html_url: string, id: int, issue_url: string, labels: table<color: string, default: bool, description: string, id: int, name: string, node_id: string, url: string>, locked: bool, maintainer_can_modify: bool, merge_commit_sha: string, mergeable: bool, mergeable_state: string, merged: bool, merged_at: string, merged_by: record<avatar_url: string, email: string, events_url: string, followers_url: string, following_url: string, gists_url: string, gravatar_id: string, html_url: string, id: int, login: string, name: string, node_id: string, organizations_url: string, received_events_url: string, repos_url: string, site_admin: bool, starred_at: string, starred_url: string, subscriptions_url: string, type: string, url: string>, milestone: record<closed_at: string, closed_issues: int, created_at: string, creator: record<avatar_url: string, email: string, events_url: string, followers_url: string, following_url: string, gists_url: string, gravatar_id: string, html_url: string, id: int, login: string, name: string, node_id: string, organizations_url: string, received_events_url: string, repos_url: string, site_admin: bool, starred_at: string, starred_url: string, subscriptions_url: string, type: string, url: string>, description: string, due_on: string, html_url: string, id: int, labels_url: string, node_id: string, number: int, open_issues: int, state: string, title: string, updated_at: string, url: string>, node_id: string, number: int, patch_url: string, rebaseable: bool, requested_reviewers: table<avatar_url: string, email: string, events_url: string, followers_url: string, following_url: string, gists_url: string, gravatar_id: string, html_url: string, id: int, login: string, name: string, node_id: string, organizations_url: string, received_events_url: string, repos_url: string, site_admin: bool, starred_at: string, starred_url: string, subscriptions_url: string, type: string, url: string>, requested_teams: table<description: string, html_url: string, id: int, ldap_dn: string, members_url: string, name: string, node_id: string, permission: string, privacy: string, repositories_url: string, slug: string, url: string>, review_comment_url: string, review_comments: int, review_comments_url: string, state: string, statuses_url: string, title: string, updated_at: string, url: string, user: record<avatar_url: string, email: string, events_url: string, followers_url: string, following_url: string, gists_url: string, gravatar_id: string, html_url: string, id: int, login: string, name: string, node_id: string, organizations_url: string, received_events_url: string, repos_url: string, site_admin: bool, starred_at: string, starred_url: string, subscriptions_url: string, type: string, url: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($owner | is-empty) { error make --unspanned { msg: "path parameter 'owner' must be non-empty" } }
+  if ($repo | is-empty) { error make --unspanned { msg: "path parameter 'repo' must be non-empty" } }
+  if ($pull_number | is-empty) { error make --unspanned { msg: "path parameter 'pull_number' must be non-empty" } }
   let full_url = (build-url $base ({owner: (encode-path-segment $owner), repo: (encode-path-segment $repo), pull_number: (encode-path-segment $pull_number)} | format pattern "/repos/{owner}/{repo}/pulls/{pull_number}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
 }
 
 # Update a pull request
@@ -11444,12 +12222,15 @@ export def "repos-pulls update" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($owner | is-empty) { error make --unspanned { msg: "path parameter 'owner' must be non-empty" } }
+  if ($repo | is-empty) { error make --unspanned { msg: "path parameter 'repo' must be non-empty" } }
+  if ($pull_number | is-empty) { error make --unspanned { msg: "path parameter 'pull_number' must be non-empty" } }
   let full_url = (build-url $base ({owner: (encode-path-segment $owner), repo: (encode-path-segment $repo), pull_number: (encode-path-segment $pull_number)} | format pattern "/repos/{owner}/{repo}/pulls/{pull_number}"))
   let req_body = {"base": $body_base, "body": $body, "maintainer_can_modify": $maintainer_can_modify, "state": $state, "title": $title} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "patch" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body
+  do-request "patch" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: {}, body: $req_body}
 }
 
 # List review comments on a pull request
@@ -11478,11 +12259,14 @@ export def "repos-pulls-comments list-review" [
 ]: nothing -> table<_links: record<html: record, pull_request: record, self: record>, author_association: string, body: string, body_html: string, body_text: string, commit_id: string, created_at: string, diff_hunk: string, html_url: string, id: int, in_reply_to_id: int, line: int, node_id: string, original_commit_id: string, original_line: int, original_position: int, original_start_line: int, path: string, position: int, pull_request_review_id: int, pull_request_url: string, reactions: record<_1: int, _1: int, confused: int, eyes: int, heart: int, hooray: int, laugh: int, rocket: int, total_count: int, url: string>, side: string, start_line: int, start_side: string, updated_at: string, url: string, user: record<avatar_url: string, email: string, events_url: string, followers_url: string, following_url: string, gists_url: string, gravatar_id: string, html_url: string, id: int, login: string, name: string, node_id: string, organizations_url: string, received_events_url: string, repos_url: string, site_admin: bool, starred_at: string, starred_url: string, subscriptions_url: string, type: string, url: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($owner | is-empty) { error make --unspanned { msg: "path parameter 'owner' must be non-empty" } }
+  if ($repo | is-empty) { error make --unspanned { msg: "path parameter 'repo' must be non-empty" } }
+  if ($pull_number | is-empty) { error make --unspanned { msg: "path parameter 'pull_number' must be non-empty" } }
   let qp = [(serialize-qp "sort" $qp_sort "scalar") (serialize-qp "direction" $direction "scalar") (serialize-qp "since" $since "scalar") (serialize-qp "per_page" $per_page "scalar") (serialize-qp "page" $page "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({owner: (encode-path-segment $owner), repo: (encode-path-segment $repo), pull_number: (encode-path-segment $pull_number)} | format pattern "/repos/{owner}/{repo}/pulls/{pull_number}/comments") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"sort": $qp_sort, "direction": $direction, "since": $since, "per_page": $per_page, "page": $page} | compact), body: null}
 }
 
 # Create a review comment for a pull request
@@ -11516,12 +12300,15 @@ export def "repos-pulls-comments create-review" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($owner | is-empty) { error make --unspanned { msg: "path parameter 'owner' must be non-empty" } }
+  if ($repo | is-empty) { error make --unspanned { msg: "path parameter 'repo' must be non-empty" } }
+  if ($pull_number | is-empty) { error make --unspanned { msg: "path parameter 'pull_number' must be non-empty" } }
   let full_url = (build-url $base ({owner: (encode-path-segment $owner), repo: (encode-path-segment $repo), pull_number: (encode-path-segment $pull_number)} | format pattern "/repos/{owner}/{repo}/pulls/{pull_number}/comments"))
   let req_body = {"body": $body, "commit_id": $commit_id, "in_reply_to": $in_reply_to, "line": $line, "path": $path, "position": $position, "side": $side, "start_line": $start_line, "start_side": $start_side} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: {}, body: $req_body}
 }
 
 # Create a reply for a review comment
@@ -11548,12 +12335,16 @@ export def "repos-pulls-comments-replies create-reply-for-review" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($owner | is-empty) { error make --unspanned { msg: "path parameter 'owner' must be non-empty" } }
+  if ($repo | is-empty) { error make --unspanned { msg: "path parameter 'repo' must be non-empty" } }
+  if ($pull_number | is-empty) { error make --unspanned { msg: "path parameter 'pull_number' must be non-empty" } }
+  if ($comment_id | is-empty) { error make --unspanned { msg: "path parameter 'comment_id' must be non-empty" } }
   let full_url = (build-url $base ({owner: (encode-path-segment $owner), repo: (encode-path-segment $repo), pull_number: (encode-path-segment $pull_number), comment_id: (encode-path-segment $comment_id)} | format pattern "/repos/{owner}/{repo}/pulls/{pull_number}/comments/{comment_id}/replies"))
   let req_body = {"body": $body} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: {}, body: $req_body}
 }
 
 # List commits on a pull request
@@ -11579,11 +12370,14 @@ export def "repos-pulls-commits list" [
 ]: nothing -> table<author: record<avatar_url: string, email: string, events_url: string, followers_url: string, following_url: string, gists_url: string, gravatar_id: string, html_url: string, id: int, login: string, name: string, node_id: string, organizations_url: string, received_events_url: string, repos_url: string, site_admin: bool, starred_at: string, starred_url: string, subscriptions_url: string, type: string, url: string>, comments_url: string, commit: record<author: record, comment_count: int, committer: record, message: string, tree: record, url: string, verification: record>, committer: record<avatar_url: string, email: string, events_url: string, followers_url: string, following_url: string, gists_url: string, gravatar_id: string, html_url: string, id: int, login: string, name: string, node_id: string, organizations_url: string, received_events_url: string, repos_url: string, site_admin: bool, starred_at: string, starred_url: string, subscriptions_url: string, type: string, url: string>, files: list<record>, html_url: string, node_id: string, parents: list<record>, sha: string, stats: record<additions: int, deletions: int, total: int>, url: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($owner | is-empty) { error make --unspanned { msg: "path parameter 'owner' must be non-empty" } }
+  if ($repo | is-empty) { error make --unspanned { msg: "path parameter 'repo' must be non-empty" } }
+  if ($pull_number | is-empty) { error make --unspanned { msg: "path parameter 'pull_number' must be non-empty" } }
   let qp = [(serialize-qp "per_page" $per_page "scalar") (serialize-qp "page" $page "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({owner: (encode-path-segment $owner), repo: (encode-path-segment $repo), pull_number: (encode-path-segment $pull_number)} | format pattern "/repos/{owner}/{repo}/pulls/{pull_number}/commits") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"per_page": $per_page, "page": $page} | compact), body: null}
 }
 
 # List pull requests files
@@ -11609,11 +12403,14 @@ export def "repos-pulls-files list" [
 ]: nothing -> table<additions: int, blob_url: string, changes: int, contents_url: string, deletions: int, filename: string, patch: string, previous_filename: string, raw_url: string, sha: string, status: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($owner | is-empty) { error make --unspanned { msg: "path parameter 'owner' must be non-empty" } }
+  if ($repo | is-empty) { error make --unspanned { msg: "path parameter 'repo' must be non-empty" } }
+  if ($pull_number | is-empty) { error make --unspanned { msg: "path parameter 'pull_number' must be non-empty" } }
   let qp = [(serialize-qp "per_page" $per_page "scalar") (serialize-qp "page" $page "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({owner: (encode-path-segment $owner), repo: (encode-path-segment $repo), pull_number: (encode-path-segment $pull_number)} | format pattern "/repos/{owner}/{repo}/pulls/{pull_number}/files") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"per_page": $per_page, "page": $page} | compact), body: null}
 }
 
 # Check if a pull request has been merged
@@ -11637,10 +12434,13 @@ export def "repos-pulls-merge check-if-merged" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($owner | is-empty) { error make --unspanned { msg: "path parameter 'owner' must be non-empty" } }
+  if ($repo | is-empty) { error make --unspanned { msg: "path parameter 'repo' must be non-empty" } }
+  if ($pull_number | is-empty) { error make --unspanned { msg: "path parameter 'pull_number' must be non-empty" } }
   let full_url = (build-url $base ({owner: (encode-path-segment $owner), repo: (encode-path-segment $repo), pull_number: (encode-path-segment $pull_number)} | format pattern "/repos/{owner}/{repo}/pulls/{pull_number}/merge"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
 }
 
 # Merge a pull request
@@ -11669,12 +12469,15 @@ export def "repos-pulls-merge update" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($owner | is-empty) { error make --unspanned { msg: "path parameter 'owner' must be non-empty" } }
+  if ($repo | is-empty) { error make --unspanned { msg: "path parameter 'repo' must be non-empty" } }
+  if ($pull_number | is-empty) { error make --unspanned { msg: "path parameter 'pull_number' must be non-empty" } }
   let full_url = (build-url $base ({owner: (encode-path-segment $owner), repo: (encode-path-segment $repo), pull_number: (encode-path-segment $pull_number)} | format pattern "/repos/{owner}/{repo}/pulls/{pull_number}/merge"))
   let req_body = {"commit_message": $commit_message, "commit_title": $commit_title, "merge_method": $merge_method, "sha": $sha} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: {}, body: $req_body}
 }
 
 # Remove requested reviewers from a pull request
@@ -11701,12 +12504,15 @@ export def "repos-pulls-requested-reviewers delete" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($owner | is-empty) { error make --unspanned { msg: "path parameter 'owner' must be non-empty" } }
+  if ($repo | is-empty) { error make --unspanned { msg: "path parameter 'repo' must be non-empty" } }
+  if ($pull_number | is-empty) { error make --unspanned { msg: "path parameter 'pull_number' must be non-empty" } }
   let full_url = (build-url $base ({owner: (encode-path-segment $owner), repo: (encode-path-segment $repo), pull_number: (encode-path-segment $pull_number)} | format pattern "/repos/{owner}/{repo}/pulls/{pull_number}/requested_reviewers"))
   let req_body = {"reviewers": $reviewers, "team_reviewers": $team_reviewers} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: {}, body: $req_body}
 }
 
 # List requested reviewers for a pull request
@@ -11732,11 +12538,14 @@ export def "repos-pulls-requested-reviewers list" [
 ]: nothing -> record<teams: table<description: string, html_url: string, id: int, members_url: string, name: string, node_id: string, parent: record, permission: string, permissions: record, privacy: string, repositories_url: string, slug: string, url: string>, users: table<avatar_url: string, email: string, events_url: string, followers_url: string, following_url: string, gists_url: string, gravatar_id: string, html_url: string, id: int, login: string, name: string, node_id: string, organizations_url: string, received_events_url: string, repos_url: string, site_admin: bool, starred_at: string, starred_url: string, subscriptions_url: string, type: string, url: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($owner | is-empty) { error make --unspanned { msg: "path parameter 'owner' must be non-empty" } }
+  if ($repo | is-empty) { error make --unspanned { msg: "path parameter 'repo' must be non-empty" } }
+  if ($pull_number | is-empty) { error make --unspanned { msg: "path parameter 'pull_number' must be non-empty" } }
   let qp = [(serialize-qp "per_page" $per_page "scalar") (serialize-qp "page" $page "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({owner: (encode-path-segment $owner), repo: (encode-path-segment $repo), pull_number: (encode-path-segment $pull_number)} | format pattern "/repos/{owner}/{repo}/pulls/{pull_number}/requested_reviewers") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"per_page": $per_page, "page": $page} | compact), body: null}
 }
 
 # Request reviewers for a pull request
@@ -11763,12 +12572,15 @@ export def "repos-pulls-requested-reviewers request" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($owner | is-empty) { error make --unspanned { msg: "path parameter 'owner' must be non-empty" } }
+  if ($repo | is-empty) { error make --unspanned { msg: "path parameter 'repo' must be non-empty" } }
+  if ($pull_number | is-empty) { error make --unspanned { msg: "path parameter 'pull_number' must be non-empty" } }
   let full_url = (build-url $base ({owner: (encode-path-segment $owner), repo: (encode-path-segment $repo), pull_number: (encode-path-segment $pull_number)} | format pattern "/repos/{owner}/{repo}/pulls/{pull_number}/requested_reviewers"))
   let req_body = {"reviewers": $reviewers, "team_reviewers": $team_reviewers} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: {}, body: $req_body}
 }
 
 # List reviews for a pull request
@@ -11794,11 +12606,14 @@ export def "repos-pulls-reviews list" [
 ]: nothing -> table<_links: record<html: record, pull_request: record>, author_association: string, body: string, body_html: string, body_text: string, commit_id: string, html_url: string, id: int, node_id: string, pull_request_url: string, state: string, submitted_at: string, user: record<avatar_url: string, email: string, events_url: string, followers_url: string, following_url: string, gists_url: string, gravatar_id: string, html_url: string, id: int, login: string, name: string, node_id: string, organizations_url: string, received_events_url: string, repos_url: string, site_admin: bool, starred_at: string, starred_url: string, subscriptions_url: string, type: string, url: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($owner | is-empty) { error make --unspanned { msg: "path parameter 'owner' must be non-empty" } }
+  if ($repo | is-empty) { error make --unspanned { msg: "path parameter 'repo' must be non-empty" } }
+  if ($pull_number | is-empty) { error make --unspanned { msg: "path parameter 'pull_number' must be non-empty" } }
   let qp = [(serialize-qp "per_page" $per_page "scalar") (serialize-qp "page" $page "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({owner: (encode-path-segment $owner), repo: (encode-path-segment $repo), pull_number: (encode-path-segment $pull_number)} | format pattern "/repos/{owner}/{repo}/pulls/{pull_number}/reviews") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"per_page": $per_page, "page": $page} | compact), body: null}
 }
 
 # Create a review for a pull request
@@ -11828,12 +12643,15 @@ export def "repos-pulls-reviews create" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($owner | is-empty) { error make --unspanned { msg: "path parameter 'owner' must be non-empty" } }
+  if ($repo | is-empty) { error make --unspanned { msg: "path parameter 'repo' must be non-empty" } }
+  if ($pull_number | is-empty) { error make --unspanned { msg: "path parameter 'pull_number' must be non-empty" } }
   let full_url = (build-url $base ({owner: (encode-path-segment $owner), repo: (encode-path-segment $repo), pull_number: (encode-path-segment $pull_number)} | format pattern "/repos/{owner}/{repo}/pulls/{pull_number}/reviews"))
   let req_body = {"body": $body, "comments": $comments, "commit_id": $commit_id, "event": $event} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: {}, body: $req_body}
 }
 
 # Delete a pending review for a pull request
@@ -11858,10 +12676,14 @@ export def "repos-pulls-reviews delete-pending" [
 ]: nothing -> record<_links: record<html: record<href: string>, pull_request: record<href: string>>, author_association: string, body: string, body_html: string, body_text: string, commit_id: string, html_url: string, id: int, node_id: string, pull_request_url: string, state: string, submitted_at: string, user: record<avatar_url: string, email: string, events_url: string, followers_url: string, following_url: string, gists_url: string, gravatar_id: string, html_url: string, id: int, login: string, name: string, node_id: string, organizations_url: string, received_events_url: string, repos_url: string, site_admin: bool, starred_at: string, starred_url: string, subscriptions_url: string, type: string, url: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($owner | is-empty) { error make --unspanned { msg: "path parameter 'owner' must be non-empty" } }
+  if ($repo | is-empty) { error make --unspanned { msg: "path parameter 'repo' must be non-empty" } }
+  if ($pull_number | is-empty) { error make --unspanned { msg: "path parameter 'pull_number' must be non-empty" } }
+  if ($review_id | is-empty) { error make --unspanned { msg: "path parameter 'review_id' must be non-empty" } }
   let full_url = (build-url $base ({owner: (encode-path-segment $owner), repo: (encode-path-segment $repo), pull_number: (encode-path-segment $pull_number), review_id: (encode-path-segment $review_id)} | format pattern "/repos/{owner}/{repo}/pulls/{pull_number}/reviews/{review_id}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
 }
 
 # Get a review for a pull request
@@ -11886,10 +12708,14 @@ export def "repos-pulls-reviews get" [
 ]: nothing -> record<_links: record<html: record<href: string>, pull_request: record<href: string>>, author_association: string, body: string, body_html: string, body_text: string, commit_id: string, html_url: string, id: int, node_id: string, pull_request_url: string, state: string, submitted_at: string, user: record<avatar_url: string, email: string, events_url: string, followers_url: string, following_url: string, gists_url: string, gravatar_id: string, html_url: string, id: int, login: string, name: string, node_id: string, organizations_url: string, received_events_url: string, repos_url: string, site_admin: bool, starred_at: string, starred_url: string, subscriptions_url: string, type: string, url: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($owner | is-empty) { error make --unspanned { msg: "path parameter 'owner' must be non-empty" } }
+  if ($repo | is-empty) { error make --unspanned { msg: "path parameter 'repo' must be non-empty" } }
+  if ($pull_number | is-empty) { error make --unspanned { msg: "path parameter 'pull_number' must be non-empty" } }
+  if ($review_id | is-empty) { error make --unspanned { msg: "path parameter 'review_id' must be non-empty" } }
   let full_url = (build-url $base ({owner: (encode-path-segment $owner), repo: (encode-path-segment $repo), pull_number: (encode-path-segment $pull_number), review_id: (encode-path-segment $review_id)} | format pattern "/repos/{owner}/{repo}/pulls/{pull_number}/reviews/{review_id}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
 }
 
 # Update a review for a pull request
@@ -11916,12 +12742,16 @@ export def "repos-pulls-reviews update" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($owner | is-empty) { error make --unspanned { msg: "path parameter 'owner' must be non-empty" } }
+  if ($repo | is-empty) { error make --unspanned { msg: "path parameter 'repo' must be non-empty" } }
+  if ($pull_number | is-empty) { error make --unspanned { msg: "path parameter 'pull_number' must be non-empty" } }
+  if ($review_id | is-empty) { error make --unspanned { msg: "path parameter 'review_id' must be non-empty" } }
   let full_url = (build-url $base ({owner: (encode-path-segment $owner), repo: (encode-path-segment $repo), pull_number: (encode-path-segment $pull_number), review_id: (encode-path-segment $review_id)} | format pattern "/repos/{owner}/{repo}/pulls/{pull_number}/reviews/{review_id}"))
   let req_body = {"body": $body} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: {}, body: $req_body}
 }
 
 # List comments for a pull request review
@@ -11948,11 +12778,15 @@ export def "repos-pulls-reviews-comments list" [
 ]: nothing -> table<_links: record<html: record, pull_request: record, self: record>, author_association: string, body: string, body_html: string, body_text: string, commit_id: string, created_at: string, diff_hunk: string, html_url: string, id: int, in_reply_to_id: int, line: int, node_id: string, original_commit_id: string, original_line: int, original_position: int, original_start_line: int, path: string, position: int, pull_request_review_id: int, pull_request_url: string, reactions: record<_1: int, _1: int, confused: int, eyes: int, heart: int, hooray: int, laugh: int, rocket: int, total_count: int, url: string>, side: string, start_line: int, start_side: string, updated_at: string, url: string, user: record<avatar_url: string, email: string, events_url: string, followers_url: string, following_url: string, gists_url: string, gravatar_id: string, html_url: string, id: int, login: string, name: string, node_id: string, organizations_url: string, received_events_url: string, repos_url: string, site_admin: bool, starred_at: string, starred_url: string, subscriptions_url: string, type: string, url: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($owner | is-empty) { error make --unspanned { msg: "path parameter 'owner' must be non-empty" } }
+  if ($repo | is-empty) { error make --unspanned { msg: "path parameter 'repo' must be non-empty" } }
+  if ($pull_number | is-empty) { error make --unspanned { msg: "path parameter 'pull_number' must be non-empty" } }
+  if ($review_id | is-empty) { error make --unspanned { msg: "path parameter 'review_id' must be non-empty" } }
   let qp = [(serialize-qp "per_page" $per_page "scalar") (serialize-qp "page" $page "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({owner: (encode-path-segment $owner), repo: (encode-path-segment $repo), pull_number: (encode-path-segment $pull_number), review_id: (encode-path-segment $review_id)} | format pattern "/repos/{owner}/{repo}/pulls/{pull_number}/reviews/{review_id}/comments") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"per_page": $per_page, "page": $page} | compact), body: null}
 }
 
 # Dismiss a review for a pull request
@@ -11980,12 +12814,16 @@ export def "repos-pulls-reviews-dismissals update-dismiss" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($owner | is-empty) { error make --unspanned { msg: "path parameter 'owner' must be non-empty" } }
+  if ($repo | is-empty) { error make --unspanned { msg: "path parameter 'repo' must be non-empty" } }
+  if ($pull_number | is-empty) { error make --unspanned { msg: "path parameter 'pull_number' must be non-empty" } }
+  if ($review_id | is-empty) { error make --unspanned { msg: "path parameter 'review_id' must be non-empty" } }
   let full_url = (build-url $base ({owner: (encode-path-segment $owner), repo: (encode-path-segment $repo), pull_number: (encode-path-segment $pull_number), review_id: (encode-path-segment $review_id)} | format pattern "/repos/{owner}/{repo}/pulls/{pull_number}/reviews/{review_id}/dismissals"))
   let req_body = {"event": $event, "message": $message} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: {}, body: $req_body}
 }
 
 # Submit a review for a pull request
@@ -12013,12 +12851,16 @@ export def "repos-pulls-reviews-events submit" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($owner | is-empty) { error make --unspanned { msg: "path parameter 'owner' must be non-empty" } }
+  if ($repo | is-empty) { error make --unspanned { msg: "path parameter 'repo' must be non-empty" } }
+  if ($pull_number | is-empty) { error make --unspanned { msg: "path parameter 'pull_number' must be non-empty" } }
+  if ($review_id | is-empty) { error make --unspanned { msg: "path parameter 'review_id' must be non-empty" } }
   let full_url = (build-url $base ({owner: (encode-path-segment $owner), repo: (encode-path-segment $repo), pull_number: (encode-path-segment $pull_number), review_id: (encode-path-segment $review_id)} | format pattern "/repos/{owner}/{repo}/pulls/{pull_number}/reviews/{review_id}/events"))
   let req_body = {"body": $body, "event": $event} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: {}, body: $req_body}
 }
 
 # Update a pull request branch
@@ -12044,12 +12886,15 @@ export def "repos-pulls-update-branch update" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($owner | is-empty) { error make --unspanned { msg: "path parameter 'owner' must be non-empty" } }
+  if ($repo | is-empty) { error make --unspanned { msg: "path parameter 'repo' must be non-empty" } }
+  if ($pull_number | is-empty) { error make --unspanned { msg: "path parameter 'pull_number' must be non-empty" } }
   let full_url = (build-url $base ({owner: (encode-path-segment $owner), repo: (encode-path-segment $repo), pull_number: (encode-path-segment $pull_number)} | format pattern "/repos/{owner}/{repo}/pulls/{pull_number}/update-branch"))
   let req_body = {"expected_head_sha": $expected_head_sha} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: {}, body: $req_body}
 }
 
 # Get a repository README
@@ -12073,11 +12918,13 @@ export def "repos-readme get" [
 ]: nothing -> record<_links: record<git: string, html: string, self: string>, content: string, download_url: string, encoding: string, git_url: string, html_url: string, name: string, path: string, sha: string, size: int, submodule_git_url: string, target: string, type: string, url: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($owner | is-empty) { error make --unspanned { msg: "path parameter 'owner' must be non-empty" } }
+  if ($repo | is-empty) { error make --unspanned { msg: "path parameter 'repo' must be non-empty" } }
   let qp = [(serialize-qp "ref" $ref "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({owner: (encode-path-segment $owner), repo: (encode-path-segment $repo)} | format pattern "/repos/{owner}/{repo}/readme") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"ref": $ref} | compact), body: null}
 }
 
 # Get a repository README for a directory
@@ -12102,11 +12949,14 @@ export def "repos-readme get-in-directory" [
 ]: nothing -> record<_links: record<git: string, html: string, self: string>, content: string, download_url: string, encoding: string, git_url: string, html_url: string, name: string, path: string, sha: string, size: int, submodule_git_url: string, target: string, type: string, url: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($owner | is-empty) { error make --unspanned { msg: "path parameter 'owner' must be non-empty" } }
+  if ($repo | is-empty) { error make --unspanned { msg: "path parameter 'repo' must be non-empty" } }
+  if ($dir | is-empty) { error make --unspanned { msg: "path parameter 'dir' must be non-empty" } }
   let qp = [(serialize-qp "ref" $ref "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({owner: (encode-path-segment $owner), repo: (encode-path-segment $repo), dir: (encode-path-segment $dir)} | format pattern "/repos/{owner}/{repo}/readme/{dir}") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"ref": $ref} | compact), body: null}
 }
 
 # List releases
@@ -12131,11 +12981,13 @@ export def "repos-releases list" [
 ]: nothing -> table<assets: list<record>, assets_url: string, author: record<avatar_url: string, email: string, events_url: string, followers_url: string, following_url: string, gists_url: string, gravatar_id: string, html_url: string, id: int, login: string, name: string, node_id: string, organizations_url: string, received_events_url: string, repos_url: string, site_admin: bool, starred_at: string, starred_url: string, subscriptions_url: string, type: string, url: string>, body: string, body_html: string, body_text: string, created_at: string, draft: bool, html_url: string, id: int, name: string, node_id: string, prerelease: bool, published_at: string, reactions: record<_1: int, _1: int, confused: int, eyes: int, heart: int, hooray: int, laugh: int, rocket: int, total_count: int, url: string>, tag_name: string, tarball_url: string, target_commitish: string, upload_url: string, url: string, zipball_url: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($owner | is-empty) { error make --unspanned { msg: "path parameter 'owner' must be non-empty" } }
+  if ($repo | is-empty) { error make --unspanned { msg: "path parameter 'repo' must be non-empty" } }
   let qp = [(serialize-qp "per_page" $per_page "scalar") (serialize-qp "page" $page "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({owner: (encode-path-segment $owner), repo: (encode-path-segment $repo)} | format pattern "/repos/{owner}/{repo}/releases") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"per_page": $per_page, "page": $page} | compact), body: null}
 }
 
 # Create a release
@@ -12165,12 +13017,14 @@ export def "repos-releases create" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($owner | is-empty) { error make --unspanned { msg: "path parameter 'owner' must be non-empty" } }
+  if ($repo | is-empty) { error make --unspanned { msg: "path parameter 'repo' must be non-empty" } }
   let full_url = (build-url $base ({owner: (encode-path-segment $owner), repo: (encode-path-segment $repo)} | format pattern "/repos/{owner}/{repo}/releases"))
   let req_body = {"body": $body, "draft": $draft, "name": $name, "prerelease": $prerelease, "tag_name": $tag_name, "target_commitish": $target_commitish} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: {}, body: $req_body}
 }
 
 # Delete a release asset
@@ -12194,10 +13048,13 @@ export def "repos-releases-assets delete" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($owner | is-empty) { error make --unspanned { msg: "path parameter 'owner' must be non-empty" } }
+  if ($repo | is-empty) { error make --unspanned { msg: "path parameter 'repo' must be non-empty" } }
+  if ($asset_id | is-empty) { error make --unspanned { msg: "path parameter 'asset_id' must be non-empty" } }
   let full_url = (build-url $base ({owner: (encode-path-segment $owner), repo: (encode-path-segment $repo), asset_id: (encode-path-segment $asset_id)} | format pattern "/repos/{owner}/{repo}/releases/assets/{asset_id}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
 }
 
 # Get a release asset
@@ -12221,10 +13078,13 @@ export def "repos-releases-assets get" [
 ]: nothing -> record<browser_download_url: string, content_type: string, created_at: string, download_count: int, id: int, label: string, name: string, node_id: string, size: int, state: string, updated_at: string, uploader: record<avatar_url: string, email: string, events_url: string, followers_url: string, following_url: string, gists_url: string, gravatar_id: string, html_url: string, id: int, login: string, name: string, node_id: string, organizations_url: string, received_events_url: string, repos_url: string, site_admin: bool, starred_at: string, starred_url: string, subscriptions_url: string, type: string, url: string>, url: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($owner | is-empty) { error make --unspanned { msg: "path parameter 'owner' must be non-empty" } }
+  if ($repo | is-empty) { error make --unspanned { msg: "path parameter 'repo' must be non-empty" } }
+  if ($asset_id | is-empty) { error make --unspanned { msg: "path parameter 'asset_id' must be non-empty" } }
   let full_url = (build-url $base ({owner: (encode-path-segment $owner), repo: (encode-path-segment $repo), asset_id: (encode-path-segment $asset_id)} | format pattern "/repos/{owner}/{repo}/releases/assets/{asset_id}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
 }
 
 # Update a release asset
@@ -12252,12 +13112,15 @@ export def "repos-releases-assets update" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($owner | is-empty) { error make --unspanned { msg: "path parameter 'owner' must be non-empty" } }
+  if ($repo | is-empty) { error make --unspanned { msg: "path parameter 'repo' must be non-empty" } }
+  if ($asset_id | is-empty) { error make --unspanned { msg: "path parameter 'asset_id' must be non-empty" } }
   let full_url = (build-url $base ({owner: (encode-path-segment $owner), repo: (encode-path-segment $repo), asset_id: (encode-path-segment $asset_id)} | format pattern "/repos/{owner}/{repo}/releases/assets/{asset_id}"))
   let req_body = {"label": $label, "name": $name, "state": $state} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "patch" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body
+  do-request "patch" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: {}, body: $req_body}
 }
 
 # Get the latest release
@@ -12280,10 +13143,12 @@ export def "repos-releases-latest get" [
 ]: nothing -> record<assets: table<browser_download_url: string, content_type: string, created_at: string, download_count: int, id: int, label: string, name: string, node_id: string, size: int, state: string, updated_at: string, uploader: record, url: string>, assets_url: string, author: record<avatar_url: string, email: string, events_url: string, followers_url: string, following_url: string, gists_url: string, gravatar_id: string, html_url: string, id: int, login: string, name: string, node_id: string, organizations_url: string, received_events_url: string, repos_url: string, site_admin: bool, starred_at: string, starred_url: string, subscriptions_url: string, type: string, url: string>, body: string, body_html: string, body_text: string, created_at: string, draft: bool, html_url: string, id: int, name: string, node_id: string, prerelease: bool, published_at: string, reactions: record<_1: int, _1: int, confused: int, eyes: int, heart: int, hooray: int, laugh: int, rocket: int, total_count: int, url: string>, tag_name: string, tarball_url: string, target_commitish: string, upload_url: string, url: string, zipball_url: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($owner | is-empty) { error make --unspanned { msg: "path parameter 'owner' must be non-empty" } }
+  if ($repo | is-empty) { error make --unspanned { msg: "path parameter 'repo' must be non-empty" } }
   let full_url = (build-url $base ({owner: (encode-path-segment $owner), repo: (encode-path-segment $repo)} | format pattern "/repos/{owner}/{repo}/releases/latest"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
 }
 
 # Get a release by tag name
@@ -12307,10 +13172,13 @@ export def "repos-releases-tags get" [
 ]: nothing -> record<assets: table<browser_download_url: string, content_type: string, created_at: string, download_count: int, id: int, label: string, name: string, node_id: string, size: int, state: string, updated_at: string, uploader: record, url: string>, assets_url: string, author: record<avatar_url: string, email: string, events_url: string, followers_url: string, following_url: string, gists_url: string, gravatar_id: string, html_url: string, id: int, login: string, name: string, node_id: string, organizations_url: string, received_events_url: string, repos_url: string, site_admin: bool, starred_at: string, starred_url: string, subscriptions_url: string, type: string, url: string>, body: string, body_html: string, body_text: string, created_at: string, draft: bool, html_url: string, id: int, name: string, node_id: string, prerelease: bool, published_at: string, reactions: record<_1: int, _1: int, confused: int, eyes: int, heart: int, hooray: int, laugh: int, rocket: int, total_count: int, url: string>, tag_name: string, tarball_url: string, target_commitish: string, upload_url: string, url: string, zipball_url: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($owner | is-empty) { error make --unspanned { msg: "path parameter 'owner' must be non-empty" } }
+  if ($repo | is-empty) { error make --unspanned { msg: "path parameter 'repo' must be non-empty" } }
+  if ($tag | is-empty) { error make --unspanned { msg: "path parameter 'tag' must be non-empty" } }
   let full_url = (build-url $base ({owner: (encode-path-segment $owner), repo: (encode-path-segment $repo), tag: (encode-path-segment $tag)} | format pattern "/repos/{owner}/{repo}/releases/tags/{tag}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
 }
 
 # Delete a release
@@ -12334,10 +13202,13 @@ export def "repos-releases delete" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($owner | is-empty) { error make --unspanned { msg: "path parameter 'owner' must be non-empty" } }
+  if ($repo | is-empty) { error make --unspanned { msg: "path parameter 'repo' must be non-empty" } }
+  if ($release_id | is-empty) { error make --unspanned { msg: "path parameter 'release_id' must be non-empty" } }
   let full_url = (build-url $base ({owner: (encode-path-segment $owner), repo: (encode-path-segment $repo), release_id: (encode-path-segment $release_id)} | format pattern "/repos/{owner}/{repo}/releases/{release_id}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
 }
 
 # Get a release
@@ -12361,10 +13232,13 @@ export def "repos-releases get" [
 ]: nothing -> record<assets: table<browser_download_url: string, content_type: string, created_at: string, download_count: int, id: int, label: string, name: string, node_id: string, size: int, state: string, updated_at: string, uploader: record, url: string>, assets_url: string, author: record<avatar_url: string, email: string, events_url: string, followers_url: string, following_url: string, gists_url: string, gravatar_id: string, html_url: string, id: int, login: string, name: string, node_id: string, organizations_url: string, received_events_url: string, repos_url: string, site_admin: bool, starred_at: string, starred_url: string, subscriptions_url: string, type: string, url: string>, body: string, body_html: string, body_text: string, created_at: string, draft: bool, html_url: string, id: int, name: string, node_id: string, prerelease: bool, published_at: string, reactions: record<_1: int, _1: int, confused: int, eyes: int, heart: int, hooray: int, laugh: int, rocket: int, total_count: int, url: string>, tag_name: string, tarball_url: string, target_commitish: string, upload_url: string, url: string, zipball_url: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($owner | is-empty) { error make --unspanned { msg: "path parameter 'owner' must be non-empty" } }
+  if ($repo | is-empty) { error make --unspanned { msg: "path parameter 'repo' must be non-empty" } }
+  if ($release_id | is-empty) { error make --unspanned { msg: "path parameter 'release_id' must be non-empty" } }
   let full_url = (build-url $base ({owner: (encode-path-segment $owner), repo: (encode-path-segment $repo), release_id: (encode-path-segment $release_id)} | format pattern "/repos/{owner}/{repo}/releases/{release_id}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
 }
 
 # Update a release
@@ -12395,12 +13269,15 @@ export def "repos-releases update" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($owner | is-empty) { error make --unspanned { msg: "path parameter 'owner' must be non-empty" } }
+  if ($repo | is-empty) { error make --unspanned { msg: "path parameter 'repo' must be non-empty" } }
+  if ($release_id | is-empty) { error make --unspanned { msg: "path parameter 'release_id' must be non-empty" } }
   let full_url = (build-url $base ({owner: (encode-path-segment $owner), repo: (encode-path-segment $repo), release_id: (encode-path-segment $release_id)} | format pattern "/repos/{owner}/{repo}/releases/{release_id}"))
   let req_body = {"body": $body, "draft": $draft, "name": $name, "prerelease": $prerelease, "tag_name": $tag_name, "target_commitish": $target_commitish} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "patch" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body
+  do-request "patch" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: {}, body: $req_body}
 }
 
 # List release assets
@@ -12426,11 +13303,14 @@ export def "repos-releases-assets list" [
 ]: nothing -> table<browser_download_url: string, content_type: string, created_at: string, download_count: int, id: int, label: string, name: string, node_id: string, size: int, state: string, updated_at: string, uploader: record<avatar_url: string, email: string, events_url: string, followers_url: string, following_url: string, gists_url: string, gravatar_id: string, html_url: string, id: int, login: string, name: string, node_id: string, organizations_url: string, received_events_url: string, repos_url: string, site_admin: bool, starred_at: string, starred_url: string, subscriptions_url: string, type: string, url: string>, url: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($owner | is-empty) { error make --unspanned { msg: "path parameter 'owner' must be non-empty" } }
+  if ($repo | is-empty) { error make --unspanned { msg: "path parameter 'repo' must be non-empty" } }
+  if ($release_id | is-empty) { error make --unspanned { msg: "path parameter 'release_id' must be non-empty" } }
   let qp = [(serialize-qp "per_page" $per_page "scalar") (serialize-qp "page" $page "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({owner: (encode-path-segment $owner), repo: (encode-path-segment $repo), release_id: (encode-path-segment $release_id)} | format pattern "/repos/{owner}/{repo}/releases/{release_id}/assets") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"per_page": $per_page, "page": $page} | compact), body: null}
 }
 
 # Upload a release asset
@@ -12458,13 +13338,16 @@ export def "repos-releases-assets upload" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default "https://uploads.github.com")
+  if ($owner | is-empty) { error make --unspanned { msg: "path parameter 'owner' must be non-empty" } }
+  if ($repo | is-empty) { error make --unspanned { msg: "path parameter 'repo' must be non-empty" } }
+  if ($release_id | is-empty) { error make --unspanned { msg: "path parameter 'release_id' must be non-empty" } }
   let qp = [(serialize-qp "name" $name "scalar") (serialize-qp "label" $label "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({owner: (encode-path-segment $owner), repo: (encode-path-segment $repo), release_id: (encode-path-segment $release_id)} | format pattern "/repos/{owner}/{repo}/releases/{release_id}/assets") $qp)
   let req_body = $body
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else if (($input | is-not-empty) and ($req_body | is-empty)) { $input } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "*/*" $req_body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "*/*" $req_body {query: ({"name": $name, "label": $label} | compact), body: $req_body}
 }
 
 # List stargazers
@@ -12489,11 +13372,13 @@ export def "repos-stargazers list-activity" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($owner | is-empty) { error make --unspanned { msg: "path parameter 'owner' must be non-empty" } }
+  if ($repo | is-empty) { error make --unspanned { msg: "path parameter 'repo' must be non-empty" } }
   let qp = [(serialize-qp "per_page" $per_page "scalar") (serialize-qp "page" $page "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({owner: (encode-path-segment $owner), repo: (encode-path-segment $repo)} | format pattern "/repos/{owner}/{repo}/stargazers") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"per_page": $per_page, "page": $page} | compact), body: null}
 }
 
 # Get the weekly commit activity
@@ -12516,10 +13401,12 @@ export def "repos-stats-code-frequency get" [
 ]: nothing -> list<list<int>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($owner | is-empty) { error make --unspanned { msg: "path parameter 'owner' must be non-empty" } }
+  if ($repo | is-empty) { error make --unspanned { msg: "path parameter 'repo' must be non-empty" } }
   let full_url = (build-url $base ({owner: (encode-path-segment $owner), repo: (encode-path-segment $repo)} | format pattern "/repos/{owner}/{repo}/stats/code_frequency"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
 }
 
 # Get the last year of commit activity
@@ -12542,10 +13429,12 @@ export def "repos-stats-commit-activity get" [
 ]: nothing -> table<days: list<int>, total: int, week: int> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($owner | is-empty) { error make --unspanned { msg: "path parameter 'owner' must be non-empty" } }
+  if ($repo | is-empty) { error make --unspanned { msg: "path parameter 'repo' must be non-empty" } }
   let full_url = (build-url $base ({owner: (encode-path-segment $owner), repo: (encode-path-segment $repo)} | format pattern "/repos/{owner}/{repo}/stats/commit_activity"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
 }
 
 # Get all contributor commit activity
@@ -12568,10 +13457,12 @@ export def "repos-stats-contributors get" [
 ]: nothing -> table<author: record<avatar_url: string, email: string, events_url: string, followers_url: string, following_url: string, gists_url: string, gravatar_id: string, html_url: string, id: int, login: string, name: string, node_id: string, organizations_url: string, received_events_url: string, repos_url: string, site_admin: bool, starred_at: string, starred_url: string, subscriptions_url: string, type: string, url: string>, total: int, weeks: list<record>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($owner | is-empty) { error make --unspanned { msg: "path parameter 'owner' must be non-empty" } }
+  if ($repo | is-empty) { error make --unspanned { msg: "path parameter 'repo' must be non-empty" } }
   let full_url = (build-url $base ({owner: (encode-path-segment $owner), repo: (encode-path-segment $repo)} | format pattern "/repos/{owner}/{repo}/stats/contributors"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
 }
 
 # Get the weekly commit count
@@ -12594,10 +13485,12 @@ export def "repos-stats-participation get" [
 ]: nothing -> record<all: list<int>, owner: list<int>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($owner | is-empty) { error make --unspanned { msg: "path parameter 'owner' must be non-empty" } }
+  if ($repo | is-empty) { error make --unspanned { msg: "path parameter 'repo' must be non-empty" } }
   let full_url = (build-url $base ({owner: (encode-path-segment $owner), repo: (encode-path-segment $repo)} | format pattern "/repos/{owner}/{repo}/stats/participation"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
 }
 
 # Get the hourly commit count for each day
@@ -12620,10 +13513,12 @@ export def "repos-stats-punch-card get" [
 ]: nothing -> list<list<int>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($owner | is-empty) { error make --unspanned { msg: "path parameter 'owner' must be non-empty" } }
+  if ($repo | is-empty) { error make --unspanned { msg: "path parameter 'repo' must be non-empty" } }
   let full_url = (build-url $base ({owner: (encode-path-segment $owner), repo: (encode-path-segment $repo)} | format pattern "/repos/{owner}/{repo}/stats/punch_card"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
 }
 
 # Create a commit status
@@ -12652,12 +13547,15 @@ export def "repos-statuses create-commit-status" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($owner | is-empty) { error make --unspanned { msg: "path parameter 'owner' must be non-empty" } }
+  if ($repo | is-empty) { error make --unspanned { msg: "path parameter 'repo' must be non-empty" } }
+  if ($sha | is-empty) { error make --unspanned { msg: "path parameter 'sha' must be non-empty" } }
   let full_url = (build-url $base ({owner: (encode-path-segment $owner), repo: (encode-path-segment $repo), sha: (encode-path-segment $sha)} | format pattern "/repos/{owner}/{repo}/statuses/{sha}"))
   let req_body = {"context": $context, "description": $description, "state": $state, "target_url": $target_url} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: {}, body: $req_body}
 }
 
 # List watchers
@@ -12682,11 +13580,13 @@ export def "repos-subscribers list-activity-watchers" [
 ]: nothing -> table<avatar_url: string, email: string, events_url: string, followers_url: string, following_url: string, gists_url: string, gravatar_id: string, html_url: string, id: int, login: string, name: string, node_id: string, organizations_url: string, received_events_url: string, repos_url: string, site_admin: bool, starred_at: string, starred_url: string, subscriptions_url: string, type: string, url: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($owner | is-empty) { error make --unspanned { msg: "path parameter 'owner' must be non-empty" } }
+  if ($repo | is-empty) { error make --unspanned { msg: "path parameter 'repo' must be non-empty" } }
   let qp = [(serialize-qp "per_page" $per_page "scalar") (serialize-qp "page" $page "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({owner: (encode-path-segment $owner), repo: (encode-path-segment $repo)} | format pattern "/repos/{owner}/{repo}/subscribers") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"per_page": $per_page, "page": $page} | compact), body: null}
 }
 
 # Delete a repository subscription
@@ -12709,10 +13609,12 @@ export def "repos-subscription delete-activity" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($owner | is-empty) { error make --unspanned { msg: "path parameter 'owner' must be non-empty" } }
+  if ($repo | is-empty) { error make --unspanned { msg: "path parameter 'repo' must be non-empty" } }
   let full_url = (build-url $base ({owner: (encode-path-segment $owner), repo: (encode-path-segment $repo)} | format pattern "/repos/{owner}/{repo}/subscription"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
 }
 
 # Get a repository subscription
@@ -12735,10 +13637,12 @@ export def "repos-subscription get-activity" [
 ]: nothing -> record<created_at: string, ignored: bool, reason: string, repository_url: string, subscribed: bool, url: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($owner | is-empty) { error make --unspanned { msg: "path parameter 'owner' must be non-empty" } }
+  if ($repo | is-empty) { error make --unspanned { msg: "path parameter 'repo' must be non-empty" } }
   let full_url = (build-url $base ({owner: (encode-path-segment $owner), repo: (encode-path-segment $repo)} | format pattern "/repos/{owner}/{repo}/subscription"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
 }
 
 # Set a repository subscription
@@ -12764,12 +13668,14 @@ export def "repos-subscription update-activity" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($owner | is-empty) { error make --unspanned { msg: "path parameter 'owner' must be non-empty" } }
+  if ($repo | is-empty) { error make --unspanned { msg: "path parameter 'repo' must be non-empty" } }
   let full_url = (build-url $base ({owner: (encode-path-segment $owner), repo: (encode-path-segment $repo)} | format pattern "/repos/{owner}/{repo}/subscription"))
   let req_body = {"ignored": $ignored, "subscribed": $subscribed} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: {}, body: $req_body}
 }
 
 # List repository tags
@@ -12794,11 +13700,13 @@ export def "repos-tags list" [
 ]: nothing -> table<commit: record<sha: string, url: string>, name: string, node_id: string, tarball_url: string, zipball_url: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($owner | is-empty) { error make --unspanned { msg: "path parameter 'owner' must be non-empty" } }
+  if ($repo | is-empty) { error make --unspanned { msg: "path parameter 'repo' must be non-empty" } }
   let qp = [(serialize-qp "per_page" $per_page "scalar") (serialize-qp "page" $page "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({owner: (encode-path-segment $owner), repo: (encode-path-segment $repo)} | format pattern "/repos/{owner}/{repo}/tags") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"per_page": $per_page, "page": $page} | compact), body: null}
 }
 
 # Download a repository archive (tar)
@@ -12822,10 +13730,13 @@ export def "repos-tarball download-archive" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($owner | is-empty) { error make --unspanned { msg: "path parameter 'owner' must be non-empty" } }
+  if ($repo | is-empty) { error make --unspanned { msg: "path parameter 'repo' must be non-empty" } }
+  if ($ref | is-empty) { error make --unspanned { msg: "path parameter 'ref' must be non-empty" } }
   let full_url = (build-url $base ({owner: (encode-path-segment $owner), repo: (encode-path-segment $repo), ref: (encode-path-segment $ref)} | format pattern "/repos/{owner}/{repo}/tarball/{ref}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
 }
 
 # List repository teams
@@ -12850,11 +13761,13 @@ export def "repos-teams list" [
 ]: nothing -> table<description: string, html_url: string, id: int, members_url: string, name: string, node_id: string, parent: record<description: string, html_url: string, id: int, ldap_dn: string, members_url: string, name: string, node_id: string, permission: string, privacy: string, repositories_url: string, slug: string, url: string>, permission: string, permissions: record<admin: bool, maintain: bool, pull: bool, push: bool, triage: bool>, privacy: string, repositories_url: string, slug: string, url: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($owner | is-empty) { error make --unspanned { msg: "path parameter 'owner' must be non-empty" } }
+  if ($repo | is-empty) { error make --unspanned { msg: "path parameter 'repo' must be non-empty" } }
   let qp = [(serialize-qp "per_page" $per_page "scalar") (serialize-qp "page" $page "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({owner: (encode-path-segment $owner), repo: (encode-path-segment $repo)} | format pattern "/repos/{owner}/{repo}/teams") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"per_page": $per_page, "page": $page} | compact), body: null}
 }
 
 # Get all repository topics
@@ -12879,11 +13792,13 @@ export def "repos-topics get-list" [
 ]: nothing -> record<names: list<string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($owner | is-empty) { error make --unspanned { msg: "path parameter 'owner' must be non-empty" } }
+  if ($repo | is-empty) { error make --unspanned { msg: "path parameter 'repo' must be non-empty" } }
   let qp = [(serialize-qp "page" $page "scalar") (serialize-qp "per_page" $per_page "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({owner: (encode-path-segment $owner), repo: (encode-path-segment $repo)} | format pattern "/repos/{owner}/{repo}/topics") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"page": $page, "per_page": $per_page} | compact), body: null}
 }
 
 # Replace all repository topics
@@ -12908,12 +13823,14 @@ export def "repos-topics update-list" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($owner | is-empty) { error make --unspanned { msg: "path parameter 'owner' must be non-empty" } }
+  if ($repo | is-empty) { error make --unspanned { msg: "path parameter 'repo' must be non-empty" } }
   let full_url = (build-url $base ({owner: (encode-path-segment $owner), repo: (encode-path-segment $repo)} | format pattern "/repos/{owner}/{repo}/topics"))
   let req_body = {"names": $names} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: {}, body: $req_body}
 }
 
 # Transfer a repository
@@ -12939,12 +13856,14 @@ export def "repos-transfer create" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($owner | is-empty) { error make --unspanned { msg: "path parameter 'owner' must be non-empty" } }
+  if ($repo | is-empty) { error make --unspanned { msg: "path parameter 'repo' must be non-empty" } }
   let full_url = (build-url $base ({owner: (encode-path-segment $owner), repo: (encode-path-segment $repo)} | format pattern "/repos/{owner}/{repo}/transfer"))
   let req_body = {"new_owner": $new_owner, "team_ids": $team_ids} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: {}, body: $req_body}
 }
 
 # Download a repository archive (zip)
@@ -12968,10 +13887,13 @@ export def "repos-zipball download-archive" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($owner | is-empty) { error make --unspanned { msg: "path parameter 'owner' must be non-empty" } }
+  if ($repo | is-empty) { error make --unspanned { msg: "path parameter 'repo' must be non-empty" } }
+  if ($ref | is-empty) { error make --unspanned { msg: "path parameter 'ref' must be non-empty" } }
   let full_url = (build-url $base ({owner: (encode-path-segment $owner), repo: (encode-path-segment $repo), ref: (encode-path-segment $ref)} | format pattern "/repos/{owner}/{repo}/zipball/{ref}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
 }
 
 # Create a repository using a template
@@ -13000,12 +13922,14 @@ export def "repos-generate create" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($template_owner | is-empty) { error make --unspanned { msg: "path parameter 'template_owner' must be non-empty" } }
+  if ($template_repo | is-empty) { error make --unspanned { msg: "path parameter 'template_repo' must be non-empty" } }
   let full_url = (build-url $base ({template_owner: (encode-path-segment $template_owner), template_repo: (encode-path-segment $template_repo)} | format pattern "/repos/{template_owner}/{template_repo}/generate"))
   let req_body = {"description": $description, "include_all_branches": $include_all_branches, "name": $name, "owner": $owner, "private": $private} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: {}, body: $req_body}
 }
 
 # List public repositories
@@ -13032,7 +13956,7 @@ export def "repositories list-repos-public" [
   let full_url = (build-url $base "/repositories" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"since": $since, "visibility": $visibility} | compact), body: null}
 }
 
 # Search code
@@ -13062,7 +13986,7 @@ export def "search-code list" [
   let full_url = (build-url $base "/search/code" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"q": $q, "sort": $qp_sort, "order": $order, "per_page": $per_page, "page": $page} | compact), body: null}
 }
 
 # Search commits
@@ -13092,7 +14016,7 @@ export def "search-commits list" [
   let full_url = (build-url $base "/search/commits" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"q": $q, "sort": $qp_sort, "order": $order, "per_page": $per_page, "page": $page} | compact), body: null}
 }
 
 # Search issues and pull requests
@@ -13122,7 +14046,7 @@ export def "search-issues pull-and-requests" [
   let full_url = (build-url $base "/search/issues" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"q": $q, "sort": $qp_sort, "order": $order, "per_page": $per_page, "page": $page} | compact), body: null}
 }
 
 # Search labels
@@ -13153,7 +14077,7 @@ export def "search-labels list" [
   let full_url = (build-url $base "/search/labels" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"repository_id": $repository_id, "q": $q, "sort": $qp_sort, "order": $order, "per_page": $per_page, "page": $page} | compact), body: null}
 }
 
 # Search repositories
@@ -13183,7 +14107,7 @@ export def "search-repositories list-repos" [
   let full_url = (build-url $base "/search/repositories" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"q": $q, "sort": $qp_sort, "order": $order, "per_page": $per_page, "page": $page} | compact), body: null}
 }
 
 # Search topics
@@ -13211,7 +14135,7 @@ export def "search-topics list" [
   let full_url = (build-url $base "/search/topics" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"q": $q, "per_page": $per_page, "page": $page} | compact), body: null}
 }
 
 # Search users
@@ -13241,7 +14165,7 @@ export def "search-users list" [
   let full_url = (build-url $base "/search/users" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"q": $q, "sort": $qp_sort, "order": $order, "per_page": $per_page, "page": $page} | compact), body: null}
 }
 
 # Get the configuration status
@@ -13265,7 +14189,7 @@ export def "setup-configcheck get-enterprise-admin-configuration-status" [
   let full_url = (build-url $base "/setup/api/configcheck")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
 }
 
 # Start a configuration process
@@ -13289,7 +14213,7 @@ export def "setup-configure start-enterprise-admin-configuration-process" [
   let full_url = (build-url $base "/setup/api/configure")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
 }
 
 # Get the maintenance status
@@ -13313,7 +14237,7 @@ export def "setup-maintenance get-enterprise-admin-status" [
   let full_url = (build-url $base "/setup/api/maintenance")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
 }
 
 # Enable or disable maintenance mode
@@ -13341,8 +14265,8 @@ export def "setup-maintenance enable-enterprise-admin-or-disable-mode" [
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  let req_body = ($req_body | transpose k v | where v != null | reduce -f {} {|p, acc| $acc | upsert $p.k $p.v } | url build-query)
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/x-www-form-urlencoded" $req_body
+  let req_body_wire = ($req_body | transpose k v | where v != null | reduce -f {} {|p, acc| $acc | upsert $p.k $p.v } | url build-query)
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/x-www-form-urlencoded" $req_body_wire {query: {}, body: $req_body}
 }
 
 # Get settings
@@ -13366,7 +14290,7 @@ export def "setup-settings get-enterprise-admin" [
   let full_url = (build-url $base "/setup/api/settings")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
 }
 
 # Set settings
@@ -13394,8 +14318,8 @@ export def "setup-settings update-enterprise-admin" [
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  let req_body = ($req_body | transpose k v | where v != null | reduce -f {} {|p, acc| $acc | upsert $p.k $p.v } | url build-query)
-  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/x-www-form-urlencoded" $req_body
+  let req_body_wire = ($req_body | transpose k v | where v != null | reduce -f {} {|p, acc| $acc | upsert $p.k $p.v } | url build-query)
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/x-www-form-urlencoded" $req_body_wire {query: {}, body: $req_body}
 }
 
 # Remove an authorized SSH key
@@ -13423,8 +14347,8 @@ export def "setup-settings-authorized-keys delete-enterprise-admin-ssh" [
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  let req_body = ($req_body | transpose k v | where v != null | reduce -f {} {|p, acc| $acc | upsert $p.k $p.v } | url build-query)
-  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/x-www-form-urlencoded" $req_body
+  let req_body_wire = ($req_body | transpose k v | where v != null | reduce -f {} {|p, acc| $acc | upsert $p.k $p.v } | url build-query)
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/x-www-form-urlencoded" $req_body_wire {query: {}, body: $req_body}
 }
 
 # Get all authorized SSH keys
@@ -13448,7 +14372,7 @@ export def "setup-settings-authorized-keys get-enterprise-admin-list-ssh" [
   let full_url = (build-url $base "/setup/api/settings/authorized-keys")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
 }
 
 # Add an authorized SSH key
@@ -13476,8 +14400,8 @@ export def "setup-settings-authorized-keys create-enterprise-admin-ssh" [
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  let req_body = ($req_body | transpose k v | where v != null | reduce -f {} {|p, acc| $acc | upsert $p.k $p.v } | url build-query)
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/x-www-form-urlencoded" $req_body
+  let req_body_wire = ($req_body | transpose k v | where v != null | reduce -f {} {|p, acc| $acc | upsert $p.k $p.v } | url build-query)
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/x-www-form-urlencoded" $req_body_wire {query: {}, body: $req_body}
 }
 
 # Create a GitHub license
@@ -13507,8 +14431,8 @@ export def "setup-start create-enterprise-admin-enterprise-server-license" [
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  let req_body = ($req_body | transpose k v | where v != null | reduce -f {} {|p, acc| $acc | upsert $p.k $p.v } | url build-query)
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/x-www-form-urlencoded" $req_body
+  let req_body_wire = ($req_body | transpose k v | where v != null | reduce -f {} {|p, acc| $acc | upsert $p.k $p.v } | url build-query)
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/x-www-form-urlencoded" $req_body_wire {query: {}, body: $req_body}
 }
 
 # Upgrade a license
@@ -13536,8 +14460,8 @@ export def "setup-upgrade create-enterprise-admin-license" [
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  let req_body = ($req_body | transpose k v | where v != null | reduce -f {} {|p, acc| $acc | upsert $p.k $p.v } | url build-query)
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/x-www-form-urlencoded" $req_body
+  let req_body_wire = ($req_body | transpose k v | where v != null | reduce -f {} {|p, acc| $acc | upsert $p.k $p.v } | url build-query)
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/x-www-form-urlencoded" $req_body_wire {query: {}, body: $req_body}
 }
 
 # Delete a team (Legacy)
@@ -13561,10 +14485,11 @@ export def "teams delete-legacy" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($team_id | is-empty) { error make --unspanned { msg: "path parameter 'team_id' must be non-empty" } }
   let full_url = (build-url $base ({team_id: (encode-path-segment $team_id)} | format pattern "/teams/{team_id}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
 }
 
 # Get a team (Legacy)
@@ -13588,10 +14513,11 @@ export def "teams get-legacy" [
 ]: nothing -> record<created_at: string, description: string, html_url: string, id: int, ldap_dn: string, members_count: int, members_url: string, name: string, node_id: string, organization: record<avatar_url: string, billing_email: string, blog: string, collaborators: int, company: string, created_at: string, default_repository_permission: string, description: string, disk_usage: int, email: string, events_url: string, followers: int, following: int, has_organization_projects: bool, has_repository_projects: bool, hooks_url: string, html_url: string, id: int, issues_url: string, location: string, login: string, members_allowed_repository_creation_type: string, members_can_create_internal_repositories: bool, members_can_create_pages: bool, members_can_create_private_pages: bool, members_can_create_private_repositories: bool, members_can_create_public_pages: bool, members_can_create_public_repositories: bool, members_can_create_repositories: bool, members_url: string, name: string, node_id: string, owned_private_repos: int, plan: record<filled_seats: int, name: string, private_repos: int, seats: int, space: int>, private_gists: int, public_gists: int, public_members_url: string, public_repos: int, repos_url: string, total_private_repos: int, two_factor_requirement_enabled: bool, type: string, updated_at: string, url: string>, parent: record<description: string, html_url: string, id: int, ldap_dn: string, members_url: string, name: string, node_id: string, permission: string, privacy: string, repositories_url: string, slug: string, url: string>, permission: string, privacy: string, repos_count: int, repositories_url: string, slug: string, updated_at: string, url: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($team_id | is-empty) { error make --unspanned { msg: "path parameter 'team_id' must be non-empty" } }
   let full_url = (build-url $base ({team_id: (encode-path-segment $team_id)} | format pattern "/teams/{team_id}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
 }
 
 # Update a team (Legacy)
@@ -13621,12 +14547,13 @@ export def "teams update-legacy" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($team_id | is-empty) { error make --unspanned { msg: "path parameter 'team_id' must be non-empty" } }
   let full_url = (build-url $base ({team_id: (encode-path-segment $team_id)} | format pattern "/teams/{team_id}"))
   let req_body = {"description": $description, "name": $name, "parent_team_id": $parent_team_id, "permission": $permission, "privacy": $privacy} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "patch" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body
+  do-request "patch" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: {}, body: $req_body}
 }
 
 # List discussions (Legacy)
@@ -13653,11 +14580,12 @@ export def "teams-discussions list-legacy" [
 ]: nothing -> table<author: record<avatar_url: string, email: string, events_url: string, followers_url: string, following_url: string, gists_url: string, gravatar_id: string, html_url: string, id: int, login: string, name: string, node_id: string, organizations_url: string, received_events_url: string, repos_url: string, site_admin: bool, starred_at: string, starred_url: string, subscriptions_url: string, type: string, url: string>, body: string, body_html: string, body_version: string, comments_count: int, comments_url: string, created_at: string, html_url: string, last_edited_at: string, node_id: string, number: int, pinned: bool, private: bool, reactions: record<_1: int, _1: int, confused: int, eyes: int, heart: int, hooray: int, laugh: int, rocket: int, total_count: int, url: string>, team_url: string, title: string, updated_at: string, url: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($team_id | is-empty) { error make --unspanned { msg: "path parameter 'team_id' must be non-empty" } }
   let qp = [(serialize-qp "direction" $direction "scalar") (serialize-qp "per_page" $per_page "scalar") (serialize-qp "page" $page "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({team_id: (encode-path-segment $team_id)} | format pattern "/teams/{team_id}/discussions") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"direction": $direction, "per_page": $per_page, "page": $page} | compact), body: null}
 }
 
 # Create a discussion (Legacy)
@@ -13685,12 +14613,13 @@ export def "teams-discussions create-legacy" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($team_id | is-empty) { error make --unspanned { msg: "path parameter 'team_id' must be non-empty" } }
   let full_url = (build-url $base ({team_id: (encode-path-segment $team_id)} | format pattern "/teams/{team_id}/discussions"))
   let req_body = {"body": $body, "private": $private, "title": $title} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: {}, body: $req_body}
 }
 
 # Delete a discussion (Legacy)
@@ -13715,10 +14644,12 @@ export def "teams-discussions delete-legacy" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($team_id | is-empty) { error make --unspanned { msg: "path parameter 'team_id' must be non-empty" } }
+  if ($discussion_number | is-empty) { error make --unspanned { msg: "path parameter 'discussion_number' must be non-empty" } }
   let full_url = (build-url $base ({team_id: (encode-path-segment $team_id), discussion_number: (encode-path-segment $discussion_number)} | format pattern "/teams/{team_id}/discussions/{discussion_number}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
 }
 
 # Get a discussion (Legacy)
@@ -13743,10 +14674,12 @@ export def "teams-discussions get-legacy" [
 ]: nothing -> record<author: record<avatar_url: string, email: string, events_url: string, followers_url: string, following_url: string, gists_url: string, gravatar_id: string, html_url: string, id: int, login: string, name: string, node_id: string, organizations_url: string, received_events_url: string, repos_url: string, site_admin: bool, starred_at: string, starred_url: string, subscriptions_url: string, type: string, url: string>, body: string, body_html: string, body_version: string, comments_count: int, comments_url: string, created_at: string, html_url: string, last_edited_at: string, node_id: string, number: int, pinned: bool, private: bool, reactions: record<_1: int, _1: int, confused: int, eyes: int, heart: int, hooray: int, laugh: int, rocket: int, total_count: int, url: string>, team_url: string, title: string, updated_at: string, url: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($team_id | is-empty) { error make --unspanned { msg: "path parameter 'team_id' must be non-empty" } }
+  if ($discussion_number | is-empty) { error make --unspanned { msg: "path parameter 'discussion_number' must be non-empty" } }
   let full_url = (build-url $base ({team_id: (encode-path-segment $team_id), discussion_number: (encode-path-segment $discussion_number)} | format pattern "/teams/{team_id}/discussions/{discussion_number}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
 }
 
 # Update a discussion (Legacy)
@@ -13774,12 +14707,14 @@ export def "teams-discussions update-legacy" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($team_id | is-empty) { error make --unspanned { msg: "path parameter 'team_id' must be non-empty" } }
+  if ($discussion_number | is-empty) { error make --unspanned { msg: "path parameter 'discussion_number' must be non-empty" } }
   let full_url = (build-url $base ({team_id: (encode-path-segment $team_id), discussion_number: (encode-path-segment $discussion_number)} | format pattern "/teams/{team_id}/discussions/{discussion_number}"))
   let req_body = {"body": $body, "title": $title} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "patch" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body
+  do-request "patch" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: {}, body: $req_body}
 }
 
 # List discussion comments (Legacy)
@@ -13807,11 +14742,13 @@ export def "teams-discussions-comments list-legacy" [
 ]: nothing -> table<author: record<avatar_url: string, email: string, events_url: string, followers_url: string, following_url: string, gists_url: string, gravatar_id: string, html_url: string, id: int, login: string, name: string, node_id: string, organizations_url: string, received_events_url: string, repos_url: string, site_admin: bool, starred_at: string, starred_url: string, subscriptions_url: string, type: string, url: string>, body: string, body_html: string, body_version: string, created_at: string, discussion_url: string, html_url: string, last_edited_at: string, node_id: string, number: int, reactions: record<_1: int, _1: int, confused: int, eyes: int, heart: int, hooray: int, laugh: int, rocket: int, total_count: int, url: string>, updated_at: string, url: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($team_id | is-empty) { error make --unspanned { msg: "path parameter 'team_id' must be non-empty" } }
+  if ($discussion_number | is-empty) { error make --unspanned { msg: "path parameter 'discussion_number' must be non-empty" } }
   let qp = [(serialize-qp "direction" $direction "scalar") (serialize-qp "per_page" $per_page "scalar") (serialize-qp "page" $page "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({team_id: (encode-path-segment $team_id), discussion_number: (encode-path-segment $discussion_number)} | format pattern "/teams/{team_id}/discussions/{discussion_number}/comments") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"direction": $direction, "per_page": $per_page, "page": $page} | compact), body: null}
 }
 
 # Create a discussion comment (Legacy)
@@ -13838,12 +14775,14 @@ export def "teams-discussions-comments create-legacy" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($team_id | is-empty) { error make --unspanned { msg: "path parameter 'team_id' must be non-empty" } }
+  if ($discussion_number | is-empty) { error make --unspanned { msg: "path parameter 'discussion_number' must be non-empty" } }
   let full_url = (build-url $base ({team_id: (encode-path-segment $team_id), discussion_number: (encode-path-segment $discussion_number)} | format pattern "/teams/{team_id}/discussions/{discussion_number}/comments"))
   let req_body = {"body": $body} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: {}, body: $req_body}
 }
 
 # Delete a discussion comment (Legacy)
@@ -13869,10 +14808,13 @@ export def "teams-discussions-comments delete-legacy" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($team_id | is-empty) { error make --unspanned { msg: "path parameter 'team_id' must be non-empty" } }
+  if ($discussion_number | is-empty) { error make --unspanned { msg: "path parameter 'discussion_number' must be non-empty" } }
+  if ($comment_number | is-empty) { error make --unspanned { msg: "path parameter 'comment_number' must be non-empty" } }
   let full_url = (build-url $base ({team_id: (encode-path-segment $team_id), discussion_number: (encode-path-segment $discussion_number), comment_number: (encode-path-segment $comment_number)} | format pattern "/teams/{team_id}/discussions/{discussion_number}/comments/{comment_number}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
 }
 
 # Get a discussion comment (Legacy)
@@ -13898,10 +14840,13 @@ export def "teams-discussions-comments get-legacy" [
 ]: nothing -> record<author: record<avatar_url: string, email: string, events_url: string, followers_url: string, following_url: string, gists_url: string, gravatar_id: string, html_url: string, id: int, login: string, name: string, node_id: string, organizations_url: string, received_events_url: string, repos_url: string, site_admin: bool, starred_at: string, starred_url: string, subscriptions_url: string, type: string, url: string>, body: string, body_html: string, body_version: string, created_at: string, discussion_url: string, html_url: string, last_edited_at: string, node_id: string, number: int, reactions: record<_1: int, _1: int, confused: int, eyes: int, heart: int, hooray: int, laugh: int, rocket: int, total_count: int, url: string>, updated_at: string, url: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($team_id | is-empty) { error make --unspanned { msg: "path parameter 'team_id' must be non-empty" } }
+  if ($discussion_number | is-empty) { error make --unspanned { msg: "path parameter 'discussion_number' must be non-empty" } }
+  if ($comment_number | is-empty) { error make --unspanned { msg: "path parameter 'comment_number' must be non-empty" } }
   let full_url = (build-url $base ({team_id: (encode-path-segment $team_id), discussion_number: (encode-path-segment $discussion_number), comment_number: (encode-path-segment $comment_number)} | format pattern "/teams/{team_id}/discussions/{discussion_number}/comments/{comment_number}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
 }
 
 # Update a discussion comment (Legacy)
@@ -13929,12 +14874,15 @@ export def "teams-discussions-comments update-legacy" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($team_id | is-empty) { error make --unspanned { msg: "path parameter 'team_id' must be non-empty" } }
+  if ($discussion_number | is-empty) { error make --unspanned { msg: "path parameter 'discussion_number' must be non-empty" } }
+  if ($comment_number | is-empty) { error make --unspanned { msg: "path parameter 'comment_number' must be non-empty" } }
   let full_url = (build-url $base ({team_id: (encode-path-segment $team_id), discussion_number: (encode-path-segment $discussion_number), comment_number: (encode-path-segment $comment_number)} | format pattern "/teams/{team_id}/discussions/{discussion_number}/comments/{comment_number}"))
   let req_body = {"body": $body} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "patch" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body
+  do-request "patch" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: {}, body: $req_body}
 }
 
 # List reactions for a team discussion comment (Legacy)
@@ -13963,11 +14911,14 @@ export def "teams-discussions-comments-reactions list-for-legacy" [
 ]: nothing -> table<content: string, created_at: string, id: int, node_id: string, user: record<avatar_url: string, email: string, events_url: string, followers_url: string, following_url: string, gists_url: string, gravatar_id: string, html_url: string, id: int, login: string, name: string, node_id: string, organizations_url: string, received_events_url: string, repos_url: string, site_admin: bool, starred_at: string, starred_url: string, subscriptions_url: string, type: string, url: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($team_id | is-empty) { error make --unspanned { msg: "path parameter 'team_id' must be non-empty" } }
+  if ($discussion_number | is-empty) { error make --unspanned { msg: "path parameter 'discussion_number' must be non-empty" } }
+  if ($comment_number | is-empty) { error make --unspanned { msg: "path parameter 'comment_number' must be non-empty" } }
   let qp = [(serialize-qp "content" $content "scalar") (serialize-qp "per_page" $per_page "scalar") (serialize-qp "page" $page "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({team_id: (encode-path-segment $team_id), discussion_number: (encode-path-segment $discussion_number), comment_number: (encode-path-segment $comment_number)} | format pattern "/teams/{team_id}/discussions/{discussion_number}/comments/{comment_number}/reactions") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"content": $content, "per_page": $per_page, "page": $page} | compact), body: null}
 }
 
 # Create reaction for a team discussion comment (Legacy)
@@ -13995,12 +14946,15 @@ export def "teams-discussions-comments-reactions create-for-legacy" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($team_id | is-empty) { error make --unspanned { msg: "path parameter 'team_id' must be non-empty" } }
+  if ($discussion_number | is-empty) { error make --unspanned { msg: "path parameter 'discussion_number' must be non-empty" } }
+  if ($comment_number | is-empty) { error make --unspanned { msg: "path parameter 'comment_number' must be non-empty" } }
   let full_url = (build-url $base ({team_id: (encode-path-segment $team_id), discussion_number: (encode-path-segment $discussion_number), comment_number: (encode-path-segment $comment_number)} | format pattern "/teams/{team_id}/discussions/{discussion_number}/comments/{comment_number}/reactions"))
   let req_body = {"content": $content} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: {}, body: $req_body}
 }
 
 # List reactions for a team discussion (Legacy)
@@ -14028,11 +14982,13 @@ export def "teams-discussions-reactions list-for-legacy" [
 ]: nothing -> table<content: string, created_at: string, id: int, node_id: string, user: record<avatar_url: string, email: string, events_url: string, followers_url: string, following_url: string, gists_url: string, gravatar_id: string, html_url: string, id: int, login: string, name: string, node_id: string, organizations_url: string, received_events_url: string, repos_url: string, site_admin: bool, starred_at: string, starred_url: string, subscriptions_url: string, type: string, url: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($team_id | is-empty) { error make --unspanned { msg: "path parameter 'team_id' must be non-empty" } }
+  if ($discussion_number | is-empty) { error make --unspanned { msg: "path parameter 'discussion_number' must be non-empty" } }
   let qp = [(serialize-qp "content" $content "scalar") (serialize-qp "per_page" $per_page "scalar") (serialize-qp "page" $page "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({team_id: (encode-path-segment $team_id), discussion_number: (encode-path-segment $discussion_number)} | format pattern "/teams/{team_id}/discussions/{discussion_number}/reactions") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"content": $content, "per_page": $per_page, "page": $page} | compact), body: null}
 }
 
 # Create reaction for a team discussion (Legacy)
@@ -14059,12 +15015,14 @@ export def "teams-discussions-reactions create-for-legacy" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($team_id | is-empty) { error make --unspanned { msg: "path parameter 'team_id' must be non-empty" } }
+  if ($discussion_number | is-empty) { error make --unspanned { msg: "path parameter 'discussion_number' must be non-empty" } }
   let full_url = (build-url $base ({team_id: (encode-path-segment $team_id), discussion_number: (encode-path-segment $discussion_number)} | format pattern "/teams/{team_id}/discussions/{discussion_number}/reactions"))
   let req_body = {"content": $content} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: {}, body: $req_body}
 }
 
 # List team members (Legacy)
@@ -14091,11 +15049,12 @@ export def "teams-members list-legacy" [
 ]: nothing -> table<avatar_url: string, email: string, events_url: string, followers_url: string, following_url: string, gists_url: string, gravatar_id: string, html_url: string, id: int, login: string, name: string, node_id: string, organizations_url: string, received_events_url: string, repos_url: string, site_admin: bool, starred_at: string, starred_url: string, subscriptions_url: string, type: string, url: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($team_id | is-empty) { error make --unspanned { msg: "path parameter 'team_id' must be non-empty" } }
   let qp = [(serialize-qp "role" $role "scalar") (serialize-qp "per_page" $per_page "scalar") (serialize-qp "page" $page "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({team_id: (encode-path-segment $team_id)} | format pattern "/teams/{team_id}/members") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"role": $role, "per_page": $per_page, "page": $page} | compact), body: null}
 }
 
 # Remove team member (Legacy)
@@ -14120,10 +15079,12 @@ export def "teams-members delete-legacy" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($team_id | is-empty) { error make --unspanned { msg: "path parameter 'team_id' must be non-empty" } }
+  if ($username | is-empty) { error make --unspanned { msg: "path parameter 'username' must be non-empty" } }
   let full_url = (build-url $base ({team_id: (encode-path-segment $team_id), username: (encode-path-segment $username)} | format pattern "/teams/{team_id}/members/{username}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
 }
 
 # Get team member (Legacy)
@@ -14148,10 +15109,12 @@ export def "teams-members get-legacy" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($team_id | is-empty) { error make --unspanned { msg: "path parameter 'team_id' must be non-empty" } }
+  if ($username | is-empty) { error make --unspanned { msg: "path parameter 'username' must be non-empty" } }
   let full_url = (build-url $base ({team_id: (encode-path-segment $team_id), username: (encode-path-segment $username)} | format pattern "/teams/{team_id}/members/{username}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
 }
 
 # Add team member (Legacy)
@@ -14176,10 +15139,12 @@ export def "teams-members create-legacy" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($team_id | is-empty) { error make --unspanned { msg: "path parameter 'team_id' must be non-empty" } }
+  if ($username | is-empty) { error make --unspanned { msg: "path parameter 'username' must be non-empty" } }
   let full_url = (build-url $base ({team_id: (encode-path-segment $team_id), username: (encode-path-segment $username)} | format pattern "/teams/{team_id}/members/{username}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
 }
 
 # Remove team membership for a user (Legacy)
@@ -14204,10 +15169,12 @@ export def "teams-memberships delete-for-user-legacy" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($team_id | is-empty) { error make --unspanned { msg: "path parameter 'team_id' must be non-empty" } }
+  if ($username | is-empty) { error make --unspanned { msg: "path parameter 'username' must be non-empty" } }
   let full_url = (build-url $base ({team_id: (encode-path-segment $team_id), username: (encode-path-segment $username)} | format pattern "/teams/{team_id}/memberships/{username}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
 }
 
 # Get team membership for a user (Legacy)
@@ -14232,10 +15199,12 @@ export def "teams-memberships get-for-user-legacy" [
 ]: nothing -> record<role: string, state: string, url: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($team_id | is-empty) { error make --unspanned { msg: "path parameter 'team_id' must be non-empty" } }
+  if ($username | is-empty) { error make --unspanned { msg: "path parameter 'username' must be non-empty" } }
   let full_url = (build-url $base ({team_id: (encode-path-segment $team_id), username: (encode-path-segment $username)} | format pattern "/teams/{team_id}/memberships/{username}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
 }
 
 # Add or update team membership for a user (Legacy)
@@ -14262,12 +15231,14 @@ export def "teams-memberships create-or-update-for-user-legacy" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($team_id | is-empty) { error make --unspanned { msg: "path parameter 'team_id' must be non-empty" } }
+  if ($username | is-empty) { error make --unspanned { msg: "path parameter 'username' must be non-empty" } }
   let full_url = (build-url $base ({team_id: (encode-path-segment $team_id), username: (encode-path-segment $username)} | format pattern "/teams/{team_id}/memberships/{username}"))
   let req_body = {"role": $role} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: {}, body: $req_body}
 }
 
 # List team projects (Legacy)
@@ -14293,11 +15264,12 @@ export def "teams-projects list-legacy" [
 ]: nothing -> table<body: string, columns_url: string, created_at: string, creator: record<avatar_url: string, email: string, events_url: string, followers_url: string, following_url: string, gists_url: string, gravatar_id: string, html_url: string, id: int, login: string, name: string, node_id: string, organizations_url: string, received_events_url: string, repos_url: string, site_admin: bool, starred_at: string, starred_url: string, subscriptions_url: string, type: string, url: string>, html_url: string, id: int, name: string, node_id: string, number: int, organization_permission: string, owner_url: string, permissions: record<admin: bool, read: bool, write: bool>, private: bool, state: string, updated_at: string, url: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($team_id | is-empty) { error make --unspanned { msg: "path parameter 'team_id' must be non-empty" } }
   let qp = [(serialize-qp "per_page" $per_page "scalar") (serialize-qp "page" $page "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({team_id: (encode-path-segment $team_id)} | format pattern "/teams/{team_id}/projects") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"per_page": $per_page, "page": $page} | compact), body: null}
 }
 
 # Remove a project from a team (Legacy)
@@ -14322,10 +15294,12 @@ export def "teams-projects delete-legacy" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($team_id | is-empty) { error make --unspanned { msg: "path parameter 'team_id' must be non-empty" } }
+  if ($project_id | is-empty) { error make --unspanned { msg: "path parameter 'project_id' must be non-empty" } }
   let full_url = (build-url $base ({team_id: (encode-path-segment $team_id), project_id: (encode-path-segment $project_id)} | format pattern "/teams/{team_id}/projects/{project_id}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
 }
 
 # Check team permissions for a project (Legacy)
@@ -14350,10 +15324,12 @@ export def "teams-projects check-permissions-for-legacy" [
 ]: nothing -> record<body: string, columns_url: string, created_at: string, creator: record<avatar_url: string, email: string, events_url: string, followers_url: string, following_url: string, gists_url: string, gravatar_id: string, html_url: string, id: int, login: string, name: string, node_id: string, organizations_url: string, received_events_url: string, repos_url: string, site_admin: bool, starred_at: string, starred_url: string, subscriptions_url: string, type: string, url: string>, html_url: string, id: int, name: string, node_id: string, number: int, organization_permission: string, owner_url: string, permissions: record<admin: bool, read: bool, write: bool>, private: bool, state: string, updated_at: string, url: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($team_id | is-empty) { error make --unspanned { msg: "path parameter 'team_id' must be non-empty" } }
+  if ($project_id | is-empty) { error make --unspanned { msg: "path parameter 'project_id' must be non-empty" } }
   let full_url = (build-url $base ({team_id: (encode-path-segment $team_id), project_id: (encode-path-segment $project_id)} | format pattern "/teams/{team_id}/projects/{project_id}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
 }
 
 # Add or update team project permissions (Legacy)
@@ -14380,12 +15356,14 @@ export def "teams-projects create-or-update-permissions-legacy" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($team_id | is-empty) { error make --unspanned { msg: "path parameter 'team_id' must be non-empty" } }
+  if ($project_id | is-empty) { error make --unspanned { msg: "path parameter 'project_id' must be non-empty" } }
   let full_url = (build-url $base ({team_id: (encode-path-segment $team_id), project_id: (encode-path-segment $project_id)} | format pattern "/teams/{team_id}/projects/{project_id}"))
   let req_body = {"permission": $permission} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: {}, body: $req_body}
 }
 
 # List team repositories (Legacy)
@@ -14411,11 +15389,12 @@ export def "teams-repos list-legacy" [
 ]: nothing -> table<allow_forking: bool, anonymous_access_enabled: bool, archive_url: string, archived: bool, assignees_url: string, blobs_url: string, branches_url: string, clone_url: string, code_of_conduct: record<body: string, html_url: string, key: string, name: string, url: string>, collaborators_url: string, comments_url: string, commits_url: string, compare_url: string, contents_url: string, contributors_url: string, created_at: string, default_branch: string, delete_branch_on_merge: bool, deployments_url: string, description: string, disabled: bool, downloads_url: string, events_url: string, fork: bool, forks: int, forks_count: int, forks_url: string, full_name: string, git_commits_url: string, git_refs_url: string, git_tags_url: string, git_url: string, has_downloads: bool, has_issues: bool, has_pages: bool, has_projects: bool, has_wiki: bool, homepage: string, hooks_url: string, html_url: string, id: int, is_template: bool, issue_comment_url: string, issue_events_url: string, issues_url: string, keys_url: string, labels_url: string, language: string, languages_url: string, license: record<key: string, name: string, node_id: string, spdx_id: string, url: string>, merges_url: string, milestones_url: string, mirror_url: string, name: string, network_count: int, node_id: string, notifications_url: string, open_issues: int, open_issues_count: int, owner: record<avatar_url: string, email: string, events_url: string, followers_url: string, following_url: string, gists_url: string, gravatar_id: string, html_url: string, id: int, login: string, name: string, node_id: string, organizations_url: string, received_events_url: string, repos_url: string, site_admin: bool, starred_at: string, starred_url: string, subscriptions_url: string, type: string, url: string>, permissions: record<admin: bool, maintain: bool, pull: bool, push: bool, triage: bool>, private: bool, pulls_url: string, pushed_at: string, releases_url: string, size: int, ssh_url: string, stargazers_count: int, stargazers_url: string, statuses_url: string, subscribers_count: int, subscribers_url: string, subscription_url: string, svn_url: string, tags_url: string, teams_url: string, template_repository: record<allow_forking: bool, allow_merge_commit: bool, allow_rebase_merge: bool, allow_squash_merge: bool, anonymous_access_enabled: bool, archive_url: string, archived: bool, assignees_url: string, blobs_url: string, branches_url: string, clone_url: string, collaborators_url: string, comments_url: string, commits_url: string, compare_url: string, contents_url: string, contributors_url: string, created_at: string, default_branch: string, delete_branch_on_merge: bool, deployments_url: string, description: string, disabled: bool, downloads_url: string, events_url: string, fork: bool, forks: int, forks_count: int, forks_url: string, full_name: string, git_commits_url: string, git_refs_url: string, git_tags_url: string, git_url: string, has_downloads: bool, has_issues: bool, has_pages: bool, has_projects: bool, has_wiki: bool, homepage: string, hooks_url: string, html_url: string, id: int, is_template: bool, issue_comment_url: string, issue_events_url: string, issues_url: string, keys_url: string, labels_url: string, language: string, languages_url: string, license: record, master_branch: string, merges_url: string, milestones_url: string, mirror_url: string, name: string, network_count: int, node_id: string, notifications_url: string, open_issues: int, open_issues_count: int, organization: record, owner: record, permissions: record, private: bool, pulls_url: string, pushed_at: string, releases_url: string, size: int, ssh_url: string, stargazers_count: int, stargazers_url: string, starred_at: string, statuses_url: string, subscribers_count: int, subscribers_url: string, subscription_url: string, svn_url: string, tags_url: string, teams_url: string, template_repository: record, topics: list, trees_url: string, updated_at: string, url: string, visibility: string, watchers: int, watchers_count: int>, topics: list<string>, trees_url: string, updated_at: string, url: string, visibility: string, watchers: int, watchers_count: int> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($team_id | is-empty) { error make --unspanned { msg: "path parameter 'team_id' must be non-empty" } }
   let qp = [(serialize-qp "per_page" $per_page "scalar") (serialize-qp "page" $page "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({team_id: (encode-path-segment $team_id)} | format pattern "/teams/{team_id}/repos") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"per_page": $per_page, "page": $page} | compact), body: null}
 }
 
 # Remove a repository from a team (Legacy)
@@ -14441,10 +15420,13 @@ export def "teams-repos delete-legacy" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($team_id | is-empty) { error make --unspanned { msg: "path parameter 'team_id' must be non-empty" } }
+  if ($owner | is-empty) { error make --unspanned { msg: "path parameter 'owner' must be non-empty" } }
+  if ($repo | is-empty) { error make --unspanned { msg: "path parameter 'repo' must be non-empty" } }
   let full_url = (build-url $base ({team_id: (encode-path-segment $team_id), owner: (encode-path-segment $owner), repo: (encode-path-segment $repo)} | format pattern "/teams/{team_id}/repos/{owner}/{repo}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
 }
 
 # Check team permissions for a repository (Legacy)
@@ -14470,10 +15452,13 @@ export def "teams-repos check-permissions-for-legacy" [
 ]: nothing -> record<allow_forking: bool, allow_merge_commit: bool, allow_rebase_merge: bool, allow_squash_merge: bool, anonymous_access_enabled: bool, archive_url: string, archived: bool, assignees_url: string, blobs_url: string, branches_url: string, clone_url: string, collaborators_url: string, comments_url: string, commits_url: string, compare_url: string, contents_url: string, contributors_url: string, created_at: string, default_branch: string, delete_branch_on_merge: bool, deployments_url: string, description: string, disabled: bool, downloads_url: string, events_url: string, fork: bool, forks: int, forks_count: int, forks_url: string, full_name: string, git_commits_url: string, git_refs_url: string, git_tags_url: string, git_url: string, has_downloads: bool, has_issues: bool, has_pages: bool, has_projects: bool, has_wiki: bool, homepage: string, hooks_url: string, html_url: string, id: int, is_template: bool, issue_comment_url: string, issue_events_url: string, issues_url: string, keys_url: string, labels_url: string, language: string, languages_url: string, license: record<html_url: string, key: string, name: string, node_id: string, spdx_id: string, url: string>, master_branch: string, merges_url: string, milestones_url: string, mirror_url: string, name: string, network_count: int, node_id: string, notifications_url: string, open_issues: int, open_issues_count: int, owner: record<avatar_url: string, email: string, events_url: string, followers_url: string, following_url: string, gists_url: string, gravatar_id: string, html_url: string, id: int, login: string, name: string, node_id: string, organizations_url: string, received_events_url: string, repos_url: string, site_admin: bool, starred_at: string, starred_url: string, subscriptions_url: string, type: string, url: string>, permissions: record<admin: bool, maintain: bool, pull: bool, push: bool, triage: bool>, private: bool, pulls_url: string, pushed_at: string, releases_url: string, size: int, ssh_url: string, stargazers_count: int, stargazers_url: string, statuses_url: string, subscribers_count: int, subscribers_url: string, subscription_url: string, svn_url: string, tags_url: string, teams_url: string, template_repository: record<allow_forking: bool, allow_merge_commit: bool, allow_rebase_merge: bool, allow_squash_merge: bool, anonymous_access_enabled: bool, archive_url: string, archived: bool, assignees_url: string, blobs_url: string, branches_url: string, clone_url: string, collaborators_url: string, comments_url: string, commits_url: string, compare_url: string, contents_url: string, contributors_url: string, created_at: string, default_branch: string, delete_branch_on_merge: bool, deployments_url: string, description: string, disabled: bool, downloads_url: string, events_url: string, fork: bool, forks: int, forks_count: int, forks_url: string, full_name: string, git_commits_url: string, git_refs_url: string, git_tags_url: string, git_url: string, has_downloads: bool, has_issues: bool, has_pages: bool, has_projects: bool, has_wiki: bool, homepage: string, hooks_url: string, html_url: string, id: int, is_template: bool, issue_comment_url: string, issue_events_url: string, issues_url: string, keys_url: string, labels_url: string, language: string, languages_url: string, license: record<html_url: string, key: string, name: string, node_id: string, spdx_id: string, url: string>, master_branch: string, merges_url: string, milestones_url: string, mirror_url: string, name: string, network_count: int, node_id: string, notifications_url: string, open_issues: int, open_issues_count: int, organization: record<avatar_url: string, email: string, events_url: string, followers_url: string, following_url: string, gists_url: string, gravatar_id: string, html_url: string, id: int, login: string, name: string, node_id: string, organizations_url: string, received_events_url: string, repos_url: string, site_admin: bool, starred_at: string, starred_url: string, subscriptions_url: string, type: string, url: string>, owner: record<avatar_url: string, email: string, events_url: string, followers_url: string, following_url: string, gists_url: string, gravatar_id: string, html_url: string, id: int, login: string, name: string, node_id: string, organizations_url: string, received_events_url: string, repos_url: string, site_admin: bool, starred_at: string, starred_url: string, subscriptions_url: string, type: string, url: string>, permissions: record<admin: bool, maintain: bool, pull: bool, push: bool, triage: bool>, private: bool, pulls_url: string, pushed_at: string, releases_url: string, size: int, ssh_url: string, stargazers_count: int, stargazers_url: string, starred_at: string, statuses_url: string, subscribers_count: int, subscribers_url: string, subscription_url: string, svn_url: string, tags_url: string, teams_url: string, template_repository: record<allow_merge_commit: bool, allow_rebase_merge: bool, allow_squash_merge: bool, anonymous_access_enabled: bool, archive_url: string, archived: bool, assignees_url: string, blobs_url: string, branches_url: string, clone_url: string, collaborators_url: string, comments_url: string, commits_url: string, compare_url: string, contents_url: string, contributors_url: string, created_at: string, default_branch: string, delete_branch_on_merge: bool, deployments_url: string, description: string, disabled: bool, downloads_url: string, events_url: string, fork: bool, forks_count: int, forks_url: string, full_name: string, git_commits_url: string, git_refs_url: string, git_tags_url: string, git_url: string, has_downloads: bool, has_issues: bool, has_pages: bool, has_projects: bool, has_wiki: bool, homepage: string, hooks_url: string, html_url: string, id: int, is_template: bool, issue_comment_url: string, issue_events_url: string, issues_url: string, keys_url: string, labels_url: string, language: string, languages_url: string, merges_url: string, milestones_url: string, mirror_url: string, name: string, network_count: int, node_id: string, notifications_url: string, open_issues_count: int, owner: record, permissions: record, private: bool, pulls_url: string, pushed_at: string, releases_url: string, size: int, ssh_url: string, stargazers_count: int, stargazers_url: string, statuses_url: string, subscribers_count: int, subscribers_url: string, subscription_url: string, svn_url: string, tags_url: string, teams_url: string, topics: list, trees_url: string, updated_at: string, url: string, visibility: string, watchers_count: int>, topics: list<string>, trees_url: string, updated_at: string, url: string, visibility: string, watchers: int, watchers_count: int>, topics: list<string>, trees_url: string, updated_at: string, url: string, visibility: string, watchers: int, watchers_count: int> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($team_id | is-empty) { error make --unspanned { msg: "path parameter 'team_id' must be non-empty" } }
+  if ($owner | is-empty) { error make --unspanned { msg: "path parameter 'owner' must be non-empty" } }
+  if ($repo | is-empty) { error make --unspanned { msg: "path parameter 'repo' must be non-empty" } }
   let full_url = (build-url $base ({team_id: (encode-path-segment $team_id), owner: (encode-path-segment $owner), repo: (encode-path-segment $repo)} | format pattern "/teams/{team_id}/repos/{owner}/{repo}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
 }
 
 # Add or update team repository permissions (Legacy)
@@ -14501,12 +15486,15 @@ export def "teams-repos create-or-update-permissions-legacy" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($team_id | is-empty) { error make --unspanned { msg: "path parameter 'team_id' must be non-empty" } }
+  if ($owner | is-empty) { error make --unspanned { msg: "path parameter 'owner' must be non-empty" } }
+  if ($repo | is-empty) { error make --unspanned { msg: "path parameter 'repo' must be non-empty" } }
   let full_url = (build-url $base ({team_id: (encode-path-segment $team_id), owner: (encode-path-segment $owner), repo: (encode-path-segment $repo)} | format pattern "/teams/{team_id}/repos/{owner}/{repo}"))
   let req_body = {"permission": $permission} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: {}, body: $req_body}
 }
 
 # List child teams (Legacy)
@@ -14532,11 +15520,12 @@ export def "teams-teams list-child-legacy" [
 ]: nothing -> table<description: string, html_url: string, id: int, members_url: string, name: string, node_id: string, parent: record<description: string, html_url: string, id: int, ldap_dn: string, members_url: string, name: string, node_id: string, permission: string, privacy: string, repositories_url: string, slug: string, url: string>, permission: string, permissions: record<admin: bool, maintain: bool, pull: bool, push: bool, triage: bool>, privacy: string, repositories_url: string, slug: string, url: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($team_id | is-empty) { error make --unspanned { msg: "path parameter 'team_id' must be non-empty" } }
   let qp = [(serialize-qp "per_page" $per_page "scalar") (serialize-qp "page" $page "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({team_id: (encode-path-segment $team_id)} | format pattern "/teams/{team_id}/teams") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"per_page": $per_page, "page": $page} | compact), body: null}
 }
 
 # Get the authenticated user
@@ -14560,7 +15549,7 @@ export def "user get-authenticated" [
   let full_url = (build-url $base "/user")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
 }
 
 # Update the authenticated user
@@ -14595,7 +15584,7 @@ export def "user update-authenticated" [
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "patch" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body
+  do-request "patch" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: {}, body: $req_body}
 }
 
 # Delete an email address for the authenticated user
@@ -14623,7 +15612,7 @@ export def "user-emails delete-for-authenticated" [
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else if ($input | describe | str starts-with "list") { $input } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: {}, body: $req_body}
 }
 
 # List email addresses for the authenticated user
@@ -14650,7 +15639,7 @@ export def "user-emails list-for-authenticated" [
   let full_url = (build-url $base "/user/emails" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"per_page": $per_page, "page": $page} | compact), body: null}
 }
 
 # Add an email address for the authenticated user
@@ -14678,7 +15667,7 @@ export def "user-emails create-for-authenticated" [
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else if ($input | describe | str starts-with "list") { $input } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: {}, body: $req_body}
 }
 
 # List followers of the authenticated user
@@ -14705,7 +15694,7 @@ export def "user-followers list-for-authenticated" [
   let full_url = (build-url $base "/user/followers" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"per_page": $per_page, "page": $page} | compact), body: null}
 }
 
 # List the people the authenticated user follows
@@ -14732,7 +15721,7 @@ export def "user-following list-followed-by-authenticated" [
   let full_url = (build-url $base "/user/following" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"per_page": $per_page, "page": $page} | compact), body: null}
 }
 
 # Unfollow a user
@@ -14754,10 +15743,11 @@ export def "user-following delete-unfollow" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($username | is-empty) { error make --unspanned { msg: "path parameter 'username' must be non-empty" } }
   let full_url = (build-url $base ({username: (encode-path-segment $username)} | format pattern "/user/following/{username}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
 }
 
 # Check if a person is followed by the authenticated user
@@ -14779,10 +15769,11 @@ export def "user-following check-person-is-followed-by-authenticated" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($username | is-empty) { error make --unspanned { msg: "path parameter 'username' must be non-empty" } }
   let full_url = (build-url $base ({username: (encode-path-segment $username)} | format pattern "/user/following/{username}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
 }
 
 # Follow a user
@@ -14804,10 +15795,11 @@ export def "user-following update-follow" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($username | is-empty) { error make --unspanned { msg: "path parameter 'username' must be non-empty" } }
   let full_url = (build-url $base ({username: (encode-path-segment $username)} | format pattern "/user/following/{username}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
 }
 
 # List GPG keys for the authenticated user
@@ -14834,7 +15826,7 @@ export def "user-gpg-keys list-for-authenticated" [
   let full_url = (build-url $base "/user/gpg_keys" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"per_page": $per_page, "page": $page} | compact), body: null}
 }
 
 # Create a GPG key for the authenticated user
@@ -14862,7 +15854,7 @@ export def "user-gpg-keys create-for-authenticated" [
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: {}, body: $req_body}
 }
 
 # Delete a GPG key for the authenticated user
@@ -14884,10 +15876,11 @@ export def "user-gpg-keys delete-for-authenticated" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($gpg_key_id | is-empty) { error make --unspanned { msg: "path parameter 'gpg_key_id' must be non-empty" } }
   let full_url = (build-url $base ({gpg_key_id: (encode-path-segment $gpg_key_id)} | format pattern "/user/gpg_keys/{gpg_key_id}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
 }
 
 # Get a GPG key for the authenticated user
@@ -14909,10 +15902,11 @@ export def "user-gpg-keys get-for-authenticated" [
 ]: nothing -> record<can_certify: bool, can_encrypt_comms: bool, can_encrypt_storage: bool, can_sign: bool, created_at: string, emails: table<email: string, verified: bool>, expires_at: string, id: int, key_id: string, primary_key_id: int, public_key: string, raw_key: string, subkeys: table<can_certify: bool, can_encrypt_comms: bool, can_encrypt_storage: bool, can_sign: bool, created_at: string, emails: list, expires_at: string, id: int, key_id: string, primary_key_id: int, public_key: string, raw_key: string, subkeys: list>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($gpg_key_id | is-empty) { error make --unspanned { msg: "path parameter 'gpg_key_id' must be non-empty" } }
   let full_url = (build-url $base ({gpg_key_id: (encode-path-segment $gpg_key_id)} | format pattern "/user/gpg_keys/{gpg_key_id}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
 }
 
 # List app installations accessible to the user access token
@@ -14942,7 +15936,7 @@ export def "user-installations list-apps-for-authenticated" [
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"accept": $hdr_accept} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"per_page": $per_page, "page": $page} | compact), body: null}
 }
 
 # List repositories accessible to the user access token
@@ -14967,13 +15961,14 @@ export def "user-installations-repositories list-apps-repos-for-authenticated" [
 ]: nothing -> record<repositories: table<allow_forking: bool, allow_merge_commit: bool, allow_rebase_merge: bool, allow_squash_merge: bool, anonymous_access_enabled: bool, archive_url: string, archived: bool, assignees_url: string, blobs_url: string, branches_url: string, clone_url: string, collaborators_url: string, comments_url: string, commits_url: string, compare_url: string, contents_url: string, contributors_url: string, created_at: string, default_branch: string, delete_branch_on_merge: bool, deployments_url: string, description: string, disabled: bool, downloads_url: string, events_url: string, fork: bool, forks: int, forks_count: int, forks_url: string, full_name: string, git_commits_url: string, git_refs_url: string, git_tags_url: string, git_url: string, has_downloads: bool, has_issues: bool, has_pages: bool, has_projects: bool, has_wiki: bool, homepage: string, hooks_url: string, html_url: string, id: int, is_template: bool, issue_comment_url: string, issue_events_url: string, issues_url: string, keys_url: string, labels_url: string, language: string, languages_url: string, license: record, master_branch: string, merges_url: string, milestones_url: string, mirror_url: string, name: string, network_count: int, node_id: string, notifications_url: string, open_issues: int, open_issues_count: int, organization: record, owner: record, permissions: record, private: bool, pulls_url: string, pushed_at: string, releases_url: string, size: int, ssh_url: string, stargazers_count: int, stargazers_url: string, starred_at: string, statuses_url: string, subscribers_count: int, subscribers_url: string, subscription_url: string, svn_url: string, tags_url: string, teams_url: string, template_repository: record, topics: list, trees_url: string, updated_at: string, url: string, visibility: string, watchers: int, watchers_count: int>, repository_selection: string, total_count: int> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($installation_id | is-empty) { error make --unspanned { msg: "path parameter 'installation_id' must be non-empty" } }
   let qp = [(serialize-qp "per_page" $per_page "scalar") (serialize-qp "page" $page "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({installation_id: (encode-path-segment $installation_id)} | format pattern "/user/installations/{installation_id}/repositories") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"accept": $hdr_accept} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"per_page": $per_page, "page": $page} | compact), body: null}
 }
 
 # Remove a repository from an app installation
@@ -14996,10 +15991,12 @@ export def "user-installations-repositories delete-apps-repo" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($installation_id | is-empty) { error make --unspanned { msg: "path parameter 'installation_id' must be non-empty" } }
+  if ($repository_id | is-empty) { error make --unspanned { msg: "path parameter 'repository_id' must be non-empty" } }
   let full_url = (build-url $base ({installation_id: (encode-path-segment $installation_id), repository_id: (encode-path-segment $repository_id)} | format pattern "/user/installations/{installation_id}/repositories/{repository_id}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
 }
 
 # Add a repository to an app installation
@@ -15022,10 +16019,12 @@ export def "user-installations-repositories create-apps-repo" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($installation_id | is-empty) { error make --unspanned { msg: "path parameter 'installation_id' must be non-empty" } }
+  if ($repository_id | is-empty) { error make --unspanned { msg: "path parameter 'repository_id' must be non-empty" } }
   let full_url = (build-url $base ({installation_id: (encode-path-segment $installation_id), repository_id: (encode-path-segment $repository_id)} | format pattern "/user/installations/{installation_id}/repositories/{repository_id}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
 }
 
 # List user account issues assigned to the authenticated user
@@ -15058,7 +16057,7 @@ export def "user-issues list-for-authenticated" [
   let full_url = (build-url $base "/user/issues" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"filter": $filter, "state": $state, "labels": $labels, "sort": $qp_sort, "direction": $direction, "since": $since, "per_page": $per_page, "page": $page} | compact), body: null}
 }
 
 # List public SSH keys for the authenticated user
@@ -15085,7 +16084,7 @@ export def "user-keys list-public-ssh-for-authenticated" [
   let full_url = (build-url $base "/user/keys" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"per_page": $per_page, "page": $page} | compact), body: null}
 }
 
 # Create a public SSH key for the authenticated user
@@ -15114,7 +16113,7 @@ export def "user-keys create-public-ssh-for-authenticated" [
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: {}, body: $req_body}
 }
 
 # Delete a public SSH key for the authenticated user
@@ -15136,10 +16135,11 @@ export def "user-keys delete-public-ssh-for-authenticated" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($key_id | is-empty) { error make --unspanned { msg: "path parameter 'key_id' must be non-empty" } }
   let full_url = (build-url $base ({key_id: (encode-path-segment $key_id)} | format pattern "/user/keys/{key_id}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
 }
 
 # Get a public SSH key for the authenticated user
@@ -15161,10 +16161,11 @@ export def "user-keys get-public-ssh-for-authenticated" [
 ]: nothing -> record<created_at: string, id: int, key: string, read_only: bool, title: string, url: string, verified: bool> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($key_id | is-empty) { error make --unspanned { msg: "path parameter 'key_id' must be non-empty" } }
   let full_url = (build-url $base ({key_id: (encode-path-segment $key_id)} | format pattern "/user/keys/{key_id}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
 }
 
 # List organization memberships for the authenticated user
@@ -15192,7 +16193,7 @@ export def "user-memberships-orgs list-for-authenticated" [
   let full_url = (build-url $base "/user/memberships/orgs" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"state": $state, "per_page": $per_page, "page": $page} | compact), body: null}
 }
 
 # Get an organization membership for the authenticated user
@@ -15214,10 +16215,11 @@ export def "user-memberships-orgs get-for-authenticated" [
 ]: nothing -> record<organization: record<avatar_url: string, description: string, events_url: string, hooks_url: string, id: int, issues_url: string, login: string, members_url: string, node_id: string, public_members_url: string, repos_url: string, url: string>, organization_url: string, permissions: record<can_create_repository: bool>, role: string, state: string, url: string, user: record<avatar_url: string, email: string, events_url: string, followers_url: string, following_url: string, gists_url: string, gravatar_id: string, html_url: string, id: int, login: string, name: string, node_id: string, organizations_url: string, received_events_url: string, repos_url: string, site_admin: bool, starred_at: string, starred_url: string, subscriptions_url: string, type: string, url: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($org | is-empty) { error make --unspanned { msg: "path parameter 'org' must be non-empty" } }
   let full_url = (build-url $base ({org: (encode-path-segment $org)} | format pattern "/user/memberships/orgs/{org}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
 }
 
 # Update an organization membership for the authenticated user
@@ -15241,12 +16243,13 @@ export def "user-memberships-orgs update-for-authenticated" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($org | is-empty) { error make --unspanned { msg: "path parameter 'org' must be non-empty" } }
   let full_url = (build-url $base ({org: (encode-path-segment $org)} | format pattern "/user/memberships/orgs/{org}"))
   let req_body = {"state": $state} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "patch" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body
+  do-request "patch" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: {}, body: $req_body}
 }
 
 # List organizations for the authenticated user
@@ -15273,7 +16276,7 @@ export def "user-orgs list-for-authenticated" [
   let full_url = (build-url $base "/user/orgs" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"per_page": $per_page, "page": $page} | compact), body: null}
 }
 
 # Create a user project
@@ -15302,7 +16305,7 @@ export def "user-projects create-for-authenticated" [
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: {}, body: $req_body}
 }
 
 # List public email addresses for the authenticated user
@@ -15329,7 +16332,7 @@ export def "user-public-emails list-for-authenticated" [
   let full_url = (build-url $base "/user/public_emails" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"per_page": $per_page, "page": $page} | compact), body: null}
 }
 
 # List repositories for the authenticated user
@@ -15363,7 +16366,7 @@ export def "user-repos list-for-authenticated" [
   let full_url = (build-url $base "/user/repos" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"visibility": $visibility, "affiliation": $affiliation, "type": $type, "sort": $qp_sort, "direction": $direction, "per_page": $per_page, "page": $page, "since": $since, "before": $before} | compact), body: null}
 }
 
 # Create a repository for the authenticated user
@@ -15407,7 +16410,7 @@ export def "user-repos create-for-authenticated" [
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: {}, body: $req_body}
 }
 
 # List repository invitations for the authenticated user
@@ -15434,7 +16437,7 @@ export def "user-repository-invitations list-repos-for-authenticated" [
   let full_url = (build-url $base "/user/repository_invitations" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"per_page": $per_page, "page": $page} | compact), body: null}
 }
 
 # Decline a repository invitation
@@ -15456,10 +16459,11 @@ export def "user-repository-invitations delete-repos-decline" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($invitation_id | is-empty) { error make --unspanned { msg: "path parameter 'invitation_id' must be non-empty" } }
   let full_url = (build-url $base ({invitation_id: (encode-path-segment $invitation_id)} | format pattern "/user/repository_invitations/{invitation_id}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
 }
 
 # Accept a repository invitation
@@ -15481,10 +16485,11 @@ export def "user-repository-invitations update-repos-accept" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($invitation_id | is-empty) { error make --unspanned { msg: "path parameter 'invitation_id' must be non-empty" } }
   let full_url = (build-url $base ({invitation_id: (encode-path-segment $invitation_id)} | format pattern "/user/repository_invitations/{invitation_id}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "patch" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "patch" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
 }
 
 # List repositories starred by the authenticated user
@@ -15514,7 +16519,7 @@ export def "user-starred list-activity-repos-by-authenticated" [
   let full_url = (build-url $base "/user/starred" $qp)
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"sort": $qp_sort, "direction": $direction, "per_page": $per_page, "page": $page} | compact), body: null}
 }
 
 # Unstar a repository for the authenticated user
@@ -15537,10 +16542,12 @@ export def "user-starred delete-activity-unstar-for-authenticated" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($owner | is-empty) { error make --unspanned { msg: "path parameter 'owner' must be non-empty" } }
+  if ($repo | is-empty) { error make --unspanned { msg: "path parameter 'repo' must be non-empty" } }
   let full_url = (build-url $base ({owner: (encode-path-segment $owner), repo: (encode-path-segment $repo)} | format pattern "/user/starred/{owner}/{repo}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
 }
 
 # Check if a repository is starred by the authenticated user
@@ -15563,10 +16570,12 @@ export def "user-starred check-activity-is-by-authenticated" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($owner | is-empty) { error make --unspanned { msg: "path parameter 'owner' must be non-empty" } }
+  if ($repo | is-empty) { error make --unspanned { msg: "path parameter 'repo' must be non-empty" } }
   let full_url = (build-url $base ({owner: (encode-path-segment $owner), repo: (encode-path-segment $repo)} | format pattern "/user/starred/{owner}/{repo}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
 }
 
 # Star a repository for the authenticated user
@@ -15589,10 +16598,12 @@ export def "user-starred update-activity-star-for-authenticated" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($owner | is-empty) { error make --unspanned { msg: "path parameter 'owner' must be non-empty" } }
+  if ($repo | is-empty) { error make --unspanned { msg: "path parameter 'repo' must be non-empty" } }
   let full_url = (build-url $base ({owner: (encode-path-segment $owner), repo: (encode-path-segment $repo)} | format pattern "/user/starred/{owner}/{repo}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
 }
 
 # List repositories watched by the authenticated user
@@ -15619,7 +16630,7 @@ export def "user-subscriptions list-activity-watched-repos-for-authenticated" [
   let full_url = (build-url $base "/user/subscriptions" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"per_page": $per_page, "page": $page} | compact), body: null}
 }
 
 # List teams for the authenticated user
@@ -15646,7 +16657,7 @@ export def "user-teams list-for-authenticated" [
   let full_url = (build-url $base "/user/teams" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"per_page": $per_page, "page": $page} | compact), body: null}
 }
 
 # List users
@@ -15673,7 +16684,7 @@ export def "users list" [
   let full_url = (build-url $base "/users" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"since": $since, "per_page": $per_page} | compact), body: null}
 }
 
 # Get a user
@@ -15695,10 +16706,11 @@ export def "users get" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($username | is-empty) { error make --unspanned { msg: "path parameter 'username' must be non-empty" } }
   let full_url = (build-url $base ({username: (encode-path-segment $username)} | format pattern "/users/{username}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
 }
 
 # List events for the authenticated user
@@ -15722,11 +16734,12 @@ export def "users-events list-activity-for-authenticated" [
 ]: nothing -> table<actor: record<avatar_url: string, display_login: string, gravatar_id: string, id: int, login: string, url: string>, created_at: string, id: string, org: record<avatar_url: string, display_login: string, gravatar_id: string, id: int, login: string, url: string>, payload: record<action: string, comment: record, issue: record, pages: list>, public: bool, repo: record<id: int, name: string, url: string>, type: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($username | is-empty) { error make --unspanned { msg: "path parameter 'username' must be non-empty" } }
   let qp = [(serialize-qp "per_page" $per_page "scalar") (serialize-qp "page" $page "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({username: (encode-path-segment $username)} | format pattern "/users/{username}/events") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"per_page": $per_page, "page": $page} | compact), body: null}
 }
 
 # List organization events for the authenticated user
@@ -15751,11 +16764,13 @@ export def "users-events-orgs list-activity-for-authenticated" [
 ]: nothing -> table<actor: record<avatar_url: string, display_login: string, gravatar_id: string, id: int, login: string, url: string>, created_at: string, id: string, org: record<avatar_url: string, display_login: string, gravatar_id: string, id: int, login: string, url: string>, payload: record<action: string, comment: record, issue: record, pages: list>, public: bool, repo: record<id: int, name: string, url: string>, type: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($username | is-empty) { error make --unspanned { msg: "path parameter 'username' must be non-empty" } }
+  if ($org | is-empty) { error make --unspanned { msg: "path parameter 'org' must be non-empty" } }
   let qp = [(serialize-qp "per_page" $per_page "scalar") (serialize-qp "page" $page "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({username: (encode-path-segment $username), org: (encode-path-segment $org)} | format pattern "/users/{username}/events/orgs/{org}") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"per_page": $per_page, "page": $page} | compact), body: null}
 }
 
 # List public events for a user
@@ -15779,11 +16794,12 @@ export def "users-events-public list-activity" [
 ]: nothing -> table<actor: record<avatar_url: string, display_login: string, gravatar_id: string, id: int, login: string, url: string>, created_at: string, id: string, org: record<avatar_url: string, display_login: string, gravatar_id: string, id: int, login: string, url: string>, payload: record<action: string, comment: record, issue: record, pages: list>, public: bool, repo: record<id: int, name: string, url: string>, type: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($username | is-empty) { error make --unspanned { msg: "path parameter 'username' must be non-empty" } }
   let qp = [(serialize-qp "per_page" $per_page "scalar") (serialize-qp "page" $page "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({username: (encode-path-segment $username)} | format pattern "/users/{username}/events/public") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"per_page": $per_page, "page": $page} | compact), body: null}
 }
 
 # List followers of a user
@@ -15807,11 +16823,12 @@ export def "users-followers list" [
 ]: nothing -> table<avatar_url: string, email: string, events_url: string, followers_url: string, following_url: string, gists_url: string, gravatar_id: string, html_url: string, id: int, login: string, name: string, node_id: string, organizations_url: string, received_events_url: string, repos_url: string, site_admin: bool, starred_at: string, starred_url: string, subscriptions_url: string, type: string, url: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($username | is-empty) { error make --unspanned { msg: "path parameter 'username' must be non-empty" } }
   let qp = [(serialize-qp "per_page" $per_page "scalar") (serialize-qp "page" $page "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({username: (encode-path-segment $username)} | format pattern "/users/{username}/followers") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"per_page": $per_page, "page": $page} | compact), body: null}
 }
 
 # List the people a user follows
@@ -15835,11 +16852,12 @@ export def "users-following list" [
 ]: nothing -> table<avatar_url: string, email: string, events_url: string, followers_url: string, following_url: string, gists_url: string, gravatar_id: string, html_url: string, id: int, login: string, name: string, node_id: string, organizations_url: string, received_events_url: string, repos_url: string, site_admin: bool, starred_at: string, starred_url: string, subscriptions_url: string, type: string, url: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($username | is-empty) { error make --unspanned { msg: "path parameter 'username' must be non-empty" } }
   let qp = [(serialize-qp "per_page" $per_page "scalar") (serialize-qp "page" $page "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({username: (encode-path-segment $username)} | format pattern "/users/{username}/following") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"per_page": $per_page, "page": $page} | compact), body: null}
 }
 
 # Check if a user follows another user
@@ -15862,10 +16880,12 @@ export def "users-following check" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($username | is-empty) { error make --unspanned { msg: "path parameter 'username' must be non-empty" } }
+  if ($target_user | is-empty) { error make --unspanned { msg: "path parameter 'target_user' must be non-empty" } }
   let full_url = (build-url $base ({username: (encode-path-segment $username), target_user: (encode-path-segment $target_user)} | format pattern "/users/{username}/following/{target_user}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
 }
 
 # List gists for a user
@@ -15890,11 +16910,12 @@ export def "users-gists list" [
 ]: nothing -> table<comments: int, comments_url: string, commits_url: string, created_at: string, description: string, files: record, forks: list<any>, forks_url: string, git_pull_url: string, git_push_url: string, history: list<any>, html_url: string, id: string, node_id: string, owner: record<avatar_url: string, email: string, events_url: string, followers_url: string, following_url: string, gists_url: string, gravatar_id: string, html_url: string, id: int, login: string, name: string, node_id: string, organizations_url: string, received_events_url: string, repos_url: string, site_admin: bool, starred_at: string, starred_url: string, subscriptions_url: string, type: string, url: string>, public: bool, truncated: bool, updated_at: string, url: string, user: record<avatar_url: string, email: string, events_url: string, followers_url: string, following_url: string, gists_url: string, gravatar_id: string, html_url: string, id: int, login: string, name: string, node_id: string, organizations_url: string, received_events_url: string, repos_url: string, site_admin: bool, starred_at: string, starred_url: string, subscriptions_url: string, type: string, url: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($username | is-empty) { error make --unspanned { msg: "path parameter 'username' must be non-empty" } }
   let qp = [(serialize-qp "since" $since "scalar") (serialize-qp "per_page" $per_page "scalar") (serialize-qp "page" $page "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({username: (encode-path-segment $username)} | format pattern "/users/{username}/gists") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"since": $since, "per_page": $per_page, "page": $page} | compact), body: null}
 }
 
 # List GPG keys for a user
@@ -15918,11 +16939,12 @@ export def "users-gpg-keys list" [
 ]: nothing -> table<can_certify: bool, can_encrypt_comms: bool, can_encrypt_storage: bool, can_sign: bool, created_at: string, emails: list<record>, expires_at: string, id: int, key_id: string, primary_key_id: int, public_key: string, raw_key: string, subkeys: list<record>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($username | is-empty) { error make --unspanned { msg: "path parameter 'username' must be non-empty" } }
   let qp = [(serialize-qp "per_page" $per_page "scalar") (serialize-qp "page" $page "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({username: (encode-path-segment $username)} | format pattern "/users/{username}/gpg_keys") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"per_page": $per_page, "page": $page} | compact), body: null}
 }
 
 # Get contextual information for a user
@@ -15946,11 +16968,12 @@ export def "users-hovercard get-context" [
 ]: nothing -> record<contexts: table<message: string, octicon: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($username | is-empty) { error make --unspanned { msg: "path parameter 'username' must be non-empty" } }
   let qp = [(serialize-qp "subject_type" $subject_type "scalar") (serialize-qp "subject_id" $subject_id "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({username: (encode-path-segment $username)} | format pattern "/users/{username}/hovercard") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"subject_type": $subject_type, "subject_id": $subject_id} | compact), body: null}
 }
 
 # Get a user installation for the authenticated app
@@ -15973,12 +16996,13 @@ export def "users-installation get-apps" [
 ]: nothing -> record<access_tokens_url: string, account: any, app_id: int, app_slug: string, contact_email: string, created_at: string, events: list<string>, html_url: string, id: int, permissions: record<checks: string, contents: string, deployments: string, issues: string, metadata: string, organization_administration: string, pull_requests: string, statuses: string>, repositories_url: string, repository_selection: string, single_file_name: string, suspended_at: string, suspended_by: record<avatar_url: string, email: string, events_url: string, followers_url: string, following_url: string, gists_url: string, gravatar_id: string, html_url: string, id: int, login: string, name: string, node_id: string, organizations_url: string, received_events_url: string, repos_url: string, site_admin: bool, starred_at: string, starred_url: string, subscriptions_url: string, type: string, url: string>, target_id: int, target_type: string, updated_at: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($username | is-empty) { error make --unspanned { msg: "path parameter 'username' must be non-empty" } }
   let full_url = (build-url $base ({username: (encode-path-segment $username)} | format pattern "/users/{username}/installation"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"accept": $hdr_accept} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
 }
 
 # List public keys for a user
@@ -16002,11 +17026,12 @@ export def "users-keys list-public" [
 ]: nothing -> table<id: int, key: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($username | is-empty) { error make --unspanned { msg: "path parameter 'username' must be non-empty" } }
   let qp = [(serialize-qp "per_page" $per_page "scalar") (serialize-qp "page" $page "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({username: (encode-path-segment $username)} | format pattern "/users/{username}/keys") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"per_page": $per_page, "page": $page} | compact), body: null}
 }
 
 # List organizations for a user
@@ -16030,11 +17055,12 @@ export def "users-orgs list" [
 ]: nothing -> table<avatar_url: string, description: string, events_url: string, hooks_url: string, id: int, issues_url: string, login: string, members_url: string, node_id: string, public_members_url: string, repos_url: string, url: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($username | is-empty) { error make --unspanned { msg: "path parameter 'username' must be non-empty" } }
   let qp = [(serialize-qp "per_page" $per_page "scalar") (serialize-qp "page" $page "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({username: (encode-path-segment $username)} | format pattern "/users/{username}/orgs") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"per_page": $per_page, "page": $page} | compact), body: null}
 }
 
 # List user projects
@@ -16059,11 +17085,12 @@ export def "users-projects list" [
 ]: nothing -> table<body: string, columns_url: string, created_at: string, creator: record<avatar_url: string, email: string, events_url: string, followers_url: string, following_url: string, gists_url: string, gravatar_id: string, html_url: string, id: int, login: string, name: string, node_id: string, organizations_url: string, received_events_url: string, repos_url: string, site_admin: bool, starred_at: string, starred_url: string, subscriptions_url: string, type: string, url: string>, html_url: string, id: int, name: string, node_id: string, number: int, organization_permission: string, owner_url: string, private: bool, state: string, updated_at: string, url: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($username | is-empty) { error make --unspanned { msg: "path parameter 'username' must be non-empty" } }
   let qp = [(serialize-qp "state" $state "scalar") (serialize-qp "per_page" $per_page "scalar") (serialize-qp "page" $page "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({username: (encode-path-segment $username)} | format pattern "/users/{username}/projects") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"state": $state, "per_page": $per_page, "page": $page} | compact), body: null}
 }
 
 # List events received by the authenticated user
@@ -16087,11 +17114,12 @@ export def "users-received-events list-activity" [
 ]: nothing -> table<actor: record<avatar_url: string, display_login: string, gravatar_id: string, id: int, login: string, url: string>, created_at: string, id: string, org: record<avatar_url: string, display_login: string, gravatar_id: string, id: int, login: string, url: string>, payload: record<action: string, comment: record, issue: record, pages: list>, public: bool, repo: record<id: int, name: string, url: string>, type: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($username | is-empty) { error make --unspanned { msg: "path parameter 'username' must be non-empty" } }
   let qp = [(serialize-qp "per_page" $per_page "scalar") (serialize-qp "page" $page "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({username: (encode-path-segment $username)} | format pattern "/users/{username}/received_events") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"per_page": $per_page, "page": $page} | compact), body: null}
 }
 
 # List public events received by a user
@@ -16115,11 +17143,12 @@ export def "users-received-events-public list-activity" [
 ]: nothing -> table<actor: record<avatar_url: string, display_login: string, gravatar_id: string, id: int, login: string, url: string>, created_at: string, id: string, org: record<avatar_url: string, display_login: string, gravatar_id: string, id: int, login: string, url: string>, payload: record<action: string, comment: record, issue: record, pages: list>, public: bool, repo: record<id: int, name: string, url: string>, type: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($username | is-empty) { error make --unspanned { msg: "path parameter 'username' must be non-empty" } }
   let qp = [(serialize-qp "per_page" $per_page "scalar") (serialize-qp "page" $page "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({username: (encode-path-segment $username)} | format pattern "/users/{username}/received_events/public") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"per_page": $per_page, "page": $page} | compact), body: null}
 }
 
 # List repositories for a user
@@ -16146,11 +17175,12 @@ export def "users-repos list" [
 ]: nothing -> table<allow_forking: bool, anonymous_access_enabled: bool, archive_url: string, archived: bool, assignees_url: string, blobs_url: string, branches_url: string, clone_url: string, code_of_conduct: record<body: string, html_url: string, key: string, name: string, url: string>, collaborators_url: string, comments_url: string, commits_url: string, compare_url: string, contents_url: string, contributors_url: string, created_at: string, default_branch: string, delete_branch_on_merge: bool, deployments_url: string, description: string, disabled: bool, downloads_url: string, events_url: string, fork: bool, forks: int, forks_count: int, forks_url: string, full_name: string, git_commits_url: string, git_refs_url: string, git_tags_url: string, git_url: string, has_downloads: bool, has_issues: bool, has_pages: bool, has_projects: bool, has_wiki: bool, homepage: string, hooks_url: string, html_url: string, id: int, is_template: bool, issue_comment_url: string, issue_events_url: string, issues_url: string, keys_url: string, labels_url: string, language: string, languages_url: string, license: record<key: string, name: string, node_id: string, spdx_id: string, url: string>, merges_url: string, milestones_url: string, mirror_url: string, name: string, network_count: int, node_id: string, notifications_url: string, open_issues: int, open_issues_count: int, owner: record<avatar_url: string, email: string, events_url: string, followers_url: string, following_url: string, gists_url: string, gravatar_id: string, html_url: string, id: int, login: string, name: string, node_id: string, organizations_url: string, received_events_url: string, repos_url: string, site_admin: bool, starred_at: string, starred_url: string, subscriptions_url: string, type: string, url: string>, permissions: record<admin: bool, maintain: bool, pull: bool, push: bool, triage: bool>, private: bool, pulls_url: string, pushed_at: string, releases_url: string, size: int, ssh_url: string, stargazers_count: int, stargazers_url: string, statuses_url: string, subscribers_count: int, subscribers_url: string, subscription_url: string, svn_url: string, tags_url: string, teams_url: string, template_repository: record<allow_forking: bool, allow_merge_commit: bool, allow_rebase_merge: bool, allow_squash_merge: bool, anonymous_access_enabled: bool, archive_url: string, archived: bool, assignees_url: string, blobs_url: string, branches_url: string, clone_url: string, collaborators_url: string, comments_url: string, commits_url: string, compare_url: string, contents_url: string, contributors_url: string, created_at: string, default_branch: string, delete_branch_on_merge: bool, deployments_url: string, description: string, disabled: bool, downloads_url: string, events_url: string, fork: bool, forks: int, forks_count: int, forks_url: string, full_name: string, git_commits_url: string, git_refs_url: string, git_tags_url: string, git_url: string, has_downloads: bool, has_issues: bool, has_pages: bool, has_projects: bool, has_wiki: bool, homepage: string, hooks_url: string, html_url: string, id: int, is_template: bool, issue_comment_url: string, issue_events_url: string, issues_url: string, keys_url: string, labels_url: string, language: string, languages_url: string, license: record, master_branch: string, merges_url: string, milestones_url: string, mirror_url: string, name: string, network_count: int, node_id: string, notifications_url: string, open_issues: int, open_issues_count: int, organization: record, owner: record, permissions: record, private: bool, pulls_url: string, pushed_at: string, releases_url: string, size: int, ssh_url: string, stargazers_count: int, stargazers_url: string, starred_at: string, statuses_url: string, subscribers_count: int, subscribers_url: string, subscription_url: string, svn_url: string, tags_url: string, teams_url: string, template_repository: record, topics: list, trees_url: string, updated_at: string, url: string, visibility: string, watchers: int, watchers_count: int>, topics: list<string>, trees_url: string, updated_at: string, url: string, visibility: string, watchers: int, watchers_count: int> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($username | is-empty) { error make --unspanned { msg: "path parameter 'username' must be non-empty" } }
   let qp = [(serialize-qp "type" $type "scalar") (serialize-qp "sort" $qp_sort "scalar") (serialize-qp "direction" $direction "scalar") (serialize-qp "per_page" $per_page "scalar") (serialize-qp "page" $page "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({username: (encode-path-segment $username)} | format pattern "/users/{username}/repos") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"type": $type, "sort": $qp_sort, "direction": $direction, "per_page": $per_page, "page": $page} | compact), body: null}
 }
 
 # Demote a site administrator
@@ -16172,10 +17202,11 @@ export def "users-site-admin delete-enterprise-demote-administrator" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($username | is-empty) { error make --unspanned { msg: "path parameter 'username' must be non-empty" } }
   let full_url = (build-url $base ({username: (encode-path-segment $username)} | format pattern "/users/{username}/site_admin"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
 }
 
 # Promote a user to be a site administrator
@@ -16197,10 +17228,11 @@ export def "users-site-admin update-enterprise-promote-to-be-administrator" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($username | is-empty) { error make --unspanned { msg: "path parameter 'username' must be non-empty" } }
   let full_url = (build-url $base ({username: (encode-path-segment $username)} | format pattern "/users/{username}/site_admin"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
 }
 
 # List repositories starred by a user
@@ -16226,11 +17258,12 @@ export def "users-starred list-activity-repos" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($username | is-empty) { error make --unspanned { msg: "path parameter 'username' must be non-empty" } }
   let qp = [(serialize-qp "sort" $qp_sort "scalar") (serialize-qp "direction" $direction "scalar") (serialize-qp "per_page" $per_page "scalar") (serialize-qp "page" $page "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({username: (encode-path-segment $username)} | format pattern "/users/{username}/starred") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"sort": $qp_sort, "direction": $direction, "per_page": $per_page, "page": $page} | compact), body: null}
 }
 
 # List repositories watched by a user
@@ -16254,11 +17287,12 @@ export def "users-subscriptions list-activity-repos-watched" [
 ]: nothing -> table<allow_forking: bool, anonymous_access_enabled: bool, archive_url: string, archived: bool, assignees_url: string, blobs_url: string, branches_url: string, clone_url: string, code_of_conduct: record<body: string, html_url: string, key: string, name: string, url: string>, collaborators_url: string, comments_url: string, commits_url: string, compare_url: string, contents_url: string, contributors_url: string, created_at: string, default_branch: string, delete_branch_on_merge: bool, deployments_url: string, description: string, disabled: bool, downloads_url: string, events_url: string, fork: bool, forks: int, forks_count: int, forks_url: string, full_name: string, git_commits_url: string, git_refs_url: string, git_tags_url: string, git_url: string, has_downloads: bool, has_issues: bool, has_pages: bool, has_projects: bool, has_wiki: bool, homepage: string, hooks_url: string, html_url: string, id: int, is_template: bool, issue_comment_url: string, issue_events_url: string, issues_url: string, keys_url: string, labels_url: string, language: string, languages_url: string, license: record<key: string, name: string, node_id: string, spdx_id: string, url: string>, merges_url: string, milestones_url: string, mirror_url: string, name: string, network_count: int, node_id: string, notifications_url: string, open_issues: int, open_issues_count: int, owner: record<avatar_url: string, email: string, events_url: string, followers_url: string, following_url: string, gists_url: string, gravatar_id: string, html_url: string, id: int, login: string, name: string, node_id: string, organizations_url: string, received_events_url: string, repos_url: string, site_admin: bool, starred_at: string, starred_url: string, subscriptions_url: string, type: string, url: string>, permissions: record<admin: bool, maintain: bool, pull: bool, push: bool, triage: bool>, private: bool, pulls_url: string, pushed_at: string, releases_url: string, size: int, ssh_url: string, stargazers_count: int, stargazers_url: string, statuses_url: string, subscribers_count: int, subscribers_url: string, subscription_url: string, svn_url: string, tags_url: string, teams_url: string, template_repository: record<allow_forking: bool, allow_merge_commit: bool, allow_rebase_merge: bool, allow_squash_merge: bool, anonymous_access_enabled: bool, archive_url: string, archived: bool, assignees_url: string, blobs_url: string, branches_url: string, clone_url: string, collaborators_url: string, comments_url: string, commits_url: string, compare_url: string, contents_url: string, contributors_url: string, created_at: string, default_branch: string, delete_branch_on_merge: bool, deployments_url: string, description: string, disabled: bool, downloads_url: string, events_url: string, fork: bool, forks: int, forks_count: int, forks_url: string, full_name: string, git_commits_url: string, git_refs_url: string, git_tags_url: string, git_url: string, has_downloads: bool, has_issues: bool, has_pages: bool, has_projects: bool, has_wiki: bool, homepage: string, hooks_url: string, html_url: string, id: int, is_template: bool, issue_comment_url: string, issue_events_url: string, issues_url: string, keys_url: string, labels_url: string, language: string, languages_url: string, license: record, master_branch: string, merges_url: string, milestones_url: string, mirror_url: string, name: string, network_count: int, node_id: string, notifications_url: string, open_issues: int, open_issues_count: int, organization: record, owner: record, permissions: record, private: bool, pulls_url: string, pushed_at: string, releases_url: string, size: int, ssh_url: string, stargazers_count: int, stargazers_url: string, starred_at: string, statuses_url: string, subscribers_count: int, subscribers_url: string, subscription_url: string, svn_url: string, tags_url: string, teams_url: string, template_repository: record, topics: list, trees_url: string, updated_at: string, url: string, visibility: string, watchers: int, watchers_count: int>, topics: list<string>, trees_url: string, updated_at: string, url: string, visibility: string, watchers: int, watchers_count: int> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($username | is-empty) { error make --unspanned { msg: "path parameter 'username' must be non-empty" } }
   let qp = [(serialize-qp "per_page" $per_page "scalar") (serialize-qp "page" $page "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({username: (encode-path-segment $username)} | format pattern "/users/{username}/subscriptions") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"per_page": $per_page, "page": $page} | compact), body: null}
 }
 
 # Unsuspend a user
@@ -16282,12 +17316,13 @@ export def "users-suspended delete-enterprise-admin-unsuspend" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($username | is-empty) { error make --unspanned { msg: "path parameter 'username' must be non-empty" } }
   let full_url = (build-url $base ({username: (encode-path-segment $username)} | format pattern "/users/{username}/suspended"))
   let req_body = {"reason": $reason} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: {}, body: $req_body}
 }
 
 # Suspend a user
@@ -16311,12 +17346,13 @@ export def "users-suspended update-enterprise-admin-suspend" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($username | is-empty) { error make --unspanned { msg: "path parameter 'username' must be non-empty" } }
   let full_url = (build-url $base ({username: (encode-path-segment $username)} | format pattern "/users/{username}/suspended"))
   let req_body = {"reason": $reason} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: {}, body: $req_body}
 }
 
 # Get the Zen of GitHub
@@ -16339,5 +17375,5 @@ export def "zen get-meta" [
   let full_url = (build-url $base "/zen")
   let accept_val = "text/plain"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
 }

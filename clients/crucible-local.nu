@@ -3,16 +3,17 @@
 # Auth: --token flag or $env.CRUCIBLE_TOKEN
 
 const BASE_URL = "http://crucible.local/context"
-const DEFAULT_AUTH = "bearer"
 
-# Build auth: returns {headers: record, query: string}
+# Build auth: returns {scheme: string, headers: record, query: string, location: string}.
+# `location` is "header" | "query" | "cookie" | "none" and tells dry-run callers
+# where the token went without inspecting headers/query themselves.
 def build-auth [token?: string, auth_scheme?: string]: nothing -> record {
   let token_val = if ($token != null) and ($token | is-not-empty) { $token } else { $env | get -o CRUCIBLE_TOKEN | default "" }
   let scheme = ($auth_scheme | default "bearer")
-  if ($scheme == "none") or ($token_val | is-empty) { return {headers: {}, query: ""} }
+  if ($scheme == "none") or ($token_val | is-empty) { return {scheme: $scheme, headers: {}, query: "", location: "none"} }
   match $scheme {
-    "none" => { {headers: {}, query: ""} }
-    _ => { {headers: {Authorization: $"Bearer ($token_val)"}, query: ""} }
+    "none" => { {scheme: $scheme, headers: {}, query: "", location: "none"} }
+    _ => { {scheme: $scheme, headers: {Authorization: $"Bearer ($token_val)"}, query: "", location: "header"} }
   }
 }
 
@@ -21,8 +22,9 @@ def build-auth [token?: string, auth_scheme?: string]: nothing -> record {
 # ([A-Za-z0-9-._~]) stay literal; everything else gets %XX.
 def serialize-qp [name: string, value: any, style: string]: nothing -> list<string> {
   if ($value == null) { return [] }
-  let n = (encode-path-segment $name)
   let is_list = ($value | describe | str starts-with "list")
+  if $is_list and ($value | is-empty) { return [] }
+  let n = (encode-path-segment $name)
   if ($value | describe | str starts-with "record") { return ($value | transpose k v | each { $"($n)[(encode-path-segment $in.k)]=(encode-path-segment $in.v)" }) }
   if not $is_list { return [$"($n)=(encode-path-segment $value)"] }
   match $style {
@@ -53,22 +55,42 @@ def build-url [base: string, path: string, query?: string]: nothing -> string {
   if ($query != null) and ($query | is-not-empty) { $result | upsert query $query | url join } else { $result | url join }
 }
 
+# Build the dry-run record returned by --dry-run. Shape:
+#   {dry_run: true, method, url, query: <record>, headers, body, content_type, timeout,
+#    auth: {scheme, location}}
+# `meta` carries logical-form data (the query record by spec name, the pre-serialization
+# body) that do-request itself cannot reconstruct from its wire-format args.
+def build-dry-run-record [method: string, url: string, auth: record, content_type: string, timeout: duration, meta?: record]: nothing -> record {
+  let m = ($meta | default {})
+  {
+    dry_run: true
+    method: $method
+    url: $url
+    query: ($m | get -o query | default {})
+    headers: $auth.headers
+    body: ($m | get -o body)
+    content_type: $content_type
+    timeout: $timeout
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+}
+
 # Execute HTTP request with method dispatch
-def do-request [method: string, url: string, auth: record, insecure: bool, raw: bool, dry_run: bool, max_time?: duration, allow_errors?: bool, full?: bool, content_type?: string, body?: any]: nothing -> any {
+def do-request [method: string, url: string, auth: record, insecure: bool, raw: bool, dry_run: bool, max_time?: duration, allow_errors?: bool, full?: bool, content_type?: string, body?: any, dry_run_meta?: record]: nothing -> any {
   let req_url = if ($auth.query | is-not-empty) { if ($url | str contains "?") { $"($url)&($auth.query)" } else { $"($url)?($auth.query)" } } else { $url }
   let timeout = ($max_time | default 30min)
   let ct = ($content_type | default "application/json")
-  if $dry_run { return {method: $method, url: $req_url, headers: $auth.headers, query_string: $auth.query, content_type: $ct, timeout: $timeout, body: $body} }
+  if $dry_run { return (build-dry-run-record $method $req_url $auth $ct $timeout $dry_run_meta) }
   let resp = match $method {
     "get" => { http get --headers $auth.headers --full --allow-errors --max-time $timeout --insecure=$insecure --raw=$raw $req_url }
-    "head" => { http head --headers $auth.headers --max-time $timeout --insecure=$insecure $req_url }
-    "options" => { http options --headers $auth.headers --max-time $timeout --insecure=$insecure $req_url }
+    "head" => { http head --headers $auth.headers --full --allow-errors --max-time $timeout --insecure=$insecure $req_url }
+    "options" => { http options --headers $auth.headers --full --allow-errors --max-time $timeout --insecure=$insecure $req_url }
     "post" => { if ($body | is-empty) { http post --headers $auth.headers --full --allow-errors --max-time $timeout --insecure=$insecure --raw=$raw $req_url "" } else { http post --headers $auth.headers --content-type $ct --full --allow-errors --max-time $timeout --insecure=$insecure --raw=$raw $req_url $body } }
     "put" => { if ($body | is-empty) { http put --headers $auth.headers --full --allow-errors --max-time $timeout --insecure=$insecure --raw=$raw $req_url "" } else { http put --headers $auth.headers --content-type $ct --full --allow-errors --max-time $timeout --insecure=$insecure --raw=$raw $req_url $body } }
     "patch" => { if ($body | is-empty) { http patch --headers $auth.headers --full --allow-errors --max-time $timeout --insecure=$insecure --raw=$raw $req_url "" } else { http patch --headers $auth.headers --content-type $ct --full --allow-errors --max-time $timeout --insecure=$insecure --raw=$raw $req_url $body } }
     "delete" => { if ($body | is-empty) { http delete --headers $auth.headers --full --allow-errors --max-time $timeout --insecure=$insecure --raw=$raw $req_url } else { http delete --headers $auth.headers --content-type $ct --data $body --full --allow-errors --max-time $timeout --insecure=$insecure --raw=$raw $req_url } }
   }
-  if ($method in ["head" "options"]) { return $resp }
+  if ($method == "head") and (not $full) and (not $allow_errors) and $resp.status < 400 { return $resp.headers }
   if $allow_errors { $resp } else if $resp.status >= 400 { error make --unspanned { msg: $"HTTP ($resp.status): ($resp.body)" } } else if $full { {status: $resp.status, headers: $resp.headers, body: $resp.body} } else if $resp.status == 204 { null } else { $resp.body }
 }
 
@@ -122,7 +144,7 @@ export def "rest-service-auth-v1-login get" [
   let full_url = (build-url $base "/rest-service/auth-v1/login" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"userName": $user_name, "password": $password} | compact), body: null}
 }
 
 # Get the user authentication token.
@@ -145,7 +167,7 @@ export def "rest-service-auth-v1-login create" [
   let full_url = (build-url $base "/rest-service/auth-v1/login")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
 }
 
 # Get the list of projects that the authenticated user is entitled to access.
@@ -170,7 +192,7 @@ export def "rest-service-projects-v1 get-list" [
   let full_url = (build-url $base "/rest-service/projects-v1" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"excludeAllowedReviewers": $exclude_allowed_reviewers} | compact), body: null}
 }
 
 # Returns a project description.
@@ -192,11 +214,12 @@ export def "rest-service-projects-v1 get" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($key | is-empty) { error make --unspanned { msg: "path parameter 'key' must be non-empty" } }
   let qp = [(serialize-qp "excludeAllowedReviewers" $exclude_allowed_reviewers "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({key: (encode-path-segment $key)} | format pattern "/rest-service/projects-v1/{key}") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"excludeAllowedReviewers": $exclude_allowed_reviewers} | compact), body: null}
 }
 
 # Returns a list of all repositories. This includes plugin provided repositories
@@ -225,7 +248,7 @@ export def "rest-service-repositories-v1 get-list" [
   let full_url = (build-url $base "/rest-service/repositories-v1" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"name": $name, "enabled": $enabled, "available": $available, "type": $type, "limit": $limit} | compact), body: null}
 }
 
 # Lists the contents of the specified directory.
@@ -247,10 +270,12 @@ export def "rest-service-repositories-v1-browse get" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($repository | is-empty) { error make --unspanned { msg: "path parameter 'repository' must be non-empty" } }
+  if ($path | is-empty) { error make --unspanned { msg: "path parameter 'path' must be non-empty" } }
   let full_url = (build-url $base ({repository: (encode-path-segment $repository), path: (encode-path-segment $path)} | format pattern "/rest-service/repositories-v1/browse/{repository}/{path}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
 }
 
 # Represents a particular changeset.
@@ -272,10 +297,12 @@ export def "rest-service-repositories-v1-change get" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($repository | is-empty) { error make --unspanned { msg: "path parameter 'repository' must be non-empty" } }
+  if ($revision | is-empty) { error make --unspanned { msg: "path parameter 'revision' must be non-empty" } }
   let full_url = (build-url $base ({repository: (encode-path-segment $repository), revision: (encode-path-segment $revision)} | format pattern "/rest-service/repositories-v1/change/{repository}/{revision}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
 }
 
 # Represents a sorted list of changesets, newest first.
@@ -302,11 +329,13 @@ export def "rest-service-repositories-v1-changes changes" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($repository | is-empty) { error make --unspanned { msg: "path parameter 'repository' must be non-empty" } }
+  if ($path | is-empty) { error make --unspanned { msg: "path parameter 'path' must be non-empty" } }
   let qp = [(serialize-qp "oldestCsid" $oldest_csid "scalar") (serialize-qp "includeOldest" $include_oldest "scalar") (serialize-qp "newestCsid" $newest_csid "scalar") (serialize-qp "includeNewest" $include_newest "scalar") (serialize-qp "max" $max "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({repository: (encode-path-segment $repository), path: (encode-path-segment $path)} | format pattern "/rest-service/repositories-v1/changes/{repository}/{path}") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"oldestCsid": $oldest_csid, "includeOldest": $include_oldest, "newestCsid": $newest_csid, "includeNewest": $include_newest, "max": $max} | compact), body: null}
 }
 
 # Returns the raw content of the specified file revision as a binary stream. No attempt is made to identify the content type and no mime type is provided.
@@ -329,10 +358,13 @@ export def "rest-service-repositories-v1-content get" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($repository | is-empty) { error make --unspanned { msg: "path parameter 'repository' must be non-empty" } }
+  if ($revision | is-empty) { error make --unspanned { msg: "path parameter 'revision' must be non-empty" } }
+  if ($path | is-empty) { error make --unspanned { msg: "path parameter 'path' must be non-empty" } }
   let full_url = (build-url $base ({repository: (encode-path-segment $repository), revision: (encode-path-segment $revision), path: (encode-path-segment $path)} | format pattern "/rest-service/repositories-v1/content/{repository}/{revision}/{path}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
 }
 
 # Represents the history of a versioned entity.
@@ -355,10 +387,13 @@ export def "rest-service-repositories-v1-history get" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($repository | is-empty) { error make --unspanned { msg: "path parameter 'repository' must be non-empty" } }
+  if ($revision | is-empty) { error make --unspanned { msg: "path parameter 'revision' must be non-empty" } }
+  if ($path | is-empty) { error make --unspanned { msg: "path parameter 'path' must be non-empty" } }
   let full_url = (build-url $base ({repository: (encode-path-segment $repository), revision: (encode-path-segment $revision), path: (encode-path-segment $path)} | format pattern "/rest-service/repositories-v1/history/{repository}/{revision}/{path}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
 }
 
 # GET /rest-service/repositories-v1/{repository}
@@ -378,10 +413,11 @@ export def "rest-service-repositories-v1 get-details-by-repository" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($repository | is-empty) { error make --unspanned { msg: "path parameter 'repository' must be non-empty" } }
   let full_url = (build-url $base ({repository: (encode-path-segment $repository)} | format pattern "/rest-service/repositories-v1/{repository}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
 }
 
 # For backward compatibility we provide this method, but repositories should be referred to just by their key.
@@ -402,10 +438,11 @@ export def "rest-service-repositories-v1-svn get-details" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($repository | is-empty) { error make --unspanned { msg: "path parameter 'repository' must be non-empty" } }
   let full_url = (build-url $base ({repository: (encode-path-segment $repository)} | format pattern "/rest-service/repositories-v1/{repository}/svn"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
 }
 
 # GET /rest-service/repositories-v1/{repository}/{revision}/{path}
@@ -427,10 +464,13 @@ export def "rest-service-repositories-v1 get-details-by-repository-revision-path
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($repository | is-empty) { error make --unspanned { msg: "path parameter 'repository' must be non-empty" } }
+  if ($revision | is-empty) { error make --unspanned { msg: "path parameter 'revision' must be non-empty" } }
+  if ($path | is-empty) { error make --unspanned { msg: "path parameter 'path' must be non-empty" } }
   let full_url = (build-url $base ({repository: (encode-path-segment $repository), revision: (encode-path-segment $revision), path: (encode-path-segment $path)} | format pattern "/rest-service/repositories-v1/{repository}/{revision}/{path}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
 }
 
 # GET /rest-service/reviews-v1
@@ -454,7 +494,7 @@ export def "rest-service-reviews-v1 get-list" [
   let full_url = (build-url $base "/rest-service/reviews-v1" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"state": $state} | compact), body: null}
 }
 
 # POST /rest-service/reviews-v1
@@ -476,7 +516,7 @@ export def "rest-service-reviews-v1 create" [
   let full_url = (build-url $base "/rest-service/reviews-v1")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
 }
 
 # Retrieves all reviews that are in one of the the specified states. For each review all details are included (review items + comments). The wiki rendered comments will be available via the element
@@ -501,7 +541,7 @@ export def "rest-service-reviews-v1-details get-list-detailed" [
   let full_url = (build-url $base "/rest-service/reviews-v1/details" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"state": $state} | compact), body: null}
 }
 
 # To ignore a property, omit it from the query string.
@@ -537,7 +577,7 @@ export def "rest-service-reviews-v1-filter get-custom" [
   let full_url = (build-url $base "/rest-service/reviews-v1/filter" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"title": $title, "author": $author, "moderator": $moderator, "creator": $creator, "states": $states, "reviewer": $reviewer, "orRoles": $or_roles, "complete": $complete, "allReviewersComplete": $all_reviewers_complete, "project": $project, "fromDate": $from_date, "toDate": $to_date} | compact), body: null}
 }
 
 # This method should no longer be used, as it uses a POST for a read-only retrieval operation and is provided for backward compatibility only.
@@ -560,7 +600,7 @@ export def "rest-service-reviews-v1-filter create-custom" [
   let full_url = (build-url $base "/rest-service/reviews-v1/filter")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
 }
 
 # To ignore a property, omit it from the query string.
@@ -596,7 +636,7 @@ export def "rest-service-reviews-v1-filter-details get-detailed-custom" [
   let full_url = (build-url $base "/rest-service/reviews-v1/filter/details" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"title": $title, "author": $author, "moderator": $moderator, "creator": $creator, "states": $states, "reviewer": $reviewer, "orRoles": $or_roles, "complete": $complete, "allReviewersComplete": $all_reviewers_complete, "project": $project, "fromDate": $from_date, "toDate": $to_date} | compact), body: null}
 }
 
 # This method should no longer be used, as it uses a POST for a read-only retrieval operation and is provided for backward compatibility only.
@@ -619,7 +659,7 @@ export def "rest-service-reviews-v1-filter-details create-detailed-custom" [
   let full_url = (build-url $base "/rest-service/reviews-v1/filter/details")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
 }
 
 # Get all the reviews which match the given filter, for the current user.
@@ -640,10 +680,11 @@ export def "rest-service-reviews-v1-filter get-filtered-for-user" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($filter | is-empty) { error make --unspanned { msg: "path parameter 'filter' must be non-empty" } }
   let full_url = (build-url $base ({filter: (encode-path-segment $filter)} | format pattern "/rest-service/reviews-v1/filter/{filter}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
 }
 
 # Gets a list of all the reviews that match the specified filter criteria.
@@ -664,10 +705,11 @@ export def "rest-service-reviews-v1-filter-details get-detailed-filtered-for-use
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($filter | is-empty) { error make --unspanned { msg: "path parameter 'filter' must be non-empty" } }
   let full_url = (build-url $base ({filter: (encode-path-segment $filter)} | format pattern "/rest-service/reviews-v1/filter/{filter}/details"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
 }
 
 # Get comment metrics metadata for the specified metrics version.
@@ -688,10 +730,11 @@ export def "rest-service-reviews-v1-metrics get" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($version | is-empty) { error make --unspanned { msg: "path parameter 'version' must be non-empty" } }
   let full_url = (build-url $base ({version: (encode-path-segment $version)} | format pattern "/rest-service/reviews-v1/metrics/{version}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
 }
 
 # Return a list of Reviews which include a particular file.
@@ -713,11 +756,12 @@ export def "rest-service-reviews-v1-search get-for-path" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($repository | is-empty) { error make --unspanned { msg: "path parameter 'repository' must be non-empty" } }
   let qp = [(serialize-qp "path" $path "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({repository: (encode-path-segment $repository)} | format pattern "/rest-service/reviews-v1/search/{repository}") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"path": $path} | compact), body: null}
 }
 
 # Return a list of Reviews which include a particular file.
@@ -739,11 +783,12 @@ export def "rest-service-reviews-v1-search-details get-for-path" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($repository | is-empty) { error make --unspanned { msg: "path parameter 'repository' must be non-empty" } }
   let qp = [(serialize-qp "path" $path "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({repository: (encode-path-segment $repository)} | format pattern "/rest-service/reviews-v1/search/{repository}/details") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"path": $path} | compact), body: null}
 }
 
 # Returns Crucible version information.
@@ -766,7 +811,7 @@ export def "rest-service-reviews-v1-version-info get" [
   let full_url = (build-url $base "/rest-service/reviews-v1/versionInfo")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
 }
 
 # Permanently deletes the specified review. The review must have been abandoned.
@@ -787,10 +832,11 @@ export def "rest-service-reviews-v1 delete" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
   let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/rest-service/reviews-v1/{id}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
 }
 
 # Get a single review by its permId (e.g. "CR-45"). If the review does not exist, a 404 is returned. The moderator element may not exist if the review does not have a Moderator.
@@ -811,10 +857,11 @@ export def "rest-service-reviews-v1 get" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
   let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/rest-service/reviews-v1/{id}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
 }
 
 # Get a list of the actions which the current user is allowed to perform on the review.
@@ -835,10 +882,11 @@ export def "rest-service-reviews-v1-actions get-available" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
   let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/rest-service/reviews-v1/{id}/actions"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
 }
 
 # POST /rest-service/reviews-v1/{id}/addChangeset
@@ -858,10 +906,11 @@ export def "rest-service-reviews-v1-add-changeset create" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
   let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/rest-service/reviews-v1/{id}/addChangeset"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
 }
 
 # POST /rest-service/reviews-v1/{id}/addFile
@@ -881,10 +930,11 @@ export def "rest-service-reviews-v1-add-file create" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
   let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/rest-service/reviews-v1/{id}/addFile"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
 }
 
 # Old, non-restful name. Kept for backwards compatibility. Exactly the same as POSTing to /{id}/patch
@@ -905,10 +955,11 @@ export def "rest-service-reviews-v1-add-patch create-review0" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
   let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/rest-service/reviews-v1/{id}/addPatch"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
 }
 
 # Closes the given review with the summary given.
@@ -929,10 +980,11 @@ export def "rest-service-reviews-v1-close close-with-comment" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
   let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/rest-service/reviews-v1/{id}/close"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
 }
 
 # Return all the comments visible to the requesting user for the review.
@@ -954,11 +1006,12 @@ export def "rest-service-reviews-v1-comments get-list" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
   let qp = [(serialize-qp "render" $render "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/rest-service/reviews-v1/{id}/comments") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"render": $render} | compact), body: null}
 }
 
 # Add a general comment to the review.
@@ -979,10 +1032,11 @@ export def "rest-service-reviews-v1-comments create-general" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
   let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/rest-service/reviews-v1/{id}/comments"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
 }
 
 # GET /rest-service/reviews-v1/{id}/comments/general
@@ -1003,11 +1057,12 @@ export def "rest-service-reviews-v1-comments-general get" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
   let qp = [(serialize-qp "render" $render "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/rest-service/reviews-v1/{id}/comments/general") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"render": $render} | compact), body: null}
 }
 
 # For the effective user, mark all comments in a review as read (except those marked as leave unread).
@@ -1028,10 +1083,11 @@ export def "rest-service-reviews-v1-comments-mark-all-as-read list" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
   let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/rest-service/reviews-v1/{id}/comments/markAllAsRead"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
 }
 
 # GET /rest-service/reviews-v1/{id}/comments/versioned
@@ -1052,11 +1108,12 @@ export def "rest-service-reviews-v1-comments-versioned get" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
   let qp = [(serialize-qp "render" $render "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/rest-service/reviews-v1/{id}/comments/versioned") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"render": $render} | compact), body: null}
 }
 
 # Deletes the given comment.
@@ -1078,10 +1135,12 @@ export def "rest-service-reviews-v1-comments delete" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
+  if ($c_id | is-empty) { error make --unspanned { msg: "path parameter 'cId' must be non-empty" } }
   let full_url = (build-url $base ({id: (encode-path-segment $id), c_id: (encode-path-segment $c_id)} | format pattern "/rest-service/reviews-v1/{id}/comments/{c_id}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
 }
 
 # Gets the given comment.
@@ -1104,11 +1163,13 @@ export def "rest-service-reviews-v1-comments get" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
+  if ($c_id | is-empty) { error make --unspanned { msg: "path parameter 'cId' must be non-empty" } }
   let qp = [(serialize-qp "render" $render "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({id: (encode-path-segment $id), c_id: (encode-path-segment $c_id)} | format pattern "/rest-service/reviews-v1/{id}/comments/{c_id}") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"render": $render} | compact), body: null}
 }
 
 # Updates the comment given by the perma id to the new comment posted.
@@ -1130,10 +1191,12 @@ export def "rest-service-reviews-v1-comments update" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
+  if ($c_id | is-empty) { error make --unspanned { msg: "path parameter 'cId' must be non-empty" } }
   let full_url = (build-url $base ({id: (encode-path-segment $id), c_id: (encode-path-segment $c_id)} | format pattern "/rest-service/reviews-v1/{id}/comments/{c_id}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
 }
 
 # Marks the comment as leave unread to the current user - it will not automatically be marked as read by crucible.
@@ -1155,10 +1218,12 @@ export def "rest-service-reviews-v1-comments-mark-as-leave-unread create" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
+  if ($c_id | is-empty) { error make --unspanned { msg: "path parameter 'cId' must be non-empty" } }
   let full_url = (build-url $base ({id: (encode-path-segment $id), c_id: (encode-path-segment $c_id)} | format pattern "/rest-service/reviews-v1/{id}/comments/{c_id}/markAsLeaveUnread"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
 }
 
 # Mark the given comment as read for the user used to make this POST.
@@ -1180,10 +1245,12 @@ export def "rest-service-reviews-v1-comments-mark-as-read get" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
+  if ($c_id | is-empty) { error make --unspanned { msg: "path parameter 'cId' must be non-empty" } }
   let full_url = (build-url $base ({id: (encode-path-segment $id), c_id: (encode-path-segment $c_id)} | format pattern "/rest-service/reviews-v1/{id}/comments/{c_id}/markAsRead"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
 }
 
 # Gets the replies to the given comment.
@@ -1206,11 +1273,13 @@ export def "rest-service-reviews-v1-comments-replies get" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
+  if ($c_id | is-empty) { error make --unspanned { msg: "path parameter 'cId' must be non-empty" } }
   let qp = [(serialize-qp "render" $render "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({id: (encode-path-segment $id), c_id: (encode-path-segment $c_id)} | format pattern "/rest-service/reviews-v1/{id}/comments/{c_id}/replies") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"render": $render} | compact), body: null}
 }
 
 # Adds a reply to the given comment. This call includes the repsonse header that contains the URL of the newly created entity.
@@ -1232,10 +1301,12 @@ export def "rest-service-reviews-v1-comments-replies create-reply" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
+  if ($c_id | is-empty) { error make --unspanned { msg: "path parameter 'cId' must be non-empty" } }
   let full_url = (build-url $base ({id: (encode-path-segment $id), c_id: (encode-path-segment $c_id)} | format pattern "/rest-service/reviews-v1/{id}/comments/{c_id}/replies"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
 }
 
 # Deletes the reply.
@@ -1258,10 +1329,13 @@ export def "rest-service-reviews-v1-comments-replies delete-reply" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
+  if ($c_id | is-empty) { error make --unspanned { msg: "path parameter 'cId' must be non-empty" } }
+  if ($r_id | is-empty) { error make --unspanned { msg: "path parameter 'rId' must be non-empty" } }
   let full_url = (build-url $base ({id: (encode-path-segment $id), c_id: (encode-path-segment $c_id), r_id: (encode-path-segment $r_id)} | format pattern "/rest-service/reviews-v1/{id}/comments/{c_id}/replies/{r_id}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
 }
 
 # Updates a reply with the given newComment.
@@ -1284,10 +1358,13 @@ export def "rest-service-reviews-v1-comments-replies update-reply" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
+  if ($c_id | is-empty) { error make --unspanned { msg: "path parameter 'cId' must be non-empty" } }
+  if ($r_id | is-empty) { error make --unspanned { msg: "path parameter 'rId' must be non-empty" } }
   let full_url = (build-url $base ({id: (encode-path-segment $id), c_id: (encode-path-segment $c_id), r_id: (encode-path-segment $r_id)} | format pattern "/rest-service/reviews-v1/{id}/comments/{c_id}/replies/{r_id}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
 }
 
 # Completes the review for the current user
@@ -1309,11 +1386,12 @@ export def "rest-service-reviews-v1-complete complete" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
   let qp = [(serialize-qp "ignoreWarnings" $ignore_warnings "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/rest-service/reviews-v1/{id}/complete") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"ignoreWarnings": $ignore_warnings} | compact), body: null}
 }
 
 # Returns the specified review.
@@ -1334,10 +1412,11 @@ export def "rest-service-reviews-v1-details get-detailed" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
   let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/rest-service/reviews-v1/{id}/details"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
 }
 
 # Get a list of patches and their details for the given review
@@ -1358,10 +1437,11 @@ export def "rest-service-reviews-v1-patch get-patches" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
   let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/rest-service/reviews-v1/{id}/patch"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
 }
 
 # Add the revisions in a patch to an existing review.
@@ -1382,10 +1462,11 @@ export def "rest-service-reviews-v1-patch create" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
   let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/rest-service/reviews-v1/{id}/patch"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
 }
 
 # Removes the patch with the given id from the review. All of the revisions provided by the patch will be removed as well.
@@ -1407,10 +1488,12 @@ export def "rest-service-reviews-v1-patch delete" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
+  if ($patch_id | is-empty) { error make --unspanned { msg: "path parameter 'patchId' must be non-empty" } }
   let full_url = (build-url $base ({id: (encode-path-segment $id), patch_id: (encode-path-segment $patch_id)} | format pattern "/rest-service/reviews-v1/{id}/patch/{patch_id}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
 }
 
 # Publishes all the draft comments of the current user.
@@ -1431,10 +1514,11 @@ export def "rest-service-reviews-v1-publish list-comments" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
   let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/rest-service/reviews-v1/{id}/publish"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
 }
 
 # publishes the given draft comment.
@@ -1456,10 +1540,12 @@ export def "rest-service-reviews-v1-publish publish-comment" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
+  if ($c_id | is-empty) { error make --unspanned { msg: "path parameter 'cId' must be non-empty" } }
   let full_url = (build-url $base ({id: (encode-path-segment $id), c_id: (encode-path-segment $c_id)} | format pattern "/rest-service/reviews-v1/{id}/publish/{c_id}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
 }
 
 # Immediately send a reminder to incomplete reviewers about the given review.
@@ -1480,10 +1566,11 @@ export def "rest-service-reviews-v1-remind create-incomplete-reviewers" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
   let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/rest-service/reviews-v1/{id}/remind"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
 }
 
 # Get a list of reviewers in the review given by the permaid id.
@@ -1504,10 +1591,11 @@ export def "rest-service-reviews-v1-reviewers get" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
   let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/rest-service/reviews-v1/{id}/reviewers"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
 }
 
 # Adds the given list of reviewers to the review.
@@ -1528,10 +1616,11 @@ export def "rest-service-reviews-v1-reviewers create" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
   let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/rest-service/reviews-v1/{id}/reviewers"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
 }
 
 # Gets a list of completed reviewers.
@@ -1552,10 +1641,11 @@ export def "rest-service-reviews-v1-reviewers-completed get" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
   let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/rest-service/reviews-v1/{id}/reviewers/completed"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
 }
 
 # Gets a list of reviewers that have not completed the review.
@@ -1576,10 +1666,11 @@ export def "rest-service-reviews-v1-reviewers-uncompleted get" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
   let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/rest-service/reviews-v1/{id}/reviewers/uncompleted"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
 }
 
 # Removes the reviewer from the review.
@@ -1601,10 +1692,12 @@ export def "rest-service-reviews-v1-reviewers delete" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
+  if ($username | is-empty) { error make --unspanned { msg: "path parameter 'username' must be non-empty" } }
   let full_url = (build-url $base ({id: (encode-path-segment $id), username: (encode-path-segment $username)} | format pattern "/rest-service/reviews-v1/{id}/reviewers/{username}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
 }
 
 # Returns a list of all the items in a review.
@@ -1625,10 +1718,11 @@ export def "rest-service-reviews-v1-reviewitems get-items" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
   let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/rest-service/reviews-v1/{id}/reviewitems"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
 }
 
 # Add the changes between two files in a fisheye repository to the review.
@@ -1649,10 +1743,11 @@ export def "rest-service-reviews-v1-reviewitems create-fisheye-item" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
   let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/rest-service/reviews-v1/{id}/reviewitems"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
 }
 
 # Adds the given review item to the review. This will always create a new review item, even if there is an existing one with the same data in the review (in which case the existing item will be replaced).
@@ -1673,10 +1768,11 @@ export def "rest-service-reviews-v1-reviewitems-details create-item" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
   let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/rest-service/reviews-v1/{id}/reviewitems/details"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
 }
 
 # Adds a review item for each of the supplied crucibleRevisionData elements.
@@ -1697,10 +1793,11 @@ export def "rest-service-reviews-v1-reviewitems-revisions create-items" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
   let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/rest-service/reviews-v1/{id}/reviewitems/revisions"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
 }
 
 # Removes an item from a review.
@@ -1722,10 +1819,12 @@ export def "rest-service-reviews-v1-reviewitems delete-item" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
+  if ($ri_id | is-empty) { error make --unspanned { msg: "path parameter 'riId' must be non-empty" } }
   let full_url = (build-url $base ({id: (encode-path-segment $id), ri_id: (encode-path-segment $ri_id)} | format pattern "/rest-service/reviews-v1/{id}/reviewitems/{ri_id}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
 }
 
 # Returns detailed information for a specific review item.
@@ -1747,10 +1846,12 @@ export def "rest-service-reviews-v1-reviewitems get-item" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
+  if ($ri_id | is-empty) { error make --unspanned { msg: "path parameter 'riId' must be non-empty" } }
   let full_url = (build-url $base ({id: (encode-path-segment $id), ri_id: (encode-path-segment $ri_id)} | format pattern "/rest-service/reviews-v1/{id}/reviewitems/{ri_id}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
 }
 
 # GET /rest-service/reviews-v1/{id}/reviewitems/{riId}/comments
@@ -1772,11 +1873,13 @@ export def "rest-service-reviews-v1-reviewitems-comments get-items" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
+  if ($ri_id | is-empty) { error make --unspanned { msg: "path parameter 'riId' must be non-empty" } }
   let qp = [(serialize-qp "render" $render "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({id: (encode-path-segment $id), ri_id: (encode-path-segment $ri_id)} | format pattern "/rest-service/reviews-v1/{id}/reviewitems/{ri_id}/comments") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"render": $render} | compact), body: null}
 }
 
 # This call includes the repsonse header that contains the URL of the newly created entity.
@@ -1798,10 +1901,12 @@ export def "rest-service-reviews-v1-reviewitems-comments create-versioned" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
+  if ($ri_id | is-empty) { error make --unspanned { msg: "path parameter 'riId' must be non-empty" } }
   let full_url = (build-url $base ({id: (encode-path-segment $id), ri_id: (encode-path-segment $ri_id)} | format pattern "/rest-service/reviews-v1/{id}/reviewitems/{ri_id}/comments"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
 }
 
 # Sets the review item specified by itemId with the given reviewItem. The old review item is discarded. Can only perform this operation if the old review item specified by itemId can be deleted. The old review item's permId is not changed.
@@ -1823,10 +1928,12 @@ export def "rest-service-reviews-v1-reviewitems-details update-item" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
+  if ($ri_id | is-empty) { error make --unspanned { msg: "path parameter 'riId' must be non-empty" } }
   let full_url = (build-url $base ({id: (encode-path-segment $id), ri_id: (encode-path-segment $ri_id)} | format pattern "/rest-service/reviews-v1/{id}/reviewitems/{ri_id}/details"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
 }
 
 # Removes the revisions given from the review item in the review specified by the id. If the review item has no more revisions left, it is automatically deleted.
@@ -1849,11 +1956,13 @@ export def "rest-service-reviews-v1-reviewitems-revisions delete-item" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
+  if ($ri_id | is-empty) { error make --unspanned { msg: "path parameter 'riId' must be non-empty" } }
   let qp = [(serialize-qp "rev" $rev "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({id: (encode-path-segment $id), ri_id: (encode-path-segment $ri_id)} | format pattern "/rest-service/reviews-v1/{id}/reviewitems/{ri_id}/revisions") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"rev": $rev} | compact), body: null}
 }
 
 # Adds the given list of revisions to the supplied review item, merging if required. For example, if the review item for contains revisions 3 to 6, and if:
@@ -1876,11 +1985,13 @@ export def "rest-service-reviews-v1-reviewitems-revisions create-item" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
+  if ($ri_id | is-empty) { error make --unspanned { msg: "path parameter 'riId' must be non-empty" } }
   let qp = [(serialize-qp "rev" $rev "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({id: (encode-path-segment $id), ri_id: (encode-path-segment $ri_id)} | format pattern "/rest-service/reviews-v1/{id}/reviewitems/{ri_id}/revisions") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"rev": $rev} | compact), body: null}
 }
 
 # Change the state of a review by performing an action on it.
@@ -1903,11 +2014,12 @@ export def "rest-service-reviews-v1-transition create-change-state" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
   let qp = [(serialize-qp "action" $action "scalar") (serialize-qp "ignoreWarnings" $ignore_warnings "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/rest-service/reviews-v1/{id}/transition") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"action": $action, "ignoreWarnings": $ignore_warnings} | compact), body: null}
 }
 
 # Get a list of the actions which the current user can perform on this review, given its current state and the user's permissions.
@@ -1928,10 +2040,11 @@ export def "rest-service-reviews-v1-transitions get-available" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
   let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/rest-service/reviews-v1/{id}/transitions"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
 }
 
 # Uncompletes the review for the current user.
@@ -1953,11 +2066,12 @@ export def "rest-service-reviews-v1-uncomplete create" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
   let qp = [(serialize-qp "ignoreWarnings" $ignore_warnings "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/rest-service/reviews-v1/{id}/uncomplete") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"ignoreWarnings": $ignore_warnings} | compact), body: null}
 }
 
 # Search for reviews where the name, description, state or permaId contain the specified term.
@@ -1983,7 +2097,7 @@ export def "rest-service-search-v1-reviews get-for-term" [
   let full_url = (build-url $base "/rest-service/search-v1/reviews" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"term": $term, "maxReturn": $max_return} | compact), body: null}
 }
 
 # Get a list of all reviews that have been linked to the specified JIRA issue key.
@@ -2009,7 +2123,7 @@ export def "rest-service-search-v1-reviews-for-issue get-key" [
   let full_url = (build-url $base "/rest-service/search-v1/reviewsForIssue" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"jiraKey": $jira_key, "maxReturn": $max_return} | compact), body: null}
 }
 
 # Get a list of all the users. You can also ask for a set of users.
@@ -2034,7 +2148,7 @@ export def "rest-service-users-v1 get" [
   let full_url = (build-url $base "/rest-service/users-v1" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"username": $username} | compact), body: null}
 }
 
 # Returns the user details of the user mapped to a committer in a repository.
@@ -2056,10 +2170,12 @@ export def "rest-service-users-v1 get-mapped" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($repository | is-empty) { error make --unspanned { msg: "path parameter 'repository' must be non-empty" } }
+  if ($username | is-empty) { error make --unspanned { msg: "path parameter 'username' must be non-empty" } }
   let full_url = (build-url $base ({repository: (encode-path-segment $repository), username: (encode-path-segment $username)} | format pattern "/rest-service/users-v1/{repository}/{username}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
 }
 
 # Returns the user's profile details.
@@ -2080,8 +2196,9 @@ export def "rest-service-users-v1 get-profile" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($username | is-empty) { error make --unspanned { msg: "path parameter 'username' must be non-empty" } }
   let full_url = (build-url $base ({username: (encode-path-segment $username)} | format pattern "/rest-service/users-v1/{username}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
 }

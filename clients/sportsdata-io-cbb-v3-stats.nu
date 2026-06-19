@@ -3,18 +3,19 @@
 # Auth: --token flag or $env.CBB_V3_STATS_TOKEN
 
 const BASE_URL = "http://azure-api.sportsdata.io/v3/cbb/stats"
-const DEFAULT_AUTH = "ocp-apim-subscription-key"
 
-# Build auth: returns {headers: record, query: string}
+# Build auth: returns {scheme: string, headers: record, query: string, location: string}.
+# `location` is "header" | "query" | "cookie" | "none" and tells dry-run callers
+# where the token went without inspecting headers/query themselves.
 def build-auth [token?: string, auth_scheme?: string]: nothing -> record {
   let token_val = if ($token != null) and ($token | is-not-empty) { $token } else { $env | get -o CBB_V3_STATS_TOKEN | default "" }
   let scheme = ($auth_scheme | default "bearer")
-  if ($scheme == "none") or ($token_val | is-empty) { return {headers: {}, query: ""} }
+  if ($scheme == "none") or ($token_val | is-empty) { return {scheme: $scheme, headers: {}, query: "", location: "none"} }
   match $scheme {
-    "ocp-apim-subscription-key" => { {headers: {Ocp-Apim-Subscription-Key: $token_val}, query: ""} }
-    "query-key" => { {headers: {}, query: $"(encode-path-segment "key")=(encode-path-segment $token_val)"} }
-    "none" => { {headers: {}, query: ""} }
-    _ => { {headers: {Authorization: $"Bearer ($token_val)"}, query: ""} }
+    "ocp-apim-subscription-key" => { {scheme: $scheme, headers: {Ocp-Apim-Subscription-Key: $token_val}, query: "", location: "header"} }
+    "query-key" => { {scheme: $scheme, headers: {}, query: $"(encode-path-segment "key")=(encode-path-segment $token_val)", location: "query"} }
+    "none" => { {scheme: $scheme, headers: {}, query: "", location: "none"} }
+    _ => { {scheme: $scheme, headers: {Authorization: $"Bearer ($token_val)"}, query: "", location: "header"} }
   }
 }
 
@@ -23,8 +24,9 @@ def build-auth [token?: string, auth_scheme?: string]: nothing -> record {
 # ([A-Za-z0-9-._~]) stay literal; everything else gets %XX.
 def serialize-qp [name: string, value: any, style: string]: nothing -> list<string> {
   if ($value == null) { return [] }
-  let n = (encode-path-segment $name)
   let is_list = ($value | describe | str starts-with "list")
+  if $is_list and ($value | is-empty) { return [] }
+  let n = (encode-path-segment $name)
   if ($value | describe | str starts-with "record") { return ($value | transpose k v | each { $"($n)[(encode-path-segment $in.k)]=(encode-path-segment $in.v)" }) }
   if not $is_list { return [$"($n)=(encode-path-segment $value)"] }
   match $style {
@@ -55,22 +57,42 @@ def build-url [base: string, path: string, query?: string]: nothing -> string {
   if ($query != null) and ($query | is-not-empty) { $result | upsert query $query | url join } else { $result | url join }
 }
 
+# Build the dry-run record returned by --dry-run. Shape:
+#   {dry_run: true, method, url, query: <record>, headers, body, content_type, timeout,
+#    auth: {scheme, location}}
+# `meta` carries logical-form data (the query record by spec name, the pre-serialization
+# body) that do-request itself cannot reconstruct from its wire-format args.
+def build-dry-run-record [method: string, url: string, auth: record, content_type: string, timeout: duration, meta?: record]: nothing -> record {
+  let m = ($meta | default {})
+  {
+    dry_run: true
+    method: $method
+    url: $url
+    query: ($m | get -o query | default {})
+    headers: $auth.headers
+    body: ($m | get -o body)
+    content_type: $content_type
+    timeout: $timeout
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+}
+
 # Execute HTTP request with method dispatch
-def do-request [method: string, url: string, auth: record, insecure: bool, raw: bool, dry_run: bool, max_time?: duration, allow_errors?: bool, full?: bool, content_type?: string, body?: any]: nothing -> any {
+def do-request [method: string, url: string, auth: record, insecure: bool, raw: bool, dry_run: bool, max_time?: duration, allow_errors?: bool, full?: bool, content_type?: string, body?: any, dry_run_meta?: record]: nothing -> any {
   let req_url = if ($auth.query | is-not-empty) { if ($url | str contains "?") { $"($url)&($auth.query)" } else { $"($url)?($auth.query)" } } else { $url }
   let timeout = ($max_time | default 30min)
   let ct = ($content_type | default "application/json")
-  if $dry_run { return {method: $method, url: $req_url, headers: $auth.headers, query_string: $auth.query, content_type: $ct, timeout: $timeout, body: $body} }
+  if $dry_run { return (build-dry-run-record $method $req_url $auth $ct $timeout $dry_run_meta) }
   let resp = match $method {
     "get" => { http get --headers $auth.headers --full --allow-errors --max-time $timeout --insecure=$insecure --raw=$raw $req_url }
-    "head" => { http head --headers $auth.headers --max-time $timeout --insecure=$insecure $req_url }
-    "options" => { http options --headers $auth.headers --max-time $timeout --insecure=$insecure $req_url }
+    "head" => { http head --headers $auth.headers --full --allow-errors --max-time $timeout --insecure=$insecure $req_url }
+    "options" => { http options --headers $auth.headers --full --allow-errors --max-time $timeout --insecure=$insecure $req_url }
     "post" => { if ($body | is-empty) { http post --headers $auth.headers --full --allow-errors --max-time $timeout --insecure=$insecure --raw=$raw $req_url "" } else { http post --headers $auth.headers --content-type $ct --full --allow-errors --max-time $timeout --insecure=$insecure --raw=$raw $req_url $body } }
     "put" => { if ($body | is-empty) { http put --headers $auth.headers --full --allow-errors --max-time $timeout --insecure=$insecure --raw=$raw $req_url "" } else { http put --headers $auth.headers --content-type $ct --full --allow-errors --max-time $timeout --insecure=$insecure --raw=$raw $req_url $body } }
     "patch" => { if ($body | is-empty) { http patch --headers $auth.headers --full --allow-errors --max-time $timeout --insecure=$insecure --raw=$raw $req_url "" } else { http patch --headers $auth.headers --content-type $ct --full --allow-errors --max-time $timeout --insecure=$insecure --raw=$raw $req_url $body } }
     "delete" => { if ($body | is-empty) { http delete --headers $auth.headers --full --allow-errors --max-time $timeout --insecure=$insecure --raw=$raw $req_url } else { http delete --headers $auth.headers --content-type $ct --data $body --full --allow-errors --max-time $timeout --insecure=$insecure --raw=$raw $req_url } }
   }
-  if ($method in ["head" "options"]) { return $resp }
+  if ($method == "head") and (not $full) and (not $allow_errors) and $resp.status < 400 { return $resp.headers }
   if $allow_errors { $resp } else if $resp.status >= 400 { error make --unspanned { msg: $"HTTP ($resp.status): ($resp.body)" } } else if $full { {status: $resp.status, headers: $resp.headers, body: $resp.body} } else if $resp.status == 204 { null } else { $resp.body }
 }
 
@@ -119,10 +141,11 @@ export def "are-any-games-in-progress get" [
 ]: nothing -> bool {
   let auth = (build-auth $token ($auth_scheme | default "ocp-apim-subscription-key"))
   let base = ($base_url | default $BASE_URL)
+  if ($format | is-empty) { error make --unspanned { msg: "path parameter 'format' must be non-empty" } }
   let full_url = (build-url $base ({format: (encode-path-segment $format)} | format pattern "/{format}/AreAnyGamesInProgress"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
 }
 
 # Box Score
@@ -144,10 +167,12 @@ export def "box-score get" [
 ]: nothing -> record<Game: record<Attendance: int, AwayPointSpreadPayout: int, AwayRotationNumber: int, AwayTeam: string, AwayTeamID: int, AwayTeamMoneyLine: int, AwayTeamPreviousGameID: int, AwayTeamPreviousGlobalGameID: int, AwayTeamScore: int, AwayTeamSeed: int, BottomTeamPreviousGameId: int, Bracket: string, Channel: string, DateTime: string, DateTimeUTC: string, Day: string, GameEndDateTime: string, GameID: int, GlobalAwayTeamID: int, GlobalGameID: int, GlobalHomeTeamID: int, HomePointSpreadPayout: int, HomeRotationNumber: int, HomeTeam: string, HomeTeamID: int, HomeTeamMoneyLine: int, HomeTeamPreviousGameID: int, HomeTeamPreviousGlobalGameID: int, HomeTeamScore: int, HomeTeamSeed: int, IsClosed: bool, NeutralVenue: bool, OverPayout: int, OverUnder: float, Period: string, Periods: list<record>, PointSpread: float, Round: int, Season: int, SeasonType: int, Stadium: record<Active: bool, Address: string, Capacity: int, City: string, Country: string, GeoLat: float, GeoLong: float, Name: string, StadiumID: int, State: string, Zip: string>, Status: string, TimeRemainingMinutes: int, TimeRemainingSeconds: int, TopTeamPreviousGameId: int, TournamentDisplayOrder: int, TournamentDisplayOrderForHomeTeam: string, TournamentID: int, UnderPayout: int, Updated: string>, Periods: table<AwayScore: int, GameID: int, HomeScore: int, Name: string, Number: int, PeriodID: int, Type: string>, PlayerGames: table<Assists: int, AssistsPercentage: float, BlockedShots: int, BlocksPercentage: float, DateTime: string, Day: string, DefensiveRebounds: int, DefensiveReboundsPercentage: float, DraftKingsPosition: string, DraftKingsSalary: int, EffectiveFieldGoalsPercentage: float, FanDuelPosition: string, FanDuelSalary: int, FantasyDataSalary: int, FantasyPoints: float, FantasyPointsDraftKings: float, FantasyPointsFanDuel: float, FantasyPointsYahoo: float, FieldGoalsAttempted: int, FieldGoalsMade: int, FieldGoalsPercentage: float, FreeThrowsAttempted: int, FreeThrowsMade: int, FreeThrowsPercentage: float, GameID: int, Games: int, GlobalGameID: int, GlobalOpponentID: int, GlobalTeamID: int, HomeOrAway: string, InjuryBodyPart: string, InjuryNotes: string, InjuryStartDate: string, InjuryStatus: string, IsGameOver: bool, Minutes: int, Name: string, OffensiveRebounds: int, OffensiveReboundsPercentage: float, Opponent: string, OpponentID: int, OpponentPositionRank: int, OpponentRank: int, PersonalFouls: int, PlayerEfficiencyRating: float, PlayerID: int, Points: int, Position: string, Rebounds: int, Season: int, SeasonType: int, StatID: int, Steals: int, StealsPercentage: float, Team: string, TeamID: int, ThreePointersAttempted: int, ThreePointersMade: int, ThreePointersPercentage: float, TotalReboundsPercentage: float, TrueShootingAttempts: float, TrueShootingPercentage: float, TurnOversPercentage: float, Turnovers: int, TwoPointersAttempted: int, TwoPointersMade: int, TwoPointersPercentage: float, Updated: string, UsageRatePercentage: float, YahooPosition: string, YahooSalary: int>, TeamGames: table<Assists: int, AssistsPercentage: float, BlockedShots: int, BlocksPercentage: float, ConferenceLosses: int, ConferenceWins: int, DateTime: string, Day: string, DefensiveRebounds: int, DefensiveReboundsPercentage: float, EffectiveFieldGoalsPercentage: float, FantasyPoints: float, FantasyPointsDraftKings: float, FantasyPointsFanDuel: float, FantasyPointsYahoo: float, FieldGoalsAttempted: int, FieldGoalsMade: int, FieldGoalsPercentage: float, FreeThrowsAttempted: int, FreeThrowsMade: int, FreeThrowsPercentage: float, GameID: int, Games: int, GlobalGameID: int, GlobalOpponentID: int, GlobalTeamID: int, HomeOrAway: string, IsGameOver: bool, Losses: int, Minutes: int, Name: string, OffensiveRebounds: int, OffensiveReboundsPercentage: float, Opponent: string, OpponentID: int, PersonalFouls: int, PlayerEfficiencyRating: float, Points: int, Possessions: float, Rebounds: int, Season: int, SeasonType: int, StatID: int, Steals: int, StealsPercentage: float, Team: string, TeamID: int, ThreePointersAttempted: int, ThreePointersMade: int, ThreePointersPercentage: float, TotalReboundsPercentage: float, TrueShootingAttempts: float, TrueShootingPercentage: float, TurnOversPercentage: float, Turnovers: int, TwoPointersAttempted: int, TwoPointersMade: int, TwoPointersPercentage: float, Updated: string, UsageRatePercentage: float, Wins: int>> {
   let auth = (build-auth $token ($auth_scheme | default "ocp-apim-subscription-key"))
   let base = ($base_url | default $BASE_URL)
+  if ($format | is-empty) { error make --unspanned { msg: "path parameter 'format' must be non-empty" } }
+  if ($gameid | is-empty) { error make --unspanned { msg: "path parameter 'gameid' must be non-empty" } }
   let full_url = (build-url $base ({format: (encode-path-segment $format), gameid: (encode-path-segment $gameid)} | format pattern "/{format}/BoxScore/{gameid}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
 }
 
 # Box Scores by Date
@@ -169,10 +194,12 @@ export def "box-scores get" [
 ]: nothing -> table<Game: record<Attendance: int, AwayPointSpreadPayout: int, AwayRotationNumber: int, AwayTeam: string, AwayTeamID: int, AwayTeamMoneyLine: int, AwayTeamPreviousGameID: int, AwayTeamPreviousGlobalGameID: int, AwayTeamScore: int, AwayTeamSeed: int, BottomTeamPreviousGameId: int, Bracket: string, Channel: string, DateTime: string, DateTimeUTC: string, Day: string, GameEndDateTime: string, GameID: int, GlobalAwayTeamID: int, GlobalGameID: int, GlobalHomeTeamID: int, HomePointSpreadPayout: int, HomeRotationNumber: int, HomeTeam: string, HomeTeamID: int, HomeTeamMoneyLine: int, HomeTeamPreviousGameID: int, HomeTeamPreviousGlobalGameID: int, HomeTeamScore: int, HomeTeamSeed: int, IsClosed: bool, NeutralVenue: bool, OverPayout: int, OverUnder: float, Period: string, Periods: list, PointSpread: float, Round: int, Season: int, SeasonType: int, Stadium: record, Status: string, TimeRemainingMinutes: int, TimeRemainingSeconds: int, TopTeamPreviousGameId: int, TournamentDisplayOrder: int, TournamentDisplayOrderForHomeTeam: string, TournamentID: int, UnderPayout: int, Updated: string>, Periods: list<record>, PlayerGames: list<record>, TeamGames: list<record>> {
   let auth = (build-auth $token ($auth_scheme | default "ocp-apim-subscription-key"))
   let base = ($base_url | default $BASE_URL)
+  if ($format | is-empty) { error make --unspanned { msg: "path parameter 'format' must be non-empty" } }
+  if ($date | is-empty) { error make --unspanned { msg: "path parameter 'date' must be non-empty" } }
   let full_url = (build-url $base ({format: (encode-path-segment $format), date: (encode-path-segment $date)} | format pattern "/{format}/BoxScores/{date}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
 }
 
 # Box Scores by Date Delta
@@ -195,10 +222,13 @@ export def "box-scores-delta get" [
 ]: nothing -> table<Game: record<Attendance: int, AwayPointSpreadPayout: int, AwayRotationNumber: int, AwayTeam: string, AwayTeamID: int, AwayTeamMoneyLine: int, AwayTeamPreviousGameID: int, AwayTeamPreviousGlobalGameID: int, AwayTeamScore: int, AwayTeamSeed: int, BottomTeamPreviousGameId: int, Bracket: string, Channel: string, DateTime: string, DateTimeUTC: string, Day: string, GameEndDateTime: string, GameID: int, GlobalAwayTeamID: int, GlobalGameID: int, GlobalHomeTeamID: int, HomePointSpreadPayout: int, HomeRotationNumber: int, HomeTeam: string, HomeTeamID: int, HomeTeamMoneyLine: int, HomeTeamPreviousGameID: int, HomeTeamPreviousGlobalGameID: int, HomeTeamScore: int, HomeTeamSeed: int, IsClosed: bool, NeutralVenue: bool, OverPayout: int, OverUnder: float, Period: string, Periods: list, PointSpread: float, Round: int, Season: int, SeasonType: int, Stadium: record, Status: string, TimeRemainingMinutes: int, TimeRemainingSeconds: int, TopTeamPreviousGameId: int, TournamentDisplayOrder: int, TournamentDisplayOrderForHomeTeam: string, TournamentID: int, UnderPayout: int, Updated: string>, Periods: list<record>, PlayerGames: list<record>, TeamGames: list<record>> {
   let auth = (build-auth $token ($auth_scheme | default "ocp-apim-subscription-key"))
   let base = ($base_url | default $BASE_URL)
+  if ($format | is-empty) { error make --unspanned { msg: "path parameter 'format' must be non-empty" } }
+  if ($date | is-empty) { error make --unspanned { msg: "path parameter 'date' must be non-empty" } }
+  if ($minutes | is-empty) { error make --unspanned { msg: "path parameter 'minutes' must be non-empty" } }
   let full_url = (build-url $base ({format: (encode-path-segment $format), date: (encode-path-segment $date), minutes: (encode-path-segment $minutes)} | format pattern "/{format}/BoxScoresDelta/{date}/{minutes}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
 }
 
 # Current Season
@@ -219,10 +249,11 @@ export def "current-season get" [
 ]: nothing -> record<ApiSeason: string, Description: string, EndYear: int, PostSeasonStartDate: string, RegularSeasonStartDate: string, Season: int, StartYear: int> {
   let auth = (build-auth $token ($auth_scheme | default "ocp-apim-subscription-key"))
   let base = ($base_url | default $BASE_URL)
+  if ($format | is-empty) { error make --unspanned { msg: "path parameter 'format' must be non-empty" } }
   let full_url = (build-url $base ({format: (encode-path-segment $format)} | format pattern "/{format}/CurrentSeason"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
 }
 
 # Schedules
@@ -244,10 +275,12 @@ export def "games get-schedules" [
 ]: nothing -> table<Attendance: int, AwayPointSpreadPayout: int, AwayRotationNumber: int, AwayTeam: string, AwayTeamID: int, AwayTeamMoneyLine: int, AwayTeamPreviousGameID: int, AwayTeamPreviousGlobalGameID: int, AwayTeamScore: int, AwayTeamSeed: int, BottomTeamPreviousGameId: int, Bracket: string, Channel: string, DateTime: string, DateTimeUTC: string, Day: string, GameEndDateTime: string, GameID: int, GlobalAwayTeamID: int, GlobalGameID: int, GlobalHomeTeamID: int, HomePointSpreadPayout: int, HomeRotationNumber: int, HomeTeam: string, HomeTeamID: int, HomeTeamMoneyLine: int, HomeTeamPreviousGameID: int, HomeTeamPreviousGlobalGameID: int, HomeTeamScore: int, HomeTeamSeed: int, IsClosed: bool, NeutralVenue: bool, OverPayout: int, OverUnder: float, Period: string, Periods: list<record>, PointSpread: float, Round: int, Season: int, SeasonType: int, Stadium: record<Active: bool, Address: string, Capacity: int, City: string, Country: string, GeoLat: float, GeoLong: float, Name: string, StadiumID: int, State: string, Zip: string>, Status: string, TimeRemainingMinutes: int, TimeRemainingSeconds: int, TopTeamPreviousGameId: int, TournamentDisplayOrder: int, TournamentDisplayOrderForHomeTeam: string, TournamentID: int, UnderPayout: int, Updated: string> {
   let auth = (build-auth $token ($auth_scheme | default "ocp-apim-subscription-key"))
   let base = ($base_url | default $BASE_URL)
+  if ($format | is-empty) { error make --unspanned { msg: "path parameter 'format' must be non-empty" } }
+  if ($season | is-empty) { error make --unspanned { msg: "path parameter 'season' must be non-empty" } }
   let full_url = (build-url $base ({format: (encode-path-segment $format), season: (encode-path-segment $season)} | format pattern "/{format}/Games/{season}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
 }
 
 # Games by Date
@@ -269,10 +302,12 @@ export def "games-by-date get" [
 ]: nothing -> table<Attendance: int, AwayPointSpreadPayout: int, AwayRotationNumber: int, AwayTeam: string, AwayTeamID: int, AwayTeamMoneyLine: int, AwayTeamPreviousGameID: int, AwayTeamPreviousGlobalGameID: int, AwayTeamScore: int, AwayTeamSeed: int, BottomTeamPreviousGameId: int, Bracket: string, Channel: string, DateTime: string, DateTimeUTC: string, Day: string, GameEndDateTime: string, GameID: int, GlobalAwayTeamID: int, GlobalGameID: int, GlobalHomeTeamID: int, HomePointSpreadPayout: int, HomeRotationNumber: int, HomeTeam: string, HomeTeamID: int, HomeTeamMoneyLine: int, HomeTeamPreviousGameID: int, HomeTeamPreviousGlobalGameID: int, HomeTeamScore: int, HomeTeamSeed: int, IsClosed: bool, NeutralVenue: bool, OverPayout: int, OverUnder: float, Period: string, Periods: list<record>, PointSpread: float, Round: int, Season: int, SeasonType: int, Stadium: record<Active: bool, Address: string, Capacity: int, City: string, Country: string, GeoLat: float, GeoLong: float, Name: string, StadiumID: int, State: string, Zip: string>, Status: string, TimeRemainingMinutes: int, TimeRemainingSeconds: int, TopTeamPreviousGameId: int, TournamentDisplayOrder: int, TournamentDisplayOrderForHomeTeam: string, TournamentID: int, UnderPayout: int, Updated: string> {
   let auth = (build-auth $token ($auth_scheme | default "ocp-apim-subscription-key"))
   let base = ($base_url | default $BASE_URL)
+  if ($format | is-empty) { error make --unspanned { msg: "path parameter 'format' must be non-empty" } }
+  if ($date | is-empty) { error make --unspanned { msg: "path parameter 'date' must be non-empty" } }
   let full_url = (build-url $base ({format: (encode-path-segment $format), date: (encode-path-segment $date)} | format pattern "/{format}/GamesByDate/{date}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
 }
 
 # Injured Players
@@ -293,10 +328,11 @@ export def "injured-players get" [
 ]: nothing -> table<BirthCity: string, BirthState: string, Class: string, FantasyAlarmPlayerID: int, FirstName: string, GlobalTeamID: int, Height: int, HighSchool: string, InjuryBodyPart: string, InjuryNotes: string, InjuryStartDate: string, InjuryStatus: string, Jersey: int, LastName: string, PlayerID: int, Position: string, RotoWirePlayerID: int, RotoworldPlayerID: int, SportRadarPlayerID: string, Team: string, TeamID: int, Weight: int> {
   let auth = (build-auth $token ($auth_scheme | default "ocp-apim-subscription-key"))
   let base = ($base_url | default $BASE_URL)
+  if ($format | is-empty) { error make --unspanned { msg: "path parameter 'format' must be non-empty" } }
   let full_url = (build-url $base ({format: (encode-path-segment $format)} | format pattern "/{format}/InjuredPlayers"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
 }
 
 # League Hierarchy
@@ -317,10 +353,11 @@ export def "league-hierarchy get" [
 ]: nothing -> table<ConferenceID: int, Name: string, Teams: list<record>> {
   let auth = (build-auth $token ($auth_scheme | default "ocp-apim-subscription-key"))
   let base = ($base_url | default $BASE_URL)
+  if ($format | is-empty) { error make --unspanned { msg: "path parameter 'format' must be non-empty" } }
   let full_url = (build-url $base ({format: (encode-path-segment $format)} | format pattern "/{format}/LeagueHierarchy"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
 }
 
 # Player Details by Player
@@ -342,10 +379,12 @@ export def "player get-details" [
 ]: nothing -> record<BirthCity: string, BirthState: string, Class: string, FantasyAlarmPlayerID: int, FirstName: string, GlobalTeamID: int, Height: int, HighSchool: string, InjuryBodyPart: string, InjuryNotes: string, InjuryStartDate: string, InjuryStatus: string, Jersey: int, LastName: string, PlayerID: int, Position: string, RotoWirePlayerID: int, RotoworldPlayerID: int, SportRadarPlayerID: string, Team: string, TeamID: int, Weight: int> {
   let auth = (build-auth $token ($auth_scheme | default "ocp-apim-subscription-key"))
   let base = ($base_url | default $BASE_URL)
+  if ($format | is-empty) { error make --unspanned { msg: "path parameter 'format' must be non-empty" } }
+  if ($playerid | is-empty) { error make --unspanned { msg: "path parameter 'playerid' must be non-empty" } }
   let full_url = (build-url $base ({format: (encode-path-segment $format), playerid: (encode-path-segment $playerid)} | format pattern "/{format}/Player/{playerid}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
 }
 
 # Projected Player Game Stats by Date
@@ -367,10 +406,12 @@ export def "player-game-projection-stats-by-date stats-projected" [
 ]: nothing -> table<Assists: int, AssistsPercentage: float, BlockedShots: int, BlocksPercentage: float, DateTime: string, Day: string, DefensiveRebounds: int, DefensiveReboundsPercentage: float, DraftKingsPosition: string, DraftKingsSalary: int, EffectiveFieldGoalsPercentage: float, FanDuelPosition: string, FanDuelSalary: int, FantasyDataSalary: int, FantasyPoints: float, FantasyPointsDraftKings: float, FantasyPointsFanDuel: float, FantasyPointsYahoo: float, FieldGoalsAttempted: int, FieldGoalsMade: int, FieldGoalsPercentage: float, FreeThrowsAttempted: int, FreeThrowsMade: int, FreeThrowsPercentage: float, GameID: int, Games: int, GlobalGameID: int, GlobalOpponentID: int, GlobalTeamID: int, HomeOrAway: string, InjuryBodyPart: string, InjuryNotes: string, InjuryStartDate: string, InjuryStatus: string, IsGameOver: bool, Minutes: int, Name: string, OffensiveRebounds: int, OffensiveReboundsPercentage: float, Opponent: string, OpponentID: int, OpponentPositionRank: int, OpponentRank: int, PersonalFouls: int, PlayerEfficiencyRating: float, PlayerID: int, Points: int, Position: string, Rebounds: int, Season: int, SeasonType: int, StatID: int, Steals: int, StealsPercentage: float, Team: string, TeamID: int, ThreePointersAttempted: int, ThreePointersMade: int, ThreePointersPercentage: float, TotalReboundsPercentage: float, TrueShootingAttempts: float, TrueShootingPercentage: float, TurnOversPercentage: float, Turnovers: int, TwoPointersAttempted: int, TwoPointersMade: int, TwoPointersPercentage: float, Updated: string, UsageRatePercentage: float, YahooPosition: string, YahooSalary: int> {
   let auth = (build-auth $token ($auth_scheme | default "ocp-apim-subscription-key"))
   let base = ($base_url | default $BASE_URL)
+  if ($format | is-empty) { error make --unspanned { msg: "path parameter 'format' must be non-empty" } }
+  if ($date | is-empty) { error make --unspanned { msg: "path parameter 'date' must be non-empty" } }
   let full_url = (build-url $base ({format: (encode-path-segment $format), date: (encode-path-segment $date)} | format pattern "/{format}/PlayerGameProjectionStatsByDate/{date}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
 }
 
 # Projected Player Game Stats by Player
@@ -393,10 +434,13 @@ export def "player-game-projection-stats-by-player stats-projected" [
 ]: nothing -> record<Assists: int, AssistsPercentage: float, BlockedShots: int, BlocksPercentage: float, DateTime: string, Day: string, DefensiveRebounds: int, DefensiveReboundsPercentage: float, DraftKingsPosition: string, DraftKingsSalary: int, EffectiveFieldGoalsPercentage: float, FanDuelPosition: string, FanDuelSalary: int, FantasyDataSalary: int, FantasyPoints: float, FantasyPointsDraftKings: float, FantasyPointsFanDuel: float, FantasyPointsYahoo: float, FieldGoalsAttempted: int, FieldGoalsMade: int, FieldGoalsPercentage: float, FreeThrowsAttempted: int, FreeThrowsMade: int, FreeThrowsPercentage: float, GameID: int, Games: int, GlobalGameID: int, GlobalOpponentID: int, GlobalTeamID: int, HomeOrAway: string, InjuryBodyPart: string, InjuryNotes: string, InjuryStartDate: string, InjuryStatus: string, IsGameOver: bool, Minutes: int, Name: string, OffensiveRebounds: int, OffensiveReboundsPercentage: float, Opponent: string, OpponentID: int, OpponentPositionRank: int, OpponentRank: int, PersonalFouls: int, PlayerEfficiencyRating: float, PlayerID: int, Points: int, Position: string, Rebounds: int, Season: int, SeasonType: int, StatID: int, Steals: int, StealsPercentage: float, Team: string, TeamID: int, ThreePointersAttempted: int, ThreePointersMade: int, ThreePointersPercentage: float, TotalReboundsPercentage: float, TrueShootingAttempts: float, TrueShootingPercentage: float, TurnOversPercentage: float, Turnovers: int, TwoPointersAttempted: int, TwoPointersMade: int, TwoPointersPercentage: float, Updated: string, UsageRatePercentage: float, YahooPosition: string, YahooSalary: int> {
   let auth = (build-auth $token ($auth_scheme | default "ocp-apim-subscription-key"))
   let base = ($base_url | default $BASE_URL)
+  if ($format | is-empty) { error make --unspanned { msg: "path parameter 'format' must be non-empty" } }
+  if ($date | is-empty) { error make --unspanned { msg: "path parameter 'date' must be non-empty" } }
+  if ($playerid | is-empty) { error make --unspanned { msg: "path parameter 'playerid' must be non-empty" } }
   let full_url = (build-url $base ({format: (encode-path-segment $format), date: (encode-path-segment $date), playerid: (encode-path-segment $playerid)} | format pattern "/{format}/PlayerGameProjectionStatsByPlayer/{date}/{playerid}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
 }
 
 # Player Game Stats by Date
@@ -418,10 +462,12 @@ export def "player-game-stats-by-date stats" [
 ]: nothing -> table<Assists: int, AssistsPercentage: float, BlockedShots: int, BlocksPercentage: float, DateTime: string, Day: string, DefensiveRebounds: int, DefensiveReboundsPercentage: float, DraftKingsPosition: string, DraftKingsSalary: int, EffectiveFieldGoalsPercentage: float, FanDuelPosition: string, FanDuelSalary: int, FantasyDataSalary: int, FantasyPoints: float, FantasyPointsDraftKings: float, FantasyPointsFanDuel: float, FantasyPointsYahoo: float, FieldGoalsAttempted: int, FieldGoalsMade: int, FieldGoalsPercentage: float, FreeThrowsAttempted: int, FreeThrowsMade: int, FreeThrowsPercentage: float, GameID: int, Games: int, GlobalGameID: int, GlobalOpponentID: int, GlobalTeamID: int, HomeOrAway: string, InjuryBodyPart: string, InjuryNotes: string, InjuryStartDate: string, InjuryStatus: string, IsGameOver: bool, Minutes: int, Name: string, OffensiveRebounds: int, OffensiveReboundsPercentage: float, Opponent: string, OpponentID: int, OpponentPositionRank: int, OpponentRank: int, PersonalFouls: int, PlayerEfficiencyRating: float, PlayerID: int, Points: int, Position: string, Rebounds: int, Season: int, SeasonType: int, StatID: int, Steals: int, StealsPercentage: float, Team: string, TeamID: int, ThreePointersAttempted: int, ThreePointersMade: int, ThreePointersPercentage: float, TotalReboundsPercentage: float, TrueShootingAttempts: float, TrueShootingPercentage: float, TurnOversPercentage: float, Turnovers: int, TwoPointersAttempted: int, TwoPointersMade: int, TwoPointersPercentage: float, Updated: string, UsageRatePercentage: float, YahooPosition: string, YahooSalary: int> {
   let auth = (build-auth $token ($auth_scheme | default "ocp-apim-subscription-key"))
   let base = ($base_url | default $BASE_URL)
+  if ($format | is-empty) { error make --unspanned { msg: "path parameter 'format' must be non-empty" } }
+  if ($date | is-empty) { error make --unspanned { msg: "path parameter 'date' must be non-empty" } }
   let full_url = (build-url $base ({format: (encode-path-segment $format), date: (encode-path-segment $date)} | format pattern "/{format}/PlayerGameStatsByDate/{date}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
 }
 
 # Player Game Stats by Player
@@ -444,10 +490,13 @@ export def "player-game-stats-by-player stats" [
 ]: nothing -> record<Assists: int, AssistsPercentage: float, BlockedShots: int, BlocksPercentage: float, DateTime: string, Day: string, DefensiveRebounds: int, DefensiveReboundsPercentage: float, DraftKingsPosition: string, DraftKingsSalary: int, EffectiveFieldGoalsPercentage: float, FanDuelPosition: string, FanDuelSalary: int, FantasyDataSalary: int, FantasyPoints: float, FantasyPointsDraftKings: float, FantasyPointsFanDuel: float, FantasyPointsYahoo: float, FieldGoalsAttempted: int, FieldGoalsMade: int, FieldGoalsPercentage: float, FreeThrowsAttempted: int, FreeThrowsMade: int, FreeThrowsPercentage: float, GameID: int, Games: int, GlobalGameID: int, GlobalOpponentID: int, GlobalTeamID: int, HomeOrAway: string, InjuryBodyPart: string, InjuryNotes: string, InjuryStartDate: string, InjuryStatus: string, IsGameOver: bool, Minutes: int, Name: string, OffensiveRebounds: int, OffensiveReboundsPercentage: float, Opponent: string, OpponentID: int, OpponentPositionRank: int, OpponentRank: int, PersonalFouls: int, PlayerEfficiencyRating: float, PlayerID: int, Points: int, Position: string, Rebounds: int, Season: int, SeasonType: int, StatID: int, Steals: int, StealsPercentage: float, Team: string, TeamID: int, ThreePointersAttempted: int, ThreePointersMade: int, ThreePointersPercentage: float, TotalReboundsPercentage: float, TrueShootingAttempts: float, TrueShootingPercentage: float, TurnOversPercentage: float, Turnovers: int, TwoPointersAttempted: int, TwoPointersMade: int, TwoPointersPercentage: float, Updated: string, UsageRatePercentage: float, YahooPosition: string, YahooSalary: int> {
   let auth = (build-auth $token ($auth_scheme | default "ocp-apim-subscription-key"))
   let base = ($base_url | default $BASE_URL)
+  if ($format | is-empty) { error make --unspanned { msg: "path parameter 'format' must be non-empty" } }
+  if ($date | is-empty) { error make --unspanned { msg: "path parameter 'date' must be non-empty" } }
+  if ($playerid | is-empty) { error make --unspanned { msg: "path parameter 'playerid' must be non-empty" } }
   let full_url = (build-url $base ({format: (encode-path-segment $format), date: (encode-path-segment $date), playerid: (encode-path-segment $playerid)} | format pattern "/{format}/PlayerGameStatsByPlayer/{date}/{playerid}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
 }
 
 # Player Game Logs By Season
@@ -471,10 +520,14 @@ export def "player-game-stats-by-season logs" [
 ]: nothing -> table<Assists: int, AssistsPercentage: float, BlockedShots: int, BlocksPercentage: float, DateTime: string, Day: string, DefensiveRebounds: int, DefensiveReboundsPercentage: float, DraftKingsPosition: string, DraftKingsSalary: int, EffectiveFieldGoalsPercentage: float, FanDuelPosition: string, FanDuelSalary: int, FantasyDataSalary: int, FantasyPoints: float, FantasyPointsDraftKings: float, FantasyPointsFanDuel: float, FantasyPointsYahoo: float, FieldGoalsAttempted: int, FieldGoalsMade: int, FieldGoalsPercentage: float, FreeThrowsAttempted: int, FreeThrowsMade: int, FreeThrowsPercentage: float, GameID: int, Games: int, GlobalGameID: int, GlobalOpponentID: int, GlobalTeamID: int, HomeOrAway: string, InjuryBodyPart: string, InjuryNotes: string, InjuryStartDate: string, InjuryStatus: string, IsGameOver: bool, Minutes: int, Name: string, OffensiveRebounds: int, OffensiveReboundsPercentage: float, Opponent: string, OpponentID: int, OpponentPositionRank: int, OpponentRank: int, PersonalFouls: int, PlayerEfficiencyRating: float, PlayerID: int, Points: int, Position: string, Rebounds: int, Season: int, SeasonType: int, StatID: int, Steals: int, StealsPercentage: float, Team: string, TeamID: int, ThreePointersAttempted: int, ThreePointersMade: int, ThreePointersPercentage: float, TotalReboundsPercentage: float, TrueShootingAttempts: float, TrueShootingPercentage: float, TurnOversPercentage: float, Turnovers: int, TwoPointersAttempted: int, TwoPointersMade: int, TwoPointersPercentage: float, Updated: string, UsageRatePercentage: float, YahooPosition: string, YahooSalary: int> {
   let auth = (build-auth $token ($auth_scheme | default "ocp-apim-subscription-key"))
   let base = ($base_url | default $BASE_URL)
+  if ($format | is-empty) { error make --unspanned { msg: "path parameter 'format' must be non-empty" } }
+  if ($season | is-empty) { error make --unspanned { msg: "path parameter 'season' must be non-empty" } }
+  if ($playerid | is-empty) { error make --unspanned { msg: "path parameter 'playerid' must be non-empty" } }
+  if ($numberofgames | is-empty) { error make --unspanned { msg: "path parameter 'numberofgames' must be non-empty" } }
   let full_url = (build-url $base ({format: (encode-path-segment $format), season: (encode-path-segment $season), playerid: (encode-path-segment $playerid), numberofgames: (encode-path-segment $numberofgames)} | format pattern "/{format}/PlayerGameStatsBySeason/{season}/{playerid}/{numberofgames}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
 }
 
 # Player Season Stats
@@ -496,10 +549,12 @@ export def "player-season-stats stats" [
 ]: nothing -> table<Assists: int, AssistsPercentage: float, BlockedShots: int, BlocksPercentage: float, DefensiveRebounds: int, DefensiveReboundsPercentage: float, EffectiveFieldGoalsPercentage: float, FantasyPoints: float, FantasyPointsDraftKings: float, FantasyPointsFanDuel: float, FantasyPointsYahoo: float, FieldGoalsAttempted: int, FieldGoalsMade: int, FieldGoalsPercentage: float, FreeThrowsAttempted: int, FreeThrowsMade: int, FreeThrowsPercentage: float, Games: int, GlobalTeamID: int, Minutes: int, Name: string, OffensiveRebounds: int, OffensiveReboundsPercentage: float, PersonalFouls: int, PlayerEfficiencyRating: float, PlayerID: int, Points: int, Position: string, Rebounds: int, Season: int, SeasonType: int, StatID: int, Steals: int, StealsPercentage: float, Team: string, TeamID: int, ThreePointersAttempted: int, ThreePointersMade: int, ThreePointersPercentage: float, TotalReboundsPercentage: float, TrueShootingAttempts: float, TrueShootingPercentage: float, TurnOversPercentage: float, Turnovers: int, TwoPointersAttempted: int, TwoPointersMade: int, TwoPointersPercentage: float, Updated: string, UsageRatePercentage: float> {
   let auth = (build-auth $token ($auth_scheme | default "ocp-apim-subscription-key"))
   let base = ($base_url | default $BASE_URL)
+  if ($format | is-empty) { error make --unspanned { msg: "path parameter 'format' must be non-empty" } }
+  if ($season | is-empty) { error make --unspanned { msg: "path parameter 'season' must be non-empty" } }
   let full_url = (build-url $base ({format: (encode-path-segment $format), season: (encode-path-segment $season)} | format pattern "/{format}/PlayerSeasonStats/{season}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
 }
 
 # Player Season Stats By Player
@@ -522,10 +577,13 @@ export def "player-season-stats-by-player stats" [
 ]: nothing -> record<Assists: int, AssistsPercentage: float, BlockedShots: int, BlocksPercentage: float, DefensiveRebounds: int, DefensiveReboundsPercentage: float, EffectiveFieldGoalsPercentage: float, FantasyPoints: float, FantasyPointsDraftKings: float, FantasyPointsFanDuel: float, FantasyPointsYahoo: float, FieldGoalsAttempted: int, FieldGoalsMade: int, FieldGoalsPercentage: float, FreeThrowsAttempted: int, FreeThrowsMade: int, FreeThrowsPercentage: float, Games: int, GlobalTeamID: int, Minutes: int, Name: string, OffensiveRebounds: int, OffensiveReboundsPercentage: float, PersonalFouls: int, PlayerEfficiencyRating: float, PlayerID: int, Points: int, Position: string, Rebounds: int, Season: int, SeasonType: int, StatID: int, Steals: int, StealsPercentage: float, Team: string, TeamID: int, ThreePointersAttempted: int, ThreePointersMade: int, ThreePointersPercentage: float, TotalReboundsPercentage: float, TrueShootingAttempts: float, TrueShootingPercentage: float, TurnOversPercentage: float, Turnovers: int, TwoPointersAttempted: int, TwoPointersMade: int, TwoPointersPercentage: float, Updated: string, UsageRatePercentage: float> {
   let auth = (build-auth $token ($auth_scheme | default "ocp-apim-subscription-key"))
   let base = ($base_url | default $BASE_URL)
+  if ($format | is-empty) { error make --unspanned { msg: "path parameter 'format' must be non-empty" } }
+  if ($season | is-empty) { error make --unspanned { msg: "path parameter 'season' must be non-empty" } }
+  if ($playerid | is-empty) { error make --unspanned { msg: "path parameter 'playerid' must be non-empty" } }
   let full_url = (build-url $base ({format: (encode-path-segment $format), season: (encode-path-segment $season), playerid: (encode-path-segment $playerid)} | format pattern "/{format}/PlayerSeasonStatsByPlayer/{season}/{playerid}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
 }
 
 # Player Season Stats by Team
@@ -548,10 +606,13 @@ export def "player-season-stats-by-team stats" [
 ]: nothing -> table<Assists: int, AssistsPercentage: float, BlockedShots: int, BlocksPercentage: float, DefensiveRebounds: int, DefensiveReboundsPercentage: float, EffectiveFieldGoalsPercentage: float, FantasyPoints: float, FantasyPointsDraftKings: float, FantasyPointsFanDuel: float, FantasyPointsYahoo: float, FieldGoalsAttempted: int, FieldGoalsMade: int, FieldGoalsPercentage: float, FreeThrowsAttempted: int, FreeThrowsMade: int, FreeThrowsPercentage: float, Games: int, GlobalTeamID: int, Minutes: int, Name: string, OffensiveRebounds: int, OffensiveReboundsPercentage: float, PersonalFouls: int, PlayerEfficiencyRating: float, PlayerID: int, Points: int, Position: string, Rebounds: int, Season: int, SeasonType: int, StatID: int, Steals: int, StealsPercentage: float, Team: string, TeamID: int, ThreePointersAttempted: int, ThreePointersMade: int, ThreePointersPercentage: float, TotalReboundsPercentage: float, TrueShootingAttempts: float, TrueShootingPercentage: float, TurnOversPercentage: float, Turnovers: int, TwoPointersAttempted: int, TwoPointersMade: int, TwoPointersPercentage: float, Updated: string, UsageRatePercentage: float> {
   let auth = (build-auth $token ($auth_scheme | default "ocp-apim-subscription-key"))
   let base = ($base_url | default $BASE_URL)
+  if ($format | is-empty) { error make --unspanned { msg: "path parameter 'format' must be non-empty" } }
+  if ($season | is-empty) { error make --unspanned { msg: "path parameter 'season' must be non-empty" } }
+  if ($team | is-empty) { error make --unspanned { msg: "path parameter 'team' must be non-empty" } }
   let full_url = (build-url $base ({format: (encode-path-segment $format), season: (encode-path-segment $season), team: (encode-path-segment $team)} | format pattern "/{format}/PlayerSeasonStatsByTeam/{season}/{team}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
 }
 
 # Player Details by Active
@@ -572,10 +633,11 @@ export def "players get-details-by-active" [
 ]: nothing -> table<BirthCity: string, BirthState: string, Class: string, FantasyAlarmPlayerID: int, FirstName: string, GlobalTeamID: int, Height: int, HighSchool: string, InjuryBodyPart: string, InjuryNotes: string, InjuryStartDate: string, InjuryStatus: string, Jersey: int, LastName: string, PlayerID: int, Position: string, RotoWirePlayerID: int, RotoworldPlayerID: int, SportRadarPlayerID: string, Team: string, TeamID: int, Weight: int> {
   let auth = (build-auth $token ($auth_scheme | default "ocp-apim-subscription-key"))
   let base = ($base_url | default $BASE_URL)
+  if ($format | is-empty) { error make --unspanned { msg: "path parameter 'format' must be non-empty" } }
   let full_url = (build-url $base ({format: (encode-path-segment $format)} | format pattern "/{format}/Players"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
 }
 
 # Player Details by Team
@@ -597,10 +659,12 @@ export def "players get-details" [
 ]: nothing -> table<BirthCity: string, BirthState: string, Class: string, FantasyAlarmPlayerID: int, FirstName: string, GlobalTeamID: int, Height: int, HighSchool: string, InjuryBodyPart: string, InjuryNotes: string, InjuryStartDate: string, InjuryStatus: string, Jersey: int, LastName: string, PlayerID: int, Position: string, RotoWirePlayerID: int, RotoworldPlayerID: int, SportRadarPlayerID: string, Team: string, TeamID: int, Weight: int> {
   let auth = (build-auth $token ($auth_scheme | default "ocp-apim-subscription-key"))
   let base = ($base_url | default $BASE_URL)
+  if ($format | is-empty) { error make --unspanned { msg: "path parameter 'format' must be non-empty" } }
+  if ($team | is-empty) { error make --unspanned { msg: "path parameter 'team' must be non-empty" } }
   let full_url = (build-url $base ({format: (encode-path-segment $format), team: (encode-path-segment $team)} | format pattern "/{format}/Players/{team}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
 }
 
 # Stadiums
@@ -621,10 +685,11 @@ export def "stadiums get" [
 ]: nothing -> table<Active: bool, Address: string, Capacity: int, City: string, Country: string, GeoLat: float, GeoLong: float, Name: string, StadiumID: int, State: string, Zip: string> {
   let auth = (build-auth $token ($auth_scheme | default "ocp-apim-subscription-key"))
   let base = ($base_url | default $BASE_URL)
+  if ($format | is-empty) { error make --unspanned { msg: "path parameter 'format' must be non-empty" } }
   let full_url = (build-url $base ({format: (encode-path-segment $format)} | format pattern "/{format}/Stadiums"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
 }
 
 # Team Game Stats by Date
@@ -646,10 +711,12 @@ export def "team-game-stats-by-date stats" [
 ]: nothing -> table<Assists: int, AssistsPercentage: float, BlockedShots: int, BlocksPercentage: float, ConferenceLosses: int, ConferenceWins: int, DateTime: string, Day: string, DefensiveRebounds: int, DefensiveReboundsPercentage: float, EffectiveFieldGoalsPercentage: float, FantasyPoints: float, FantasyPointsDraftKings: float, FantasyPointsFanDuel: float, FantasyPointsYahoo: float, FieldGoalsAttempted: int, FieldGoalsMade: int, FieldGoalsPercentage: float, FreeThrowsAttempted: int, FreeThrowsMade: int, FreeThrowsPercentage: float, GameID: int, Games: int, GlobalGameID: int, GlobalOpponentID: int, GlobalTeamID: int, HomeOrAway: string, IsGameOver: bool, Losses: int, Minutes: int, Name: string, OffensiveRebounds: int, OffensiveReboundsPercentage: float, Opponent: string, OpponentID: int, PersonalFouls: int, PlayerEfficiencyRating: float, Points: int, Possessions: float, Rebounds: int, Season: int, SeasonType: int, StatID: int, Steals: int, StealsPercentage: float, Team: string, TeamID: int, ThreePointersAttempted: int, ThreePointersMade: int, ThreePointersPercentage: float, TotalReboundsPercentage: float, TrueShootingAttempts: float, TrueShootingPercentage: float, TurnOversPercentage: float, Turnovers: int, TwoPointersAttempted: int, TwoPointersMade: int, TwoPointersPercentage: float, Updated: string, UsageRatePercentage: float, Wins: int> {
   let auth = (build-auth $token ($auth_scheme | default "ocp-apim-subscription-key"))
   let base = ($base_url | default $BASE_URL)
+  if ($format | is-empty) { error make --unspanned { msg: "path parameter 'format' must be non-empty" } }
+  if ($date | is-empty) { error make --unspanned { msg: "path parameter 'date' must be non-empty" } }
   let full_url = (build-url $base ({format: (encode-path-segment $format), date: (encode-path-segment $date)} | format pattern "/{format}/TeamGameStatsByDate/{date}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
 }
 
 # Team Game Logs By Season
@@ -673,10 +740,14 @@ export def "team-game-stats-by-season logs" [
 ]: nothing -> table<Assists: int, AssistsPercentage: float, BlockedShots: int, BlocksPercentage: float, ConferenceLosses: int, ConferenceWins: int, DateTime: string, Day: string, DefensiveRebounds: int, DefensiveReboundsPercentage: float, EffectiveFieldGoalsPercentage: float, FantasyPoints: float, FantasyPointsDraftKings: float, FantasyPointsFanDuel: float, FantasyPointsYahoo: float, FieldGoalsAttempted: int, FieldGoalsMade: int, FieldGoalsPercentage: float, FreeThrowsAttempted: int, FreeThrowsMade: int, FreeThrowsPercentage: float, GameID: int, Games: int, GlobalGameID: int, GlobalOpponentID: int, GlobalTeamID: int, HomeOrAway: string, IsGameOver: bool, Losses: int, Minutes: int, Name: string, OffensiveRebounds: int, OffensiveReboundsPercentage: float, Opponent: string, OpponentID: int, PersonalFouls: int, PlayerEfficiencyRating: float, Points: int, Possessions: float, Rebounds: int, Season: int, SeasonType: int, StatID: int, Steals: int, StealsPercentage: float, Team: string, TeamID: int, ThreePointersAttempted: int, ThreePointersMade: int, ThreePointersPercentage: float, TotalReboundsPercentage: float, TrueShootingAttempts: float, TrueShootingPercentage: float, TurnOversPercentage: float, Turnovers: int, TwoPointersAttempted: int, TwoPointersMade: int, TwoPointersPercentage: float, Updated: string, UsageRatePercentage: float, Wins: int> {
   let auth = (build-auth $token ($auth_scheme | default "ocp-apim-subscription-key"))
   let base = ($base_url | default $BASE_URL)
+  if ($format | is-empty) { error make --unspanned { msg: "path parameter 'format' must be non-empty" } }
+  if ($season | is-empty) { error make --unspanned { msg: "path parameter 'season' must be non-empty" } }
+  if ($teamid | is-empty) { error make --unspanned { msg: "path parameter 'teamid' must be non-empty" } }
+  if ($numberofgames | is-empty) { error make --unspanned { msg: "path parameter 'numberofgames' must be non-empty" } }
   let full_url = (build-url $base ({format: (encode-path-segment $format), season: (encode-path-segment $season), teamid: (encode-path-segment $teamid), numberofgames: (encode-path-segment $numberofgames)} | format pattern "/{format}/TeamGameStatsBySeason/{season}/{teamid}/{numberofgames}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
 }
 
 # Team Season Stats
@@ -698,10 +769,12 @@ export def "team-season-stats stats" [
 ]: nothing -> table<Assists: int, AssistsPercentage: float, BlockedShots: int, BlocksPercentage: float, ConferenceLosses: int, ConferenceWins: int, DefensiveRebounds: int, DefensiveReboundsPercentage: float, EffectiveFieldGoalsPercentage: float, FantasyPoints: float, FantasyPointsDraftKings: float, FantasyPointsFanDuel: float, FantasyPointsYahoo: float, FieldGoalsAttempted: int, FieldGoalsMade: int, FieldGoalsPercentage: float, FreeThrowsAttempted: int, FreeThrowsMade: int, FreeThrowsPercentage: float, Games: int, GlobalTeamID: int, Losses: int, Minutes: int, Name: string, OffensiveRebounds: int, OffensiveReboundsPercentage: float, PersonalFouls: int, PlayerEfficiencyRating: float, Points: int, Possessions: float, Rebounds: int, Season: int, SeasonType: int, StatID: int, Steals: int, StealsPercentage: float, Team: string, TeamID: int, ThreePointersAttempted: int, ThreePointersMade: int, ThreePointersPercentage: float, TotalReboundsPercentage: float, TrueShootingAttempts: float, TrueShootingPercentage: float, TurnOversPercentage: float, Turnovers: int, TwoPointersAttempted: int, TwoPointersMade: int, TwoPointersPercentage: float, Updated: string, UsageRatePercentage: float, Wins: int> {
   let auth = (build-auth $token ($auth_scheme | default "ocp-apim-subscription-key"))
   let base = ($base_url | default $BASE_URL)
+  if ($format | is-empty) { error make --unspanned { msg: "path parameter 'format' must be non-empty" } }
+  if ($season | is-empty) { error make --unspanned { msg: "path parameter 'season' must be non-empty" } }
   let full_url = (build-url $base ({format: (encode-path-segment $format), season: (encode-path-segment $season)} | format pattern "/{format}/TeamSeasonStats/{season}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
 }
 
 # Tournament Hierarchy
@@ -723,10 +796,12 @@ export def "tournament get-hierarchy" [
 ]: nothing -> record<Games: table<Attendance: int, AwayPointSpreadPayout: int, AwayRotationNumber: int, AwayTeam: string, AwayTeamID: int, AwayTeamMoneyLine: int, AwayTeamPreviousGameID: int, AwayTeamPreviousGlobalGameID: int, AwayTeamScore: int, AwayTeamSeed: int, BottomTeamPreviousGameId: int, Bracket: string, Channel: string, DateTime: string, DateTimeUTC: string, Day: string, GameEndDateTime: string, GameID: int, GlobalAwayTeamID: int, GlobalGameID: int, GlobalHomeTeamID: int, HomePointSpreadPayout: int, HomeRotationNumber: int, HomeTeam: string, HomeTeamID: int, HomeTeamMoneyLine: int, HomeTeamPreviousGameID: int, HomeTeamPreviousGlobalGameID: int, HomeTeamScore: int, HomeTeamSeed: int, IsClosed: bool, NeutralVenue: bool, OverPayout: int, OverUnder: float, Period: string, Periods: list, PointSpread: float, Round: int, Season: int, SeasonType: int, Stadium: record, Status: string, TimeRemainingMinutes: int, TimeRemainingSeconds: int, TopTeamPreviousGameId: int, TournamentDisplayOrder: int, TournamentDisplayOrderForHomeTeam: string, TournamentID: int, UnderPayout: int, Updated: string>, LeftBottomBracketConference: string, LeftTopBracketConference: string, Location: string, Name: string, RightBottomBracketConference: string, RightTopBracketConference: string, Season: int, TournamentID: int> {
   let auth = (build-auth $token ($auth_scheme | default "ocp-apim-subscription-key"))
   let base = ($base_url | default $BASE_URL)
+  if ($format | is-empty) { error make --unspanned { msg: "path parameter 'format' must be non-empty" } }
+  if ($season | is-empty) { error make --unspanned { msg: "path parameter 'season' must be non-empty" } }
   let full_url = (build-url $base ({format: (encode-path-segment $format), season: (encode-path-segment $season)} | format pattern "/{format}/Tournament/{season}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
 }
 
 # Teams
@@ -747,8 +822,9 @@ export def "teams get" [
 ]: nothing -> table<Active: bool, ApRank: int, Conference: string, ConferenceID: int, ConferenceLosses: int, ConferenceWins: int, GlobalTeamID: int, Key: string, Losses: int, Name: string, School: string, ShortDisplayName: string, Stadium: record<Active: bool, Address: string, Capacity: int, City: string, Country: string, GeoLat: float, GeoLong: float, Name: string, StadiumID: int, State: string, Zip: string>, TeamID: int, TeamLogoUrl: string, Wins: int> {
   let auth = (build-auth $token ($auth_scheme | default "ocp-apim-subscription-key"))
   let base = ($base_url | default $BASE_URL)
+  if ($format | is-empty) { error make --unspanned { msg: "path parameter 'format' must be non-empty" } }
   let full_url = (build-url $base ({format: (encode-path-segment $format)} | format pattern "/{format}/teams"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
 }

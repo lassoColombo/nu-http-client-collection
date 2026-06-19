@@ -3,18 +3,19 @@
 # Auth: --token flag or $env.MIMIC_REST_API_TOKEN
 
 const BASE_URL = "http://gambitcomm.local"
-const DEFAULT_AUTH = "basic"
 
-# Build auth: returns {headers: record, query: string}
+# Build auth: returns {scheme: string, headers: record, query: string, location: string}.
+# `location` is "header" | "query" | "cookie" | "none" and tells dry-run callers
+# where the token went without inspecting headers/query themselves.
 def build-auth [token?: string, auth_scheme?: string]: nothing -> record {
   let token_val = if ($token != null) and ($token | is-not-empty) { $token } else { $env | get -o MIMIC_REST_API_TOKEN | default "" }
   let scheme = ($auth_scheme | default "bearer")
-  if ($scheme == "none") or ($token_val | is-empty) { return {headers: {}, query: ""} }
+  if ($scheme == "none") or ($token_val | is-empty) { return {scheme: $scheme, headers: {}, query: "", location: "none"} }
   match $scheme {
-    "basic" => { {headers: {Authorization: $"Basic ($token_val)"}, query: ""} }
-    "basic-credentials" => { {headers: {Authorization: $"Basic ($token_val | encode base64)"}, query: ""} }
-    "none" => { {headers: {}, query: ""} }
-    _ => { {headers: {Authorization: $"Bearer ($token_val)"}, query: ""} }
+    "basic" => { {scheme: $scheme, headers: {Authorization: $"Basic ($token_val)"}, query: "", location: "header"} }
+    "basic-credentials" => { {scheme: $scheme, headers: {Authorization: $"Basic ($token_val | encode base64)"}, query: "", location: "header"} }
+    "none" => { {scheme: $scheme, headers: {}, query: "", location: "none"} }
+    _ => { {scheme: $scheme, headers: {Authorization: $"Bearer ($token_val)"}, query: "", location: "header"} }
   }
 }
 
@@ -23,8 +24,9 @@ def build-auth [token?: string, auth_scheme?: string]: nothing -> record {
 # ([A-Za-z0-9-._~]) stay literal; everything else gets %XX.
 def serialize-qp [name: string, value: any, style: string]: nothing -> list<string> {
   if ($value == null) { return [] }
-  let n = (encode-path-segment $name)
   let is_list = ($value | describe | str starts-with "list")
+  if $is_list and ($value | is-empty) { return [] }
+  let n = (encode-path-segment $name)
   if ($value | describe | str starts-with "record") { return ($value | transpose k v | each { $"($n)[(encode-path-segment $in.k)]=(encode-path-segment $in.v)" }) }
   if not $is_list { return [$"($n)=(encode-path-segment $value)"] }
   match $style {
@@ -55,22 +57,42 @@ def build-url [base: string, path: string, query?: string]: nothing -> string {
   if ($query != null) and ($query | is-not-empty) { $result | upsert query $query | url join } else { $result | url join }
 }
 
+# Build the dry-run record returned by --dry-run. Shape:
+#   {dry_run: true, method, url, query: <record>, headers, body, content_type, timeout,
+#    auth: {scheme, location}}
+# `meta` carries logical-form data (the query record by spec name, the pre-serialization
+# body) that do-request itself cannot reconstruct from its wire-format args.
+def build-dry-run-record [method: string, url: string, auth: record, content_type: string, timeout: duration, meta?: record]: nothing -> record {
+  let m = ($meta | default {})
+  {
+    dry_run: true
+    method: $method
+    url: $url
+    query: ($m | get -o query | default {})
+    headers: $auth.headers
+    body: ($m | get -o body)
+    content_type: $content_type
+    timeout: $timeout
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+}
+
 # Execute HTTP request with method dispatch
-def do-request [method: string, url: string, auth: record, insecure: bool, raw: bool, dry_run: bool, max_time?: duration, allow_errors?: bool, full?: bool, content_type?: string, body?: any]: nothing -> any {
+def do-request [method: string, url: string, auth: record, insecure: bool, raw: bool, dry_run: bool, max_time?: duration, allow_errors?: bool, full?: bool, content_type?: string, body?: any, dry_run_meta?: record]: nothing -> any {
   let req_url = if ($auth.query | is-not-empty) { if ($url | str contains "?") { $"($url)&($auth.query)" } else { $"($url)?($auth.query)" } } else { $url }
   let timeout = ($max_time | default 30min)
   let ct = ($content_type | default "application/json")
-  if $dry_run { return {method: $method, url: $req_url, headers: $auth.headers, query_string: $auth.query, content_type: $ct, timeout: $timeout, body: $body} }
+  if $dry_run { return (build-dry-run-record $method $req_url $auth $ct $timeout $dry_run_meta) }
   let resp = match $method {
     "get" => { http get --headers $auth.headers --full --allow-errors --max-time $timeout --insecure=$insecure --raw=$raw $req_url }
-    "head" => { http head --headers $auth.headers --max-time $timeout --insecure=$insecure $req_url }
-    "options" => { http options --headers $auth.headers --max-time $timeout --insecure=$insecure $req_url }
+    "head" => { http head --headers $auth.headers --full --allow-errors --max-time $timeout --insecure=$insecure $req_url }
+    "options" => { http options --headers $auth.headers --full --allow-errors --max-time $timeout --insecure=$insecure $req_url }
     "post" => { if ($body | is-empty) { http post --headers $auth.headers --full --allow-errors --max-time $timeout --insecure=$insecure --raw=$raw $req_url "" } else { http post --headers $auth.headers --content-type $ct --full --allow-errors --max-time $timeout --insecure=$insecure --raw=$raw $req_url $body } }
     "put" => { if ($body | is-empty) { http put --headers $auth.headers --full --allow-errors --max-time $timeout --insecure=$insecure --raw=$raw $req_url "" } else { http put --headers $auth.headers --content-type $ct --full --allow-errors --max-time $timeout --insecure=$insecure --raw=$raw $req_url $body } }
     "patch" => { if ($body | is-empty) { http patch --headers $auth.headers --full --allow-errors --max-time $timeout --insecure=$insecure --raw=$raw $req_url "" } else { http patch --headers $auth.headers --content-type $ct --full --allow-errors --max-time $timeout --insecure=$insecure --raw=$raw $req_url $body } }
     "delete" => { if ($body | is-empty) { http delete --headers $auth.headers --full --allow-errors --max-time $timeout --insecure=$insecure --raw=$raw $req_url } else { http delete --headers $auth.headers --content-type $ct --data $body --full --allow-errors --max-time $timeout --insecure=$insecure --raw=$raw $req_url } }
   }
-  if ($method in ["head" "options"]) { return $resp }
+  if ($method == "head") and (not $full) and (not $allow_errors) and $resp.status < 400 { return $resp.headers }
   if $allow_errors { $resp } else if $resp.status >= 400 { error make --unspanned { msg: $"HTTP ($resp.status): ($resp.body)" } } else if $full { {status: $resp.status, headers: $resp.headers, body: $resp.body} } else if $resp.status == 204 { null } else { $resp.body }
 }
 
@@ -121,10 +143,13 @@ export def "mimic-access-add create" [
 ]: nothing -> string {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
+  if ($user | is-empty) { error make --unspanned { msg: "path parameter 'user' must be non-empty" } }
+  if ($agents | is-empty) { error make --unspanned { msg: "path parameter 'agents' must be non-empty" } }
+  if ($mask | is-empty) { error make --unspanned { msg: "path parameter 'mask' must be non-empty" } }
   let full_url = (build-url $base ({user: (encode-path-segment $user), agents: (encode-path-segment $agents), mask: (encode-path-segment $mask)} | format pattern "/mimic/access/add/{user}/{agents}/{mask}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
 }
 
 # Clears a users entry from access control database.
@@ -145,10 +170,11 @@ export def "mimic-access-del delete" [
 ]: nothing -> string {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
+  if ($user | is-empty) { error make --unspanned { msg: "path parameter 'user' must be non-empty" } }
   let full_url = (build-url $base ({user: (encode-path-segment $user)} | format pattern "/mimic/access/del/{user}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
 }
 
 # Returns the current access control database in use.
@@ -171,7 +197,7 @@ export def "mimic-access-get-acldb get" [
   let full_url = (build-url $base "/mimic/access/get/acldb")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
 }
 
 # Returns the current admin directory.
@@ -194,7 +220,7 @@ export def "mimic-access-get-admindir get" [
   let full_url = (build-url $base "/mimic/access/get/admindir")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
 }
 
 # Returns the current administrator.
@@ -217,7 +243,7 @@ export def "mimic-access-get-adminuser get" [
   let full_url = (build-url $base "/mimic/access/get/adminuser")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
 }
 
 # Returns the state of access control checking.
@@ -240,7 +266,7 @@ export def "mimic-access-get-enabled get" [
   let full_url = (build-url $base "/mimic/access/get/enabled")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
 }
 
 # Returns an array of entries.
@@ -263,7 +289,7 @@ export def "mimic-access-list list" [
   let full_url = (build-url $base "/mimic/access/list")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
 }
 
 # Loads the specified file for access control data.
@@ -284,10 +310,11 @@ export def "mimic-access-load update" [
 ]: nothing -> list<string> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
+  if ($filename | is-empty) { error make --unspanned { msg: "path parameter 'filename' must be non-empty" } }
   let full_url = (build-url $base ({filename: (encode-path-segment $filename)} | format pattern "/mimic/access/load/{filename}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
 }
 
 # Saves current access control data in specified file.
@@ -308,10 +335,11 @@ export def "mimic-access-save update" [
 ]: nothing -> list<string> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
+  if ($filename | is-empty) { error make --unspanned { msg: "path parameter 'filename' must be non-empty" } }
   let full_url = (build-url $base ({filename: (encode-path-segment $filename)} | format pattern "/mimic/access/save/{filename}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
 }
 
 # Allows setting the name of the current access control database.
@@ -332,10 +360,11 @@ export def "mimic-access-set-acldb update" [
 ]: nothing -> string {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
+  if ($database_name | is-empty) { error make --unspanned { msg: "path parameter 'databaseName' must be non-empty" } }
   let full_url = (build-url $base ({database_name: (encode-path-segment $database_name)} | format pattern "/mimic/access/set/acldb/{database_name}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
 }
 
 # Allows the user to enable/disable the access control check.
@@ -356,10 +385,11 @@ export def "mimic-access-set-enabled update" [
 ]: nothing -> string {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
+  if ($enabled_or_not | is-empty) { error make --unspanned { msg: "path parameter 'enabledOrNot' must be non-empty" } }
   let full_url = (build-url $base ({enabled_or_not: (encode-path-segment $enabled_or_not)} | format pattern "/mimic/access/set/enabled/{enabled_or_not}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
 }
 
 # Add an agent.
@@ -383,12 +413,14 @@ export def "mimic-agent-add create-new" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
+  if ($agent_num | is-empty) { error make --unspanned { msg: "path parameter 'agentNum' must be non-empty" } }
+  if ($ip | is-empty) { error make --unspanned { msg: "path parameter 'IP' must be non-empty" } }
   let full_url = (build-url $base ({agent_num: (encode-path-segment $agent_num), ip: (encode-path-segment $ip)} | format pattern "/mimic/agent/{agent_num}/add/{ip}"))
   let req_body = $body
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else if (($input | is-not-empty) and ($req_body | is-empty)) { $input } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: {}, body: $req_body}
 }
 
 # Add a source address that the agent will accept messages from.
@@ -411,10 +443,13 @@ export def "mimic-agent-from-add create" [
 ]: nothing -> string {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
+  if ($agent_num | is-empty) { error make --unspanned { msg: "path parameter 'agentNum' must be non-empty" } }
+  if ($ip | is-empty) { error make --unspanned { msg: "path parameter 'IP' must be non-empty" } }
+  if ($port | is-empty) { error make --unspanned { msg: "path parameter 'port' must be non-empty" } }
   let full_url = (build-url $base ({agent_num: (encode-path-segment $agent_num), ip: (encode-path-segment $ip), port: (encode-path-segment $port)} | format pattern "/mimic/agent/{agent_num}/from/add/{ip}/{port}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
 }
 
 # delete a source address that the agent will accept messages from.
@@ -437,10 +472,13 @@ export def "mimic-agent-from-delete delete" [
 ]: nothing -> string {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
+  if ($agent_num | is-empty) { error make --unspanned { msg: "path parameter 'agentNum' must be non-empty" } }
+  if ($ip | is-empty) { error make --unspanned { msg: "path parameter 'IP' must be non-empty" } }
+  if ($port | is-empty) { error make --unspanned { msg: "path parameter 'port' must be non-empty" } }
   let full_url = (build-url $base ({agent_num: (encode-path-segment $agent_num), ip: (encode-path-segment $ip), port: (encode-path-segment $port)} | format pattern "/mimic/agent/{agent_num}/from/delete/{ip}/{port}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
 }
 
 # List the source addresses that the agent will accept messages from.
@@ -461,10 +499,11 @@ export def "mimic-agent-from-list list" [
 ]: nothing -> table<IP: string, port: int> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
+  if ($agent_num | is-empty) { error make --unspanned { msg: "path parameter 'agentNum' must be non-empty" } }
   let full_url = (build-url $base ({agent_num: (encode-path-segment $agent_num)} | format pattern "/mimic/agent/{agent_num}/from/list"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
 }
 
 # has the agent value space changed?
@@ -485,10 +524,11 @@ export def "mimic-agent-get-changed get" [
 ]: nothing -> int {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
+  if ($agent_num | is-empty) { error make --unspanned { msg: "path parameter 'agentNum' must be non-empty" } }
   let full_url = (build-url $base ({agent_num: (encode-path-segment $agent_num)} | format pattern "/mimic/agent/{agent_num}/get/changed"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
 }
 
 # has the lab configuration changed?
@@ -509,10 +549,11 @@ export def "mimic-agent-get-config-changed get" [
 ]: nothing -> int {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
+  if ($agent_num | is-empty) { error make --unspanned { msg: "path parameter 'agentNum' must be non-empty" } }
   let full_url = (build-url $base ({agent_num: (encode-path-segment $agent_num)} | format pattern "/mimic/agent/{agent_num}/get/config_changed"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
 }
 
 # one-way transit delay in msec.
@@ -533,10 +574,11 @@ export def "mimic-agent-get-delay get" [
 ]: nothing -> int {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
+  if ($agent_num | is-empty) { error make --unspanned { msg: "path parameter 'agentNum' must be non-empty" } }
   let full_url = (build-url $base ({agent_num: (encode-path-segment $agent_num)} | format pattern "/mimic/agent/{agent_num}/get/delay"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
 }
 
 # drop rate (every N-th PDU). 0 means no drops.
@@ -557,10 +599,11 @@ export def "mimic-agent-get-drops get" [
 ]: nothing -> int {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
+  if ($agent_num | is-empty) { error make --unspanned { msg: "path parameter 'agentNum' must be non-empty" } }
   let full_url = (build-url $base ({agent_num: (encode-path-segment $agent_num)} | format pattern "/mimic/agent/{agent_num}/get/drops"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
 }
 
 # host address of the agent.
@@ -581,10 +624,11 @@ export def "mimic-agent-get-host get" [
 ]: nothing -> string {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
+  if ($agent_num | is-empty) { error make --unspanned { msg: "path parameter 'agentNum' must be non-empty" } }
   let full_url = (build-url $base ({agent_num: (encode-path-segment $agent_num)} | format pattern "/mimic/agent/{agent_num}/get/host"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
 }
 
 # timeout in seconds for retransmitting INFORM PDUs.
@@ -605,10 +649,11 @@ export def "mimic-agent-get-inform-timeout get" [
 ]: nothing -> int {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
+  if ($agent_num | is-empty) { error make --unspanned { msg: "path parameter 'agentNum' must be non-empty" } }
   let full_url = (build-url $base ({agent_num: (encode-path-segment $agent_num)} | format pattern "/mimic/agent/{agent_num}/get/inform_timeout"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
 }
 
 # network interface card for the agent.
@@ -629,10 +674,11 @@ export def "mimic-agent-get-interface get" [
 ]: nothing -> string {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
+  if ($agent_num | is-empty) { error make --unspanned { msg: "path parameter 'agentNum' must be non-empty" } }
   let full_url = (build-url $base ({agent_num: (encode-path-segment $agent_num)} | format pattern "/mimic/agent/{agent_num}/get/interface"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
 }
 
 # subnet mask of the agent.
@@ -653,10 +699,11 @@ export def "mimic-agent-get-mask get" [
 ]: nothing -> string {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
+  if ($agent_num | is-empty) { error make --unspanned { msg: "path parameter 'agentNum' must be non-empty" } }
   let full_url = (build-url $base ({agent_num: (encode-path-segment $agent_num)} | format pattern "/mimic/agent/{agent_num}/get/mask"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
 }
 
 # set of MIBs, simulations and scenarios
@@ -677,10 +724,11 @@ export def "mimic-agent-get-mibs get" [
 ]: nothing -> table<device: string, mib: string, scenario: int> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
+  if ($agent_num | is-empty) { error make --unspanned { msg: "path parameter 'agentNum' must be non-empty" } }
   let full_url = (build-url $base ({agent_num: (encode-path-segment $agent_num)} | format pattern "/mimic/agent/{agent_num}/get/mibs"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
 }
 
 # number of starts for the agent.
@@ -701,10 +749,11 @@ export def "mimic-agent-get-num-starts get-number" [
 ]: nothing -> int {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
+  if ($agent_num | is-empty) { error make --unspanned { msg: "path parameter 'agentNum' must be non-empty" } }
   let full_url = (build-url $base ({agent_num: (encode-path-segment $agent_num)} | format pattern "/mimic/agent/{agent_num}/get/num_starts"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
 }
 
 # MIB directory of the agent.
@@ -725,10 +774,11 @@ export def "mimic-agent-get-oiddir get" [
 ]: nothing -> string {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
+  if ($agent_num | is-empty) { error make --unspanned { msg: "path parameter 'agentNum' must be non-empty" } }
   let full_url = (build-url $base ({agent_num: (encode-path-segment $agent_num)} | format pattern "/mimic/agent/{agent_num}/get/oiddir"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
 }
 
 # owner of the agent.
@@ -749,10 +799,11 @@ export def "mimic-agent-get-owner get" [
 ]: nothing -> string {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
+  if ($agent_num | is-empty) { error make --unspanned { msg: "path parameter 'agentNum' must be non-empty" } }
   let full_url = (build-url $base ({agent_num: (encode-path-segment $agent_num)} | format pattern "/mimic/agent/{agent_num}/get/owner"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
 }
 
 # maximum PDU size.
@@ -773,10 +824,11 @@ export def "mimic-agent-get-pdusize get" [
 ]: nothing -> int {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
+  if ($agent_num | is-empty) { error make --unspanned { msg: "path parameter 'agentNum' must be non-empty" } }
   let full_url = (build-url $base ({agent_num: (encode-path-segment $agent_num)} | format pattern "/mimic/agent/{agent_num}/get/pdusize"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
 }
 
 # port number
@@ -797,10 +849,11 @@ export def "mimic-agent-get-port get" [
 ]: nothing -> string {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
+  if ($agent_num | is-empty) { error make --unspanned { msg: "path parameter 'agentNum' must be non-empty" } }
   let full_url = (build-url $base ({agent_num: (encode-path-segment $agent_num)} | format pattern "/mimic/agent/{agent_num}/get/port"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
 }
 
 # private directory of the agent.
@@ -821,10 +874,11 @@ export def "mimic-agent-get-privdir get" [
 ]: nothing -> string {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
+  if ($agent_num | is-empty) { error make --unspanned { msg: "path parameter 'agentNum' must be non-empty" } }
   let full_url = (build-url $base ({agent_num: (encode-path-segment $agent_num)} | format pattern "/mimic/agent/{agent_num}/get/privdir"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
 }
 
 # protocols supported by agent
@@ -845,10 +899,11 @@ export def "mimic-agent-get-protocol get" [
 ]: nothing -> list<string> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
+  if ($agent_num | is-empty) { error make --unspanned { msg: "path parameter 'agentNum' must be non-empty" } }
   let full_url = (build-url $base ({agent_num: (encode-path-segment $agent_num)} | format pattern "/mimic/agent/{agent_num}/get/protocol"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
 }
 
 # read community string
@@ -869,10 +924,11 @@ export def "mimic-agent-get-read get-community" [
 ]: nothing -> string {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
+  if ($agent_num | is-empty) { error make --unspanned { msg: "path parameter 'agentNum' must be non-empty" } }
   let full_url = (build-url $base ({agent_num: (encode-path-segment $agent_num)} | format pattern "/mimic/agent/{agent_num}/get/read"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
 }
 
 # first scenario name
@@ -893,10 +949,11 @@ export def "mimic-agent-get-scen get" [
 ]: nothing -> int {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
+  if ($agent_num | is-empty) { error make --unspanned { msg: "path parameter 'agentNum' must be non-empty" } }
   let full_url = (build-url $base ({agent_num: (encode-path-segment $agent_num)} | format pattern "/mimic/agent/{agent_num}/get/scen"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
 }
 
 # first simulation name
@@ -917,10 +974,11 @@ export def "mimic-agent-get-sim get" [
 ]: nothing -> string {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
+  if ($agent_num | is-empty) { error make --unspanned { msg: "path parameter 'agentNum' must be non-empty" } }
   let full_url = (build-url $base ({agent_num: (encode-path-segment $agent_num)} | format pattern "/mimic/agent/{agent_num}/get/sim"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
 }
 
 # relative start time
@@ -941,10 +999,11 @@ export def "mimic-agent-get-start get-starttime" [
 ]: nothing -> string {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
+  if ($agent_num | is-empty) { error make --unspanned { msg: "path parameter 'agentNum' must be non-empty" } }
   let full_url = (build-url $base ({agent_num: (encode-path-segment $agent_num)} | format pattern "/mimic/agent/{agent_num}/get/start"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
 }
 
 # current running state of the agent
@@ -965,10 +1024,11 @@ export def "mimic-agent-get-state get" [
 ]: nothing -> int {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
+  if ($agent_num | is-empty) { error make --unspanned { msg: "path parameter 'agentNum' must be non-empty" } }
   let full_url = (build-url $base ({agent_num: (encode-path-segment $agent_num)} | format pattern "/mimic/agent/{agent_num}/get/state"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
 }
 
 # has the agent state changed?
@@ -989,10 +1049,11 @@ export def "mimic-agent-get-state-changed get" [
 ]: nothing -> int {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
+  if ($agent_num | is-empty) { error make --unspanned { msg: "path parameter 'agentNum' must be non-empty" } }
   let full_url = (build-url $base ({agent_num: (encode-path-segment $agent_num)} | format pattern "/mimic/agent/{agent_num}/get/state_changed"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
 }
 
 # current statistics of the agent instance
@@ -1013,10 +1074,11 @@ export def "mimic-agent-get-statistics get" [
 ]: nothing -> list<int> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
+  if ($agent_num | is-empty) { error make --unspanned { msg: "path parameter 'agentNum' must be non-empty" } }
   let full_url = (build-url $base ({agent_num: (encode-path-segment $agent_num)} | format pattern "/mimic/agent/{agent_num}/get/statistics"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
 }
 
 # SNMP PDU tracing
@@ -1037,10 +1099,11 @@ export def "mimic-agent-get-trace get" [
 ]: nothing -> int {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
+  if ($agent_num | is-empty) { error make --unspanned { msg: "path parameter 'agentNum' must be non-empty" } }
   let full_url = (build-url $base ({agent_num: (encode-path-segment $agent_num)} | format pattern "/mimic/agent/{agent_num}/get/trace"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
 }
 
 # SNMP SET validation policy.
@@ -1061,10 +1124,11 @@ export def "mimic-agent-get-validate get" [
 ]: nothing -> int {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
+  if ($agent_num | is-empty) { error make --unspanned { msg: "path parameter 'agentNum' must be non-empty" } }
   let full_url = (build-url $base ({agent_num: (encode-path-segment $agent_num)} | format pattern "/mimic/agent/{agent_num}/get/validate"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
 }
 
 # write community string
@@ -1085,10 +1149,11 @@ export def "mimic-agent-get-write get-community" [
 ]: nothing -> string {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
+  if ($agent_num | is-empty) { error make --unspanned { msg: "path parameter 'agentNum' must be non-empty" } }
   let full_url = (build-url $base ({agent_num: (encode-path-segment $agent_num)} | format pattern "/mimic/agent/{agent_num}/get/write"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
 }
 
 # Halt the current agent.
@@ -1109,10 +1174,11 @@ export def "mimic-agent-halt update" [
 ]: nothing -> string {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
+  if ($agent_num | is-empty) { error make --unspanned { msg: "path parameter 'agentNum' must be non-empty" } }
   let full_url = (build-url $base ({agent_num: (encode-path-segment $agent_num)} | format pattern "/mimic/agent/{agent_num}/halt"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
 }
 
 # Adds a new ipalias for the agent.
@@ -1137,10 +1203,15 @@ export def "mimic-agent-ipalias-add create" [
 ]: nothing -> string {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
+  if ($agent_num | is-empty) { error make --unspanned { msg: "path parameter 'agentNum' must be non-empty" } }
+  if ($ip | is-empty) { error make --unspanned { msg: "path parameter 'IP' must be non-empty" } }
+  if ($port | is-empty) { error make --unspanned { msg: "path parameter 'port' must be non-empty" } }
+  if ($mask | is-empty) { error make --unspanned { msg: "path parameter 'mask' must be non-empty" } }
+  if ($interface | is-empty) { error make --unspanned { msg: "path parameter 'interface' must be non-empty" } }
   let full_url = (build-url $base ({agent_num: (encode-path-segment $agent_num), ip: (encode-path-segment $ip), port: (encode-path-segment $port), mask: (encode-path-segment $mask), interface: (encode-path-segment $interface)} | format pattern "/mimic/agent/{agent_num}/ipalias/add/{ip}/{port}/{mask}/{interface}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
 }
 
 # Deletes an existing ipalias from the agent.
@@ -1163,10 +1234,13 @@ export def "mimic-agent-ipalias-delete delete" [
 ]: nothing -> string {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
+  if ($agent_num | is-empty) { error make --unspanned { msg: "path parameter 'agentNum' must be non-empty" } }
+  if ($ip | is-empty) { error make --unspanned { msg: "path parameter 'IP' must be non-empty" } }
+  if ($port | is-empty) { error make --unspanned { msg: "path parameter 'port' must be non-empty" } }
   let full_url = (build-url $base ({agent_num: (encode-path-segment $agent_num), ip: (encode-path-segment $ip), port: (encode-path-segment $port)} | format pattern "/mimic/agent/{agent_num}/ipalias/delete/{ip}/{port}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
 }
 
 # Lists all the additional ipaliases configured for the agent.
@@ -1187,10 +1261,11 @@ export def "mimic-agent-ipalias-list list-ipaliases" [
 ]: nothing -> table<IP: string, interface: string, mask: string, port: int> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
+  if ($agent_num | is-empty) { error make --unspanned { msg: "path parameter 'agentNum' must be non-empty" } }
   let full_url = (build-url $base ({agent_num: (encode-path-segment $agent_num)} | format pattern "/mimic/agent/{agent_num}/ipalias/list"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
 }
 
 # Starts an existing ipalias for the agent.
@@ -1213,10 +1288,13 @@ export def "mimic-agent-ipalias-start start" [
 ]: nothing -> string {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
+  if ($agent_num | is-empty) { error make --unspanned { msg: "path parameter 'agentNum' must be non-empty" } }
+  if ($ip | is-empty) { error make --unspanned { msg: "path parameter 'IP' must be non-empty" } }
+  if ($port | is-empty) { error make --unspanned { msg: "path parameter 'port' must be non-empty" } }
   let full_url = (build-url $base ({agent_num: (encode-path-segment $agent_num), ip: (encode-path-segment $ip), port: (encode-path-segment $port)} | format pattern "/mimic/agent/{agent_num}/ipalias/start/{ip}/{port}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
 }
 
 # Returns the status (0=down, 1=up) of an existing ipalias for the agent.
@@ -1239,10 +1317,13 @@ export def "mimic-agent-ipalias-status get" [
 ]: nothing -> string {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
+  if ($agent_num | is-empty) { error make --unspanned { msg: "path parameter 'agentNum' must be non-empty" } }
+  if ($ip | is-empty) { error make --unspanned { msg: "path parameter 'IP' must be non-empty" } }
+  if ($port | is-empty) { error make --unspanned { msg: "path parameter 'port' must be non-empty" } }
   let full_url = (build-url $base ({agent_num: (encode-path-segment $agent_num), ip: (encode-path-segment $ip), port: (encode-path-segment $port)} | format pattern "/mimic/agent/{agent_num}/ipalias/status/{ip}/{port}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
 }
 
 # Stops an existing ipalias for the agent.
@@ -1265,10 +1346,13 @@ export def "mimic-agent-ipalias-stop stop" [
 ]: nothing -> string {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
+  if ($agent_num | is-empty) { error make --unspanned { msg: "path parameter 'agentNum' must be non-empty" } }
+  if ($ip | is-empty) { error make --unspanned { msg: "path parameter 'IP' must be non-empty" } }
+  if ($port | is-empty) { error make --unspanned { msg: "path parameter 'port' must be non-empty" } }
   let full_url = (build-url $base ({agent_num: (encode-path-segment $agent_num), ip: (encode-path-segment $ip), port: (encode-path-segment $port)} | format pattern "/mimic/agent/{agent_num}/ipalias/stop/{ip}/{port}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
 }
 
 # Pause the current agent.
@@ -1289,10 +1373,11 @@ export def "mimic-agent-pause pause-now" [
 ]: nothing -> string {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
+  if ($agent_num | is-empty) { error make --unspanned { msg: "path parameter 'agentNum' must be non-empty" } }
   let full_url = (build-url $base ({agent_num: (encode-path-segment $agent_num)} | format pattern "/mimic/agent/{agent_num}/pause"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
 }
 
 # Show the agent's COAP argument structure
@@ -1313,10 +1398,11 @@ export def "mimic-agent-protocol-msg-coap-get-args get" [
 ]: nothing -> record {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
+  if ($agent_num | is-empty) { error make --unspanned { msg: "path parameter 'agentNum' must be non-empty" } }
   let full_url = (build-url $base ({agent_num: (encode-path-segment $agent_num)} | format pattern "/mimic/agent/{agent_num}/protocol/msg/coap/get/args"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
 }
 
 # Show the agent's COAP configuration
@@ -1337,10 +1423,11 @@ export def "mimic-agent-protocol-msg-coap-get-config get" [
 ]: nothing -> record<keystore: string, primary_port: int, rule: string, secure_port: int> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
+  if ($agent_num | is-empty) { error make --unspanned { msg: "path parameter 'agentNum' must be non-empty" } }
   let full_url = (build-url $base ({agent_num: (encode-path-segment $agent_num)} | format pattern "/mimic/agent/{agent_num}/protocol/msg/coap/get/config"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
 }
 
 # Show the agent's COAP statistics
@@ -1361,10 +1448,11 @@ export def "mimic-agent-protocol-msg-coap-get-statistics get" [
 ]: nothing -> list<int> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
+  if ($agent_num | is-empty) { error make --unspanned { msg: "path parameter 'agentNum' must be non-empty" } }
   let full_url = (build-url $base ({agent_num: (encode-path-segment $agent_num)} | format pattern "/mimic/agent/{agent_num}/protocol/msg/coap/get/statistics"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
 }
 
 # Show the agent's COAP traffic tracing
@@ -1385,10 +1473,11 @@ export def "mimic-agent-protocol-msg-coap-get-trace get" [
 ]: nothing -> record<keystore: string, primary_port: int, rule: string, secure_port: int> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
+  if ($agent_num | is-empty) { error make --unspanned { msg: "path parameter 'agentNum' must be non-empty" } }
   let full_url = (build-url $base ({agent_num: (encode-path-segment $agent_num)} | format pattern "/mimic/agent/{agent_num}/protocol/msg/coap/get/trace"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
 }
 
 # Set the agent's COAP configuration
@@ -1411,10 +1500,13 @@ export def "mimic-agent-protocol-msg-coap-set-config update" [
 ]: nothing -> string {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
+  if ($agent_num | is-empty) { error make --unspanned { msg: "path parameter 'agentNum' must be non-empty" } }
+  if ($argument | is-empty) { error make --unspanned { msg: "path parameter 'argument' must be non-empty" } }
+  if ($value | is-empty) { error make --unspanned { msg: "path parameter 'value' must be non-empty" } }
   let full_url = (build-url $base ({agent_num: (encode-path-segment $agent_num), argument: (encode-path-segment $argument), value: (encode-path-segment $value)} | format pattern "/mimic/agent/{agent_num}/protocol/msg/coap/set/config/{argument}/{value}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
 }
 
 # Set the agent's COAP traffic tracing
@@ -1436,10 +1528,12 @@ export def "mimic-agent-protocol-msg-coap-set-trace update" [
 ]: nothing -> string {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
+  if ($agent_num | is-empty) { error make --unspanned { msg: "path parameter 'agentNum' must be non-empty" } }
+  if ($enable_or_not | is-empty) { error make --unspanned { msg: "path parameter 'enableOrNot' must be non-empty" } }
   let full_url = (build-url $base ({agent_num: (encode-path-segment $agent_num), enable_or_not: (encode-path-segment $enable_or_not)} | format pattern "/mimic/agent/{agent_num}/protocol/msg/coap/set/trace/{enable_or_not}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
 }
 
 # Show the agent's DHCP argument structure
@@ -1460,10 +1554,11 @@ export def "mimic-agent-protocol-msg-dhcp-get-args get" [
 ]: nothing -> record {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
+  if ($agent_num | is-empty) { error make --unspanned { msg: "path parameter 'agentNum' must be non-empty" } }
   let full_url = (build-url $base ({agent_num: (encode-path-segment $agent_num)} | format pattern "/mimic/agent/{agent_num}/protocol/msg/dhcp/get/args"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
 }
 
 # Show the agent's DHCP configuration
@@ -1484,10 +1579,11 @@ export def "mimic-agent-protocol-msg-dhcp-get-config get" [
 ]: nothing -> record<add_options: string, classid: string, hwaddr: string, script: string> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
+  if ($agent_num | is-empty) { error make --unspanned { msg: "path parameter 'agentNum' must be non-empty" } }
   let full_url = (build-url $base ({agent_num: (encode-path-segment $agent_num)} | format pattern "/mimic/agent/{agent_num}/protocol/msg/dhcp/get/config"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
 }
 
 # Show the agent's DHCP statistics
@@ -1508,10 +1604,11 @@ export def "mimic-agent-protocol-msg-dhcp-get-statistics get" [
 ]: nothing -> list<int> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
+  if ($agent_num | is-empty) { error make --unspanned { msg: "path parameter 'agentNum' must be non-empty" } }
   let full_url = (build-url $base ({agent_num: (encode-path-segment $agent_num)} | format pattern "/mimic/agent/{agent_num}/protocol/msg/dhcp/get/statistics"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
 }
 
 # Show the agent's DHCP traffic tracing
@@ -1532,10 +1629,11 @@ export def "mimic-agent-protocol-msg-dhcp-get-trace get" [
 ]: nothing -> record<add_options: string, classid: string, hwaddr: string, script: string> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
+  if ($agent_num | is-empty) { error make --unspanned { msg: "path parameter 'agentNum' must be non-empty" } }
   let full_url = (build-url $base ({agent_num: (encode-path-segment $agent_num)} | format pattern "/mimic/agent/{agent_num}/protocol/msg/dhcp/get/trace"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
 }
 
 # Show the parameters configured by the server in its DHCP-OFFER message
@@ -1556,10 +1654,11 @@ export def "mimic-agent-protocol-msg-dhcp-params get" [
 ]: nothing -> list<record> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
+  if ($agent_num | is-empty) { error make --unspanned { msg: "path parameter 'agentNum' must be non-empty" } }
   let full_url = (build-url $base ({agent_num: (encode-path-segment $agent_num)} | format pattern "/mimic/agent/{agent_num}/protocol/msg/dhcp/params"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
 }
 
 # Set the agent's DHCP configuration
@@ -1582,10 +1681,13 @@ export def "mimic-agent-protocol-msg-dhcp-set-config update" [
 ]: nothing -> string {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
+  if ($agent_num | is-empty) { error make --unspanned { msg: "path parameter 'agentNum' must be non-empty" } }
+  if ($argument | is-empty) { error make --unspanned { msg: "path parameter 'argument' must be non-empty" } }
+  if ($value | is-empty) { error make --unspanned { msg: "path parameter 'value' must be non-empty" } }
   let full_url = (build-url $base ({agent_num: (encode-path-segment $agent_num), argument: (encode-path-segment $argument), value: (encode-path-segment $value)} | format pattern "/mimic/agent/{agent_num}/protocol/msg/dhcp/set/config/{argument}/{value}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
 }
 
 # Set the agent's DHCP traffic tracing
@@ -1607,10 +1709,12 @@ export def "mimic-agent-protocol-msg-dhcp-set-trace update" [
 ]: nothing -> string {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
+  if ($agent_num | is-empty) { error make --unspanned { msg: "path parameter 'agentNum' must be non-empty" } }
+  if ($enable_or_not | is-empty) { error make --unspanned { msg: "path parameter 'enableOrNot' must be non-empty" } }
   let full_url = (build-url $base ({agent_num: (encode-path-segment $agent_num), enable_or_not: (encode-path-segment $enable_or_not)} | format pattern "/mimic/agent/{agent_num}/protocol/msg/dhcp/set/trace/{enable_or_not}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
 }
 
 # Show the agent's IPMI argument structure
@@ -1631,10 +1735,11 @@ export def "mimic-agent-protocol-msg-ipmi-get-args get" [
 ]: nothing -> record {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
+  if ($agent_num | is-empty) { error make --unspanned { msg: "path parameter 'agentNum' must be non-empty" } }
   let full_url = (build-url $base ({agent_num: (encode-path-segment $agent_num)} | format pattern "/mimic/agent/{agent_num}/protocol/msg/ipmi/get/args"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
 }
 
 # Show the agent's IPMI configuration
@@ -1655,10 +1760,11 @@ export def "mimic-agent-protocol-msg-ipmi-get-config get" [
 ]: nothing -> record<primary_port: int, secure_port: int, version: string> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
+  if ($agent_num | is-empty) { error make --unspanned { msg: "path parameter 'agentNum' must be non-empty" } }
   let full_url = (build-url $base ({agent_num: (encode-path-segment $agent_num)} | format pattern "/mimic/agent/{agent_num}/protocol/msg/ipmi/get/config"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
 }
 
 # Show the agent's IPMI statistics
@@ -1679,10 +1785,11 @@ export def "mimic-agent-protocol-msg-ipmi-get-statistics get" [
 ]: nothing -> list<int> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
+  if ($agent_num | is-empty) { error make --unspanned { msg: "path parameter 'agentNum' must be non-empty" } }
   let full_url = (build-url $base ({agent_num: (encode-path-segment $agent_num)} | format pattern "/mimic/agent/{agent_num}/protocol/msg/ipmi/get/statistics"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
 }
 
 # Show the agent's IPMI traffic tracing
@@ -1703,10 +1810,11 @@ export def "mimic-agent-protocol-msg-ipmi-get-trace get" [
 ]: nothing -> record<primary_port: int, secure_port: int, version: string> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
+  if ($agent_num | is-empty) { error make --unspanned { msg: "path parameter 'agentNum' must be non-empty" } }
   let full_url = (build-url $base ({agent_num: (encode-path-segment $agent_num)} | format pattern "/mimic/agent/{agent_num}/protocol/msg/ipmi/get/trace"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
 }
 
 # Show the outgoing message's attributes
@@ -1728,10 +1836,12 @@ export def "mimic-agent-protocol-msg-ipmi-get get" [
 ]: nothing -> string {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
+  if ($agent_num | is-empty) { error make --unspanned { msg: "path parameter 'agentNum' must be non-empty" } }
+  if ($attr | is-empty) { error make --unspanned { msg: "path parameter 'attr' must be non-empty" } }
   let full_url = (build-url $base ({agent_num: (encode-path-segment $agent_num), attr: (encode-path-segment $attr)} | format pattern "/mimic/agent/{agent_num}/protocol/msg/ipmi/get/{attr}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
 }
 
 # Set the agent's IPMI configuration
@@ -1754,10 +1864,13 @@ export def "mimic-agent-protocol-msg-ipmi-set-config update" [
 ]: nothing -> string {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
+  if ($agent_num | is-empty) { error make --unspanned { msg: "path parameter 'agentNum' must be non-empty" } }
+  if ($argument | is-empty) { error make --unspanned { msg: "path parameter 'argument' must be non-empty" } }
+  if ($value | is-empty) { error make --unspanned { msg: "path parameter 'value' must be non-empty" } }
   let full_url = (build-url $base ({agent_num: (encode-path-segment $agent_num), argument: (encode-path-segment $argument), value: (encode-path-segment $value)} | format pattern "/mimic/agent/{agent_num}/protocol/msg/ipmi/set/config/{argument}/{value}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
 }
 
 # Set the agent's IPMI traffic tracing
@@ -1779,10 +1892,12 @@ export def "mimic-agent-protocol-msg-ipmi-set-trace update" [
 ]: nothing -> string {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
+  if ($agent_num | is-empty) { error make --unspanned { msg: "path parameter 'agentNum' must be non-empty" } }
+  if ($enable_or_not | is-empty) { error make --unspanned { msg: "path parameter 'enableOrNot' must be non-empty" } }
   let full_url = (build-url $base ({agent_num: (encode-path-segment $agent_num), enable_or_not: (encode-path-segment $enable_or_not)} | format pattern "/mimic/agent/{agent_num}/protocol/msg/ipmi/set/trace/{enable_or_not}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
 }
 
 # Set the outgoing message's attributes
@@ -1805,10 +1920,13 @@ export def "mimic-agent-protocol-msg-ipmi-set update" [
 ]: nothing -> string {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
+  if ($agent_num | is-empty) { error make --unspanned { msg: "path parameter 'agentNum' must be non-empty" } }
+  if ($attr | is-empty) { error make --unspanned { msg: "path parameter 'attr' must be non-empty" } }
+  if ($value | is-empty) { error make --unspanned { msg: "path parameter 'value' must be non-empty" } }
   let full_url = (build-url $base ({agent_num: (encode-path-segment $agent_num), attr: (encode-path-segment $attr), value: (encode-path-segment $value)} | format pattern "/mimic/agent/{agent_num}/protocol/msg/ipmi/set/{attr}/{value}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
 }
 
 # Show the agent's MQTT TCP connection state
@@ -1829,10 +1947,11 @@ export def "mimic-agent-protocol-msg-mqtt-client-get-protstate get" [
 ]: nothing -> list<int> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
+  if ($agent_num | is-empty) { error make --unspanned { msg: "path parameter 'agentNum' must be non-empty" } }
   let full_url = (build-url $base ({agent_num: (encode-path-segment $agent_num)} | format pattern "/mimic/agent/{agent_num}/protocol/msg/mqtt/client/get/protstate"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
 }
 
 # Show the agent's MQTT state
@@ -1853,10 +1972,11 @@ export def "mimic-agent-protocol-msg-mqtt-client-get-state get" [
 ]: nothing -> list<int> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
+  if ($agent_num | is-empty) { error make --unspanned { msg: "path parameter 'agentNum' must be non-empty" } }
   let full_url = (build-url $base ({agent_num: (encode-path-segment $agent_num)} | format pattern "/mimic/agent/{agent_num}/protocol/msg/mqtt/client/get/state"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
 }
 
 # Show the agent's current messages' cardinality
@@ -1877,10 +1997,11 @@ export def "mimic-agent-protocol-msg-mqtt-client-message-card get" [
 ]: nothing -> list<int> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
+  if ($agent_num | is-empty) { error make --unspanned { msg: "path parameter 'agentNum' must be non-empty" } }
   let full_url = (build-url $base ({agent_num: (encode-path-segment $agent_num)} | format pattern "/mimic/agent/{agent_num}/protocol/msg/mqtt/client/message/card"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
 }
 
 # Show the agent's message attributes
@@ -1903,10 +2024,13 @@ export def "mimic-agent-protocol-msg-mqtt-client-message-get get" [
 ]: nothing -> list<string> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
+  if ($agent_num | is-empty) { error make --unspanned { msg: "path parameter 'agentNum' must be non-empty" } }
+  if ($msg_num | is-empty) { error make --unspanned { msg: "path parameter 'msgNum' must be non-empty" } }
+  if ($attr | is-empty) { error make --unspanned { msg: "path parameter 'attr' must be non-empty" } }
   let full_url = (build-url $base ({agent_num: (encode-path-segment $agent_num), msg_num: (encode-path-segment $msg_num), attr: (encode-path-segment $attr)} | format pattern "/mimic/agent/{agent_num}/protocol/msg/mqtt/client/message/get/{msg_num}/{attr}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
 }
 
 # Set the agent's message attributes
@@ -1930,10 +2054,14 @@ export def "mimic-agent-protocol-msg-mqtt-client-message-set update" [
 ]: nothing -> list<string> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
+  if ($agent_num | is-empty) { error make --unspanned { msg: "path parameter 'agentNum' must be non-empty" } }
+  if ($msg_num | is-empty) { error make --unspanned { msg: "path parameter 'msgNum' must be non-empty" } }
+  if ($attr | is-empty) { error make --unspanned { msg: "path parameter 'attr' must be non-empty" } }
+  if ($value | is-empty) { error make --unspanned { msg: "path parameter 'value' must be non-empty" } }
   let full_url = (build-url $base ({agent_num: (encode-path-segment $agent_num), msg_num: (encode-path-segment $msg_num), attr: (encode-path-segment $attr), value: (encode-path-segment $value)} | format pattern "/mimic/agent/{agent_num}/protocol/msg/mqtt/client/message/set/{msg_num}/{attr}/{value}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
 }
 
 # Restart receiving messages from a subcription of the agent
@@ -1955,10 +2083,12 @@ export def "mimic-agent-protocol-msg-mqtt-client-resubscribe update" [
 ]: nothing -> string {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
+  if ($agent_num | is-empty) { error make --unspanned { msg: "path parameter 'agentNum' must be non-empty" } }
+  if ($sub_num | is-empty) { error make --unspanned { msg: "path parameter 'subNum' must be non-empty" } }
   let full_url = (build-url $base ({agent_num: (encode-path-segment $agent_num), sub_num: (encode-path-segment $sub_num)} | format pattern "/mimic/agent/{agent_num}/protocol/msg/mqtt/client/resubscribe/{sub_num}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
 }
 
 # Abort agent's MQTT TCP session without sending DISCONNECT command
@@ -1979,10 +2109,11 @@ export def "mimic-agent-protocol-msg-mqtt-client-runtime-abort abort" [
 ]: nothing -> list<string> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
+  if ($agent_num | is-empty) { error make --unspanned { msg: "path parameter 'agentNum' must be non-empty" } }
   let full_url = (build-url $base ({agent_num: (encode-path-segment $agent_num)} | format pattern "/mimic/agent/{agent_num}/protocol/msg/mqtt/client/runtime/abort"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
 }
 
 # Start agent's MQTT TCP session
@@ -2003,10 +2134,11 @@ export def "mimic-agent-protocol-msg-mqtt-client-runtime-connect update" [
 ]: nothing -> list<string> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
+  if ($agent_num | is-empty) { error make --unspanned { msg: "path parameter 'agentNum' must be non-empty" } }
   let full_url = (build-url $base ({agent_num: (encode-path-segment $agent_num)} | format pattern "/mimic/agent/{agent_num}/protocol/msg/mqtt/client/runtime/connect"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
 }
 
 # Disconnect agent's MQTT TCP session by sending DISCONNECT command
@@ -2027,10 +2159,11 @@ export def "mimic-agent-protocol-msg-mqtt-client-runtime-disconnect update" [
 ]: nothing -> list<string> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
+  if ($agent_num | is-empty) { error make --unspanned { msg: "path parameter 'agentNum' must be non-empty" } }
   let full_url = (build-url $base ({agent_num: (encode-path-segment $agent_num)} | format pattern "/mimic/agent/{agent_num}/protocol/msg/mqtt/client/runtime/disconnect"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
 }
 
 # Set the agent's MQTT TCP connection target broker
@@ -2052,10 +2185,12 @@ export def "mimic-agent-protocol-msg-mqtt-client-set-broker update" [
 ]: nothing -> list<int> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
+  if ($agent_num | is-empty) { error make --unspanned { msg: "path parameter 'agentNum' must be non-empty" } }
+  if ($broker_addr | is-empty) { error make --unspanned { msg: "path parameter 'brokerAddr' must be non-empty" } }
   let full_url = (build-url $base ({agent_num: (encode-path-segment $agent_num), broker_addr: (encode-path-segment $broker_addr)} | format pattern "/mimic/agent/{agent_num}/protocol/msg/mqtt/client/set/broker/{broker_addr}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
 }
 
 # Set the agent's MQTT session
@@ -2077,10 +2212,12 @@ export def "mimic-agent-protocol-msg-mqtt-client-set-cleansession update" [
 ]: nothing -> list<int> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
+  if ($agent_num | is-empty) { error make --unspanned { msg: "path parameter 'agentNum' must be non-empty" } }
+  if ($clean_or_not | is-empty) { error make --unspanned { msg: "path parameter 'cleanOrNot' must be non-empty" } }
   let full_url = (build-url $base ({agent_num: (encode-path-segment $agent_num), clean_or_not: (encode-path-segment $clean_or_not)} | format pattern "/mimic/agent/{agent_num}/protocol/msg/mqtt/client/set/cleansession/{clean_or_not}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
 }
 
 # Set the agent's MQTT client ID
@@ -2102,10 +2239,12 @@ export def "mimic-agent-protocol-msg-mqtt-client-set-clientid update" [
 ]: nothing -> list<int> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
+  if ($agent_num | is-empty) { error make --unspanned { msg: "path parameter 'agentNum' must be non-empty" } }
+  if ($client_id | is-empty) { error make --unspanned { msg: "path parameter 'clientID' must be non-empty" } }
   let full_url = (build-url $base ({agent_num: (encode-path-segment $agent_num), client_id: (encode-path-segment $client_id)} | format pattern "/mimic/agent/{agent_num}/protocol/msg/mqtt/client/set/clientid/{client_id}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
 }
 
 # Set the agent's MQTT TCP keepalive
@@ -2127,10 +2266,12 @@ export def "mimic-agent-protocol-msg-mqtt-client-set-keepalive update" [
 ]: nothing -> list<int> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
+  if ($agent_num | is-empty) { error make --unspanned { msg: "path parameter 'agentNum' must be non-empty" } }
+  if ($alive_time | is-empty) { error make --unspanned { msg: "path parameter 'aliveTime' must be non-empty" } }
   let full_url = (build-url $base ({agent_num: (encode-path-segment $agent_num), alive_time: (encode-path-segment $alive_time)} | format pattern "/mimic/agent/{agent_num}/protocol/msg/mqtt/client/set/keepalive/{alive_time}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
 }
 
 # Set the agent's MQTT disconnection action
@@ -2152,10 +2293,12 @@ export def "mimic-agent-protocol-msg-mqtt-client-set-on-disconnect update" [
 ]: nothing -> list<int> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
+  if ($agent_num | is-empty) { error make --unspanned { msg: "path parameter 'agentNum' must be non-empty" } }
+  if ($action | is-empty) { error make --unspanned { msg: "path parameter 'action' must be non-empty" } }
   let full_url = (build-url $base ({agent_num: (encode-path-segment $agent_num), action: (encode-path-segment $action)} | format pattern "/mimic/agent/{agent_num}/protocol/msg/mqtt/client/set/on_disconnect/{action}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
 }
 
 # Set the agent's MQTT client password
@@ -2177,10 +2320,12 @@ export def "mimic-agent-protocol-msg-mqtt-client-set-password update" [
 ]: nothing -> list<int> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
+  if ($agent_num | is-empty) { error make --unspanned { msg: "path parameter 'agentNum' must be non-empty" } }
+  if ($password | is-empty) { error make --unspanned { msg: "path parameter 'password' must be non-empty" } }
   let full_url = (build-url $base ({agent_num: (encode-path-segment $agent_num), password: (encode-path-segment $password)} | format pattern "/mimic/agent/{agent_num}/protocol/msg/mqtt/client/set/password/{password}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
 }
 
 # Set the agent's MQTT TCP connection target port
@@ -2202,10 +2347,12 @@ export def "mimic-agent-protocol-msg-mqtt-client-set-port update" [
 ]: nothing -> list<int> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
+  if ($agent_num | is-empty) { error make --unspanned { msg: "path parameter 'agentNum' must be non-empty" } }
+  if ($port | is-empty) { error make --unspanned { msg: "path parameter 'port' must be non-empty" } }
   let full_url = (build-url $base ({agent_num: (encode-path-segment $agent_num), port: (encode-path-segment $port)} | format pattern "/mimic/agent/{agent_num}/protocol/msg/mqtt/client/set/port/{port}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
 }
 
 # Set the agent's MQTT client username
@@ -2227,10 +2374,12 @@ export def "mimic-agent-protocol-msg-mqtt-client-set-username update" [
 ]: nothing -> list<int> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
+  if ($agent_num | is-empty) { error make --unspanned { msg: "path parameter 'agentNum' must be non-empty" } }
+  if ($username | is-empty) { error make --unspanned { msg: "path parameter 'username' must be non-empty" } }
   let full_url = (build-url $base ({agent_num: (encode-path-segment $agent_num), username: (encode-path-segment $username)} | format pattern "/mimic/agent/{agent_num}/protocol/msg/mqtt/client/set/username/{username}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
 }
 
 # Set the agent's MQTT client's will
@@ -2252,10 +2401,12 @@ export def "mimic-agent-protocol-msg-mqtt-client-set-willmsg update" [
 ]: nothing -> list<int> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
+  if ($agent_num | is-empty) { error make --unspanned { msg: "path parameter 'agentNum' must be non-empty" } }
+  if ($msg | is-empty) { error make --unspanned { msg: "path parameter 'msg' must be non-empty" } }
   let full_url = (build-url $base ({agent_num: (encode-path-segment $agent_num), msg: (encode-path-segment $msg)} | format pattern "/mimic/agent/{agent_num}/protocol/msg/mqtt/client/set/willmsg/{msg}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
 }
 
 # Set the agent's MQTT will message's QOS field
@@ -2277,10 +2428,12 @@ export def "mimic-agent-protocol-msg-mqtt-client-set-willqos update" [
 ]: nothing -> list<int> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
+  if ($agent_num | is-empty) { error make --unspanned { msg: "path parameter 'agentNum' must be non-empty" } }
+  if ($qos | is-empty) { error make --unspanned { msg: "path parameter 'qos' must be non-empty" } }
   let full_url = (build-url $base ({agent_num: (encode-path-segment $agent_num), qos: (encode-path-segment $qos)} | format pattern "/mimic/agent/{agent_num}/protocol/msg/mqtt/client/set/willqos/{qos}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
 }
 
 # Set the agent's MQTT retained will
@@ -2302,10 +2455,12 @@ export def "mimic-agent-protocol-msg-mqtt-client-set-willretain update" [
 ]: nothing -> list<int> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
+  if ($agent_num | is-empty) { error make --unspanned { msg: "path parameter 'agentNum' must be non-empty" } }
+  if ($retain | is-empty) { error make --unspanned { msg: "path parameter 'retain' must be non-empty" } }
   let full_url = (build-url $base ({agent_num: (encode-path-segment $agent_num), retain: (encode-path-segment $retain)} | format pattern "/mimic/agent/{agent_num}/protocol/msg/mqtt/client/set/willretain/{retain}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
 }
 
 # Set the agent's MQTT client will's topic
@@ -2327,10 +2482,12 @@ export def "mimic-agent-protocol-msg-mqtt-client-set-willtopic update" [
 ]: nothing -> list<int> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
+  if ($agent_num | is-empty) { error make --unspanned { msg: "path parameter 'agentNum' must be non-empty" } }
+  if ($topic | is-empty) { error make --unspanned { msg: "path parameter 'topic' must be non-empty" } }
   let full_url = (build-url $base ({agent_num: (encode-path-segment $agent_num), topic: (encode-path-segment $topic)} | format pattern "/mimic/agent/{agent_num}/protocol/msg/mqtt/client/set/willtopic/{topic}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
 }
 
 # Show the agent's current subscriptions' cardinality
@@ -2351,10 +2508,11 @@ export def "mimic-agent-protocol-msg-mqtt-client-subscribe-card subscribe" [
 ]: nothing -> list<int> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
+  if ($agent_num | is-empty) { error make --unspanned { msg: "path parameter 'agentNum' must be non-empty" } }
   let full_url = (build-url $base ({agent_num: (encode-path-segment $agent_num)} | format pattern "/mimic/agent/{agent_num}/protocol/msg/mqtt/client/subscribe/card"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
 }
 
 # Show the agent's subscription attributes
@@ -2377,10 +2535,13 @@ export def "mimic-agent-protocol-msg-mqtt-client-subscribe-get subscribe" [
 ]: nothing -> list<string> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
+  if ($agent_num | is-empty) { error make --unspanned { msg: "path parameter 'agentNum' must be non-empty" } }
+  if ($sub_num | is-empty) { error make --unspanned { msg: "path parameter 'subNum' must be non-empty" } }
+  if ($attr | is-empty) { error make --unspanned { msg: "path parameter 'attr' must be non-empty" } }
   let full_url = (build-url $base ({agent_num: (encode-path-segment $agent_num), sub_num: (encode-path-segment $sub_num), attr: (encode-path-segment $attr)} | format pattern "/mimic/agent/{agent_num}/protocol/msg/mqtt/client/subscribe/get/{sub_num}/{attr}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
 }
 
 # Set the agent's subscribe attributes
@@ -2404,10 +2565,14 @@ export def "mimic-agent-protocol-msg-mqtt-client-subscribe-set subscribe" [
 ]: nothing -> list<string> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
+  if ($agent_num | is-empty) { error make --unspanned { msg: "path parameter 'agentNum' must be non-empty" } }
+  if ($sub_num | is-empty) { error make --unspanned { msg: "path parameter 'subNum' must be non-empty" } }
+  if ($attr | is-empty) { error make --unspanned { msg: "path parameter 'attr' must be non-empty" } }
+  if ($value | is-empty) { error make --unspanned { msg: "path parameter 'value' must be non-empty" } }
   let full_url = (build-url $base ({agent_num: (encode-path-segment $agent_num), sub_num: (encode-path-segment $sub_num), attr: (encode-path-segment $attr), value: (encode-path-segment $value)} | format pattern "/mimic/agent/{agent_num}/protocol/msg/mqtt/client/subscribe/set/{sub_num}/{attr}/{value}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
 }
 
 # Stops receiving messages from a subcription of the agent
@@ -2429,10 +2594,12 @@ export def "mimic-agent-protocol-msg-mqtt-client-unsubscribe unsubscribe" [
 ]: nothing -> string {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
+  if ($agent_num | is-empty) { error make --unspanned { msg: "path parameter 'agentNum' must be non-empty" } }
+  if ($sub_num | is-empty) { error make --unspanned { msg: "path parameter 'subNum' must be non-empty" } }
   let full_url = (build-url $base ({agent_num: (encode-path-segment $agent_num), sub_num: (encode-path-segment $sub_num)} | format pattern "/mimic/agent/{agent_num}/protocol/msg/mqtt/client/unsubscribe/{sub_num}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
 }
 
 # Show the agent's MQTT argument structure
@@ -2453,10 +2620,11 @@ export def "mimic-agent-protocol-msg-mqtt-get-args get" [
 ]: nothing -> record {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
+  if ($agent_num | is-empty) { error make --unspanned { msg: "path parameter 'agentNum' must be non-empty" } }
   let full_url = (build-url $base ({agent_num: (encode-path-segment $agent_num)} | format pattern "/mimic/agent/{agent_num}/protocol/msg/mqtt/get/args"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
 }
 
 # Show the agent's MQTT configuration
@@ -2477,10 +2645,11 @@ export def "mimic-agent-protocol-msg-mqtt-get-config get" [
 ]: nothing -> record<broker: string, clientid: string, filename: string, is_tls: string, password: string, port: int, tls_conf_filename: string, username: string, version: string> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
+  if ($agent_num | is-empty) { error make --unspanned { msg: "path parameter 'agentNum' must be non-empty" } }
   let full_url = (build-url $base ({agent_num: (encode-path-segment $agent_num)} | format pattern "/mimic/agent/{agent_num}/protocol/msg/mqtt/get/config"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
 }
 
 # Show the agent's MQTT statistics
@@ -2501,10 +2670,11 @@ export def "mimic-agent-protocol-msg-mqtt-get-statistics get" [
 ]: nothing -> list<int> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
+  if ($agent_num | is-empty) { error make --unspanned { msg: "path parameter 'agentNum' must be non-empty" } }
   let full_url = (build-url $base ({agent_num: (encode-path-segment $agent_num)} | format pattern "/mimic/agent/{agent_num}/protocol/msg/mqtt/get/statistics"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
 }
 
 # Show the agent's MQTT traffic tracing
@@ -2525,10 +2695,11 @@ export def "mimic-agent-protocol-msg-mqtt-get-trace get" [
 ]: nothing -> record<broker: string, clientid: string, filename: string, is_tls: string, password: string, port: int, tls_conf_filename: string, username: string, version: string> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
+  if ($agent_num | is-empty) { error make --unspanned { msg: "path parameter 'agentNum' must be non-empty" } }
   let full_url = (build-url $base ({agent_num: (encode-path-segment $agent_num)} | format pattern "/mimic/agent/{agent_num}/protocol/msg/mqtt/get/trace"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
 }
 
 # Set the agent's MQTT configuration
@@ -2551,10 +2722,13 @@ export def "mimic-agent-protocol-msg-mqtt-set-config update" [
 ]: nothing -> string {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
+  if ($agent_num | is-empty) { error make --unspanned { msg: "path parameter 'agentNum' must be non-empty" } }
+  if ($argument | is-empty) { error make --unspanned { msg: "path parameter 'argument' must be non-empty" } }
+  if ($value | is-empty) { error make --unspanned { msg: "path parameter 'value' must be non-empty" } }
   let full_url = (build-url $base ({agent_num: (encode-path-segment $agent_num), argument: (encode-path-segment $argument), value: (encode-path-segment $value)} | format pattern "/mimic/agent/{agent_num}/protocol/msg/mqtt/set/config/{argument}/{value}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
 }
 
 # Set the agent's MQTT traffic tracing
@@ -2576,10 +2750,12 @@ export def "mimic-agent-protocol-msg-mqtt-set-trace update" [
 ]: nothing -> string {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
+  if ($agent_num | is-empty) { error make --unspanned { msg: "path parameter 'agentNum' must be non-empty" } }
+  if ($enable_or_not | is-empty) { error make --unspanned { msg: "path parameter 'enableOrNot' must be non-empty" } }
   let full_url = (build-url $base ({agent_num: (encode-path-segment $agent_num), enable_or_not: (encode-path-segment $enable_or_not)} | format pattern "/mimic/agent/{agent_num}/protocol/msg/mqtt/set/trace/{enable_or_not}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
 }
 
 # Change NETFLOW data export interval
@@ -2601,10 +2777,12 @@ export def "mimic-agent-protocol-msg-netflow-flow-change-dfs-interval update" [
 ]: nothing -> string {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
+  if ($agent_num | is-empty) { error make --unspanned { msg: "path parameter 'agentNum' must be non-empty" } }
+  if ($interval | is-empty) { error make --unspanned { msg: "path parameter 'interval' must be non-empty" } }
   let full_url = (build-url $base ({agent_num: (encode-path-segment $agent_num), interval: (encode-path-segment $interval)} | format pattern "/mimic/agent/{agent_num}/protocol/msg/netflow/flow/change/dfs_interval/{interval}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
 }
 
 # Change NETFLOW template export interval
@@ -2626,10 +2804,12 @@ export def "mimic-agent-protocol-msg-netflow-flow-change-tfs-interval update" [
 ]: nothing -> string {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
+  if ($agent_num | is-empty) { error make --unspanned { msg: "path parameter 'agentNum' must be non-empty" } }
+  if ($interval | is-empty) { error make --unspanned { msg: "path parameter 'interval' must be non-empty" } }
   let full_url = (build-url $base ({agent_num: (encode-path-segment $agent_num), interval: (encode-path-segment $interval)} | format pattern "/mimic/agent/{agent_num}/protocol/msg/netflow/flow/change/tfs_interval/{interval}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
 }
 
 # Change NETFLOW export attributes
@@ -2654,10 +2834,15 @@ export def "mimic-agent-protocol-msg-netflow-flow-change update" [
 ]: nothing -> string {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
+  if ($agent_num | is-empty) { error make --unspanned { msg: "path parameter 'agentNum' must be non-empty" } }
+  if ($flowset_uid | is-empty) { error make --unspanned { msg: "path parameter 'flowset-uid' must be non-empty" } }
+  if ($field_num | is-empty) { error make --unspanned { msg: "path parameter 'field-num' must be non-empty" } }
+  if ($attr | is-empty) { error make --unspanned { msg: "path parameter 'attr' must be non-empty" } }
+  if ($value | is-empty) { error make --unspanned { msg: "path parameter 'value' must be non-empty" } }
   let full_url = (build-url $base ({agent_num: (encode-path-segment $agent_num), flowset_uid: (encode-path-segment $flowset_uid), field_num: (encode-path-segment $field_num), attr: (encode-path-segment $attr), value: (encode-path-segment $value)} | format pattern "/mimic/agent/{agent_num}/protocol/msg/netflow/flow/change/{flowset_uid}/{field_num}/{attr}/{value}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
 }
 
 # Show list of NETFLOW exports
@@ -2678,10 +2863,11 @@ export def "mimic-agent-protocol-msg-netflow-flow-list list" [
 ]: nothing -> list<record> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
+  if ($agent_num | is-empty) { error make --unspanned { msg: "path parameter 'agentNum' must be non-empty" } }
   let full_url = (build-url $base ({agent_num: (encode-path-segment $agent_num)} | format pattern "/mimic/agent/{agent_num}/protocol/msg/netflow/flow/list"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
 }
 
 # Show the agent's NETFLOW argument structure
@@ -2702,10 +2888,11 @@ export def "mimic-agent-protocol-msg-netflow-get-args get" [
 ]: nothing -> record {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
+  if ($agent_num | is-empty) { error make --unspanned { msg: "path parameter 'agentNum' must be non-empty" } }
   let full_url = (build-url $base ({agent_num: (encode-path-segment $agent_num)} | format pattern "/mimic/agent/{agent_num}/protocol/msg/netflow/get/args"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
 }
 
 # Show the agent's NETFLOW configuration
@@ -2726,10 +2913,11 @@ export def "mimic-agent-protocol-msg-netflow-get-config get" [
 ]: nothing -> record<bundleflowsets: int, collector: string, collectorport: int, filename: string> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
+  if ($agent_num | is-empty) { error make --unspanned { msg: "path parameter 'agentNum' must be non-empty" } }
   let full_url = (build-url $base ({agent_num: (encode-path-segment $agent_num)} | format pattern "/mimic/agent/{agent_num}/protocol/msg/netflow/get/config"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
 }
 
 # Show the agent's NETFLOW statistics
@@ -2750,10 +2938,11 @@ export def "mimic-agent-protocol-msg-netflow-get-statistics get" [
 ]: nothing -> list<int> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
+  if ($agent_num | is-empty) { error make --unspanned { msg: "path parameter 'agentNum' must be non-empty" } }
   let full_url = (build-url $base ({agent_num: (encode-path-segment $agent_num)} | format pattern "/mimic/agent/{agent_num}/protocol/msg/netflow/get/statistics"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
 }
 
 # Show the agent's NETFLOW traffic tracing
@@ -2774,10 +2963,11 @@ export def "mimic-agent-protocol-msg-netflow-get-trace get" [
 ]: nothing -> record<bundleflowsets: int, collector: string, collectorport: int, filename: string> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
+  if ($agent_num | is-empty) { error make --unspanned { msg: "path parameter 'agentNum' must be non-empty" } }
   let full_url = (build-url $base ({agent_num: (encode-path-segment $agent_num)} | format pattern "/mimic/agent/{agent_num}/protocol/msg/netflow/get/trace"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
 }
 
 # Halt NETFLOW traffic
@@ -2798,10 +2988,11 @@ export def "mimic-agent-protocol-msg-netflow-halt update" [
 ]: nothing -> string {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
+  if ($agent_num | is-empty) { error make --unspanned { msg: "path parameter 'agentNum' must be non-empty" } }
   let full_url = (build-url $base ({agent_num: (encode-path-segment $agent_num)} | format pattern "/mimic/agent/{agent_num}/protocol/msg/netflow/halt"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
 }
 
 # Reload NETFLOW configuration before resuming traffic
@@ -2822,10 +3013,11 @@ export def "mimic-agent-protocol-msg-netflow-reload reload" [
 ]: nothing -> string {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
+  if ($agent_num | is-empty) { error make --unspanned { msg: "path parameter 'agentNum' must be non-empty" } }
   let full_url = (build-url $base ({agent_num: (encode-path-segment $agent_num)} | format pattern "/mimic/agent/{agent_num}/protocol/msg/netflow/reload"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
 }
 
 # Resuming traffic
@@ -2846,10 +3038,11 @@ export def "mimic-agent-protocol-msg-netflow-resume update" [
 ]: nothing -> string {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
+  if ($agent_num | is-empty) { error make --unspanned { msg: "path parameter 'agentNum' must be non-empty" } }
   let full_url = (build-url $base ({agent_num: (encode-path-segment $agent_num)} | format pattern "/mimic/agent/{agent_num}/protocol/msg/netflow/resume"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
 }
 
 # Swap NETFLOW collector
@@ -2871,10 +3064,12 @@ export def "mimic-agent-protocol-msg-netflow-set-collector update" [
 ]: nothing -> string {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
+  if ($agent_num | is-empty) { error make --unspanned { msg: "path parameter 'agentNum' must be non-empty" } }
+  if ($collector_ip | is-empty) { error make --unspanned { msg: "path parameter 'collectorIP' must be non-empty" } }
   let full_url = (build-url $base ({agent_num: (encode-path-segment $agent_num), collector_ip: (encode-path-segment $collector_ip)} | format pattern "/mimic/agent/{agent_num}/protocol/msg/netflow/set/collector/{collector_ip}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
 }
 
 # Set the agent's NETFLOW configuration
@@ -2897,10 +3092,13 @@ export def "mimic-agent-protocol-msg-netflow-set-config update" [
 ]: nothing -> string {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
+  if ($agent_num | is-empty) { error make --unspanned { msg: "path parameter 'agentNum' must be non-empty" } }
+  if ($argument | is-empty) { error make --unspanned { msg: "path parameter 'argument' must be non-empty" } }
+  if ($value | is-empty) { error make --unspanned { msg: "path parameter 'value' must be non-empty" } }
   let full_url = (build-url $base ({agent_num: (encode-path-segment $agent_num), argument: (encode-path-segment $argument), value: (encode-path-segment $value)} | format pattern "/mimic/agent/{agent_num}/protocol/msg/netflow/set/config/{argument}/{value}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
 }
 
 # Swap NETFLOW configuration file
@@ -2922,10 +3120,12 @@ export def "mimic-agent-protocol-msg-netflow-set-filename update-file-name" [
 ]: nothing -> string {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
+  if ($agent_num | is-empty) { error make --unspanned { msg: "path parameter 'agentNum' must be non-empty" } }
+  if ($file_name | is-empty) { error make --unspanned { msg: "path parameter 'fileName' must be non-empty" } }
   let full_url = (build-url $base ({agent_num: (encode-path-segment $agent_num), file_name: (encode-path-segment $file_name)} | format pattern "/mimic/agent/{agent_num}/protocol/msg/netflow/set/filename/{file_name}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
 }
 
 # Set the agent's NETFLOW traffic tracing
@@ -2947,10 +3147,12 @@ export def "mimic-agent-protocol-msg-netflow-set-trace update" [
 ]: nothing -> string {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
+  if ($agent_num | is-empty) { error make --unspanned { msg: "path parameter 'agentNum' must be non-empty" } }
+  if ($enable_or_not | is-empty) { error make --unspanned { msg: "path parameter 'enableOrNot' must be non-empty" } }
   let full_url = (build-url $base ({agent_num: (encode-path-segment $agent_num), enable_or_not: (encode-path-segment $enable_or_not)} | format pattern "/mimic/agent/{agent_num}/protocol/msg/netflow/set/trace/{enable_or_not}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
 }
 
 # Show the agent's PROXY argument structure
@@ -2971,10 +3173,11 @@ export def "mimic-agent-protocol-msg-proxy-get-args get" [
 ]: nothing -> record {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
+  if ($agent_num | is-empty) { error make --unspanned { msg: "path parameter 'agentNum' must be non-empty" } }
   let full_url = (build-url $base ({agent_num: (encode-path-segment $agent_num)} | format pattern "/mimic/agent/{agent_num}/protocol/msg/proxy/get/args"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
 }
 
 # Show the agent's PROXY configuration
@@ -2995,10 +3198,11 @@ export def "mimic-agent-protocol-msg-proxy-get-config get" [
 ]: nothing -> record<TCP_NODELAY: int, client_to_server: string, disconnect_delay: int, max_connects: int, portno: int, pre_connect: string, server_to_client: string, target: string, transport: string> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
+  if ($agent_num | is-empty) { error make --unspanned { msg: "path parameter 'agentNum' must be non-empty" } }
   let full_url = (build-url $base ({agent_num: (encode-path-segment $agent_num)} | format pattern "/mimic/agent/{agent_num}/protocol/msg/proxy/get/config"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
 }
 
 # Show the agent's PROXY statistics
@@ -3019,10 +3223,11 @@ export def "mimic-agent-protocol-msg-proxy-get-statistics get" [
 ]: nothing -> list<int> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
+  if ($agent_num | is-empty) { error make --unspanned { msg: "path parameter 'agentNum' must be non-empty" } }
   let full_url = (build-url $base ({agent_num: (encode-path-segment $agent_num)} | format pattern "/mimic/agent/{agent_num}/protocol/msg/proxy/get/statistics"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
 }
 
 # Show the agent's PROXY traffic tracing
@@ -3043,10 +3248,11 @@ export def "mimic-agent-protocol-msg-proxy-get-trace get" [
 ]: nothing -> record<TCP_NODELAY: int, client_to_server: string, disconnect_delay: int, max_connects: int, portno: int, pre_connect: string, server_to_client: string, target: string, transport: string> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
+  if ($agent_num | is-empty) { error make --unspanned { msg: "path parameter 'agentNum' must be non-empty" } }
   let full_url = (build-url $base ({agent_num: (encode-path-segment $agent_num)} | format pattern "/mimic/agent/{agent_num}/protocol/msg/proxy/get/trace"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
 }
 
 # Add individual proxy target on the agent and the simulator host
@@ -3070,10 +3276,14 @@ export def "mimic-agent-protocol-msg-proxy-port-add create" [
 ]: nothing -> string {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
+  if ($agent_num | is-empty) { error make --unspanned { msg: "path parameter 'agentNum' must be non-empty" } }
+  if ($port | is-empty) { error make --unspanned { msg: "path parameter 'port' must be non-empty" } }
+  if ($target | is-empty) { error make --unspanned { msg: "path parameter 'target' must be non-empty" } }
+  if ($target_port | is-empty) { error make --unspanned { msg: "path parameter 'targetPort' must be non-empty" } }
   let full_url = (build-url $base ({agent_num: (encode-path-segment $agent_num), port: (encode-path-segment $port), target: (encode-path-segment $target), target_port: (encode-path-segment $target_port)} | format pattern "/mimic/agent/{agent_num}/protocol/msg/proxy/port/add/{port}/{target}/{target_port}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
 }
 
 # Check individual target
@@ -3095,10 +3305,12 @@ export def "mimic-agent-protocol-msg-proxy-port-is-started get-isstarted" [
 ]: nothing -> string {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
+  if ($agent_num | is-empty) { error make --unspanned { msg: "path parameter 'agentNum' must be non-empty" } }
+  if ($port | is-empty) { error make --unspanned { msg: "path parameter 'port' must be non-empty" } }
   let full_url = (build-url $base ({agent_num: (encode-path-segment $agent_num), port: (encode-path-segment $port)} | format pattern "/mimic/agent/{agent_num}/protocol/msg/proxy/port/isStarted/{port}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
 }
 
 # List all proxy targets
@@ -3119,10 +3331,11 @@ export def "mimic-agent-protocol-msg-proxy-port-list list" [
 ]: nothing -> list<int> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
+  if ($agent_num | is-empty) { error make --unspanned { msg: "path parameter 'agentNum' must be non-empty" } }
   let full_url = (build-url $base ({agent_num: (encode-path-segment $agent_num)} | format pattern "/mimic/agent/{agent_num}/protocol/msg/proxy/port/list"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
 }
 
 # Remove individual proxy target on the agent and the simulator host
@@ -3144,10 +3357,12 @@ export def "mimic-agent-protocol-msg-proxy-port-remove delete" [
 ]: nothing -> string {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
+  if ($agent_num | is-empty) { error make --unspanned { msg: "path parameter 'agentNum' must be non-empty" } }
+  if ($port | is-empty) { error make --unspanned { msg: "path parameter 'port' must be non-empty" } }
   let full_url = (build-url $base ({agent_num: (encode-path-segment $agent_num), port: (encode-path-segment $port)} | format pattern "/mimic/agent/{agent_num}/protocol/msg/proxy/port/remove/{port}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
 }
 
 # Start additional target
@@ -3169,10 +3384,12 @@ export def "mimic-agent-protocol-msg-proxy-port-start start" [
 ]: nothing -> string {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
+  if ($agent_num | is-empty) { error make --unspanned { msg: "path parameter 'agentNum' must be non-empty" } }
+  if ($port | is-empty) { error make --unspanned { msg: "path parameter 'port' must be non-empty" } }
   let full_url = (build-url $base ({agent_num: (encode-path-segment $agent_num), port: (encode-path-segment $port)} | format pattern "/mimic/agent/{agent_num}/protocol/msg/proxy/port/start/{port}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
 }
 
 # Stop additional target
@@ -3194,10 +3411,12 @@ export def "mimic-agent-protocol-msg-proxy-port-stop stop" [
 ]: nothing -> string {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
+  if ($agent_num | is-empty) { error make --unspanned { msg: "path parameter 'agentNum' must be non-empty" } }
+  if ($port | is-empty) { error make --unspanned { msg: "path parameter 'port' must be non-empty" } }
   let full_url = (build-url $base ({agent_num: (encode-path-segment $agent_num), port: (encode-path-segment $port)} | format pattern "/mimic/agent/{agent_num}/protocol/msg/proxy/port/stop/{port}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
 }
 
 # Set the agent's PROXY configuration
@@ -3220,10 +3439,13 @@ export def "mimic-agent-protocol-msg-proxy-set-config update" [
 ]: nothing -> string {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
+  if ($agent_num | is-empty) { error make --unspanned { msg: "path parameter 'agentNum' must be non-empty" } }
+  if ($argument | is-empty) { error make --unspanned { msg: "path parameter 'argument' must be non-empty" } }
+  if ($value | is-empty) { error make --unspanned { msg: "path parameter 'value' must be non-empty" } }
   let full_url = (build-url $base ({agent_num: (encode-path-segment $agent_num), argument: (encode-path-segment $argument), value: (encode-path-segment $value)} | format pattern "/mimic/agent/{agent_num}/protocol/msg/proxy/set/config/{argument}/{value}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
 }
 
 # Set the agent's PROXY traffic tracing
@@ -3245,10 +3467,12 @@ export def "mimic-agent-protocol-msg-proxy-set-trace update" [
 ]: nothing -> string {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
+  if ($agent_num | is-empty) { error make --unspanned { msg: "path parameter 'agentNum' must be non-empty" } }
+  if ($enable_or_not | is-empty) { error make --unspanned { msg: "path parameter 'enableOrNot' must be non-empty" } }
   let full_url = (build-url $base ({agent_num: (encode-path-segment $agent_num), enable_or_not: (encode-path-segment $enable_or_not)} | format pattern "/mimic/agent/{agent_num}/protocol/msg/proxy/set/trace/{enable_or_not}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
 }
 
 # Show the agent's SFLOW argument structure
@@ -3269,10 +3493,11 @@ export def "mimic-agent-protocol-msg-sflow-get-args get" [
 ]: nothing -> record {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
+  if ($agent_num | is-empty) { error make --unspanned { msg: "path parameter 'agentNum' must be non-empty" } }
   let full_url = (build-url $base ({agent_num: (encode-path-segment $agent_num)} | format pattern "/mimic/agent/{agent_num}/protocol/msg/sflow/get/args"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
 }
 
 # Show the agent's SFLOW configuration
@@ -3293,10 +3518,11 @@ export def "mimic-agent-protocol-msg-sflow-get-config get" [
 ]: nothing -> record<collector: string, collectorport: int, encoding_type: string, filename: string, flows_per_min: int, include_samples: string, records_per_sample: string, samples_per_datagram: string> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
+  if ($agent_num | is-empty) { error make --unspanned { msg: "path parameter 'agentNum' must be non-empty" } }
   let full_url = (build-url $base ({agent_num: (encode-path-segment $agent_num)} | format pattern "/mimic/agent/{agent_num}/protocol/msg/sflow/get/config"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
 }
 
 # Show the agent's SFLOW statistics
@@ -3317,10 +3543,11 @@ export def "mimic-agent-protocol-msg-sflow-get-statistics get" [
 ]: nothing -> list<int> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
+  if ($agent_num | is-empty) { error make --unspanned { msg: "path parameter 'agentNum' must be non-empty" } }
   let full_url = (build-url $base ({agent_num: (encode-path-segment $agent_num)} | format pattern "/mimic/agent/{agent_num}/protocol/msg/sflow/get/statistics"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
 }
 
 # Show the agent's SFLOW traffic tracing
@@ -3341,10 +3568,11 @@ export def "mimic-agent-protocol-msg-sflow-get-trace get" [
 ]: nothing -> record<collector: string, collectorport: int, encoding_type: string, filename: string, flows_per_min: int, include_samples: string, records_per_sample: string, samples_per_datagram: string> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
+  if ($agent_num | is-empty) { error make --unspanned { msg: "path parameter 'agentNum' must be non-empty" } }
   let full_url = (build-url $base ({agent_num: (encode-path-segment $agent_num)} | format pattern "/mimic/agent/{agent_num}/protocol/msg/sflow/get/trace"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
 }
 
 # Halt SFLOW traffic
@@ -3365,10 +3593,11 @@ export def "mimic-agent-protocol-msg-sflow-halt update" [
 ]: nothing -> string {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
+  if ($agent_num | is-empty) { error make --unspanned { msg: "path parameter 'agentNum' must be non-empty" } }
   let full_url = (build-url $base ({agent_num: (encode-path-segment $agent_num)} | format pattern "/mimic/agent/{agent_num}/protocol/msg/sflow/halt"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
 }
 
 # Reload SFLOW configuration before resuming traffic
@@ -3389,10 +3618,11 @@ export def "mimic-agent-protocol-msg-sflow-reload reload" [
 ]: nothing -> string {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
+  if ($agent_num | is-empty) { error make --unspanned { msg: "path parameter 'agentNum' must be non-empty" } }
   let full_url = (build-url $base ({agent_num: (encode-path-segment $agent_num)} | format pattern "/mimic/agent/{agent_num}/protocol/msg/sflow/reload"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
 }
 
 # Resuming traffic
@@ -3413,10 +3643,11 @@ export def "mimic-agent-protocol-msg-sflow-resume update" [
 ]: nothing -> string {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
+  if ($agent_num | is-empty) { error make --unspanned { msg: "path parameter 'agentNum' must be non-empty" } }
   let full_url = (build-url $base ({agent_num: (encode-path-segment $agent_num)} | format pattern "/mimic/agent/{agent_num}/protocol/msg/sflow/resume"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
 }
 
 # Set the agent's SFLOW configuration
@@ -3439,10 +3670,13 @@ export def "mimic-agent-protocol-msg-sflow-set-config update" [
 ]: nothing -> string {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
+  if ($agent_num | is-empty) { error make --unspanned { msg: "path parameter 'agentNum' must be non-empty" } }
+  if ($argument | is-empty) { error make --unspanned { msg: "path parameter 'argument' must be non-empty" } }
+  if ($value | is-empty) { error make --unspanned { msg: "path parameter 'value' must be non-empty" } }
   let full_url = (build-url $base ({agent_num: (encode-path-segment $agent_num), argument: (encode-path-segment $argument), value: (encode-path-segment $value)} | format pattern "/mimic/agent/{agent_num}/protocol/msg/sflow/set/config/{argument}/{value}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
 }
 
 # Set the agent's SFLOW traffic tracing
@@ -3464,10 +3698,12 @@ export def "mimic-agent-protocol-msg-sflow-set-trace update" [
 ]: nothing -> string {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
+  if ($agent_num | is-empty) { error make --unspanned { msg: "path parameter 'agentNum' must be non-empty" } }
+  if ($enable_or_not | is-empty) { error make --unspanned { msg: "path parameter 'enableOrNot' must be non-empty" } }
   let full_url = (build-url $base ({agent_num: (encode-path-segment $agent_num), enable_or_not: (encode-path-segment $enable_or_not)} | format pattern "/mimic/agent/{agent_num}/protocol/msg/sflow/set/trace/{enable_or_not}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
 }
 
 # Show the agent's SNMPTCP argument structure
@@ -3488,10 +3724,11 @@ export def "mimic-agent-protocol-msg-snmptcp-get-args get" [
 ]: nothing -> record {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
+  if ($agent_num | is-empty) { error make --unspanned { msg: "path parameter 'agentNum' must be non-empty" } }
   let full_url = (build-url $base ({agent_num: (encode-path-segment $agent_num)} | format pattern "/mimic/agent/{agent_num}/protocol/msg/snmptcp/get/args"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
 }
 
 # Show the agent's SNMPTCP configuration
@@ -3512,10 +3749,11 @@ export def "mimic-agent-protocol-msg-snmptcp-get-config get" [
 ]: nothing -> record<connections: int> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
+  if ($agent_num | is-empty) { error make --unspanned { msg: "path parameter 'agentNum' must be non-empty" } }
   let full_url = (build-url $base ({agent_num: (encode-path-segment $agent_num)} | format pattern "/mimic/agent/{agent_num}/protocol/msg/snmptcp/get/config"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
 }
 
 # Show the agent's SNMPTCP statistics
@@ -3536,10 +3774,11 @@ export def "mimic-agent-protocol-msg-snmptcp-get-statistics get" [
 ]: nothing -> list<int> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
+  if ($agent_num | is-empty) { error make --unspanned { msg: "path parameter 'agentNum' must be non-empty" } }
   let full_url = (build-url $base ({agent_num: (encode-path-segment $agent_num)} | format pattern "/mimic/agent/{agent_num}/protocol/msg/snmptcp/get/statistics"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
 }
 
 # Show the agent's SNMPTCP traffic tracing
@@ -3560,10 +3799,11 @@ export def "mimic-agent-protocol-msg-snmptcp-get-trace get" [
 ]: nothing -> record<connections: int> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
+  if ($agent_num | is-empty) { error make --unspanned { msg: "path parameter 'agentNum' must be non-empty" } }
   let full_url = (build-url $base ({agent_num: (encode-path-segment $agent_num)} | format pattern "/mimic/agent/{agent_num}/protocol/msg/snmptcp/get/trace"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
 }
 
 # Disable individual IP aliases on the agent and the simulator host
@@ -3586,10 +3826,13 @@ export def "mimic-agent-protocol-msg-snmptcp-ipalias-disable disable" [
 ]: nothing -> string {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
+  if ($agent_num | is-empty) { error make --unspanned { msg: "path parameter 'agentNum' must be non-empty" } }
+  if ($ipaddress | is-empty) { error make --unspanned { msg: "path parameter 'ipaddress' must be non-empty" } }
+  if ($port | is-empty) { error make --unspanned { msg: "path parameter 'port' must be non-empty" } }
   let full_url = (build-url $base ({agent_num: (encode-path-segment $agent_num), ipaddress: (encode-path-segment $ipaddress), port: (encode-path-segment $port)} | format pattern "/mimic/agent/{agent_num}/protocol/msg/snmptcp/ipalias/disable/{ipaddress}/{port}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
 }
 
 # Enable individual IP aliases on the agent and the simulator host
@@ -3612,10 +3855,13 @@ export def "mimic-agent-protocol-msg-snmptcp-ipalias-enable enable" [
 ]: nothing -> string {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
+  if ($agent_num | is-empty) { error make --unspanned { msg: "path parameter 'agentNum' must be non-empty" } }
+  if ($ipaddress | is-empty) { error make --unspanned { msg: "path parameter 'ipaddress' must be non-empty" } }
+  if ($port | is-empty) { error make --unspanned { msg: "path parameter 'port' must be non-empty" } }
   let full_url = (build-url $base ({agent_num: (encode-path-segment $agent_num), ipaddress: (encode-path-segment $ipaddress), port: (encode-path-segment $port)} | format pattern "/mimic/agent/{agent_num}/protocol/msg/snmptcp/ipalias/enable/{ipaddress}/{port}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
 }
 
 # Check individual IP aliases on the agent and the simulator host
@@ -3638,10 +3884,13 @@ export def "mimic-agent-protocol-msg-snmptcp-ipalias-isenabled get" [
 ]: nothing -> string {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
+  if ($agent_num | is-empty) { error make --unspanned { msg: "path parameter 'agentNum' must be non-empty" } }
+  if ($ipaddress | is-empty) { error make --unspanned { msg: "path parameter 'ipaddress' must be non-empty" } }
+  if ($port | is-empty) { error make --unspanned { msg: "path parameter 'port' must be non-empty" } }
   let full_url = (build-url $base ({agent_num: (encode-path-segment $agent_num), ipaddress: (encode-path-segment $ipaddress), port: (encode-path-segment $port)} | format pattern "/mimic/agent/{agent_num}/protocol/msg/snmptcp/ipalias/isenabled/{ipaddress}/{port}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
 }
 
 # List all IP aliases on the agent and the simulator host
@@ -3662,10 +3911,11 @@ export def "mimic-agent-protocol-msg-snmptcp-ipalias-list list" [
 ]: nothing -> table<IP: string, interface: string, mask: string, port: int> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
+  if ($agent_num | is-empty) { error make --unspanned { msg: "path parameter 'agentNum' must be non-empty" } }
   let full_url = (build-url $base ({agent_num: (encode-path-segment $agent_num)} | format pattern "/mimic/agent/{agent_num}/protocol/msg/snmptcp/ipalias/list"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
 }
 
 # Set the agent's SNMPTCP configuration
@@ -3688,10 +3938,13 @@ export def "mimic-agent-protocol-msg-snmptcp-set-config update" [
 ]: nothing -> string {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
+  if ($agent_num | is-empty) { error make --unspanned { msg: "path parameter 'agentNum' must be non-empty" } }
+  if ($argument | is-empty) { error make --unspanned { msg: "path parameter 'argument' must be non-empty" } }
+  if ($value | is-empty) { error make --unspanned { msg: "path parameter 'value' must be non-empty" } }
   let full_url = (build-url $base ({agent_num: (encode-path-segment $agent_num), argument: (encode-path-segment $argument), value: (encode-path-segment $value)} | format pattern "/mimic/agent/{agent_num}/protocol/msg/snmptcp/set/config/{argument}/{value}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
 }
 
 # Set the agent's SNMPTCP traffic tracing
@@ -3713,10 +3966,12 @@ export def "mimic-agent-protocol-msg-snmptcp-set-trace update" [
 ]: nothing -> string {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
+  if ($agent_num | is-empty) { error make --unspanned { msg: "path parameter 'agentNum' must be non-empty" } }
+  if ($enable_or_not | is-empty) { error make --unspanned { msg: "path parameter 'enableOrNot' must be non-empty" } }
   let full_url = (build-url $base ({agent_num: (encode-path-segment $agent_num), enable_or_not: (encode-path-segment $enable_or_not)} | format pattern "/mimic/agent/{agent_num}/protocol/msg/snmptcp/set/trace/{enable_or_not}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
 }
 
 # Adds a new access entry with the specified parameters.
@@ -3745,10 +4000,19 @@ export def "mimic-agent-protocol-msg-snmpv3-access-add create" [
 ]: nothing -> string {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
+  if ($agent_num | is-empty) { error make --unspanned { msg: "path parameter 'agentNum' must be non-empty" } }
+  if ($group_name | is-empty) { error make --unspanned { msg: "path parameter 'groupName' must be non-empty" } }
+  if ($prefix | is-empty) { error make --unspanned { msg: "path parameter 'prefix' must be non-empty" } }
+  if ($security_model | is-empty) { error make --unspanned { msg: "path parameter 'securityModel' must be non-empty" } }
+  if ($security_level | is-empty) { error make --unspanned { msg: "path parameter 'securityLevel' must be non-empty" } }
+  if ($context_match | is-empty) { error make --unspanned { msg: "path parameter 'contextMatch' must be non-empty" } }
+  if ($read_view | is-empty) { error make --unspanned { msg: "path parameter 'readView' must be non-empty" } }
+  if ($write_view | is-empty) { error make --unspanned { msg: "path parameter 'writeView' must be non-empty" } }
+  if ($notify_view | is-empty) { error make --unspanned { msg: "path parameter 'notifyView' must be non-empty" } }
   let full_url = (build-url $base ({agent_num: (encode-path-segment $agent_num), group_name: (encode-path-segment $group_name), prefix: (encode-path-segment $prefix), security_model: (encode-path-segment $security_model), security_level: (encode-path-segment $security_level), context_match: (encode-path-segment $context_match), read_view: (encode-path-segment $read_view), write_view: (encode-path-segment $write_view), notify_view: (encode-path-segment $notify_view)} | format pattern "/mimic/agent/{agent_num}/protocol/msg/snmpv3/access/add/{group_name}/{prefix}/{security_model}/{security_level}/{context_match}/{read_view}/{write_view}/{notify_view}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
 }
 
 # Clears all access entries.
@@ -3769,10 +4033,11 @@ export def "mimic-agent-protocol-msg-snmpv3-access-clear delete" [
 ]: nothing -> string {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
+  if ($agent_num | is-empty) { error make --unspanned { msg: "path parameter 'agentNum' must be non-empty" } }
   let full_url = (build-url $base ({agent_num: (encode-path-segment $agent_num)} | format pattern "/mimic/agent/{agent_num}/protocol/msg/snmpv3/access/clear"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
 }
 
 # Deletes the specified access entry.
@@ -3794,10 +4059,12 @@ export def "mimic-agent-protocol-msg-snmpv3-access-del delete" [
 ]: nothing -> string {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
+  if ($agent_num | is-empty) { error make --unspanned { msg: "path parameter 'agentNum' must be non-empty" } }
+  if ($access_name | is-empty) { error make --unspanned { msg: "path parameter 'accessName' must be non-empty" } }
   let full_url = (build-url $base ({agent_num: (encode-path-segment $agent_num), access_name: (encode-path-segment $access_name)} | format pattern "/mimic/agent/{agent_num}/protocol/msg/snmpv3/access/del/{access_name}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
 }
 
 # Returns the current acccess entries as an array of strings.
@@ -3818,10 +4085,11 @@ export def "mimic-agent-protocol-msg-snmpv3-access-list list" [
 ]: nothing -> list<string> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
+  if ($agent_num | is-empty) { error make --unspanned { msg: "path parameter 'agentNum' must be non-empty" } }
   let full_url = (build-url $base ({agent_num: (encode-path-segment $agent_num)} | format pattern "/mimic/agent/{agent_num}/protocol/msg/snmpv3/access/list"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
 }
 
 # Returns the SNMPv3 configuration.
@@ -3842,10 +4110,11 @@ export def "mimic-agent-protocol-msg-snmpv3-get-config get" [
 ]: nothing -> record<context_engine_id: string, engine_id: string, usm_db: string, vacm_db: string> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
+  if ($agent_num | is-empty) { error make --unspanned { msg: "path parameter 'agentNum' must be non-empty" } }
   let full_url = (build-url $base ({agent_num: (encode-path-segment $agent_num)} | format pattern "/mimic/agent/{agent_num}/protocol/msg/snmpv3/get/config"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
 }
 
 # Retrieves the contextEngineID for the agent instance.
@@ -3866,10 +4135,11 @@ export def "mimic-agent-protocol-msg-snmpv3-get-context-engineid get" [
 ]: nothing -> string {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
+  if ($agent_num | is-empty) { error make --unspanned { msg: "path parameter 'agentNum' must be non-empty" } }
   let full_url = (build-url $base ({agent_num: (encode-path-segment $agent_num)} | format pattern "/mimic/agent/{agent_num}/protocol/msg/snmpv3/get/context_engineid"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
 }
 
 # Retrieves the number of times the agent has been restarted.
@@ -3890,10 +4160,11 @@ export def "mimic-agent-protocol-msg-snmpv3-get-engineboots get" [
 ]: nothing -> int {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
+  if ($agent_num | is-empty) { error make --unspanned { msg: "path parameter 'agentNum' must be non-empty" } }
   let full_url = (build-url $base ({agent_num: (encode-path-segment $agent_num)} | format pattern "/mimic/agent/{agent_num}/protocol/msg/snmpv3/get/engineboots"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
 }
 
 # For started agents, retrieves the current engineID in use by the snmpv3 module.
@@ -3914,10 +4185,11 @@ export def "mimic-agent-protocol-msg-snmpv3-get-engineid get" [
 ]: nothing -> string {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
+  if ($agent_num | is-empty) { error make --unspanned { msg: "path parameter 'agentNum' must be non-empty" } }
   let full_url = (build-url $base ({agent_num: (encode-path-segment $agent_num)} | format pattern "/mimic/agent/{agent_num}/protocol/msg/snmpv3/get/engineid"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
 }
 
 # Retrieves the time in seconds for which the agent has been running.
@@ -3938,10 +4210,11 @@ export def "mimic-agent-protocol-msg-snmpv3-get-enginetime get" [
 ]: nothing -> int {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
+  if ($agent_num | is-empty) { error make --unspanned { msg: "path parameter 'agentNum' must be non-empty" } }
   let full_url = (build-url $base ({agent_num: (encode-path-segment $agent_num)} | format pattern "/mimic/agent/{agent_num}/protocol/msg/snmpv3/get/enginetime"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
 }
 
 # Adds a new group entry with the specified parameters.
@@ -3965,10 +4238,14 @@ export def "mimic-agent-protocol-msg-snmpv3-group-add create" [
 ]: nothing -> string {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
+  if ($agent_num | is-empty) { error make --unspanned { msg: "path parameter 'agentNum' must be non-empty" } }
+  if ($group_name | is-empty) { error make --unspanned { msg: "path parameter 'groupName' must be non-empty" } }
+  if ($security_model | is-empty) { error make --unspanned { msg: "path parameter 'securityModel' must be non-empty" } }
+  if ($security_name | is-empty) { error make --unspanned { msg: "path parameter 'securityName' must be non-empty" } }
   let full_url = (build-url $base ({agent_num: (encode-path-segment $agent_num), group_name: (encode-path-segment $group_name), security_model: (encode-path-segment $security_model), security_name: (encode-path-segment $security_name)} | format pattern "/mimic/agent/{agent_num}/protocol/msg/snmpv3/group/add/{group_name}/{security_model}/{security_name}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
 }
 
 # Clears all group entries.
@@ -3989,10 +4266,11 @@ export def "mimic-agent-protocol-msg-snmpv3-group-clear delete" [
 ]: nothing -> string {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
+  if ($agent_num | is-empty) { error make --unspanned { msg: "path parameter 'agentNum' must be non-empty" } }
   let full_url = (build-url $base ({agent_num: (encode-path-segment $agent_num)} | format pattern "/mimic/agent/{agent_num}/protocol/msg/snmpv3/group/clear"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
 }
 
 # Deletes the specified group entry.
@@ -4014,10 +4292,12 @@ export def "mimic-agent-protocol-msg-snmpv3-group-del delete" [
 ]: nothing -> string {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
+  if ($agent_num | is-empty) { error make --unspanned { msg: "path parameter 'agentNum' must be non-empty" } }
+  if ($group_name | is-empty) { error make --unspanned { msg: "path parameter 'groupName' must be non-empty" } }
   let full_url = (build-url $base ({agent_num: (encode-path-segment $agent_num), group_name: (encode-path-segment $group_name)} | format pattern "/mimic/agent/{agent_num}/protocol/msg/snmpv3/group/del/{group_name}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
 }
 
 # Returns the current group entries as an array of strings.
@@ -4038,10 +4318,11 @@ export def "mimic-agent-protocol-msg-snmpv3-group-list list" [
 ]: nothing -> list<string> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
+  if ($agent_num | is-empty) { error make --unspanned { msg: "path parameter 'agentNum' must be non-empty" } }
   let full_url = (build-url $base ({agent_num: (encode-path-segment $agent_num)} | format pattern "/mimic/agent/{agent_num}/protocol/msg/snmpv3/group/list"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
 }
 
 # Changes the SNMPv3 configuration.
@@ -4064,10 +4345,13 @@ export def "mimic-agent-protocol-msg-snmpv3-set-config update" [
 ]: nothing -> string {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
+  if ($agent_num | is-empty) { error make --unspanned { msg: "path parameter 'agentNum' must be non-empty" } }
+  if ($parameter | is-empty) { error make --unspanned { msg: "path parameter 'parameter' must be non-empty" } }
+  if ($value | is-empty) { error make --unspanned { msg: "path parameter 'value' must be non-empty" } }
   let full_url = (build-url $base ({agent_num: (encode-path-segment $agent_num), parameter: (encode-path-segment $parameter), value: (encode-path-segment $value)} | format pattern "/mimic/agent/{agent_num}/protocol/msg/snmpv3/set/config/{parameter}/{value}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
 }
 
 # Adds a new user entry with the specified parameters.
@@ -4094,10 +4378,17 @@ export def "mimic-agent-protocol-msg-snmpv3-user-add create" [
 ]: nothing -> string {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
+  if ($agent_num | is-empty) { error make --unspanned { msg: "path parameter 'agentNum' must be non-empty" } }
+  if ($user_name | is-empty) { error make --unspanned { msg: "path parameter 'userName' must be non-empty" } }
+  if ($security_name | is-empty) { error make --unspanned { msg: "path parameter 'securityName' must be non-empty" } }
+  if ($auth_protocol | is-empty) { error make --unspanned { msg: "path parameter 'authProtocol' must be non-empty" } }
+  if ($auth_key | is-empty) { error make --unspanned { msg: "path parameter 'authKey' must be non-empty" } }
+  if ($priv_protocol | is-empty) { error make --unspanned { msg: "path parameter 'privProtocol' must be non-empty" } }
+  if ($priv_key | is-empty) { error make --unspanned { msg: "path parameter 'privKey' must be non-empty" } }
   let full_url = (build-url $base ({agent_num: (encode-path-segment $agent_num), user_name: (encode-path-segment $user_name), security_name: (encode-path-segment $security_name), auth_protocol: (encode-path-segment $auth_protocol), auth_key: (encode-path-segment $auth_key), priv_protocol: (encode-path-segment $priv_protocol), priv_key: (encode-path-segment $priv_key)} | format pattern "/mimic/agent/{agent_num}/protocol/msg/snmpv3/user/add/{user_name}/{security_name}/{auth_protocol}/{auth_key}/{priv_protocol}/{priv_key}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
 }
 
 # Clears all user entries.
@@ -4118,10 +4409,11 @@ export def "mimic-agent-protocol-msg-snmpv3-user-clear delete" [
 ]: nothing -> string {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
+  if ($agent_num | is-empty) { error make --unspanned { msg: "path parameter 'agentNum' must be non-empty" } }
   let full_url = (build-url $base ({agent_num: (encode-path-segment $agent_num)} | format pattern "/mimic/agent/{agent_num}/protocol/msg/snmpv3/user/clear"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
 }
 
 # Deletes the specified user entry.
@@ -4143,10 +4435,12 @@ export def "mimic-agent-protocol-msg-snmpv3-user-del delete" [
 ]: nothing -> string {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
+  if ($agent_num | is-empty) { error make --unspanned { msg: "path parameter 'agentNum' must be non-empty" } }
+  if ($user_name | is-empty) { error make --unspanned { msg: "path parameter 'userName' must be non-empty" } }
   let full_url = (build-url $base ({agent_num: (encode-path-segment $agent_num), user_name: (encode-path-segment $user_name)} | format pattern "/mimic/agent/{agent_num}/protocol/msg/snmpv3/user/del/{user_name}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
 }
 
 # Returns the current user entries as a Tcl list.
@@ -4167,10 +4461,11 @@ export def "mimic-agent-protocol-msg-snmpv3-user-list list" [
 ]: nothing -> list<string> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
+  if ($agent_num | is-empty) { error make --unspanned { msg: "path parameter 'agentNum' must be non-empty" } }
   let full_url = (build-url $base ({agent_num: (encode-path-segment $agent_num)} | format pattern "/mimic/agent/{agent_num}/protocol/msg/snmpv3/user/list"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
 }
 
 # Saves current user settings in the currently loaded USM config file.
@@ -4191,10 +4486,11 @@ export def "mimic-agent-protocol-msg-snmpv3-usm-save update" [
 ]: nothing -> list<string> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
+  if ($agent_num | is-empty) { error make --unspanned { msg: "path parameter 'agentNum' must be non-empty" } }
   let full_url = (build-url $base ({agent_num: (encode-path-segment $agent_num)} | format pattern "/mimic/agent/{agent_num}/protocol/msg/snmpv3/usm/save"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
 }
 
 # Saves current user settings in the specified USM config file.
@@ -4216,10 +4512,12 @@ export def "mimic-agent-protocol-msg-snmpv3-usm-saveas update" [
 ]: nothing -> list<string> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
+  if ($agent_num | is-empty) { error make --unspanned { msg: "path parameter 'agentNum' must be non-empty" } }
+  if ($filename | is-empty) { error make --unspanned { msg: "path parameter 'filename' must be non-empty" } }
   let full_url = (build-url $base ({agent_num: (encode-path-segment $agent_num), filename: (encode-path-segment $filename)} | format pattern "/mimic/agent/{agent_num}/protocol/msg/snmpv3/usm/saveas/{filename}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
 }
 
 # Saves current group, access, view settings in the currently loaded VACM config file.
@@ -4240,10 +4538,11 @@ export def "mimic-agent-protocol-msg-snmpv3-vacm-save update" [
 ]: nothing -> list<string> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
+  if ($agent_num | is-empty) { error make --unspanned { msg: "path parameter 'agentNum' must be non-empty" } }
   let full_url = (build-url $base ({agent_num: (encode-path-segment $agent_num)} | format pattern "/mimic/agent/{agent_num}/protocol/msg/snmpv3/vacm/save"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
 }
 
 # Saves current group, access, view settings in the specified VACM config file.
@@ -4265,10 +4564,12 @@ export def "mimic-agent-protocol-msg-snmpv3-vacm-saveas update" [
 ]: nothing -> list<string> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
+  if ($agent_num | is-empty) { error make --unspanned { msg: "path parameter 'agentNum' must be non-empty" } }
+  if ($filename | is-empty) { error make --unspanned { msg: "path parameter 'filename' must be non-empty" } }
   let full_url = (build-url $base ({agent_num: (encode-path-segment $agent_num), filename: (encode-path-segment $filename)} | format pattern "/mimic/agent/{agent_num}/protocol/msg/snmpv3/vacm/saveas/{filename}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
 }
 
 # Adds a new view entry with the specified parameters.
@@ -4293,10 +4594,15 @@ export def "mimic-agent-protocol-msg-snmpv3-view-add create" [
 ]: nothing -> string {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
+  if ($agent_num | is-empty) { error make --unspanned { msg: "path parameter 'agentNum' must be non-empty" } }
+  if ($view_name | is-empty) { error make --unspanned { msg: "path parameter 'viewName' must be non-empty" } }
+  if ($view_type | is-empty) { error make --unspanned { msg: "path parameter 'viewType' must be non-empty" } }
+  if ($subtree | is-empty) { error make --unspanned { msg: "path parameter 'subtree' must be non-empty" } }
+  if ($mask | is-empty) { error make --unspanned { msg: "path parameter 'mask' must be non-empty" } }
   let full_url = (build-url $base ({agent_num: (encode-path-segment $agent_num), view_name: (encode-path-segment $view_name), view_type: (encode-path-segment $view_type), subtree: (encode-path-segment $subtree), mask: (encode-path-segment $mask)} | format pattern "/mimic/agent/{agent_num}/protocol/msg/snmpv3/view/add/{view_name}/{view_type}/{subtree}/{mask}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
 }
 
 # Clears all view entries.
@@ -4317,10 +4623,11 @@ export def "mimic-agent-protocol-msg-snmpv3-view-clear delete" [
 ]: nothing -> string {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
+  if ($agent_num | is-empty) { error make --unspanned { msg: "path parameter 'agentNum' must be non-empty" } }
   let full_url = (build-url $base ({agent_num: (encode-path-segment $agent_num)} | format pattern "/mimic/agent/{agent_num}/protocol/msg/snmpv3/view/clear"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
 }
 
 # Deletes the specified view entry.
@@ -4342,10 +4649,12 @@ export def "mimic-agent-protocol-msg-snmpv3-view-del delete" [
 ]: nothing -> string {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
+  if ($agent_num | is-empty) { error make --unspanned { msg: "path parameter 'agentNum' must be non-empty" } }
+  if ($view_name | is-empty) { error make --unspanned { msg: "path parameter 'viewName' must be non-empty" } }
   let full_url = (build-url $base ({agent_num: (encode-path-segment $agent_num), view_name: (encode-path-segment $view_name)} | format pattern "/mimic/agent/{agent_num}/protocol/msg/snmpv3/view/del/{view_name}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
 }
 
 # Returns the current view entries as an array of strings.
@@ -4366,10 +4675,11 @@ export def "mimic-agent-protocol-msg-snmpv3-view-list list" [
 ]: nothing -> list<string> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
+  if ($agent_num | is-empty) { error make --unspanned { msg: "path parameter 'agentNum' must be non-empty" } }
   let full_url = (build-url $base ({agent_num: (encode-path-segment $agent_num)} | format pattern "/mimic/agent/{agent_num}/protocol/msg/snmpv3/view/list"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
 }
 
 # Show the agent's SSH argument structure
@@ -4390,10 +4700,11 @@ export def "mimic-agent-protocol-msg-ssh-get-args get" [
 ]: nothing -> record {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
+  if ($agent_num | is-empty) { error make --unspanned { msg: "path parameter 'agentNum' must be non-empty" } }
   let full_url = (build-url $base ({agent_num: (encode-path-segment $agent_num)} | format pattern "/mimic/agent/{agent_num}/protocol/msg/ssh/get/args"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
 }
 
 # Show the agent's SSH configuration
@@ -4414,10 +4725,11 @@ export def "mimic-agent-protocol-msg-ssh-get-config get" [
 ]: nothing -> record<port: int, version: string> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
+  if ($agent_num | is-empty) { error make --unspanned { msg: "path parameter 'agentNum' must be non-empty" } }
   let full_url = (build-url $base ({agent_num: (encode-path-segment $agent_num)} | format pattern "/mimic/agent/{agent_num}/protocol/msg/ssh/get/config"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
 }
 
 # Show the agent's SSH statistics
@@ -4438,10 +4750,11 @@ export def "mimic-agent-protocol-msg-ssh-get-statistics get" [
 ]: nothing -> list<int> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
+  if ($agent_num | is-empty) { error make --unspanned { msg: "path parameter 'agentNum' must be non-empty" } }
   let full_url = (build-url $base ({agent_num: (encode-path-segment $agent_num)} | format pattern "/mimic/agent/{agent_num}/protocol/msg/ssh/get/statistics"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
 }
 
 # Show the agent's SSH traffic tracing
@@ -4462,10 +4775,11 @@ export def "mimic-agent-protocol-msg-ssh-get-trace get" [
 ]: nothing -> record<port: int, version: string> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
+  if ($agent_num | is-empty) { error make --unspanned { msg: "path parameter 'agentNum' must be non-empty" } }
   let full_url = (build-url $base ({agent_num: (encode-path-segment $agent_num)} | format pattern "/mimic/agent/{agent_num}/protocol/msg/ssh/get/trace"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
 }
 
 # Disable individual IP aliases on the agent and the simulator host
@@ -4488,10 +4802,13 @@ export def "mimic-agent-protocol-msg-ssh-ipalias-disable disable" [
 ]: nothing -> string {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
+  if ($agent_num | is-empty) { error make --unspanned { msg: "path parameter 'agentNum' must be non-empty" } }
+  if ($ipaddress | is-empty) { error make --unspanned { msg: "path parameter 'ipaddress' must be non-empty" } }
+  if ($port | is-empty) { error make --unspanned { msg: "path parameter 'port' must be non-empty" } }
   let full_url = (build-url $base ({agent_num: (encode-path-segment $agent_num), ipaddress: (encode-path-segment $ipaddress), port: (encode-path-segment $port)} | format pattern "/mimic/agent/{agent_num}/protocol/msg/ssh/ipalias/disable/{ipaddress}/{port}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
 }
 
 # Enable individual IP aliases on the agent and the simulator host
@@ -4514,10 +4831,13 @@ export def "mimic-agent-protocol-msg-ssh-ipalias-enable enable" [
 ]: nothing -> string {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
+  if ($agent_num | is-empty) { error make --unspanned { msg: "path parameter 'agentNum' must be non-empty" } }
+  if ($ipaddress | is-empty) { error make --unspanned { msg: "path parameter 'ipaddress' must be non-empty" } }
+  if ($port | is-empty) { error make --unspanned { msg: "path parameter 'port' must be non-empty" } }
   let full_url = (build-url $base ({agent_num: (encode-path-segment $agent_num), ipaddress: (encode-path-segment $ipaddress), port: (encode-path-segment $port)} | format pattern "/mimic/agent/{agent_num}/protocol/msg/ssh/ipalias/enable/{ipaddress}/{port}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
 }
 
 # Check individual IP aliases on the agent and the simulator host
@@ -4540,10 +4860,13 @@ export def "mimic-agent-protocol-msg-ssh-ipalias-isenabled get" [
 ]: nothing -> string {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
+  if ($agent_num | is-empty) { error make --unspanned { msg: "path parameter 'agentNum' must be non-empty" } }
+  if ($ipaddress | is-empty) { error make --unspanned { msg: "path parameter 'ipaddress' must be non-empty" } }
+  if ($port | is-empty) { error make --unspanned { msg: "path parameter 'port' must be non-empty" } }
   let full_url = (build-url $base ({agent_num: (encode-path-segment $agent_num), ipaddress: (encode-path-segment $ipaddress), port: (encode-path-segment $port)} | format pattern "/mimic/agent/{agent_num}/protocol/msg/ssh/ipalias/isenabled/{ipaddress}/{port}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
 }
 
 # List all IP aliases on the agent and the simulator host
@@ -4564,10 +4887,11 @@ export def "mimic-agent-protocol-msg-ssh-ipalias-list list" [
 ]: nothing -> table<IP: string, interface: string, mask: string, port: int> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
+  if ($agent_num | is-empty) { error make --unspanned { msg: "path parameter 'agentNum' must be non-empty" } }
   let full_url = (build-url $base ({agent_num: (encode-path-segment $agent_num)} | format pattern "/mimic/agent/{agent_num}/protocol/msg/ssh/ipalias/list"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
 }
 
 # Set the agent's SSH configuration
@@ -4590,10 +4914,13 @@ export def "mimic-agent-protocol-msg-ssh-set-config update" [
 ]: nothing -> string {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
+  if ($agent_num | is-empty) { error make --unspanned { msg: "path parameter 'agentNum' must be non-empty" } }
+  if ($argument | is-empty) { error make --unspanned { msg: "path parameter 'argument' must be non-empty" } }
+  if ($value | is-empty) { error make --unspanned { msg: "path parameter 'value' must be non-empty" } }
   let full_url = (build-url $base ({agent_num: (encode-path-segment $agent_num), argument: (encode-path-segment $argument), value: (encode-path-segment $value)} | format pattern "/mimic/agent/{agent_num}/protocol/msg/ssh/set/config/{argument}/{value}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
 }
 
 # Set the agent's SSH traffic tracing
@@ -4615,10 +4942,12 @@ export def "mimic-agent-protocol-msg-ssh-set-trace update" [
 ]: nothing -> string {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
+  if ($agent_num | is-empty) { error make --unspanned { msg: "path parameter 'agentNum' must be non-empty" } }
+  if ($enable_or_not | is-empty) { error make --unspanned { msg: "path parameter 'enableOrNot' must be non-empty" } }
   let full_url = (build-url $base ({agent_num: (encode-path-segment $agent_num), enable_or_not: (encode-path-segment $enable_or_not)} | format pattern "/mimic/agent/{agent_num}/protocol/msg/ssh/set/trace/{enable_or_not}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
 }
 
 # Show the agent's SYSLOG argument structure
@@ -4639,10 +4968,11 @@ export def "mimic-agent-protocol-msg-syslog-get-args get" [
 ]: nothing -> record {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
+  if ($agent_num | is-empty) { error make --unspanned { msg: "path parameter 'agentNum' must be non-empty" } }
   let full_url = (build-url $base ({agent_num: (encode-path-segment $agent_num)} | format pattern "/mimic/agent/{agent_num}/protocol/msg/syslog/get/args"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
 }
 
 # Show the agent's SYSLOG configuration
@@ -4663,10 +4993,11 @@ export def "mimic-agent-protocol-msg-syslog-get-config get" [
 ]: nothing -> record<client: string, hostname: string, localport: int, separator: string, sequence: int, server: string, serverport: int, timestamp: string> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
+  if ($agent_num | is-empty) { error make --unspanned { msg: "path parameter 'agentNum' must be non-empty" } }
   let full_url = (build-url $base ({agent_num: (encode-path-segment $agent_num)} | format pattern "/mimic/agent/{agent_num}/protocol/msg/syslog/get/config"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
 }
 
 # Show the agent's SYSLOG statistics
@@ -4687,10 +5018,11 @@ export def "mimic-agent-protocol-msg-syslog-get-statistics get" [
 ]: nothing -> list<int> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
+  if ($agent_num | is-empty) { error make --unspanned { msg: "path parameter 'agentNum' must be non-empty" } }
   let full_url = (build-url $base ({agent_num: (encode-path-segment $agent_num)} | format pattern "/mimic/agent/{agent_num}/protocol/msg/syslog/get/statistics"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
 }
 
 # Show the agent's SYSLOG traffic tracing
@@ -4711,10 +5043,11 @@ export def "mimic-agent-protocol-msg-syslog-get-trace get" [
 ]: nothing -> record<client: string, hostname: string, localport: int, separator: string, sequence: int, server: string, serverport: int, timestamp: string> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
+  if ($agent_num | is-empty) { error make --unspanned { msg: "path parameter 'agentNum' must be non-empty" } }
   let full_url = (build-url $base ({agent_num: (encode-path-segment $agent_num)} | format pattern "/mimic/agent/{agent_num}/protocol/msg/syslog/get/trace"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
 }
 
 # Show the outgoing message's attributes
@@ -4736,10 +5069,12 @@ export def "mimic-agent-protocol-msg-syslog-get get" [
 ]: nothing -> string {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
+  if ($agent_num | is-empty) { error make --unspanned { msg: "path parameter 'agentNum' must be non-empty" } }
+  if ($attr | is-empty) { error make --unspanned { msg: "path parameter 'attr' must be non-empty" } }
   let full_url = (build-url $base ({agent_num: (encode-path-segment $agent_num), attr: (encode-path-segment $attr)} | format pattern "/mimic/agent/{agent_num}/protocol/msg/syslog/get/{attr}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
 }
 
 # Set the agent's SYSLOG traffic tracing
@@ -4767,12 +5102,14 @@ export def "mimic-agent-protocol-msg-syslog-send send" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
+  if ($agent_num | is-empty) { error make --unspanned { msg: "path parameter 'agentNum' must be non-empty" } }
+  if ($pri | is-empty) { error make --unspanned { msg: "path parameter 'pri' must be non-empty" } }
   let full_url = (build-url $base ({agent_num: (encode-path-segment $agent_num), pri: (encode-path-segment $pri)} | format pattern "/mimic/agent/{agent_num}/protocol/msg/syslog/send/{pri}"))
   let req_body = {"hostname": $hostname, "message": $message, "separator": $separator, "sequence": $sequence, "timestamp": $timestamp} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: {}, body: $req_body}
 }
 
 # Set the agent's SYSLOG configuration
@@ -4795,10 +5132,13 @@ export def "mimic-agent-protocol-msg-syslog-set-config update" [
 ]: nothing -> string {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
+  if ($agent_num | is-empty) { error make --unspanned { msg: "path parameter 'agentNum' must be non-empty" } }
+  if ($argument | is-empty) { error make --unspanned { msg: "path parameter 'argument' must be non-empty" } }
+  if ($value | is-empty) { error make --unspanned { msg: "path parameter 'value' must be non-empty" } }
   let full_url = (build-url $base ({agent_num: (encode-path-segment $agent_num), argument: (encode-path-segment $argument), value: (encode-path-segment $value)} | format pattern "/mimic/agent/{agent_num}/protocol/msg/syslog/set/config/{argument}/{value}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
 }
 
 # Set the agent's SYSLOG traffic tracing
@@ -4820,10 +5160,12 @@ export def "mimic-agent-protocol-msg-syslog-set-trace update" [
 ]: nothing -> string {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
+  if ($agent_num | is-empty) { error make --unspanned { msg: "path parameter 'agentNum' must be non-empty" } }
+  if ($enable_or_not | is-empty) { error make --unspanned { msg: "path parameter 'enableOrNot' must be non-empty" } }
   let full_url = (build-url $base ({agent_num: (encode-path-segment $agent_num), enable_or_not: (encode-path-segment $enable_or_not)} | format pattern "/mimic/agent/{agent_num}/protocol/msg/syslog/set/trace/{enable_or_not}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
 }
 
 # Set the outgoing message's attributes
@@ -4846,10 +5188,13 @@ export def "mimic-agent-protocol-msg-syslog-set update" [
 ]: nothing -> string {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
+  if ($agent_num | is-empty) { error make --unspanned { msg: "path parameter 'agentNum' must be non-empty" } }
+  if ($attr | is-empty) { error make --unspanned { msg: "path parameter 'attr' must be non-empty" } }
+  if ($value | is-empty) { error make --unspanned { msg: "path parameter 'value' must be non-empty" } }
   let full_url = (build-url $base ({agent_num: (encode-path-segment $agent_num), attr: (encode-path-segment $attr), value: (encode-path-segment $value)} | format pattern "/mimic/agent/{agent_num}/protocol/msg/syslog/set/{attr}/{value}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
 }
 
 # Changes the connection's current logon.
@@ -4873,10 +5218,14 @@ export def "mimic-agent-protocol-msg-telnet-connection-logon update" [
 ]: nothing -> list<string> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
+  if ($agent_num | is-empty) { error make --unspanned { msg: "path parameter 'agentNum' must be non-empty" } }
+  if ($connection_id | is-empty) { error make --unspanned { msg: "path parameter 'connectionID' must be non-empty" } }
+  if ($user | is-empty) { error make --unspanned { msg: "path parameter 'user' must be non-empty" } }
+  if ($password | is-empty) { error make --unspanned { msg: "path parameter 'password' must be non-empty" } }
   let full_url = (build-url $base ({agent_num: (encode-path-segment $agent_num), connection_id: (encode-path-segment $connection_id), user: (encode-path-segment $user), password: (encode-path-segment $password)} | format pattern "/mimic/agent/{agent_num}/protocol/msg/telnet/connection/logon/{connection_id}/{user}/{password}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
 }
 
 # Executes the command asynchronously .
@@ -4899,10 +5248,13 @@ export def "mimic-agent-protocol-msg-telnet-connection-request request" [
 ]: nothing -> list<string> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
+  if ($agent_num | is-empty) { error make --unspanned { msg: "path parameter 'agentNum' must be non-empty" } }
+  if ($connection_id | is-empty) { error make --unspanned { msg: "path parameter 'connectionID' must be non-empty" } }
+  if ($command | is-empty) { error make --unspanned { msg: "path parameter 'command' must be non-empty" } }
   let full_url = (build-url $base ({agent_num: (encode-path-segment $agent_num), connection_id: (encode-path-segment $connection_id), command: (encode-path-segment $command)} | format pattern "/mimic/agent/{agent_num}/protocol/msg/telnet/connection/request/{connection_id}/{command}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
 }
 
 # Triggers the asynchronous signal event with the specified signal name
@@ -4925,10 +5277,13 @@ export def "mimic-agent-protocol-msg-telnet-connection-signal update" [
 ]: nothing -> list<string> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
+  if ($agent_num | is-empty) { error make --unspanned { msg: "path parameter 'agentNum' must be non-empty" } }
+  if ($connection_id | is-empty) { error make --unspanned { msg: "path parameter 'connectionID' must be non-empty" } }
+  if ($signal_name | is-empty) { error make --unspanned { msg: "path parameter 'signalName' must be non-empty" } }
   let full_url = (build-url $base ({agent_num: (encode-path-segment $agent_num), connection_id: (encode-path-segment $connection_id), signal_name: (encode-path-segment $signal_name)} | format pattern "/mimic/agent/{agent_num}/protocol/msg/telnet/connection/signal/{connection_id}/{signal_name}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
 }
 
 # Show the agent's TELNET argument structure
@@ -4949,10 +5304,11 @@ export def "mimic-agent-protocol-msg-telnet-get-args get" [
 ]: nothing -> record {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
+  if ($agent_num | is-empty) { error make --unspanned { msg: "path parameter 'agentNum' must be non-empty" } }
   let full_url = (build-url $base ({agent_num: (encode-path-segment $agent_num)} | format pattern "/mimic/agent/{agent_num}/protocol/msg/telnet/get/args"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
 }
 
 # Show the agent's TELNET configuration
@@ -4973,10 +5329,11 @@ export def "mimic-agent-protocol-msg-telnet-get-config get" [
 ]: nothing -> record<keymap: string, paging_prompt: string, port: int, prompt: string, rule: string, userdb: string> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
+  if ($agent_num | is-empty) { error make --unspanned { msg: "path parameter 'agentNum' must be non-empty" } }
   let full_url = (build-url $base ({agent_num: (encode-path-segment $agent_num)} | format pattern "/mimic/agent/{agent_num}/protocol/msg/telnet/get/config"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
 }
 
 # Show the agent's TELNET statistics
@@ -4997,10 +5354,11 @@ export def "mimic-agent-protocol-msg-telnet-get-statistics get" [
 ]: nothing -> list<int> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
+  if ($agent_num | is-empty) { error make --unspanned { msg: "path parameter 'agentNum' must be non-empty" } }
   let full_url = (build-url $base ({agent_num: (encode-path-segment $agent_num)} | format pattern "/mimic/agent/{agent_num}/protocol/msg/telnet/get/statistics"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
 }
 
 # Show the agent's TELNET traffic tracing
@@ -5021,10 +5379,11 @@ export def "mimic-agent-protocol-msg-telnet-get-trace get" [
 ]: nothing -> record<keymap: string, paging_prompt: string, port: int, prompt: string, rule: string, userdb: string> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
+  if ($agent_num | is-empty) { error make --unspanned { msg: "path parameter 'agentNum' must be non-empty" } }
   let full_url = (build-url $base ({agent_num: (encode-path-segment $agent_num)} | format pattern "/mimic/agent/{agent_num}/protocol/msg/telnet/get/trace"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
 }
 
 # Disable individual IP aliases on the agent and the simulator host
@@ -5047,10 +5406,13 @@ export def "mimic-agent-protocol-msg-telnet-ipalias-disable disable" [
 ]: nothing -> string {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
+  if ($agent_num | is-empty) { error make --unspanned { msg: "path parameter 'agentNum' must be non-empty" } }
+  if ($ipaddress | is-empty) { error make --unspanned { msg: "path parameter 'ipaddress' must be non-empty" } }
+  if ($port | is-empty) { error make --unspanned { msg: "path parameter 'port' must be non-empty" } }
   let full_url = (build-url $base ({agent_num: (encode-path-segment $agent_num), ipaddress: (encode-path-segment $ipaddress), port: (encode-path-segment $port)} | format pattern "/mimic/agent/{agent_num}/protocol/msg/telnet/ipalias/disable/{ipaddress}/{port}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
 }
 
 # Enable individual IP aliases on the agent and the simulator host
@@ -5073,10 +5435,13 @@ export def "mimic-agent-protocol-msg-telnet-ipalias-enable enable" [
 ]: nothing -> string {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
+  if ($agent_num | is-empty) { error make --unspanned { msg: "path parameter 'agentNum' must be non-empty" } }
+  if ($ipaddress | is-empty) { error make --unspanned { msg: "path parameter 'ipaddress' must be non-empty" } }
+  if ($port | is-empty) { error make --unspanned { msg: "path parameter 'port' must be non-empty" } }
   let full_url = (build-url $base ({agent_num: (encode-path-segment $agent_num), ipaddress: (encode-path-segment $ipaddress), port: (encode-path-segment $port)} | format pattern "/mimic/agent/{agent_num}/protocol/msg/telnet/ipalias/enable/{ipaddress}/{port}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
 }
 
 # Check individual IP aliases on the agent and the simulator host
@@ -5099,10 +5464,13 @@ export def "mimic-agent-protocol-msg-telnet-ipalias-isenabled get" [
 ]: nothing -> string {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
+  if ($agent_num | is-empty) { error make --unspanned { msg: "path parameter 'agentNum' must be non-empty" } }
+  if ($ipaddress | is-empty) { error make --unspanned { msg: "path parameter 'ipaddress' must be non-empty" } }
+  if ($port | is-empty) { error make --unspanned { msg: "path parameter 'port' must be non-empty" } }
   let full_url = (build-url $base ({agent_num: (encode-path-segment $agent_num), ipaddress: (encode-path-segment $ipaddress), port: (encode-path-segment $port)} | format pattern "/mimic/agent/{agent_num}/protocol/msg/telnet/ipalias/isenabled/{ipaddress}/{port}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
 }
 
 # List all IP aliases on the agent and the simulator host
@@ -5123,10 +5491,11 @@ export def "mimic-agent-protocol-msg-telnet-ipalias-list list" [
 ]: nothing -> table<IP: string, interface: string, mask: string, port: int> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
+  if ($agent_num | is-empty) { error make --unspanned { msg: "path parameter 'agentNum' must be non-empty" } }
   let full_url = (build-url $base ({agent_num: (encode-path-segment $agent_num)} | format pattern "/mimic/agent/{agent_num}/protocol/msg/telnet/ipalias/list"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
 }
 
 # Show the agent's TELNET connections
@@ -5147,10 +5516,11 @@ export def "mimic-agent-protocol-msg-telnet-server-get-connections get" [
 ]: nothing -> list<int> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
+  if ($agent_num | is-empty) { error make --unspanned { msg: "path parameter 'agentNum' must be non-empty" } }
   let full_url = (build-url $base ({agent_num: (encode-path-segment $agent_num)} | format pattern "/mimic/agent/{agent_num}/protocol/msg/telnet/server/get/connections"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
 }
 
 # Show the agent's TELNET keymap file name
@@ -5171,10 +5541,11 @@ export def "mimic-agent-protocol-msg-telnet-server-get-keymap get" [
 ]: nothing -> list<string> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
+  if ($agent_num | is-empty) { error make --unspanned { msg: "path parameter 'agentNum' must be non-empty" } }
   let full_url = (build-url $base ({agent_num: (encode-path-segment $agent_num)} | format pattern "/mimic/agent/{agent_num}/protocol/msg/telnet/server/get/keymap"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
 }
 
 # Show the agent's TELNET rules db file name
@@ -5195,10 +5566,11 @@ export def "mimic-agent-protocol-msg-telnet-server-get-rulesdb get" [
 ]: nothing -> list<string> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
+  if ($agent_num | is-empty) { error make --unspanned { msg: "path parameter 'agentNum' must be non-empty" } }
   let full_url = (build-url $base ({agent_num: (encode-path-segment $agent_num)} | format pattern "/mimic/agent/{agent_num}/protocol/msg/telnet/server/get/rulesdb"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
 }
 
 # Show the agent's TELNET server state
@@ -5219,10 +5591,11 @@ export def "mimic-agent-protocol-msg-telnet-server-get-state get" [
 ]: nothing -> list<int> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
+  if ($agent_num | is-empty) { error make --unspanned { msg: "path parameter 'agentNum' must be non-empty" } }
   let full_url = (build-url $base ({agent_num: (encode-path-segment $agent_num)} | format pattern "/mimic/agent/{agent_num}/protocol/msg/telnet/server/get/state"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
 }
 
 # Show the agent's TELNET user db file name
@@ -5243,10 +5616,11 @@ export def "mimic-agent-protocol-msg-telnet-server-get-userdb get" [
 ]: nothing -> list<string> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
+  if ($agent_num | is-empty) { error make --unspanned { msg: "path parameter 'agentNum' must be non-empty" } }
   let full_url = (build-url $base ({agent_num: (encode-path-segment $agent_num)} | format pattern "/mimic/agent/{agent_num}/protocol/msg/telnet/server/get/userdb"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
 }
 
 # Show the agent's TELNET users
@@ -5267,10 +5641,11 @@ export def "mimic-agent-protocol-msg-telnet-server-get-users get" [
 ]: nothing -> table<groups: list<string>, hasPassword: int, password: string, username: string> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
+  if ($agent_num | is-empty) { error make --unspanned { msg: "path parameter 'agentNum' must be non-empty" } }
   let full_url = (build-url $base ({agent_num: (encode-path-segment $agent_num)} | format pattern "/mimic/agent/{agent_num}/protocol/msg/telnet/server/get/users"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
 }
 
 # Set the agent's TELNET configuration
@@ -5293,10 +5668,13 @@ export def "mimic-agent-protocol-msg-telnet-set-config update" [
 ]: nothing -> string {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
+  if ($agent_num | is-empty) { error make --unspanned { msg: "path parameter 'agentNum' must be non-empty" } }
+  if ($argument | is-empty) { error make --unspanned { msg: "path parameter 'argument' must be non-empty" } }
+  if ($value | is-empty) { error make --unspanned { msg: "path parameter 'value' must be non-empty" } }
   let full_url = (build-url $base ({agent_num: (encode-path-segment $agent_num), argument: (encode-path-segment $argument), value: (encode-path-segment $value)} | format pattern "/mimic/agent/{agent_num}/protocol/msg/telnet/set/config/{argument}/{value}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
 }
 
 # Set the agent's TELNET traffic tracing
@@ -5318,10 +5696,12 @@ export def "mimic-agent-protocol-msg-telnet-set-trace update" [
 ]: nothing -> string {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
+  if ($agent_num | is-empty) { error make --unspanned { msg: "path parameter 'agentNum' must be non-empty" } }
+  if ($enable_or_not | is-empty) { error make --unspanned { msg: "path parameter 'enableOrNot' must be non-empty" } }
   let full_url = (build-url $base ({agent_num: (encode-path-segment $agent_num), enable_or_not: (encode-path-segment $enable_or_not)} | format pattern "/mimic/agent/{agent_num}/protocol/msg/telnet/set/trace/{enable_or_not}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
 }
 
 # Show the agent's TFTP argument structure
@@ -5342,10 +5722,11 @@ export def "mimic-agent-protocol-msg-tftp-get-args get" [
 ]: nothing -> record {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
+  if ($agent_num | is-empty) { error make --unspanned { msg: "path parameter 'agentNum' must be non-empty" } }
   let full_url = (build-url $base ({agent_num: (encode-path-segment $agent_num)} | format pattern "/mimic/agent/{agent_num}/protocol/msg/tftp/get/args"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
 }
 
 # Show the agent's TFTP configuration
@@ -5366,10 +5747,11 @@ export def "mimic-agent-protocol-msg-tftp-get-config get" [
 ]: nothing -> record<cache: int, client: string, dstfile: string, mode: string, port: int, retries: int, script: string, server: string, srcfile: string, timeout: int, trace: string> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
+  if ($agent_num | is-empty) { error make --unspanned { msg: "path parameter 'agentNum' must be non-empty" } }
   let full_url = (build-url $base ({agent_num: (encode-path-segment $agent_num)} | format pattern "/mimic/agent/{agent_num}/protocol/msg/tftp/get/config"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
 }
 
 # Show the agent's TFTP statistics
@@ -5390,10 +5772,11 @@ export def "mimic-agent-protocol-msg-tftp-get-statistics get" [
 ]: nothing -> list<int> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
+  if ($agent_num | is-empty) { error make --unspanned { msg: "path parameter 'agentNum' must be non-empty" } }
   let full_url = (build-url $base ({agent_num: (encode-path-segment $agent_num)} | format pattern "/mimic/agent/{agent_num}/protocol/msg/tftp/get/statistics"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
 }
 
 # Show the agent's TFTP traffic tracing
@@ -5414,10 +5797,11 @@ export def "mimic-agent-protocol-msg-tftp-get-trace get" [
 ]: nothing -> record<cache: int, client: string, dstfile: string, mode: string, port: int, retries: int, script: string, server: string, srcfile: string, timeout: int, trace: string> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
+  if ($agent_num | is-empty) { error make --unspanned { msg: "path parameter 'agentNum' must be non-empty" } }
   let full_url = (build-url $base ({agent_num: (encode-path-segment $agent_num)} | format pattern "/mimic/agent/{agent_num}/protocol/msg/tftp/get/trace"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
 }
 
 # Create a read session to download srcfile from server
@@ -5439,10 +5823,12 @@ export def "mimic-agent-protocol-msg-tftp-session-read-server get" [
 ]: nothing -> list<int> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
+  if ($agent_num | is-empty) { error make --unspanned { msg: "path parameter 'agentNum' must be non-empty" } }
+  if ($srcfile | is-empty) { error make --unspanned { msg: "path parameter 'srcfile' must be non-empty" } }
   let full_url = (build-url $base ({agent_num: (encode-path-segment $agent_num), srcfile: (encode-path-segment $srcfile)} | format pattern "/mimic/agent/{agent_num}/protocol/msg/tftp/session/read/server/{srcfile}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
 }
 
 # Create a read session to upload srcfile to server
@@ -5464,10 +5850,12 @@ export def "mimic-agent-protocol-msg-tftp-session-write-server create" [
 ]: nothing -> list<int> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
+  if ($agent_num | is-empty) { error make --unspanned { msg: "path parameter 'agentNum' must be non-empty" } }
+  if ($srcfile | is-empty) { error make --unspanned { msg: "path parameter 'srcfile' must be non-empty" } }
   let full_url = (build-url $base ({agent_num: (encode-path-segment $agent_num), srcfile: (encode-path-segment $srcfile)} | format pattern "/mimic/agent/{agent_num}/protocol/msg/tftp/session/write/server/{srcfile}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
 }
 
 # Set the agent's TFTP configuration
@@ -5490,10 +5878,13 @@ export def "mimic-agent-protocol-msg-tftp-set-config update" [
 ]: nothing -> string {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
+  if ($agent_num | is-empty) { error make --unspanned { msg: "path parameter 'agentNum' must be non-empty" } }
+  if ($argument | is-empty) { error make --unspanned { msg: "path parameter 'argument' must be non-empty" } }
+  if ($value | is-empty) { error make --unspanned { msg: "path parameter 'value' must be non-empty" } }
   let full_url = (build-url $base ({agent_num: (encode-path-segment $agent_num), argument: (encode-path-segment $argument), value: (encode-path-segment $value)} | format pattern "/mimic/agent/{agent_num}/protocol/msg/tftp/set/config/{argument}/{value}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
 }
 
 # Set the agent's TFTP traffic tracing
@@ -5515,10 +5906,12 @@ export def "mimic-agent-protocol-msg-tftp-set-trace update" [
 ]: nothing -> string {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
+  if ($agent_num | is-empty) { error make --unspanned { msg: "path parameter 'agentNum' must be non-empty" } }
+  if ($enable_or_not | is-empty) { error make --unspanned { msg: "path parameter 'enableOrNot' must be non-empty" } }
   let full_url = (build-url $base ({agent_num: (encode-path-segment $agent_num), enable_or_not: (encode-path-segment $enable_or_not)} | format pattern "/mimic/agent/{agent_num}/protocol/msg/tftp/set/trace/{enable_or_not}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
 }
 
 # Show a parameter of a TFTP sesssion
@@ -5541,10 +5934,13 @@ export def "mimic-agent-protocol-msg-tftp-get get-session" [
 ]: nothing -> string {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
+  if ($agent_num | is-empty) { error make --unspanned { msg: "path parameter 'agentNum' must be non-empty" } }
+  if ($session_id | is-empty) { error make --unspanned { msg: "path parameter 'sessionID' must be non-empty" } }
+  if ($parameter | is-empty) { error make --unspanned { msg: "path parameter 'parameter' must be non-empty" } }
   let full_url = (build-url $base ({agent_num: (encode-path-segment $agent_num), session_id: (encode-path-segment $session_id), parameter: (encode-path-segment $parameter)} | format pattern "/mimic/agent/{agent_num}/protocol/msg/tftp/{session_id}/get/{parameter}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
 }
 
 # Set a parameter of a TFTP sesssion
@@ -5568,10 +5964,14 @@ export def "mimic-agent-protocol-msg-tftp-set update-session" [
 ]: nothing -> string {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
+  if ($agent_num | is-empty) { error make --unspanned { msg: "path parameter 'agentNum' must be non-empty" } }
+  if ($session_id | is-empty) { error make --unspanned { msg: "path parameter 'sessionID' must be non-empty" } }
+  if ($parameter | is-empty) { error make --unspanned { msg: "path parameter 'parameter' must be non-empty" } }
+  if ($value | is-empty) { error make --unspanned { msg: "path parameter 'value' must be non-empty" } }
   let full_url = (build-url $base ({agent_num: (encode-path-segment $agent_num), session_id: (encode-path-segment $session_id), parameter: (encode-path-segment $parameter), value: (encode-path-segment $value)} | format pattern "/mimic/agent/{agent_num}/protocol/msg/tftp/{session_id}/set/{parameter}/{value}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
 }
 
 # Start a TFTP sesssion
@@ -5593,10 +5993,12 @@ export def "mimic-agent-protocol-msg-tftp-start start-session" [
 ]: nothing -> string {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
+  if ($agent_num | is-empty) { error make --unspanned { msg: "path parameter 'agentNum' must be non-empty" } }
+  if ($session_id | is-empty) { error make --unspanned { msg: "path parameter 'sessionID' must be non-empty" } }
   let full_url = (build-url $base ({agent_num: (encode-path-segment $agent_num), session_id: (encode-path-segment $session_id)} | format pattern "/mimic/agent/{agent_num}/protocol/msg/tftp/{session_id}/start"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
 }
 
 # Check a TFTP sesssion's status
@@ -5618,10 +6020,12 @@ export def "mimic-agent-protocol-msg-tftp-status get-session" [
 ]: nothing -> string {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
+  if ($agent_num | is-empty) { error make --unspanned { msg: "path parameter 'agentNum' must be non-empty" } }
+  if ($session_id | is-empty) { error make --unspanned { msg: "path parameter 'sessionID' must be non-empty" } }
   let full_url = (build-url $base ({agent_num: (encode-path-segment $agent_num), session_id: (encode-path-segment $session_id)} | format pattern "/mimic/agent/{agent_num}/protocol/msg/tftp/{session_id}/status"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
 }
 
 # Stop a TFTP sesssion
@@ -5643,10 +6047,12 @@ export def "mimic-agent-protocol-msg-tftp-stop stop-session" [
 ]: nothing -> string {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
+  if ($agent_num | is-empty) { error make --unspanned { msg: "path parameter 'agentNum' must be non-empty" } }
+  if ($session_id | is-empty) { error make --unspanned { msg: "path parameter 'sessionID' must be non-empty" } }
   let full_url = (build-url $base ({agent_num: (encode-path-segment $agent_num), session_id: (encode-path-segment $session_id)} | format pattern "/mimic/agent/{agent_num}/protocol/msg/tftp/{session_id}/stop"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
 }
 
 # Show the agent's TOD argument structure
@@ -5667,10 +6073,11 @@ export def "mimic-agent-protocol-msg-tod-get-args get" [
 ]: nothing -> record {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
+  if ($agent_num | is-empty) { error make --unspanned { msg: "path parameter 'agentNum' must be non-empty" } }
   let full_url = (build-url $base ({agent_num: (encode-path-segment $agent_num)} | format pattern "/mimic/agent/{agent_num}/protocol/msg/tod/get/args"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
 }
 
 # Show the agent's TOD configuration
@@ -5691,10 +6098,11 @@ export def "mimic-agent-protocol-msg-tod-get-config get" [
 ]: nothing -> record<port: int, retries: int, script: string, server: string, timeout: int> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
+  if ($agent_num | is-empty) { error make --unspanned { msg: "path parameter 'agentNum' must be non-empty" } }
   let full_url = (build-url $base ({agent_num: (encode-path-segment $agent_num)} | format pattern "/mimic/agent/{agent_num}/protocol/msg/tod/get/config"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
 }
 
 # Show the agent's TOD statistics
@@ -5715,10 +6123,11 @@ export def "mimic-agent-protocol-msg-tod-get-statistics get" [
 ]: nothing -> list<int> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
+  if ($agent_num | is-empty) { error make --unspanned { msg: "path parameter 'agentNum' must be non-empty" } }
   let full_url = (build-url $base ({agent_num: (encode-path-segment $agent_num)} | format pattern "/mimic/agent/{agent_num}/protocol/msg/tod/get/statistics"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
 }
 
 # Show the agent's TOD traffic tracing
@@ -5739,10 +6148,11 @@ export def "mimic-agent-protocol-msg-tod-get-trace get" [
 ]: nothing -> record<port: int, retries: int, script: string, server: string, timeout: int> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
+  if ($agent_num | is-empty) { error make --unspanned { msg: "path parameter 'agentNum' must be non-empty" } }
   let full_url = (build-url $base ({agent_num: (encode-path-segment $agent_num)} | format pattern "/mimic/agent/{agent_num}/protocol/msg/tod/get/trace"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
 }
 
 # Retrieve TOD time
@@ -5768,10 +6178,16 @@ export def "mimic-agent-protocol-msg-tod-gettime-server-port-script-timeout-retr
 ]: nothing -> list<string> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
+  if ($agent_num | is-empty) { error make --unspanned { msg: "path parameter 'agentNum' must be non-empty" } }
+  if ($server_addr | is-empty) { error make --unspanned { msg: "path parameter 'serverAddr' must be non-empty" } }
+  if ($port_num | is-empty) { error make --unspanned { msg: "path parameter 'portNum' must be non-empty" } }
+  if ($script_name | is-empty) { error make --unspanned { msg: "path parameter 'scriptName' must be non-empty" } }
+  if ($time_sec | is-empty) { error make --unspanned { msg: "path parameter 'timeSec' must be non-empty" } }
+  if ($num_retries | is-empty) { error make --unspanned { msg: "path parameter 'numRetries' must be non-empty" } }
   let full_url = (build-url $base ({agent_num: (encode-path-segment $agent_num), server_addr: (encode-path-segment $server_addr), port_num: (encode-path-segment $port_num), script_name: (encode-path-segment $script_name), time_sec: (encode-path-segment $time_sec), num_retries: (encode-path-segment $num_retries)} | format pattern "/mimic/agent/{agent_num}/protocol/msg/tod/gettime/server/{server_addr}/port/{port_num}/script/{script_name}/timeout/{time_sec}/retries/{num_retries}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
 }
 
 # Set the agent's TOD configuration
@@ -5794,10 +6210,13 @@ export def "mimic-agent-protocol-msg-tod-set-config update" [
 ]: nothing -> string {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
+  if ($agent_num | is-empty) { error make --unspanned { msg: "path parameter 'agentNum' must be non-empty" } }
+  if ($argument | is-empty) { error make --unspanned { msg: "path parameter 'argument' must be non-empty" } }
+  if ($value | is-empty) { error make --unspanned { msg: "path parameter 'value' must be non-empty" } }
   let full_url = (build-url $base ({agent_num: (encode-path-segment $agent_num), argument: (encode-path-segment $argument), value: (encode-path-segment $value)} | format pattern "/mimic/agent/{agent_num}/protocol/msg/tod/set/config/{argument}/{value}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
 }
 
 # Set the agent's TOD traffic tracing
@@ -5819,10 +6238,12 @@ export def "mimic-agent-protocol-msg-tod-set-trace update" [
 ]: nothing -> string {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
+  if ($agent_num | is-empty) { error make --unspanned { msg: "path parameter 'agentNum' must be non-empty" } }
+  if ($enable_or_not | is-empty) { error make --unspanned { msg: "path parameter 'enableOrNot' must be non-empty" } }
   let full_url = (build-url $base ({agent_num: (encode-path-segment $agent_num), enable_or_not: (encode-path-segment $enable_or_not)} | format pattern "/mimic/agent/{agent_num}/protocol/msg/tod/set/trace/{enable_or_not}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
 }
 
 # Show the agent's WEB argument structure
@@ -5843,10 +6264,11 @@ export def "mimic-agent-protocol-msg-web-get-args get" [
 ]: nothing -> record {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
+  if ($agent_num | is-empty) { error make --unspanned { msg: "path parameter 'agentNum' must be non-empty" } }
   let full_url = (build-url $base ({agent_num: (encode-path-segment $agent_num)} | format pattern "/mimic/agent/{agent_num}/protocol/msg/web/get/args"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
 }
 
 # Show the agent's WEB configuration
@@ -5867,10 +6289,11 @@ export def "mimic-agent-protocol-msg-web-get-config get" [
 ]: nothing -> record<is_persistent_connections: int, password: string, port: int, rule: string, username: string, wsdl: string> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
+  if ($agent_num | is-empty) { error make --unspanned { msg: "path parameter 'agentNum' must be non-empty" } }
   let full_url = (build-url $base ({agent_num: (encode-path-segment $agent_num)} | format pattern "/mimic/agent/{agent_num}/protocol/msg/web/get/config"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
 }
 
 # Show the agent's WEB statistics
@@ -5891,10 +6314,11 @@ export def "mimic-agent-protocol-msg-web-get-statistics get" [
 ]: nothing -> list<int> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
+  if ($agent_num | is-empty) { error make --unspanned { msg: "path parameter 'agentNum' must be non-empty" } }
   let full_url = (build-url $base ({agent_num: (encode-path-segment $agent_num)} | format pattern "/mimic/agent/{agent_num}/protocol/msg/web/get/statistics"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
 }
 
 # Show the agent's WEB traffic tracing
@@ -5915,10 +6339,11 @@ export def "mimic-agent-protocol-msg-web-get-trace get" [
 ]: nothing -> record<is_persistent_connections: int, password: string, port: int, rule: string, username: string, wsdl: string> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
+  if ($agent_num | is-empty) { error make --unspanned { msg: "path parameter 'agentNum' must be non-empty" } }
   let full_url = (build-url $base ({agent_num: (encode-path-segment $agent_num)} | format pattern "/mimic/agent/{agent_num}/protocol/msg/web/get/trace"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
 }
 
 # Add the agent's WEB port
@@ -5940,10 +6365,12 @@ export def "mimic-agent-protocol-msg-web-port-add create" [
 ]: nothing -> string {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
+  if ($agent_num | is-empty) { error make --unspanned { msg: "path parameter 'agentNum' must be non-empty" } }
+  if ($port | is-empty) { error make --unspanned { msg: "path parameter 'port' must be non-empty" } }
   let full_url = (build-url $base ({agent_num: (encode-path-segment $agent_num), port: (encode-path-segment $port)} | format pattern "/mimic/agent/{agent_num}/protocol/msg/web/port/add/{port}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
 }
 
 # Show the agent's WEB port
@@ -5965,10 +6392,12 @@ export def "mimic-agent-protocol-msg-web-port-exists get" [
 ]: nothing -> list<string> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
+  if ($agent_num | is-empty) { error make --unspanned { msg: "path parameter 'agentNum' must be non-empty" } }
+  if ($port | is-empty) { error make --unspanned { msg: "path parameter 'port' must be non-empty" } }
   let full_url = (build-url $base ({agent_num: (encode-path-segment $agent_num), port: (encode-path-segment $port)} | format pattern "/mimic/agent/{agent_num}/protocol/msg/web/port/exists/{port}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
 }
 
 # Remove the agent's WEB port
@@ -5990,10 +6419,12 @@ export def "mimic-agent-protocol-msg-web-port-remove delete" [
 ]: nothing -> string {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
+  if ($agent_num | is-empty) { error make --unspanned { msg: "path parameter 'agentNum' must be non-empty" } }
+  if ($port | is-empty) { error make --unspanned { msg: "path parameter 'port' must be non-empty" } }
   let full_url = (build-url $base ({agent_num: (encode-path-segment $agent_num), port: (encode-path-segment $port)} | format pattern "/mimic/agent/{agent_num}/protocol/msg/web/port/remove/{port}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
 }
 
 # Set the agent's WEB port attribute
@@ -6017,10 +6448,14 @@ export def "mimic-agent-protocol-msg-web-port-set update" [
 ]: nothing -> string {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
+  if ($agent_num | is-empty) { error make --unspanned { msg: "path parameter 'agentNum' must be non-empty" } }
+  if ($port | is-empty) { error make --unspanned { msg: "path parameter 'port' must be non-empty" } }
+  if ($protocol | is-empty) { error make --unspanned { msg: "path parameter 'protocol' must be non-empty" } }
+  if ($version | is-empty) { error make --unspanned { msg: "path parameter 'version' must be non-empty" } }
   let full_url = (build-url $base ({agent_num: (encode-path-segment $agent_num), port: (encode-path-segment $port), protocol: (encode-path-segment $protocol), version: (encode-path-segment $version)} | format pattern "/mimic/agent/{agent_num}/protocol/msg/web/port/set/{port}/{protocol}/{version}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
 }
 
 # Start the agent's WEB port
@@ -6042,10 +6477,12 @@ export def "mimic-agent-protocol-msg-web-port-start start" [
 ]: nothing -> string {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
+  if ($agent_num | is-empty) { error make --unspanned { msg: "path parameter 'agentNum' must be non-empty" } }
+  if ($port | is-empty) { error make --unspanned { msg: "path parameter 'port' must be non-empty" } }
   let full_url = (build-url $base ({agent_num: (encode-path-segment $agent_num), port: (encode-path-segment $port)} | format pattern "/mimic/agent/{agent_num}/protocol/msg/web/port/start/{port}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
 }
 
 # Stop the agent's WEB port
@@ -6067,10 +6504,12 @@ export def "mimic-agent-protocol-msg-web-port-stop stop" [
 ]: nothing -> string {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
+  if ($agent_num | is-empty) { error make --unspanned { msg: "path parameter 'agentNum' must be non-empty" } }
+  if ($port | is-empty) { error make --unspanned { msg: "path parameter 'port' must be non-empty" } }
   let full_url = (build-url $base ({agent_num: (encode-path-segment $agent_num), port: (encode-path-segment $port)} | format pattern "/mimic/agent/{agent_num}/protocol/msg/web/port/stop/{port}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
 }
 
 # Set the agent's WEB configuration
@@ -6093,10 +6532,13 @@ export def "mimic-agent-protocol-msg-web-set-config update" [
 ]: nothing -> string {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
+  if ($agent_num | is-empty) { error make --unspanned { msg: "path parameter 'agentNum' must be non-empty" } }
+  if ($argument | is-empty) { error make --unspanned { msg: "path parameter 'argument' must be non-empty" } }
+  if ($value | is-empty) { error make --unspanned { msg: "path parameter 'value' must be non-empty" } }
   let full_url = (build-url $base ({agent_num: (encode-path-segment $agent_num), argument: (encode-path-segment $argument), value: (encode-path-segment $value)} | format pattern "/mimic/agent/{agent_num}/protocol/msg/web/set/config/{argument}/{value}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
 }
 
 # Set the agent's WEB traffic tracing
@@ -6118,10 +6560,12 @@ export def "mimic-agent-protocol-msg-web-set-trace update" [
 ]: nothing -> string {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
+  if ($agent_num | is-empty) { error make --unspanned { msg: "path parameter 'agentNum' must be non-empty" } }
+  if ($enable_or_not | is-empty) { error make --unspanned { msg: "path parameter 'enableOrNot' must be non-empty" } }
   let full_url = (build-url $base ({agent_num: (encode-path-segment $agent_num), enable_or_not: (encode-path-segment $enable_or_not)} | format pattern "/mimic/agent/{agent_num}/protocol/msg/web/set/trace/{enable_or_not}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
 }
 
 # Returns the protocol's configuration.
@@ -6143,10 +6587,12 @@ export def "mimic-agent-protocol-get-config get" [
 ]: nothing -> record {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
+  if ($agent_num | is-empty) { error make --unspanned { msg: "path parameter 'agentNum' must be non-empty" } }
+  if ($prot | is-empty) { error make --unspanned { msg: "path parameter 'prot' must be non-empty" } }
   let full_url = (build-url $base ({agent_num: (encode-path-segment $agent_num), prot: (encode-path-segment $prot)} | format pattern "/mimic/agent/{agent_num}/protocol/{prot}/get/config"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
 }
 
 # Reload the current agent.
@@ -6167,10 +6613,11 @@ export def "mimic-agent-reload reload" [
 ]: nothing -> string {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
+  if ($agent_num | is-empty) { error make --unspanned { msg: "path parameter 'agentNum' must be non-empty" } }
   let full_url = (build-url $base ({agent_num: (encode-path-segment $agent_num)} | format pattern "/mimic/agent/{agent_num}/reload"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
 }
 
 # Remove the current agent.
@@ -6191,10 +6638,11 @@ export def "mimic-agent-remove delete" [
 ]: nothing -> string {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
+  if ($agent_num | is-empty) { error make --unspanned { msg: "path parameter 'agentNum' must be non-empty" } }
   let full_url = (build-url $base ({agent_num: (encode-path-segment $agent_num)} | format pattern "/mimic/agent/{agent_num}/remove"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
 }
 
 # Resume the current agent.
@@ -6215,10 +6663,11 @@ export def "mimic-agent-resume update" [
 ]: nothing -> string {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
+  if ($agent_num | is-empty) { error make --unspanned { msg: "path parameter 'agentNum' must be non-empty" } }
   let full_url = (build-url $base ({agent_num: (encode-path-segment $agent_num)} | format pattern "/mimic/agent/{agent_num}/resume"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
 }
 
 # Save agent MIB values.
@@ -6239,10 +6688,11 @@ export def "mimic-agent-save update" [
 ]: nothing -> string {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
+  if ($agent_num | is-empty) { error make --unspanned { msg: "path parameter 'agentNum' must be non-empty" } }
   let full_url = (build-url $base ({agent_num: (encode-path-segment $agent_num)} | format pattern "/mimic/agent/{agent_num}/save"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
 }
 
 # one-way transit delay in msec
@@ -6264,10 +6714,12 @@ export def "mimic-agent-set-delay update" [
 ]: nothing -> int {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
+  if ($agent_num | is-empty) { error make --unspanned { msg: "path parameter 'agentNum' must be non-empty" } }
+  if ($delay | is-empty) { error make --unspanned { msg: "path parameter 'delay' must be non-empty" } }
   let full_url = (build-url $base ({agent_num: (encode-path-segment $agent_num), delay: (encode-path-segment $delay)} | format pattern "/mimic/agent/{agent_num}/set/delay/{delay}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
 }
 
 # drop rate (every N-th PDU)
@@ -6289,10 +6741,12 @@ export def "mimic-agent-set-drops update" [
 ]: nothing -> int {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
+  if ($agent_num | is-empty) { error make --unspanned { msg: "path parameter 'agentNum' must be non-empty" } }
+  if ($drops | is-empty) { error make --unspanned { msg: "path parameter 'drops' must be non-empty" } }
   let full_url = (build-url $base ({agent_num: (encode-path-segment $agent_num), drops: (encode-path-segment $drops)} | format pattern "/mimic/agent/{agent_num}/set/drops/{drops}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
 }
 
 # host address of the agent.
@@ -6314,10 +6768,12 @@ export def "mimic-agent-set-host update" [
 ]: nothing -> string {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
+  if ($agent_num | is-empty) { error make --unspanned { msg: "path parameter 'agentNum' must be non-empty" } }
+  if ($host | is-empty) { error make --unspanned { msg: "path parameter 'host' must be non-empty" } }
   let full_url = (build-url $base ({agent_num: (encode-path-segment $agent_num), host: (encode-path-segment $host)} | format pattern "/mimic/agent/{agent_num}/set/host/{host}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
 }
 
 # timeout in seconds for retransmitting INFORM PDUs
@@ -6339,10 +6795,12 @@ export def "mimic-agent-set-inform-timeout update" [
 ]: nothing -> int {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
+  if ($agent_num | is-empty) { error make --unspanned { msg: "path parameter 'agentNum' must be non-empty" } }
+  if ($inform_timeout | is-empty) { error make --unspanned { msg: "path parameter 'inform_timeout' must be non-empty" } }
   let full_url = (build-url $base ({agent_num: (encode-path-segment $agent_num), inform_timeout: (encode-path-segment $inform_timeout)} | format pattern "/mimic/agent/{agent_num}/set/inform_timeout/{inform_timeout}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
 }
 
 # network interface card for the agent
@@ -6364,10 +6822,12 @@ export def "mimic-agent-set-interface update" [
 ]: nothing -> string {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
+  if ($agent_num | is-empty) { error make --unspanned { msg: "path parameter 'agentNum' must be non-empty" } }
+  if ($interface | is-empty) { error make --unspanned { msg: "path parameter 'interface' must be non-empty" } }
   let full_url = (build-url $base ({agent_num: (encode-path-segment $agent_num), interface: (encode-path-segment $interface)} | format pattern "/mimic/agent/{agent_num}/set/interface/{interface}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
 }
 
 # subnet mask of the agent.
@@ -6389,10 +6849,12 @@ export def "mimic-agent-set-mask update" [
 ]: nothing -> string {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
+  if ($agent_num | is-empty) { error make --unspanned { msg: "path parameter 'agentNum' must be non-empty" } }
+  if ($mask | is-empty) { error make --unspanned { msg: "path parameter 'mask' must be non-empty" } }
   let full_url = (build-url $base ({agent_num: (encode-path-segment $agent_num), mask: (encode-path-segment $mask)} | format pattern "/mimic/agent/{agent_num}/set/mask/{mask}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
 }
 
 # set of MIBs, simulations and scenarios
@@ -6415,12 +6877,13 @@ export def "mimic-agent-set-mibs update" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
+  if ($agent_num | is-empty) { error make --unspanned { msg: "path parameter 'agentNum' must be non-empty" } }
   let full_url = (build-url $base ({agent_num: (encode-path-segment $agent_num)} | format pattern "/mimic/agent/{agent_num}/set/mibs"))
   let req_body = $body
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else if (($input | is-not-empty) and ($req_body | is-empty)) { $input } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: {}, body: $req_body}
 }
 
 # MIB directory of the agent.
@@ -6442,10 +6905,12 @@ export def "mimic-agent-set-oiddir update" [
 ]: nothing -> string {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
+  if ($agent_num | is-empty) { error make --unspanned { msg: "path parameter 'agentNum' must be non-empty" } }
+  if ($oiddir | is-empty) { error make --unspanned { msg: "path parameter 'oiddir' must be non-empty" } }
   let full_url = (build-url $base ({agent_num: (encode-path-segment $agent_num), oiddir: (encode-path-segment $oiddir)} | format pattern "/mimic/agent/{agent_num}/set/oiddir/{oiddir}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
 }
 
 # owner of the agent
@@ -6467,10 +6932,12 @@ export def "mimic-agent-set-owner update" [
 ]: nothing -> string {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
+  if ($agent_num | is-empty) { error make --unspanned { msg: "path parameter 'agentNum' must be non-empty" } }
+  if ($owner | is-empty) { error make --unspanned { msg: "path parameter 'owner' must be non-empty" } }
   let full_url = (build-url $base ({agent_num: (encode-path-segment $agent_num), owner: (encode-path-segment $owner)} | format pattern "/mimic/agent/{agent_num}/set/owner/{owner}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
 }
 
 # maximum PDU size
@@ -6492,10 +6959,12 @@ export def "mimic-agent-set-pdusize update" [
 ]: nothing -> int {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
+  if ($agent_num | is-empty) { error make --unspanned { msg: "path parameter 'agentNum' must be non-empty" } }
+  if ($pdusize | is-empty) { error make --unspanned { msg: "path parameter 'pdusize' must be non-empty" } }
   let full_url = (build-url $base ({agent_num: (encode-path-segment $agent_num), pdusize: (encode-path-segment $pdusize)} | format pattern "/mimic/agent/{agent_num}/set/pdusize/{pdusize}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
 }
 
 # port number
@@ -6517,10 +6986,12 @@ export def "mimic-agent-set-port update" [
 ]: nothing -> string {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
+  if ($agent_num | is-empty) { error make --unspanned { msg: "path parameter 'agentNum' must be non-empty" } }
+  if ($port | is-empty) { error make --unspanned { msg: "path parameter 'port' must be non-empty" } }
   let full_url = (build-url $base ({agent_num: (encode-path-segment $agent_num), port: (encode-path-segment $port)} | format pattern "/mimic/agent/{agent_num}/set/port/{port}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
 }
 
 # private directory of the agent.
@@ -6542,10 +7013,12 @@ export def "mimic-agent-set-privdir update" [
 ]: nothing -> string {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
+  if ($agent_num | is-empty) { error make --unspanned { msg: "path parameter 'agentNum' must be non-empty" } }
+  if ($privdir | is-empty) { error make --unspanned { msg: "path parameter 'privdir' must be non-empty" } }
   let full_url = (build-url $base ({agent_num: (encode-path-segment $agent_num), privdir: (encode-path-segment $privdir)} | format pattern "/mimic/agent/{agent_num}/set/privdir/{privdir}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
 }
 
 # protocols supported by agent as a comma-separated list
@@ -6568,12 +7041,13 @@ export def "mimic-agent-set-protocol update" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
+  if ($agent_num | is-empty) { error make --unspanned { msg: "path parameter 'agentNum' must be non-empty" } }
   let full_url = (build-url $base ({agent_num: (encode-path-segment $agent_num)} | format pattern "/mimic/agent/{agent_num}/set/protocol"))
   let req_body = $body
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else if (($input | is-not-empty) and ($req_body | is-empty)) { $input } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: {}, body: $req_body}
 }
 
 # read community string
@@ -6595,10 +7069,12 @@ export def "mimic-agent-set-read update-community" [
 ]: nothing -> string {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
+  if ($agent_num | is-empty) { error make --unspanned { msg: "path parameter 'agentNum' must be non-empty" } }
+  if ($read | is-empty) { error make --unspanned { msg: "path parameter 'read' must be non-empty" } }
   let full_url = (build-url $base ({agent_num: (encode-path-segment $agent_num), read: (encode-path-segment $read)} | format pattern "/mimic/agent/{agent_num}/set/read/{read}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
 }
 
 # relative start time
@@ -6620,10 +7096,12 @@ export def "mimic-agent-set-start update-starttime" [
 ]: nothing -> string {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
+  if ($agent_num | is-empty) { error make --unspanned { msg: "path parameter 'agentNum' must be non-empty" } }
+  if ($start | is-empty) { error make --unspanned { msg: "path parameter 'start' must be non-empty" } }
   let full_url = (build-url $base ({agent_num: (encode-path-segment $agent_num), start: (encode-path-segment $start)} | format pattern "/mimic/agent/{agent_num}/set/start/{start}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
 }
 
 # SNMP PDU tracing
@@ -6645,10 +7123,12 @@ export def "mimic-agent-set-trace update" [
 ]: nothing -> int {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
+  if ($agent_num | is-empty) { error make --unspanned { msg: "path parameter 'agentNum' must be non-empty" } }
+  if ($trace | is-empty) { error make --unspanned { msg: "path parameter 'trace' must be non-empty" } }
   let full_url = (build-url $base ({agent_num: (encode-path-segment $agent_num), trace: (encode-path-segment $trace)} | format pattern "/mimic/agent/{agent_num}/set/trace/{trace}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
 }
 
 # SNMP SET validation policy
@@ -6670,10 +7150,12 @@ export def "mimic-agent-set-validate update" [
 ]: nothing -> int {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
+  if ($agent_num | is-empty) { error make --unspanned { msg: "path parameter 'agentNum' must be non-empty" } }
+  if ($validate | is-empty) { error make --unspanned { msg: "path parameter 'validate' must be non-empty" } }
   let full_url = (build-url $base ({agent_num: (encode-path-segment $agent_num), validate: (encode-path-segment $validate)} | format pattern "/mimic/agent/{agent_num}/set/validate/{validate}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
 }
 
 # write community string
@@ -6695,10 +7177,12 @@ export def "mimic-agent-set-write update-community" [
 ]: nothing -> string {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
+  if ($agent_num | is-empty) { error make --unspanned { msg: "path parameter 'agentNum' must be non-empty" } }
+  if ($write | is-empty) { error make --unspanned { msg: "path parameter 'write' must be non-empty" } }
   let full_url = (build-url $base ({agent_num: (encode-path-segment $agent_num), write: (encode-path-segment $write)} | format pattern "/mimic/agent/{agent_num}/set/write/{write}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
 }
 
 # Start the current agent.
@@ -6719,10 +7203,11 @@ export def "mimic-agent-start start" [
 ]: nothing -> string {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
+  if ($agent_num | is-empty) { error make --unspanned { msg: "path parameter 'agentNum' must be non-empty" } }
   let full_url = (build-url $base ({agent_num: (encode-path-segment $agent_num)} | format pattern "/mimic/agent/{agent_num}/start"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
 }
 
 # Show the agent's primary IP address
@@ -6743,10 +7228,11 @@ export def "mimic-agent-stop stop" [
 ]: nothing -> string {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
+  if ($agent_num | is-empty) { error make --unspanned { msg: "path parameter 'agentNum' must be non-empty" } }
   let full_url = (build-url $base ({agent_num: (encode-path-segment $agent_num)} | format pattern "/mimic/agent/{agent_num}/stop"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
 }
 
 # This command copies the variable store from the other agent to this agent.
@@ -6768,10 +7254,12 @@ export def "mimic-agent-store-copy copy" [
 ]: nothing -> string {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
+  if ($agent_num | is-empty) { error make --unspanned { msg: "path parameter 'agentNum' must be non-empty" } }
+  if ($other_agent | is-empty) { error make --unspanned { msg: "path parameter 'otherAgent' must be non-empty" } }
   let full_url = (build-url $base ({agent_num: (encode-path-segment $agent_num), other_agent: (encode-path-segment $other_agent)} | format pattern "/mimic/agent/{agent_num}/store/copy/{other_agent}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
 }
 
 # This command can be used as a predicate to ascertain the existence of a given variable.
@@ -6793,10 +7281,12 @@ export def "mimic-agent-store-exists get" [
 ]: nothing -> string {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
+  if ($agent_num | is-empty) { error make --unspanned { msg: "path parameter 'agentNum' must be non-empty" } }
+  if ($var | is-empty) { error make --unspanned { msg: "path parameter 'var' must be non-empty" } }
   let full_url = (build-url $base ({agent_num: (encode-path-segment $agent_num), var: (encode-path-segment $var)} | format pattern "/mimic/agent/{agent_num}/store/exists/{var}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
 }
 
 # Fetches the value associated with a variable.
@@ -6818,10 +7308,12 @@ export def "mimic-agent-store-get get" [
 ]: nothing -> string {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
+  if ($agent_num | is-empty) { error make --unspanned { msg: "path parameter 'agentNum' must be non-empty" } }
+  if ($var | is-empty) { error make --unspanned { msg: "path parameter 'var' must be non-empty" } }
   let full_url = (build-url $base ({agent_num: (encode-path-segment $agent_num), var: (encode-path-segment $var)} | format pattern "/mimic/agent/{agent_num}/store/get/{var}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
 }
 
 # This command will return the list of variables in the said scope.
@@ -6842,10 +7334,11 @@ export def "mimic-agent-store-list list" [
 ]: nothing -> list<string> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
+  if ($agent_num | is-empty) { error make --unspanned { msg: "path parameter 'agentNum' must be non-empty" } }
   let full_url = (build-url $base ({agent_num: (encode-path-segment $agent_num)} | format pattern "/mimic/agent/{agent_num}/store/list"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
 }
 
 # These commands treat the variable as a list, and allow to replace an entry in the list at the specified index with the specified value. The variable has to already exist.
@@ -6870,12 +7363,15 @@ export def "mimic-agent-store-lreplace update" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
+  if ($agent_num | is-empty) { error make --unspanned { msg: "path parameter 'agentNum' must be non-empty" } }
+  if ($var | is-empty) { error make --unspanned { msg: "path parameter 'var' must be non-empty" } }
+  if ($index | is-empty) { error make --unspanned { msg: "path parameter 'index' must be non-empty" } }
   let full_url = (build-url $base ({agent_num: (encode-path-segment $agent_num), var: (encode-path-segment $var), index: (encode-path-segment $index)} | format pattern "/mimic/agent/{agent_num}/store/lreplace/{var}/{index}"))
   let req_body = $body
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else if (($input | is-not-empty) and ($req_body | is-empty)) { $input } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: {}, body: $req_body}
 }
 
 # This command can be used as a predicate to ascertain the persistence of a given variable.
@@ -6897,10 +7393,12 @@ export def "mimic-agent-store-persists get" [
 ]: nothing -> string {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
+  if ($agent_num | is-empty) { error make --unspanned { msg: "path parameter 'agentNum' must be non-empty" } }
+  if ($var | is-empty) { error make --unspanned { msg: "path parameter 'var' must be non-empty" } }
   let full_url = (build-url $base ({agent_num: (encode-path-segment $agent_num), var: (encode-path-segment $var)} | format pattern "/mimic/agent/{agent_num}/store/persists/{var}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
 }
 
 # These commands allow the creation of a new variable, or changing an existing value.
@@ -6925,12 +7423,15 @@ export def "mimic-agent-store-set update" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
+  if ($agent_num | is-empty) { error make --unspanned { msg: "path parameter 'agentNum' must be non-empty" } }
+  if ($var | is-empty) { error make --unspanned { msg: "path parameter 'var' must be non-empty" } }
+  if ($persist | is-empty) { error make --unspanned { msg: "path parameter 'persist' must be non-empty" } }
   let full_url = (build-url $base ({agent_num: (encode-path-segment $agent_num), var: (encode-path-segment $var), persist: (encode-path-segment $persist)} | format pattern "/mimic/agent/{agent_num}/store/set/{var}/{persist}"))
   let req_body = $body
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else if (($input | is-not-empty) and ($req_body | is-empty)) { $input } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: {}, body: $req_body}
 }
 
 # Deletes a variable which is currently defined.
@@ -6952,10 +7453,12 @@ export def "mimic-agent-store-unset update" [
 ]: nothing -> string {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
+  if ($agent_num | is-empty) { error make --unspanned { msg: "path parameter 'agentNum' must be non-empty" } }
+  if ($var | is-empty) { error make --unspanned { msg: "path parameter 'var' must be non-empty" } }
   let full_url = (build-url $base ({agent_num: (encode-path-segment $agent_num), var: (encode-path-segment $var)} | format pattern "/mimic/agent/{agent_num}/store/unset/{var}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
 }
 
 # Add a new timer script to be executed at specified interval (in msec) with the specified argument.
@@ -6979,10 +7482,14 @@ export def "mimic-agent-timer-script-add create" [
 ]: nothing -> string {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
+  if ($agent_num | is-empty) { error make --unspanned { msg: "path parameter 'agentNum' must be non-empty" } }
+  if ($script | is-empty) { error make --unspanned { msg: "path parameter 'script' must be non-empty" } }
+  if ($interval | is-empty) { error make --unspanned { msg: "path parameter 'interval' must be non-empty" } }
+  if ($arg | is-empty) { error make --unspanned { msg: "path parameter 'arg' must be non-empty" } }
   let full_url = (build-url $base ({agent_num: (encode-path-segment $agent_num), script: (encode-path-segment $script), interval: (encode-path-segment $interval), arg: (encode-path-segment $arg)} | format pattern "/mimic/agent/{agent_num}/timer/script/add/{script}/{interval}/{arg}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
 }
 
 # Remove a timer script from the execution list.
@@ -7006,10 +7513,14 @@ export def "mimic-agent-timer-script-delete delete" [
 ]: nothing -> string {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
+  if ($agent_num | is-empty) { error make --unspanned { msg: "path parameter 'agentNum' must be non-empty" } }
+  if ($script | is-empty) { error make --unspanned { msg: "path parameter 'script' must be non-empty" } }
+  if ($interval | is-empty) { error make --unspanned { msg: "path parameter 'interval' must be non-empty" } }
+  if ($arg | is-empty) { error make --unspanned { msg: "path parameter 'arg' must be non-empty" } }
   let full_url = (build-url $base ({agent_num: (encode-path-segment $agent_num), script: (encode-path-segment $script), interval: (encode-path-segment $interval), arg: (encode-path-segment $arg)} | format pattern "/mimic/agent/{agent_num}/timer/script/delete/{script}/{interval}/{arg}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
 }
 
 # List the timer scripts currently running along with the their intervals.
@@ -7030,10 +7541,11 @@ export def "mimic-agent-timer-script-list list" [
 ]: nothing -> table<arg: string, interval: int, script: string> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
+  if ($agent_num | is-empty) { error make --unspanned { msg: "path parameter 'agentNum' must be non-empty" } }
   let full_url = (build-url $base ({agent_num: (encode-path-segment $agent_num)} | format pattern "/mimic/agent/{agent_num}/timer/script/list"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
 }
 
 # Add a trap destination to the set of destinations.
@@ -7056,10 +7568,13 @@ export def "mimic-agent-trap-config-add create" [
 ]: nothing -> string {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
+  if ($agent_num | is-empty) { error make --unspanned { msg: "path parameter 'agentNum' must be non-empty" } }
+  if ($ip | is-empty) { error make --unspanned { msg: "path parameter 'IP' must be non-empty" } }
+  if ($port | is-empty) { error make --unspanned { msg: "path parameter 'port' must be non-empty" } }
   let full_url = (build-url $base ({agent_num: (encode-path-segment $agent_num), ip: (encode-path-segment $ip), port: (encode-path-segment $port)} | format pattern "/mimic/agent/{agent_num}/trap/config/add/{ip}/{port}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
 }
 
 # Remove a trap destination from the set of destinations.
@@ -7082,10 +7597,13 @@ export def "mimic-agent-trap-config-delete delete" [
 ]: nothing -> string {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
+  if ($agent_num | is-empty) { error make --unspanned { msg: "path parameter 'agentNum' must be non-empty" } }
+  if ($ip | is-empty) { error make --unspanned { msg: "path parameter 'IP' must be non-empty" } }
+  if ($port | is-empty) { error make --unspanned { msg: "path parameter 'port' must be non-empty" } }
   let full_url = (build-url $base ({agent_num: (encode-path-segment $agent_num), ip: (encode-path-segment $ip), port: (encode-path-segment $port)} | format pattern "/mimic/agent/{agent_num}/trap/config/delete/{ip}/{port}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
 }
 
 # List the set of trap destinations for this agent instance.
@@ -7106,10 +7624,11 @@ export def "mimic-agent-trap-config-list list" [
 ]: nothing -> table<IP: string, port: int> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
+  if ($agent_num | is-empty) { error make --unspanned { msg: "path parameter 'agentNum' must be non-empty" } }
   let full_url = (build-url $base ({agent_num: (encode-path-segment $agent_num)} | format pattern "/mimic/agent/{agent_num}/trap/config/list"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
 }
 
 # List the outstanding asynchronous traps for this agent instance.
@@ -7130,10 +7649,11 @@ export def "mimic-agent-trap-list list" [
 ]: nothing -> list<string> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
+  if ($agent_num | is-empty) { error make --unspanned { msg: "path parameter 'agentNum' must be non-empty" } }
   let full_url = (build-url $base ({agent_num: (encode-path-segment $agent_num)} | format pattern "/mimic/agent/{agent_num}/trap/list"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
 }
 
 # Add an entry to a table.
@@ -7156,10 +7676,13 @@ export def "mimic-agent-value-add create" [
 ]: nothing -> string {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
+  if ($agent_num | is-empty) { error make --unspanned { msg: "path parameter 'agentNum' must be non-empty" } }
+  if ($object | is-empty) { error make --unspanned { msg: "path parameter 'object' must be non-empty" } }
+  if ($instance | is-empty) { error make --unspanned { msg: "path parameter 'instance' must be non-empty" } }
   let full_url = (build-url $base ({agent_num: (encode-path-segment $agent_num), object: (encode-path-segment $object), instance: (encode-path-segment $instance)} | format pattern "/mimic/agent/{agent_num}/value/add/{object}/{instance}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
 }
 
 # Evaluate the values of the specified instance instance for each specified MIB object object and return it as it would through SNMP requests.
@@ -7182,10 +7705,13 @@ export def "mimic-agent-value-eval get" [
 ]: nothing -> string {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
+  if ($agent_num | is-empty) { error make --unspanned { msg: "path parameter 'agentNum' must be non-empty" } }
+  if ($object | is-empty) { error make --unspanned { msg: "path parameter 'object' must be non-empty" } }
+  if ($instance | is-empty) { error make --unspanned { msg: "path parameter 'instance' must be non-empty" } }
   let full_url = (build-url $base ({agent_num: (encode-path-segment $agent_num), object: (encode-path-segment $object), instance: (encode-path-segment $instance)} | format pattern "/mimic/agent/{agent_num}/value/eval/{object}/{instance}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
 }
 
 # Get a variable in the Value Space.
@@ -7209,10 +7735,14 @@ export def "mimic-agent-value-get get" [
 ]: nothing -> string {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
+  if ($agent_num | is-empty) { error make --unspanned { msg: "path parameter 'agentNum' must be non-empty" } }
+  if ($object | is-empty) { error make --unspanned { msg: "path parameter 'object' must be non-empty" } }
+  if ($instance | is-empty) { error make --unspanned { msg: "path parameter 'instance' must be non-empty" } }
+  if ($variable | is-empty) { error make --unspanned { msg: "path parameter 'variable' must be non-empty" } }
   let full_url = (build-url $base ({agent_num: (encode-path-segment $agent_num), object: (encode-path-segment $object), instance: (encode-path-segment $instance), variable: (encode-path-segment $variable)} | format pattern "/mimic/agent/{agent_num}/value/get/{object}/{instance}/{variable}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
 }
 
 # Return the syntactical information for the specified object, such as type, size, range, enumerations, and ACCESS.
@@ -7234,10 +7764,12 @@ export def "mimic-agent-value-info get" [
 ]: nothing -> string {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
+  if ($agent_num | is-empty) { error make --unspanned { msg: "path parameter 'agentNum' must be non-empty" } }
+  if ($object | is-empty) { error make --unspanned { msg: "path parameter 'object' must be non-empty" } }
   let full_url = (build-url $base ({agent_num: (encode-path-segment $agent_num), object: (encode-path-segment $object)} | format pattern "/mimic/agent/{agent_num}/value/info/{object}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
 }
 
 # Display the MIB object instances for the specified object.
@@ -7259,10 +7791,12 @@ export def "mimic-agent-value-instances get" [
 ]: nothing -> list<string> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
+  if ($agent_num | is-empty) { error make --unspanned { msg: "path parameter 'agentNum' must be non-empty" } }
+  if ($object | is-empty) { error make --unspanned { msg: "path parameter 'object' must be non-empty" } }
   let full_url = (build-url $base ({agent_num: (encode-path-segment $agent_num), object: (encode-path-segment $object)} | format pattern "/mimic/agent/{agent_num}/value/instances/{object}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
 }
 
 # Display the MIB objects below the current position
@@ -7284,10 +7818,12 @@ export def "mimic-agent-value-list get-objects" [
 ]: nothing -> list<string> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
+  if ($agent_num | is-empty) { error make --unspanned { msg: "path parameter 'agentNum' must be non-empty" } }
+  if ($oid | is-empty) { error make --unspanned { msg: "path parameter 'OID' must be non-empty" } }
   let full_url = (build-url $base ({agent_num: (encode-path-segment $agent_num), oid: (encode-path-segment $oid)} | format pattern "/mimic/agent/{agent_num}/value/list/{oid}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
 }
 
 # Evaluate the values of the specified instance instance for each specified MIB object object and return it as it would through SNMP requests.
@@ -7309,10 +7845,12 @@ export def "mimic-agent-value-meval get" [
 ]: nothing -> list<string> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
+  if ($agent_num | is-empty) { error make --unspanned { msg: "path parameter 'agentNum' must be non-empty" } }
+  if ($obj_ins_array | is-empty) { error make --unspanned { msg: "path parameter 'objInsArray' must be non-empty" } }
   let full_url = (build-url $base ({agent_num: (encode-path-segment $agent_num), obj_ins_array: (encode-path-segment $obj_ins_array)} | format pattern "/mimic/agent/{agent_num}/value/meval/{obj_ins_array}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
 }
 
 # Get multiple variables in the Value Space.
@@ -7334,10 +7872,12 @@ export def "mimic-agent-value-mget get" [
 ]: nothing -> list<string> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
+  if ($agent_num | is-empty) { error make --unspanned { msg: "path parameter 'agentNum' must be non-empty" } }
+  if ($obj_ins_var_array | is-empty) { error make --unspanned { msg: "path parameter 'objInsVarArray' must be non-empty" } }
   let full_url = (build-url $base ({agent_num: (encode-path-segment $agent_num), obj_ins_var_array: (encode-path-segment $obj_ins_var_array)} | format pattern "/mimic/agent/{agent_num}/value/mget/{obj_ins_var_array}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
 }
 
 # Return the MIB that defines the specified object.
@@ -7359,10 +7899,12 @@ export def "mimic-agent-value-mib get" [
 ]: nothing -> string {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
+  if ($agent_num | is-empty) { error make --unspanned { msg: "path parameter 'agentNum' must be non-empty" } }
+  if ($object | is-empty) { error make --unspanned { msg: "path parameter 'object' must be non-empty" } }
   let full_url = (build-url $base ({agent_num: (encode-path-segment $agent_num), object: (encode-path-segment $object)} | format pattern "/mimic/agent/{agent_num}/value/mib/{object}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
 }
 
 # Set multiple variables in the Value Space.
@@ -7385,12 +7927,13 @@ export def "mimic-agent-value-mset update" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
+  if ($agent_num | is-empty) { error make --unspanned { msg: "path parameter 'agentNum' must be non-empty" } }
   let full_url = (build-url $base ({agent_num: (encode-path-segment $agent_num)} | format pattern "/mimic/agent/{agent_num}/value/mset"))
   let req_body = $body
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else if (($input | is-not-empty) and ($req_body | is-empty)) { $input } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: {}, body: $req_body}
 }
 
 # Unset multiple variables in the Value Space
@@ -7413,12 +7956,13 @@ export def "mimic-agent-value-munset update" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
+  if ($agent_num | is-empty) { error make --unspanned { msg: "path parameter 'agentNum' must be non-empty" } }
   let full_url = (build-url $base ({agent_num: (encode-path-segment $agent_num)} | format pattern "/mimic/agent/{agent_num}/value/munset"))
   let req_body = $body
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else if (($input | is-not-empty) and ($req_body | is-empty)) { $input } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: {}, body: $req_body}
 }
 
 # Return the symbolic name of the specified object identifier.
@@ -7440,10 +7984,12 @@ export def "mimic-agent-value-name get" [
 ]: nothing -> string {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
+  if ($agent_num | is-empty) { error make --unspanned { msg: "path parameter 'agentNum' must be non-empty" } }
+  if ($oid | is-empty) { error make --unspanned { msg: "path parameter 'OID' must be non-empty" } }
   let full_url = (build-url $base ({agent_num: (encode-path-segment $agent_num), oid: (encode-path-segment $oid)} | format pattern "/mimic/agent/{agent_num}/value/name/{oid}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
 }
 
 # Return the numeric OID of the specified object.
@@ -7465,10 +8011,12 @@ export def "mimic-agent-value-oid get" [
 ]: nothing -> string {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
+  if ($agent_num | is-empty) { error make --unspanned { msg: "path parameter 'agentNum' must be non-empty" } }
+  if ($object | is-empty) { error make --unspanned { msg: "path parameter 'object' must be non-empty" } }
   let full_url = (build-url $base ({agent_num: (encode-path-segment $agent_num), object: (encode-path-segment $object)} | format pattern "/mimic/agent/{agent_num}/value/oid/{object}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
 }
 
 # Remove an entry from a table.
@@ -7491,10 +8039,13 @@ export def "mimic-agent-value-remove delete" [
 ]: nothing -> string {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
+  if ($agent_num | is-empty) { error make --unspanned { msg: "path parameter 'agentNum' must be non-empty" } }
+  if ($object | is-empty) { error make --unspanned { msg: "path parameter 'object' must be non-empty" } }
+  if ($instance | is-empty) { error make --unspanned { msg: "path parameter 'instance' must be non-empty" } }
   let full_url = (build-url $base ({agent_num: (encode-path-segment $agent_num), object: (encode-path-segment $object), instance: (encode-path-segment $instance)} | format pattern "/mimic/agent/{agent_num}/value/remove/{object}/{instance}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
 }
 
 # Set a variable in the Value Space.
@@ -7520,12 +8071,16 @@ export def "mimic-agent-value-set update" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
+  if ($agent_num | is-empty) { error make --unspanned { msg: "path parameter 'agentNum' must be non-empty" } }
+  if ($object | is-empty) { error make --unspanned { msg: "path parameter 'object' must be non-empty" } }
+  if ($instance | is-empty) { error make --unspanned { msg: "path parameter 'instance' must be non-empty" } }
+  if ($variable | is-empty) { error make --unspanned { msg: "path parameter 'variable' must be non-empty" } }
   let full_url = (build-url $base ({agent_num: (encode-path-segment $agent_num), object: (encode-path-segment $object), instance: (encode-path-segment $instance), variable: (encode-path-segment $variable)} | format pattern "/mimic/agent/{agent_num}/value/set/{object}/{instance}/{variable}"))
   let req_body = $body
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else if (($input | is-not-empty) and ($req_body | is-empty)) { $input } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: {}, body: $req_body}
 }
 
 # Split the numerical OID into the object OID and instance OID.
@@ -7547,10 +8102,12 @@ export def "mimic-agent-value-split get" [
 ]: nothing -> list<string> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
+  if ($agent_num | is-empty) { error make --unspanned { msg: "path parameter 'agentNum' must be non-empty" } }
+  if ($oid | is-empty) { error make --unspanned { msg: "path parameter 'OID' must be non-empty" } }
   let full_url = (build-url $base ({agent_num: (encode-path-segment $agent_num), oid: (encode-path-segment $oid)} | format pattern "/mimic/agent/{agent_num}/value/split/{oid}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
 }
 
 # Get the state of a MIB object object.
@@ -7572,10 +8129,12 @@ export def "mimic-agent-value-state-get get" [
 ]: nothing -> string {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
+  if ($agent_num | is-empty) { error make --unspanned { msg: "path parameter 'agentNum' must be non-empty" } }
+  if ($object | is-empty) { error make --unspanned { msg: "path parameter 'object' must be non-empty" } }
   let full_url = (build-url $base ({agent_num: (encode-path-segment $agent_num), object: (encode-path-segment $object)} | format pattern "/mimic/agent/{agent_num}/value/state/get/{object}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
 }
 
 # Set the state of a MIB object object
@@ -7598,10 +8157,13 @@ export def "mimic-agent-value-state-set update" [
 ]: nothing -> string {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
+  if ($agent_num | is-empty) { error make --unspanned { msg: "path parameter 'agentNum' must be non-empty" } }
+  if ($object | is-empty) { error make --unspanned { msg: "path parameter 'object' must be non-empty" } }
+  if ($state | is-empty) { error make --unspanned { msg: "path parameter 'state' must be non-empty" } }
   let full_url = (build-url $base ({agent_num: (encode-path-segment $agent_num), object: (encode-path-segment $object), state: (encode-path-segment $state)} | format pattern "/mimic/agent/{agent_num}/value/state/set/{object}/{state}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
 }
 
 # Unset a variable in the Value Space in order to free its memory.
@@ -7625,10 +8187,14 @@ export def "mimic-agent-value-unset update" [
 ]: nothing -> string {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
+  if ($agent_num | is-empty) { error make --unspanned { msg: "path parameter 'agentNum' must be non-empty" } }
+  if ($object | is-empty) { error make --unspanned { msg: "path parameter 'object' must be non-empty" } }
+  if ($instance | is-empty) { error make --unspanned { msg: "path parameter 'instance' must be non-empty" } }
+  if ($variable | is-empty) { error make --unspanned { msg: "path parameter 'variable' must be non-empty" } }
   let full_url = (build-url $base ({agent_num: (encode-path-segment $agent_num), object: (encode-path-segment $object), instance: (encode-path-segment $instance), variable: (encode-path-segment $variable)} | format pattern "/mimic/agent/{agent_num}/value/unset/{object}/{instance}/{variable}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
 }
 
 # Display the variables for the specified instance instance for the specified MIB object object
@@ -7651,10 +8217,13 @@ export def "mimic-agent-value-variables get" [
 ]: nothing -> list<string> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
+  if ($agent_num | is-empty) { error make --unspanned { msg: "path parameter 'agentNum' must be non-empty" } }
+  if ($object | is-empty) { error make --unspanned { msg: "path parameter 'object' must be non-empty" } }
+  if ($instance | is-empty) { error make --unspanned { msg: "path parameter 'instance' must be non-empty" } }
   let full_url = (build-url $base ({agent_num: (encode-path-segment $agent_num), object: (encode-path-segment $object), instance: (encode-path-segment $instance)} | format pattern "/mimic/agent/{agent_num}/value/variables/{object}/{instance}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
 }
 
 # Clear the lab configuration.
@@ -7676,10 +8245,12 @@ export def "mimic-clear update-cfg-new" [
 ]: nothing -> record {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
+  if ($first_agent_num | is-empty) { error make --unspanned { msg: "path parameter 'firstAgentNum' must be non-empty" } }
+  if ($last_agent_num | is-empty) { error make --unspanned { msg: "path parameter 'lastAgentNum' must be non-empty" } }
   let full_url = (build-url $base ({first_agent_num: (encode-path-segment $first_agent_num), last_agent_num: (encode-path-segment $last_agent_num)} | format pattern "/mimic/clear/{first_agent_num}/{last_agent_num}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
 }
 
 # The list of {agentnum {statistics}} for agents that are currently active and whose statistics have changed since the last invocation of this command.
@@ -7702,7 +8273,7 @@ export def "mimic-get-active-data-list get" [
   let full_url = (build-url $base "/mimic/get/active_data_list")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
 }
 
 # The list of {agentnum} that are currently active (running or paused).
@@ -7725,7 +8296,7 @@ export def "mimic-get-active-list get" [
   let full_url = (build-url $base "/mimic/get/active_list")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
 }
 
 # The currently loaded lab configuration file for the particular user.
@@ -7748,7 +8319,7 @@ export def "mimic-get-cfgfile get" [
   let full_url = (build-url $base "/mimic/get/cfgfile")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
 }
 
 # This predicate indicates if the currently loaded agent configuration file has changed.
@@ -7771,7 +8342,7 @@ export def "mimic-get-cfgfile-changed get-cfg-file" [
   let full_url = (build-url $base "/mimic/get/cfgfile_changed")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
 }
 
 # The list of {agentnum} for which a configurable parameter changed.
@@ -7794,7 +8365,7 @@ export def "mimic-get-changed-config-list get" [
   let full_url = (build-url $base "/mimic/get/changed_config_list")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
 }
 
 # The list of {agentnum state} for which the state changed.
@@ -7817,7 +8388,7 @@ export def "mimic-get-changed-state-list get" [
   let full_url = (build-url $base "/mimic/get/changed_state_list")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
 }
 
 # The number of clients currently connected to the daemon.
@@ -7840,7 +8411,7 @@ export def "mimic-get-clients get" [
   let full_url = (build-url $base "/mimic/get/clients")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
 }
 
 # The list of {agentnum} that are currently configured.
@@ -7863,7 +8434,7 @@ export def "mimic-get-configured-list get" [
   let full_url = (build-url $base "/mimic/get/configured_list")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
 }
 
 # The set of network interfaces that can be used for simulations.
@@ -7886,7 +8457,7 @@ export def "mimic-get-interfaces get" [
   let full_url = (build-url $base "/mimic/get/interfaces")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
 }
 
 # The last configured agent instance.
@@ -7909,7 +8480,7 @@ export def "mimic-get-last get" [
   let full_url = (build-url $base "/mimic/get/last")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
 }
 
 # The current log file for the Simulator.
@@ -7932,7 +8503,7 @@ export def "mimic-get-log get" [
   let full_url = (build-url $base "/mimic/get/log")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
 }
 
 # The maximum number of agent instances.
@@ -7955,7 +8526,7 @@ export def "mimic-get-max get" [
   let full_url = (build-url $base "/mimic/get/max")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
 }
 
 # The network address of the host where the MIMIC simulator is running.
@@ -7978,7 +8549,7 @@ export def "mimic-get-netaddr get" [
   let full_url = (build-url $base "/mimic/get/netaddr")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
 }
 
 # The default network device to be used for agent addresses.
@@ -8001,7 +8572,7 @@ export def "mimic-get-netdev get" [
   let full_url = (build-url $base "/mimic/get/netdev")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
 }
 
 # The product number that is licensed.
@@ -8024,7 +8595,7 @@ export def "mimic-get-product get" [
   let full_url = (build-url $base "/mimic/get/product")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
 }
 
 # The set of protocols supported by the Simulator.
@@ -8047,7 +8618,7 @@ export def "mimic-get-protocols get-daemon" [
   let full_url = (build-url $base "/mimic/get/protocols")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
 }
 
 # The return mode.
@@ -8070,7 +8641,7 @@ export def "mimic-get-return get" [
   let full_url = (build-url $base "/mimic/get/return")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
 }
 
 # The version of the MIMIC command interface.
@@ -8093,7 +8664,7 @@ export def "mimic-get-version get" [
   let full_url = (build-url $base "/mimic/get/version")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
 }
 
 # Load the lab configuration file file.
@@ -8117,10 +8688,14 @@ export def "mimic-load update-cfg" [
 ]: nothing -> record {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
+  if ($cfg_file | is-empty) { error make --unspanned { msg: "path parameter 'cfgFile' must be non-empty" } }
+  if ($first_agent_num | is-empty) { error make --unspanned { msg: "path parameter 'firstAgentNum' must be non-empty" } }
+  if ($last_agent_num | is-empty) { error make --unspanned { msg: "path parameter 'lastAgentNum' must be non-empty" } }
+  if ($start_agent_num | is-empty) { error make --unspanned { msg: "path parameter 'startAgentNum' must be non-empty" } }
   let full_url = (build-url $base ({cfg_file: (encode-path-segment $cfg_file), first_agent_num: (encode-path-segment $first_agent_num), last_agent_num: (encode-path-segment $last_agent_num), start_agent_num: (encode-path-segment $start_agent_num)} | format pattern "/mimic/load/{cfg_file}/{first_agent_num}/{last_agent_num}/{start_agent_num}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
 }
 
 # Get multiple sets of information about MIMIC, where infoArray is one of the parameters defined in the mimic get command.
@@ -8141,10 +8716,11 @@ export def "mimic-mget get" [
 ]: nothing -> list<record> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
+  if ($info_array | is-empty) { error make --unspanned { msg: "path parameter 'infoArray' must be non-empty" } }
   let full_url = (build-url $base ({info_array: (encode-path-segment $info_array)} | format pattern "/mimic/mget/{info_array}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
 }
 
 # Show the COAP statistics headers
@@ -8167,7 +8743,7 @@ export def "mimic-protocol-msg-coap-get-stats-hdr get" [
   let full_url = (build-url $base "/mimic/protocol/msg/coap/get/stats_hdr")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
 }
 
 # Show the DHCP statistics headers
@@ -8190,7 +8766,7 @@ export def "mimic-protocol-msg-dhcp-get-stats-hdr get" [
   let full_url = (build-url $base "/mimic/protocol/msg/dhcp/get/stats_hdr")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
 }
 
 # Show the IPMI statistics headers
@@ -8213,7 +8789,7 @@ export def "mimic-protocol-msg-ipmi-get-stats-hdr get" [
   let full_url = (build-url $base "/mimic/protocol/msg/ipmi/get/stats_hdr")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
 }
 
 # Show the MQTT statistics headers
@@ -8236,7 +8812,7 @@ export def "mimic-protocol-msg-mqtt-get-stats-hdr get" [
   let full_url = (build-url $base "/mimic/protocol/msg/mqtt/get/stats_hdr")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
 }
 
 # Show the NETFLOW statistics headers
@@ -8259,7 +8835,7 @@ export def "mimic-protocol-msg-netflow-get-stats-hdr get" [
   let full_url = (build-url $base "/mimic/protocol/msg/netflow/get/stats_hdr")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
 }
 
 # Show the PROXY statistics headers
@@ -8282,7 +8858,7 @@ export def "mimic-protocol-msg-proxy-get-stats-hdr get" [
   let full_url = (build-url $base "/mimic/protocol/msg/proxy/get/stats_hdr")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
 }
 
 # Show the SFLOW statistics headers
@@ -8305,7 +8881,7 @@ export def "mimic-protocol-msg-sflow-get-stats-hdr get" [
   let full_url = (build-url $base "/mimic/protocol/msg/sflow/get/stats_hdr")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
 }
 
 # Show the SNMPTCP statistics headers
@@ -8328,7 +8904,7 @@ export def "mimic-protocol-msg-snmptcp-get-stats-hdr get" [
   let full_url = (build-url $base "/mimic/protocol/msg/snmptcp/get/stats_hdr")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
 }
 
 # Show the SSH statistics headers
@@ -8351,7 +8927,7 @@ export def "mimic-protocol-msg-ssh-get-stats-hdr get" [
   let full_url = (build-url $base "/mimic/protocol/msg/ssh/get/stats_hdr")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
 }
 
 # Show the SYSLOG statistics headers
@@ -8374,7 +8950,7 @@ export def "mimic-protocol-msg-syslog-get-stats-hdr get" [
   let full_url = (build-url $base "/mimic/protocol/msg/syslog/get/stats_hdr")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
 }
 
 # Show the TELNET statistics headers
@@ -8397,7 +8973,7 @@ export def "mimic-protocol-msg-telnet-get-stats-hdr get" [
   let full_url = (build-url $base "/mimic/protocol/msg/telnet/get/stats_hdr")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
 }
 
 # Show the TFTP statistics headers
@@ -8420,7 +8996,7 @@ export def "mimic-protocol-msg-tftp-get-stats-hdr get" [
   let full_url = (build-url $base "/mimic/protocol/msg/tftp/get/stats_hdr")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
 }
 
 # Show the TOD statistics headers
@@ -8443,7 +9019,7 @@ export def "mimic-protocol-msg-tod-get-stats-hdr get" [
   let full_url = (build-url $base "/mimic/protocol/msg/tod/get/stats_hdr")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
 }
 
 # Show the WEB statistics headers
@@ -8466,7 +9042,7 @@ export def "mimic-protocol-msg-web-get-stats-hdr get" [
   let full_url = (build-url $base "/mimic/protocol/msg/web/get/stats_hdr")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
 }
 
 # Save the lab configuration.
@@ -8489,7 +9065,7 @@ export def "mimic-save update-cfg" [
   let full_url = (build-url $base "/mimic/save")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
 }
 
 # Save the lab configuration in file.
@@ -8512,10 +9088,13 @@ export def "mimic-saveas update-cfg" [
 ]: nothing -> record {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
+  if ($cfg_file | is-empty) { error make --unspanned { msg: "path parameter 'cfgFile' must be non-empty" } }
+  if ($first_agent_num | is-empty) { error make --unspanned { msg: "path parameter 'firstAgentNum' must be non-empty" } }
+  if ($last_agent_num | is-empty) { error make --unspanned { msg: "path parameter 'lastAgentNum' must be non-empty" } }
   let full_url = (build-url $base ({cfg_file: (encode-path-segment $cfg_file), first_agent_num: (encode-path-segment $first_agent_num), last_agent_num: (encode-path-segment $last_agent_num)} | format pattern "/mimic/saveas/{cfg_file}/{first_agent_num}/{last_agent_num}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
 }
 
 # The current log file for the Simulator.
@@ -8542,7 +9121,7 @@ export def "mimic-set-log update" [
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else if (($input | is-not-empty) and ($req_body | is-empty)) { $input } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: {}, body: $req_body}
 }
 
 # The network address of the host where the MIMIC simulator is running.
@@ -8565,7 +9144,7 @@ export def "mimic-set-netdev update" [
   let full_url = (build-url $base "/mimic/set/netdev")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
 }
 
 # This operation flushes all global objects which need to be made persistent to disk.
@@ -8588,7 +9167,7 @@ export def "mimic-set-persistent update-store-save" [
   let full_url = (build-url $base "/mimic/set/persistent")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
 }
 
 # Start MIMIC.
@@ -8611,7 +9190,7 @@ export def "mimic-start list-agents" [
   let full_url = (build-url $base "/mimic/start")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
 }
 
 # Stop MIMIC.
@@ -8634,7 +9213,7 @@ export def "mimic-stop list-agents" [
   let full_url = (build-url $base "/mimic/stop")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
 }
 
 # This command can be used as a predicate to ascertain the existence of a given variable.
@@ -8655,10 +9234,11 @@ export def "mimic-store-exists get" [
 ]: nothing -> string {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
+  if ($var | is-empty) { error make --unspanned { msg: "path parameter 'var' must be non-empty" } }
   let full_url = (build-url $base ({var: (encode-path-segment $var)} | format pattern "/mimic/store/exists/{var}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
 }
 
 # Fetches the value associated with a variable.
@@ -8679,10 +9259,11 @@ export def "mimic-store-get get" [
 ]: nothing -> string {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
+  if ($var | is-empty) { error make --unspanned { msg: "path parameter 'var' must be non-empty" } }
   let full_url = (build-url $base ({var: (encode-path-segment $var)} | format pattern "/mimic/store/get/{var}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
 }
 
 # This command will return the list of variables in the said scope.
@@ -8705,7 +9286,7 @@ export def "mimic-store-list list" [
   let full_url = (build-url $base "/mimic/store/list")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
 }
 
 # These commands treat the variable as a list, and allow to replace an entry in the list at the specified index with the specified value. The variable has to already exist.
@@ -8729,12 +9310,14 @@ export def "mimic-store-lreplace update" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
+  if ($var | is-empty) { error make --unspanned { msg: "path parameter 'var' must be non-empty" } }
+  if ($index | is-empty) { error make --unspanned { msg: "path parameter 'index' must be non-empty" } }
   let full_url = (build-url $base ({var: (encode-path-segment $var), index: (encode-path-segment $index)} | format pattern "/mimic/store/lreplace/{var}/{index}"))
   let req_body = $body
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else if (($input | is-not-empty) and ($req_body | is-empty)) { $input } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: {}, body: $req_body}
 }
 
 # This command can be used as a predicate to ascertain the persistence of a given variable.
@@ -8755,10 +9338,11 @@ export def "mimic-store-persists get" [
 ]: nothing -> string {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
+  if ($var | is-empty) { error make --unspanned { msg: "path parameter 'var' must be non-empty" } }
   let full_url = (build-url $base ({var: (encode-path-segment $var)} | format pattern "/mimic/store/persists/{var}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
 }
 
 # Set the variable store for the global storage
@@ -8782,12 +9366,14 @@ export def "mimic-store-set update" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
+  if ($var | is-empty) { error make --unspanned { msg: "path parameter 'var' must be non-empty" } }
+  if ($persist | is-empty) { error make --unspanned { msg: "path parameter 'persist' must be non-empty" } }
   let full_url = (build-url $base ({var: (encode-path-segment $var), persist: (encode-path-segment $persist)} | format pattern "/mimic/store/set/{var}/{persist}"))
   let req_body = $body
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else if (($input | is-not-empty) and ($req_body | is-empty)) { $input } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: {}, body: $req_body}
 }
 
 # Deletes a variable which is currently defined.
@@ -8808,10 +9394,11 @@ export def "mimic-store-unset update" [
 ]: nothing -> string {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
+  if ($var | is-empty) { error make --unspanned { msg: "path parameter 'var' must be non-empty" } }
   let full_url = (build-url $base ({var: (encode-path-segment $var)} | format pattern "/mimic/store/unset/{var}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
 }
 
 # Terminate the MIMIC daemon.
@@ -8834,7 +9421,7 @@ export def "mimic-terminate update" [
   let full_url = (build-url $base "/mimic/terminate")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
 }
 
 # Add a new timer script to be executed at specified interval (in msec) with the specified argument.
@@ -8857,10 +9444,13 @@ export def "mimic-timer-script-add create-daemon" [
 ]: nothing -> string {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
+  if ($script | is-empty) { error make --unspanned { msg: "path parameter 'script' must be non-empty" } }
+  if ($interval | is-empty) { error make --unspanned { msg: "path parameter 'interval' must be non-empty" } }
+  if ($arg | is-empty) { error make --unspanned { msg: "path parameter 'arg' must be non-empty" } }
   let full_url = (build-url $base ({script: (encode-path-segment $script), interval: (encode-path-segment $interval), arg: (encode-path-segment $arg)} | format pattern "/mimic/timer/script/add/{script}/{interval}/{arg}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
 }
 
 # Remove a timer script from the execution list.
@@ -8883,10 +9473,13 @@ export def "mimic-timer-script-delete delete-daemon" [
 ]: nothing -> string {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
+  if ($script | is-empty) { error make --unspanned { msg: "path parameter 'script' must be non-empty" } }
+  if ($interval | is-empty) { error make --unspanned { msg: "path parameter 'interval' must be non-empty" } }
+  if ($arg | is-empty) { error make --unspanned { msg: "path parameter 'arg' must be non-empty" } }
   let full_url = (build-url $base ({script: (encode-path-segment $script), interval: (encode-path-segment $interval), arg: (encode-path-segment $arg)} | format pattern "/mimic/timer/script/delete/{script}/{interval}/{arg}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
 }
 
 # List the timer scripts currently running along with the their intervals.
@@ -8909,5 +9502,5 @@ export def "mimic-timer-script-list list-daemon" [
   let full_url = (build-url $base "/mimic/timer/script/list")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
 }

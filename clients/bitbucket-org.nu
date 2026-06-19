@@ -3,19 +3,20 @@
 # Auth: --token flag or $env.BITBUCKET_API_TOKEN
 
 const BASE_URL = "https://api.bitbucket.org/2.0"
-const DEFAULT_AUTH = "bearer"
 
-# Build auth: returns {headers: record, query: string}
+# Build auth: returns {scheme: string, headers: record, query: string, location: string}.
+# `location` is "header" | "query" | "cookie" | "none" and tells dry-run callers
+# where the token went without inspecting headers/query themselves.
 def build-auth [token?: string, auth_scheme?: string]: nothing -> record {
   let token_val = if ($token != null) and ($token | is-not-empty) { $token } else { $env | get -o BITBUCKET_API_TOKEN | default "" }
   let scheme = ($auth_scheme | default "bearer")
-  if ($scheme == "none") or ($token_val | is-empty) { return {headers: {}, query: ""} }
+  if ($scheme == "none") or ($token_val | is-empty) { return {scheme: $scheme, headers: {}, query: "", location: "none"} }
   match $scheme {
-    "bearer" => { {headers: {Authorization: $"Bearer ($token_val)"}, query: ""} }
-    "basic" => { {headers: {Authorization: $"Basic ($token_val)"}, query: ""} }
-    "basic-credentials" => { {headers: {Authorization: $"Basic ($token_val | encode base64)"}, query: ""} }
-    "none" => { {headers: {}, query: ""} }
-    _ => { {headers: {Authorization: $"Bearer ($token_val)"}, query: ""} }
+    "bearer" => { {scheme: $scheme, headers: {Authorization: $"Bearer ($token_val)"}, query: "", location: "header"} }
+    "basic" => { {scheme: $scheme, headers: {Authorization: $"Basic ($token_val)"}, query: "", location: "header"} }
+    "basic-credentials" => { {scheme: $scheme, headers: {Authorization: $"Basic ($token_val | encode base64)"}, query: "", location: "header"} }
+    "none" => { {scheme: $scheme, headers: {}, query: "", location: "none"} }
+    _ => { {scheme: $scheme, headers: {Authorization: $"Bearer ($token_val)"}, query: "", location: "header"} }
   }
 }
 
@@ -24,8 +25,9 @@ def build-auth [token?: string, auth_scheme?: string]: nothing -> record {
 # ([A-Za-z0-9-._~]) stay literal; everything else gets %XX.
 def serialize-qp [name: string, value: any, style: string]: nothing -> list<string> {
   if ($value == null) { return [] }
-  let n = (encode-path-segment $name)
   let is_list = ($value | describe | str starts-with "list")
+  if $is_list and ($value | is-empty) { return [] }
+  let n = (encode-path-segment $name)
   if ($value | describe | str starts-with "record") { return ($value | transpose k v | each { $"($n)[(encode-path-segment $in.k)]=(encode-path-segment $in.v)" }) }
   if not $is_list { return [$"($n)=(encode-path-segment $value)"] }
   match $style {
@@ -56,22 +58,42 @@ def build-url [base: string, path: string, query?: string]: nothing -> string {
   if ($query != null) and ($query | is-not-empty) { $result | upsert query $query | url join } else { $result | url join }
 }
 
+# Build the dry-run record returned by --dry-run. Shape:
+#   {dry_run: true, method, url, query: <record>, headers, body, content_type, timeout,
+#    auth: {scheme, location}}
+# `meta` carries logical-form data (the query record by spec name, the pre-serialization
+# body) that do-request itself cannot reconstruct from its wire-format args.
+def build-dry-run-record [method: string, url: string, auth: record, content_type: string, timeout: duration, meta?: record]: nothing -> record {
+  let m = ($meta | default {})
+  {
+    dry_run: true
+    method: $method
+    url: $url
+    query: ($m | get -o query | default {})
+    headers: $auth.headers
+    body: ($m | get -o body)
+    content_type: $content_type
+    timeout: $timeout
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+}
+
 # Execute HTTP request with method dispatch
-def do-request [method: string, url: string, auth: record, insecure: bool, raw: bool, dry_run: bool, max_time?: duration, allow_errors?: bool, full?: bool, content_type?: string, body?: any]: nothing -> any {
+def do-request [method: string, url: string, auth: record, insecure: bool, raw: bool, dry_run: bool, max_time?: duration, allow_errors?: bool, full?: bool, content_type?: string, body?: any, dry_run_meta?: record]: nothing -> any {
   let req_url = if ($auth.query | is-not-empty) { if ($url | str contains "?") { $"($url)&($auth.query)" } else { $"($url)?($auth.query)" } } else { $url }
   let timeout = ($max_time | default 30min)
   let ct = ($content_type | default "application/json")
-  if $dry_run { return {method: $method, url: $req_url, headers: $auth.headers, query_string: $auth.query, content_type: $ct, timeout: $timeout, body: $body} }
+  if $dry_run { return (build-dry-run-record $method $req_url $auth $ct $timeout $dry_run_meta) }
   let resp = match $method {
     "get" => { http get --headers $auth.headers --full --allow-errors --max-time $timeout --insecure=$insecure --raw=$raw $req_url }
-    "head" => { http head --headers $auth.headers --max-time $timeout --insecure=$insecure $req_url }
-    "options" => { http options --headers $auth.headers --max-time $timeout --insecure=$insecure $req_url }
+    "head" => { http head --headers $auth.headers --full --allow-errors --max-time $timeout --insecure=$insecure $req_url }
+    "options" => { http options --headers $auth.headers --full --allow-errors --max-time $timeout --insecure=$insecure $req_url }
     "post" => { if ($body | is-empty) { http post --headers $auth.headers --full --allow-errors --max-time $timeout --insecure=$insecure --raw=$raw $req_url "" } else { http post --headers $auth.headers --content-type $ct --full --allow-errors --max-time $timeout --insecure=$insecure --raw=$raw $req_url $body } }
     "put" => { if ($body | is-empty) { http put --headers $auth.headers --full --allow-errors --max-time $timeout --insecure=$insecure --raw=$raw $req_url "" } else { http put --headers $auth.headers --content-type $ct --full --allow-errors --max-time $timeout --insecure=$insecure --raw=$raw $req_url $body } }
     "patch" => { if ($body | is-empty) { http patch --headers $auth.headers --full --allow-errors --max-time $timeout --insecure=$insecure --raw=$raw $req_url "" } else { http patch --headers $auth.headers --content-type $ct --full --allow-errors --max-time $timeout --insecure=$insecure --raw=$raw $req_url $body } }
     "delete" => { if ($body | is-empty) { http delete --headers $auth.headers --full --allow-errors --max-time $timeout --insecure=$insecure --raw=$raw $req_url } else { http delete --headers $auth.headers --content-type $ct --data $body --full --allow-errors --max-time $timeout --insecure=$insecure --raw=$raw $req_url } }
   }
-  if ($method in ["head" "options"]) { return $resp }
+  if ($method == "head") and (not $full) and (not $allow_errors) and $resp.status < 400 { return $resp.headers }
   if $allow_errors { $resp } else if $resp.status >= 400 { error make --unspanned { msg: $"HTTP ($resp.status): ($resp.body)" } } else if $full { {status: $resp.status, headers: $resp.headers, body: $resp.body} } else if $resp.status == 204 { null } else { $resp.body }
 }
 
@@ -141,7 +163,7 @@ export def "addon delete" [
   let full_url = (build-url $base "/addon")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
 }
 
 # Update an installed app
@@ -163,7 +185,7 @@ export def "addon update" [
   let full_url = (build-url $base "/addon")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
 }
 
 # List linkers for an app
@@ -185,7 +207,7 @@ export def "addon-linkers list" [
   let full_url = (build-url $base "/addon/linkers")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
 }
 
 # Get a linker for an app
@@ -205,16 +227,17 @@ export def "addon-linkers get" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($linker_key | is-empty) { error make --unspanned { msg: "path parameter 'linker_key' must be non-empty" } }
   let full_url = (build-url $base ({linker_key: (encode-path-segment $linker_key)} | format pattern "/addon/linkers/{linker_key}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
 }
 
 # Delete all linker values
 #
 # DELETE /addon/linkers/{linker_key}/values
-export def "addon-linkers-values delete-by-linker_key" [
+export def "addon-linkers-values delete-by-linker-key" [
   linker_key: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -228,10 +251,11 @@ export def "addon-linkers-values delete-by-linker_key" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($linker_key | is-empty) { error make --unspanned { msg: "path parameter 'linker_key' must be non-empty" } }
   let full_url = (build-url $base ({linker_key: (encode-path-segment $linker_key)} | format pattern "/addon/linkers/{linker_key}/values"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
 }
 
 # List linker values for a linker
@@ -251,10 +275,11 @@ export def "addon-linkers-values list" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($linker_key | is-empty) { error make --unspanned { msg: "path parameter 'linker_key' must be non-empty" } }
   let full_url = (build-url $base ({linker_key: (encode-path-segment $linker_key)} | format pattern "/addon/linkers/{linker_key}/values"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
 }
 
 # Create a linker value
@@ -274,10 +299,11 @@ export def "addon-linkers-values create" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($linker_key | is-empty) { error make --unspanned { msg: "path parameter 'linker_key' must be non-empty" } }
   let full_url = (build-url $base ({linker_key: (encode-path-segment $linker_key)} | format pattern "/addon/linkers/{linker_key}/values"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
 }
 
 # Update a linker value
@@ -297,16 +323,17 @@ export def "addon-linkers-values update" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($linker_key | is-empty) { error make --unspanned { msg: "path parameter 'linker_key' must be non-empty" } }
   let full_url = (build-url $base ({linker_key: (encode-path-segment $linker_key)} | format pattern "/addon/linkers/{linker_key}/values"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
 }
 
 # Delete a linker value
 #
 # DELETE /addon/linkers/{linker_key}/values/{value_id}
-export def "addon-linkers-values delete-by-linker_key-value_id" [
+export def "addon-linkers-values delete-by-linker-key-value-id" [
   linker_key: string
   value_id: int
   --base-url(-b): string@base-url-completer # API base URL
@@ -321,10 +348,12 @@ export def "addon-linkers-values delete-by-linker_key-value_id" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($linker_key | is-empty) { error make --unspanned { msg: "path parameter 'linker_key' must be non-empty" } }
+  if ($value_id | is-empty) { error make --unspanned { msg: "path parameter 'value_id' must be non-empty" } }
   let full_url = (build-url $base ({linker_key: (encode-path-segment $linker_key), value_id: (encode-path-segment $value_id)} | format pattern "/addon/linkers/{linker_key}/values/{value_id}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
 }
 
 # Get a linker value
@@ -345,10 +374,12 @@ export def "addon-linkers-values get" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($linker_key | is-empty) { error make --unspanned { msg: "path parameter 'linker_key' must be non-empty" } }
+  if ($value_id | is-empty) { error make --unspanned { msg: "path parameter 'value_id' must be non-empty" } }
   let full_url = (build-url $base ({linker_key: (encode-path-segment $linker_key), value_id: (encode-path-segment $value_id)} | format pattern "/addon/linkers/{linker_key}/values/{value_id}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
 }
 
 # Get a webhook resource
@@ -370,7 +401,7 @@ export def "hook-events list" [
   let full_url = (build-url $base "/hook_events")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
 }
 
 # List subscribable webhook types
@@ -390,10 +421,11 @@ export def "hook-events get" [
 ]: nothing -> record<next: string, page: int, pagelen: int, previous: string, size: int, values: table<category: string, description: string, event: string, label: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($subject_type | is-empty) { error make --unspanned { msg: "path parameter 'subject_type' must be non-empty" } }
   let full_url = (build-url $base ({subject_type: (encode-path-segment $subject_type)} | format pattern "/hook_events/{subject_type}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
 }
 
 # List pull requests for a user
@@ -414,11 +446,12 @@ export def "pullrequests get" [
 ]: nothing -> record<next: string, page: int, pagelen: int, previous: string, size: int, values: table<type: string, author: record, close_source_branch: bool, closed_by: record, comment_count: int, created_on: string, destination: record, id: int, links: record, merge_commit: record, participants: list, reason: string, rendered: record, reviewers: list, source: record, state: string, summary: record, task_count: int, title: string, updated_on: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($selected_user | is-empty) { error make --unspanned { msg: "path parameter 'selected_user' must be non-empty" } }
   let qp = [(serialize-qp "state" $state "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({selected_user: (encode-path-segment $selected_user)} | format pattern "/pullrequests/{selected_user}") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"state": $state} | compact), body: null}
 }
 
 # List public repositories
@@ -445,7 +478,7 @@ export def "repositories get" [
   let full_url = (build-url $base "/repositories" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"after": $after, "role": $role, "q": $q, "sort": $qp_sort} | compact), body: null}
 }
 
 # List repositories in a workspace
@@ -468,11 +501,12 @@ export def "repositories get-by-workspace" [
 ]: nothing -> record<next: string, page: int, pagelen: int, previous: string, size: int, values: table<type: string, created_on: string, description: string, fork_policy: string, full_name: string, has_issues: bool, has_wiki: bool, is_private: bool, language: string, links: record, mainbranch: record, name: string, owner: record, parent: any, project: record, scm: string, size: int, updated_on: string, uuid: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($workspace | is-empty) { error make --unspanned { msg: "path parameter 'workspace' must be non-empty" } }
   let qp = [(serialize-qp "role" $role "scalar") (serialize-qp "q" $q "scalar") (serialize-qp "sort" $qp_sort "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({workspace: (encode-path-segment $workspace)} | format pattern "/repositories/{workspace}") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"role": $role, "q": $q, "sort": $qp_sort} | compact), body: null}
 }
 
 # Delete a repository
@@ -494,17 +528,19 @@ export def "repositories delete" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($workspace | is-empty) { error make --unspanned { msg: "path parameter 'workspace' must be non-empty" } }
+  if ($repo_slug | is-empty) { error make --unspanned { msg: "path parameter 'repo_slug' must be non-empty" } }
   let qp = [(serialize-qp "redirect_to" $redirect_to "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({workspace: (encode-path-segment $workspace), repo_slug: (encode-path-segment $repo_slug)} | format pattern "/repositories/{workspace}/{repo_slug}") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"redirect_to": $redirect_to} | compact), body: null}
 }
 
 # Get a repository
 #
 # GET /repositories/{workspace}/{repo_slug}
-export def "repositories get-by-workspace-repo_slug" [
+export def "repositories get-by-workspace-repo-slug" [
   workspace: string
   repo_slug: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -519,10 +555,12 @@ export def "repositories get-by-workspace-repo_slug" [
 ]: nothing -> record<type: string, created_on: string, description: string, fork_policy: string, full_name: string, has_issues: bool, has_wiki: bool, is_private: bool, language: string, links: record<avatar: record<href: string, name: string>, clone: list<record>, commits: record<href: string, name: string>, downloads: record<href: string, name: string>, forks: record<href: string, name: string>, hooks: record<href: string, name: string>, html: record<href: string, name: string>, pullrequests: record<href: string, name: string>, self: record<href: string, name: string>, watchers: record<href: string, name: string>>, mainbranch: record<links: record<commits: record, html: record, self: record>, name: string, target: record<participants: list, repository: any>, type: string, default_merge_strategy: string, merge_strategies: list<string>>, name: string, owner: record<type: string, created_on: string, display_name: string, links: record<avatar: record>, username: string, uuid: string>, parent: any, project: record<type: string, created_on: string, description: string, has_publicly_visible_repos: bool, is_private: bool, key: string, links: record<avatar: record, html: record>, name: string, owner: record<links: record>, updated_on: string, uuid: string>, scm: string, size: int, updated_on: string, uuid: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($workspace | is-empty) { error make --unspanned { msg: "path parameter 'workspace' must be non-empty" } }
+  if ($repo_slug | is-empty) { error make --unspanned { msg: "path parameter 'repo_slug' must be non-empty" } }
   let full_url = (build-url $base ({workspace: (encode-path-segment $workspace), repo_slug: (encode-path-segment $repo_slug)} | format pattern "/repositories/{workspace}/{repo_slug}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
 }
 
 # Create a repository
@@ -564,12 +602,14 @@ export def "repositories create" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($workspace | is-empty) { error make --unspanned { msg: "path parameter 'workspace' must be non-empty" } }
+  if ($repo_slug | is-empty) { error make --unspanned { msg: "path parameter 'repo_slug' must be non-empty" } }
   let full_url = (build-url $base ({workspace: (encode-path-segment $workspace), repo_slug: (encode-path-segment $repo_slug)} | format pattern "/repositories/{workspace}/{repo_slug}"))
   let req_body = {"type": $type, "created_on": $created_on, "description": $description, "fork_policy": $fork_policy, "full_name": $full_name, "has_issues": $has_issues, "has_wiki": $has_wiki, "is_private": $is_private, "language": $language, "links": $links, "mainbranch": $mainbranch, "name": $name, "owner": $owner, "parent": $parent, "project": $project, "scm": $scm, "size": $size, "updated_on": $updated_on, "uuid": $uuid} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: {}, body: $req_body}
 }
 
 # Update a repository
@@ -611,12 +651,14 @@ export def "repositories update" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($workspace | is-empty) { error make --unspanned { msg: "path parameter 'workspace' must be non-empty" } }
+  if ($repo_slug | is-empty) { error make --unspanned { msg: "path parameter 'repo_slug' must be non-empty" } }
   let full_url = (build-url $base ({workspace: (encode-path-segment $workspace), repo_slug: (encode-path-segment $repo_slug)} | format pattern "/repositories/{workspace}/{repo_slug}"))
   let req_body = {"type": $type, "created_on": $created_on, "description": $description, "fork_policy": $fork_policy, "full_name": $full_name, "has_issues": $has_issues, "has_wiki": $has_wiki, "is_private": $is_private, "language": $language, "links": $links, "mainbranch": $mainbranch, "name": $name, "owner": $owner, "parent": $parent, "project": $project, "scm": $scm, "size": $size, "updated_on": $updated_on, "uuid": $uuid} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: {}, body: $req_body}
 }
 
 # List branch restrictions
@@ -639,11 +681,13 @@ export def "repositories-branch-restrictions list" [
 ]: nothing -> record<next: string, page: int, pagelen: int, previous: string, size: int, values: table<type: string, groups: list, users: list>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($workspace | is-empty) { error make --unspanned { msg: "path parameter 'workspace' must be non-empty" } }
+  if ($repo_slug | is-empty) { error make --unspanned { msg: "path parameter 'repo_slug' must be non-empty" } }
   let qp = [(serialize-qp "kind" $kind "scalar") (serialize-qp "pattern" $pattern "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({workspace: (encode-path-segment $workspace), repo_slug: (encode-path-segment $repo_slug)} | format pattern "/repositories/{workspace}/{repo_slug}/branch-restrictions") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"kind": $kind, "pattern": $pattern} | compact), body: null}
 }
 
 # Create a branch restriction rule
@@ -670,12 +714,14 @@ export def "repositories-branch-restrictions create" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($workspace | is-empty) { error make --unspanned { msg: "path parameter 'workspace' must be non-empty" } }
+  if ($repo_slug | is-empty) { error make --unspanned { msg: "path parameter 'repo_slug' must be non-empty" } }
   let full_url = (build-url $base ({workspace: (encode-path-segment $workspace), repo_slug: (encode-path-segment $repo_slug)} | format pattern "/repositories/{workspace}/{repo_slug}/branch-restrictions"))
   let req_body = {"type": $type, "groups": $groups, "users": $users} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: {}, body: $req_body}
 }
 
 # Delete a branch restriction rule
@@ -697,10 +743,13 @@ export def "repositories-branch-restrictions delete" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($workspace | is-empty) { error make --unspanned { msg: "path parameter 'workspace' must be non-empty" } }
+  if ($repo_slug | is-empty) { error make --unspanned { msg: "path parameter 'repo_slug' must be non-empty" } }
+  if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
   let full_url = (build-url $base ({workspace: (encode-path-segment $workspace), repo_slug: (encode-path-segment $repo_slug), id: (encode-path-segment $id)} | format pattern "/repositories/{workspace}/{repo_slug}/branch-restrictions/{id}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
 }
 
 # Get a branch restriction rule
@@ -722,10 +771,13 @@ export def "repositories-branch-restrictions get" [
 ]: nothing -> record<type: string, groups: table<type: string, full_slug: string, links: record, name: string, owner: record, slug: string, workspace: record>, users: table<type: string, created_on: string, display_name: string, links: record, username: string, uuid: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($workspace | is-empty) { error make --unspanned { msg: "path parameter 'workspace' must be non-empty" } }
+  if ($repo_slug | is-empty) { error make --unspanned { msg: "path parameter 'repo_slug' must be non-empty" } }
+  if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
   let full_url = (build-url $base ({workspace: (encode-path-segment $workspace), repo_slug: (encode-path-segment $repo_slug), id: (encode-path-segment $id)} | format pattern "/repositories/{workspace}/{repo_slug}/branch-restrictions/{id}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
 }
 
 # Update a branch restriction rule
@@ -753,12 +805,15 @@ export def "repositories-branch-restrictions update" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($workspace | is-empty) { error make --unspanned { msg: "path parameter 'workspace' must be non-empty" } }
+  if ($repo_slug | is-empty) { error make --unspanned { msg: "path parameter 'repo_slug' must be non-empty" } }
+  if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
   let full_url = (build-url $base ({workspace: (encode-path-segment $workspace), repo_slug: (encode-path-segment $repo_slug), id: (encode-path-segment $id)} | format pattern "/repositories/{workspace}/{repo_slug}/branch-restrictions/{id}"))
   let req_body = {"type": $type, "groups": $groups, "users": $users} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: {}, body: $req_body}
 }
 
 # Get the branching model for a repository
@@ -779,10 +834,12 @@ export def "repositories-branching-model get" [
 ]: nothing -> record<type: string, branch_types: table<kind: string, prefix: string>, development: record<branch: record<links: record, name: string, target: record, type: string, default_merge_strategy: string, merge_strategies: list>, name: string, use_mainbranch: bool>, production: record<branch: record<links: record, name: string, target: record, type: string, default_merge_strategy: string, merge_strategies: list>, name: string, use_mainbranch: bool>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($workspace | is-empty) { error make --unspanned { msg: "path parameter 'workspace' must be non-empty" } }
+  if ($repo_slug | is-empty) { error make --unspanned { msg: "path parameter 'repo_slug' must be non-empty" } }
   let full_url = (build-url $base ({workspace: (encode-path-segment $workspace), repo_slug: (encode-path-segment $repo_slug)} | format pattern "/repositories/{workspace}/{repo_slug}/branching-model"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
 }
 
 # Get the branching model config for a repository
@@ -803,10 +860,12 @@ export def "repositories-branching-model-settings get" [
 ]: nothing -> record<type: string, branch_types: table<enabled: bool, kind: string, prefix: string>, development: record<is_valid: bool, name: string, use_mainbranch: bool>, links: record<self: record<href: string, name: string>>, production: record<enabled: bool, is_valid: bool, name: string, use_mainbranch: bool>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($workspace | is-empty) { error make --unspanned { msg: "path parameter 'workspace' must be non-empty" } }
+  if ($repo_slug | is-empty) { error make --unspanned { msg: "path parameter 'repo_slug' must be non-empty" } }
   let full_url = (build-url $base ({workspace: (encode-path-segment $workspace), repo_slug: (encode-path-segment $repo_slug)} | format pattern "/repositories/{workspace}/{repo_slug}/branching-model/settings"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
 }
 
 # Update the branching model config for a repository
@@ -827,10 +886,12 @@ export def "repositories-branching-model-settings update" [
 ]: nothing -> record<type: string, branch_types: table<enabled: bool, kind: string, prefix: string>, development: record<is_valid: bool, name: string, use_mainbranch: bool>, links: record<self: record<href: string, name: string>>, production: record<enabled: bool, is_valid: bool, name: string, use_mainbranch: bool>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($workspace | is-empty) { error make --unspanned { msg: "path parameter 'workspace' must be non-empty" } }
+  if ($repo_slug | is-empty) { error make --unspanned { msg: "path parameter 'repo_slug' must be non-empty" } }
   let full_url = (build-url $base ({workspace: (encode-path-segment $workspace), repo_slug: (encode-path-segment $repo_slug)} | format pattern "/repositories/{workspace}/{repo_slug}/branching-model/settings"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
 }
 
 # Get a commit
@@ -852,10 +913,13 @@ export def "repositories-commit get" [
 ]: nothing -> record<participants: table<type: string, approved: bool, participated_on: string, role: string, state: string, user: record>, repository: record<type: string, created_on: string, description: string, fork_policy: string, full_name: string, has_issues: bool, has_wiki: bool, is_private: bool, language: string, links: record<avatar: record, clone: list, commits: record, downloads: record, forks: record, hooks: record, html: record, pullrequests: record, self: record, watchers: record>, mainbranch: record<links: record, name: string, target: any, type: string, default_merge_strategy: string, merge_strategies: list>, name: string, owner: record<type: string, created_on: string, display_name: string, links: record, username: string, uuid: string>, parent: any, project: record<type: string, created_on: string, description: string, has_publicly_visible_repos: bool, is_private: bool, key: string, links: record, name: string, owner: record, updated_on: string, uuid: string>, scm: string, size: int, updated_on: string, uuid: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($workspace | is-empty) { error make --unspanned { msg: "path parameter 'workspace' must be non-empty" } }
+  if ($repo_slug | is-empty) { error make --unspanned { msg: "path parameter 'repo_slug' must be non-empty" } }
+  if ($commit | is-empty) { error make --unspanned { msg: "path parameter 'commit' must be non-empty" } }
   let full_url = (build-url $base ({workspace: (encode-path-segment $workspace), repo_slug: (encode-path-segment $repo_slug), commit: (encode-path-segment $commit)} | format pattern "/repositories/{workspace}/{repo_slug}/commit/{commit}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
 }
 
 # Unapprove a commit
@@ -877,10 +941,13 @@ export def "repositories-commit-approve delete" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($workspace | is-empty) { error make --unspanned { msg: "path parameter 'workspace' must be non-empty" } }
+  if ($repo_slug | is-empty) { error make --unspanned { msg: "path parameter 'repo_slug' must be non-empty" } }
+  if ($commit | is-empty) { error make --unspanned { msg: "path parameter 'commit' must be non-empty" } }
   let full_url = (build-url $base ({workspace: (encode-path-segment $workspace), repo_slug: (encode-path-segment $repo_slug), commit: (encode-path-segment $commit)} | format pattern "/repositories/{workspace}/{repo_slug}/commit/{commit}/approve"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
 }
 
 # Approve a commit
@@ -902,10 +969,13 @@ export def "repositories-commit-approve create" [
 ]: nothing -> record<type: string, approved: bool, participated_on: string, role: string, state: string, user: record<type: string, created_on: string, display_name: string, links: record<avatar: record>, username: string, uuid: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($workspace | is-empty) { error make --unspanned { msg: "path parameter 'workspace' must be non-empty" } }
+  if ($repo_slug | is-empty) { error make --unspanned { msg: "path parameter 'repo_slug' must be non-empty" } }
+  if ($commit | is-empty) { error make --unspanned { msg: "path parameter 'commit' must be non-empty" } }
   let full_url = (build-url $base ({workspace: (encode-path-segment $workspace), repo_slug: (encode-path-segment $repo_slug), commit: (encode-path-segment $commit)} | format pattern "/repositories/{workspace}/{repo_slug}/commit/{commit}/approve"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
 }
 
 # List a commit's comments
@@ -929,11 +999,14 @@ export def "repositories-commit-comments list" [
 ]: nothing -> record<next: string, page: int, pagelen: int, previous: string, size: int, values: table<commit: record>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($workspace | is-empty) { error make --unspanned { msg: "path parameter 'workspace' must be non-empty" } }
+  if ($repo_slug | is-empty) { error make --unspanned { msg: "path parameter 'repo_slug' must be non-empty" } }
+  if ($commit | is-empty) { error make --unspanned { msg: "path parameter 'commit' must be non-empty" } }
   let qp = [(serialize-qp "q" $q "scalar") (serialize-qp "sort" $qp_sort "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({workspace: (encode-path-segment $workspace), repo_slug: (encode-path-segment $repo_slug), commit: (encode-path-segment $commit)} | format pattern "/repositories/{workspace}/{repo_slug}/commit/{commit}/comments") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"q": $q, "sort": $qp_sort} | compact), body: null}
 }
 
 # Create comment for a commit
@@ -957,12 +1030,15 @@ export def "repositories-commit-comments create" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($workspace | is-empty) { error make --unspanned { msg: "path parameter 'workspace' must be non-empty" } }
+  if ($repo_slug | is-empty) { error make --unspanned { msg: "path parameter 'repo_slug' must be non-empty" } }
+  if ($commit | is-empty) { error make --unspanned { msg: "path parameter 'commit' must be non-empty" } }
   let full_url = (build-url $base ({workspace: (encode-path-segment $workspace), repo_slug: (encode-path-segment $repo_slug), commit: (encode-path-segment $commit)} | format pattern "/repositories/{workspace}/{repo_slug}/commit/{commit}/comments"))
   let req_body = {"commit": $body_commit} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: {}, body: $req_body}
 }
 
 # Delete a commit comment
@@ -985,10 +1061,14 @@ export def "repositories-commit-comments delete" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($workspace | is-empty) { error make --unspanned { msg: "path parameter 'workspace' must be non-empty" } }
+  if ($repo_slug | is-empty) { error make --unspanned { msg: "path parameter 'repo_slug' must be non-empty" } }
+  if ($commit | is-empty) { error make --unspanned { msg: "path parameter 'commit' must be non-empty" } }
+  if ($comment_id | is-empty) { error make --unspanned { msg: "path parameter 'comment_id' must be non-empty" } }
   let full_url = (build-url $base ({workspace: (encode-path-segment $workspace), repo_slug: (encode-path-segment $repo_slug), commit: (encode-path-segment $commit), comment_id: (encode-path-segment $comment_id)} | format pattern "/repositories/{workspace}/{repo_slug}/commit/{commit}/comments/{comment_id}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
 }
 
 # Get a commit comment
@@ -1011,10 +1091,14 @@ export def "repositories-commit-comments get" [
 ]: nothing -> record<commit: record<participants: list<record>, repository: record<type: string, created_on: string, description: string, fork_policy: string, full_name: string, has_issues: bool, has_wiki: bool, is_private: bool, language: string, links: record, mainbranch: record, name: string, owner: record, parent: any, project: record, scm: string, size: int, updated_on: string, uuid: string>>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($workspace | is-empty) { error make --unspanned { msg: "path parameter 'workspace' must be non-empty" } }
+  if ($repo_slug | is-empty) { error make --unspanned { msg: "path parameter 'repo_slug' must be non-empty" } }
+  if ($commit | is-empty) { error make --unspanned { msg: "path parameter 'commit' must be non-empty" } }
+  if ($comment_id | is-empty) { error make --unspanned { msg: "path parameter 'comment_id' must be non-empty" } }
   let full_url = (build-url $base ({workspace: (encode-path-segment $workspace), repo_slug: (encode-path-segment $repo_slug), commit: (encode-path-segment $commit), comment_id: (encode-path-segment $comment_id)} | format pattern "/repositories/{workspace}/{repo_slug}/commit/{commit}/comments/{comment_id}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
 }
 
 # Update a commit comment
@@ -1039,12 +1123,16 @@ export def "repositories-commit-comments update" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($workspace | is-empty) { error make --unspanned { msg: "path parameter 'workspace' must be non-empty" } }
+  if ($repo_slug | is-empty) { error make --unspanned { msg: "path parameter 'repo_slug' must be non-empty" } }
+  if ($commit | is-empty) { error make --unspanned { msg: "path parameter 'commit' must be non-empty" } }
+  if ($comment_id | is-empty) { error make --unspanned { msg: "path parameter 'comment_id' must be non-empty" } }
   let full_url = (build-url $base ({workspace: (encode-path-segment $workspace), repo_slug: (encode-path-segment $repo_slug), commit: (encode-path-segment $commit), comment_id: (encode-path-segment $comment_id)} | format pattern "/repositories/{workspace}/{repo_slug}/commit/{commit}/comments/{comment_id}"))
   let req_body = {"commit": $body_commit} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: {}, body: $req_body}
 }
 
 # Delete a commit application property
@@ -1069,10 +1157,15 @@ export def "repositories-commit-properties delete-hosted-value" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($workspace | is-empty) { error make --unspanned { msg: "path parameter 'workspace' must be non-empty" } }
+  if ($repo_slug | is-empty) { error make --unspanned { msg: "path parameter 'repo_slug' must be non-empty" } }
+  if ($commit | is-empty) { error make --unspanned { msg: "path parameter 'commit' must be non-empty" } }
+  if ($app_key | is-empty) { error make --unspanned { msg: "path parameter 'app_key' must be non-empty" } }
+  if ($property_name | is-empty) { error make --unspanned { msg: "path parameter 'property_name' must be non-empty" } }
   let full_url = (build-url $base ({workspace: (encode-path-segment $workspace), repo_slug: (encode-path-segment $repo_slug), commit: (encode-path-segment $commit), app_key: (encode-path-segment $app_key), property_name: (encode-path-segment $property_name)} | format pattern "/repositories/{workspace}/{repo_slug}/commit/{commit}/properties/{app_key}/{property_name}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
 }
 
 # Get a commit application property
@@ -1097,10 +1190,15 @@ export def "repositories-commit-properties get-hosted-value" [
 ]: nothing -> record<_attributes: list<string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($workspace | is-empty) { error make --unspanned { msg: "path parameter 'workspace' must be non-empty" } }
+  if ($repo_slug | is-empty) { error make --unspanned { msg: "path parameter 'repo_slug' must be non-empty" } }
+  if ($commit | is-empty) { error make --unspanned { msg: "path parameter 'commit' must be non-empty" } }
+  if ($app_key | is-empty) { error make --unspanned { msg: "path parameter 'app_key' must be non-empty" } }
+  if ($property_name | is-empty) { error make --unspanned { msg: "path parameter 'property_name' must be non-empty" } }
   let full_url = (build-url $base ({workspace: (encode-path-segment $workspace), repo_slug: (encode-path-segment $repo_slug), commit: (encode-path-segment $commit), app_key: (encode-path-segment $app_key), property_name: (encode-path-segment $property_name)} | format pattern "/repositories/{workspace}/{repo_slug}/commit/{commit}/properties/{app_key}/{property_name}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
 }
 
 # Update a commit application property
@@ -1127,12 +1225,17 @@ export def "repositories-commit-properties update-hosted-value" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($workspace | is-empty) { error make --unspanned { msg: "path parameter 'workspace' must be non-empty" } }
+  if ($repo_slug | is-empty) { error make --unspanned { msg: "path parameter 'repo_slug' must be non-empty" } }
+  if ($commit | is-empty) { error make --unspanned { msg: "path parameter 'commit' must be non-empty" } }
+  if ($app_key | is-empty) { error make --unspanned { msg: "path parameter 'app_key' must be non-empty" } }
+  if ($property_name | is-empty) { error make --unspanned { msg: "path parameter 'property_name' must be non-empty" } }
   let full_url = (build-url $base ({workspace: (encode-path-segment $workspace), repo_slug: (encode-path-segment $repo_slug), commit: (encode-path-segment $commit), app_key: (encode-path-segment $app_key), property_name: (encode-path-segment $property_name)} | format pattern "/repositories/{workspace}/{repo_slug}/commit/{commit}/properties/{app_key}/{property_name}"))
   let req_body = {"_attributes": $attributes} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: {}, body: $req_body}
 }
 
 # List pull requests that contain a commit
@@ -1157,11 +1260,14 @@ export def "repositories-commit-pullrequests get" [
 ]: nothing -> record<next: string, page: int, pagelen: int, previous: string, size: int, values: table<type: string, author: record, close_source_branch: bool, closed_by: record, comment_count: int, created_on: string, destination: record, id: int, links: record, merge_commit: record, participants: list, reason: string, rendered: record, reviewers: list, source: record, state: string, summary: record, task_count: int, title: string, updated_on: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($workspace | is-empty) { error make --unspanned { msg: "path parameter 'workspace' must be non-empty" } }
+  if ($repo_slug | is-empty) { error make --unspanned { msg: "path parameter 'repo_slug' must be non-empty" } }
+  if ($commit | is-empty) { error make --unspanned { msg: "path parameter 'commit' must be non-empty" } }
   let qp = [(serialize-qp "page" $page "scalar") (serialize-qp "pagelen" $pagelen "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({workspace: (encode-path-segment $workspace), repo_slug: (encode-path-segment $repo_slug), commit: (encode-path-segment $commit)} | format pattern "/repositories/{workspace}/{repo_slug}/commit/{commit}/pullrequests") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"page": $page, "pagelen": $pagelen} | compact), body: null}
 }
 
 # List reports
@@ -1184,10 +1290,13 @@ export def "repositories-commit-reports list" [
 ]: nothing -> record<next: string, page: int, pagelen: int, previous: string, size: int, values: table<type: string, created_on: string, data: list, details: string, external_id: string, link: string, logo_url: string, remote_link_enabled: bool, report_type: string, reporter: string, result: string, title: string, updated_on: string, uuid: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($workspace | is-empty) { error make --unspanned { msg: "path parameter 'workspace' must be non-empty" } }
+  if ($repo_slug | is-empty) { error make --unspanned { msg: "path parameter 'repo_slug' must be non-empty" } }
+  if ($commit | is-empty) { error make --unspanned { msg: "path parameter 'commit' must be non-empty" } }
   let full_url = (build-url $base ({workspace: (encode-path-segment $workspace), repo_slug: (encode-path-segment $repo_slug), commit: (encode-path-segment $commit)} | format pattern "/repositories/{workspace}/{repo_slug}/commit/{commit}/reports"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
 }
 
 # Delete a report
@@ -1211,10 +1320,14 @@ export def "repositories-commit-reports delete" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($workspace | is-empty) { error make --unspanned { msg: "path parameter 'workspace' must be non-empty" } }
+  if ($repo_slug | is-empty) { error make --unspanned { msg: "path parameter 'repo_slug' must be non-empty" } }
+  if ($commit | is-empty) { error make --unspanned { msg: "path parameter 'commit' must be non-empty" } }
+  if ($report_id | is-empty) { error make --unspanned { msg: "path parameter 'reportId' must be non-empty" } }
   let full_url = (build-url $base ({workspace: (encode-path-segment $workspace), repo_slug: (encode-path-segment $repo_slug), commit: (encode-path-segment $commit), report_id: (encode-path-segment $report_id)} | format pattern "/repositories/{workspace}/{repo_slug}/commit/{commit}/reports/{report_id}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
 }
 
 # Get a report
@@ -1238,10 +1351,14 @@ export def "repositories-commit-reports get" [
 ]: nothing -> record<type: string, created_on: string, data: table<title: string, type: string, value: record>, details: string, external_id: string, link: string, logo_url: string, remote_link_enabled: bool, report_type: string, reporter: string, result: string, title: string, updated_on: string, uuid: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($workspace | is-empty) { error make --unspanned { msg: "path parameter 'workspace' must be non-empty" } }
+  if ($repo_slug | is-empty) { error make --unspanned { msg: "path parameter 'repo_slug' must be non-empty" } }
+  if ($commit | is-empty) { error make --unspanned { msg: "path parameter 'commit' must be non-empty" } }
+  if ($report_id | is-empty) { error make --unspanned { msg: "path parameter 'reportId' must be non-empty" } }
   let full_url = (build-url $base ({workspace: (encode-path-segment $workspace), repo_slug: (encode-path-segment $repo_slug), commit: (encode-path-segment $commit), report_id: (encode-path-segment $report_id)} | format pattern "/repositories/{workspace}/{repo_slug}/commit/{commit}/reports/{report_id}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
 }
 
 # Create or update a report
@@ -1281,12 +1398,16 @@ export def "repositories-commit-reports create-or-update" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($workspace | is-empty) { error make --unspanned { msg: "path parameter 'workspace' must be non-empty" } }
+  if ($repo_slug | is-empty) { error make --unspanned { msg: "path parameter 'repo_slug' must be non-empty" } }
+  if ($commit | is-empty) { error make --unspanned { msg: "path parameter 'commit' must be non-empty" } }
+  if ($report_id | is-empty) { error make --unspanned { msg: "path parameter 'reportId' must be non-empty" } }
   let full_url = (build-url $base ({workspace: (encode-path-segment $workspace), repo_slug: (encode-path-segment $repo_slug), commit: (encode-path-segment $commit), report_id: (encode-path-segment $report_id)} | format pattern "/repositories/{workspace}/{repo_slug}/commit/{commit}/reports/{report_id}"))
   let req_body = {"type": $type, "created_on": $created_on, "data": $data, "details": $details, "external_id": $external_id, "link": $link, "logo_url": $logo_url, "remote_link_enabled": $remote_link_enabled, "report_type": $report_type, "reporter": $reporter, "result": $result, "title": $title, "updated_on": $updated_on, "uuid": $uuid} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: {}, body: $req_body}
 }
 
 # List annotations
@@ -1310,10 +1431,14 @@ export def "repositories-commit-reports-annotations list" [
 ]: nothing -> record<next: string, page: int, pagelen: int, previous: string, size: int, values: table<type: string, annotation_type: string, created_on: string, details: string, external_id: string, line: int, link: string, path: string, result: string, severity: string, summary: string, updated_on: string, uuid: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($workspace | is-empty) { error make --unspanned { msg: "path parameter 'workspace' must be non-empty" } }
+  if ($repo_slug | is-empty) { error make --unspanned { msg: "path parameter 'repo_slug' must be non-empty" } }
+  if ($commit | is-empty) { error make --unspanned { msg: "path parameter 'commit' must be non-empty" } }
+  if ($report_id | is-empty) { error make --unspanned { msg: "path parameter 'reportId' must be non-empty" } }
   let full_url = (build-url $base ({workspace: (encode-path-segment $workspace), repo_slug: (encode-path-segment $repo_slug), commit: (encode-path-segment $commit), report_id: (encode-path-segment $report_id)} | format pattern "/repositories/{workspace}/{repo_slug}/commit/{commit}/reports/{report_id}/annotations"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
 }
 
 # Bulk create or update annotations
@@ -1339,12 +1464,16 @@ export def "repositories-commit-reports-annotations create-bulk-or-update" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($workspace | is-empty) { error make --unspanned { msg: "path parameter 'workspace' must be non-empty" } }
+  if ($repo_slug | is-empty) { error make --unspanned { msg: "path parameter 'repo_slug' must be non-empty" } }
+  if ($commit | is-empty) { error make --unspanned { msg: "path parameter 'commit' must be non-empty" } }
+  if ($report_id | is-empty) { error make --unspanned { msg: "path parameter 'reportId' must be non-empty" } }
   let full_url = (build-url $base ({workspace: (encode-path-segment $workspace), repo_slug: (encode-path-segment $repo_slug), commit: (encode-path-segment $commit), report_id: (encode-path-segment $report_id)} | format pattern "/repositories/{workspace}/{repo_slug}/commit/{commit}/reports/{report_id}/annotations"))
   let req_body = $body
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else if (($input | is-not-empty) and ($req_body | is-empty)) { $input } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: {}, body: $req_body}
 }
 
 # Delete an annotation
@@ -1369,10 +1498,15 @@ export def "repositories-commit-reports-annotations delete" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($workspace | is-empty) { error make --unspanned { msg: "path parameter 'workspace' must be non-empty" } }
+  if ($repo_slug | is-empty) { error make --unspanned { msg: "path parameter 'repo_slug' must be non-empty" } }
+  if ($commit | is-empty) { error make --unspanned { msg: "path parameter 'commit' must be non-empty" } }
+  if ($report_id | is-empty) { error make --unspanned { msg: "path parameter 'reportId' must be non-empty" } }
+  if ($annotation_id | is-empty) { error make --unspanned { msg: "path parameter 'annotationId' must be non-empty" } }
   let full_url = (build-url $base ({workspace: (encode-path-segment $workspace), repo_slug: (encode-path-segment $repo_slug), commit: (encode-path-segment $commit), report_id: (encode-path-segment $report_id), annotation_id: (encode-path-segment $annotation_id)} | format pattern "/repositories/{workspace}/{repo_slug}/commit/{commit}/reports/{report_id}/annotations/{annotation_id}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
 }
 
 # Get an annotation
@@ -1397,10 +1531,15 @@ export def "repositories-commit-reports-annotations get" [
 ]: nothing -> record<type: string, annotation_type: string, created_on: string, details: string, external_id: string, line: int, link: string, path: string, result: string, severity: string, summary: string, updated_on: string, uuid: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($workspace | is-empty) { error make --unspanned { msg: "path parameter 'workspace' must be non-empty" } }
+  if ($repo_slug | is-empty) { error make --unspanned { msg: "path parameter 'repo_slug' must be non-empty" } }
+  if ($commit | is-empty) { error make --unspanned { msg: "path parameter 'commit' must be non-empty" } }
+  if ($report_id | is-empty) { error make --unspanned { msg: "path parameter 'reportId' must be non-empty" } }
+  if ($annotation_id | is-empty) { error make --unspanned { msg: "path parameter 'annotationId' must be non-empty" } }
   let full_url = (build-url $base ({workspace: (encode-path-segment $workspace), repo_slug: (encode-path-segment $repo_slug), commit: (encode-path-segment $commit), report_id: (encode-path-segment $report_id), annotation_id: (encode-path-segment $annotation_id)} | format pattern "/repositories/{workspace}/{repo_slug}/commit/{commit}/reports/{report_id}/annotations/{annotation_id}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
 }
 
 # Create or update an annotation
@@ -1439,12 +1578,17 @@ export def "repositories-commit-reports-annotations create-or-update" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($workspace | is-empty) { error make --unspanned { msg: "path parameter 'workspace' must be non-empty" } }
+  if ($repo_slug | is-empty) { error make --unspanned { msg: "path parameter 'repo_slug' must be non-empty" } }
+  if ($commit | is-empty) { error make --unspanned { msg: "path parameter 'commit' must be non-empty" } }
+  if ($report_id | is-empty) { error make --unspanned { msg: "path parameter 'reportId' must be non-empty" } }
+  if ($annotation_id | is-empty) { error make --unspanned { msg: "path parameter 'annotationId' must be non-empty" } }
   let full_url = (build-url $base ({workspace: (encode-path-segment $workspace), repo_slug: (encode-path-segment $repo_slug), commit: (encode-path-segment $commit), report_id: (encode-path-segment $report_id), annotation_id: (encode-path-segment $annotation_id)} | format pattern "/repositories/{workspace}/{repo_slug}/commit/{commit}/reports/{report_id}/annotations/{annotation_id}"))
   let req_body = {"type": $type, "annotation_type": $annotation_type, "created_on": $created_on, "details": $details, "external_id": $external_id, "line": $line, "link": $link, "path": $path, "result": $result, "severity": $severity, "summary": $summary, "updated_on": $updated_on, "uuid": $uuid} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: {}, body: $req_body}
 }
 
 # List commit statuses for a commit
@@ -1468,11 +1612,14 @@ export def "repositories-commit-statuses get" [
 ]: nothing -> record<next: string, page: int, pagelen: int, previous: string, size: int, values: table<type: string, created_on: string, description: string, key: string, links: record, name: string, refname: string, state: string, updated_on: string, url: string, uuid: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($workspace | is-empty) { error make --unspanned { msg: "path parameter 'workspace' must be non-empty" } }
+  if ($repo_slug | is-empty) { error make --unspanned { msg: "path parameter 'repo_slug' must be non-empty" } }
+  if ($commit | is-empty) { error make --unspanned { msg: "path parameter 'commit' must be non-empty" } }
   let qp = [(serialize-qp "q" $q "scalar") (serialize-qp "sort" $qp_sort "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({workspace: (encode-path-segment $workspace), repo_slug: (encode-path-segment $repo_slug), commit: (encode-path-segment $commit)} | format pattern "/repositories/{workspace}/{repo_slug}/commit/{commit}/statuses") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"q": $q, "sort": $qp_sort} | compact), body: null}
 }
 
 # Create a build status for a commit
@@ -1507,12 +1654,15 @@ export def "repositories-commit-statuses-build create" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($workspace | is-empty) { error make --unspanned { msg: "path parameter 'workspace' must be non-empty" } }
+  if ($repo_slug | is-empty) { error make --unspanned { msg: "path parameter 'repo_slug' must be non-empty" } }
+  if ($commit | is-empty) { error make --unspanned { msg: "path parameter 'commit' must be non-empty" } }
   let full_url = (build-url $base ({workspace: (encode-path-segment $workspace), repo_slug: (encode-path-segment $repo_slug), commit: (encode-path-segment $commit)} | format pattern "/repositories/{workspace}/{repo_slug}/commit/{commit}/statuses/build"))
   let req_body = {"type": $type, "created_on": $created_on, "description": $description, "key": $key, "links": $links, "name": $name, "refname": $refname, "state": $state, "updated_on": $updated_on, "url": $url, "uuid": $uuid} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: {}, body: $req_body}
 }
 
 # Get a build status for a commit
@@ -1535,10 +1685,14 @@ export def "repositories-commit-statuses-build get" [
 ]: nothing -> record<type: string, created_on: string, description: string, key: string, links: record<commit: record<href: string, name: string>, self: record<href: string, name: string>>, name: string, refname: string, state: string, updated_on: string, url: string, uuid: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($workspace | is-empty) { error make --unspanned { msg: "path parameter 'workspace' must be non-empty" } }
+  if ($repo_slug | is-empty) { error make --unspanned { msg: "path parameter 'repo_slug' must be non-empty" } }
+  if ($commit | is-empty) { error make --unspanned { msg: "path parameter 'commit' must be non-empty" } }
+  if ($key | is-empty) { error make --unspanned { msg: "path parameter 'key' must be non-empty" } }
   let full_url = (build-url $base ({workspace: (encode-path-segment $workspace), repo_slug: (encode-path-segment $repo_slug), commit: (encode-path-segment $commit), key: (encode-path-segment $key)} | format pattern "/repositories/{workspace}/{repo_slug}/commit/{commit}/statuses/build/{key}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
 }
 
 # Update a build status for a commit
@@ -1574,12 +1728,16 @@ export def "repositories-commit-statuses-build update" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($workspace | is-empty) { error make --unspanned { msg: "path parameter 'workspace' must be non-empty" } }
+  if ($repo_slug | is-empty) { error make --unspanned { msg: "path parameter 'repo_slug' must be non-empty" } }
+  if ($commit | is-empty) { error make --unspanned { msg: "path parameter 'commit' must be non-empty" } }
+  if ($key | is-empty) { error make --unspanned { msg: "path parameter 'key' must be non-empty" } }
   let full_url = (build-url $base ({workspace: (encode-path-segment $workspace), repo_slug: (encode-path-segment $repo_slug), commit: (encode-path-segment $commit), key: (encode-path-segment $key)} | format pattern "/repositories/{workspace}/{repo_slug}/commit/{commit}/statuses/build/{key}"))
   let req_body = {"type": $type, "created_on": $created_on, "description": $description, "key": $body_key, "links": $links, "name": $name, "refname": $refname, "state": $state, "updated_on": $updated_on, "url": $url, "uuid": $uuid} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: {}, body: $req_body}
 }
 
 # List commits
@@ -1600,16 +1758,18 @@ export def "repositories-commits list" [
 ]: nothing -> record<next: string, page: int, pagelen: int, previous: string, size: int, values: table<type: string, author: record, date: string, hash: string, message: string, parents: list, summary: record>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($workspace | is-empty) { error make --unspanned { msg: "path parameter 'workspace' must be non-empty" } }
+  if ($repo_slug | is-empty) { error make --unspanned { msg: "path parameter 'repo_slug' must be non-empty" } }
   let full_url = (build-url $base ({workspace: (encode-path-segment $workspace), repo_slug: (encode-path-segment $repo_slug)} | format pattern "/repositories/{workspace}/{repo_slug}/commits"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
 }
 
 # List commits with include/exclude
 #
 # POST /repositories/{workspace}/{repo_slug}/commits
-export def "repositories-commits create-by-workspace-repo_slug" [
+export def "repositories-commits create-by-workspace-repo-slug" [
   workspace: string
   repo_slug: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -1624,10 +1784,12 @@ export def "repositories-commits create-by-workspace-repo_slug" [
 ]: nothing -> record<next: string, page: int, pagelen: int, previous: string, size: int, values: table<type: string, author: record, date: string, hash: string, message: string, parents: list, summary: record>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($workspace | is-empty) { error make --unspanned { msg: "path parameter 'workspace' must be non-empty" } }
+  if ($repo_slug | is-empty) { error make --unspanned { msg: "path parameter 'repo_slug' must be non-empty" } }
   let full_url = (build-url $base ({workspace: (encode-path-segment $workspace), repo_slug: (encode-path-segment $repo_slug)} | format pattern "/repositories/{workspace}/{repo_slug}/commits"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
 }
 
 # List commits for revision
@@ -1649,16 +1811,19 @@ export def "repositories-commits get" [
 ]: nothing -> record<next: string, page: int, pagelen: int, previous: string, size: int, values: table<type: string, author: record, date: string, hash: string, message: string, parents: list, summary: record>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($workspace | is-empty) { error make --unspanned { msg: "path parameter 'workspace' must be non-empty" } }
+  if ($repo_slug | is-empty) { error make --unspanned { msg: "path parameter 'repo_slug' must be non-empty" } }
+  if ($revision | is-empty) { error make --unspanned { msg: "path parameter 'revision' must be non-empty" } }
   let full_url = (build-url $base ({workspace: (encode-path-segment $workspace), repo_slug: (encode-path-segment $repo_slug), revision: (encode-path-segment $revision)} | format pattern "/repositories/{workspace}/{repo_slug}/commits/{revision}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
 }
 
 # List commits for revision using include/exclude
 #
 # POST /repositories/{workspace}/{repo_slug}/commits/{revision}
-export def "repositories-commits create-by-workspace-repo_slug-revision" [
+export def "repositories-commits create-by-workspace-repo-slug-revision" [
   workspace: string
   repo_slug: string
   revision: string
@@ -1674,10 +1839,13 @@ export def "repositories-commits create-by-workspace-repo_slug-revision" [
 ]: nothing -> record<next: string, page: int, pagelen: int, previous: string, size: int, values: table<type: string, author: record, date: string, hash: string, message: string, parents: list, summary: record>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($workspace | is-empty) { error make --unspanned { msg: "path parameter 'workspace' must be non-empty" } }
+  if ($repo_slug | is-empty) { error make --unspanned { msg: "path parameter 'repo_slug' must be non-empty" } }
+  if ($revision | is-empty) { error make --unspanned { msg: "path parameter 'revision' must be non-empty" } }
   let full_url = (build-url $base ({workspace: (encode-path-segment $workspace), repo_slug: (encode-path-segment $repo_slug), revision: (encode-path-segment $revision)} | format pattern "/repositories/{workspace}/{repo_slug}/commits/{revision}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
 }
 
 # List components
@@ -1698,10 +1866,12 @@ export def "repositories-components list" [
 ]: nothing -> record<next: string, page: int, pagelen: int, previous: string, size: int, values: table<type: string, id: int, links: record, name: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($workspace | is-empty) { error make --unspanned { msg: "path parameter 'workspace' must be non-empty" } }
+  if ($repo_slug | is-empty) { error make --unspanned { msg: "path parameter 'repo_slug' must be non-empty" } }
   let full_url = (build-url $base ({workspace: (encode-path-segment $workspace), repo_slug: (encode-path-segment $repo_slug)} | format pattern "/repositories/{workspace}/{repo_slug}/components"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
 }
 
 # Get a component for issues
@@ -1723,10 +1893,13 @@ export def "repositories-components get" [
 ]: nothing -> record<type: string, id: int, links: record<self: record<href: string, name: string>>, name: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($workspace | is-empty) { error make --unspanned { msg: "path parameter 'workspace' must be non-empty" } }
+  if ($repo_slug | is-empty) { error make --unspanned { msg: "path parameter 'repo_slug' must be non-empty" } }
+  if ($component_id | is-empty) { error make --unspanned { msg: "path parameter 'component_id' must be non-empty" } }
   let full_url = (build-url $base ({workspace: (encode-path-segment $workspace), repo_slug: (encode-path-segment $repo_slug), component_id: (encode-path-segment $component_id)} | format pattern "/repositories/{workspace}/{repo_slug}/components/{component_id}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
 }
 
 # List default reviewers
@@ -1747,10 +1920,12 @@ export def "repositories-default-reviewers list" [
 ]: nothing -> record<next: string, page: int, pagelen: int, previous: string, size: int, values: table<type: string, created_on: string, display_name: string, links: record, username: string, uuid: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($workspace | is-empty) { error make --unspanned { msg: "path parameter 'workspace' must be non-empty" } }
+  if ($repo_slug | is-empty) { error make --unspanned { msg: "path parameter 'repo_slug' must be non-empty" } }
   let full_url = (build-url $base ({workspace: (encode-path-segment $workspace), repo_slug: (encode-path-segment $repo_slug)} | format pattern "/repositories/{workspace}/{repo_slug}/default-reviewers"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
 }
 
 # Remove a user from the default reviewers
@@ -1772,10 +1947,13 @@ export def "repositories-default-reviewers delete" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($workspace | is-empty) { error make --unspanned { msg: "path parameter 'workspace' must be non-empty" } }
+  if ($repo_slug | is-empty) { error make --unspanned { msg: "path parameter 'repo_slug' must be non-empty" } }
+  if ($target_username | is-empty) { error make --unspanned { msg: "path parameter 'target_username' must be non-empty" } }
   let full_url = (build-url $base ({workspace: (encode-path-segment $workspace), repo_slug: (encode-path-segment $repo_slug), target_username: (encode-path-segment $target_username)} | format pattern "/repositories/{workspace}/{repo_slug}/default-reviewers/{target_username}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
 }
 
 # Get a default reviewer
@@ -1797,10 +1975,13 @@ export def "repositories-default-reviewers get" [
 ]: nothing -> record<type: string, created_on: string, display_name: string, links: record<avatar: record<href: string, name: string>>, username: string, uuid: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($workspace | is-empty) { error make --unspanned { msg: "path parameter 'workspace' must be non-empty" } }
+  if ($repo_slug | is-empty) { error make --unspanned { msg: "path parameter 'repo_slug' must be non-empty" } }
+  if ($target_username | is-empty) { error make --unspanned { msg: "path parameter 'target_username' must be non-empty" } }
   let full_url = (build-url $base ({workspace: (encode-path-segment $workspace), repo_slug: (encode-path-segment $repo_slug), target_username: (encode-path-segment $target_username)} | format pattern "/repositories/{workspace}/{repo_slug}/default-reviewers/{target_username}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
 }
 
 # Add a user to the default reviewers
@@ -1822,10 +2003,13 @@ export def "repositories-default-reviewers update" [
 ]: nothing -> record<type: string, created_on: string, display_name: string, links: record<avatar: record<href: string, name: string>>, username: string, uuid: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($workspace | is-empty) { error make --unspanned { msg: "path parameter 'workspace' must be non-empty" } }
+  if ($repo_slug | is-empty) { error make --unspanned { msg: "path parameter 'repo_slug' must be non-empty" } }
+  if ($target_username | is-empty) { error make --unspanned { msg: "path parameter 'target_username' must be non-empty" } }
   let full_url = (build-url $base ({workspace: (encode-path-segment $workspace), repo_slug: (encode-path-segment $repo_slug), target_username: (encode-path-segment $target_username)} | format pattern "/repositories/{workspace}/{repo_slug}/default-reviewers/{target_username}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
 }
 
 # List repository deploy keys
@@ -1846,10 +2030,12 @@ export def "repositories-deploy-keys list" [
 ]: nothing -> record<next: string, page: int, pagelen: int, previous: string, size: int, values: table<type: string, added_on: string, comment: string, key: string, label: string, last_used: string, links: record, owner: record, repository: record>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($workspace | is-empty) { error make --unspanned { msg: "path parameter 'workspace' must be non-empty" } }
+  if ($repo_slug | is-empty) { error make --unspanned { msg: "path parameter 'repo_slug' must be non-empty" } }
   let full_url = (build-url $base ({workspace: (encode-path-segment $workspace), repo_slug: (encode-path-segment $repo_slug)} | format pattern "/repositories/{workspace}/{repo_slug}/deploy-keys"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
 }
 
 # Add a repository deploy key
@@ -1870,10 +2056,12 @@ export def "repositories-deploy-keys create" [
 ]: nothing -> record<type: string, added_on: string, comment: string, key: string, label: string, last_used: string, links: record<self: record<href: string, name: string>>, owner: record<type: string, created_on: string, display_name: string, links: record<avatar: record>, username: string, uuid: string>, repository: record<type: string, created_on: string, description: string, fork_policy: string, full_name: string, has_issues: bool, has_wiki: bool, is_private: bool, language: string, links: record<avatar: record, clone: list, commits: record, downloads: record, forks: record, hooks: record, html: record, pullrequests: record, self: record, watchers: record>, mainbranch: record<links: record, name: string, target: record, type: string, default_merge_strategy: string, merge_strategies: list>, name: string, owner: record<type: string, created_on: string, display_name: string, links: record, username: string, uuid: string>, parent: any, project: record<type: string, created_on: string, description: string, has_publicly_visible_repos: bool, is_private: bool, key: string, links: record, name: string, owner: record, updated_on: string, uuid: string>, scm: string, size: int, updated_on: string, uuid: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($workspace | is-empty) { error make --unspanned { msg: "path parameter 'workspace' must be non-empty" } }
+  if ($repo_slug | is-empty) { error make --unspanned { msg: "path parameter 'repo_slug' must be non-empty" } }
   let full_url = (build-url $base ({workspace: (encode-path-segment $workspace), repo_slug: (encode-path-segment $repo_slug)} | format pattern "/repositories/{workspace}/{repo_slug}/deploy-keys"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
 }
 
 # Delete a repository deploy key
@@ -1895,10 +2083,13 @@ export def "repositories-deploy-keys delete" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($workspace | is-empty) { error make --unspanned { msg: "path parameter 'workspace' must be non-empty" } }
+  if ($repo_slug | is-empty) { error make --unspanned { msg: "path parameter 'repo_slug' must be non-empty" } }
+  if ($key_id | is-empty) { error make --unspanned { msg: "path parameter 'key_id' must be non-empty" } }
   let full_url = (build-url $base ({workspace: (encode-path-segment $workspace), repo_slug: (encode-path-segment $repo_slug), key_id: (encode-path-segment $key_id)} | format pattern "/repositories/{workspace}/{repo_slug}/deploy-keys/{key_id}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
 }
 
 # Get a repository deploy key
@@ -1920,10 +2111,13 @@ export def "repositories-deploy-keys get" [
 ]: nothing -> record<type: string, added_on: string, comment: string, key: string, label: string, last_used: string, links: record<self: record<href: string, name: string>>, owner: record<type: string, created_on: string, display_name: string, links: record<avatar: record>, username: string, uuid: string>, repository: record<type: string, created_on: string, description: string, fork_policy: string, full_name: string, has_issues: bool, has_wiki: bool, is_private: bool, language: string, links: record<avatar: record, clone: list, commits: record, downloads: record, forks: record, hooks: record, html: record, pullrequests: record, self: record, watchers: record>, mainbranch: record<links: record, name: string, target: record, type: string, default_merge_strategy: string, merge_strategies: list>, name: string, owner: record<type: string, created_on: string, display_name: string, links: record, username: string, uuid: string>, parent: any, project: record<type: string, created_on: string, description: string, has_publicly_visible_repos: bool, is_private: bool, key: string, links: record, name: string, owner: record, updated_on: string, uuid: string>, scm: string, size: int, updated_on: string, uuid: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($workspace | is-empty) { error make --unspanned { msg: "path parameter 'workspace' must be non-empty" } }
+  if ($repo_slug | is-empty) { error make --unspanned { msg: "path parameter 'repo_slug' must be non-empty" } }
+  if ($key_id | is-empty) { error make --unspanned { msg: "path parameter 'key_id' must be non-empty" } }
   let full_url = (build-url $base ({workspace: (encode-path-segment $workspace), repo_slug: (encode-path-segment $repo_slug), key_id: (encode-path-segment $key_id)} | format pattern "/repositories/{workspace}/{repo_slug}/deploy-keys/{key_id}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
 }
 
 # Update a repository deploy key
@@ -1945,10 +2139,13 @@ export def "repositories-deploy-keys update" [
 ]: nothing -> record<type: string, added_on: string, comment: string, key: string, label: string, last_used: string, links: record<self: record<href: string, name: string>>, owner: record<type: string, created_on: string, display_name: string, links: record<avatar: record>, username: string, uuid: string>, repository: record<type: string, created_on: string, description: string, fork_policy: string, full_name: string, has_issues: bool, has_wiki: bool, is_private: bool, language: string, links: record<avatar: record, clone: list, commits: record, downloads: record, forks: record, hooks: record, html: record, pullrequests: record, self: record, watchers: record>, mainbranch: record<links: record, name: string, target: record, type: string, default_merge_strategy: string, merge_strategies: list>, name: string, owner: record<type: string, created_on: string, display_name: string, links: record, username: string, uuid: string>, parent: any, project: record<type: string, created_on: string, description: string, has_publicly_visible_repos: bool, is_private: bool, key: string, links: record, name: string, owner: record, updated_on: string, uuid: string>, scm: string, size: int, updated_on: string, uuid: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($workspace | is-empty) { error make --unspanned { msg: "path parameter 'workspace' must be non-empty" } }
+  if ($repo_slug | is-empty) { error make --unspanned { msg: "path parameter 'repo_slug' must be non-empty" } }
+  if ($key_id | is-empty) { error make --unspanned { msg: "path parameter 'key_id' must be non-empty" } }
   let full_url = (build-url $base ({workspace: (encode-path-segment $workspace), repo_slug: (encode-path-segment $repo_slug), key_id: (encode-path-segment $key_id)} | format pattern "/repositories/{workspace}/{repo_slug}/deploy-keys/{key_id}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
 }
 
 # List deployments
@@ -1970,10 +2167,12 @@ export def "repositories-deployments list" [
 ]: nothing -> record<next: string, page: int, pagelen: int, previous: string, size: int, values: table<type: string, environment: record, release: record, state: record, uuid: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($workspace | is-empty) { error make --unspanned { msg: "path parameter 'workspace' must be non-empty" } }
+  if ($repo_slug | is-empty) { error make --unspanned { msg: "path parameter 'repo_slug' must be non-empty" } }
   let full_url = (build-url $base ({workspace: (encode-path-segment $workspace), repo_slug: (encode-path-segment $repo_slug)} | format pattern "/repositories/{workspace}/{repo_slug}/deployments/"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
 }
 
 # Get a deployment
@@ -1996,10 +2195,13 @@ export def "repositories-deployments get-for-repository" [
 ]: nothing -> record<type: string, environment: record<type: string, name: string, uuid: string>, release: record<type: string, commit: record<participants: list, repository: record>, created_on: string, name: string, url: string, uuid: string>, state: record<type: string>, uuid: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($workspace | is-empty) { error make --unspanned { msg: "path parameter 'workspace' must be non-empty" } }
+  if ($repo_slug | is-empty) { error make --unspanned { msg: "path parameter 'repo_slug' must be non-empty" } }
+  if ($deployment_uuid | is-empty) { error make --unspanned { msg: "path parameter 'deployment_uuid' must be non-empty" } }
   let full_url = (build-url $base ({workspace: (encode-path-segment $workspace), repo_slug: (encode-path-segment $repo_slug), deployment_uuid: (encode-path-segment $deployment_uuid)} | format pattern "/repositories/{workspace}/{repo_slug}/deployments/{deployment_uuid}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
 }
 
 # List variables for an environment
@@ -2022,10 +2224,13 @@ export def "repositories-deployments-config-environments-variables get" [
 ]: nothing -> record<next: string, page: int, pagelen: int, previous: string, size: int, values: table<type: string, key: string, secured: bool, uuid: string, value: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($workspace | is-empty) { error make --unspanned { msg: "path parameter 'workspace' must be non-empty" } }
+  if ($repo_slug | is-empty) { error make --unspanned { msg: "path parameter 'repo_slug' must be non-empty" } }
+  if ($environment_uuid | is-empty) { error make --unspanned { msg: "path parameter 'environment_uuid' must be non-empty" } }
   let full_url = (build-url $base ({workspace: (encode-path-segment $workspace), repo_slug: (encode-path-segment $repo_slug), environment_uuid: (encode-path-segment $environment_uuid)} | format pattern "/repositories/{workspace}/{repo_slug}/deployments_config/environments/{environment_uuid}/variables"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
 }
 
 # Create a variable for an environment
@@ -2054,12 +2259,15 @@ export def "repositories-deployments-config-environments-variables create" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($workspace | is-empty) { error make --unspanned { msg: "path parameter 'workspace' must be non-empty" } }
+  if ($repo_slug | is-empty) { error make --unspanned { msg: "path parameter 'repo_slug' must be non-empty" } }
+  if ($environment_uuid | is-empty) { error make --unspanned { msg: "path parameter 'environment_uuid' must be non-empty" } }
   let full_url = (build-url $base ({workspace: (encode-path-segment $workspace), repo_slug: (encode-path-segment $repo_slug), environment_uuid: (encode-path-segment $environment_uuid)} | format pattern "/repositories/{workspace}/{repo_slug}/deployments_config/environments/{environment_uuid}/variables"))
   let req_body = {"type": $type, "key": $key, "secured": $secured, "uuid": $uuid, "value": $value} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: {}, body: $req_body}
 }
 
 # Delete a variable for an environment
@@ -2083,10 +2291,14 @@ export def "repositories-deployments-config-environments-variables delete" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($workspace | is-empty) { error make --unspanned { msg: "path parameter 'workspace' must be non-empty" } }
+  if ($repo_slug | is-empty) { error make --unspanned { msg: "path parameter 'repo_slug' must be non-empty" } }
+  if ($environment_uuid | is-empty) { error make --unspanned { msg: "path parameter 'environment_uuid' must be non-empty" } }
+  if ($variable_uuid | is-empty) { error make --unspanned { msg: "path parameter 'variable_uuid' must be non-empty" } }
   let full_url = (build-url $base ({workspace: (encode-path-segment $workspace), repo_slug: (encode-path-segment $repo_slug), environment_uuid: (encode-path-segment $environment_uuid), variable_uuid: (encode-path-segment $variable_uuid)} | format pattern "/repositories/{workspace}/{repo_slug}/deployments_config/environments/{environment_uuid}/variables/{variable_uuid}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
 }
 
 # Update a variable for an environment
@@ -2116,12 +2328,16 @@ export def "repositories-deployments-config-environments-variables update" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($workspace | is-empty) { error make --unspanned { msg: "path parameter 'workspace' must be non-empty" } }
+  if ($repo_slug | is-empty) { error make --unspanned { msg: "path parameter 'repo_slug' must be non-empty" } }
+  if ($environment_uuid | is-empty) { error make --unspanned { msg: "path parameter 'environment_uuid' must be non-empty" } }
+  if ($variable_uuid | is-empty) { error make --unspanned { msg: "path parameter 'variable_uuid' must be non-empty" } }
   let full_url = (build-url $base ({workspace: (encode-path-segment $workspace), repo_slug: (encode-path-segment $repo_slug), environment_uuid: (encode-path-segment $environment_uuid), variable_uuid: (encode-path-segment $variable_uuid)} | format pattern "/repositories/{workspace}/{repo_slug}/deployments_config/environments/{environment_uuid}/variables/{variable_uuid}"))
   let req_body = {"type": $type, "key": $key, "secured": $secured, "uuid": $uuid, "value": $value} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: {}, body: $req_body}
 }
 
 # Compare two commits
@@ -2150,11 +2366,14 @@ export def "repositories-diff get" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($workspace | is-empty) { error make --unspanned { msg: "path parameter 'workspace' must be non-empty" } }
+  if ($repo_slug | is-empty) { error make --unspanned { msg: "path parameter 'repo_slug' must be non-empty" } }
+  if ($spec | is-empty) { error make --unspanned { msg: "path parameter 'spec' must be non-empty" } }
   let qp = [(serialize-qp "context" $context "scalar") (serialize-qp "path" $path "scalar") (serialize-qp "ignore_whitespace" $ignore_whitespace "scalar") (serialize-qp "binary" $binary "scalar") (serialize-qp "renames" $renames "scalar") (serialize-qp "merge" $merge "scalar") (serialize-qp "topic" $topic "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({workspace: (encode-path-segment $workspace), repo_slug: (encode-path-segment $repo_slug), spec: (encode-path-segment $spec)} | format pattern "/repositories/{workspace}/{repo_slug}/diff/{spec}") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"context": $context, "path": $path, "ignore_whitespace": $ignore_whitespace, "binary": $binary, "renames": $renames, "merge": $merge, "topic": $topic} | compact), body: null}
 }
 
 # Compare two commit diff stats
@@ -2181,11 +2400,14 @@ export def "repositories-diffstat get" [
 ]: nothing -> record<next: string, page: int, pagelen: int, previous: string, size: int, values: table<lines_added: int, lines_removed: int, new: record, old: record, status: string, type: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($workspace | is-empty) { error make --unspanned { msg: "path parameter 'workspace' must be non-empty" } }
+  if ($repo_slug | is-empty) { error make --unspanned { msg: "path parameter 'repo_slug' must be non-empty" } }
+  if ($spec | is-empty) { error make --unspanned { msg: "path parameter 'spec' must be non-empty" } }
   let qp = [(serialize-qp "ignore_whitespace" $ignore_whitespace "scalar") (serialize-qp "merge" $merge "scalar") (serialize-qp "path" $path "scalar") (serialize-qp "renames" $renames "scalar") (serialize-qp "topic" $topic "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({workspace: (encode-path-segment $workspace), repo_slug: (encode-path-segment $repo_slug), spec: (encode-path-segment $spec)} | format pattern "/repositories/{workspace}/{repo_slug}/diffstat/{spec}") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"ignore_whitespace": $ignore_whitespace, "merge": $merge, "path": $path, "renames": $renames, "topic": $topic} | compact), body: null}
 }
 
 # List download artifacts
@@ -2206,10 +2428,12 @@ export def "repositories-downloads list" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($workspace | is-empty) { error make --unspanned { msg: "path parameter 'workspace' must be non-empty" } }
+  if ($repo_slug | is-empty) { error make --unspanned { msg: "path parameter 'repo_slug' must be non-empty" } }
   let full_url = (build-url $base ({workspace: (encode-path-segment $workspace), repo_slug: (encode-path-segment $repo_slug)} | format pattern "/repositories/{workspace}/{repo_slug}/downloads"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
 }
 
 # Upload a download artifact
@@ -2230,10 +2454,12 @@ export def "repositories-downloads create" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($workspace | is-empty) { error make --unspanned { msg: "path parameter 'workspace' must be non-empty" } }
+  if ($repo_slug | is-empty) { error make --unspanned { msg: "path parameter 'repo_slug' must be non-empty" } }
   let full_url = (build-url $base ({workspace: (encode-path-segment $workspace), repo_slug: (encode-path-segment $repo_slug)} | format pattern "/repositories/{workspace}/{repo_slug}/downloads"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
 }
 
 # Delete a download artifact
@@ -2255,10 +2481,13 @@ export def "repositories-downloads delete" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($workspace | is-empty) { error make --unspanned { msg: "path parameter 'workspace' must be non-empty" } }
+  if ($repo_slug | is-empty) { error make --unspanned { msg: "path parameter 'repo_slug' must be non-empty" } }
+  if ($filename | is-empty) { error make --unspanned { msg: "path parameter 'filename' must be non-empty" } }
   let full_url = (build-url $base ({workspace: (encode-path-segment $workspace), repo_slug: (encode-path-segment $repo_slug), filename: (encode-path-segment $filename)} | format pattern "/repositories/{workspace}/{repo_slug}/downloads/{filename}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
 }
 
 # Get a download artifact link
@@ -2280,10 +2509,13 @@ export def "repositories-downloads get" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($workspace | is-empty) { error make --unspanned { msg: "path parameter 'workspace' must be non-empty" } }
+  if ($repo_slug | is-empty) { error make --unspanned { msg: "path parameter 'repo_slug' must be non-empty" } }
+  if ($filename | is-empty) { error make --unspanned { msg: "path parameter 'filename' must be non-empty" } }
   let full_url = (build-url $base ({workspace: (encode-path-segment $workspace), repo_slug: (encode-path-segment $repo_slug), filename: (encode-path-segment $filename)} | format pattern "/repositories/{workspace}/{repo_slug}/downloads/{filename}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
 }
 
 # Get the effective, or currently applied, branching model for a repository
@@ -2304,10 +2536,12 @@ export def "repositories-effective-branching-model get" [
 ]: nothing -> record<type: string, branch_types: table<kind: string, prefix: string>, development: record<branch: record<links: record, name: string, target: record, type: string, default_merge_strategy: string, merge_strategies: list>, name: string, use_mainbranch: bool>, production: record<branch: record<links: record, name: string, target: record, type: string, default_merge_strategy: string, merge_strategies: list>, name: string, use_mainbranch: bool>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($workspace | is-empty) { error make --unspanned { msg: "path parameter 'workspace' must be non-empty" } }
+  if ($repo_slug | is-empty) { error make --unspanned { msg: "path parameter 'repo_slug' must be non-empty" } }
   let full_url = (build-url $base ({workspace: (encode-path-segment $workspace), repo_slug: (encode-path-segment $repo_slug)} | format pattern "/repositories/{workspace}/{repo_slug}/effective-branching-model"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
 }
 
 # List effective default reviewers
@@ -2328,10 +2562,12 @@ export def "repositories-effective-default-reviewers get" [
 ]: nothing -> record<next: string, page: int, pagelen: int, previous: string, size: int, values: table<reviewer_type: string, type: string, user: record>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($workspace | is-empty) { error make --unspanned { msg: "path parameter 'workspace' must be non-empty" } }
+  if ($repo_slug | is-empty) { error make --unspanned { msg: "path parameter 'repo_slug' must be non-empty" } }
   let full_url = (build-url $base ({workspace: (encode-path-segment $workspace), repo_slug: (encode-path-segment $repo_slug)} | format pattern "/repositories/{workspace}/{repo_slug}/effective-default-reviewers"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
 }
 
 # List environments
@@ -2353,10 +2589,12 @@ export def "repositories-environments list" [
 ]: nothing -> record<next: string, page: int, pagelen: int, previous: string, size: int, values: table<type: string, name: string, uuid: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($workspace | is-empty) { error make --unspanned { msg: "path parameter 'workspace' must be non-empty" } }
+  if ($repo_slug | is-empty) { error make --unspanned { msg: "path parameter 'repo_slug' must be non-empty" } }
   let full_url = (build-url $base ({workspace: (encode-path-segment $workspace), repo_slug: (encode-path-segment $repo_slug)} | format pattern "/repositories/{workspace}/{repo_slug}/environments/"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
 }
 
 # Create an environment
@@ -2382,12 +2620,14 @@ export def "repositories-environments create" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($workspace | is-empty) { error make --unspanned { msg: "path parameter 'workspace' must be non-empty" } }
+  if ($repo_slug | is-empty) { error make --unspanned { msg: "path parameter 'repo_slug' must be non-empty" } }
   let full_url = (build-url $base ({workspace: (encode-path-segment $workspace), repo_slug: (encode-path-segment $repo_slug)} | format pattern "/repositories/{workspace}/{repo_slug}/environments/"))
   let req_body = {"type": $type, "name": $name, "uuid": $uuid} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: {}, body: $req_body}
 }
 
 # Delete an environment
@@ -2410,10 +2650,13 @@ export def "repositories-environments delete-for-repository" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($workspace | is-empty) { error make --unspanned { msg: "path parameter 'workspace' must be non-empty" } }
+  if ($repo_slug | is-empty) { error make --unspanned { msg: "path parameter 'repo_slug' must be non-empty" } }
+  if ($environment_uuid | is-empty) { error make --unspanned { msg: "path parameter 'environment_uuid' must be non-empty" } }
   let full_url = (build-url $base ({workspace: (encode-path-segment $workspace), repo_slug: (encode-path-segment $repo_slug), environment_uuid: (encode-path-segment $environment_uuid)} | format pattern "/repositories/{workspace}/{repo_slug}/environments/{environment_uuid}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
 }
 
 # Get an environment
@@ -2436,10 +2679,13 @@ export def "repositories-environments get-for-repository" [
 ]: nothing -> record<type: string, name: string, uuid: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($workspace | is-empty) { error make --unspanned { msg: "path parameter 'workspace' must be non-empty" } }
+  if ($repo_slug | is-empty) { error make --unspanned { msg: "path parameter 'repo_slug' must be non-empty" } }
+  if ($environment_uuid | is-empty) { error make --unspanned { msg: "path parameter 'environment_uuid' must be non-empty" } }
   let full_url = (build-url $base ({workspace: (encode-path-segment $workspace), repo_slug: (encode-path-segment $repo_slug), environment_uuid: (encode-path-segment $environment_uuid)} | format pattern "/repositories/{workspace}/{repo_slug}/environments/{environment_uuid}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
 }
 
 # Update an environment
@@ -2462,10 +2708,13 @@ export def "repositories-environments-changes update-for-repository" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($workspace | is-empty) { error make --unspanned { msg: "path parameter 'workspace' must be non-empty" } }
+  if ($repo_slug | is-empty) { error make --unspanned { msg: "path parameter 'repo_slug' must be non-empty" } }
+  if ($environment_uuid | is-empty) { error make --unspanned { msg: "path parameter 'environment_uuid' must be non-empty" } }
   let full_url = (build-url $base ({workspace: (encode-path-segment $workspace), repo_slug: (encode-path-segment $repo_slug), environment_uuid: (encode-path-segment $environment_uuid)} | format pattern "/repositories/{workspace}/{repo_slug}/environments/{environment_uuid}/changes/"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
 }
 
 # List commits that modified a file
@@ -2491,11 +2740,15 @@ export def "repositories-filehistory get" [
 ]: nothing -> record<next: string, page: int, pagelen: int, previous: string, size: int, values: table<attributes: string, commit: record, escaped_path: string, path: string, type: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($workspace | is-empty) { error make --unspanned { msg: "path parameter 'workspace' must be non-empty" } }
+  if ($repo_slug | is-empty) { error make --unspanned { msg: "path parameter 'repo_slug' must be non-empty" } }
+  if ($commit | is-empty) { error make --unspanned { msg: "path parameter 'commit' must be non-empty" } }
+  if ($path | is-empty) { error make --unspanned { msg: "path parameter 'path' must be non-empty" } }
   let qp = [(serialize-qp "renames" $renames "scalar") (serialize-qp "q" $q "scalar") (serialize-qp "sort" $qp_sort "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({workspace: (encode-path-segment $workspace), repo_slug: (encode-path-segment $repo_slug), commit: (encode-path-segment $commit), path: (encode-path-segment $path)} | format pattern "/repositories/{workspace}/{repo_slug}/filehistory/{commit}/{path}") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"renames": $renames, "q": $q, "sort": $qp_sort} | compact), body: null}
 }
 
 # List repository forks
@@ -2519,11 +2772,13 @@ export def "repositories-forks get" [
 ]: nothing -> record<next: string, page: int, pagelen: int, previous: string, size: int, values: table<type: string, created_on: string, description: string, fork_policy: string, full_name: string, has_issues: bool, has_wiki: bool, is_private: bool, language: string, links: record, mainbranch: record, name: string, owner: record, parent: any, project: record, scm: string, size: int, updated_on: string, uuid: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($workspace | is-empty) { error make --unspanned { msg: "path parameter 'workspace' must be non-empty" } }
+  if ($repo_slug | is-empty) { error make --unspanned { msg: "path parameter 'repo_slug' must be non-empty" } }
   let qp = [(serialize-qp "role" $role "scalar") (serialize-qp "q" $q "scalar") (serialize-qp "sort" $qp_sort "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({workspace: (encode-path-segment $workspace), repo_slug: (encode-path-segment $repo_slug)} | format pattern "/repositories/{workspace}/{repo_slug}/forks") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"role": $role, "q": $q, "sort": $qp_sort} | compact), body: null}
 }
 
 # Fork a repository
@@ -2565,12 +2820,14 @@ export def "repositories-forks create" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($workspace | is-empty) { error make --unspanned { msg: "path parameter 'workspace' must be non-empty" } }
+  if ($repo_slug | is-empty) { error make --unspanned { msg: "path parameter 'repo_slug' must be non-empty" } }
   let full_url = (build-url $base ({workspace: (encode-path-segment $workspace), repo_slug: (encode-path-segment $repo_slug)} | format pattern "/repositories/{workspace}/{repo_slug}/forks"))
   let req_body = {"type": $type, "created_on": $created_on, "description": $description, "fork_policy": $fork_policy, "full_name": $full_name, "has_issues": $has_issues, "has_wiki": $has_wiki, "is_private": $is_private, "language": $language, "links": $links, "mainbranch": $mainbranch, "name": $name, "owner": $owner, "parent": $parent, "project": $project, "scm": $scm, "size": $size, "updated_on": $updated_on, "uuid": $uuid} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: {}, body: $req_body}
 }
 
 # List webhooks for a repository
@@ -2591,10 +2848,12 @@ export def "repositories-hooks list" [
 ]: nothing -> record<next: string, page: int, pagelen: int, previous: string, size: int, values: table<type: string, active: bool, created_at: string, description: string, events: list, subject: record, subject_type: string, url: string, uuid: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($workspace | is-empty) { error make --unspanned { msg: "path parameter 'workspace' must be non-empty" } }
+  if ($repo_slug | is-empty) { error make --unspanned { msg: "path parameter 'repo_slug' must be non-empty" } }
   let full_url = (build-url $base ({workspace: (encode-path-segment $workspace), repo_slug: (encode-path-segment $repo_slug)} | format pattern "/repositories/{workspace}/{repo_slug}/hooks"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
 }
 
 # Create a webhook for a repository
@@ -2615,10 +2874,12 @@ export def "repositories-hooks create" [
 ]: nothing -> record<type: string, active: bool, created_at: string, description: string, events: list<string>, subject: record<type: string>, subject_type: string, url: string, uuid: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($workspace | is-empty) { error make --unspanned { msg: "path parameter 'workspace' must be non-empty" } }
+  if ($repo_slug | is-empty) { error make --unspanned { msg: "path parameter 'repo_slug' must be non-empty" } }
   let full_url = (build-url $base ({workspace: (encode-path-segment $workspace), repo_slug: (encode-path-segment $repo_slug)} | format pattern "/repositories/{workspace}/{repo_slug}/hooks"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
 }
 
 # Delete a webhook for a repository
@@ -2640,10 +2901,13 @@ export def "repositories-hooks delete" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($workspace | is-empty) { error make --unspanned { msg: "path parameter 'workspace' must be non-empty" } }
+  if ($repo_slug | is-empty) { error make --unspanned { msg: "path parameter 'repo_slug' must be non-empty" } }
+  if ($uid | is-empty) { error make --unspanned { msg: "path parameter 'uid' must be non-empty" } }
   let full_url = (build-url $base ({workspace: (encode-path-segment $workspace), repo_slug: (encode-path-segment $repo_slug), uid: (encode-path-segment $uid)} | format pattern "/repositories/{workspace}/{repo_slug}/hooks/{uid}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
 }
 
 # Get a webhook for a repository
@@ -2665,10 +2929,13 @@ export def "repositories-hooks get" [
 ]: nothing -> record<type: string, active: bool, created_at: string, description: string, events: list<string>, subject: record<type: string>, subject_type: string, url: string, uuid: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($workspace | is-empty) { error make --unspanned { msg: "path parameter 'workspace' must be non-empty" } }
+  if ($repo_slug | is-empty) { error make --unspanned { msg: "path parameter 'repo_slug' must be non-empty" } }
+  if ($uid | is-empty) { error make --unspanned { msg: "path parameter 'uid' must be non-empty" } }
   let full_url = (build-url $base ({workspace: (encode-path-segment $workspace), repo_slug: (encode-path-segment $repo_slug), uid: (encode-path-segment $uid)} | format pattern "/repositories/{workspace}/{repo_slug}/hooks/{uid}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
 }
 
 # Update a webhook for a repository
@@ -2690,10 +2957,13 @@ export def "repositories-hooks update" [
 ]: nothing -> record<type: string, active: bool, created_at: string, description: string, events: list<string>, subject: record<type: string>, subject_type: string, url: string, uuid: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($workspace | is-empty) { error make --unspanned { msg: "path parameter 'workspace' must be non-empty" } }
+  if ($repo_slug | is-empty) { error make --unspanned { msg: "path parameter 'repo_slug' must be non-empty" } }
+  if ($uid | is-empty) { error make --unspanned { msg: "path parameter 'uid' must be non-empty" } }
   let full_url = (build-url $base ({workspace: (encode-path-segment $workspace), repo_slug: (encode-path-segment $repo_slug), uid: (encode-path-segment $uid)} | format pattern "/repositories/{workspace}/{repo_slug}/hooks/{uid}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
 }
 
 # List issues
@@ -2714,10 +2984,12 @@ export def "repositories-issues list" [
 ]: nothing -> record<next: string, page: int, pagelen: int, previous: string, size: int, values: table<type: string, assignee: record, component: record, content: record, created_on: string, edited_on: string, id: int, kind: string, links: record, milestone: record, priority: string, reporter: record, repository: record, state: string, title: string, updated_on: string, version: record, votes: int>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($workspace | is-empty) { error make --unspanned { msg: "path parameter 'workspace' must be non-empty" } }
+  if ($repo_slug | is-empty) { error make --unspanned { msg: "path parameter 'repo_slug' must be non-empty" } }
   let full_url = (build-url $base ({workspace: (encode-path-segment $workspace), repo_slug: (encode-path-segment $repo_slug)} | format pattern "/repositories/{workspace}/{repo_slug}/issues"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
 }
 
 # Create an issue
@@ -2759,12 +3031,14 @@ export def "repositories-issues create" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($workspace | is-empty) { error make --unspanned { msg: "path parameter 'workspace' must be non-empty" } }
+  if ($repo_slug | is-empty) { error make --unspanned { msg: "path parameter 'repo_slug' must be non-empty" } }
   let full_url = (build-url $base ({workspace: (encode-path-segment $workspace), repo_slug: (encode-path-segment $repo_slug)} | format pattern "/repositories/{workspace}/{repo_slug}/issues"))
   let req_body = {"type": $type, "assignee": $assignee, "component": $component, "content": $content, "created_on": $created_on, "edited_on": $edited_on, "id": $id, "kind": $kind, "links": $links, "milestone": $milestone, "priority": $priority, "reporter": $reporter, "repository": $repository, "state": $state, "title": $title, "updated_on": $updated_on, "version": $version, "votes": $votes} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: {}, body: $req_body}
 }
 
 # Export issues
@@ -2791,12 +3065,14 @@ export def "repositories-issues-export create" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($workspace | is-empty) { error make --unspanned { msg: "path parameter 'workspace' must be non-empty" } }
+  if ($repo_slug | is-empty) { error make --unspanned { msg: "path parameter 'repo_slug' must be non-empty" } }
   let full_url = (build-url $base ({workspace: (encode-path-segment $workspace), repo_slug: (encode-path-segment $repo_slug)} | format pattern "/repositories/{workspace}/{repo_slug}/issues/export"))
   let req_body = {"include_attachments": $include_attachments, "project_key": $project_key, "project_name": $project_name, "send_email": $send_email, "type": $type} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: {}, body: $req_body}
 }
 
 # Check issue export status
@@ -2819,10 +3095,14 @@ export def "repositories-issues-export get" [
 ]: nothing -> record<count: int, pct: float, phase: string, status: string, total: int, type: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($workspace | is-empty) { error make --unspanned { msg: "path parameter 'workspace' must be non-empty" } }
+  if ($repo_slug | is-empty) { error make --unspanned { msg: "path parameter 'repo_slug' must be non-empty" } }
+  if ($repo_name | is-empty) { error make --unspanned { msg: "path parameter 'repo_name' must be non-empty" } }
+  if ($task_id | is-empty) { error make --unspanned { msg: "path parameter 'task_id' must be non-empty" } }
   let full_url = (build-url $base ({workspace: (encode-path-segment $workspace), repo_slug: (encode-path-segment $repo_slug), repo_name: (encode-path-segment $repo_name), task_id: (encode-path-segment $task_id)} | format pattern "/repositories/{workspace}/{repo_slug}/issues/export/{repo_name}-issues-{task_id}.zip"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
 }
 
 # Check issue import status
@@ -2843,10 +3123,12 @@ export def "repositories-issues-import get" [
 ]: nothing -> record<count: int, pct: float, phase: string, status: string, total: int, type: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($workspace | is-empty) { error make --unspanned { msg: "path parameter 'workspace' must be non-empty" } }
+  if ($repo_slug | is-empty) { error make --unspanned { msg: "path parameter 'repo_slug' must be non-empty" } }
   let full_url = (build-url $base ({workspace: (encode-path-segment $workspace), repo_slug: (encode-path-segment $repo_slug)} | format pattern "/repositories/{workspace}/{repo_slug}/issues/import"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
 }
 
 # Import issues
@@ -2867,10 +3149,12 @@ export def "repositories-issues-import create" [
 ]: nothing -> record<count: int, pct: float, phase: string, status: string, total: int, type: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($workspace | is-empty) { error make --unspanned { msg: "path parameter 'workspace' must be non-empty" } }
+  if ($repo_slug | is-empty) { error make --unspanned { msg: "path parameter 'repo_slug' must be non-empty" } }
   let full_url = (build-url $base ({workspace: (encode-path-segment $workspace), repo_slug: (encode-path-segment $repo_slug)} | format pattern "/repositories/{workspace}/{repo_slug}/issues/import"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
 }
 
 # Delete an issue
@@ -2892,10 +3176,13 @@ export def "repositories-issues delete" [
 ]: nothing -> record<type: string, assignee: record<type: string, created_on: string, display_name: string, links: record<avatar: record>, username: string, uuid: string>, component: record<type: string, id: int, links: record<self: record>, name: string>, content: record<html: string, markup: string, raw: string>, created_on: string, edited_on: string, id: int, kind: string, links: record<attachments: record<href: string, name: string>, comments: record<href: string, name: string>, html: record<href: string, name: string>, self: record<href: string, name: string>, vote: record<href: string, name: string>, watch: record<href: string, name: string>>, milestone: record<type: string, id: int, links: record<self: record>, name: string>, priority: string, reporter: record<type: string, created_on: string, display_name: string, links: record<avatar: record>, username: string, uuid: string>, repository: record<type: string, created_on: string, description: string, fork_policy: string, full_name: string, has_issues: bool, has_wiki: bool, is_private: bool, language: string, links: record<avatar: record, clone: list, commits: record, downloads: record, forks: record, hooks: record, html: record, pullrequests: record, self: record, watchers: record>, mainbranch: record<links: record, name: string, target: record, type: string, default_merge_strategy: string, merge_strategies: list>, name: string, owner: record<type: string, created_on: string, display_name: string, links: record, username: string, uuid: string>, parent: any, project: record<type: string, created_on: string, description: string, has_publicly_visible_repos: bool, is_private: bool, key: string, links: record, name: string, owner: record, updated_on: string, uuid: string>, scm: string, size: int, updated_on: string, uuid: string>, state: string, title: string, updated_on: string, version: record<type: string, id: int, links: record<self: record>, name: string>, votes: int> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($workspace | is-empty) { error make --unspanned { msg: "path parameter 'workspace' must be non-empty" } }
+  if ($repo_slug | is-empty) { error make --unspanned { msg: "path parameter 'repo_slug' must be non-empty" } }
+  if ($issue_id | is-empty) { error make --unspanned { msg: "path parameter 'issue_id' must be non-empty" } }
   let full_url = (build-url $base ({workspace: (encode-path-segment $workspace), repo_slug: (encode-path-segment $repo_slug), issue_id: (encode-path-segment $issue_id)} | format pattern "/repositories/{workspace}/{repo_slug}/issues/{issue_id}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
 }
 
 # Get an issue
@@ -2917,10 +3204,13 @@ export def "repositories-issues get" [
 ]: nothing -> record<type: string, assignee: record<type: string, created_on: string, display_name: string, links: record<avatar: record>, username: string, uuid: string>, component: record<type: string, id: int, links: record<self: record>, name: string>, content: record<html: string, markup: string, raw: string>, created_on: string, edited_on: string, id: int, kind: string, links: record<attachments: record<href: string, name: string>, comments: record<href: string, name: string>, html: record<href: string, name: string>, self: record<href: string, name: string>, vote: record<href: string, name: string>, watch: record<href: string, name: string>>, milestone: record<type: string, id: int, links: record<self: record>, name: string>, priority: string, reporter: record<type: string, created_on: string, display_name: string, links: record<avatar: record>, username: string, uuid: string>, repository: record<type: string, created_on: string, description: string, fork_policy: string, full_name: string, has_issues: bool, has_wiki: bool, is_private: bool, language: string, links: record<avatar: record, clone: list, commits: record, downloads: record, forks: record, hooks: record, html: record, pullrequests: record, self: record, watchers: record>, mainbranch: record<links: record, name: string, target: record, type: string, default_merge_strategy: string, merge_strategies: list>, name: string, owner: record<type: string, created_on: string, display_name: string, links: record, username: string, uuid: string>, parent: any, project: record<type: string, created_on: string, description: string, has_publicly_visible_repos: bool, is_private: bool, key: string, links: record, name: string, owner: record, updated_on: string, uuid: string>, scm: string, size: int, updated_on: string, uuid: string>, state: string, title: string, updated_on: string, version: record<type: string, id: int, links: record<self: record>, name: string>, votes: int> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($workspace | is-empty) { error make --unspanned { msg: "path parameter 'workspace' must be non-empty" } }
+  if ($repo_slug | is-empty) { error make --unspanned { msg: "path parameter 'repo_slug' must be non-empty" } }
+  if ($issue_id | is-empty) { error make --unspanned { msg: "path parameter 'issue_id' must be non-empty" } }
   let full_url = (build-url $base ({workspace: (encode-path-segment $workspace), repo_slug: (encode-path-segment $repo_slug), issue_id: (encode-path-segment $issue_id)} | format pattern "/repositories/{workspace}/{repo_slug}/issues/{issue_id}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
 }
 
 # Update an issue
@@ -2942,10 +3232,13 @@ export def "repositories-issues update" [
 ]: nothing -> record<type: string, assignee: record<type: string, created_on: string, display_name: string, links: record<avatar: record>, username: string, uuid: string>, component: record<type: string, id: int, links: record<self: record>, name: string>, content: record<html: string, markup: string, raw: string>, created_on: string, edited_on: string, id: int, kind: string, links: record<attachments: record<href: string, name: string>, comments: record<href: string, name: string>, html: record<href: string, name: string>, self: record<href: string, name: string>, vote: record<href: string, name: string>, watch: record<href: string, name: string>>, milestone: record<type: string, id: int, links: record<self: record>, name: string>, priority: string, reporter: record<type: string, created_on: string, display_name: string, links: record<avatar: record>, username: string, uuid: string>, repository: record<type: string, created_on: string, description: string, fork_policy: string, full_name: string, has_issues: bool, has_wiki: bool, is_private: bool, language: string, links: record<avatar: record, clone: list, commits: record, downloads: record, forks: record, hooks: record, html: record, pullrequests: record, self: record, watchers: record>, mainbranch: record<links: record, name: string, target: record, type: string, default_merge_strategy: string, merge_strategies: list>, name: string, owner: record<type: string, created_on: string, display_name: string, links: record, username: string, uuid: string>, parent: any, project: record<type: string, created_on: string, description: string, has_publicly_visible_repos: bool, is_private: bool, key: string, links: record, name: string, owner: record, updated_on: string, uuid: string>, scm: string, size: int, updated_on: string, uuid: string>, state: string, title: string, updated_on: string, version: record<type: string, id: int, links: record<self: record>, name: string>, votes: int> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($workspace | is-empty) { error make --unspanned { msg: "path parameter 'workspace' must be non-empty" } }
+  if ($repo_slug | is-empty) { error make --unspanned { msg: "path parameter 'repo_slug' must be non-empty" } }
+  if ($issue_id | is-empty) { error make --unspanned { msg: "path parameter 'issue_id' must be non-empty" } }
   let full_url = (build-url $base ({workspace: (encode-path-segment $workspace), repo_slug: (encode-path-segment $repo_slug), issue_id: (encode-path-segment $issue_id)} | format pattern "/repositories/{workspace}/{repo_slug}/issues/{issue_id}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
 }
 
 # List attachments for an issue
@@ -2967,10 +3260,13 @@ export def "repositories-issues-attachments list" [
 ]: nothing -> record<next: string, page: int, pagelen: int, previous: string, size: int, values: table<type: string, links: record, name: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($workspace | is-empty) { error make --unspanned { msg: "path parameter 'workspace' must be non-empty" } }
+  if ($repo_slug | is-empty) { error make --unspanned { msg: "path parameter 'repo_slug' must be non-empty" } }
+  if ($issue_id | is-empty) { error make --unspanned { msg: "path parameter 'issue_id' must be non-empty" } }
   let full_url = (build-url $base ({workspace: (encode-path-segment $workspace), repo_slug: (encode-path-segment $repo_slug), issue_id: (encode-path-segment $issue_id)} | format pattern "/repositories/{workspace}/{repo_slug}/issues/{issue_id}/attachments"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
 }
 
 # Upload an attachment to an issue
@@ -2992,10 +3288,13 @@ export def "repositories-issues-attachments create" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($workspace | is-empty) { error make --unspanned { msg: "path parameter 'workspace' must be non-empty" } }
+  if ($repo_slug | is-empty) { error make --unspanned { msg: "path parameter 'repo_slug' must be non-empty" } }
+  if ($issue_id | is-empty) { error make --unspanned { msg: "path parameter 'issue_id' must be non-empty" } }
   let full_url = (build-url $base ({workspace: (encode-path-segment $workspace), repo_slug: (encode-path-segment $repo_slug), issue_id: (encode-path-segment $issue_id)} | format pattern "/repositories/{workspace}/{repo_slug}/issues/{issue_id}/attachments"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
 }
 
 # Delete an attachment for an issue
@@ -3018,10 +3317,14 @@ export def "repositories-issues-attachments delete" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($workspace | is-empty) { error make --unspanned { msg: "path parameter 'workspace' must be non-empty" } }
+  if ($repo_slug | is-empty) { error make --unspanned { msg: "path parameter 'repo_slug' must be non-empty" } }
+  if ($issue_id | is-empty) { error make --unspanned { msg: "path parameter 'issue_id' must be non-empty" } }
+  if ($path | is-empty) { error make --unspanned { msg: "path parameter 'path' must be non-empty" } }
   let full_url = (build-url $base ({workspace: (encode-path-segment $workspace), repo_slug: (encode-path-segment $repo_slug), issue_id: (encode-path-segment $issue_id), path: (encode-path-segment $path)} | format pattern "/repositories/{workspace}/{repo_slug}/issues/{issue_id}/attachments/{path}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
 }
 
 # Get attachment for an issue
@@ -3044,10 +3347,14 @@ export def "repositories-issues-attachments get" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($workspace | is-empty) { error make --unspanned { msg: "path parameter 'workspace' must be non-empty" } }
+  if ($repo_slug | is-empty) { error make --unspanned { msg: "path parameter 'repo_slug' must be non-empty" } }
+  if ($issue_id | is-empty) { error make --unspanned { msg: "path parameter 'issue_id' must be non-empty" } }
+  if ($path | is-empty) { error make --unspanned { msg: "path parameter 'path' must be non-empty" } }
   let full_url = (build-url $base ({workspace: (encode-path-segment $workspace), repo_slug: (encode-path-segment $repo_slug), issue_id: (encode-path-segment $issue_id), path: (encode-path-segment $path)} | format pattern "/repositories/{workspace}/{repo_slug}/issues/{issue_id}/attachments/{path}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
 }
 
 # List changes on an issue
@@ -3071,11 +3378,14 @@ export def "repositories-issues-changes list" [
 ]: nothing -> record<next: string, page: int, pagelen: int, previous: string, size: int, values: table<changes: record, created_on: string, issue: record, links: record, message: record, name: string, type: string, user: record>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($workspace | is-empty) { error make --unspanned { msg: "path parameter 'workspace' must be non-empty" } }
+  if ($repo_slug | is-empty) { error make --unspanned { msg: "path parameter 'repo_slug' must be non-empty" } }
+  if ($issue_id | is-empty) { error make --unspanned { msg: "path parameter 'issue_id' must be non-empty" } }
   let qp = [(serialize-qp "q" $q "scalar") (serialize-qp "sort" $qp_sort "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({workspace: (encode-path-segment $workspace), repo_slug: (encode-path-segment $repo_slug), issue_id: (encode-path-segment $issue_id)} | format pattern "/repositories/{workspace}/{repo_slug}/issues/{issue_id}/changes") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"q": $q, "sort": $qp_sort} | compact), body: null}
 }
 
 # Modify the state of an issue
@@ -3109,12 +3419,15 @@ export def "repositories-issues-changes create" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($workspace | is-empty) { error make --unspanned { msg: "path parameter 'workspace' must be non-empty" } }
+  if ($repo_slug | is-empty) { error make --unspanned { msg: "path parameter 'repo_slug' must be non-empty" } }
+  if ($issue_id | is-empty) { error make --unspanned { msg: "path parameter 'issue_id' must be non-empty" } }
   let full_url = (build-url $base ({workspace: (encode-path-segment $workspace), repo_slug: (encode-path-segment $repo_slug), issue_id: (encode-path-segment $issue_id)} | format pattern "/repositories/{workspace}/{repo_slug}/issues/{issue_id}/changes"))
   let req_body = {"changes": $changes, "created_on": $created_on, "issue": $issue, "links": $links, "message": $message, "name": $name, "type": $type, "user": $user} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: {}, body: $req_body}
 }
 
 # Get issue change object
@@ -3137,10 +3450,14 @@ export def "repositories-issues-changes get" [
 ]: nothing -> record<changes: record<assignee: record<new: string, old: string>, component: record<new: string, old: string>, content: record<new: string, old: string>, kind: record<new: string, old: string>, milestone: record<new: string, old: string>, priority: record<new: string, old: string>, state: record<new: string, old: string>, title: record<new: string, old: string>, version: record<new: string, old: string>>, created_on: string, issue: record<type: string, assignee: record<type: string, created_on: string, display_name: string, links: record, username: string, uuid: string>, component: record<type: string, id: int, links: record, name: string>, content: record<html: string, markup: string, raw: string>, created_on: string, edited_on: string, id: int, kind: string, links: record<attachments: record, comments: record, html: record, self: record, vote: record, watch: record>, milestone: record<type: string, id: int, links: record, name: string>, priority: string, reporter: record<type: string, created_on: string, display_name: string, links: record, username: string, uuid: string>, repository: record<type: string, created_on: string, description: string, fork_policy: string, full_name: string, has_issues: bool, has_wiki: bool, is_private: bool, language: string, links: record, mainbranch: record, name: string, owner: record, parent: any, project: record, scm: string, size: int, updated_on: string, uuid: string>, state: string, title: string, updated_on: string, version: record<type: string, id: int, links: record, name: string>, votes: int>, links: record<issue: record<href: string, name: string>, self: record<href: string, name: string>>, message: record<html: string, markup: string, raw: string>, name: string, type: string, user: record<type: string, created_on: string, display_name: string, links: record<avatar: record>, username: string, uuid: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($workspace | is-empty) { error make --unspanned { msg: "path parameter 'workspace' must be non-empty" } }
+  if ($repo_slug | is-empty) { error make --unspanned { msg: "path parameter 'repo_slug' must be non-empty" } }
+  if ($issue_id | is-empty) { error make --unspanned { msg: "path parameter 'issue_id' must be non-empty" } }
+  if ($change_id | is-empty) { error make --unspanned { msg: "path parameter 'change_id' must be non-empty" } }
   let full_url = (build-url $base ({workspace: (encode-path-segment $workspace), repo_slug: (encode-path-segment $repo_slug), issue_id: (encode-path-segment $issue_id), change_id: (encode-path-segment $change_id)} | format pattern "/repositories/{workspace}/{repo_slug}/issues/{issue_id}/changes/{change_id}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
 }
 
 # List comments on an issue
@@ -3163,11 +3480,14 @@ export def "repositories-issues-comments list" [
 ]: nothing -> record<next: string, page: int, pagelen: int, previous: string, size: int, values: table<issue: record>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($workspace | is-empty) { error make --unspanned { msg: "path parameter 'workspace' must be non-empty" } }
+  if ($repo_slug | is-empty) { error make --unspanned { msg: "path parameter 'repo_slug' must be non-empty" } }
+  if ($issue_id | is-empty) { error make --unspanned { msg: "path parameter 'issue_id' must be non-empty" } }
   let qp = [(serialize-qp "q" $q "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({workspace: (encode-path-segment $workspace), repo_slug: (encode-path-segment $repo_slug), issue_id: (encode-path-segment $issue_id)} | format pattern "/repositories/{workspace}/{repo_slug}/issues/{issue_id}/comments") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"q": $q} | compact), body: null}
 }
 
 # Create a comment on an issue
@@ -3191,12 +3511,15 @@ export def "repositories-issues-comments create" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($workspace | is-empty) { error make --unspanned { msg: "path parameter 'workspace' must be non-empty" } }
+  if ($repo_slug | is-empty) { error make --unspanned { msg: "path parameter 'repo_slug' must be non-empty" } }
+  if ($issue_id | is-empty) { error make --unspanned { msg: "path parameter 'issue_id' must be non-empty" } }
   let full_url = (build-url $base ({workspace: (encode-path-segment $workspace), repo_slug: (encode-path-segment $repo_slug), issue_id: (encode-path-segment $issue_id)} | format pattern "/repositories/{workspace}/{repo_slug}/issues/{issue_id}/comments"))
   let req_body = {"issue": $issue} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: {}, body: $req_body}
 }
 
 # Delete a comment on an issue
@@ -3219,10 +3542,14 @@ export def "repositories-issues-comments delete" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($workspace | is-empty) { error make --unspanned { msg: "path parameter 'workspace' must be non-empty" } }
+  if ($repo_slug | is-empty) { error make --unspanned { msg: "path parameter 'repo_slug' must be non-empty" } }
+  if ($issue_id | is-empty) { error make --unspanned { msg: "path parameter 'issue_id' must be non-empty" } }
+  if ($comment_id | is-empty) { error make --unspanned { msg: "path parameter 'comment_id' must be non-empty" } }
   let full_url = (build-url $base ({workspace: (encode-path-segment $workspace), repo_slug: (encode-path-segment $repo_slug), issue_id: (encode-path-segment $issue_id), comment_id: (encode-path-segment $comment_id)} | format pattern "/repositories/{workspace}/{repo_slug}/issues/{issue_id}/comments/{comment_id}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
 }
 
 # Get a comment on an issue
@@ -3245,10 +3572,14 @@ export def "repositories-issues-comments get" [
 ]: nothing -> record<issue: record<type: string, assignee: record<type: string, created_on: string, display_name: string, links: record, username: string, uuid: string>, component: record<type: string, id: int, links: record, name: string>, content: record<html: string, markup: string, raw: string>, created_on: string, edited_on: string, id: int, kind: string, links: record<attachments: record, comments: record, html: record, self: record, vote: record, watch: record>, milestone: record<type: string, id: int, links: record, name: string>, priority: string, reporter: record<type: string, created_on: string, display_name: string, links: record, username: string, uuid: string>, repository: record<type: string, created_on: string, description: string, fork_policy: string, full_name: string, has_issues: bool, has_wiki: bool, is_private: bool, language: string, links: record, mainbranch: record, name: string, owner: record, parent: any, project: record, scm: string, size: int, updated_on: string, uuid: string>, state: string, title: string, updated_on: string, version: record<type: string, id: int, links: record, name: string>, votes: int>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($workspace | is-empty) { error make --unspanned { msg: "path parameter 'workspace' must be non-empty" } }
+  if ($repo_slug | is-empty) { error make --unspanned { msg: "path parameter 'repo_slug' must be non-empty" } }
+  if ($issue_id | is-empty) { error make --unspanned { msg: "path parameter 'issue_id' must be non-empty" } }
+  if ($comment_id | is-empty) { error make --unspanned { msg: "path parameter 'comment_id' must be non-empty" } }
   let full_url = (build-url $base ({workspace: (encode-path-segment $workspace), repo_slug: (encode-path-segment $repo_slug), issue_id: (encode-path-segment $issue_id), comment_id: (encode-path-segment $comment_id)} | format pattern "/repositories/{workspace}/{repo_slug}/issues/{issue_id}/comments/{comment_id}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
 }
 
 # Update a comment on an issue
@@ -3273,12 +3604,16 @@ export def "repositories-issues-comments update" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($workspace | is-empty) { error make --unspanned { msg: "path parameter 'workspace' must be non-empty" } }
+  if ($repo_slug | is-empty) { error make --unspanned { msg: "path parameter 'repo_slug' must be non-empty" } }
+  if ($issue_id | is-empty) { error make --unspanned { msg: "path parameter 'issue_id' must be non-empty" } }
+  if ($comment_id | is-empty) { error make --unspanned { msg: "path parameter 'comment_id' must be non-empty" } }
   let full_url = (build-url $base ({workspace: (encode-path-segment $workspace), repo_slug: (encode-path-segment $repo_slug), issue_id: (encode-path-segment $issue_id), comment_id: (encode-path-segment $comment_id)} | format pattern "/repositories/{workspace}/{repo_slug}/issues/{issue_id}/comments/{comment_id}"))
   let req_body = {"issue": $issue} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: {}, body: $req_body}
 }
 
 # Remove vote for an issue
@@ -3300,10 +3635,13 @@ export def "repositories-issues-vote delete" [
 ]: nothing -> record<error: record<data: record, detail: string, message: string>, type: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($workspace | is-empty) { error make --unspanned { msg: "path parameter 'workspace' must be non-empty" } }
+  if ($repo_slug | is-empty) { error make --unspanned { msg: "path parameter 'repo_slug' must be non-empty" } }
+  if ($issue_id | is-empty) { error make --unspanned { msg: "path parameter 'issue_id' must be non-empty" } }
   let full_url = (build-url $base ({workspace: (encode-path-segment $workspace), repo_slug: (encode-path-segment $repo_slug), issue_id: (encode-path-segment $issue_id)} | format pattern "/repositories/{workspace}/{repo_slug}/issues/{issue_id}/vote"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
 }
 
 # Check if current user voted for an issue
@@ -3325,10 +3663,13 @@ export def "repositories-issues-vote get" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($workspace | is-empty) { error make --unspanned { msg: "path parameter 'workspace' must be non-empty" } }
+  if ($repo_slug | is-empty) { error make --unspanned { msg: "path parameter 'repo_slug' must be non-empty" } }
+  if ($issue_id | is-empty) { error make --unspanned { msg: "path parameter 'issue_id' must be non-empty" } }
   let full_url = (build-url $base ({workspace: (encode-path-segment $workspace), repo_slug: (encode-path-segment $repo_slug), issue_id: (encode-path-segment $issue_id)} | format pattern "/repositories/{workspace}/{repo_slug}/issues/{issue_id}/vote"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
 }
 
 # Vote for an issue
@@ -3350,10 +3691,13 @@ export def "repositories-issues-vote update" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($workspace | is-empty) { error make --unspanned { msg: "path parameter 'workspace' must be non-empty" } }
+  if ($repo_slug | is-empty) { error make --unspanned { msg: "path parameter 'repo_slug' must be non-empty" } }
+  if ($issue_id | is-empty) { error make --unspanned { msg: "path parameter 'issue_id' must be non-empty" } }
   let full_url = (build-url $base ({workspace: (encode-path-segment $workspace), repo_slug: (encode-path-segment $repo_slug), issue_id: (encode-path-segment $issue_id)} | format pattern "/repositories/{workspace}/{repo_slug}/issues/{issue_id}/vote"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
 }
 
 # Stop watching an issue
@@ -3375,10 +3719,13 @@ export def "repositories-issues-watch delete" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($workspace | is-empty) { error make --unspanned { msg: "path parameter 'workspace' must be non-empty" } }
+  if ($repo_slug | is-empty) { error make --unspanned { msg: "path parameter 'repo_slug' must be non-empty" } }
+  if ($issue_id | is-empty) { error make --unspanned { msg: "path parameter 'issue_id' must be non-empty" } }
   let full_url = (build-url $base ({workspace: (encode-path-segment $workspace), repo_slug: (encode-path-segment $repo_slug), issue_id: (encode-path-segment $issue_id)} | format pattern "/repositories/{workspace}/{repo_slug}/issues/{issue_id}/watch"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
 }
 
 # Check if current user is watching a issue
@@ -3400,10 +3747,13 @@ export def "repositories-issues-watch get" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($workspace | is-empty) { error make --unspanned { msg: "path parameter 'workspace' must be non-empty" } }
+  if ($repo_slug | is-empty) { error make --unspanned { msg: "path parameter 'repo_slug' must be non-empty" } }
+  if ($issue_id | is-empty) { error make --unspanned { msg: "path parameter 'issue_id' must be non-empty" } }
   let full_url = (build-url $base ({workspace: (encode-path-segment $workspace), repo_slug: (encode-path-segment $repo_slug), issue_id: (encode-path-segment $issue_id)} | format pattern "/repositories/{workspace}/{repo_slug}/issues/{issue_id}/watch"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
 }
 
 # Watch an issue
@@ -3425,10 +3775,13 @@ export def "repositories-issues-watch update" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($workspace | is-empty) { error make --unspanned { msg: "path parameter 'workspace' must be non-empty" } }
+  if ($repo_slug | is-empty) { error make --unspanned { msg: "path parameter 'repo_slug' must be non-empty" } }
+  if ($issue_id | is-empty) { error make --unspanned { msg: "path parameter 'issue_id' must be non-empty" } }
   let full_url = (build-url $base ({workspace: (encode-path-segment $workspace), repo_slug: (encode-path-segment $repo_slug), issue_id: (encode-path-segment $issue_id)} | format pattern "/repositories/{workspace}/{repo_slug}/issues/{issue_id}/watch"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
 }
 
 # Get the common ancestor between two commits
@@ -3450,10 +3803,13 @@ export def "repositories-merge-base get" [
 ]: nothing -> record<participants: table<type: string, approved: bool, participated_on: string, role: string, state: string, user: record>, repository: record<type: string, created_on: string, description: string, fork_policy: string, full_name: string, has_issues: bool, has_wiki: bool, is_private: bool, language: string, links: record<avatar: record, clone: list, commits: record, downloads: record, forks: record, hooks: record, html: record, pullrequests: record, self: record, watchers: record>, mainbranch: record<links: record, name: string, target: any, type: string, default_merge_strategy: string, merge_strategies: list>, name: string, owner: record<type: string, created_on: string, display_name: string, links: record, username: string, uuid: string>, parent: any, project: record<type: string, created_on: string, description: string, has_publicly_visible_repos: bool, is_private: bool, key: string, links: record, name: string, owner: record, updated_on: string, uuid: string>, scm: string, size: int, updated_on: string, uuid: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($workspace | is-empty) { error make --unspanned { msg: "path parameter 'workspace' must be non-empty" } }
+  if ($repo_slug | is-empty) { error make --unspanned { msg: "path parameter 'repo_slug' must be non-empty" } }
+  if ($revspec | is-empty) { error make --unspanned { msg: "path parameter 'revspec' must be non-empty" } }
   let full_url = (build-url $base ({workspace: (encode-path-segment $workspace), repo_slug: (encode-path-segment $repo_slug), revspec: (encode-path-segment $revspec)} | format pattern "/repositories/{workspace}/{repo_slug}/merge-base/{revspec}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
 }
 
 # List milestones
@@ -3474,10 +3830,12 @@ export def "repositories-milestones list" [
 ]: nothing -> record<next: string, page: int, pagelen: int, previous: string, size: int, values: table<type: string, id: int, links: record, name: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($workspace | is-empty) { error make --unspanned { msg: "path parameter 'workspace' must be non-empty" } }
+  if ($repo_slug | is-empty) { error make --unspanned { msg: "path parameter 'repo_slug' must be non-empty" } }
   let full_url = (build-url $base ({workspace: (encode-path-segment $workspace), repo_slug: (encode-path-segment $repo_slug)} | format pattern "/repositories/{workspace}/{repo_slug}/milestones"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
 }
 
 # Get a milestone
@@ -3499,10 +3857,13 @@ export def "repositories-milestones get" [
 ]: nothing -> record<type: string, id: int, links: record<self: record<href: string, name: string>>, name: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($workspace | is-empty) { error make --unspanned { msg: "path parameter 'workspace' must be non-empty" } }
+  if ($repo_slug | is-empty) { error make --unspanned { msg: "path parameter 'repo_slug' must be non-empty" } }
+  if ($milestone_id | is-empty) { error make --unspanned { msg: "path parameter 'milestone_id' must be non-empty" } }
   let full_url = (build-url $base ({workspace: (encode-path-segment $workspace), repo_slug: (encode-path-segment $repo_slug), milestone_id: (encode-path-segment $milestone_id)} | format pattern "/repositories/{workspace}/{repo_slug}/milestones/{milestone_id}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
 }
 
 # Retrieve the inheritance state for repository settings
@@ -3523,10 +3884,12 @@ export def "repositories-override-settings get" [
 ]: nothing -> record<override_settings: record, type: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($workspace | is-empty) { error make --unspanned { msg: "path parameter 'workspace' must be non-empty" } }
+  if ($repo_slug | is-empty) { error make --unspanned { msg: "path parameter 'repo_slug' must be non-empty" } }
   let full_url = (build-url $base ({workspace: (encode-path-segment $workspace), repo_slug: (encode-path-segment $repo_slug)} | format pattern "/repositories/{workspace}/{repo_slug}/override-settings"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
 }
 
 # Set the inheritance state for repository settings
@@ -3547,10 +3910,12 @@ export def "repositories-override-settings update" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($workspace | is-empty) { error make --unspanned { msg: "path parameter 'workspace' must be non-empty" } }
+  if ($repo_slug | is-empty) { error make --unspanned { msg: "path parameter 'repo_slug' must be non-empty" } }
   let full_url = (build-url $base ({workspace: (encode-path-segment $workspace), repo_slug: (encode-path-segment $repo_slug)} | format pattern "/repositories/{workspace}/{repo_slug}/override-settings"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
 }
 
 # Get a patch for two commits
@@ -3572,10 +3937,13 @@ export def "repositories-patch get" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($workspace | is-empty) { error make --unspanned { msg: "path parameter 'workspace' must be non-empty" } }
+  if ($repo_slug | is-empty) { error make --unspanned { msg: "path parameter 'repo_slug' must be non-empty" } }
+  if ($spec | is-empty) { error make --unspanned { msg: "path parameter 'spec' must be non-empty" } }
   let full_url = (build-url $base ({workspace: (encode-path-segment $workspace), repo_slug: (encode-path-segment $repo_slug), spec: (encode-path-segment $spec)} | format pattern "/repositories/{workspace}/{repo_slug}/patch/{spec}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
 }
 
 # List explicit group permissions for a repository
@@ -3596,10 +3964,12 @@ export def "repositories-permissions-config-groups list" [
 ]: nothing -> record<next: string, page: int, pagelen: int, previous: string, size: int, values: table<group: record, links: record, permission: string, repository: record, type: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($workspace | is-empty) { error make --unspanned { msg: "path parameter 'workspace' must be non-empty" } }
+  if ($repo_slug | is-empty) { error make --unspanned { msg: "path parameter 'repo_slug' must be non-empty" } }
   let full_url = (build-url $base ({workspace: (encode-path-segment $workspace), repo_slug: (encode-path-segment $repo_slug)} | format pattern "/repositories/{workspace}/{repo_slug}/permissions-config/groups"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
 }
 
 # Delete an explicit group permission for a repository
@@ -3621,10 +3991,13 @@ export def "repositories-permissions-config-groups delete" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($workspace | is-empty) { error make --unspanned { msg: "path parameter 'workspace' must be non-empty" } }
+  if ($repo_slug | is-empty) { error make --unspanned { msg: "path parameter 'repo_slug' must be non-empty" } }
+  if ($group_slug | is-empty) { error make --unspanned { msg: "path parameter 'group_slug' must be non-empty" } }
   let full_url = (build-url $base ({workspace: (encode-path-segment $workspace), repo_slug: (encode-path-segment $repo_slug), group_slug: (encode-path-segment $group_slug)} | format pattern "/repositories/{workspace}/{repo_slug}/permissions-config/groups/{group_slug}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
 }
 
 # Get an explicit group permission for a repository
@@ -3646,10 +4019,13 @@ export def "repositories-permissions-config-groups get" [
 ]: nothing -> record<group: record<type: string, full_slug: string, links: record<html: record, self: record>, name: string, owner: record<type: string, created_on: string, display_name: string, links: record, username: string, uuid: string>, slug: string, workspace: record<type: string, created_on: string, is_private: bool, links: record, name: string, slug: string, updated_on: string, uuid: string>>, links: record<self: record<href: string, name: string>>, permission: string, repository: record<type: string, created_on: string, description: string, fork_policy: string, full_name: string, has_issues: bool, has_wiki: bool, is_private: bool, language: string, links: record<avatar: record, clone: list, commits: record, downloads: record, forks: record, hooks: record, html: record, pullrequests: record, self: record, watchers: record>, mainbranch: record<links: record, name: string, target: record, type: string, default_merge_strategy: string, merge_strategies: list>, name: string, owner: record<type: string, created_on: string, display_name: string, links: record, username: string, uuid: string>, parent: any, project: record<type: string, created_on: string, description: string, has_publicly_visible_repos: bool, is_private: bool, key: string, links: record, name: string, owner: record, updated_on: string, uuid: string>, scm: string, size: int, updated_on: string, uuid: string>, type: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($workspace | is-empty) { error make --unspanned { msg: "path parameter 'workspace' must be non-empty" } }
+  if ($repo_slug | is-empty) { error make --unspanned { msg: "path parameter 'repo_slug' must be non-empty" } }
+  if ($group_slug | is-empty) { error make --unspanned { msg: "path parameter 'group_slug' must be non-empty" } }
   let full_url = (build-url $base ({workspace: (encode-path-segment $workspace), repo_slug: (encode-path-segment $repo_slug), group_slug: (encode-path-segment $group_slug)} | format pattern "/repositories/{workspace}/{repo_slug}/permissions-config/groups/{group_slug}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
 }
 
 # Update an explicit group permission for a repository
@@ -3671,10 +4047,13 @@ export def "repositories-permissions-config-groups update" [
 ]: nothing -> record<group: record<type: string, full_slug: string, links: record<html: record, self: record>, name: string, owner: record<type: string, created_on: string, display_name: string, links: record, username: string, uuid: string>, slug: string, workspace: record<type: string, created_on: string, is_private: bool, links: record, name: string, slug: string, updated_on: string, uuid: string>>, links: record<self: record<href: string, name: string>>, permission: string, repository: record<type: string, created_on: string, description: string, fork_policy: string, full_name: string, has_issues: bool, has_wiki: bool, is_private: bool, language: string, links: record<avatar: record, clone: list, commits: record, downloads: record, forks: record, hooks: record, html: record, pullrequests: record, self: record, watchers: record>, mainbranch: record<links: record, name: string, target: record, type: string, default_merge_strategy: string, merge_strategies: list>, name: string, owner: record<type: string, created_on: string, display_name: string, links: record, username: string, uuid: string>, parent: any, project: record<type: string, created_on: string, description: string, has_publicly_visible_repos: bool, is_private: bool, key: string, links: record, name: string, owner: record, updated_on: string, uuid: string>, scm: string, size: int, updated_on: string, uuid: string>, type: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($workspace | is-empty) { error make --unspanned { msg: "path parameter 'workspace' must be non-empty" } }
+  if ($repo_slug | is-empty) { error make --unspanned { msg: "path parameter 'repo_slug' must be non-empty" } }
+  if ($group_slug | is-empty) { error make --unspanned { msg: "path parameter 'group_slug' must be non-empty" } }
   let full_url = (build-url $base ({workspace: (encode-path-segment $workspace), repo_slug: (encode-path-segment $repo_slug), group_slug: (encode-path-segment $group_slug)} | format pattern "/repositories/{workspace}/{repo_slug}/permissions-config/groups/{group_slug}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
 }
 
 # List explicit user permissions for a repository
@@ -3695,10 +4074,12 @@ export def "repositories-permissions-config-users list" [
 ]: nothing -> record<next: string, page: int, pagelen: int, previous: string, size: int, values: table<links: record, permission: string, repository: record, type: string, user: record>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($workspace | is-empty) { error make --unspanned { msg: "path parameter 'workspace' must be non-empty" } }
+  if ($repo_slug | is-empty) { error make --unspanned { msg: "path parameter 'repo_slug' must be non-empty" } }
   let full_url = (build-url $base ({workspace: (encode-path-segment $workspace), repo_slug: (encode-path-segment $repo_slug)} | format pattern "/repositories/{workspace}/{repo_slug}/permissions-config/users"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
 }
 
 # Delete an explicit user permission for a repository
@@ -3720,10 +4101,13 @@ export def "repositories-permissions-config-users delete" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($workspace | is-empty) { error make --unspanned { msg: "path parameter 'workspace' must be non-empty" } }
+  if ($repo_slug | is-empty) { error make --unspanned { msg: "path parameter 'repo_slug' must be non-empty" } }
+  if ($selected_user_id | is-empty) { error make --unspanned { msg: "path parameter 'selected_user_id' must be non-empty" } }
   let full_url = (build-url $base ({workspace: (encode-path-segment $workspace), repo_slug: (encode-path-segment $repo_slug), selected_user_id: (encode-path-segment $selected_user_id)} | format pattern "/repositories/{workspace}/{repo_slug}/permissions-config/users/{selected_user_id}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
 }
 
 # Get an explicit user permission for a repository
@@ -3745,10 +4129,13 @@ export def "repositories-permissions-config-users get" [
 ]: nothing -> record<links: record<self: record<href: string, name: string>>, permission: string, repository: record<type: string, created_on: string, description: string, fork_policy: string, full_name: string, has_issues: bool, has_wiki: bool, is_private: bool, language: string, links: record<avatar: record, clone: list, commits: record, downloads: record, forks: record, hooks: record, html: record, pullrequests: record, self: record, watchers: record>, mainbranch: record<links: record, name: string, target: record, type: string, default_merge_strategy: string, merge_strategies: list>, name: string, owner: record<type: string, created_on: string, display_name: string, links: record, username: string, uuid: string>, parent: any, project: record<type: string, created_on: string, description: string, has_publicly_visible_repos: bool, is_private: bool, key: string, links: record, name: string, owner: record, updated_on: string, uuid: string>, scm: string, size: int, updated_on: string, uuid: string>, type: string, user: record<account_id: string, account_status: string, has_2fa_enabled: bool, is_staff: bool, links: record<avatar: record, html: record, repositories: record, self: record>, nickname: string, website: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($workspace | is-empty) { error make --unspanned { msg: "path parameter 'workspace' must be non-empty" } }
+  if ($repo_slug | is-empty) { error make --unspanned { msg: "path parameter 'repo_slug' must be non-empty" } }
+  if ($selected_user_id | is-empty) { error make --unspanned { msg: "path parameter 'selected_user_id' must be non-empty" } }
   let full_url = (build-url $base ({workspace: (encode-path-segment $workspace), repo_slug: (encode-path-segment $repo_slug), selected_user_id: (encode-path-segment $selected_user_id)} | format pattern "/repositories/{workspace}/{repo_slug}/permissions-config/users/{selected_user_id}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
 }
 
 # Update an explicit user permission for a repository
@@ -3770,17 +4157,20 @@ export def "repositories-permissions-config-users update" [
 ]: nothing -> record<links: record<self: record<href: string, name: string>>, permission: string, repository: record<type: string, created_on: string, description: string, fork_policy: string, full_name: string, has_issues: bool, has_wiki: bool, is_private: bool, language: string, links: record<avatar: record, clone: list, commits: record, downloads: record, forks: record, hooks: record, html: record, pullrequests: record, self: record, watchers: record>, mainbranch: record<links: record, name: string, target: record, type: string, default_merge_strategy: string, merge_strategies: list>, name: string, owner: record<type: string, created_on: string, display_name: string, links: record, username: string, uuid: string>, parent: any, project: record<type: string, created_on: string, description: string, has_publicly_visible_repos: bool, is_private: bool, key: string, links: record, name: string, owner: record, updated_on: string, uuid: string>, scm: string, size: int, updated_on: string, uuid: string>, type: string, user: record<account_id: string, account_status: string, has_2fa_enabled: bool, is_staff: bool, links: record<avatar: record, html: record, repositories: record, self: record>, nickname: string, website: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($workspace | is-empty) { error make --unspanned { msg: "path parameter 'workspace' must be non-empty" } }
+  if ($repo_slug | is-empty) { error make --unspanned { msg: "path parameter 'repo_slug' must be non-empty" } }
+  if ($selected_user_id | is-empty) { error make --unspanned { msg: "path parameter 'selected_user_id' must be non-empty" } }
   let full_url = (build-url $base ({workspace: (encode-path-segment $workspace), repo_slug: (encode-path-segment $repo_slug), selected_user_id: (encode-path-segment $selected_user_id)} | format pattern "/repositories/{workspace}/{repo_slug}/permissions-config/users/{selected_user_id}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
 }
 
 # Delete caches
 #
 # DELETE /repositories/{workspace}/{repo_slug}/pipelines-config/caches
 # operationId: deleteRepositoryPipelineCaches
-export def "repositories-pipelines-config-caches delete-repository-by-workspace-repo_slug" [
+export def "repositories-pipelines-config-caches delete-repository-by-workspace-repo-slug" [
   workspace: string
   repo_slug: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -3796,11 +4186,13 @@ export def "repositories-pipelines-config-caches delete-repository-by-workspace-
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($workspace | is-empty) { error make --unspanned { msg: "path parameter 'workspace' must be non-empty" } }
+  if ($repo_slug | is-empty) { error make --unspanned { msg: "path parameter 'repo_slug' must be non-empty" } }
   let qp = [(serialize-qp "name" $name "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({workspace: (encode-path-segment $workspace), repo_slug: (encode-path-segment $repo_slug)} | format pattern "/repositories/{workspace}/{repo_slug}/pipelines-config/caches") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"name": $name} | compact), body: null}
 }
 
 # List caches
@@ -3822,17 +4214,19 @@ export def "repositories-pipelines-config-caches get-repository" [
 ]: nothing -> record<next: string, page: int, pagelen: int, previous: string, size: int, values: table<type: string, created_on: string, file_size_bytes: int, key_hash: string, name: string, path: string, pipeline_uuid: string, step_uuid: string, uuid: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($workspace | is-empty) { error make --unspanned { msg: "path parameter 'workspace' must be non-empty" } }
+  if ($repo_slug | is-empty) { error make --unspanned { msg: "path parameter 'repo_slug' must be non-empty" } }
   let full_url = (build-url $base ({workspace: (encode-path-segment $workspace), repo_slug: (encode-path-segment $repo_slug)} | format pattern "/repositories/{workspace}/{repo_slug}/pipelines-config/caches/"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
 }
 
 # Delete a cache
 #
 # DELETE /repositories/{workspace}/{repo_slug}/pipelines-config/caches/{cache_uuid}
 # operationId: deleteRepositoryPipelineCache
-export def "repositories-pipelines-config-caches delete-repository-by-workspace-repo_slug-cache_uuid" [
+export def "repositories-pipelines-config-caches delete-repository-by-workspace-repo-slug-cache-uuid" [
   workspace: string
   repo_slug: string
   cache_uuid: string
@@ -3848,10 +4242,13 @@ export def "repositories-pipelines-config-caches delete-repository-by-workspace-
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($workspace | is-empty) { error make --unspanned { msg: "path parameter 'workspace' must be non-empty" } }
+  if ($repo_slug | is-empty) { error make --unspanned { msg: "path parameter 'repo_slug' must be non-empty" } }
+  if ($cache_uuid | is-empty) { error make --unspanned { msg: "path parameter 'cache_uuid' must be non-empty" } }
   let full_url = (build-url $base ({workspace: (encode-path-segment $workspace), repo_slug: (encode-path-segment $repo_slug), cache_uuid: (encode-path-segment $cache_uuid)} | format pattern "/repositories/{workspace}/{repo_slug}/pipelines-config/caches/{cache_uuid}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
 }
 
 # Get cache content URI
@@ -3874,10 +4271,13 @@ export def "repositories-pipelines-config-caches-content-uri get-repository" [
 ]: nothing -> record<uri: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($workspace | is-empty) { error make --unspanned { msg: "path parameter 'workspace' must be non-empty" } }
+  if ($repo_slug | is-empty) { error make --unspanned { msg: "path parameter 'repo_slug' must be non-empty" } }
+  if ($cache_uuid | is-empty) { error make --unspanned { msg: "path parameter 'cache_uuid' must be non-empty" } }
   let full_url = (build-url $base ({workspace: (encode-path-segment $workspace), repo_slug: (encode-path-segment $repo_slug), cache_uuid: (encode-path-segment $cache_uuid)} | format pattern "/repositories/{workspace}/{repo_slug}/pipelines-config/caches/{cache_uuid}/content-uri"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
 }
 
 # List pipelines
@@ -3899,10 +4299,12 @@ export def "repositories-pipelines list" [
 ]: nothing -> record<next: string, page: int, pagelen: int, previous: string, size: int, values: table<type: string, build_number: int, build_seconds_used: int, completed_on: string, created_on: string, creator: record, repository: record, state: record, target: record, trigger: record, uuid: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($workspace | is-empty) { error make --unspanned { msg: "path parameter 'workspace' must be non-empty" } }
+  if ($repo_slug | is-empty) { error make --unspanned { msg: "path parameter 'repo_slug' must be non-empty" } }
   let full_url = (build-url $base ({workspace: (encode-path-segment $workspace), repo_slug: (encode-path-segment $repo_slug)} | format pattern "/repositories/{workspace}/{repo_slug}/pipelines/"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
 }
 
 # Run a pipeline
@@ -3936,12 +4338,14 @@ export def "repositories-pipelines create-for-repository" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($workspace | is-empty) { error make --unspanned { msg: "path parameter 'workspace' must be non-empty" } }
+  if ($repo_slug | is-empty) { error make --unspanned { msg: "path parameter 'repo_slug' must be non-empty" } }
   let full_url = (build-url $base ({workspace: (encode-path-segment $workspace), repo_slug: (encode-path-segment $repo_slug)} | format pattern "/repositories/{workspace}/{repo_slug}/pipelines/"))
   let req_body = {"type": $type, "build_number": $build_number, "build_seconds_used": $build_seconds_used, "completed_on": $completed_on, "created_on": $created_on, "creator": $creator, "repository": $repository, "state": $state, "target": $target, "trigger": $trigger, "uuid": $uuid} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: {}, body: $req_body}
 }
 
 # Get a pipeline
@@ -3964,10 +4368,13 @@ export def "repositories-pipelines get-for-repository" [
 ]: nothing -> record<type: string, build_number: int, build_seconds_used: int, completed_on: string, created_on: string, creator: record<type: string, created_on: string, display_name: string, links: record<avatar: record>, username: string, uuid: string>, repository: record<type: string, created_on: string, description: string, fork_policy: string, full_name: string, has_issues: bool, has_wiki: bool, is_private: bool, language: string, links: record<avatar: record, clone: list, commits: record, downloads: record, forks: record, hooks: record, html: record, pullrequests: record, self: record, watchers: record>, mainbranch: record<links: record, name: string, target: record, type: string, default_merge_strategy: string, merge_strategies: list>, name: string, owner: record<type: string, created_on: string, display_name: string, links: record, username: string, uuid: string>, parent: any, project: record<type: string, created_on: string, description: string, has_publicly_visible_repos: bool, is_private: bool, key: string, links: record, name: string, owner: record, updated_on: string, uuid: string>, scm: string, size: int, updated_on: string, uuid: string>, state: record<type: string>, target: record<type: string>, trigger: record<type: string>, uuid: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($workspace | is-empty) { error make --unspanned { msg: "path parameter 'workspace' must be non-empty" } }
+  if ($repo_slug | is-empty) { error make --unspanned { msg: "path parameter 'repo_slug' must be non-empty" } }
+  if ($pipeline_uuid | is-empty) { error make --unspanned { msg: "path parameter 'pipeline_uuid' must be non-empty" } }
   let full_url = (build-url $base ({workspace: (encode-path-segment $workspace), repo_slug: (encode-path-segment $repo_slug), pipeline_uuid: (encode-path-segment $pipeline_uuid)} | format pattern "/repositories/{workspace}/{repo_slug}/pipelines/{pipeline_uuid}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
 }
 
 # List steps for a pipeline
@@ -3990,10 +4397,13 @@ export def "repositories-pipelines-steps list" [
 ]: nothing -> record<next: string, page: int, pagelen: int, previous: string, size: int, values: table<type: string, completed_on: string, image: record, script_commands: list, setup_commands: list, started_on: string, state: record, uuid: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($workspace | is-empty) { error make --unspanned { msg: "path parameter 'workspace' must be non-empty" } }
+  if ($repo_slug | is-empty) { error make --unspanned { msg: "path parameter 'repo_slug' must be non-empty" } }
+  if ($pipeline_uuid | is-empty) { error make --unspanned { msg: "path parameter 'pipeline_uuid' must be non-empty" } }
   let full_url = (build-url $base ({workspace: (encode-path-segment $workspace), repo_slug: (encode-path-segment $repo_slug), pipeline_uuid: (encode-path-segment $pipeline_uuid)} | format pattern "/repositories/{workspace}/{repo_slug}/pipelines/{pipeline_uuid}/steps/"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
 }
 
 # Get a step of a pipeline
@@ -4017,10 +4427,14 @@ export def "repositories-pipelines-steps get-for-repository" [
 ]: nothing -> record<type: string, completed_on: string, image: record<email: string, name: string, password: string, username: string>, script_commands: table<command: string, name: string>, setup_commands: table<command: string, name: string>, started_on: string, state: record<type: string>, uuid: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($workspace | is-empty) { error make --unspanned { msg: "path parameter 'workspace' must be non-empty" } }
+  if ($repo_slug | is-empty) { error make --unspanned { msg: "path parameter 'repo_slug' must be non-empty" } }
+  if ($pipeline_uuid | is-empty) { error make --unspanned { msg: "path parameter 'pipeline_uuid' must be non-empty" } }
+  if ($step_uuid | is-empty) { error make --unspanned { msg: "path parameter 'step_uuid' must be non-empty" } }
   let full_url = (build-url $base ({workspace: (encode-path-segment $workspace), repo_slug: (encode-path-segment $repo_slug), pipeline_uuid: (encode-path-segment $pipeline_uuid), step_uuid: (encode-path-segment $step_uuid)} | format pattern "/repositories/{workspace}/{repo_slug}/pipelines/{pipeline_uuid}/steps/{step_uuid}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
 }
 
 # Get log file for a step
@@ -4044,10 +4458,14 @@ export def "repositories-pipelines-steps-log get-for-repository" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($workspace | is-empty) { error make --unspanned { msg: "path parameter 'workspace' must be non-empty" } }
+  if ($repo_slug | is-empty) { error make --unspanned { msg: "path parameter 'repo_slug' must be non-empty" } }
+  if ($pipeline_uuid | is-empty) { error make --unspanned { msg: "path parameter 'pipeline_uuid' must be non-empty" } }
+  if ($step_uuid | is-empty) { error make --unspanned { msg: "path parameter 'step_uuid' must be non-empty" } }
   let full_url = (build-url $base ({workspace: (encode-path-segment $workspace), repo_slug: (encode-path-segment $repo_slug), pipeline_uuid: (encode-path-segment $pipeline_uuid), step_uuid: (encode-path-segment $step_uuid)} | format pattern "/repositories/{workspace}/{repo_slug}/pipelines/{pipeline_uuid}/steps/{step_uuid}/log"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
 }
 
 # Get the logs for the build container or a service container for a given step of a pipeline.
@@ -4072,10 +4490,15 @@ export def "repositories-pipelines-steps-logs get-container" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($workspace | is-empty) { error make --unspanned { msg: "path parameter 'workspace' must be non-empty" } }
+  if ($repo_slug | is-empty) { error make --unspanned { msg: "path parameter 'repo_slug' must be non-empty" } }
+  if ($pipeline_uuid | is-empty) { error make --unspanned { msg: "path parameter 'pipeline_uuid' must be non-empty" } }
+  if ($step_uuid | is-empty) { error make --unspanned { msg: "path parameter 'step_uuid' must be non-empty" } }
+  if ($log_uuid | is-empty) { error make --unspanned { msg: "path parameter 'log_uuid' must be non-empty" } }
   let full_url = (build-url $base ({workspace: (encode-path-segment $workspace), repo_slug: (encode-path-segment $repo_slug), pipeline_uuid: (encode-path-segment $pipeline_uuid), step_uuid: (encode-path-segment $step_uuid), log_uuid: (encode-path-segment $log_uuid)} | format pattern "/repositories/{workspace}/{repo_slug}/pipelines/{pipeline_uuid}/steps/{step_uuid}/logs/{log_uuid}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
 }
 
 # Get a summary of test reports for a given step of a pipeline.
@@ -4099,10 +4522,14 @@ export def "repositories-pipelines-steps-test-reports get" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($workspace | is-empty) { error make --unspanned { msg: "path parameter 'workspace' must be non-empty" } }
+  if ($repo_slug | is-empty) { error make --unspanned { msg: "path parameter 'repo_slug' must be non-empty" } }
+  if ($pipeline_uuid | is-empty) { error make --unspanned { msg: "path parameter 'pipeline_uuid' must be non-empty" } }
+  if ($step_uuid | is-empty) { error make --unspanned { msg: "path parameter 'step_uuid' must be non-empty" } }
   let full_url = (build-url $base ({workspace: (encode-path-segment $workspace), repo_slug: (encode-path-segment $repo_slug), pipeline_uuid: (encode-path-segment $pipeline_uuid), step_uuid: (encode-path-segment $step_uuid)} | format pattern "/repositories/{workspace}/{repo_slug}/pipelines/{pipeline_uuid}/steps/{step_uuid}/test_reports"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
 }
 
 # Get test cases for a given step of a pipeline.
@@ -4126,10 +4553,14 @@ export def "repositories-pipelines-steps-test-reports-test-cases get" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($workspace | is-empty) { error make --unspanned { msg: "path parameter 'workspace' must be non-empty" } }
+  if ($repo_slug | is-empty) { error make --unspanned { msg: "path parameter 'repo_slug' must be non-empty" } }
+  if ($pipeline_uuid | is-empty) { error make --unspanned { msg: "path parameter 'pipeline_uuid' must be non-empty" } }
+  if ($step_uuid | is-empty) { error make --unspanned { msg: "path parameter 'step_uuid' must be non-empty" } }
   let full_url = (build-url $base ({workspace: (encode-path-segment $workspace), repo_slug: (encode-path-segment $repo_slug), pipeline_uuid: (encode-path-segment $pipeline_uuid), step_uuid: (encode-path-segment $step_uuid)} | format pattern "/repositories/{workspace}/{repo_slug}/pipelines/{pipeline_uuid}/steps/{step_uuid}/test_reports/test_cases"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
 }
 
 # Get test case reasons (output) for a given test case in a step of a pipeline.
@@ -4154,10 +4585,15 @@ export def "repositories-pipelines-steps-test-reports-test-cases-test-case-reaso
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($workspace | is-empty) { error make --unspanned { msg: "path parameter 'workspace' must be non-empty" } }
+  if ($repo_slug | is-empty) { error make --unspanned { msg: "path parameter 'repo_slug' must be non-empty" } }
+  if ($pipeline_uuid | is-empty) { error make --unspanned { msg: "path parameter 'pipeline_uuid' must be non-empty" } }
+  if ($step_uuid | is-empty) { error make --unspanned { msg: "path parameter 'step_uuid' must be non-empty" } }
+  if ($test_case_uuid | is-empty) { error make --unspanned { msg: "path parameter 'test_case_uuid' must be non-empty" } }
   let full_url = (build-url $base ({workspace: (encode-path-segment $workspace), repo_slug: (encode-path-segment $repo_slug), pipeline_uuid: (encode-path-segment $pipeline_uuid), step_uuid: (encode-path-segment $step_uuid), test_case_uuid: (encode-path-segment $test_case_uuid)} | format pattern "/repositories/{workspace}/{repo_slug}/pipelines/{pipeline_uuid}/steps/{step_uuid}/test_reports/test_cases/{test_case_uuid}/test_case_reasons"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
 }
 
 # Stop a pipeline
@@ -4180,10 +4616,13 @@ export def "repositories-pipelines-stop-pipeline stop" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($workspace | is-empty) { error make --unspanned { msg: "path parameter 'workspace' must be non-empty" } }
+  if ($repo_slug | is-empty) { error make --unspanned { msg: "path parameter 'repo_slug' must be non-empty" } }
+  if ($pipeline_uuid | is-empty) { error make --unspanned { msg: "path parameter 'pipeline_uuid' must be non-empty" } }
   let full_url = (build-url $base ({workspace: (encode-path-segment $workspace), repo_slug: (encode-path-segment $repo_slug), pipeline_uuid: (encode-path-segment $pipeline_uuid)} | format pattern "/repositories/{workspace}/{repo_slug}/pipelines/{pipeline_uuid}/stopPipeline"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
 }
 
 # Get configuration
@@ -4205,10 +4644,12 @@ export def "repositories-pipelines-config get-repository" [
 ]: nothing -> record<type: string, enabled: bool, repository: record<type: string, created_on: string, description: string, fork_policy: string, full_name: string, has_issues: bool, has_wiki: bool, is_private: bool, language: string, links: record<avatar: record, clone: list, commits: record, downloads: record, forks: record, hooks: record, html: record, pullrequests: record, self: record, watchers: record>, mainbranch: record<links: record, name: string, target: record, type: string, default_merge_strategy: string, merge_strategies: list>, name: string, owner: record<type: string, created_on: string, display_name: string, links: record, username: string, uuid: string>, parent: any, project: record<type: string, created_on: string, description: string, has_publicly_visible_repos: bool, is_private: bool, key: string, links: record, name: string, owner: record, updated_on: string, uuid: string>, scm: string, size: int, updated_on: string, uuid: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($workspace | is-empty) { error make --unspanned { msg: "path parameter 'workspace' must be non-empty" } }
+  if ($repo_slug | is-empty) { error make --unspanned { msg: "path parameter 'repo_slug' must be non-empty" } }
   let full_url = (build-url $base ({workspace: (encode-path-segment $workspace), repo_slug: (encode-path-segment $repo_slug)} | format pattern "/repositories/{workspace}/{repo_slug}/pipelines_config"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
 }
 
 # Update configuration
@@ -4234,12 +4675,14 @@ export def "repositories-pipelines-config update-repository" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($workspace | is-empty) { error make --unspanned { msg: "path parameter 'workspace' must be non-empty" } }
+  if ($repo_slug | is-empty) { error make --unspanned { msg: "path parameter 'repo_slug' must be non-empty" } }
   let full_url = (build-url $base ({workspace: (encode-path-segment $workspace), repo_slug: (encode-path-segment $repo_slug)} | format pattern "/repositories/{workspace}/{repo_slug}/pipelines_config"))
   let req_body = {"type": $type, "enabled": $enabled, "repository": $repository} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: {}, body: $req_body}
 }
 
 # Update the next build number
@@ -4264,12 +4707,14 @@ export def "repositories-pipelines-config-build-number update-repository" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($workspace | is-empty) { error make --unspanned { msg: "path parameter 'workspace' must be non-empty" } }
+  if ($repo_slug | is-empty) { error make --unspanned { msg: "path parameter 'repo_slug' must be non-empty" } }
   let full_url = (build-url $base ({workspace: (encode-path-segment $workspace), repo_slug: (encode-path-segment $repo_slug)} | format pattern "/repositories/{workspace}/{repo_slug}/pipelines_config/build_number"))
   let req_body = {"type": $type, "next": $next} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: {}, body: $req_body}
 }
 
 # List schedules
@@ -4291,10 +4736,12 @@ export def "repositories-pipelines-config-schedules list" [
 ]: nothing -> record<next: string, page: int, pagelen: int, previous: string, size: int, values: table<type: string, created_on: string, cron_pattern: string, enabled: bool, selector: record, target: record, updated_on: string, uuid: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($workspace | is-empty) { error make --unspanned { msg: "path parameter 'workspace' must be non-empty" } }
+  if ($repo_slug | is-empty) { error make --unspanned { msg: "path parameter 'repo_slug' must be non-empty" } }
   let full_url = (build-url $base ({workspace: (encode-path-segment $workspace), repo_slug: (encode-path-segment $repo_slug)} | format pattern "/repositories/{workspace}/{repo_slug}/pipelines_config/schedules/"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
 }
 
 # Create a schedule
@@ -4325,12 +4772,14 @@ export def "repositories-pipelines-config-schedules create-repository" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($workspace | is-empty) { error make --unspanned { msg: "path parameter 'workspace' must be non-empty" } }
+  if ($repo_slug | is-empty) { error make --unspanned { msg: "path parameter 'repo_slug' must be non-empty" } }
   let full_url = (build-url $base ({workspace: (encode-path-segment $workspace), repo_slug: (encode-path-segment $repo_slug)} | format pattern "/repositories/{workspace}/{repo_slug}/pipelines_config/schedules/"))
   let req_body = {"type": $type, "created_on": $created_on, "cron_pattern": $cron_pattern, "enabled": $enabled, "selector": $selector, "target": $target, "updated_on": $updated_on, "uuid": $uuid} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: {}, body: $req_body}
 }
 
 # Delete a schedule
@@ -4353,10 +4802,13 @@ export def "repositories-pipelines-config-schedules delete-repository" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($workspace | is-empty) { error make --unspanned { msg: "path parameter 'workspace' must be non-empty" } }
+  if ($repo_slug | is-empty) { error make --unspanned { msg: "path parameter 'repo_slug' must be non-empty" } }
+  if ($schedule_uuid | is-empty) { error make --unspanned { msg: "path parameter 'schedule_uuid' must be non-empty" } }
   let full_url = (build-url $base ({workspace: (encode-path-segment $workspace), repo_slug: (encode-path-segment $repo_slug), schedule_uuid: (encode-path-segment $schedule_uuid)} | format pattern "/repositories/{workspace}/{repo_slug}/pipelines_config/schedules/{schedule_uuid}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
 }
 
 # Get a schedule
@@ -4379,10 +4831,13 @@ export def "repositories-pipelines-config-schedules get-repository" [
 ]: nothing -> record<type: string, created_on: string, cron_pattern: string, enabled: bool, selector: record<type: string, pattern: string>, target: record<type: string>, updated_on: string, uuid: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($workspace | is-empty) { error make --unspanned { msg: "path parameter 'workspace' must be non-empty" } }
+  if ($repo_slug | is-empty) { error make --unspanned { msg: "path parameter 'repo_slug' must be non-empty" } }
+  if ($schedule_uuid | is-empty) { error make --unspanned { msg: "path parameter 'schedule_uuid' must be non-empty" } }
   let full_url = (build-url $base ({workspace: (encode-path-segment $workspace), repo_slug: (encode-path-segment $repo_slug), schedule_uuid: (encode-path-segment $schedule_uuid)} | format pattern "/repositories/{workspace}/{repo_slug}/pipelines_config/schedules/{schedule_uuid}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
 }
 
 # Update a schedule
@@ -4414,12 +4869,15 @@ export def "repositories-pipelines-config-schedules update-repository" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($workspace | is-empty) { error make --unspanned { msg: "path parameter 'workspace' must be non-empty" } }
+  if ($repo_slug | is-empty) { error make --unspanned { msg: "path parameter 'repo_slug' must be non-empty" } }
+  if ($schedule_uuid | is-empty) { error make --unspanned { msg: "path parameter 'schedule_uuid' must be non-empty" } }
   let full_url = (build-url $base ({workspace: (encode-path-segment $workspace), repo_slug: (encode-path-segment $repo_slug), schedule_uuid: (encode-path-segment $schedule_uuid)} | format pattern "/repositories/{workspace}/{repo_slug}/pipelines_config/schedules/{schedule_uuid}"))
   let req_body = {"type": $type, "created_on": $created_on, "cron_pattern": $cron_pattern, "enabled": $enabled, "selector": $selector, "target": $target, "updated_on": $updated_on, "uuid": $uuid} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: {}, body: $req_body}
 }
 
 # List executions of a schedule
@@ -4442,10 +4900,13 @@ export def "repositories-pipelines-config-schedules-executions get-repository" [
 ]: nothing -> record<next: string, page: int, pagelen: int, previous: string, size: int, values: table<type: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($workspace | is-empty) { error make --unspanned { msg: "path parameter 'workspace' must be non-empty" } }
+  if ($repo_slug | is-empty) { error make --unspanned { msg: "path parameter 'repo_slug' must be non-empty" } }
+  if ($schedule_uuid | is-empty) { error make --unspanned { msg: "path parameter 'schedule_uuid' must be non-empty" } }
   let full_url = (build-url $base ({workspace: (encode-path-segment $workspace), repo_slug: (encode-path-segment $repo_slug), schedule_uuid: (encode-path-segment $schedule_uuid)} | format pattern "/repositories/{workspace}/{repo_slug}/pipelines_config/schedules/{schedule_uuid}/executions/"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
 }
 
 # Delete SSH key pair
@@ -4467,10 +4928,12 @@ export def "repositories-pipelines-config-ssh-key-pair delete-repository" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($workspace | is-empty) { error make --unspanned { msg: "path parameter 'workspace' must be non-empty" } }
+  if ($repo_slug | is-empty) { error make --unspanned { msg: "path parameter 'repo_slug' must be non-empty" } }
   let full_url = (build-url $base ({workspace: (encode-path-segment $workspace), repo_slug: (encode-path-segment $repo_slug)} | format pattern "/repositories/{workspace}/{repo_slug}/pipelines_config/ssh/key_pair"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
 }
 
 # Get SSH key pair
@@ -4492,10 +4955,12 @@ export def "repositories-pipelines-config-ssh-key-pair get-repository" [
 ]: nothing -> record<type: string, private_key: string, public_key: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($workspace | is-empty) { error make --unspanned { msg: "path parameter 'workspace' must be non-empty" } }
+  if ($repo_slug | is-empty) { error make --unspanned { msg: "path parameter 'repo_slug' must be non-empty" } }
   let full_url = (build-url $base ({workspace: (encode-path-segment $workspace), repo_slug: (encode-path-segment $repo_slug)} | format pattern "/repositories/{workspace}/{repo_slug}/pipelines_config/ssh/key_pair"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
 }
 
 # Update SSH key pair
@@ -4521,12 +4986,14 @@ export def "repositories-pipelines-config-ssh-key-pair update-repository" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($workspace | is-empty) { error make --unspanned { msg: "path parameter 'workspace' must be non-empty" } }
+  if ($repo_slug | is-empty) { error make --unspanned { msg: "path parameter 'repo_slug' must be non-empty" } }
   let full_url = (build-url $base ({workspace: (encode-path-segment $workspace), repo_slug: (encode-path-segment $repo_slug)} | format pattern "/repositories/{workspace}/{repo_slug}/pipelines_config/ssh/key_pair"))
   let req_body = {"type": $type, "private_key": $private_key, "public_key": $public_key} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: {}, body: $req_body}
 }
 
 # List known hosts
@@ -4548,10 +5015,12 @@ export def "repositories-pipelines-config-ssh-known-hosts list" [
 ]: nothing -> record<next: string, page: int, pagelen: int, previous: string, size: int, values: table<type: string, hostname: string, public_key: record, uuid: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($workspace | is-empty) { error make --unspanned { msg: "path parameter 'workspace' must be non-empty" } }
+  if ($repo_slug | is-empty) { error make --unspanned { msg: "path parameter 'repo_slug' must be non-empty" } }
   let full_url = (build-url $base ({workspace: (encode-path-segment $workspace), repo_slug: (encode-path-segment $repo_slug)} | format pattern "/repositories/{workspace}/{repo_slug}/pipelines_config/ssh/known_hosts/"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
 }
 
 # Create a known host
@@ -4578,12 +5047,14 @@ export def "repositories-pipelines-config-ssh-known-hosts create-repository" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($workspace | is-empty) { error make --unspanned { msg: "path parameter 'workspace' must be non-empty" } }
+  if ($repo_slug | is-empty) { error make --unspanned { msg: "path parameter 'repo_slug' must be non-empty" } }
   let full_url = (build-url $base ({workspace: (encode-path-segment $workspace), repo_slug: (encode-path-segment $repo_slug)} | format pattern "/repositories/{workspace}/{repo_slug}/pipelines_config/ssh/known_hosts/"))
   let req_body = {"type": $type, "hostname": $hostname, "public_key": $public_key, "uuid": $uuid} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: {}, body: $req_body}
 }
 
 # Delete a known host
@@ -4606,10 +5077,13 @@ export def "repositories-pipelines-config-ssh-known-hosts delete-repository" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($workspace | is-empty) { error make --unspanned { msg: "path parameter 'workspace' must be non-empty" } }
+  if ($repo_slug | is-empty) { error make --unspanned { msg: "path parameter 'repo_slug' must be non-empty" } }
+  if ($known_host_uuid | is-empty) { error make --unspanned { msg: "path parameter 'known_host_uuid' must be non-empty" } }
   let full_url = (build-url $base ({workspace: (encode-path-segment $workspace), repo_slug: (encode-path-segment $repo_slug), known_host_uuid: (encode-path-segment $known_host_uuid)} | format pattern "/repositories/{workspace}/{repo_slug}/pipelines_config/ssh/known_hosts/{known_host_uuid}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
 }
 
 # Get a known host
@@ -4632,10 +5106,13 @@ export def "repositories-pipelines-config-ssh-known-hosts get-repository" [
 ]: nothing -> record<type: string, hostname: string, public_key: record<type: string, key: string, key_type: string, md5_fingerprint: string, sha256_fingerprint: string>, uuid: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($workspace | is-empty) { error make --unspanned { msg: "path parameter 'workspace' must be non-empty" } }
+  if ($repo_slug | is-empty) { error make --unspanned { msg: "path parameter 'repo_slug' must be non-empty" } }
+  if ($known_host_uuid | is-empty) { error make --unspanned { msg: "path parameter 'known_host_uuid' must be non-empty" } }
   let full_url = (build-url $base ({workspace: (encode-path-segment $workspace), repo_slug: (encode-path-segment $repo_slug), known_host_uuid: (encode-path-segment $known_host_uuid)} | format pattern "/repositories/{workspace}/{repo_slug}/pipelines_config/ssh/known_hosts/{known_host_uuid}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
 }
 
 # Update a known host
@@ -4663,12 +5140,15 @@ export def "repositories-pipelines-config-ssh-known-hosts update-repository" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($workspace | is-empty) { error make --unspanned { msg: "path parameter 'workspace' must be non-empty" } }
+  if ($repo_slug | is-empty) { error make --unspanned { msg: "path parameter 'repo_slug' must be non-empty" } }
+  if ($known_host_uuid | is-empty) { error make --unspanned { msg: "path parameter 'known_host_uuid' must be non-empty" } }
   let full_url = (build-url $base ({workspace: (encode-path-segment $workspace), repo_slug: (encode-path-segment $repo_slug), known_host_uuid: (encode-path-segment $known_host_uuid)} | format pattern "/repositories/{workspace}/{repo_slug}/pipelines_config/ssh/known_hosts/{known_host_uuid}"))
   let req_body = {"type": $type, "hostname": $hostname, "public_key": $public_key, "uuid": $uuid} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: {}, body: $req_body}
 }
 
 # List variables for a repository
@@ -4690,10 +5170,12 @@ export def "repositories-pipelines-config-variables list" [
 ]: nothing -> record<next: string, page: int, pagelen: int, previous: string, size: int, values: table<type: string, key: string, secured: bool, uuid: string, value: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($workspace | is-empty) { error make --unspanned { msg: "path parameter 'workspace' must be non-empty" } }
+  if ($repo_slug | is-empty) { error make --unspanned { msg: "path parameter 'repo_slug' must be non-empty" } }
   let full_url = (build-url $base ({workspace: (encode-path-segment $workspace), repo_slug: (encode-path-segment $repo_slug)} | format pattern "/repositories/{workspace}/{repo_slug}/pipelines_config/variables/"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
 }
 
 # Create a variable for a repository
@@ -4721,12 +5203,14 @@ export def "repositories-pipelines-config-variables create-repository" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($workspace | is-empty) { error make --unspanned { msg: "path parameter 'workspace' must be non-empty" } }
+  if ($repo_slug | is-empty) { error make --unspanned { msg: "path parameter 'repo_slug' must be non-empty" } }
   let full_url = (build-url $base ({workspace: (encode-path-segment $workspace), repo_slug: (encode-path-segment $repo_slug)} | format pattern "/repositories/{workspace}/{repo_slug}/pipelines_config/variables/"))
   let req_body = {"type": $type, "key": $key, "secured": $secured, "uuid": $uuid, "value": $value} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: {}, body: $req_body}
 }
 
 # Delete a variable for a repository
@@ -4749,10 +5233,13 @@ export def "repositories-pipelines-config-variables delete-repository" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($workspace | is-empty) { error make --unspanned { msg: "path parameter 'workspace' must be non-empty" } }
+  if ($repo_slug | is-empty) { error make --unspanned { msg: "path parameter 'repo_slug' must be non-empty" } }
+  if ($variable_uuid | is-empty) { error make --unspanned { msg: "path parameter 'variable_uuid' must be non-empty" } }
   let full_url = (build-url $base ({workspace: (encode-path-segment $workspace), repo_slug: (encode-path-segment $repo_slug), variable_uuid: (encode-path-segment $variable_uuid)} | format pattern "/repositories/{workspace}/{repo_slug}/pipelines_config/variables/{variable_uuid}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
 }
 
 # Get a variable for a repository
@@ -4775,10 +5262,13 @@ export def "repositories-pipelines-config-variables get-repository" [
 ]: nothing -> record<type: string, key: string, secured: bool, uuid: string, value: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($workspace | is-empty) { error make --unspanned { msg: "path parameter 'workspace' must be non-empty" } }
+  if ($repo_slug | is-empty) { error make --unspanned { msg: "path parameter 'repo_slug' must be non-empty" } }
+  if ($variable_uuid | is-empty) { error make --unspanned { msg: "path parameter 'variable_uuid' must be non-empty" } }
   let full_url = (build-url $base ({workspace: (encode-path-segment $workspace), repo_slug: (encode-path-segment $repo_slug), variable_uuid: (encode-path-segment $variable_uuid)} | format pattern "/repositories/{workspace}/{repo_slug}/pipelines_config/variables/{variable_uuid}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
 }
 
 # Update a variable for a repository
@@ -4807,12 +5297,15 @@ export def "repositories-pipelines-config-variables update-repository" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($workspace | is-empty) { error make --unspanned { msg: "path parameter 'workspace' must be non-empty" } }
+  if ($repo_slug | is-empty) { error make --unspanned { msg: "path parameter 'repo_slug' must be non-empty" } }
+  if ($variable_uuid | is-empty) { error make --unspanned { msg: "path parameter 'variable_uuid' must be non-empty" } }
   let full_url = (build-url $base ({workspace: (encode-path-segment $workspace), repo_slug: (encode-path-segment $repo_slug), variable_uuid: (encode-path-segment $variable_uuid)} | format pattern "/repositories/{workspace}/{repo_slug}/pipelines_config/variables/{variable_uuid}"))
   let req_body = {"type": $type, "key": $key, "secured": $secured, "uuid": $uuid, "value": $value} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: {}, body: $req_body}
 }
 
 # Delete a repository application property
@@ -4836,10 +5329,14 @@ export def "repositories-properties delete-repository-hosted-value" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($workspace | is-empty) { error make --unspanned { msg: "path parameter 'workspace' must be non-empty" } }
+  if ($repo_slug | is-empty) { error make --unspanned { msg: "path parameter 'repo_slug' must be non-empty" } }
+  if ($app_key | is-empty) { error make --unspanned { msg: "path parameter 'app_key' must be non-empty" } }
+  if ($property_name | is-empty) { error make --unspanned { msg: "path parameter 'property_name' must be non-empty" } }
   let full_url = (build-url $base ({workspace: (encode-path-segment $workspace), repo_slug: (encode-path-segment $repo_slug), app_key: (encode-path-segment $app_key), property_name: (encode-path-segment $property_name)} | format pattern "/repositories/{workspace}/{repo_slug}/properties/{app_key}/{property_name}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
 }
 
 # Get a repository application property
@@ -4863,10 +5360,14 @@ export def "repositories-properties get-repository-hosted-value" [
 ]: nothing -> record<_attributes: list<string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($workspace | is-empty) { error make --unspanned { msg: "path parameter 'workspace' must be non-empty" } }
+  if ($repo_slug | is-empty) { error make --unspanned { msg: "path parameter 'repo_slug' must be non-empty" } }
+  if ($app_key | is-empty) { error make --unspanned { msg: "path parameter 'app_key' must be non-empty" } }
+  if ($property_name | is-empty) { error make --unspanned { msg: "path parameter 'property_name' must be non-empty" } }
   let full_url = (build-url $base ({workspace: (encode-path-segment $workspace), repo_slug: (encode-path-segment $repo_slug), app_key: (encode-path-segment $app_key), property_name: (encode-path-segment $property_name)} | format pattern "/repositories/{workspace}/{repo_slug}/properties/{app_key}/{property_name}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
 }
 
 # Update a repository application property
@@ -4892,12 +5393,16 @@ export def "repositories-properties update-repository-hosted-value" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($workspace | is-empty) { error make --unspanned { msg: "path parameter 'workspace' must be non-empty" } }
+  if ($repo_slug | is-empty) { error make --unspanned { msg: "path parameter 'repo_slug' must be non-empty" } }
+  if ($app_key | is-empty) { error make --unspanned { msg: "path parameter 'app_key' must be non-empty" } }
+  if ($property_name | is-empty) { error make --unspanned { msg: "path parameter 'property_name' must be non-empty" } }
   let full_url = (build-url $base ({workspace: (encode-path-segment $workspace), repo_slug: (encode-path-segment $repo_slug), app_key: (encode-path-segment $app_key), property_name: (encode-path-segment $property_name)} | format pattern "/repositories/{workspace}/{repo_slug}/properties/{app_key}/{property_name}"))
   let req_body = {"_attributes": $attributes} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: {}, body: $req_body}
 }
 
 # List pull requests
@@ -4919,11 +5424,13 @@ export def "repositories-pullrequests list" [
 ]: nothing -> record<next: string, page: int, pagelen: int, previous: string, size: int, values: table<type: string, author: record, close_source_branch: bool, closed_by: record, comment_count: int, created_on: string, destination: record, id: int, links: record, merge_commit: record, participants: list, reason: string, rendered: record, reviewers: list, source: record, state: string, summary: record, task_count: int, title: string, updated_on: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($workspace | is-empty) { error make --unspanned { msg: "path parameter 'workspace' must be non-empty" } }
+  if ($repo_slug | is-empty) { error make --unspanned { msg: "path parameter 'repo_slug' must be non-empty" } }
   let qp = [(serialize-qp "state" $state "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({workspace: (encode-path-segment $workspace), repo_slug: (encode-path-segment $repo_slug)} | format pattern "/repositories/{workspace}/{repo_slug}/pullrequests") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"state": $state} | compact), body: null}
 }
 
 # Create a pull request
@@ -4973,12 +5480,14 @@ export def "repositories-pullrequests create" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($workspace | is-empty) { error make --unspanned { msg: "path parameter 'workspace' must be non-empty" } }
+  if ($repo_slug | is-empty) { error make --unspanned { msg: "path parameter 'repo_slug' must be non-empty" } }
   let full_url = (build-url $base ({workspace: (encode-path-segment $workspace), repo_slug: (encode-path-segment $repo_slug)} | format pattern "/repositories/{workspace}/{repo_slug}/pullrequests"))
   let req_body = {"type": $type, "author": $author, "close_source_branch": $close_source_branch, "closed_by": $closed_by, "comment_count": $comment_count, "created_on": $created_on, "destination": $destination, "id": $id, "links": $links, "merge_commit": $merge_commit, "participants": $participants, "reason": $reason, "rendered": $rendered, "reviewers": $reviewers, "source": $body_source, "state": $state, "summary": $summary, "task_count": $task_count, "title": $title, "updated_on": $updated_on} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: {}, body: $req_body}
 }
 
 # List a pull request activity log
@@ -4999,10 +5508,12 @@ export def "repositories-pullrequests-activity list" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($workspace | is-empty) { error make --unspanned { msg: "path parameter 'workspace' must be non-empty" } }
+  if ($repo_slug | is-empty) { error make --unspanned { msg: "path parameter 'repo_slug' must be non-empty" } }
   let full_url = (build-url $base ({workspace: (encode-path-segment $workspace), repo_slug: (encode-path-segment $repo_slug)} | format pattern "/repositories/{workspace}/{repo_slug}/pullrequests/activity"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
 }
 
 # Get a pull request
@@ -5024,10 +5535,13 @@ export def "repositories-pullrequests get" [
 ]: nothing -> record<type: string, author: record<type: string, created_on: string, display_name: string, links: record<avatar: record>, username: string, uuid: string>, close_source_branch: bool, closed_by: record<type: string, created_on: string, display_name: string, links: record<avatar: record>, username: string, uuid: string>, comment_count: int, created_on: string, destination: record<branch: record<default_merge_strategy: string, merge_strategies: list, name: string>, commit: record<hash: string>, repository: record<type: string, created_on: string, description: string, fork_policy: string, full_name: string, has_issues: bool, has_wiki: bool, is_private: bool, language: string, links: record, mainbranch: record, name: string, owner: record, parent: any, project: record, scm: string, size: int, updated_on: string, uuid: string>>, id: int, links: record<activity: record<href: string, name: string>, approve: record<href: string, name: string>, comments: record<href: string, name: string>, commits: record<href: string, name: string>, decline: record<href: string, name: string>, diff: record<href: string, name: string>, diffstat: record<href: string, name: string>, html: record<href: string, name: string>, merge: record<href: string, name: string>, self: record<href: string, name: string>>, merge_commit: record<hash: string>, participants: table<type: string, approved: bool, participated_on: string, role: string, state: string, user: record>, reason: string, rendered: record<description: record<html: string, markup: string, raw: string>, reason: record<html: string, markup: string, raw: string>, title: record<html: string, markup: string, raw: string>>, reviewers: table<type: string, created_on: string, display_name: string, links: record, username: string, uuid: string>, source: record<branch: record<default_merge_strategy: string, merge_strategies: list, name: string>, commit: record<hash: string>, repository: record<type: string, created_on: string, description: string, fork_policy: string, full_name: string, has_issues: bool, has_wiki: bool, is_private: bool, language: string, links: record, mainbranch: record, name: string, owner: record, parent: any, project: record, scm: string, size: int, updated_on: string, uuid: string>>, state: string, summary: record<html: string, markup: string, raw: string>, task_count: int, title: string, updated_on: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($workspace | is-empty) { error make --unspanned { msg: "path parameter 'workspace' must be non-empty" } }
+  if ($repo_slug | is-empty) { error make --unspanned { msg: "path parameter 'repo_slug' must be non-empty" } }
+  if ($pull_request_id | is-empty) { error make --unspanned { msg: "path parameter 'pull_request_id' must be non-empty" } }
   let full_url = (build-url $base ({workspace: (encode-path-segment $workspace), repo_slug: (encode-path-segment $repo_slug), pull_request_id: (encode-path-segment $pull_request_id)} | format pattern "/repositories/{workspace}/{repo_slug}/pullrequests/{pull_request_id}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
 }
 
 # Update a pull request
@@ -5078,12 +5592,15 @@ export def "repositories-pullrequests update" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($workspace | is-empty) { error make --unspanned { msg: "path parameter 'workspace' must be non-empty" } }
+  if ($repo_slug | is-empty) { error make --unspanned { msg: "path parameter 'repo_slug' must be non-empty" } }
+  if ($pull_request_id | is-empty) { error make --unspanned { msg: "path parameter 'pull_request_id' must be non-empty" } }
   let full_url = (build-url $base ({workspace: (encode-path-segment $workspace), repo_slug: (encode-path-segment $repo_slug), pull_request_id: (encode-path-segment $pull_request_id)} | format pattern "/repositories/{workspace}/{repo_slug}/pullrequests/{pull_request_id}"))
   let req_body = {"type": $type, "author": $author, "close_source_branch": $close_source_branch, "closed_by": $closed_by, "comment_count": $comment_count, "created_on": $created_on, "destination": $destination, "id": $id, "links": $links, "merge_commit": $merge_commit, "participants": $participants, "reason": $reason, "rendered": $rendered, "reviewers": $reviewers, "source": $body_source, "state": $state, "summary": $summary, "task_count": $task_count, "title": $title, "updated_on": $updated_on} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: {}, body: $req_body}
 }
 
 # List a pull request activity log
@@ -5105,10 +5622,13 @@ export def "repositories-pullrequests-activity get" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($workspace | is-empty) { error make --unspanned { msg: "path parameter 'workspace' must be non-empty" } }
+  if ($repo_slug | is-empty) { error make --unspanned { msg: "path parameter 'repo_slug' must be non-empty" } }
+  if ($pull_request_id | is-empty) { error make --unspanned { msg: "path parameter 'pull_request_id' must be non-empty" } }
   let full_url = (build-url $base ({workspace: (encode-path-segment $workspace), repo_slug: (encode-path-segment $repo_slug), pull_request_id: (encode-path-segment $pull_request_id)} | format pattern "/repositories/{workspace}/{repo_slug}/pullrequests/{pull_request_id}/activity"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
 }
 
 # Unapprove a pull request
@@ -5130,10 +5650,13 @@ export def "repositories-pullrequests-approve delete" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($workspace | is-empty) { error make --unspanned { msg: "path parameter 'workspace' must be non-empty" } }
+  if ($repo_slug | is-empty) { error make --unspanned { msg: "path parameter 'repo_slug' must be non-empty" } }
+  if ($pull_request_id | is-empty) { error make --unspanned { msg: "path parameter 'pull_request_id' must be non-empty" } }
   let full_url = (build-url $base ({workspace: (encode-path-segment $workspace), repo_slug: (encode-path-segment $repo_slug), pull_request_id: (encode-path-segment $pull_request_id)} | format pattern "/repositories/{workspace}/{repo_slug}/pullrequests/{pull_request_id}/approve"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
 }
 
 # Approve a pull request
@@ -5155,10 +5678,13 @@ export def "repositories-pullrequests-approve create" [
 ]: nothing -> record<type: string, approved: bool, participated_on: string, role: string, state: string, user: record<type: string, created_on: string, display_name: string, links: record<avatar: record>, username: string, uuid: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($workspace | is-empty) { error make --unspanned { msg: "path parameter 'workspace' must be non-empty" } }
+  if ($repo_slug | is-empty) { error make --unspanned { msg: "path parameter 'repo_slug' must be non-empty" } }
+  if ($pull_request_id | is-empty) { error make --unspanned { msg: "path parameter 'pull_request_id' must be non-empty" } }
   let full_url = (build-url $base ({workspace: (encode-path-segment $workspace), repo_slug: (encode-path-segment $repo_slug), pull_request_id: (encode-path-segment $pull_request_id)} | format pattern "/repositories/{workspace}/{repo_slug}/pullrequests/{pull_request_id}/approve"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
 }
 
 # List comments on a pull request
@@ -5180,10 +5706,13 @@ export def "repositories-pullrequests-comments list" [
 ]: nothing -> record<next: string, page: int, pagelen: int, previous: string, size: int, values: table<pullrequest: record>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($workspace | is-empty) { error make --unspanned { msg: "path parameter 'workspace' must be non-empty" } }
+  if ($repo_slug | is-empty) { error make --unspanned { msg: "path parameter 'repo_slug' must be non-empty" } }
+  if ($pull_request_id | is-empty) { error make --unspanned { msg: "path parameter 'pull_request_id' must be non-empty" } }
   let full_url = (build-url $base ({workspace: (encode-path-segment $workspace), repo_slug: (encode-path-segment $repo_slug), pull_request_id: (encode-path-segment $pull_request_id)} | format pattern "/repositories/{workspace}/{repo_slug}/pullrequests/{pull_request_id}/comments"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
 }
 
 # Create a comment on a pull request
@@ -5207,12 +5736,15 @@ export def "repositories-pullrequests-comments create" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($workspace | is-empty) { error make --unspanned { msg: "path parameter 'workspace' must be non-empty" } }
+  if ($repo_slug | is-empty) { error make --unspanned { msg: "path parameter 'repo_slug' must be non-empty" } }
+  if ($pull_request_id | is-empty) { error make --unspanned { msg: "path parameter 'pull_request_id' must be non-empty" } }
   let full_url = (build-url $base ({workspace: (encode-path-segment $workspace), repo_slug: (encode-path-segment $repo_slug), pull_request_id: (encode-path-segment $pull_request_id)} | format pattern "/repositories/{workspace}/{repo_slug}/pullrequests/{pull_request_id}/comments"))
   let req_body = {"pullrequest": $pullrequest} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: {}, body: $req_body}
 }
 
 # Delete a comment on a pull request
@@ -5235,10 +5767,14 @@ export def "repositories-pullrequests-comments delete" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($workspace | is-empty) { error make --unspanned { msg: "path parameter 'workspace' must be non-empty" } }
+  if ($repo_slug | is-empty) { error make --unspanned { msg: "path parameter 'repo_slug' must be non-empty" } }
+  if ($pull_request_id | is-empty) { error make --unspanned { msg: "path parameter 'pull_request_id' must be non-empty" } }
+  if ($comment_id | is-empty) { error make --unspanned { msg: "path parameter 'comment_id' must be non-empty" } }
   let full_url = (build-url $base ({workspace: (encode-path-segment $workspace), repo_slug: (encode-path-segment $repo_slug), pull_request_id: (encode-path-segment $pull_request_id), comment_id: (encode-path-segment $comment_id)} | format pattern "/repositories/{workspace}/{repo_slug}/pullrequests/{pull_request_id}/comments/{comment_id}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
 }
 
 # Get a comment on a pull request
@@ -5261,10 +5797,14 @@ export def "repositories-pullrequests-comments get" [
 ]: nothing -> record<pullrequest: record<type: string, author: record<type: string, created_on: string, display_name: string, links: record, username: string, uuid: string>, close_source_branch: bool, closed_by: record<type: string, created_on: string, display_name: string, links: record, username: string, uuid: string>, comment_count: int, created_on: string, destination: record<branch: record, commit: record, repository: record>, id: int, links: record<activity: record, approve: record, comments: record, commits: record, decline: record, diff: record, diffstat: record, html: record, merge: record, self: record>, merge_commit: record<hash: string>, participants: list<record>, reason: string, rendered: record<description: record, reason: record, title: record>, reviewers: list<record>, source: record<branch: record, commit: record, repository: record>, state: string, summary: record<html: string, markup: string, raw: string>, task_count: int, title: string, updated_on: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($workspace | is-empty) { error make --unspanned { msg: "path parameter 'workspace' must be non-empty" } }
+  if ($repo_slug | is-empty) { error make --unspanned { msg: "path parameter 'repo_slug' must be non-empty" } }
+  if ($pull_request_id | is-empty) { error make --unspanned { msg: "path parameter 'pull_request_id' must be non-empty" } }
+  if ($comment_id | is-empty) { error make --unspanned { msg: "path parameter 'comment_id' must be non-empty" } }
   let full_url = (build-url $base ({workspace: (encode-path-segment $workspace), repo_slug: (encode-path-segment $repo_slug), pull_request_id: (encode-path-segment $pull_request_id), comment_id: (encode-path-segment $comment_id)} | format pattern "/repositories/{workspace}/{repo_slug}/pullrequests/{pull_request_id}/comments/{comment_id}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
 }
 
 # Update a comment on a pull request
@@ -5289,12 +5829,16 @@ export def "repositories-pullrequests-comments update" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($workspace | is-empty) { error make --unspanned { msg: "path parameter 'workspace' must be non-empty" } }
+  if ($repo_slug | is-empty) { error make --unspanned { msg: "path parameter 'repo_slug' must be non-empty" } }
+  if ($pull_request_id | is-empty) { error make --unspanned { msg: "path parameter 'pull_request_id' must be non-empty" } }
+  if ($comment_id | is-empty) { error make --unspanned { msg: "path parameter 'comment_id' must be non-empty" } }
   let full_url = (build-url $base ({workspace: (encode-path-segment $workspace), repo_slug: (encode-path-segment $repo_slug), pull_request_id: (encode-path-segment $pull_request_id), comment_id: (encode-path-segment $comment_id)} | format pattern "/repositories/{workspace}/{repo_slug}/pullrequests/{pull_request_id}/comments/{comment_id}"))
   let req_body = {"pullrequest": $pullrequest} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: {}, body: $req_body}
 }
 
 # List commits on a pull request
@@ -5316,10 +5860,13 @@ export def "repositories-pullrequests-commits get" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($workspace | is-empty) { error make --unspanned { msg: "path parameter 'workspace' must be non-empty" } }
+  if ($repo_slug | is-empty) { error make --unspanned { msg: "path parameter 'repo_slug' must be non-empty" } }
+  if ($pull_request_id | is-empty) { error make --unspanned { msg: "path parameter 'pull_request_id' must be non-empty" } }
   let full_url = (build-url $base ({workspace: (encode-path-segment $workspace), repo_slug: (encode-path-segment $repo_slug), pull_request_id: (encode-path-segment $pull_request_id)} | format pattern "/repositories/{workspace}/{repo_slug}/pullrequests/{pull_request_id}/commits"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
 }
 
 # Decline a pull request
@@ -5341,10 +5888,13 @@ export def "repositories-pullrequests-decline create" [
 ]: nothing -> record<type: string, author: record<type: string, created_on: string, display_name: string, links: record<avatar: record>, username: string, uuid: string>, close_source_branch: bool, closed_by: record<type: string, created_on: string, display_name: string, links: record<avatar: record>, username: string, uuid: string>, comment_count: int, created_on: string, destination: record<branch: record<default_merge_strategy: string, merge_strategies: list, name: string>, commit: record<hash: string>, repository: record<type: string, created_on: string, description: string, fork_policy: string, full_name: string, has_issues: bool, has_wiki: bool, is_private: bool, language: string, links: record, mainbranch: record, name: string, owner: record, parent: any, project: record, scm: string, size: int, updated_on: string, uuid: string>>, id: int, links: record<activity: record<href: string, name: string>, approve: record<href: string, name: string>, comments: record<href: string, name: string>, commits: record<href: string, name: string>, decline: record<href: string, name: string>, diff: record<href: string, name: string>, diffstat: record<href: string, name: string>, html: record<href: string, name: string>, merge: record<href: string, name: string>, self: record<href: string, name: string>>, merge_commit: record<hash: string>, participants: table<type: string, approved: bool, participated_on: string, role: string, state: string, user: record>, reason: string, rendered: record<description: record<html: string, markup: string, raw: string>, reason: record<html: string, markup: string, raw: string>, title: record<html: string, markup: string, raw: string>>, reviewers: table<type: string, created_on: string, display_name: string, links: record, username: string, uuid: string>, source: record<branch: record<default_merge_strategy: string, merge_strategies: list, name: string>, commit: record<hash: string>, repository: record<type: string, created_on: string, description: string, fork_policy: string, full_name: string, has_issues: bool, has_wiki: bool, is_private: bool, language: string, links: record, mainbranch: record, name: string, owner: record, parent: any, project: record, scm: string, size: int, updated_on: string, uuid: string>>, state: string, summary: record<html: string, markup: string, raw: string>, task_count: int, title: string, updated_on: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($workspace | is-empty) { error make --unspanned { msg: "path parameter 'workspace' must be non-empty" } }
+  if ($repo_slug | is-empty) { error make --unspanned { msg: "path parameter 'repo_slug' must be non-empty" } }
+  if ($pull_request_id | is-empty) { error make --unspanned { msg: "path parameter 'pull_request_id' must be non-empty" } }
   let full_url = (build-url $base ({workspace: (encode-path-segment $workspace), repo_slug: (encode-path-segment $repo_slug), pull_request_id: (encode-path-segment $pull_request_id)} | format pattern "/repositories/{workspace}/{repo_slug}/pullrequests/{pull_request_id}/decline"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
 }
 
 # List changes in a pull request
@@ -5366,10 +5916,13 @@ export def "repositories-pullrequests-diff get" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($workspace | is-empty) { error make --unspanned { msg: "path parameter 'workspace' must be non-empty" } }
+  if ($repo_slug | is-empty) { error make --unspanned { msg: "path parameter 'repo_slug' must be non-empty" } }
+  if ($pull_request_id | is-empty) { error make --unspanned { msg: "path parameter 'pull_request_id' must be non-empty" } }
   let full_url = (build-url $base ({workspace: (encode-path-segment $workspace), repo_slug: (encode-path-segment $repo_slug), pull_request_id: (encode-path-segment $pull_request_id)} | format pattern "/repositories/{workspace}/{repo_slug}/pullrequests/{pull_request_id}/diff"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
 }
 
 # Get the diff stat for a pull request
@@ -5391,10 +5944,13 @@ export def "repositories-pullrequests-diffstat get" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($workspace | is-empty) { error make --unspanned { msg: "path parameter 'workspace' must be non-empty" } }
+  if ($repo_slug | is-empty) { error make --unspanned { msg: "path parameter 'repo_slug' must be non-empty" } }
+  if ($pull_request_id | is-empty) { error make --unspanned { msg: "path parameter 'pull_request_id' must be non-empty" } }
   let full_url = (build-url $base ({workspace: (encode-path-segment $workspace), repo_slug: (encode-path-segment $repo_slug), pull_request_id: (encode-path-segment $pull_request_id)} | format pattern "/repositories/{workspace}/{repo_slug}/pullrequests/{pull_request_id}/diffstat"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
 }
 
 # Merge a pull request
@@ -5422,13 +5978,16 @@ export def "repositories-pullrequests-merge create" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($workspace | is-empty) { error make --unspanned { msg: "path parameter 'workspace' must be non-empty" } }
+  if ($repo_slug | is-empty) { error make --unspanned { msg: "path parameter 'repo_slug' must be non-empty" } }
+  if ($pull_request_id | is-empty) { error make --unspanned { msg: "path parameter 'pull_request_id' must be non-empty" } }
   let qp = [(serialize-qp "async" $async "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({workspace: (encode-path-segment $workspace), repo_slug: (encode-path-segment $repo_slug), pull_request_id: (encode-path-segment $pull_request_id)} | format pattern "/repositories/{workspace}/{repo_slug}/pullrequests/{pull_request_id}/merge") $qp)
   let req_body = {"close_source_branch": $close_source_branch, "merge_strategy": $merge_strategy, "message": $message, "type": $type} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: ({"async": $async} | compact), body: $req_body}
 }
 
 # Get the merge task status for a pull request
@@ -5451,10 +6010,14 @@ export def "repositories-pullrequests-merge-task-status get" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($workspace | is-empty) { error make --unspanned { msg: "path parameter 'workspace' must be non-empty" } }
+  if ($repo_slug | is-empty) { error make --unspanned { msg: "path parameter 'repo_slug' must be non-empty" } }
+  if ($pull_request_id | is-empty) { error make --unspanned { msg: "path parameter 'pull_request_id' must be non-empty" } }
+  if ($task_id | is-empty) { error make --unspanned { msg: "path parameter 'task_id' must be non-empty" } }
   let full_url = (build-url $base ({workspace: (encode-path-segment $workspace), repo_slug: (encode-path-segment $repo_slug), pull_request_id: (encode-path-segment $pull_request_id), task_id: (encode-path-segment $task_id)} | format pattern "/repositories/{workspace}/{repo_slug}/pullrequests/{pull_request_id}/merge/task-status/{task_id}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
 }
 
 # Get the patch for a pull request
@@ -5476,10 +6039,13 @@ export def "repositories-pullrequests-patch get" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($workspace | is-empty) { error make --unspanned { msg: "path parameter 'workspace' must be non-empty" } }
+  if ($repo_slug | is-empty) { error make --unspanned { msg: "path parameter 'repo_slug' must be non-empty" } }
+  if ($pull_request_id | is-empty) { error make --unspanned { msg: "path parameter 'pull_request_id' must be non-empty" } }
   let full_url = (build-url $base ({workspace: (encode-path-segment $workspace), repo_slug: (encode-path-segment $repo_slug), pull_request_id: (encode-path-segment $pull_request_id)} | format pattern "/repositories/{workspace}/{repo_slug}/pullrequests/{pull_request_id}/patch"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
 }
 
 # Remove change request for a pull request
@@ -5501,10 +6067,13 @@ export def "repositories-pullrequests-request-changes delete" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($workspace | is-empty) { error make --unspanned { msg: "path parameter 'workspace' must be non-empty" } }
+  if ($repo_slug | is-empty) { error make --unspanned { msg: "path parameter 'repo_slug' must be non-empty" } }
+  if ($pull_request_id | is-empty) { error make --unspanned { msg: "path parameter 'pull_request_id' must be non-empty" } }
   let full_url = (build-url $base ({workspace: (encode-path-segment $workspace), repo_slug: (encode-path-segment $repo_slug), pull_request_id: (encode-path-segment $pull_request_id)} | format pattern "/repositories/{workspace}/{repo_slug}/pullrequests/{pull_request_id}/request-changes"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
 }
 
 # Request changes for a pull request
@@ -5526,10 +6095,13 @@ export def "repositories-pullrequests-request-changes create" [
 ]: nothing -> record<type: string, approved: bool, participated_on: string, role: string, state: string, user: record<type: string, created_on: string, display_name: string, links: record<avatar: record>, username: string, uuid: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($workspace | is-empty) { error make --unspanned { msg: "path parameter 'workspace' must be non-empty" } }
+  if ($repo_slug | is-empty) { error make --unspanned { msg: "path parameter 'repo_slug' must be non-empty" } }
+  if ($pull_request_id | is-empty) { error make --unspanned { msg: "path parameter 'pull_request_id' must be non-empty" } }
   let full_url = (build-url $base ({workspace: (encode-path-segment $workspace), repo_slug: (encode-path-segment $repo_slug), pull_request_id: (encode-path-segment $pull_request_id)} | format pattern "/repositories/{workspace}/{repo_slug}/pullrequests/{pull_request_id}/request-changes"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
 }
 
 # List commit statuses for a pull request
@@ -5553,11 +6125,14 @@ export def "repositories-pullrequests-statuses get" [
 ]: nothing -> record<next: string, page: int, pagelen: int, previous: string, size: int, values: table<type: string, created_on: string, description: string, key: string, links: record, name: string, refname: string, state: string, updated_on: string, url: string, uuid: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($workspace | is-empty) { error make --unspanned { msg: "path parameter 'workspace' must be non-empty" } }
+  if ($repo_slug | is-empty) { error make --unspanned { msg: "path parameter 'repo_slug' must be non-empty" } }
+  if ($pull_request_id | is-empty) { error make --unspanned { msg: "path parameter 'pull_request_id' must be non-empty" } }
   let qp = [(serialize-qp "q" $q "scalar") (serialize-qp "sort" $qp_sort "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({workspace: (encode-path-segment $workspace), repo_slug: (encode-path-segment $repo_slug), pull_request_id: (encode-path-segment $pull_request_id)} | format pattern "/repositories/{workspace}/{repo_slug}/pullrequests/{pull_request_id}/statuses") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"q": $q, "sort": $qp_sort} | compact), body: null}
 }
 
 # Delete a pull request application property
@@ -5582,10 +6157,15 @@ export def "repositories-pullrequests-properties delete-pull-request-hosted-valu
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($workspace | is-empty) { error make --unspanned { msg: "path parameter 'workspace' must be non-empty" } }
+  if ($repo_slug | is-empty) { error make --unspanned { msg: "path parameter 'repo_slug' must be non-empty" } }
+  if ($pullrequest_id | is-empty) { error make --unspanned { msg: "path parameter 'pullrequest_id' must be non-empty" } }
+  if ($app_key | is-empty) { error make --unspanned { msg: "path parameter 'app_key' must be non-empty" } }
+  if ($property_name | is-empty) { error make --unspanned { msg: "path parameter 'property_name' must be non-empty" } }
   let full_url = (build-url $base ({workspace: (encode-path-segment $workspace), repo_slug: (encode-path-segment $repo_slug), pullrequest_id: (encode-path-segment $pullrequest_id), app_key: (encode-path-segment $app_key), property_name: (encode-path-segment $property_name)} | format pattern "/repositories/{workspace}/{repo_slug}/pullrequests/{pullrequest_id}/properties/{app_key}/{property_name}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
 }
 
 # Get a pull request application property
@@ -5610,10 +6190,15 @@ export def "repositories-pullrequests-properties get-pull-request-hosted-value" 
 ]: nothing -> record<_attributes: list<string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($workspace | is-empty) { error make --unspanned { msg: "path parameter 'workspace' must be non-empty" } }
+  if ($repo_slug | is-empty) { error make --unspanned { msg: "path parameter 'repo_slug' must be non-empty" } }
+  if ($pullrequest_id | is-empty) { error make --unspanned { msg: "path parameter 'pullrequest_id' must be non-empty" } }
+  if ($app_key | is-empty) { error make --unspanned { msg: "path parameter 'app_key' must be non-empty" } }
+  if ($property_name | is-empty) { error make --unspanned { msg: "path parameter 'property_name' must be non-empty" } }
   let full_url = (build-url $base ({workspace: (encode-path-segment $workspace), repo_slug: (encode-path-segment $repo_slug), pullrequest_id: (encode-path-segment $pullrequest_id), app_key: (encode-path-segment $app_key), property_name: (encode-path-segment $property_name)} | format pattern "/repositories/{workspace}/{repo_slug}/pullrequests/{pullrequest_id}/properties/{app_key}/{property_name}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
 }
 
 # Update a pull request application property
@@ -5640,12 +6225,17 @@ export def "repositories-pullrequests-properties update-pull-request-hosted-valu
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($workspace | is-empty) { error make --unspanned { msg: "path parameter 'workspace' must be non-empty" } }
+  if ($repo_slug | is-empty) { error make --unspanned { msg: "path parameter 'repo_slug' must be non-empty" } }
+  if ($pullrequest_id | is-empty) { error make --unspanned { msg: "path parameter 'pullrequest_id' must be non-empty" } }
+  if ($app_key | is-empty) { error make --unspanned { msg: "path parameter 'app_key' must be non-empty" } }
+  if ($property_name | is-empty) { error make --unspanned { msg: "path parameter 'property_name' must be non-empty" } }
   let full_url = (build-url $base ({workspace: (encode-path-segment $workspace), repo_slug: (encode-path-segment $repo_slug), pullrequest_id: (encode-path-segment $pullrequest_id), app_key: (encode-path-segment $app_key), property_name: (encode-path-segment $property_name)} | format pattern "/repositories/{workspace}/{repo_slug}/pullrequests/{pullrequest_id}/properties/{app_key}/{property_name}"))
   let req_body = {"_attributes": $attributes} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: {}, body: $req_body}
 }
 
 # List branches and tags
@@ -5668,11 +6258,13 @@ export def "repositories-refs get" [
 ]: nothing -> record<next: string, page: int, pagelen: int, previous: string, size: int, values: table<links: record, name: string, target: record, type: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($workspace | is-empty) { error make --unspanned { msg: "path parameter 'workspace' must be non-empty" } }
+  if ($repo_slug | is-empty) { error make --unspanned { msg: "path parameter 'repo_slug' must be non-empty" } }
   let qp = [(serialize-qp "q" $q "scalar") (serialize-qp "sort" $qp_sort "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({workspace: (encode-path-segment $workspace), repo_slug: (encode-path-segment $repo_slug)} | format pattern "/repositories/{workspace}/{repo_slug}/refs") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"q": $q, "sort": $qp_sort} | compact), body: null}
 }
 
 # List open branches
@@ -5695,11 +6287,13 @@ export def "repositories-refs-branches list" [
 ]: nothing -> record<next: string, page: int, pagelen: int, previous: string, size: int, values: table<links: record, name: string, target: record, type: string, default_merge_strategy: string, merge_strategies: list>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($workspace | is-empty) { error make --unspanned { msg: "path parameter 'workspace' must be non-empty" } }
+  if ($repo_slug | is-empty) { error make --unspanned { msg: "path parameter 'repo_slug' must be non-empty" } }
   let qp = [(serialize-qp "q" $q "scalar") (serialize-qp "sort" $qp_sort "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({workspace: (encode-path-segment $workspace), repo_slug: (encode-path-segment $repo_slug)} | format pattern "/repositories/{workspace}/{repo_slug}/refs/branches") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"q": $q, "sort": $qp_sort} | compact), body: null}
 }
 
 # Create a branch
@@ -5720,10 +6314,12 @@ export def "repositories-refs-branches create" [
 ]: nothing -> record<links: record<commits: record<href: string, name: string>, html: record<href: string, name: string>, self: record<href: string, name: string>>, name: string, target: record<participants: list<record>, repository: record<type: string, created_on: string, description: string, fork_policy: string, full_name: string, has_issues: bool, has_wiki: bool, is_private: bool, language: string, links: record, mainbranch: any, name: string, owner: record, parent: any, project: record, scm: string, size: int, updated_on: string, uuid: string>>, type: string, default_merge_strategy: string, merge_strategies: list<string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($workspace | is-empty) { error make --unspanned { msg: "path parameter 'workspace' must be non-empty" } }
+  if ($repo_slug | is-empty) { error make --unspanned { msg: "path parameter 'repo_slug' must be non-empty" } }
   let full_url = (build-url $base ({workspace: (encode-path-segment $workspace), repo_slug: (encode-path-segment $repo_slug)} | format pattern "/repositories/{workspace}/{repo_slug}/refs/branches"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
 }
 
 # Delete a branch
@@ -5745,10 +6341,13 @@ export def "repositories-refs-branches delete" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($workspace | is-empty) { error make --unspanned { msg: "path parameter 'workspace' must be non-empty" } }
+  if ($repo_slug | is-empty) { error make --unspanned { msg: "path parameter 'repo_slug' must be non-empty" } }
+  if ($name | is-empty) { error make --unspanned { msg: "path parameter 'name' must be non-empty" } }
   let full_url = (build-url $base ({workspace: (encode-path-segment $workspace), repo_slug: (encode-path-segment $repo_slug), name: (encode-path-segment $name)} | format pattern "/repositories/{workspace}/{repo_slug}/refs/branches/{name}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
 }
 
 # Get a branch
@@ -5770,10 +6369,13 @@ export def "repositories-refs-branches get" [
 ]: nothing -> record<links: record<commits: record<href: string, name: string>, html: record<href: string, name: string>, self: record<href: string, name: string>>, name: string, target: record<participants: list<record>, repository: record<type: string, created_on: string, description: string, fork_policy: string, full_name: string, has_issues: bool, has_wiki: bool, is_private: bool, language: string, links: record, mainbranch: any, name: string, owner: record, parent: any, project: record, scm: string, size: int, updated_on: string, uuid: string>>, type: string, default_merge_strategy: string, merge_strategies: list<string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($workspace | is-empty) { error make --unspanned { msg: "path parameter 'workspace' must be non-empty" } }
+  if ($repo_slug | is-empty) { error make --unspanned { msg: "path parameter 'repo_slug' must be non-empty" } }
+  if ($name | is-empty) { error make --unspanned { msg: "path parameter 'name' must be non-empty" } }
   let full_url = (build-url $base ({workspace: (encode-path-segment $workspace), repo_slug: (encode-path-segment $repo_slug), name: (encode-path-segment $name)} | format pattern "/repositories/{workspace}/{repo_slug}/refs/branches/{name}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
 }
 
 # List tags
@@ -5796,11 +6398,13 @@ export def "repositories-refs-tags list" [
 ]: nothing -> record<next: string, page: int, pagelen: int, previous: string, size: int, values: table<links: record, name: string, target: record, type: string, date: string, message: string, tagger: record>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($workspace | is-empty) { error make --unspanned { msg: "path parameter 'workspace' must be non-empty" } }
+  if ($repo_slug | is-empty) { error make --unspanned { msg: "path parameter 'repo_slug' must be non-empty" } }
   let qp = [(serialize-qp "q" $q "scalar") (serialize-qp "sort" $qp_sort "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({workspace: (encode-path-segment $workspace), repo_slug: (encode-path-segment $repo_slug)} | format pattern "/repositories/{workspace}/{repo_slug}/refs/tags") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"q": $q, "sort": $qp_sort} | compact), body: null}
 }
 
 # Create a tag
@@ -5830,12 +6434,14 @@ export def "repositories-refs-tags create" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($workspace | is-empty) { error make --unspanned { msg: "path parameter 'workspace' must be non-empty" } }
+  if ($repo_slug | is-empty) { error make --unspanned { msg: "path parameter 'repo_slug' must be non-empty" } }
   let full_url = (build-url $base ({workspace: (encode-path-segment $workspace), repo_slug: (encode-path-segment $repo_slug)} | format pattern "/repositories/{workspace}/{repo_slug}/refs/tags"))
   let req_body = {"links": $links, "name": $name, "target": $target, "type": $type, "date": $date, "message": $message, "tagger": $tagger} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: {}, body: $req_body}
 }
 
 # Delete a tag
@@ -5857,10 +6463,13 @@ export def "repositories-refs-tags delete" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($workspace | is-empty) { error make --unspanned { msg: "path parameter 'workspace' must be non-empty" } }
+  if ($repo_slug | is-empty) { error make --unspanned { msg: "path parameter 'repo_slug' must be non-empty" } }
+  if ($name | is-empty) { error make --unspanned { msg: "path parameter 'name' must be non-empty" } }
   let full_url = (build-url $base ({workspace: (encode-path-segment $workspace), repo_slug: (encode-path-segment $repo_slug), name: (encode-path-segment $name)} | format pattern "/repositories/{workspace}/{repo_slug}/refs/tags/{name}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
 }
 
 # Get a tag
@@ -5882,16 +6491,19 @@ export def "repositories-refs-tags get" [
 ]: nothing -> record<links: record<commits: record<href: string, name: string>, html: record<href: string, name: string>, self: record<href: string, name: string>>, name: string, target: record<participants: list<record>, repository: record<type: string, created_on: string, description: string, fork_policy: string, full_name: string, has_issues: bool, has_wiki: bool, is_private: bool, language: string, links: record, mainbranch: record, name: string, owner: record, parent: any, project: record, scm: string, size: int, updated_on: string, uuid: string>>, type: string, date: string, message: string, tagger: record<type: string, raw: string, user: record<type: string, created_on: string, display_name: string, links: record, username: string, uuid: string>>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($workspace | is-empty) { error make --unspanned { msg: "path parameter 'workspace' must be non-empty" } }
+  if ($repo_slug | is-empty) { error make --unspanned { msg: "path parameter 'repo_slug' must be non-empty" } }
+  if ($name | is-empty) { error make --unspanned { msg: "path parameter 'name' must be non-empty" } }
   let full_url = (build-url $base ({workspace: (encode-path-segment $workspace), repo_slug: (encode-path-segment $repo_slug), name: (encode-path-segment $name)} | format pattern "/repositories/{workspace}/{repo_slug}/refs/tags/{name}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
 }
 
 # Get the root directory of the main branch
 #
 # GET /repositories/{workspace}/{repo_slug}/src
-export def "repositories-src get-by-workspace-repo_slug" [
+export def "repositories-src get-by-workspace-repo-slug" [
   workspace: string
   repo_slug: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -5907,11 +6519,13 @@ export def "repositories-src get-by-workspace-repo_slug" [
 ]: nothing -> record<next: string, page: int, pagelen: int, previous: string, size: int, values: table<commit: record, path: string, type: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($workspace | is-empty) { error make --unspanned { msg: "path parameter 'workspace' must be non-empty" } }
+  if ($repo_slug | is-empty) { error make --unspanned { msg: "path parameter 'repo_slug' must be non-empty" } }
   let qp = [(serialize-qp "format" $format "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({workspace: (encode-path-segment $workspace), repo_slug: (encode-path-segment $repo_slug)} | format pattern "/repositories/{workspace}/{repo_slug}/src") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"format": $format} | compact), body: null}
 }
 
 # Create a commit by uploading a file
@@ -5937,17 +6551,19 @@ export def "repositories-src create" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($workspace | is-empty) { error make --unspanned { msg: "path parameter 'workspace' must be non-empty" } }
+  if ($repo_slug | is-empty) { error make --unspanned { msg: "path parameter 'repo_slug' must be non-empty" } }
   let qp = [(serialize-qp "message" $message "scalar") (serialize-qp "author" $author "scalar") (serialize-qp "parents" $parents "scalar") (serialize-qp "files" $files "scalar") (serialize-qp "branch" $branch "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({workspace: (encode-path-segment $workspace), repo_slug: (encode-path-segment $repo_slug)} | format pattern "/repositories/{workspace}/{repo_slug}/src") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"message": $message, "author": $author, "parents": $parents, "files": $files, "branch": $branch} | compact), body: null}
 }
 
 # Get file or directory contents
 #
 # GET /repositories/{workspace}/{repo_slug}/src/{commit}/{path}
-export def "repositories-src get-by-workspace-repo_slug-commit-path" [
+export def "repositories-src get-by-workspace-repo-slug-commit-path" [
   workspace: string
   repo_slug: string
   commit: string
@@ -5968,11 +6584,15 @@ export def "repositories-src get-by-workspace-repo_slug-commit-path" [
 ]: nothing -> record<next: string, page: int, pagelen: int, previous: string, size: int, values: table<commit: record, path: string, type: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($workspace | is-empty) { error make --unspanned { msg: "path parameter 'workspace' must be non-empty" } }
+  if ($repo_slug | is-empty) { error make --unspanned { msg: "path parameter 'repo_slug' must be non-empty" } }
+  if ($commit | is-empty) { error make --unspanned { msg: "path parameter 'commit' must be non-empty" } }
+  if ($path | is-empty) { error make --unspanned { msg: "path parameter 'path' must be non-empty" } }
   let qp = [(serialize-qp "format" $format "scalar") (serialize-qp "q" $q "scalar") (serialize-qp "sort" $qp_sort "scalar") (serialize-qp "max_depth" $max_depth "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({workspace: (encode-path-segment $workspace), repo_slug: (encode-path-segment $repo_slug), commit: (encode-path-segment $commit), path: (encode-path-segment $path)} | format pattern "/repositories/{workspace}/{repo_slug}/src/{commit}/{path}") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"format": $format, "q": $q, "sort": $qp_sort, "max_depth": $max_depth} | compact), body: null}
 }
 
 # List defined versions for issues
@@ -5993,10 +6613,12 @@ export def "repositories-versions list" [
 ]: nothing -> record<next: string, page: int, pagelen: int, previous: string, size: int, values: table<type: string, id: int, links: record, name: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($workspace | is-empty) { error make --unspanned { msg: "path parameter 'workspace' must be non-empty" } }
+  if ($repo_slug | is-empty) { error make --unspanned { msg: "path parameter 'repo_slug' must be non-empty" } }
   let full_url = (build-url $base ({workspace: (encode-path-segment $workspace), repo_slug: (encode-path-segment $repo_slug)} | format pattern "/repositories/{workspace}/{repo_slug}/versions"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
 }
 
 # Get a defined version for issues
@@ -6018,10 +6640,13 @@ export def "repositories-versions get" [
 ]: nothing -> record<type: string, id: int, links: record<self: record<href: string, name: string>>, name: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($workspace | is-empty) { error make --unspanned { msg: "path parameter 'workspace' must be non-empty" } }
+  if ($repo_slug | is-empty) { error make --unspanned { msg: "path parameter 'repo_slug' must be non-empty" } }
+  if ($version_id | is-empty) { error make --unspanned { msg: "path parameter 'version_id' must be non-empty" } }
   let full_url = (build-url $base ({workspace: (encode-path-segment $workspace), repo_slug: (encode-path-segment $repo_slug), version_id: (encode-path-segment $version_id)} | format pattern "/repositories/{workspace}/{repo_slug}/versions/{version_id}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
 }
 
 # List repositories watchers
@@ -6042,10 +6667,12 @@ export def "repositories-watchers get" [
 ]: nothing -> record<next: string, page: int, pagelen: int, previous: string, size: int, values: table<type: string, created_on: string, display_name: string, links: record, username: string, uuid: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($workspace | is-empty) { error make --unspanned { msg: "path parameter 'workspace' must be non-empty" } }
+  if ($repo_slug | is-empty) { error make --unspanned { msg: "path parameter 'repo_slug' must be non-empty" } }
   let full_url = (build-url $base ({workspace: (encode-path-segment $workspace), repo_slug: (encode-path-segment $repo_slug)} | format pattern "/repositories/{workspace}/{repo_slug}/watchers"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
 }
 
 # List snippets
@@ -6069,7 +6696,7 @@ export def "snippets get" [
   let full_url = (build-url $base "/snippets" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"role": $role} | compact), body: null}
 }
 
 # Create a snippet
@@ -6103,7 +6730,7 @@ export def "snippets create" [
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: {}, body: $req_body}
 }
 
 # List snippets in a workspace
@@ -6124,11 +6751,12 @@ export def "snippets get-by-workspace" [
 ]: nothing -> record<next: string, page: int, pagelen: int, previous: string, size: int, values: table<type: string, created_on: string, creator: record, id: int, is_private: bool, owner: record, scm: string, title: string, updated_on: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($workspace | is-empty) { error make --unspanned { msg: "path parameter 'workspace' must be non-empty" } }
   let qp = [(serialize-qp "role" $role "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({workspace: (encode-path-segment $workspace)} | format pattern "/snippets/{workspace}") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"role": $role} | compact), body: null}
 }
 
 # Create a snippet for a workspace
@@ -6158,18 +6786,19 @@ export def "snippets create-by-workspace" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($workspace | is-empty) { error make --unspanned { msg: "path parameter 'workspace' must be non-empty" } }
   let full_url = (build-url $base ({workspace: (encode-path-segment $workspace)} | format pattern "/snippets/{workspace}"))
   let req_body = {"type": $type, "created_on": $created_on, "creator": $creator, "id": $id, "is_private": $is_private, "owner": $owner, "scm": $scm, "title": $title, "updated_on": $updated_on} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: {}, body: $req_body}
 }
 
 # Delete a snippet
 #
 # DELETE /snippets/{workspace}/{encoded_id}
-export def "snippets delete-by-workspace-encoded_id" [
+export def "snippets delete-by-workspace-encoded-id" [
   workspace: string
   encoded_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -6184,16 +6813,18 @@ export def "snippets delete-by-workspace-encoded_id" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($workspace | is-empty) { error make --unspanned { msg: "path parameter 'workspace' must be non-empty" } }
+  if ($encoded_id | is-empty) { error make --unspanned { msg: "path parameter 'encoded_id' must be non-empty" } }
   let full_url = (build-url $base ({workspace: (encode-path-segment $workspace), encoded_id: (encode-path-segment $encoded_id)} | format pattern "/snippets/{workspace}/{encoded_id}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
 }
 
 # Get a snippet
 #
 # GET /snippets/{workspace}/{encoded_id}
-export def "snippets get-by-workspace-encoded_id" [
+export def "snippets get-by-workspace-encoded-id" [
   workspace: string
   encoded_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -6209,16 +6840,18 @@ export def "snippets get-by-workspace-encoded_id" [
 ]: nothing -> record<type: string, created_on: string, creator: record<type: string, created_on: string, display_name: string, links: record<avatar: record>, username: string, uuid: string>, id: int, is_private: bool, owner: record<type: string, created_on: string, display_name: string, links: record<avatar: record>, username: string, uuid: string>, scm: string, title: string, updated_on: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($workspace | is-empty) { error make --unspanned { msg: "path parameter 'workspace' must be non-empty" } }
+  if ($encoded_id | is-empty) { error make --unspanned { msg: "path parameter 'encoded_id' must be non-empty" } }
   let full_url = (build-url $base ({workspace: (encode-path-segment $workspace), encoded_id: (encode-path-segment $encoded_id)} | format pattern "/snippets/{workspace}/{encoded_id}"))
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
 }
 
 # Update a snippet
 #
 # PUT /snippets/{workspace}/{encoded_id}
-export def "snippets update-by-workspace-encoded_id" [
+export def "snippets update-by-workspace-encoded-id" [
   workspace: string
   encoded_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -6234,10 +6867,12 @@ export def "snippets update-by-workspace-encoded_id" [
 ]: nothing -> record<type: string, created_on: string, creator: record<type: string, created_on: string, display_name: string, links: record<avatar: record>, username: string, uuid: string>, id: int, is_private: bool, owner: record<type: string, created_on: string, display_name: string, links: record<avatar: record>, username: string, uuid: string>, scm: string, title: string, updated_on: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($workspace | is-empty) { error make --unspanned { msg: "path parameter 'workspace' must be non-empty" } }
+  if ($encoded_id | is-empty) { error make --unspanned { msg: "path parameter 'encoded_id' must be non-empty" } }
   let full_url = (build-url $base ({workspace: (encode-path-segment $workspace), encoded_id: (encode-path-segment $encoded_id)} | format pattern "/snippets/{workspace}/{encoded_id}"))
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
 }
 
 # List comments on a snippet
@@ -6258,10 +6893,12 @@ export def "snippets-comments list" [
 ]: nothing -> record<next: string, page: int, pagelen: int, previous: string, size: int, values: table<type: string, links: record, snippet: record>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($workspace | is-empty) { error make --unspanned { msg: "path parameter 'workspace' must be non-empty" } }
+  if ($encoded_id | is-empty) { error make --unspanned { msg: "path parameter 'encoded_id' must be non-empty" } }
   let full_url = (build-url $base ({workspace: (encode-path-segment $workspace), encoded_id: (encode-path-segment $encoded_id)} | format pattern "/snippets/{workspace}/{encoded_id}/comments"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
 }
 
 # Create a comment on a snippet
@@ -6287,12 +6924,14 @@ export def "snippets-comments create" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($workspace | is-empty) { error make --unspanned { msg: "path parameter 'workspace' must be non-empty" } }
+  if ($encoded_id | is-empty) { error make --unspanned { msg: "path parameter 'encoded_id' must be non-empty" } }
   let full_url = (build-url $base ({workspace: (encode-path-segment $workspace), encoded_id: (encode-path-segment $encoded_id)} | format pattern "/snippets/{workspace}/{encoded_id}/comments"))
   let req_body = {"type": $type, "links": $links, "snippet": $snippet} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: {}, body: $req_body}
 }
 
 # Delete a comment on a snippet
@@ -6314,10 +6953,13 @@ export def "snippets-comments delete" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($workspace | is-empty) { error make --unspanned { msg: "path parameter 'workspace' must be non-empty" } }
+  if ($encoded_id | is-empty) { error make --unspanned { msg: "path parameter 'encoded_id' must be non-empty" } }
+  if ($comment_id | is-empty) { error make --unspanned { msg: "path parameter 'comment_id' must be non-empty" } }
   let full_url = (build-url $base ({workspace: (encode-path-segment $workspace), encoded_id: (encode-path-segment $encoded_id), comment_id: (encode-path-segment $comment_id)} | format pattern "/snippets/{workspace}/{encoded_id}/comments/{comment_id}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
 }
 
 # Get a comment on a snippet
@@ -6339,10 +6981,13 @@ export def "snippets-comments get" [
 ]: nothing -> record<type: string, links: record<html: record<href: string, name: string>, self: record<href: string, name: string>>, snippet: record<type: string, created_on: string, creator: record<type: string, created_on: string, display_name: string, links: record, username: string, uuid: string>, id: int, is_private: bool, owner: record<type: string, created_on: string, display_name: string, links: record, username: string, uuid: string>, scm: string, title: string, updated_on: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($workspace | is-empty) { error make --unspanned { msg: "path parameter 'workspace' must be non-empty" } }
+  if ($encoded_id | is-empty) { error make --unspanned { msg: "path parameter 'encoded_id' must be non-empty" } }
+  if ($comment_id | is-empty) { error make --unspanned { msg: "path parameter 'comment_id' must be non-empty" } }
   let full_url = (build-url $base ({workspace: (encode-path-segment $workspace), encoded_id: (encode-path-segment $encoded_id), comment_id: (encode-path-segment $comment_id)} | format pattern "/snippets/{workspace}/{encoded_id}/comments/{comment_id}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
 }
 
 # Update a comment on a snippet
@@ -6369,12 +7014,15 @@ export def "snippets-comments update" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($workspace | is-empty) { error make --unspanned { msg: "path parameter 'workspace' must be non-empty" } }
+  if ($encoded_id | is-empty) { error make --unspanned { msg: "path parameter 'encoded_id' must be non-empty" } }
+  if ($comment_id | is-empty) { error make --unspanned { msg: "path parameter 'comment_id' must be non-empty" } }
   let full_url = (build-url $base ({workspace: (encode-path-segment $workspace), encoded_id: (encode-path-segment $encoded_id), comment_id: (encode-path-segment $comment_id)} | format pattern "/snippets/{workspace}/{encoded_id}/comments/{comment_id}"))
   let req_body = {"type": $type, "links": $links, "snippet": $snippet} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: {}, body: $req_body}
 }
 
 # List snippet changes
@@ -6395,10 +7043,12 @@ export def "snippets-commits list" [
 ]: nothing -> record<next: string, page: int, pagelen: int, previous: string, size: int, values: table<links: record, snippet: record>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($workspace | is-empty) { error make --unspanned { msg: "path parameter 'workspace' must be non-empty" } }
+  if ($encoded_id | is-empty) { error make --unspanned { msg: "path parameter 'encoded_id' must be non-empty" } }
   let full_url = (build-url $base ({workspace: (encode-path-segment $workspace), encoded_id: (encode-path-segment $encoded_id)} | format pattern "/snippets/{workspace}/{encoded_id}/commits"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
 }
 
 # Get a previous snippet change
@@ -6420,10 +7070,13 @@ export def "snippets-commits get" [
 ]: nothing -> record<links: record<diff: record<href: string, name: string>, html: record<href: string, name: string>, self: record<href: string, name: string>>, snippet: record<type: string, created_on: string, creator: record<type: string, created_on: string, display_name: string, links: record, username: string, uuid: string>, id: int, is_private: bool, owner: record<type: string, created_on: string, display_name: string, links: record, username: string, uuid: string>, scm: string, title: string, updated_on: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($workspace | is-empty) { error make --unspanned { msg: "path parameter 'workspace' must be non-empty" } }
+  if ($encoded_id | is-empty) { error make --unspanned { msg: "path parameter 'encoded_id' must be non-empty" } }
+  if ($revision | is-empty) { error make --unspanned { msg: "path parameter 'revision' must be non-empty" } }
   let full_url = (build-url $base ({workspace: (encode-path-segment $workspace), encoded_id: (encode-path-segment $encoded_id), revision: (encode-path-segment $revision)} | format pattern "/snippets/{workspace}/{encoded_id}/commits/{revision}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
 }
 
 # Get a snippet's raw file at HEAD
@@ -6445,10 +7098,13 @@ export def "snippets-files list" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($workspace | is-empty) { error make --unspanned { msg: "path parameter 'workspace' must be non-empty" } }
+  if ($encoded_id | is-empty) { error make --unspanned { msg: "path parameter 'encoded_id' must be non-empty" } }
+  if ($path | is-empty) { error make --unspanned { msg: "path parameter 'path' must be non-empty" } }
   let full_url = (build-url $base ({workspace: (encode-path-segment $workspace), encoded_id: (encode-path-segment $encoded_id), path: (encode-path-segment $path)} | format pattern "/snippets/{workspace}/{encoded_id}/files/{path}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
 }
 
 # Stop watching a snippet
@@ -6469,10 +7125,12 @@ export def "snippets-watch delete" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($workspace | is-empty) { error make --unspanned { msg: "path parameter 'workspace' must be non-empty" } }
+  if ($encoded_id | is-empty) { error make --unspanned { msg: "path parameter 'encoded_id' must be non-empty" } }
   let full_url = (build-url $base ({workspace: (encode-path-segment $workspace), encoded_id: (encode-path-segment $encoded_id)} | format pattern "/snippets/{workspace}/{encoded_id}/watch"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
 }
 
 # Check if the current user is watching a snippet
@@ -6493,10 +7151,12 @@ export def "snippets-watch get" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($workspace | is-empty) { error make --unspanned { msg: "path parameter 'workspace' must be non-empty" } }
+  if ($encoded_id | is-empty) { error make --unspanned { msg: "path parameter 'encoded_id' must be non-empty" } }
   let full_url = (build-url $base ({workspace: (encode-path-segment $workspace), encoded_id: (encode-path-segment $encoded_id)} | format pattern "/snippets/{workspace}/{encoded_id}/watch"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
 }
 
 # Watch a snippet
@@ -6517,10 +7177,12 @@ export def "snippets-watch update" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($workspace | is-empty) { error make --unspanned { msg: "path parameter 'workspace' must be non-empty" } }
+  if ($encoded_id | is-empty) { error make --unspanned { msg: "path parameter 'encoded_id' must be non-empty" } }
   let full_url = (build-url $base ({workspace: (encode-path-segment $workspace), encoded_id: (encode-path-segment $encoded_id)} | format pattern "/snippets/{workspace}/{encoded_id}/watch"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
 }
 
 # List users watching a snippet
@@ -6543,16 +7205,18 @@ export def "snippets-watchers get" [
 ]: nothing -> record<next: string, page: int, pagelen: int, previous: string, size: int, values: table<type: string, created_on: string, display_name: string, links: record, username: string, uuid: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($workspace | is-empty) { error make --unspanned { msg: "path parameter 'workspace' must be non-empty" } }
+  if ($encoded_id | is-empty) { error make --unspanned { msg: "path parameter 'encoded_id' must be non-empty" } }
   let full_url = (build-url $base ({workspace: (encode-path-segment $workspace), encoded_id: (encode-path-segment $encoded_id)} | format pattern "/snippets/{workspace}/{encoded_id}/watchers"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
 }
 
 # Delete a previous revision of a snippet
 #
 # DELETE /snippets/{workspace}/{encoded_id}/{node_id}
-export def "snippets delete-by-workspace-encoded_id-node_id" [
+export def "snippets delete-by-workspace-encoded-id-node-id" [
   workspace: string
   encoded_id: string
   node_id: string
@@ -6568,16 +7232,19 @@ export def "snippets delete-by-workspace-encoded_id-node_id" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($workspace | is-empty) { error make --unspanned { msg: "path parameter 'workspace' must be non-empty" } }
+  if ($encoded_id | is-empty) { error make --unspanned { msg: "path parameter 'encoded_id' must be non-empty" } }
+  if ($node_id | is-empty) { error make --unspanned { msg: "path parameter 'node_id' must be non-empty" } }
   let full_url = (build-url $base ({workspace: (encode-path-segment $workspace), encoded_id: (encode-path-segment $encoded_id), node_id: (encode-path-segment $node_id)} | format pattern "/snippets/{workspace}/{encoded_id}/{node_id}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
 }
 
 # Get a previous revision of a snippet
 #
 # GET /snippets/{workspace}/{encoded_id}/{node_id}
-export def "snippets get-by-workspace-encoded_id-node_id" [
+export def "snippets get-by-workspace-encoded-id-node-id" [
   workspace: string
   encoded_id: string
   node_id: string
@@ -6594,16 +7261,19 @@ export def "snippets get-by-workspace-encoded_id-node_id" [
 ]: nothing -> record<type: string, created_on: string, creator: record<type: string, created_on: string, display_name: string, links: record<avatar: record>, username: string, uuid: string>, id: int, is_private: bool, owner: record<type: string, created_on: string, display_name: string, links: record<avatar: record>, username: string, uuid: string>, scm: string, title: string, updated_on: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($workspace | is-empty) { error make --unspanned { msg: "path parameter 'workspace' must be non-empty" } }
+  if ($encoded_id | is-empty) { error make --unspanned { msg: "path parameter 'encoded_id' must be non-empty" } }
+  if ($node_id | is-empty) { error make --unspanned { msg: "path parameter 'node_id' must be non-empty" } }
   let full_url = (build-url $base ({workspace: (encode-path-segment $workspace), encoded_id: (encode-path-segment $encoded_id), node_id: (encode-path-segment $node_id)} | format pattern "/snippets/{workspace}/{encoded_id}/{node_id}"))
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
 }
 
 # Update a previous revision of a snippet
 #
 # PUT /snippets/{workspace}/{encoded_id}/{node_id}
-export def "snippets update-by-workspace-encoded_id-node_id" [
+export def "snippets update-by-workspace-encoded-id-node-id" [
   workspace: string
   encoded_id: string
   node_id: string
@@ -6620,10 +7290,13 @@ export def "snippets update-by-workspace-encoded_id-node_id" [
 ]: nothing -> record<type: string, created_on: string, creator: record<type: string, created_on: string, display_name: string, links: record<avatar: record>, username: string, uuid: string>, id: int, is_private: bool, owner: record<type: string, created_on: string, display_name: string, links: record<avatar: record>, username: string, uuid: string>, scm: string, title: string, updated_on: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($workspace | is-empty) { error make --unspanned { msg: "path parameter 'workspace' must be non-empty" } }
+  if ($encoded_id | is-empty) { error make --unspanned { msg: "path parameter 'encoded_id' must be non-empty" } }
+  if ($node_id | is-empty) { error make --unspanned { msg: "path parameter 'node_id' must be non-empty" } }
   let full_url = (build-url $base ({workspace: (encode-path-segment $workspace), encoded_id: (encode-path-segment $encoded_id), node_id: (encode-path-segment $node_id)} | format pattern "/snippets/{workspace}/{encoded_id}/{node_id}"))
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
 }
 
 # Get a snippet's raw file
@@ -6646,10 +7319,14 @@ export def "snippets-files get" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($workspace | is-empty) { error make --unspanned { msg: "path parameter 'workspace' must be non-empty" } }
+  if ($encoded_id | is-empty) { error make --unspanned { msg: "path parameter 'encoded_id' must be non-empty" } }
+  if ($node_id | is-empty) { error make --unspanned { msg: "path parameter 'node_id' must be non-empty" } }
+  if ($path | is-empty) { error make --unspanned { msg: "path parameter 'path' must be non-empty" } }
   let full_url = (build-url $base ({workspace: (encode-path-segment $workspace), encoded_id: (encode-path-segment $encoded_id), node_id: (encode-path-segment $node_id), path: (encode-path-segment $path)} | format pattern "/snippets/{workspace}/{encoded_id}/{node_id}/files/{path}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
 }
 
 # Get snippet changes between versions
@@ -6672,11 +7349,14 @@ export def "snippets-diff get" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($workspace | is-empty) { error make --unspanned { msg: "path parameter 'workspace' must be non-empty" } }
+  if ($encoded_id | is-empty) { error make --unspanned { msg: "path parameter 'encoded_id' must be non-empty" } }
+  if ($revision | is-empty) { error make --unspanned { msg: "path parameter 'revision' must be non-empty" } }
   let qp = [(serialize-qp "path" $path "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({workspace: (encode-path-segment $workspace), encoded_id: (encode-path-segment $encoded_id), revision: (encode-path-segment $revision)} | format pattern "/snippets/{workspace}/{encoded_id}/{revision}/diff") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"path": $path} | compact), body: null}
 }
 
 # Get snippet patch between versions
@@ -6698,10 +7378,13 @@ export def "snippets-patch get" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($workspace | is-empty) { error make --unspanned { msg: "path parameter 'workspace' must be non-empty" } }
+  if ($encoded_id | is-empty) { error make --unspanned { msg: "path parameter 'encoded_id' must be non-empty" } }
+  if ($revision | is-empty) { error make --unspanned { msg: "path parameter 'revision' must be non-empty" } }
   let full_url = (build-url $base ({workspace: (encode-path-segment $workspace), encoded_id: (encode-path-segment $encoded_id), revision: (encode-path-segment $revision)} | format pattern "/snippets/{workspace}/{encoded_id}/{revision}/patch"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
 }
 
 # List variables for an account
@@ -6724,10 +7407,11 @@ export def "teams-pipelines-config-variables list" [
 ]: nothing -> record<next: string, page: int, pagelen: int, previous: string, size: int, values: table<type: string, key: string, secured: bool, uuid: string, value: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($username | is-empty) { error make --unspanned { msg: "path parameter 'username' must be non-empty" } }
   let full_url = (build-url $base ({username: (encode-path-segment $username)} | format pattern "/teams/{username}/pipelines_config/variables/"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
 }
 
 # Create a variable for a user
@@ -6756,12 +7440,13 @@ export def "teams-pipelines-config-variables create" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($username | is-empty) { error make --unspanned { msg: "path parameter 'username' must be non-empty" } }
   let full_url = (build-url $base ({username: (encode-path-segment $username)} | format pattern "/teams/{username}/pipelines_config/variables/"))
   let req_body = {"type": $type, "key": $key, "secured": $secured, "uuid": $uuid, "value": $value} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: {}, body: $req_body}
 }
 
 # Delete a variable for a team
@@ -6785,10 +7470,12 @@ export def "teams-pipelines-config-variables delete" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($username | is-empty) { error make --unspanned { msg: "path parameter 'username' must be non-empty" } }
+  if ($variable_uuid | is-empty) { error make --unspanned { msg: "path parameter 'variable_uuid' must be non-empty" } }
   let full_url = (build-url $base ({username: (encode-path-segment $username), variable_uuid: (encode-path-segment $variable_uuid)} | format pattern "/teams/{username}/pipelines_config/variables/{variable_uuid}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
 }
 
 # Get a variable for a team
@@ -6812,10 +7499,12 @@ export def "teams-pipelines-config-variables get" [
 ]: nothing -> record<type: string, key: string, secured: bool, uuid: string, value: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($username | is-empty) { error make --unspanned { msg: "path parameter 'username' must be non-empty" } }
+  if ($variable_uuid | is-empty) { error make --unspanned { msg: "path parameter 'variable_uuid' must be non-empty" } }
   let full_url = (build-url $base ({username: (encode-path-segment $username), variable_uuid: (encode-path-segment $variable_uuid)} | format pattern "/teams/{username}/pipelines_config/variables/{variable_uuid}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
 }
 
 # Update a variable for a team
@@ -6845,12 +7534,14 @@ export def "teams-pipelines-config-variables update" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($username | is-empty) { error make --unspanned { msg: "path parameter 'username' must be non-empty" } }
+  if ($variable_uuid | is-empty) { error make --unspanned { msg: "path parameter 'variable_uuid' must be non-empty" } }
   let full_url = (build-url $base ({username: (encode-path-segment $username), variable_uuid: (encode-path-segment $variable_uuid)} | format pattern "/teams/{username}/pipelines_config/variables/{variable_uuid}"))
   let req_body = {"type": $type, "key": $key, "secured": $secured, "uuid": $uuid, "value": $value} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: {}, body: $req_body}
 }
 
 # Search for code in a team's repositories
@@ -6874,11 +7565,12 @@ export def "teams-search-code list" [
 ]: nothing -> record<next: string, page: int, pagelen: int, previous: string, query_substituted: bool, size: int, values: table<content_match_count: int, content_matches: list, file: record, path_matches: list, type: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($username | is-empty) { error make --unspanned { msg: "path parameter 'username' must be non-empty" } }
   let qp = [(serialize-qp "search_query" $search_query "scalar") (serialize-qp "page" $page "scalar") (serialize-qp "pagelen" $pagelen "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({username: (encode-path-segment $username)} | format pattern "/teams/{username}/search/code") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"search_query": $search_query, "page": $page, "pagelen": $pagelen} | compact), body: null}
 }
 
 # Get current user
@@ -6900,7 +7592,7 @@ export def "user get" [
   let full_url = (build-url $base "/user")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
 }
 
 # List email addresses for current user
@@ -6922,7 +7614,7 @@ export def "user-emails list" [
   let full_url = (build-url $base "/user/emails")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
 }
 
 # Get an email address for current user
@@ -6942,10 +7634,11 @@ export def "user-emails get" [
 ]: nothing -> record<error: record<data: record, detail: string, message: string>, type: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($email | is-empty) { error make --unspanned { msg: "path parameter 'email' must be non-empty" } }
   let full_url = (build-url $base ({email: (encode-path-segment $email)} | format pattern "/user/emails/{email}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
 }
 
 # List repository permissions for a user
@@ -6970,7 +7663,7 @@ export def "user-permissions-repositories get" [
   let full_url = (build-url $base "/user/permissions/repositories" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"q": $q, "sort": $qp_sort} | compact), body: null}
 }
 
 # List workspaces for the current user
@@ -6995,7 +7688,7 @@ export def "user-permissions-workspaces get" [
   let full_url = (build-url $base "/user/permissions/workspaces" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"q": $q, "sort": $qp_sort} | compact), body: null}
 }
 
 # Get a user
@@ -7015,10 +7708,11 @@ export def "users get" [
 ]: nothing -> record<type: string, created_on: string, display_name: string, links: record<avatar: record<href: string, name: string>>, username: string, uuid: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($selected_user | is-empty) { error make --unspanned { msg: "path parameter 'selected_user' must be non-empty" } }
   let full_url = (build-url $base ({selected_user: (encode-path-segment $selected_user)} | format pattern "/users/{selected_user}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
 }
 
 # List variables for a user
@@ -7041,10 +7735,11 @@ export def "users-pipelines-config-variables list" [
 ]: nothing -> record<next: string, page: int, pagelen: int, previous: string, size: int, values: table<type: string, key: string, secured: bool, uuid: string, value: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($selected_user | is-empty) { error make --unspanned { msg: "path parameter 'selected_user' must be non-empty" } }
   let full_url = (build-url $base ({selected_user: (encode-path-segment $selected_user)} | format pattern "/users/{selected_user}/pipelines_config/variables/"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
 }
 
 # Create a variable for a user
@@ -7073,12 +7768,13 @@ export def "users-pipelines-config-variables create" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($selected_user | is-empty) { error make --unspanned { msg: "path parameter 'selected_user' must be non-empty" } }
   let full_url = (build-url $base ({selected_user: (encode-path-segment $selected_user)} | format pattern "/users/{selected_user}/pipelines_config/variables/"))
   let req_body = {"type": $type, "key": $key, "secured": $secured, "uuid": $uuid, "value": $value} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: {}, body: $req_body}
 }
 
 # Delete a variable for a user
@@ -7102,10 +7798,12 @@ export def "users-pipelines-config-variables delete" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($selected_user | is-empty) { error make --unspanned { msg: "path parameter 'selected_user' must be non-empty" } }
+  if ($variable_uuid | is-empty) { error make --unspanned { msg: "path parameter 'variable_uuid' must be non-empty" } }
   let full_url = (build-url $base ({selected_user: (encode-path-segment $selected_user), variable_uuid: (encode-path-segment $variable_uuid)} | format pattern "/users/{selected_user}/pipelines_config/variables/{variable_uuid}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
 }
 
 # Get a variable for a user
@@ -7129,10 +7827,12 @@ export def "users-pipelines-config-variables get" [
 ]: nothing -> record<type: string, key: string, secured: bool, uuid: string, value: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($selected_user | is-empty) { error make --unspanned { msg: "path parameter 'selected_user' must be non-empty" } }
+  if ($variable_uuid | is-empty) { error make --unspanned { msg: "path parameter 'variable_uuid' must be non-empty" } }
   let full_url = (build-url $base ({selected_user: (encode-path-segment $selected_user), variable_uuid: (encode-path-segment $variable_uuid)} | format pattern "/users/{selected_user}/pipelines_config/variables/{variable_uuid}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
 }
 
 # Update a variable for a user
@@ -7162,12 +7862,14 @@ export def "users-pipelines-config-variables update" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($selected_user | is-empty) { error make --unspanned { msg: "path parameter 'selected_user' must be non-empty" } }
+  if ($variable_uuid | is-empty) { error make --unspanned { msg: "path parameter 'variable_uuid' must be non-empty" } }
   let full_url = (build-url $base ({selected_user: (encode-path-segment $selected_user), variable_uuid: (encode-path-segment $variable_uuid)} | format pattern "/users/{selected_user}/pipelines_config/variables/{variable_uuid}"))
   let req_body = {"type": $type, "key": $key, "secured": $secured, "uuid": $uuid, "value": $value} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: {}, body: $req_body}
 }
 
 # Delete a user application property
@@ -7190,10 +7892,13 @@ export def "users-properties delete-hosted-value" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($selected_user | is-empty) { error make --unspanned { msg: "path parameter 'selected_user' must be non-empty" } }
+  if ($app_key | is-empty) { error make --unspanned { msg: "path parameter 'app_key' must be non-empty" } }
+  if ($property_name | is-empty) { error make --unspanned { msg: "path parameter 'property_name' must be non-empty" } }
   let full_url = (build-url $base ({selected_user: (encode-path-segment $selected_user), app_key: (encode-path-segment $app_key), property_name: (encode-path-segment $property_name)} | format pattern "/users/{selected_user}/properties/{app_key}/{property_name}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
 }
 
 # Get a user application property
@@ -7216,10 +7921,13 @@ export def "users-properties get-hosted-value" [
 ]: nothing -> record<_attributes: list<string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($selected_user | is-empty) { error make --unspanned { msg: "path parameter 'selected_user' must be non-empty" } }
+  if ($app_key | is-empty) { error make --unspanned { msg: "path parameter 'app_key' must be non-empty" } }
+  if ($property_name | is-empty) { error make --unspanned { msg: "path parameter 'property_name' must be non-empty" } }
   let full_url = (build-url $base ({selected_user: (encode-path-segment $selected_user), app_key: (encode-path-segment $app_key), property_name: (encode-path-segment $property_name)} | format pattern "/users/{selected_user}/properties/{app_key}/{property_name}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
 }
 
 # Update a user application property
@@ -7244,12 +7952,15 @@ export def "users-properties update-hosted-value" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($selected_user | is-empty) { error make --unspanned { msg: "path parameter 'selected_user' must be non-empty" } }
+  if ($app_key | is-empty) { error make --unspanned { msg: "path parameter 'app_key' must be non-empty" } }
+  if ($property_name | is-empty) { error make --unspanned { msg: "path parameter 'property_name' must be non-empty" } }
   let full_url = (build-url $base ({selected_user: (encode-path-segment $selected_user), app_key: (encode-path-segment $app_key), property_name: (encode-path-segment $property_name)} | format pattern "/users/{selected_user}/properties/{app_key}/{property_name}"))
   let req_body = {"_attributes": $attributes} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: {}, body: $req_body}
 }
 
 # Search for code in a user's repositories
@@ -7273,11 +7984,12 @@ export def "users-search-code list-account" [
 ]: nothing -> record<next: string, page: int, pagelen: int, previous: string, query_substituted: bool, size: int, values: table<content_match_count: int, content_matches: list, file: record, path_matches: list, type: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($selected_user | is-empty) { error make --unspanned { msg: "path parameter 'selected_user' must be non-empty" } }
   let qp = [(serialize-qp "search_query" $search_query "scalar") (serialize-qp "page" $page "scalar") (serialize-qp "pagelen" $pagelen "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({selected_user: (encode-path-segment $selected_user)} | format pattern "/users/{selected_user}/search/code") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"search_query": $search_query, "page": $page, "pagelen": $pagelen} | compact), body: null}
 }
 
 # List SSH keys
@@ -7297,10 +8009,11 @@ export def "users-ssh-keys list" [
 ]: nothing -> record<next: string, page: int, pagelen: int, previous: string, size: int, values: table<owner: record>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($selected_user | is-empty) { error make --unspanned { msg: "path parameter 'selected_user' must be non-empty" } }
   let full_url = (build-url $base ({selected_user: (encode-path-segment $selected_user)} | format pattern "/users/{selected_user}/ssh-keys"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
 }
 
 # Add a new SSH key
@@ -7322,12 +8035,13 @@ export def "users-ssh-keys create" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($selected_user | is-empty) { error make --unspanned { msg: "path parameter 'selected_user' must be non-empty" } }
   let full_url = (build-url $base ({selected_user: (encode-path-segment $selected_user)} | format pattern "/users/{selected_user}/ssh-keys"))
   let req_body = {"owner": $owner} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: {}, body: $req_body}
 }
 
 # Delete a SSH key
@@ -7348,10 +8062,12 @@ export def "users-ssh-keys delete" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($selected_user | is-empty) { error make --unspanned { msg: "path parameter 'selected_user' must be non-empty" } }
+  if ($key_id | is-empty) { error make --unspanned { msg: "path parameter 'key_id' must be non-empty" } }
   let full_url = (build-url $base ({selected_user: (encode-path-segment $selected_user), key_id: (encode-path-segment $key_id)} | format pattern "/users/{selected_user}/ssh-keys/{key_id}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
 }
 
 # Get a SSH key
@@ -7372,10 +8088,12 @@ export def "users-ssh-keys get" [
 ]: nothing -> record<owner: record<type: string, created_on: string, display_name: string, links: record<avatar: record>, username: string, uuid: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($selected_user | is-empty) { error make --unspanned { msg: "path parameter 'selected_user' must be non-empty" } }
+  if ($key_id | is-empty) { error make --unspanned { msg: "path parameter 'key_id' must be non-empty" } }
   let full_url = (build-url $base ({selected_user: (encode-path-segment $selected_user), key_id: (encode-path-segment $key_id)} | format pattern "/users/{selected_user}/ssh-keys/{key_id}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
 }
 
 # Update a SSH key
@@ -7398,12 +8116,14 @@ export def "users-ssh-keys update" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($selected_user | is-empty) { error make --unspanned { msg: "path parameter 'selected_user' must be non-empty" } }
+  if ($key_id | is-empty) { error make --unspanned { msg: "path parameter 'key_id' must be non-empty" } }
   let full_url = (build-url $base ({selected_user: (encode-path-segment $selected_user), key_id: (encode-path-segment $key_id)} | format pattern "/users/{selected_user}/ssh-keys/{key_id}"))
   let req_body = {"owner": $owner} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: {}, body: $req_body}
 }
 
 # List workspaces for user
@@ -7429,7 +8149,7 @@ export def "workspaces list" [
   let full_url = (build-url $base "/workspaces" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"role": $role, "q": $q, "sort": $qp_sort} | compact), body: null}
 }
 
 # Get a workspace
@@ -7449,10 +8169,11 @@ export def "workspaces get" [
 ]: nothing -> record<type: string, created_on: string, is_private: bool, links: record<avatar: record<href: string, name: string>, html: record<href: string, name: string>, members: record<href: string, name: string>, owners: record<href: string, name: string>, projects: record<href: string, name: string>, repositories: record<href: string, name: string>, self: record<href: string, name: string>, snippets: record<href: string, name: string>>, name: string, slug: string, updated_on: string, uuid: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($workspace | is-empty) { error make --unspanned { msg: "path parameter 'workspace' must be non-empty" } }
   let full_url = (build-url $base ({workspace: (encode-path-segment $workspace)} | format pattern "/workspaces/{workspace}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
 }
 
 # List webhooks for a workspace
@@ -7472,10 +8193,11 @@ export def "workspaces-hooks list" [
 ]: nothing -> record<next: string, page: int, pagelen: int, previous: string, size: int, values: table<type: string, active: bool, created_at: string, description: string, events: list, subject: record, subject_type: string, url: string, uuid: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($workspace | is-empty) { error make --unspanned { msg: "path parameter 'workspace' must be non-empty" } }
   let full_url = (build-url $base ({workspace: (encode-path-segment $workspace)} | format pattern "/workspaces/{workspace}/hooks"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
 }
 
 # Create a webhook for a workspace
@@ -7495,10 +8217,11 @@ export def "workspaces-hooks create" [
 ]: nothing -> record<type: string, active: bool, created_at: string, description: string, events: list<string>, subject: record<type: string>, subject_type: string, url: string, uuid: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($workspace | is-empty) { error make --unspanned { msg: "path parameter 'workspace' must be non-empty" } }
   let full_url = (build-url $base ({workspace: (encode-path-segment $workspace)} | format pattern "/workspaces/{workspace}/hooks"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
 }
 
 # Delete a webhook for a workspace
@@ -7519,10 +8242,12 @@ export def "workspaces-hooks delete" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($workspace | is-empty) { error make --unspanned { msg: "path parameter 'workspace' must be non-empty" } }
+  if ($uid | is-empty) { error make --unspanned { msg: "path parameter 'uid' must be non-empty" } }
   let full_url = (build-url $base ({workspace: (encode-path-segment $workspace), uid: (encode-path-segment $uid)} | format pattern "/workspaces/{workspace}/hooks/{uid}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
 }
 
 # Get a webhook for a workspace
@@ -7543,10 +8268,12 @@ export def "workspaces-hooks get" [
 ]: nothing -> record<type: string, active: bool, created_at: string, description: string, events: list<string>, subject: record<type: string>, subject_type: string, url: string, uuid: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($workspace | is-empty) { error make --unspanned { msg: "path parameter 'workspace' must be non-empty" } }
+  if ($uid | is-empty) { error make --unspanned { msg: "path parameter 'uid' must be non-empty" } }
   let full_url = (build-url $base ({workspace: (encode-path-segment $workspace), uid: (encode-path-segment $uid)} | format pattern "/workspaces/{workspace}/hooks/{uid}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
 }
 
 # Update a webhook for a workspace
@@ -7567,10 +8294,12 @@ export def "workspaces-hooks update" [
 ]: nothing -> record<type: string, active: bool, created_at: string, description: string, events: list<string>, subject: record<type: string>, subject_type: string, url: string, uuid: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($workspace | is-empty) { error make --unspanned { msg: "path parameter 'workspace' must be non-empty" } }
+  if ($uid | is-empty) { error make --unspanned { msg: "path parameter 'uid' must be non-empty" } }
   let full_url = (build-url $base ({workspace: (encode-path-segment $workspace), uid: (encode-path-segment $uid)} | format pattern "/workspaces/{workspace}/hooks/{uid}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
 }
 
 # List users in a workspace
@@ -7590,10 +8319,11 @@ export def "workspaces-members list" [
 ]: nothing -> record<next: string, page: int, pagelen: int, previous: string, size: int, values: table<type: string, links: record, user: record, workspace: record>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($workspace | is-empty) { error make --unspanned { msg: "path parameter 'workspace' must be non-empty" } }
   let full_url = (build-url $base ({workspace: (encode-path-segment $workspace)} | format pattern "/workspaces/{workspace}/members"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
 }
 
 # Get user membership for a workspace
@@ -7614,10 +8344,12 @@ export def "workspaces-members get" [
 ]: nothing -> record<type: string, links: record<self: record<href: string, name: string>>, user: record<type: string, created_on: string, display_name: string, links: record<avatar: record>, username: string, uuid: string>, workspace: record<type: string, created_on: string, is_private: bool, links: record<avatar: record, html: record, members: record, owners: record, projects: record, repositories: record, self: record, snippets: record>, name: string, slug: string, updated_on: string, uuid: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($workspace | is-empty) { error make --unspanned { msg: "path parameter 'workspace' must be non-empty" } }
+  if ($member | is-empty) { error make --unspanned { msg: "path parameter 'member' must be non-empty" } }
   let full_url = (build-url $base ({workspace: (encode-path-segment $workspace), member: (encode-path-segment $member)} | format pattern "/workspaces/{workspace}/members/{member}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
 }
 
 # List user permissions in a workspace
@@ -7638,11 +8370,12 @@ export def "workspaces-permissions get" [
 ]: nothing -> record<next: string, page: int, pagelen: int, previous: string, size: int, values: table<type: string, links: record, user: record, workspace: record>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($workspace | is-empty) { error make --unspanned { msg: "path parameter 'workspace' must be non-empty" } }
   let qp = [(serialize-qp "q" $q "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({workspace: (encode-path-segment $workspace)} | format pattern "/workspaces/{workspace}/permissions") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"q": $q} | compact), body: null}
 }
 
 # List all repository permissions for a workspace
@@ -7664,11 +8397,12 @@ export def "workspaces-permissions-repositories list" [
 ]: nothing -> record<next: string, page: int, pagelen: int, previous: string, size: int, values: table<permission: string, repository: record, type: string, user: record>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($workspace | is-empty) { error make --unspanned { msg: "path parameter 'workspace' must be non-empty" } }
   let qp = [(serialize-qp "q" $q "scalar") (serialize-qp "sort" $qp_sort "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({workspace: (encode-path-segment $workspace)} | format pattern "/workspaces/{workspace}/permissions/repositories") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"q": $q, "sort": $qp_sort} | compact), body: null}
 }
 
 # List a repository permissions for a workspace
@@ -7691,11 +8425,13 @@ export def "workspaces-permissions-repositories get" [
 ]: nothing -> record<next: string, page: int, pagelen: int, previous: string, size: int, values: table<permission: string, repository: record, type: string, user: record>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($workspace | is-empty) { error make --unspanned { msg: "path parameter 'workspace' must be non-empty" } }
+  if ($repo_slug | is-empty) { error make --unspanned { msg: "path parameter 'repo_slug' must be non-empty" } }
   let qp = [(serialize-qp "q" $q "scalar") (serialize-qp "sort" $qp_sort "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({workspace: (encode-path-segment $workspace), repo_slug: (encode-path-segment $repo_slug)} | format pattern "/workspaces/{workspace}/permissions/repositories/{repo_slug}") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"q": $q, "sort": $qp_sort} | compact), body: null}
 }
 
 # Get OpenID configuration for OIDC in Pipelines
@@ -7716,10 +8452,11 @@ export def "workspaces-pipelines-config-identity-oidc-well-known-openid-configur
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($workspace | is-empty) { error make --unspanned { msg: "path parameter 'workspace' must be non-empty" } }
   let full_url = (build-url $base ({workspace: (encode-path-segment $workspace)} | format pattern "/workspaces/{workspace}/pipelines-config/identity/oidc/.well-known/openid-configuration"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
 }
 
 # Get keys for OIDC in Pipelines
@@ -7740,10 +8477,11 @@ export def "workspaces-pipelines-config-identity-oidc-keys-json get" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($workspace | is-empty) { error make --unspanned { msg: "path parameter 'workspace' must be non-empty" } }
   let full_url = (build-url $base ({workspace: (encode-path-segment $workspace)} | format pattern "/workspaces/{workspace}/pipelines-config/identity/oidc/keys.json"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
 }
 
 # List variables for a workspace
@@ -7764,10 +8502,11 @@ export def "workspaces-pipelines-config-variables list" [
 ]: nothing -> record<next: string, page: int, pagelen: int, previous: string, size: int, values: table<type: string, key: string, secured: bool, uuid: string, value: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($workspace | is-empty) { error make --unspanned { msg: "path parameter 'workspace' must be non-empty" } }
   let full_url = (build-url $base ({workspace: (encode-path-segment $workspace)} | format pattern "/workspaces/{workspace}/pipelines-config/variables"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
 }
 
 # Create a variable for a workspace
@@ -7794,12 +8533,13 @@ export def "workspaces-pipelines-config-variables create" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($workspace | is-empty) { error make --unspanned { msg: "path parameter 'workspace' must be non-empty" } }
   let full_url = (build-url $base ({workspace: (encode-path-segment $workspace)} | format pattern "/workspaces/{workspace}/pipelines-config/variables"))
   let req_body = {"type": $type, "key": $key, "secured": $secured, "uuid": $uuid, "value": $value} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: {}, body: $req_body}
 }
 
 # Delete a variable for a workspace
@@ -7821,10 +8561,12 @@ export def "workspaces-pipelines-config-variables delete" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($workspace | is-empty) { error make --unspanned { msg: "path parameter 'workspace' must be non-empty" } }
+  if ($variable_uuid | is-empty) { error make --unspanned { msg: "path parameter 'variable_uuid' must be non-empty" } }
   let full_url = (build-url $base ({workspace: (encode-path-segment $workspace), variable_uuid: (encode-path-segment $variable_uuid)} | format pattern "/workspaces/{workspace}/pipelines-config/variables/{variable_uuid}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
 }
 
 # Get variable for a workspace
@@ -7846,10 +8588,12 @@ export def "workspaces-pipelines-config-variables get" [
 ]: nothing -> record<type: string, key: string, secured: bool, uuid: string, value: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($workspace | is-empty) { error make --unspanned { msg: "path parameter 'workspace' must be non-empty" } }
+  if ($variable_uuid | is-empty) { error make --unspanned { msg: "path parameter 'variable_uuid' must be non-empty" } }
   let full_url = (build-url $base ({workspace: (encode-path-segment $workspace), variable_uuid: (encode-path-segment $variable_uuid)} | format pattern "/workspaces/{workspace}/pipelines-config/variables/{variable_uuid}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
 }
 
 # Update variable for a workspace
@@ -7877,12 +8621,14 @@ export def "workspaces-pipelines-config-variables update" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($workspace | is-empty) { error make --unspanned { msg: "path parameter 'workspace' must be non-empty" } }
+  if ($variable_uuid | is-empty) { error make --unspanned { msg: "path parameter 'variable_uuid' must be non-empty" } }
   let full_url = (build-url $base ({workspace: (encode-path-segment $workspace), variable_uuid: (encode-path-segment $variable_uuid)} | format pattern "/workspaces/{workspace}/pipelines-config/variables/{variable_uuid}"))
   let req_body = {"type": $type, "key": $key, "secured": $secured, "uuid": $uuid, "value": $value} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: {}, body: $req_body}
 }
 
 # List projects in a workspace
@@ -7902,10 +8648,11 @@ export def "workspaces-projects list" [
 ]: nothing -> record<next: string, page: int, pagelen: int, previous: string, size: int, values: table<type: string, created_on: string, description: string, has_publicly_visible_repos: bool, is_private: bool, key: string, links: record, name: string, owner: record, updated_on: string, uuid: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($workspace | is-empty) { error make --unspanned { msg: "path parameter 'workspace' must be non-empty" } }
   let full_url = (build-url $base ({workspace: (encode-path-segment $workspace)} | format pattern "/workspaces/{workspace}/projects"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
 }
 
 # Create a project in a workspace
@@ -7938,12 +8685,13 @@ export def "workspaces-projects create" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($workspace | is-empty) { error make --unspanned { msg: "path parameter 'workspace' must be non-empty" } }
   let full_url = (build-url $base ({workspace: (encode-path-segment $workspace)} | format pattern "/workspaces/{workspace}/projects"))
   let req_body = {"type": $type, "created_on": $created_on, "description": $description, "has_publicly_visible_repos": $has_publicly_visible_repos, "is_private": $is_private, "key": $key, "links": $links, "name": $name, "owner": $owner, "updated_on": $updated_on, "uuid": $uuid} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: {}, body: $req_body}
 }
 
 # Delete a project for a workspace
@@ -7964,10 +8712,12 @@ export def "workspaces-projects delete" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($workspace | is-empty) { error make --unspanned { msg: "path parameter 'workspace' must be non-empty" } }
+  if ($project_key | is-empty) { error make --unspanned { msg: "path parameter 'project_key' must be non-empty" } }
   let full_url = (build-url $base ({workspace: (encode-path-segment $workspace), project_key: (encode-path-segment $project_key)} | format pattern "/workspaces/{workspace}/projects/{project_key}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
 }
 
 # Get a project for a workspace
@@ -7988,10 +8738,12 @@ export def "workspaces-projects get" [
 ]: nothing -> record<type: string, created_on: string, description: string, has_publicly_visible_repos: bool, is_private: bool, key: string, links: record<avatar: record<href: string, name: string>, html: record<href: string, name: string>>, name: string, owner: record<links: record<avatar: record, html: record, members: record, projects: record, repositories: record, self: record>>, updated_on: string, uuid: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($workspace | is-empty) { error make --unspanned { msg: "path parameter 'workspace' must be non-empty" } }
+  if ($project_key | is-empty) { error make --unspanned { msg: "path parameter 'project_key' must be non-empty" } }
   let full_url = (build-url $base ({workspace: (encode-path-segment $workspace), project_key: (encode-path-segment $project_key)} | format pattern "/workspaces/{workspace}/projects/{project_key}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
 }
 
 # Update a project for a workspace
@@ -8025,12 +8777,14 @@ export def "workspaces-projects update" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($workspace | is-empty) { error make --unspanned { msg: "path parameter 'workspace' must be non-empty" } }
+  if ($project_key | is-empty) { error make --unspanned { msg: "path parameter 'project_key' must be non-empty" } }
   let full_url = (build-url $base ({workspace: (encode-path-segment $workspace), project_key: (encode-path-segment $project_key)} | format pattern "/workspaces/{workspace}/projects/{project_key}"))
   let req_body = {"type": $type, "created_on": $created_on, "description": $description, "has_publicly_visible_repos": $has_publicly_visible_repos, "is_private": $is_private, "key": $key, "links": $links, "name": $name, "owner": $owner, "updated_on": $updated_on, "uuid": $uuid} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: {}, body: $req_body}
 }
 
 # Get the branching model for a project
@@ -8051,10 +8805,12 @@ export def "workspaces-projects-branching-model get" [
 ]: nothing -> record<type: string, branch_types: table<kind: string, prefix: string>, development: record<name: string, use_mainbranch: bool>, production: record<name: string, use_mainbranch: bool>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($workspace | is-empty) { error make --unspanned { msg: "path parameter 'workspace' must be non-empty" } }
+  if ($project_key | is-empty) { error make --unspanned { msg: "path parameter 'project_key' must be non-empty" } }
   let full_url = (build-url $base ({workspace: (encode-path-segment $workspace), project_key: (encode-path-segment $project_key)} | format pattern "/workspaces/{workspace}/projects/{project_key}/branching-model"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
 }
 
 # Get the branching model config for a project
@@ -8075,10 +8831,12 @@ export def "workspaces-projects-branching-model-settings get" [
 ]: nothing -> record<type: string, branch_types: table<enabled: bool, kind: string, prefix: string>, development: record<is_valid: bool, name: string, use_mainbranch: bool>, links: record<self: record<href: string, name: string>>, production: record<enabled: bool, is_valid: bool, name: string, use_mainbranch: bool>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($workspace | is-empty) { error make --unspanned { msg: "path parameter 'workspace' must be non-empty" } }
+  if ($project_key | is-empty) { error make --unspanned { msg: "path parameter 'project_key' must be non-empty" } }
   let full_url = (build-url $base ({workspace: (encode-path-segment $workspace), project_key: (encode-path-segment $project_key)} | format pattern "/workspaces/{workspace}/projects/{project_key}/branching-model/settings"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
 }
 
 # Update the branching model config for a project
@@ -8099,10 +8857,12 @@ export def "workspaces-projects-branching-model-settings update" [
 ]: nothing -> record<type: string, branch_types: table<enabled: bool, kind: string, prefix: string>, development: record<is_valid: bool, name: string, use_mainbranch: bool>, links: record<self: record<href: string, name: string>>, production: record<enabled: bool, is_valid: bool, name: string, use_mainbranch: bool>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($workspace | is-empty) { error make --unspanned { msg: "path parameter 'workspace' must be non-empty" } }
+  if ($project_key | is-empty) { error make --unspanned { msg: "path parameter 'project_key' must be non-empty" } }
   let full_url = (build-url $base ({workspace: (encode-path-segment $workspace), project_key: (encode-path-segment $project_key)} | format pattern "/workspaces/{workspace}/projects/{project_key}/branching-model/settings"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
 }
 
 # List the default reviewers in a project
@@ -8123,10 +8883,12 @@ export def "workspaces-projects-default-reviewers list" [
 ]: nothing -> record<next: string, page: int, pagelen: int, previous: string, size: int, values: table<reviewer_type: string, type: string, user: record>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($workspace | is-empty) { error make --unspanned { msg: "path parameter 'workspace' must be non-empty" } }
+  if ($project_key | is-empty) { error make --unspanned { msg: "path parameter 'project_key' must be non-empty" } }
   let full_url = (build-url $base ({workspace: (encode-path-segment $workspace), project_key: (encode-path-segment $project_key)} | format pattern "/workspaces/{workspace}/projects/{project_key}/default-reviewers"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
 }
 
 # Remove the specific user from the project's default reviewers
@@ -8148,10 +8910,13 @@ export def "workspaces-projects-default-reviewers delete" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($workspace | is-empty) { error make --unspanned { msg: "path parameter 'workspace' must be non-empty" } }
+  if ($project_key | is-empty) { error make --unspanned { msg: "path parameter 'project_key' must be non-empty" } }
+  if ($selected_user | is-empty) { error make --unspanned { msg: "path parameter 'selected_user' must be non-empty" } }
   let full_url = (build-url $base ({workspace: (encode-path-segment $workspace), project_key: (encode-path-segment $project_key), selected_user: (encode-path-segment $selected_user)} | format pattern "/workspaces/{workspace}/projects/{project_key}/default-reviewers/{selected_user}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
 }
 
 # Get a default reviewer
@@ -8173,10 +8938,13 @@ export def "workspaces-projects-default-reviewers get" [
 ]: nothing -> record<account_id: string, account_status: string, has_2fa_enabled: bool, is_staff: bool, links: record<avatar: record<href: string, name: string>, html: record<href: string, name: string>, repositories: record<href: string, name: string>, self: record<href: string, name: string>>, nickname: string, website: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($workspace | is-empty) { error make --unspanned { msg: "path parameter 'workspace' must be non-empty" } }
+  if ($project_key | is-empty) { error make --unspanned { msg: "path parameter 'project_key' must be non-empty" } }
+  if ($selected_user | is-empty) { error make --unspanned { msg: "path parameter 'selected_user' must be non-empty" } }
   let full_url = (build-url $base ({workspace: (encode-path-segment $workspace), project_key: (encode-path-segment $project_key), selected_user: (encode-path-segment $selected_user)} | format pattern "/workspaces/{workspace}/projects/{project_key}/default-reviewers/{selected_user}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
 }
 
 # Add the specific user as a default reviewer for the project
@@ -8198,10 +8966,13 @@ export def "workspaces-projects-default-reviewers update" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($workspace | is-empty) { error make --unspanned { msg: "path parameter 'workspace' must be non-empty" } }
+  if ($project_key | is-empty) { error make --unspanned { msg: "path parameter 'project_key' must be non-empty" } }
+  if ($selected_user | is-empty) { error make --unspanned { msg: "path parameter 'selected_user' must be non-empty" } }
   let full_url = (build-url $base ({workspace: (encode-path-segment $workspace), project_key: (encode-path-segment $project_key), selected_user: (encode-path-segment $selected_user)} | format pattern "/workspaces/{workspace}/projects/{project_key}/default-reviewers/{selected_user}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
 }
 
 # List project deploy keys
@@ -8222,10 +8993,12 @@ export def "workspaces-projects-deploy-keys list" [
 ]: nothing -> record<next: string, page: int, pagelen: int, previous: string, size: int, values: table<type: string, added_on: string, comment: string, created_by: record, key: string, label: string, last_used: string, links: record, project: record>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($workspace | is-empty) { error make --unspanned { msg: "path parameter 'workspace' must be non-empty" } }
+  if ($project_key | is-empty) { error make --unspanned { msg: "path parameter 'project_key' must be non-empty" } }
   let full_url = (build-url $base ({workspace: (encode-path-segment $workspace), project_key: (encode-path-segment $project_key)} | format pattern "/workspaces/{workspace}/projects/{project_key}/deploy-keys"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
 }
 
 # Create a project deploy key
@@ -8246,10 +9019,12 @@ export def "workspaces-projects-deploy-keys create" [
 ]: nothing -> record<type: string, added_on: string, comment: string, created_by: record<type: string, created_on: string, display_name: string, links: record<avatar: record>, username: string, uuid: string>, key: string, label: string, last_used: string, links: record<self: record<href: string, name: string>>, project: record<type: string, created_on: string, description: string, has_publicly_visible_repos: bool, is_private: bool, key: string, links: record<avatar: record, html: record>, name: string, owner: record<links: record>, updated_on: string, uuid: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($workspace | is-empty) { error make --unspanned { msg: "path parameter 'workspace' must be non-empty" } }
+  if ($project_key | is-empty) { error make --unspanned { msg: "path parameter 'project_key' must be non-empty" } }
   let full_url = (build-url $base ({workspace: (encode-path-segment $workspace), project_key: (encode-path-segment $project_key)} | format pattern "/workspaces/{workspace}/projects/{project_key}/deploy-keys"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
 }
 
 # Delete a deploy key from a project
@@ -8271,10 +9046,13 @@ export def "workspaces-projects-deploy-keys delete" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($workspace | is-empty) { error make --unspanned { msg: "path parameter 'workspace' must be non-empty" } }
+  if ($project_key | is-empty) { error make --unspanned { msg: "path parameter 'project_key' must be non-empty" } }
+  if ($key_id | is-empty) { error make --unspanned { msg: "path parameter 'key_id' must be non-empty" } }
   let full_url = (build-url $base ({workspace: (encode-path-segment $workspace), project_key: (encode-path-segment $project_key), key_id: (encode-path-segment $key_id)} | format pattern "/workspaces/{workspace}/projects/{project_key}/deploy-keys/{key_id}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
 }
 
 # Get a project deploy key
@@ -8296,10 +9074,13 @@ export def "workspaces-projects-deploy-keys get" [
 ]: nothing -> record<type: string, added_on: string, comment: string, created_by: record<type: string, created_on: string, display_name: string, links: record<avatar: record>, username: string, uuid: string>, key: string, label: string, last_used: string, links: record<self: record<href: string, name: string>>, project: record<type: string, created_on: string, description: string, has_publicly_visible_repos: bool, is_private: bool, key: string, links: record<avatar: record, html: record>, name: string, owner: record<links: record>, updated_on: string, uuid: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($workspace | is-empty) { error make --unspanned { msg: "path parameter 'workspace' must be non-empty" } }
+  if ($project_key | is-empty) { error make --unspanned { msg: "path parameter 'project_key' must be non-empty" } }
+  if ($key_id | is-empty) { error make --unspanned { msg: "path parameter 'key_id' must be non-empty" } }
   let full_url = (build-url $base ({workspace: (encode-path-segment $workspace), project_key: (encode-path-segment $project_key), key_id: (encode-path-segment $key_id)} | format pattern "/workspaces/{workspace}/projects/{project_key}/deploy-keys/{key_id}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
 }
 
 # Search for code in a workspace
@@ -8323,9 +9104,10 @@ export def "workspaces-search-code list" [
 ]: nothing -> record<next: string, page: int, pagelen: int, previous: string, query_substituted: bool, size: int, values: table<content_match_count: int, content_matches: list, file: record, path_matches: list, type: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($workspace | is-empty) { error make --unspanned { msg: "path parameter 'workspace' must be non-empty" } }
   let qp = [(serialize-qp "search_query" $search_query "scalar") (serialize-qp "page" $page "scalar") (serialize-qp "pagelen" $pagelen "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({workspace: (encode-path-segment $workspace)} | format pattern "/workspaces/{workspace}/search/code") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"search_query": $search_query, "page": $page, "pagelen": $pagelen} | compact), body: null}
 }

@@ -3,16 +3,17 @@
 # Auth: --token flag or $env.BUDGEA_API_DOCUMENTATION_TOKEN
 
 const BASE_URL = "http://localhost//budgea.biapi.pro/2.0"
-const DEFAULT_AUTH = "bearer"
 
-# Build auth: returns {headers: record, query: string}
+# Build auth: returns {scheme: string, headers: record, query: string, location: string}.
+# `location` is "header" | "query" | "cookie" | "none" and tells dry-run callers
+# where the token went without inspecting headers/query themselves.
 def build-auth [token?: string, auth_scheme?: string]: nothing -> record {
   let token_val = if ($token != null) and ($token | is-not-empty) { $token } else { $env | get -o BUDGEA_API_DOCUMENTATION_TOKEN | default "" }
   let scheme = ($auth_scheme | default "bearer")
-  if ($scheme == "none") or ($token_val | is-empty) { return {headers: {}, query: ""} }
+  if ($scheme == "none") or ($token_val | is-empty) { return {scheme: $scheme, headers: {}, query: "", location: "none"} }
   match $scheme {
-    "none" => { {headers: {}, query: ""} }
-    _ => { {headers: {Authorization: $"Bearer ($token_val)"}, query: ""} }
+    "none" => { {scheme: $scheme, headers: {}, query: "", location: "none"} }
+    _ => { {scheme: $scheme, headers: {Authorization: $"Bearer ($token_val)"}, query: "", location: "header"} }
   }
 }
 
@@ -21,8 +22,9 @@ def build-auth [token?: string, auth_scheme?: string]: nothing -> record {
 # ([A-Za-z0-9-._~]) stay literal; everything else gets %XX.
 def serialize-qp [name: string, value: any, style: string]: nothing -> list<string> {
   if ($value == null) { return [] }
-  let n = (encode-path-segment $name)
   let is_list = ($value | describe | str starts-with "list")
+  if $is_list and ($value | is-empty) { return [] }
+  let n = (encode-path-segment $name)
   if ($value | describe | str starts-with "record") { return ($value | transpose k v | each { $"($n)[(encode-path-segment $in.k)]=(encode-path-segment $in.v)" }) }
   if not $is_list { return [$"($n)=(encode-path-segment $value)"] }
   match $style {
@@ -53,22 +55,42 @@ def build-url [base: string, path: string, query?: string]: nothing -> string {
   if ($query != null) and ($query | is-not-empty) { $result | upsert query $query | url join } else { $result | url join }
 }
 
+# Build the dry-run record returned by --dry-run. Shape:
+#   {dry_run: true, method, url, query: <record>, headers, body, content_type, timeout,
+#    auth: {scheme, location}}
+# `meta` carries logical-form data (the query record by spec name, the pre-serialization
+# body) that do-request itself cannot reconstruct from its wire-format args.
+def build-dry-run-record [method: string, url: string, auth: record, content_type: string, timeout: duration, meta?: record]: nothing -> record {
+  let m = ($meta | default {})
+  {
+    dry_run: true
+    method: $method
+    url: $url
+    query: ($m | get -o query | default {})
+    headers: $auth.headers
+    body: ($m | get -o body)
+    content_type: $content_type
+    timeout: $timeout
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+}
+
 # Execute HTTP request with method dispatch
-def do-request [method: string, url: string, auth: record, insecure: bool, raw: bool, dry_run: bool, max_time?: duration, allow_errors?: bool, full?: bool, content_type?: string, body?: any]: nothing -> any {
+def do-request [method: string, url: string, auth: record, insecure: bool, raw: bool, dry_run: bool, max_time?: duration, allow_errors?: bool, full?: bool, content_type?: string, body?: any, dry_run_meta?: record]: nothing -> any {
   let req_url = if ($auth.query | is-not-empty) { if ($url | str contains "?") { $"($url)&($auth.query)" } else { $"($url)?($auth.query)" } } else { $url }
   let timeout = ($max_time | default 30min)
   let ct = ($content_type | default "application/json")
-  if $dry_run { return {method: $method, url: $req_url, headers: $auth.headers, query_string: $auth.query, content_type: $ct, timeout: $timeout, body: $body} }
+  if $dry_run { return (build-dry-run-record $method $req_url $auth $ct $timeout $dry_run_meta) }
   let resp = match $method {
     "get" => { http get --headers $auth.headers --full --allow-errors --max-time $timeout --insecure=$insecure --raw=$raw $req_url }
-    "head" => { http head --headers $auth.headers --max-time $timeout --insecure=$insecure $req_url }
-    "options" => { http options --headers $auth.headers --max-time $timeout --insecure=$insecure $req_url }
+    "head" => { http head --headers $auth.headers --full --allow-errors --max-time $timeout --insecure=$insecure $req_url }
+    "options" => { http options --headers $auth.headers --full --allow-errors --max-time $timeout --insecure=$insecure $req_url }
     "post" => { if ($body | is-empty) { http post --headers $auth.headers --full --allow-errors --max-time $timeout --insecure=$insecure --raw=$raw $req_url "" } else { http post --headers $auth.headers --content-type $ct --full --allow-errors --max-time $timeout --insecure=$insecure --raw=$raw $req_url $body } }
     "put" => { if ($body | is-empty) { http put --headers $auth.headers --full --allow-errors --max-time $timeout --insecure=$insecure --raw=$raw $req_url "" } else { http put --headers $auth.headers --content-type $ct --full --allow-errors --max-time $timeout --insecure=$insecure --raw=$raw $req_url $body } }
     "patch" => { if ($body | is-empty) { http patch --headers $auth.headers --full --allow-errors --max-time $timeout --insecure=$insecure --raw=$raw $req_url "" } else { http patch --headers $auth.headers --content-type $ct --full --allow-errors --max-time $timeout --insecure=$insecure --raw=$raw $req_url $body } }
     "delete" => { if ($body | is-empty) { http delete --headers $auth.headers --full --allow-errors --max-time $timeout --insecure=$insecure --raw=$raw $req_url } else { http delete --headers $auth.headers --content-type $ct --data $body --full --allow-errors --max-time $timeout --insecure=$insecure --raw=$raw $req_url } }
   }
-  if ($method in ["head" "options"]) { return $resp }
+  if ($method == "head") and (not $full) and (not $allow_errors) and $resp.status < 400 { return $resp.headers }
   if $allow_errors { $resp } else if $resp.status >= 400 { error make --unspanned { msg: $"HTTP ($resp.status): ($resp.body)" } } else if $full { {status: $resp.status, headers: $resp.headers, body: $resp.body} } else if $resp.status == 204 { null } else { $resp.body }
 }
 
@@ -159,7 +181,7 @@ export def "account-types list" [
   let full_url = (build-url $base "/account_types" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"expand": $expand} | compact), body: null}
 }
 
 # Get an account type
@@ -180,11 +202,12 @@ export def "account-types get" [
 ]: nothing -> record<color: string, display_name: string, display_name_p: string, id: int, id_parent: int, is_invest: bool, name: string, product: string, weboob_type_id: int> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($id_account_type | is-empty) { error make --unspanned { msg: "path parameter 'id_account_type' must be non-empty" } }
   let qp = [(serialize-qp "expand" $expand "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({id_account_type: (encode-path-segment $id_account_type)} | format pattern "/account_types/{id_account_type}") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"expand": $expand} | compact), body: null}
 }
 
 # Generate a jwt manage token
@@ -214,7 +237,7 @@ export def "admin-jwt create" [
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let req_body = if ($req_body | describe | str starts-with "record") { $req_body } else { {} }
   let mp = (build-multipart-body $req_body [] $dry_run)
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full $mp.content_type $mp.body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full $mp.content_type $mp.body {query: {}, body: $req_body}
 }
 
 # Create a new anonymous user
@@ -244,7 +267,7 @@ export def "auth-init create" [
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let req_body = if ($req_body | describe | str starts-with "record") { $req_body } else { {} }
   let mp = (build-multipart-body $req_body [] $dry_run)
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full $mp.content_type $mp.body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full $mp.content_type $mp.body {query: {}, body: $req_body}
 }
 
 # Generate a user jwt token
@@ -277,7 +300,7 @@ export def "auth-jwt create" [
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let req_body = if ($req_body | describe | str starts-with "record") { $req_body } else { {} }
   let mp = (build-multipart-body $req_body [] $dry_run)
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full $mp.content_type $mp.body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full $mp.content_type $mp.body {query: {}, body: $req_body}
 }
 
 # Get a new access token given an user id and client credentials
@@ -310,7 +333,7 @@ export def "auth-renew create" [
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let req_body = if ($req_body | describe | str starts-with "record") { $req_body } else { {} }
   let mp = (build-multipart-body $req_body [] $dry_run)
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full $mp.content_type $mp.body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full $mp.content_type $mp.body {query: {}, body: $req_body}
 }
 
 # Remove user access
@@ -332,7 +355,7 @@ export def "auth-token delete" [
   let full_url = (build-url $base "/auth/token")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
 }
 
 # Login to API with credentials
@@ -365,7 +388,7 @@ export def "auth-token create" [
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let req_body = if ($req_body | describe | str starts-with "record") { $req_body } else { {} }
   let mp = (build-multipart-body $req_body [] $dry_run)
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full $mp.content_type $mp.body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full $mp.content_type $mp.body {query: {}, body: $req_body}
 }
 
 # Transform a temporary code to a access_token
@@ -398,7 +421,7 @@ export def "auth-token-access create" [
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let req_body = if ($req_body | describe | str starts-with "record") { $req_body } else { {} }
   let mp = (build-multipart-body $req_body [] $dry_run)
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full $mp.content_type $mp.body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full $mp.content_type $mp.body {query: {}, body: $req_body}
 }
 
 # Generate a user temporary token
@@ -421,7 +444,7 @@ export def "auth-token-code get" [
   let full_url = (build-url $base "/auth/token/code")
   let accept_val = ($accept | default "access")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
 }
 
 # Get list of connectors
@@ -445,7 +468,7 @@ export def "banks list" [
   let full_url = (build-url $base "/banks" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"expand": $expand} | compact), body: null}
 }
 
 # Create bank categories
@@ -475,7 +498,7 @@ export def "banks-categories create" [
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let req_body = if ($req_body | describe | str starts-with "record") { $req_body } else { {} }
   let mp = (build-multipart-body $req_body [] $dry_run)
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full $mp.content_type $mp.body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full $mp.content_type $mp.body {query: ({"expand": $expand} | compact), body: $req_body}
 }
 
 # Delete the supplied category
@@ -496,17 +519,18 @@ export def "banks-categories delete" [
 ]: nothing -> record<id: int, name: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($id_category | is-empty) { error make --unspanned { msg: "path parameter 'id_category' must be non-empty" } }
   let qp = [(serialize-qp "expand" $expand "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({id_category: (encode-path-segment $id_category)} | format pattern "/banks/categories/{id_category}") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"expand": $expand} | compact), body: null}
 }
 
 # Edit a bank categories
 #
 # POST /banks/categories/{id_category}
-export def "banks-categories create-by-id_category" [
+export def "banks-categories create-by-id-category" [
   id_category: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -523,6 +547,7 @@ export def "banks-categories create-by-id_category" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($id_category | is-empty) { error make --unspanned { msg: "path parameter 'id_category' must be non-empty" } }
   let qp = [(serialize-qp "expand" $expand "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({id_category: (encode-path-segment $id_category)} | format pattern "/banks/categories/{id_category}") $qp)
   let req_body = {"name": $name} | compact
@@ -531,7 +556,7 @@ export def "banks-categories create-by-id_category" [
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let req_body = if ($req_body | describe | str starts-with "record") { $req_body } else { {} }
   let mp = (build-multipart-body $req_body [] $dry_run)
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full $mp.content_type $mp.body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full $mp.content_type $mp.body {query: ({"expand": $expand} | compact), body: $req_body}
 }
 
 # Get a connector
@@ -552,11 +577,12 @@ export def "banks get" [
 ]: nothing -> record<auth_mechanism: string, beta: bool, charged: bool, code: string, color: string, hidden: bool, id: int, months_to_fetch: int, name: string, restricted: bool, siret: string, slug: string, sync_frequency: float, uuid: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($id_bank | is-empty) { error make --unspanned { msg: "path parameter 'id_bank' must be non-empty" } }
   let qp = [(serialize-qp "expand" $expand "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({id_bank: (encode-path-segment $id_bank)} | format pattern "/banks/{id_bank}") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"expand": $expand} | compact), body: null}
 }
 
 # Get a subset of id_connection for a given bank. Different selection methode are possible
@@ -583,11 +609,12 @@ export def "banks-connections get" [
 ]: nothing -> record<connections: table<active: bool, created: string, id: int, id_connector: int, id_user: int, last_push: string, last_update: string, next_try: string>, total: float> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($id_connector | is-empty) { error make --unspanned { msg: "path parameter 'id_connector' must be non-empty" } }
   let qp = [(serialize-qp "method" $method "scalar") (serialize-qp "n" $n "scalar") (serialize-qp "type" $type "scalar") (serialize-qp "occurences" $occurences "scalar") (serialize-qp "source" $qp_source "scalar") (serialize-qp "minutes_without_sync" $minutes_without_sync "scalar") (serialize-qp "expand" $expand "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({id_connector: (encode-path-segment $id_connector)} | format pattern "/banks/{id_connector}/connections") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"method": $method, "n": $n, "type": $type, "occurences": $occurences, "source": $qp_source, "minutes_without_sync": $minutes_without_sync, "expand": $expand} | compact), body: null}
 }
 
 # Get all links to the files associated with this connector.
@@ -608,11 +635,12 @@ export def "banks-logos get" [
 ]: nothing -> record<connectorlogos: table<id: int, id_connector: int, id_file: int, type: string>, total: float> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($id_connector | is-empty) { error make --unspanned { msg: "path parameter 'id_connector' must be non-empty" } }
   let qp = [(serialize-qp "expand" $expand "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({id_connector: (encode-path-segment $id_connector)} | format pattern "/banks/{id_connector}/logos") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"expand": $expand} | compact), body: null}
 }
 
 # Get all links to the files associated with this connector.
@@ -633,11 +661,12 @@ export def "banks-logos-main get" [
 ]: nothing -> record<connectorlogos: table<id: int, id_connector: int, id_file: int, type: string>, total: float> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($id_connector | is-empty) { error make --unspanned { msg: "path parameter 'id_connector' must be non-empty" } }
   let qp = [(serialize-qp "expand" $expand "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({id_connector: (encode-path-segment $id_connector)} | format pattern "/banks/{id_connector}/logos/main") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"expand": $expand} | compact), body: null}
 }
 
 # Get all links to the files associated with this connector.
@@ -658,11 +687,12 @@ export def "banks-logos-thumbnail get" [
 ]: nothing -> record<connectorlogos: table<id: int, id_connector: int, id_file: int, type: string>, total: float> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($id_connector | is-empty) { error make --unspanned { msg: "path parameter 'id_connector' must be non-empty" } }
   let qp = [(serialize-qp "expand" $expand "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({id_connector: (encode-path-segment $id_connector)} | format pattern "/banks/{id_connector}/logos/thumbnail") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"expand": $expand} | compact), body: null}
 }
 
 # Get list of connector sources
@@ -683,11 +713,12 @@ export def "banks-sources list" [
 ]: nothing -> record<sources: table<auth_mechanism: string, disabled: string, disabled_capabilities: string, fallback: string, id: int, id_connector: int, id_weboob: string, name: string, priority: int, stability: string>, total: float> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($id_connector | is-empty) { error make --unspanned { msg: "path parameter 'id_connector' must be non-empty" } }
   let qp = [(serialize-qp "expand" $expand "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({id_connector: (encode-path-segment $id_connector)} | format pattern "/banks/{id_connector}/sources") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"expand": $expand} | compact), body: null}
 }
 
 # Get fields specific to a domain and a source
@@ -709,11 +740,13 @@ export def "banks-sources-fields get" [
 ]: nothing -> record<source_fields: table<id_connector_source: int, label: string, name: string, regex: string, required: bool, secret: bool, type: string>, total: float> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($id_connector | is-empty) { error make --unspanned { msg: "path parameter 'id_connector' must be non-empty" } }
+  if ($id_connector_source | is-empty) { error make --unspanned { msg: "path parameter 'id_connector_source' must be non-empty" } }
   let qp = [(serialize-qp "expand" $expand "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({id_connector: (encode-path-segment $id_connector), id_connector_source: (encode-path-segment $id_connector_source)} | format pattern "/banks/{id_connector}/sources/{id_connector_source}/fields") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"expand": $expand} | compact), body: null}
 }
 
 # Get the connector source
@@ -735,11 +768,13 @@ export def "banks-sources get" [
 ]: nothing -> record<auth_mechanism: string, disabled: string, disabled_capabilities: string, fallback: string, id: int, id_connector: int, id_weboob: string, name: string, priority: int, stability: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($id_connector | is-empty) { error make --unspanned { msg: "path parameter 'id_connector' must be non-empty" } }
+  if ($id_source | is-empty) { error make --unspanned { msg: "path parameter 'id_source' must be non-empty" } }
   let qp = [(serialize-qp "expand" $expand "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({id_connector: (encode-path-segment $id_connector), id_source: (encode-path-segment $id_source)} | format pattern "/banks/{id_connector}/sources/{id_source}") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"expand": $expand} | compact), body: null}
 }
 
 # Get all categories
@@ -763,7 +798,7 @@ export def "categories get" [
   let full_url = (build-url $base "/categories" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"expand": $expand} | compact), body: null}
 }
 
 # Add a new keyword associated with a category in the database.
@@ -787,7 +822,7 @@ export def "categories-keywords create" [
   let full_url = (build-url $base "/categories/keywords" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"expand": $expand} | compact), body: null}
 }
 
 # Delete a particular key-value pair on a transaction.
@@ -808,11 +843,12 @@ export def "categories-keywords delete" [
 ]: nothing -> record<id: int, id_category: int, income: bool, keyword: string, priority: int> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($id_keyword | is-empty) { error make --unspanned { msg: "path parameter 'id_keyword' must be non-empty" } }
   let qp = [(serialize-qp "expand" $expand "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({id_keyword: (encode-path-segment $id_keyword)} | format pattern "/categories/keywords/{id_keyword}") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"expand": $expand} | compact), body: null}
 }
 
 # categorize transactions without storing them
@@ -843,7 +879,7 @@ export def "categorize create" [
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let req_body = if ($req_body | describe | str starts-with "record") { $req_body } else { {} }
   let mp = (build-multipart-body $req_body [] $dry_run)
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full $mp.content_type $mp.body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full $mp.content_type $mp.body {query: {}, body: $req_body}
 }
 
 # Get the latest certificate of a type
@@ -864,11 +900,12 @@ export def "certificate get" [
 ]: nothing -> record<created: string, id: int, id_private_key_file: int, id_public_key_file: int, type: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($type | is-empty) { error make --unspanned { msg: "path parameter 'type' must be non-empty" } }
   let qp = [(serialize-qp "expand" $expand "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({type: (encode-path-segment $type)} | format pattern "/certificate/{type}") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"expand": $expand} | compact), body: null}
 }
 
 # List clients
@@ -892,7 +929,7 @@ export def "clients list" [
   let full_url = (build-url $base "/clients" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"expand": $expand} | compact), body: null}
 }
 
 # Create a client
@@ -925,7 +962,7 @@ export def "clients create" [
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let req_body = if ($req_body | describe | str starts-with "record") { $req_body } else { {} }
   let mp = (build-multipart-body $req_body [] $dry_run)
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full $mp.content_type $mp.body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full $mp.content_type $mp.body {query: ({"expand": $expand} | compact), body: $req_body}
 }
 
 # Delete a client
@@ -946,11 +983,12 @@ export def "clients delete" [
 ]: nothing -> record<config: string, id: int, id_logo: int, name: string, private_key: string, pro: bool, public_key: string, redirect_uris: string, secret: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($id_client | is-empty) { error make --unspanned { msg: "path parameter 'id_client' must be non-empty" } }
   let qp = [(serialize-qp "expand" $expand "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({id_client: (encode-path-segment $id_client)} | format pattern "/clients/{id_client}") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"expand": $expand} | compact), body: null}
 }
 
 # Get information about a client
@@ -971,11 +1009,12 @@ export def "clients get" [
 ]: nothing -> record<config: string, id: int, id_logo: int, name: string, private_key: string, pro: bool, public_key: string, redirect_uris: string, secret: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($id_client | is-empty) { error make --unspanned { msg: "path parameter 'id_client' must be non-empty" } }
   let qp = [(serialize-qp "expand" $expand "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({id_client: (encode-path-segment $id_client)} | format pattern "/clients/{id_client}") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"expand": $expand} | compact), body: null}
 }
 
 # Update a client
@@ -1009,6 +1048,7 @@ export def "clients update" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($id_client | is-empty) { error make --unspanned { msg: "path parameter 'id_client' must be non-empty" } }
   let qp = [(serialize-qp "expand" $expand "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({id_client: (encode-path-segment $id_client)} | format pattern "/clients/{id_client}") $qp)
   let req_body = {"config": $config, "description": $description, "description_banks": $description_banks, "description_providers": $description_providers, "generate_keys": $generate_keys, "name": $name, "primary_color": $primary_color, "pro": $pro, "redirect_uris": $redirect_uris, "secondary_color": $secondary_color, "secret": $secret, "update_config": $update_config} | compact
@@ -1017,7 +1057,7 @@ export def "clients update" [
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let req_body = if ($req_body | describe | str starts-with "record") { $req_body } else { {} }
   let mp = (build-multipart-body $req_body [] $dry_run)
-  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full $mp.content_type $mp.body
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full $mp.content_type $mp.body {query: ({"expand": $expand} | compact), body: $req_body}
 }
 
 # Delete the client logo
@@ -1038,11 +1078,12 @@ export def "clients-logo delete" [
 ]: nothing -> record<content_type: string, file_size: int, filename: string, id: int> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($id_client | is-empty) { error make --unspanned { msg: "path parameter 'id_client' must be non-empty" } }
   let qp = [(serialize-qp "expand" $expand "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({id_client: (encode-path-segment $id_client)} | format pattern "/clients/{id_client}/logo") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"expand": $expand} | compact), body: null}
 }
 
 # Update the client logo
@@ -1063,11 +1104,12 @@ export def "clients-logo create" [
 ]: nothing -> record<content_type: string, file_size: int, filename: string, id: int> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($id_client | is-empty) { error make --unspanned { msg: "path parameter 'id_client' must be non-empty" } }
   let qp = [(serialize-qp "expand" $expand "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({id_client: (encode-path-segment $id_client)} | format pattern "/clients/{id_client}/logo") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"expand": $expand} | compact), body: null}
 }
 
 # Get configuration of the API.
@@ -1091,7 +1133,7 @@ export def "config get" [
   let full_url = (build-url $base "/config" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"search": $search} | compact), body: null}
 }
 
 # Insert/update configuration key(s)/value(s) on the API.
@@ -1113,7 +1155,7 @@ export def "config create" [
   let full_url = (build-url $base "/config")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
 }
 
 # Get configuration change history of the API.
@@ -1141,7 +1183,7 @@ export def "config-logs get" [
   let full_url = (build-url $base "/config/logs" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"search": $search, "type": $type, "min_date": $min_date, "max_date": $max_date, "expand": $expand} | compact), body: null}
 }
 
 # Get connections without a user
@@ -1165,7 +1207,7 @@ export def "connections get" [
   let full_url = (build-url $base "/connections" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"expand": $expand} | compact), body: null}
 }
 
 # Get connection logs
@@ -1198,11 +1240,12 @@ export def "connections-logs get" [
 ]: nothing -> record<connectionlogs: table<error: string, error_message: string, error_uid: string, fields: string, id: int, id_connection: int, id_connector: int, id_source: int, id_user: int, login: string, nb_accounts: int, next_try: string, session_folder_id: string, start: string, statut: int, timestamp: string, worker: string>, total: float> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($id_connection | is-empty) { error make --unspanned { msg: "path parameter 'id_connection' must be non-empty" } }
   let qp = [(serialize-qp "limit" $limit "scalar") (serialize-qp "offset" $offset "scalar") (serialize-qp "min_date" $min_date "scalar") (serialize-qp "max_date" $max_date "scalar") (serialize-qp "period" $period "scalar") (serialize-qp "id_user" $id_user "scalar") (serialize-qp "id_connection" $id_connection "scalar") (serialize-qp "id_connector" $id_connector "scalar") (serialize-qp "connector_uuid" $connector_uuid "scalar") (serialize-qp "error" $qp_error "scalar") (serialize-qp "id_source" $id_source "scalar") (serialize-qp "id_max" $id_max "scalar") (serialize-qp "expand" $expand "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({id_connection: (encode-path-segment $id_connection)} | format pattern "/connections/{id_connection}/logs") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"limit": $limit, "offset": $offset, "min_date": $min_date, "max_date": $max_date, "period": $period, "id_user": $id_user, "id_connection": $id_connection, "id_connector": $id_connector, "connector_uuid": $connector_uuid, "error": $qp_error, "id_source": $id_source, "id_max": $id_max, "expand": $expand} | compact), body: null}
 }
 
 # Get connection sources
@@ -1223,11 +1266,12 @@ export def "connections-sources get" [
 ]: nothing -> record<sources: table<access_expire: string, created: string, disabled: string, expire: string, id: int, id_connection: int, id_connector_source: int, last_update: string, name: string, next_try: string, state: string>, total: float> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($id_connection | is-empty) { error make --unspanned { msg: "path parameter 'id_connection' must be non-empty" } }
   let qp = [(serialize-qp "expand" $expand "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({id_connection: (encode-path-segment $id_connection)} | format pattern "/connections/{id_connection}/sources") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"expand": $expand} | compact), body: null}
 }
 
 # Disable a connection source
@@ -1249,11 +1293,13 @@ export def "connections-sources delete" [
 ]: nothing -> record<access_expire: string, created: string, disabled: string, expire: string, id: int, id_connection: int, id_connector_source: int, last_update: string, name: string, next_try: string, state: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($id_connection | is-empty) { error make --unspanned { msg: "path parameter 'id_connection' must be non-empty" } }
+  if ($id_source | is-empty) { error make --unspanned { msg: "path parameter 'id_source' must be non-empty" } }
   let qp = [(serialize-qp "expand" $expand "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({id_connection: (encode-path-segment $id_connection), id_source: (encode-path-segment $id_source)} | format pattern "/connections/{id_connection}/sources/{id_source}") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"expand": $expand} | compact), body: null}
 }
 
 # "
@@ -1279,6 +1325,8 @@ export def "connections-sources create" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($id_connection | is-empty) { error make --unspanned { msg: "path parameter 'id_connection' must be non-empty" } }
+  if ($id_source | is-empty) { error make --unspanned { msg: "path parameter 'id_source' must be non-empty" } }
   let qp = [(serialize-qp "background" $background "scalar") (serialize-qp "expand" $expand "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({id_connection: (encode-path-segment $id_connection), id_source: (encode-path-segment $id_source)} | format pattern "/connections/{id_connection}/sources/{id_source}") $qp)
   let req_body = {"disabled": $disabled, "synchronize": $synchronize} | compact
@@ -1287,7 +1335,7 @@ export def "connections-sources create" [
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let req_body = if ($req_body | describe | str starts-with "record") { $req_body } else { {} }
   let mp = (build-multipart-body $req_body [] $dry_run)
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full $mp.content_type $mp.body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full $mp.content_type $mp.body {query: ({"background": $background, "expand": $expand} | compact), body: $req_body}
 }
 
 # Update connection source
@@ -1314,6 +1362,8 @@ export def "connections-sources update" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($id_connection | is-empty) { error make --unspanned { msg: "path parameter 'id_connection' must be non-empty" } }
+  if ($id_source | is-empty) { error make --unspanned { msg: "path parameter 'id_source' must be non-empty" } }
   let qp = [(serialize-qp "background" $background "scalar") (serialize-qp "expand" $expand "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({id_connection: (encode-path-segment $id_connection), id_source: (encode-path-segment $id_source)} | format pattern "/connections/{id_connection}/sources/{id_source}") $qp)
   let req_body = {"disabled": $disabled, "force": $force, "synchronize": $synchronize} | compact
@@ -1322,7 +1372,7 @@ export def "connections-sources update" [
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let req_body = if ($req_body | describe | str starts-with "record") { $req_body } else { {} }
   let mp = (build-multipart-body $req_body [] $dry_run)
-  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full $mp.content_type $mp.body
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full $mp.content_type $mp.body {query: ({"background": $background, "expand": $expand} | compact), body: $req_body}
 }
 
 # Get list of connectors
@@ -1346,7 +1396,7 @@ export def "connectors list" [
   let full_url = (build-url $base "/connectors" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"expand": $expand} | compact), body: null}
 }
 
 # Request a new connector
@@ -1383,7 +1433,7 @@ export def "connectors create" [
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let req_body = if ($req_body | describe | str starts-with "record") { $req_body } else { {} }
   let mp = (build-multipart-body $req_body [] $dry_run)
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full $mp.content_type $mp.body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full $mp.content_type $mp.body {query: ({"expand": $expand} | compact), body: $req_body}
 }
 
 # Enable/disable several connectors
@@ -1413,7 +1463,7 @@ export def "connectors update" [
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let req_body = if ($req_body | describe | str starts-with "record") { $req_body } else { {} }
   let mp = (build-multipart-body $req_body [] $dry_run)
-  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full $mp.content_type $mp.body
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full $mp.content_type $mp.body {query: ({"expand": $expand} | compact), body: $req_body}
 }
 
 # Get a connector
@@ -1434,17 +1484,18 @@ export def "connectors get" [
 ]: nothing -> record<auth_mechanism: string, beta: bool, charged: bool, code: string, color: string, hidden: bool, id: int, months_to_fetch: int, name: string, restricted: bool, siret: string, slug: string, sync_frequency: float, uuid: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($id_connector | is-empty) { error make --unspanned { msg: "path parameter 'id_connector' must be non-empty" } }
   let qp = [(serialize-qp "expand" $expand "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({id_connector: (encode-path-segment $id_connector)} | format pattern "/connectors/{id_connector}") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"expand": $expand} | compact), body: null}
 }
 
 # Edit the provided connector
 #
 # PUT /connectors/{id_connector}
-export def "connectors update-by-id_connector" [
+export def "connectors update-by-id-connector" [
   id_connector: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1465,6 +1516,7 @@ export def "connectors update-by-id_connector" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($id_connector | is-empty) { error make --unspanned { msg: "path parameter 'id_connector' must be non-empty" } }
   let qp = [(serialize-qp "expand" $expand "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({id_connector: (encode-path-segment $id_connector)} | format pattern "/connectors/{id_connector}") $qp)
   let req_body = {"auth_mechanism": $auth_mechanism, "hidden": $hidden, "id_categories": $id_categories, "sync_frequency": $sync_frequency} | compact
@@ -1473,7 +1525,7 @@ export def "connectors update-by-id_connector" [
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let req_body = if ($req_body | describe | str starts-with "record") { $req_body } else { {} }
   let mp = (build-multipart-body $req_body [] $dry_run)
-  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full $mp.content_type $mp.body
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full $mp.content_type $mp.body {query: ({"expand": $expand} | compact), body: $req_body}
 }
 
 # Get all links to the files associated with this connector.
@@ -1494,11 +1546,12 @@ export def "connectors-logos get" [
 ]: nothing -> record<connectorlogos: table<id: int, id_connector: int, id_file: int, type: string>, total: float> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($id_connector | is-empty) { error make --unspanned { msg: "path parameter 'id_connector' must be non-empty" } }
   let qp = [(serialize-qp "expand" $expand "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({id_connector: (encode-path-segment $id_connector)} | format pattern "/connectors/{id_connector}/logos") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"expand": $expand} | compact), body: null}
 }
 
 # Create a connector Logo
@@ -1519,17 +1572,18 @@ export def "connectors-logos create" [
 ]: nothing -> record<id: int, id_connector: int, id_file: int, type: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($id_connector | is-empty) { error make --unspanned { msg: "path parameter 'id_connector' must be non-empty" } }
   let qp = [(serialize-qp "expand" $expand "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({id_connector: (encode-path-segment $id_connector)} | format pattern "/connectors/{id_connector}/logos") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"expand": $expand} | compact), body: null}
 }
 
 # Create or Update a connector Logo
 #
 # PUT /connectors/{id_connector}/logos
-export def "connectors-logos update-by-id_connector" [
+export def "connectors-logos update-by-id-connector" [
   id_connector: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1544,11 +1598,12 @@ export def "connectors-logos update-by-id_connector" [
 ]: nothing -> record<id: int, id_connector: int, id_file: int, type: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($id_connector | is-empty) { error make --unspanned { msg: "path parameter 'id_connector' must be non-empty" } }
   let qp = [(serialize-qp "expand" $expand "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({id_connector: (encode-path-segment $id_connector)} | format pattern "/connectors/{id_connector}/logos") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"expand": $expand} | compact), body: null}
 }
 
 # Get all links to the files associated with this connector.
@@ -1569,11 +1624,12 @@ export def "connectors-logos-main get" [
 ]: nothing -> record<connectorlogos: table<id: int, id_connector: int, id_file: int, type: string>, total: float> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($id_connector | is-empty) { error make --unspanned { msg: "path parameter 'id_connector' must be non-empty" } }
   let qp = [(serialize-qp "expand" $expand "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({id_connector: (encode-path-segment $id_connector)} | format pattern "/connectors/{id_connector}/logos/main") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"expand": $expand} | compact), body: null}
 }
 
 # Get all links to the files associated with this connector.
@@ -1594,11 +1650,12 @@ export def "connectors-logos-thumbnail get" [
 ]: nothing -> record<connectorlogos: table<id: int, id_connector: int, id_file: int, type: string>, total: float> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($id_connector | is-empty) { error make --unspanned { msg: "path parameter 'id_connector' must be non-empty" } }
   let qp = [(serialize-qp "expand" $expand "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({id_connector: (encode-path-segment $id_connector)} | format pattern "/connectors/{id_connector}/logos/thumbnail") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"expand": $expand} | compact), body: null}
 }
 
 # Delete a single Logo object.
@@ -1620,17 +1677,19 @@ export def "connectors-logos delete" [
 ]: nothing -> record<id: int, id_connector: int, id_file: int, type: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($id_connector | is-empty) { error make --unspanned { msg: "path parameter 'id_connector' must be non-empty" } }
+  if ($id_logo | is-empty) { error make --unspanned { msg: "path parameter 'id_logo' must be non-empty" } }
   let qp = [(serialize-qp "expand" $expand "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({id_connector: (encode-path-segment $id_connector), id_logo: (encode-path-segment $id_logo)} | format pattern "/connectors/{id_connector}/logos/{id_logo}") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"expand": $expand} | compact), body: null}
 }
 
 # Create or Update a connector Logo.
 #
 # PUT /connectors/{id_connector}/logos/{id_logo}
-export def "connectors-logos update-by-id_connector-id_logo" [
+export def "connectors-logos update-by-id-connector-id-logo" [
   id_connector: int
   id_logo: int
   --base-url(-b): string@base-url-completer # API base URL
@@ -1646,11 +1705,13 @@ export def "connectors-logos update-by-id_connector-id_logo" [
 ]: nothing -> record<id: int, id_connector: int, id_file: int, type: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($id_connector | is-empty) { error make --unspanned { msg: "path parameter 'id_connector' must be non-empty" } }
+  if ($id_logo | is-empty) { error make --unspanned { msg: "path parameter 'id_logo' must be non-empty" } }
   let qp = [(serialize-qp "expand" $expand "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({id_connector: (encode-path-segment $id_connector), id_logo: (encode-path-segment $id_logo)} | format pattern "/connectors/{id_connector}/logos/{id_logo}") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"expand": $expand} | compact), body: null}
 }
 
 # Get list of connector sources
@@ -1671,17 +1732,18 @@ export def "connectors-sources list" [
 ]: nothing -> record<sources: table<auth_mechanism: string, disabled: string, disabled_capabilities: string, fallback: string, id: int, id_connector: int, id_weboob: string, name: string, priority: int, stability: string>, total: float> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($id_connector | is-empty) { error make --unspanned { msg: "path parameter 'id_connector' must be non-empty" } }
   let qp = [(serialize-qp "expand" $expand "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({id_connector: (encode-path-segment $id_connector)} | format pattern "/connectors/{id_connector}/sources") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"expand": $expand} | compact), body: null}
 }
 
 # Edit several connector sources
 #
 # PUT /connectors/{id_connector}/sources
-export def "connectors-sources update-by-id_connector" [
+export def "connectors-sources update-by-id-connector" [
   id_connector: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1699,6 +1761,7 @@ export def "connectors-sources update-by-id_connector" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($id_connector | is-empty) { error make --unspanned { msg: "path parameter 'id_connector' must be non-empty" } }
   let qp = [(serialize-qp "expand" $expand "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({id_connector: (encode-path-segment $id_connector)} | format pattern "/connectors/{id_connector}/sources") $qp)
   let req_body = {"disabled_capabilities": $disabled_capabilities, "unavailable_capabilities": $unavailable_capabilities} | compact
@@ -1707,7 +1770,7 @@ export def "connectors-sources update-by-id_connector" [
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let req_body = if ($req_body | describe | str starts-with "record") { $req_body } else { {} }
   let mp = (build-multipart-body $req_body [] $dry_run)
-  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full $mp.content_type $mp.body
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full $mp.content_type $mp.body {query: ({"expand": $expand} | compact), body: $req_body}
 }
 
 # Get fields specific to a domain and a source
@@ -1729,11 +1792,13 @@ export def "connectors-sources-fields get" [
 ]: nothing -> record<source_fields: table<id_connector_source: int, label: string, name: string, regex: string, required: bool, secret: bool, type: string>, total: float> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($id_connector | is-empty) { error make --unspanned { msg: "path parameter 'id_connector' must be non-empty" } }
+  if ($id_connector_source | is-empty) { error make --unspanned { msg: "path parameter 'id_connector_source' must be non-empty" } }
   let qp = [(serialize-qp "expand" $expand "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({id_connector: (encode-path-segment $id_connector), id_connector_source: (encode-path-segment $id_connector_source)} | format pattern "/connectors/{id_connector}/sources/{id_connector_source}/fields") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"expand": $expand} | compact), body: null}
 }
 
 # Get the connector source
@@ -1755,17 +1820,19 @@ export def "connectors-sources get" [
 ]: nothing -> record<auth_mechanism: string, disabled: string, disabled_capabilities: string, fallback: string, id: int, id_connector: int, id_weboob: string, name: string, priority: int, stability: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($id_connector | is-empty) { error make --unspanned { msg: "path parameter 'id_connector' must be non-empty" } }
+  if ($id_source | is-empty) { error make --unspanned { msg: "path parameter 'id_source' must be non-empty" } }
   let qp = [(serialize-qp "expand" $expand "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({id_connector: (encode-path-segment $id_connector), id_source: (encode-path-segment $id_source)} | format pattern "/connectors/{id_connector}/sources/{id_source}") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"expand": $expand} | compact), body: null}
 }
 
 # Edit the provided connector source
 #
 # PUT /connectors/{id_connector}/sources/{id_source}
-export def "connectors-sources update-by-id_connector-id_source" [
+export def "connectors-sources update-by-id-connector-id-source" [
   id_connector: int
   id_source: int
   --base-url(-b): string@base-url-completer # API base URL
@@ -1787,6 +1854,8 @@ export def "connectors-sources update-by-id_connector-id_source" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($id_connector | is-empty) { error make --unspanned { msg: "path parameter 'id_connector' must be non-empty" } }
+  if ($id_source | is-empty) { error make --unspanned { msg: "path parameter 'id_source' must be non-empty" } }
   let qp = [(serialize-qp "expand" $expand "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({id_connector: (encode-path-segment $id_connector), id_source: (encode-path-segment $id_source)} | format pattern "/connectors/{id_connector}/sources/{id_source}") $qp)
   let req_body = {"auth_mechanism": $auth_mechanism, "disabled": $disabled, "disabled_capabilities": $disabled_capabilities, "unavailable": $unavailable, "unavailable_capabilities": $unavailable_capabilities} | compact
@@ -1795,7 +1864,7 @@ export def "connectors-sources update-by-id_connector-id_source" [
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let req_body = if ($req_body | describe | str starts-with "record") { $req_body } else { {} }
   let mp = (build-multipart-body $req_body [] $dry_run)
-  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full $mp.content_type $mp.body
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full $mp.content_type $mp.body {query: ({"expand": $expand} | compact), body: $req_body}
 }
 
 # Get incidents logs.
@@ -1825,7 +1894,7 @@ export def "incidents get" [
   let full_url = (build-url $base "/incidents" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"state": $state, "id": $id, "weboob_id": $weboob_id, "start_date": $start_date, "end_date": $end_date, "page": $page, "size": $size} | compact), body: null}
 }
 
 # Get invoicing data for a given period (default is the current month).
@@ -1861,7 +1930,7 @@ export def "invoicing get" [
   let full_url = (build-url $base "/invoicing" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"min_date": $min_date, "max_date": $max_date, "users_synced": $users_synced, "users_bank": $users_bank, "users_bill": $users_bill, "accounts_synced": $accounts_synced, "subscriptions_synced": $subscriptions_synced, "connections_synced": $connections_synced, "connections_account": $connections_account, "transfers_synced": $transfers_synced, "payments_synced": $payments_synced, "all": $all, "detail": $detail} | compact), body: null}
 }
 
 # Get connection logs
@@ -1897,7 +1966,7 @@ export def "logs get" [
   let full_url = (build-url $base "/logs" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"limit": $limit, "offset": $offset, "min_date": $min_date, "max_date": $max_date, "period": $period, "id_user": $id_user, "id_connection": $id_connection, "id_connector": $id_connector, "connector_uuid": $connector_uuid, "error": $qp_error, "id_source": $id_source, "id_max": $id_max, "expand": $expand} | compact), body: null}
 }
 
 # get performances stats on this instance
@@ -1921,7 +1990,7 @@ export def "monitoring get" [
   let full_url = (build-url $base "/monitoring" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"period": $period} | compact), body: null}
 }
 
 # Get list of connectors
@@ -1945,7 +2014,7 @@ export def "providers list" [
   let full_url = (build-url $base "/providers" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"expand": $expand} | compact), body: null}
 }
 
 # Get a random subset of provider's id_connection
@@ -1967,11 +2036,12 @@ export def "providers-connections get" [
 ]: nothing -> record<connections: table<active: bool, created: string, id: int, id_connector: int, id_user: int, last_push: string, last_update: string, next_try: string>, total: float> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($id_connector | is-empty) { error make --unspanned { msg: "path parameter 'id_connector' must be non-empty" } }
   let qp = [(serialize-qp "range" $range "scalar") (serialize-qp "expand" $expand "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({id_connector: (encode-path-segment $id_connector)} | format pattern "/providers/{id_connector}/connections") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"range": $range, "expand": $expand} | compact), body: null}
 }
 
 # Get all links to the files associated with this connector.
@@ -1992,11 +2062,12 @@ export def "providers-logos get" [
 ]: nothing -> record<connectorlogos: table<id: int, id_connector: int, id_file: int, type: string>, total: float> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($id_connector | is-empty) { error make --unspanned { msg: "path parameter 'id_connector' must be non-empty" } }
   let qp = [(serialize-qp "expand" $expand "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({id_connector: (encode-path-segment $id_connector)} | format pattern "/providers/{id_connector}/logos") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"expand": $expand} | compact), body: null}
 }
 
 # Get all links to the files associated with this connector.
@@ -2017,11 +2088,12 @@ export def "providers-logos-main get" [
 ]: nothing -> record<connectorlogos: table<id: int, id_connector: int, id_file: int, type: string>, total: float> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($id_connector | is-empty) { error make --unspanned { msg: "path parameter 'id_connector' must be non-empty" } }
   let qp = [(serialize-qp "expand" $expand "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({id_connector: (encode-path-segment $id_connector)} | format pattern "/providers/{id_connector}/logos/main") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"expand": $expand} | compact), body: null}
 }
 
 # Get all links to the files associated with this connector.
@@ -2042,11 +2114,12 @@ export def "providers-logos-thumbnail get" [
 ]: nothing -> record<connectorlogos: table<id: int, id_connector: int, id_file: int, type: string>, total: float> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($id_connector | is-empty) { error make --unspanned { msg: "path parameter 'id_connector' must be non-empty" } }
   let qp = [(serialize-qp "expand" $expand "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({id_connector: (encode-path-segment $id_connector)} | format pattern "/providers/{id_connector}/logos/thumbnail") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"expand": $expand} | compact), body: null}
 }
 
 # Get list of connector sources
@@ -2067,11 +2140,12 @@ export def "providers-sources list" [
 ]: nothing -> record<sources: table<auth_mechanism: string, disabled: string, disabled_capabilities: string, fallback: string, id: int, id_connector: int, id_weboob: string, name: string, priority: int, stability: string>, total: float> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($id_connector | is-empty) { error make --unspanned { msg: "path parameter 'id_connector' must be non-empty" } }
   let qp = [(serialize-qp "expand" $expand "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({id_connector: (encode-path-segment $id_connector)} | format pattern "/providers/{id_connector}/sources") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"expand": $expand} | compact), body: null}
 }
 
 # Get fields specific to a domain and a source
@@ -2093,11 +2167,13 @@ export def "providers-sources-fields get" [
 ]: nothing -> record<source_fields: table<id_connector_source: int, label: string, name: string, regex: string, required: bool, secret: bool, type: string>, total: float> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($id_connector | is-empty) { error make --unspanned { msg: "path parameter 'id_connector' must be non-empty" } }
+  if ($id_connector_source | is-empty) { error make --unspanned { msg: "path parameter 'id_connector_source' must be non-empty" } }
   let qp = [(serialize-qp "expand" $expand "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({id_connector: (encode-path-segment $id_connector), id_connector_source: (encode-path-segment $id_connector_source)} | format pattern "/providers/{id_connector}/sources/{id_connector_source}/fields") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"expand": $expand} | compact), body: null}
 }
 
 # Get the connector source
@@ -2119,11 +2195,13 @@ export def "providers-sources get" [
 ]: nothing -> record<auth_mechanism: string, disabled: string, disabled_capabilities: string, fallback: string, id: int, id_connector: int, id_weboob: string, name: string, priority: int, stability: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($id_connector | is-empty) { error make --unspanned { msg: "path parameter 'id_connector' must be non-empty" } }
+  if ($id_source | is-empty) { error make --unspanned { msg: "path parameter 'id_source' must be non-empty" } }
   let qp = [(serialize-qp "expand" $expand "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({id_connector: (encode-path-segment $id_connector), id_source: (encode-path-segment $id_source)} | format pattern "/providers/{id_connector}/sources/{id_source}") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"expand": $expand} | compact), body: null}
 }
 
 # Get a connector
@@ -2144,11 +2222,12 @@ export def "providers get" [
 ]: nothing -> record<auth_mechanism: string, beta: bool, charged: bool, code: string, color: string, hidden: bool, id: int, months_to_fetch: int, name: string, restricted: bool, siret: string, slug: string, sync_frequency: float, uuid: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($id_provider | is-empty) { error make --unspanned { msg: "path parameter 'id_provider' must be non-empty" } }
   let qp = [(serialize-qp "expand" $expand "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({id_provider: (encode-path-segment $id_provider)} | format pattern "/providers/{id_provider}") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"expand": $expand} | compact), body: null}
 }
 
 # Get details on all psd2 registrations
@@ -2172,7 +2251,7 @@ export def "psd2-registrations list" [
   let full_url = (build-url $base "/psd2-registrations" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"expand": $expand} | compact), body: null}
 }
 
 # Get details for a given psd2 registration
@@ -2193,11 +2272,12 @@ export def "psd2-registrations get" [
 ]: nothing -> record<id: int, id_connector_source: int, status: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($id_psd2_registration | is-empty) { error make --unspanned { msg: "path parameter 'id_psd2-registration' must be non-empty" } }
   let qp = [(serialize-qp "expand" $expand "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({id_psd2_registration: (encode-path-segment $id_psd2_registration)} | format pattern "/psd2-registrations/{id_psd2_registration}") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"expand": $expand} | compact), body: null}
 }
 
 # Get psd2 registration logs.
@@ -2222,11 +2302,12 @@ export def "psd2-registrations-logs get" [
 ]: nothing -> record<psd2registrationlogs: table<created_at: string, error_message: string, id: int, id_psd2registration: int, type: string>, total: float> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($id_psd2registration | is-empty) { error make --unspanned { msg: "path parameter 'id_psd2registration' must be non-empty" } }
   let qp = [(serialize-qp "limit" $limit "scalar") (serialize-qp "offset" $offset "scalar") (serialize-qp "min_date" $min_date "scalar") (serialize-qp "max_date" $max_date "scalar") (serialize-qp "expand" $expand "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({id_psd2registration: (encode-path-segment $id_psd2registration)} | format pattern "/psd2-registrations/{id_psd2registration}/logs") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"limit": $limit, "offset": $offset, "min_date": $min_date, "max_date": $max_date, "expand": $expand} | compact), body: null}
 }
 
 # Get public encryption key of the API.
@@ -2248,7 +2329,7 @@ export def "publickey get" [
   let full_url = (build-url $base "/publickey")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
 }
 
 # Test synchronization on a random connection.
@@ -2270,7 +2351,7 @@ export def "test-sync create" [
   let full_url = (build-url $base "/test/sync")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
 }
 
 # Test synchronization on a random connection.
@@ -2292,7 +2373,7 @@ export def "test-webhooks create" [
   let full_url = (build-url $base "/test/webhooks")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
 }
 
 # Get users
@@ -2317,7 +2398,7 @@ export def "users list" [
   let full_url = (build-url $base "/users" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"search": $search, "expand": $expand} | compact), body: null}
 }
 
 # Delete the user
@@ -2338,11 +2419,12 @@ export def "users delete" [
 ]: nothing -> record<id: int, platform: string, signin: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($id_user | is-empty) { error make --unspanned { msg: "path parameter 'id_user' must be non-empty" } }
   let qp = [(serialize-qp "expand" $expand "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({id_user: (encode-path-segment $id_user)} | format pattern "/users/{id_user}") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"expand": $expand} | compact), body: null}
 }
 
 # Get a user
@@ -2363,11 +2445,12 @@ export def "users get" [
 ]: nothing -> record<id: int, platform: string, signin: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($id_user | is-empty) { error make --unspanned { msg: "path parameter 'id_user' must be non-empty" } }
   let qp = [(serialize-qp "expand" $expand "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({id_user: (encode-path-segment $id_user)} | format pattern "/users/{id_user}") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"expand": $expand} | compact), body: null}
 }
 
 # Get account types
@@ -2388,11 +2471,12 @@ export def "users-account-types list" [
 ]: nothing -> record<accounttypes: table<color: string, display_name: string, display_name_p: string, id: int, id_parent: int, is_invest: bool, name: string, product: string, weboob_type_id: int>, total: float> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($id_user | is-empty) { error make --unspanned { msg: "path parameter 'id_user' must be non-empty" } }
   let qp = [(serialize-qp "expand" $expand "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({id_user: (encode-path-segment $id_user)} | format pattern "/users/{id_user}/account_types") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"expand": $expand} | compact), body: null}
 }
 
 # Get an account type
@@ -2414,11 +2498,13 @@ export def "users-account-types get" [
 ]: nothing -> record<color: string, display_name: string, display_name_p: string, id: int, id_parent: int, is_invest: bool, name: string, product: string, weboob_type_id: int> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($id_user | is-empty) { error make --unspanned { msg: "path parameter 'id_user' must be non-empty" } }
+  if ($id_account_type | is-empty) { error make --unspanned { msg: "path parameter 'id_account_type' must be non-empty" } }
   let qp = [(serialize-qp "expand" $expand "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({id_user: (encode-path-segment $id_user), id_account_type: (encode-path-segment $id_account_type)} | format pattern "/users/{id_user}/account_types/{id_account_type}") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"expand": $expand} | compact), body: null}
 }
 
 # Get the category
@@ -2439,10 +2525,12 @@ export def "users-accounts-categories get" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($id_user | is-empty) { error make --unspanned { msg: "path parameter 'id_user' must be non-empty" } }
+  if ($id_account | is-empty) { error make --unspanned { msg: "path parameter 'id_account' must be non-empty" } }
   let full_url = (build-url $base ({id_user: (encode-path-segment $id_user), id_account: (encode-path-segment $id_account)} | format pattern "/users/{id_user}/accounts/{id_account}/categories"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
 }
 
 # Get clustered transactions
@@ -2464,11 +2552,13 @@ export def "users-accounts-transactionsclusters get" [
 ]: nothing -> record<total: float, transactionsclusters: table<created_by: string, enabled: bool, id: int, id_account: int, id_category: int, mean_amount: float, median_increment: int, next_date: string, wording: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($id_user | is-empty) { error make --unspanned { msg: "path parameter 'id_user' must be non-empty" } }
+  if ($id_account | is-empty) { error make --unspanned { msg: "path parameter 'id_account' must be non-empty" } }
   let qp = [(serialize-qp "expand" $expand "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({id_user: (encode-path-segment $id_user), id_account: (encode-path-segment $id_account)} | format pattern "/users/{id_user}/accounts/{id_account}/transactionsclusters") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"expand": $expand} | compact), body: null}
 }
 
 # Create clustered transaction
@@ -2490,11 +2580,13 @@ export def "users-accounts-transactionsclusters create" [
 ]: nothing -> record<created_by: string, enabled: bool, id: int, id_account: int, id_category: int, mean_amount: float, median_increment: int, next_date: string, wording: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($id_user | is-empty) { error make --unspanned { msg: "path parameter 'id_user' must be non-empty" } }
+  if ($id_account | is-empty) { error make --unspanned { msg: "path parameter 'id_account' must be non-empty" } }
   let qp = [(serialize-qp "expand" $expand "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({id_user: (encode-path-segment $id_user), id_account: (encode-path-segment $id_account)} | format pattern "/users/{id_user}/accounts/{id_account}/transactionsclusters") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"expand": $expand} | compact), body: null}
 }
 
 # Delete a clustered transaction
@@ -2517,11 +2609,14 @@ export def "users-accounts-transactionsclusters delete" [
 ]: nothing -> record<created_by: string, enabled: bool, id: int, id_account: int, id_category: int, mean_amount: float, median_increment: int, next_date: string, wording: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($id_user | is-empty) { error make --unspanned { msg: "path parameter 'id_user' must be non-empty" } }
+  if ($id_account | is-empty) { error make --unspanned { msg: "path parameter 'id_account' must be non-empty" } }
+  if ($id_transactionscluster | is-empty) { error make --unspanned { msg: "path parameter 'id_transactionscluster' must be non-empty" } }
   let qp = [(serialize-qp "expand" $expand "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({id_user: (encode-path-segment $id_user), id_account: (encode-path-segment $id_account), id_transactionscluster: (encode-path-segment $id_transactionscluster)} | format pattern "/users/{id_user}/accounts/{id_account}/transactionsclusters/{id_transactionscluster}") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"expand": $expand} | compact), body: null}
 }
 
 # Edit a clustered transaction
@@ -2544,11 +2639,14 @@ export def "users-accounts-transactionsclusters update" [
 ]: nothing -> record<created_by: string, enabled: bool, id: int, id_account: int, id_category: int, mean_amount: float, median_increment: int, next_date: string, wording: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($id_user | is-empty) { error make --unspanned { msg: "path parameter 'id_user' must be non-empty" } }
+  if ($id_account | is-empty) { error make --unspanned { msg: "path parameter 'id_account' must be non-empty" } }
+  if ($id_transactionscluster | is-empty) { error make --unspanned { msg: "path parameter 'id_transactionscluster' must be non-empty" } }
   let qp = [(serialize-qp "expand" $expand "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({id_user: (encode-path-segment $id_user), id_account: (encode-path-segment $id_account), id_transactionscluster: (encode-path-segment $id_transactionscluster)} | format pattern "/users/{id_user}/accounts/{id_account}/transactionsclusters/{id_transactionscluster}") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"expand": $expand} | compact), body: null}
 }
 
 # Get alerts
@@ -2569,11 +2667,12 @@ export def "users-alerts get" [
 ]: nothing -> record<alerts: table<id: int, id_account: int, id_investment: int, id_transaction: int, id_user: int, timestamp: string, type: string, value: float>, total: float> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($id_user | is-empty) { error make --unspanned { msg: "path parameter 'id_user' must be non-empty" } }
   let qp = [(serialize-qp "expand" $expand "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({id_user: (encode-path-segment $id_user)} | format pattern "/users/{id_user}/alerts") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"expand": $expand} | compact), body: null}
 }
 
 # Get the category
@@ -2593,10 +2692,11 @@ export def "users-categories get" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($id_user | is-empty) { error make --unspanned { msg: "path parameter 'id_user' must be non-empty" } }
   let full_url = (build-url $base ({id_user: (encode-path-segment $id_user)} | format pattern "/users/{id_user}/categories"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
 }
 
 # Get the category
@@ -2617,11 +2717,12 @@ export def "users-categories-full get" [
 ]: nothing -> record<categorys: table<color: string, id: int, id_logo: int, id_parent_category: int, id_parent_category_in_menu: int, id_user: int, income: bool, name: string, name_displayed: string, refundable: bool>, total: float> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($id_user | is-empty) { error make --unspanned { msg: "path parameter 'id_user' must be non-empty" } }
   let qp = [(serialize-qp "expand" $expand "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({id_user: (encode-path-segment $id_user)} | format pattern "/users/{id_user}/categories/full") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"expand": $expand} | compact), body: null}
 }
 
 # Create a new transaction category
@@ -2650,6 +2751,7 @@ export def "users-categories-full create" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($id_user | is-empty) { error make --unspanned { msg: "path parameter 'id_user' must be non-empty" } }
   let qp = [(serialize-qp "expand" $expand "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({id_user: (encode-path-segment $id_user)} | format pattern "/users/{id_user}/categories/full") $qp)
   let req_body = {"accountant_account": $accountant_account, "color": $color, "id_parent_category": $id_parent_category, "id_parent_category_in_menu": $id_parent_category_in_menu, "income": $income, "name": $name, "refundable": $refundable} | compact
@@ -2658,7 +2760,7 @@ export def "users-categories-full create" [
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let req_body = if ($req_body | describe | str starts-with "record") { $req_body } else { {} }
   let mp = (build-multipart-body $req_body [] $dry_run)
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full $mp.content_type $mp.body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full $mp.content_type $mp.body {query: ({"expand": $expand} | compact), body: $req_body}
 }
 
 # Delete a user-created transaction category
@@ -2680,11 +2782,13 @@ export def "users-categories-full delete" [
 ]: nothing -> record<color: string, id: int, id_logo: int, id_parent_category: int, id_parent_category_in_menu: int, id_user: int, income: bool, name: string, name_displayed: string, refundable: bool> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($id_user | is-empty) { error make --unspanned { msg: "path parameter 'id_user' must be non-empty" } }
+  if ($id_full | is-empty) { error make --unspanned { msg: "path parameter 'id_full' must be non-empty" } }
   let qp = [(serialize-qp "expand" $expand "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({id_user: (encode-path-segment $id_user), id_full: (encode-path-segment $id_full)} | format pattern "/users/{id_user}/categories/full/{id_full}") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"expand": $expand} | compact), body: null}
 }
 
 # Modify a user-created category
@@ -2709,6 +2813,8 @@ export def "users-categories-full update" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($id_user | is-empty) { error make --unspanned { msg: "path parameter 'id_user' must be non-empty" } }
+  if ($id_full | is-empty) { error make --unspanned { msg: "path parameter 'id_full' must be non-empty" } }
   let qp = [(serialize-qp "expand" $expand "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({id_user: (encode-path-segment $id_user), id_full: (encode-path-segment $id_full)} | format pattern "/users/{id_user}/categories/full/{id_full}") $qp)
   let req_body = {"accountant_account": $accountant_account, "hide": $hide} | compact
@@ -2717,7 +2823,7 @@ export def "users-categories-full update" [
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let req_body = if ($req_body | describe | str starts-with "record") { $req_body } else { {} }
   let mp = (build-multipart-body $req_body [] $dry_run)
-  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full $mp.content_type $mp.body
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full $mp.content_type $mp.body {query: ({"expand": $expand} | compact), body: $req_body}
 }
 
 # Delete the given user configurations. deletions on keys prefixed by 'biapi.' (except callback_url) are ignored
@@ -2737,10 +2843,11 @@ export def "users-config delete" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($id_user | is-empty) { error make --unspanned { msg: "path parameter 'id_user' must be non-empty" } }
   let full_url = (build-url $base ({id_user: (encode-path-segment $id_user)} | format pattern "/users/{id_user}/config"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
 }
 
 # Get configuration of a user.
@@ -2761,10 +2868,11 @@ export def "users-config get" [
 ]: nothing -> record {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($id_user | is-empty) { error make --unspanned { msg: "path parameter 'id_user' must be non-empty" } }
   let full_url = (build-url $base ({id_user: (encode-path-segment $id_user)} | format pattern "/users/{id_user}/config"))
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
 }
 
 # Change configuration of a user. modifications on keys prefixed by 'biapi.' (except callback_url) are ignored
@@ -2784,16 +2892,17 @@ export def "users-config create" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($id_user | is-empty) { error make --unspanned { msg: "path parameter 'id_user' must be non-empty" } }
   let full_url = (build-url $base ({id_user: (encode-path-segment $id_user)} | format pattern "/users/{id_user}/config"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
 }
 
 # Delete all connections
 #
 # DELETE /users/{id_user}/connections
-export def "users-connections delete-by-id_user" [
+export def "users-connections delete-by-id-user" [
   id_user: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -2808,11 +2917,12 @@ export def "users-connections delete-by-id_user" [
 ]: nothing -> record<active: bool, created: string, id: int, id_connector: int, id_user: int, last_push: string, last_update: string, next_try: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($id_user | is-empty) { error make --unspanned { msg: "path parameter 'id_user' must be non-empty" } }
   let qp = [(serialize-qp "expand" $expand "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({id_user: (encode-path-segment $id_user)} | format pattern "/users/{id_user}/connections") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"expand": $expand} | compact), body: null}
 }
 
 # Get connections
@@ -2833,17 +2943,18 @@ export def "users-connections get" [
 ]: nothing -> record<connections: table<active: bool, created: string, id: int, id_connector: int, id_user: int, last_push: string, last_update: string, next_try: string>, total: float> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($id_user | is-empty) { error make --unspanned { msg: "path parameter 'id_user' must be non-empty" } }
   let qp = [(serialize-qp "expand" $expand "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({id_user: (encode-path-segment $id_user)} | format pattern "/users/{id_user}/connections") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"expand": $expand} | compact), body: null}
 }
 
 # Add a new connection.
 #
 # POST /users/{id_user}/connections
-export def "users-connections create-by-id_user" [
+export def "users-connections create-by-id-user" [
   id_user: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -2862,6 +2973,7 @@ export def "users-connections create-by-id_user" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($id_user | is-empty) { error make --unspanned { msg: "path parameter 'id_user' must be non-empty" } }
   let qp = [(serialize-qp "source" $qp_source "scalar") (serialize-qp "expand" $expand "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({id_user: (encode-path-segment $id_user)} | format pattern "/users/{id_user}/connections") $qp)
   let req_body = {"connector_uuid": $connector_uuid, "id_connector": $id_connector} | compact
@@ -2870,13 +2982,13 @@ export def "users-connections create-by-id_user" [
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let req_body = if ($req_body | describe | str starts-with "record") { $req_body } else { {} }
   let mp = (build-multipart-body $req_body [] $dry_run)
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full $mp.content_type $mp.body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full $mp.content_type $mp.body {query: ({"source": $qp_source, "expand": $expand} | compact), body: $req_body}
 }
 
 # Delete a connection.
 #
 # DELETE /users/{id_user}/connections/{id_connection}
-export def "users-connections delete-by-id_user-id_connection" [
+export def "users-connections delete-by-id-user-id-connection" [
   id_user: string
   id_connection: int
   --base-url(-b): string@base-url-completer # API base URL
@@ -2892,17 +3004,19 @@ export def "users-connections delete-by-id_user-id_connection" [
 ]: nothing -> record<active: bool, created: string, id: int, id_connector: int, id_user: int, last_push: string, last_update: string, next_try: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($id_user | is-empty) { error make --unspanned { msg: "path parameter 'id_user' must be non-empty" } }
+  if ($id_connection | is-empty) { error make --unspanned { msg: "path parameter 'id_connection' must be non-empty" } }
   let qp = [(serialize-qp "expand" $expand "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({id_user: (encode-path-segment $id_user), id_connection: (encode-path-segment $id_connection)} | format pattern "/users/{id_user}/connections/{id_connection}") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"expand": $expand} | compact), body: null}
 }
 
 # Update a connection.
 #
 # POST /users/{id_user}/connections/{id_connection}
-export def "users-connections create-by-id_user-id_connection" [
+export def "users-connections create-by-id-user-id-connection" [
   id_user: string
   id_connection: int
   --base-url(-b): string@base-url-completer # API base URL
@@ -2927,6 +3041,8 @@ export def "users-connections create-by-id_user-id_connection" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($id_user | is-empty) { error make --unspanned { msg: "path parameter 'id_user' must be non-empty" } }
+  if ($id_connection | is-empty) { error make --unspanned { msg: "path parameter 'id_connection' must be non-empty" } }
   let qp = [(serialize-qp "background" $background "scalar") (serialize-qp "psu_requested" $psu_requested "scalar") (serialize-qp "refresh_psd2_auth" $refresh_psd2_auth "scalar") (serialize-qp "expand" $expand "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({id_user: (encode-path-segment $id_user), id_connection: (encode-path-segment $id_connection)} | format pattern "/users/{id_user}/connections/{id_connection}") $qp)
   let req_body = {"active": $active, "decoupled": $decoupled, "expire": $expire, "login": $login, "password": $password} | compact
@@ -2935,7 +3051,7 @@ export def "users-connections create-by-id_user-id_connection" [
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let req_body = if ($req_body | describe | str starts-with "record") { $req_body } else { {} }
   let mp = (build-multipart-body $req_body [] $dry_run)
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full $mp.content_type $mp.body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full $mp.content_type $mp.body {query: ({"background": $background, "psu_requested": $psu_requested, "refresh_psd2_auth": $refresh_psd2_auth, "expand": $expand} | compact), body: $req_body}
 }
 
 # Force synchronisation of a connection.
@@ -2960,17 +3076,19 @@ export def "users-connections update" [
 ]: nothing -> record<active: bool, created: string, id: int, id_connector: int, id_user: int, last_push: string, last_update: string, next_try: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($id_user | is-empty) { error make --unspanned { msg: "path parameter 'id_user' must be non-empty" } }
+  if ($id_connection | is-empty) { error make --unspanned { msg: "path parameter 'id_connection' must be non-empty" } }
   let qp = [(serialize-qp "last_update" $last_update "scalar") (serialize-qp "background" $background "scalar") (serialize-qp "psu_requested" $psu_requested "scalar") (serialize-qp "expand" $expand "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({id_user: (encode-path-segment $id_user), id_connection: (encode-path-segment $id_connection)} | format pattern "/users/{id_user}/connections/{id_connection}") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"last_update": $last_update, "background": $background, "psu_requested": $psu_requested, "expand": $expand} | compact), body: null}
 }
 
 # Delete all accounts
 #
 # DELETE /users/{id_user}/connections/{id_connection}/accounts
-export def "users-connections-accounts delete-by-id_user-id_connection" [
+export def "users-connections-accounts delete-by-id-user-id-connection" [
   id_user: string
   id_connection: int
   --base-url(-b): string@base-url-completer # API base URL
@@ -2986,11 +3104,13 @@ export def "users-connections-accounts delete-by-id_user-id_connection" [
 ]: nothing -> record<balance: float, bookmarked: int, coming: float, company_name: string, currency: record, deleted: string, disabled: string, display: bool, error: string, iban: string, id: int, id_connection: int, id_parent: int, id_source: int, id_type: int, id_user: int, last_update: string, name: string, number: string, opening_date: string, original_name: string, ownership: string, usage: string, webid: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($id_user | is-empty) { error make --unspanned { msg: "path parameter 'id_user' must be non-empty" } }
+  if ($id_connection | is-empty) { error make --unspanned { msg: "path parameter 'id_connection' must be non-empty" } }
   let qp = [(serialize-qp "expand" $expand "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({id_user: (encode-path-segment $id_user), id_connection: (encode-path-segment $id_connection)} | format pattern "/users/{id_user}/connections/{id_connection}/accounts") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"expand": $expand} | compact), body: null}
 }
 
 # Get accounts list.
@@ -3012,11 +3132,13 @@ export def "users-connections-accounts get" [
 ]: nothing -> record<accounts: table<balance: float, bookmarked: int, coming: float, company_name: string, currency: record, deleted: string, disabled: string, display: bool, error: string, iban: string, id: int, id_connection: int, id_parent: int, id_source: int, id_type: int, id_user: int, last_update: string, name: string, number: string, opening_date: string, original_name: string, ownership: string, usage: string, webid: string>, total: float> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($id_user | is-empty) { error make --unspanned { msg: "path parameter 'id_user' must be non-empty" } }
+  if ($id_connection | is-empty) { error make --unspanned { msg: "path parameter 'id_connection' must be non-empty" } }
   let qp = [(serialize-qp "expand" $expand "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({id_user: (encode-path-segment $id_user), id_connection: (encode-path-segment $id_connection)} | format pattern "/users/{id_user}/connections/{id_connection}/accounts") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"expand": $expand} | compact), body: null}
 }
 
 # Create an account
@@ -3045,6 +3167,8 @@ export def "users-connections-accounts create" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($id_user | is-empty) { error make --unspanned { msg: "path parameter 'id_user' must be non-empty" } }
+  if ($id_connection | is-empty) { error make --unspanned { msg: "path parameter 'id_connection' must be non-empty" } }
   let qp = [(serialize-qp "expand" $expand "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({id_user: (encode-path-segment $id_user), id_connection: (encode-path-segment $id_connection)} | format pattern "/users/{id_user}/connections/{id_connection}/accounts") $qp)
   let req_body = {"balance": $balance, "iban": $iban, "id_connection": $body_id_connection, "id_currency": $id_currency, "name": $name, "number": $number} | compact
@@ -3053,13 +3177,13 @@ export def "users-connections-accounts create" [
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let req_body = if ($req_body | describe | str starts-with "record") { $req_body } else { {} }
   let mp = (build-multipart-body $req_body [] $dry_run)
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full $mp.content_type $mp.body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full $mp.content_type $mp.body {query: ({"expand": $expand} | compact), body: $req_body}
 }
 
 # Update many accounts at once
 #
 # PUT /users/{id_user}/connections/{id_connection}/accounts
-export def "users-connections-accounts update-by-id_user-id_connection" [
+export def "users-connections-accounts update-by-id-user-id-connection" [
   id_user: string
   id_connection: int
   --base-url(-b): string@base-url-completer # API base URL
@@ -3075,17 +3199,19 @@ export def "users-connections-accounts update-by-id_user-id_connection" [
 ]: nothing -> record<balance: float, bookmarked: int, coming: float, company_name: string, currency: record, deleted: string, disabled: string, display: bool, error: string, iban: string, id: int, id_connection: int, id_parent: int, id_source: int, id_type: int, id_user: int, last_update: string, name: string, number: string, opening_date: string, original_name: string, ownership: string, usage: string, webid: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($id_user | is-empty) { error make --unspanned { msg: "path parameter 'id_user' must be non-empty" } }
+  if ($id_connection | is-empty) { error make --unspanned { msg: "path parameter 'id_connection' must be non-empty" } }
   let qp = [(serialize-qp "expand" $expand "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({id_user: (encode-path-segment $id_user), id_connection: (encode-path-segment $id_connection)} | format pattern "/users/{id_user}/connections/{id_connection}/accounts") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"expand": $expand} | compact), body: null}
 }
 
 # Delete an account.
 #
 # DELETE /users/{id_user}/connections/{id_connection}/accounts/{id_account}
-export def "users-connections-accounts delete-by-id_user-id_connection-id_account" [
+export def "users-connections-accounts delete-by-id-user-id-connection-id-account" [
   id_user: string
   id_connection: int
   id_account: int
@@ -3102,17 +3228,20 @@ export def "users-connections-accounts delete-by-id_user-id_connection-id_accoun
 ]: nothing -> record<balance: float, bookmarked: int, coming: float, company_name: string, currency: record, deleted: string, disabled: string, display: bool, error: string, iban: string, id: int, id_connection: int, id_parent: int, id_source: int, id_type: int, id_user: int, last_update: string, name: string, number: string, opening_date: string, original_name: string, ownership: string, usage: string, webid: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($id_user | is-empty) { error make --unspanned { msg: "path parameter 'id_user' must be non-empty" } }
+  if ($id_connection | is-empty) { error make --unspanned { msg: "path parameter 'id_connection' must be non-empty" } }
+  if ($id_account | is-empty) { error make --unspanned { msg: "path parameter 'id_account' must be non-empty" } }
   let qp = [(serialize-qp "expand" $expand "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({id_user: (encode-path-segment $id_user), id_connection: (encode-path-segment $id_connection), id_account: (encode-path-segment $id_account)} | format pattern "/users/{id_user}/connections/{id_connection}/accounts/{id_account}") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"expand": $expand} | compact), body: null}
 }
 
 # Update an account
 #
 # PUT /users/{id_user}/connections/{id_connection}/accounts/{id_account}
-export def "users-connections-accounts update-by-id_user-id_connection-id_account" [
+export def "users-connections-accounts update-by-id-user-id-connection-id-account" [
   id_user: string
   id_connection: int
   id_account: int
@@ -3137,6 +3266,9 @@ export def "users-connections-accounts update-by-id_user-id_connection-id_accoun
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($id_user | is-empty) { error make --unspanned { msg: "path parameter 'id_user' must be non-empty" } }
+  if ($id_connection | is-empty) { error make --unspanned { msg: "path parameter 'id_connection' must be non-empty" } }
+  if ($id_account | is-empty) { error make --unspanned { msg: "path parameter 'id_account' must be non-empty" } }
   let qp = [(serialize-qp "expand" $expand "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({id_user: (encode-path-segment $id_user), id_connection: (encode-path-segment $id_connection), id_account: (encode-path-segment $id_account)} | format pattern "/users/{id_user}/connections/{id_connection}/accounts/{id_account}") $qp)
   let req_body = {"balance": $balance, "bookmarked": $bookmarked, "disabled": $disabled, "display": $display, "iban": $iban, "name": $name, "usage": $usage} | compact
@@ -3145,7 +3277,7 @@ export def "users-connections-accounts update-by-id_user-id_connection-id_accoun
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let req_body = if ($req_body | describe | str starts-with "record") { $req_body } else { {} }
   let mp = (build-multipart-body $req_body [] $dry_run)
-  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full $mp.content_type $mp.body
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full $mp.content_type $mp.body {query: ({"expand": $expand} | compact), body: $req_body}
 }
 
 # Get the category
@@ -3167,10 +3299,13 @@ export def "users-connections-accounts-categories get" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($id_user | is-empty) { error make --unspanned { msg: "path parameter 'id_user' must be non-empty" } }
+  if ($id_connection | is-empty) { error make --unspanned { msg: "path parameter 'id_connection' must be non-empty" } }
+  if ($id_account | is-empty) { error make --unspanned { msg: "path parameter 'id_account' must be non-empty" } }
   let full_url = (build-url $base ({id_user: (encode-path-segment $id_user), id_connection: (encode-path-segment $id_connection), id_account: (encode-path-segment $id_account)} | format pattern "/users/{id_user}/connections/{id_connection}/accounts/{id_account}/categories"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
 }
 
 # Get deltas of accounts
@@ -3195,11 +3330,14 @@ export def "users-connections-accounts-delta get" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($id_user | is-empty) { error make --unspanned { msg: "path parameter 'id_user' must be non-empty" } }
+  if ($id_connection | is-empty) { error make --unspanned { msg: "path parameter 'id_connection' must be non-empty" } }
+  if ($id_account | is-empty) { error make --unspanned { msg: "path parameter 'id_account' must be non-empty" } }
   let qp = [(serialize-qp "min_date" $min_date "scalar") (serialize-qp "max_date" $max_date "scalar") (serialize-qp "period" $period "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({id_user: (encode-path-segment $id_user), id_connection: (encode-path-segment $id_connection), id_account: (encode-path-segment $id_account)} | format pattern "/users/{id_user}/connections/{id_connection}/accounts/{id_account}/delta") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"min_date": $min_date, "max_date": $max_date, "period": $period} | compact), body: null}
 }
 
 # Get accounts logs.
@@ -3226,11 +3364,14 @@ export def "users-connections-accounts-logs get" [
 ]: nothing -> record<accountlogs: table<balance: float, coming: float, error: string, error_message: string, id: int, id_account: int, id_connection_log: int, id_connector: int, timestamp: string>, total: float> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($id_user | is-empty) { error make --unspanned { msg: "path parameter 'id_user' must be non-empty" } }
+  if ($id_connection | is-empty) { error make --unspanned { msg: "path parameter 'id_connection' must be non-empty" } }
+  if ($id_account | is-empty) { error make --unspanned { msg: "path parameter 'id_account' must be non-empty" } }
   let qp = [(serialize-qp "limit" $limit "scalar") (serialize-qp "offset" $offset "scalar") (serialize-qp "min_date" $min_date "scalar") (serialize-qp "max_date" $max_date "scalar") (serialize-qp "expand" $expand "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({id_user: (encode-path-segment $id_user), id_connection: (encode-path-segment $id_connection), id_account: (encode-path-segment $id_account)} | format pattern "/users/{id_user}/connections/{id_connection}/accounts/{id_account}/logs") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"limit": $limit, "offset": $offset, "min_date": $min_date, "max_date": $max_date, "expand": $expand} | compact), body: null}
 }
 
 # Get account sources
@@ -3253,11 +3394,14 @@ export def "users-connections-accounts-sources get" [
 ]: nothing -> record<sources: table<access_expire: string, created: string, disabled: string, expire: string, id: int, id_connection: int, id_connector_source: int, last_update: string, name: string, next_try: string, state: string>, total: float> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($id_user | is-empty) { error make --unspanned { msg: "path parameter 'id_user' must be non-empty" } }
+  if ($id_connection | is-empty) { error make --unspanned { msg: "path parameter 'id_connection' must be non-empty" } }
+  if ($id_account | is-empty) { error make --unspanned { msg: "path parameter 'id_account' must be non-empty" } }
   let qp = [(serialize-qp "expand" $expand "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({id_user: (encode-path-segment $id_user), id_connection: (encode-path-segment $id_connection), id_account: (encode-path-segment $id_account)} | format pattern "/users/{id_user}/connections/{id_connection}/accounts/{id_account}/sources") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"expand": $expand} | compact), body: null}
 }
 
 # Delete transactions
@@ -3280,11 +3424,14 @@ export def "users-connections-accounts-transactions delete" [
 ]: nothing -> record<active: bool, application_date: string, bdate: string, bdatetime: string, card: string, coming: bool, comment: string, commission: float, commission_currency: record, counterparty: string, country: string, date: string, date_scraped: string, datetime: string, deleted: string, gross_value: float, id: int, id_account: int, id_category: int, id_cluster: int, last_update: string, nature: string, original_currency: record, original_gross_value: float, original_value: float, original_wording: string, rdate: string, rdatetime: string, simplified_wording: string, state: string, stemmed_wording: string, value: float, vdate: string, vdatetime: string, webid: string, wording: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($id_user | is-empty) { error make --unspanned { msg: "path parameter 'id_user' must be non-empty" } }
+  if ($id_connection | is-empty) { error make --unspanned { msg: "path parameter 'id_connection' must be non-empty" } }
+  if ($id_account | is-empty) { error make --unspanned { msg: "path parameter 'id_account' must be non-empty" } }
   let qp = [(serialize-qp "expand" $expand "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({id_user: (encode-path-segment $id_user), id_connection: (encode-path-segment $id_connection), id_account: (encode-path-segment $id_account)} | format pattern "/users/{id_user}/connections/{id_connection}/accounts/{id_account}/transactions") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"expand": $expand} | compact), body: null}
 }
 
 # Get transactions
@@ -3321,11 +3468,14 @@ export def "users-connections-accounts-transactions get" [
 ]: nothing -> record<total: float, transactions: table<active: bool, application_date: string, bdate: string, bdatetime: string, card: string, coming: bool, comment: string, commission: float, commission_currency: record, counterparty: string, country: string, date: string, date_scraped: string, datetime: string, deleted: string, gross_value: float, id: int, id_account: int, id_category: int, id_cluster: int, last_update: string, nature: string, original_currency: record, original_gross_value: float, original_value: float, original_wording: string, rdate: string, rdatetime: string, simplified_wording: string, state: string, stemmed_wording: string, value: float, vdate: string, vdatetime: string, webid: string, wording: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($id_user | is-empty) { error make --unspanned { msg: "path parameter 'id_user' must be non-empty" } }
+  if ($id_connection | is-empty) { error make --unspanned { msg: "path parameter 'id_connection' must be non-empty" } }
+  if ($id_account | is-empty) { error make --unspanned { msg: "path parameter 'id_account' must be non-empty" } }
   let qp = [(serialize-qp "limit" $limit "scalar") (serialize-qp "offset" $offset "scalar") (serialize-qp "min_date" $min_date "scalar") (serialize-qp "max_date" $max_date "scalar") (serialize-qp "income" $income "scalar") (serialize-qp "deleted" $deleted "scalar") (serialize-qp "all" $all "scalar") (serialize-qp "last_update" $last_update "scalar") (serialize-qp "wording" $wording "scalar") (serialize-qp "min_value" $min_value "scalar") (serialize-qp "max_value" $max_value "scalar") (serialize-qp "search" $search "scalar") (serialize-qp "value" $value "scalar") (serialize-qp "id_category" $id_category "scalar") (serialize-qp "expand" $expand "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({id_user: (encode-path-segment $id_user), id_connection: (encode-path-segment $id_connection), id_account: (encode-path-segment $id_account)} | format pattern "/users/{id_user}/connections/{id_connection}/accounts/{id_account}/transactions") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"limit": $limit, "offset": $offset, "min_date": $min_date, "max_date": $max_date, "income": $income, "deleted": $deleted, "all": $all, "last_update": $last_update, "wording": $wording, "min_value": $min_value, "max_value": $max_value, "search": $search, "value": $value, "id_category": $id_category, "expand": $expand} | compact), body: null}
 }
 
 # Create transactions
@@ -3359,6 +3509,9 @@ export def "users-connections-accounts-transactions create" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($id_user | is-empty) { error make --unspanned { msg: "path parameter 'id_user' must be non-empty" } }
+  if ($id_connection | is-empty) { error make --unspanned { msg: "path parameter 'id_connection' must be non-empty" } }
+  if ($id_account | is-empty) { error make --unspanned { msg: "path parameter 'id_account' must be non-empty" } }
   let qp = [(serialize-qp "expand" $expand "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({id_user: (encode-path-segment $id_user), id_connection: (encode-path-segment $id_connection), id_account: (encode-path-segment $id_account)} | format pattern "/users/{id_user}/connections/{id_connection}/accounts/{id_account}/transactions") $qp)
   let req_body = {"active": $active, "coming": $coming, "date": $date, "date_scraped": $date_scraped, "id_account": $body_id_account, "original_wording": $original_wording, "rdate": $rdate, "state": $state, "type": $type, "value": $value} | compact
@@ -3367,7 +3520,7 @@ export def "users-connections-accounts-transactions create" [
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let req_body = if ($req_body | describe | str starts-with "record") { $req_body } else { {} }
   let mp = (build-multipart-body $req_body [] $dry_run)
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full $mp.content_type $mp.body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full $mp.content_type $mp.body {query: ({"expand": $expand} | compact), body: $req_body}
 }
 
 # Edit a transaction meta-data
@@ -3397,6 +3550,10 @@ export def "users-connections-accounts-transactions update" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($id_user | is-empty) { error make --unspanned { msg: "path parameter 'id_user' must be non-empty" } }
+  if ($id_connection | is-empty) { error make --unspanned { msg: "path parameter 'id_connection' must be non-empty" } }
+  if ($id_account | is-empty) { error make --unspanned { msg: "path parameter 'id_account' must be non-empty" } }
+  if ($id_transaction | is-empty) { error make --unspanned { msg: "path parameter 'id_transaction' must be non-empty" } }
   let qp = [(serialize-qp "expand" $expand "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({id_user: (encode-path-segment $id_user), id_connection: (encode-path-segment $id_connection), id_account: (encode-path-segment $id_account), id_transaction: (encode-path-segment $id_transaction)} | format pattern "/users/{id_user}/connections/{id_connection}/accounts/{id_account}/transactions/{id_transaction}") $qp)
   let req_body = {"active": $active, "application_date": $application_date, "comment": $comment, "id_category": $id_category, "wording": $wording} | compact
@@ -3405,13 +3562,13 @@ export def "users-connections-accounts-transactions update" [
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let req_body = if ($req_body | describe | str starts-with "record") { $req_body } else { {} }
   let mp = (build-multipart-body $req_body [] $dry_run)
-  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full $mp.content_type $mp.body
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full $mp.content_type $mp.body {query: ({"expand": $expand} | compact), body: $req_body}
 }
 
 # Delete all arbitrary key-value pairs of a transaction
 #
 # DELETE /users/{id_user}/connections/{id_connection}/accounts/{id_account}/transactions/{id_transaction}/informations
-export def "users-connections-accounts-transactions-informations delete-by-id_user-id_connection-id_account-id_transaction" [
+export def "users-connections-accounts-transactions-informations delete-by-id-user-id-connection-id-account-id-transaction" [
   id_user: string
   id_connection: int
   id_account: int
@@ -3429,11 +3586,15 @@ export def "users-connections-accounts-transactions-informations delete-by-id_us
 ]: nothing -> record<id: int, id_transaction: int, key: string, value: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($id_user | is-empty) { error make --unspanned { msg: "path parameter 'id_user' must be non-empty" } }
+  if ($id_connection | is-empty) { error make --unspanned { msg: "path parameter 'id_connection' must be non-empty" } }
+  if ($id_account | is-empty) { error make --unspanned { msg: "path parameter 'id_account' must be non-empty" } }
+  if ($id_transaction | is-empty) { error make --unspanned { msg: "path parameter 'id_transaction' must be non-empty" } }
   let qp = [(serialize-qp "expand" $expand "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({id_user: (encode-path-segment $id_user), id_connection: (encode-path-segment $id_connection), id_account: (encode-path-segment $id_account), id_transaction: (encode-path-segment $id_transaction)} | format pattern "/users/{id_user}/connections/{id_connection}/accounts/{id_account}/transactions/{id_transaction}/informations") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"expand": $expand} | compact), body: null}
 }
 
 # List all arbitrary key-value pairs on a transaction
@@ -3457,11 +3618,15 @@ export def "users-connections-accounts-transactions-informations list" [
 ]: nothing -> record<total: float, transactioninformations: table<id: int, id_transaction: int, key: string, value: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($id_user | is-empty) { error make --unspanned { msg: "path parameter 'id_user' must be non-empty" } }
+  if ($id_connection | is-empty) { error make --unspanned { msg: "path parameter 'id_connection' must be non-empty" } }
+  if ($id_account | is-empty) { error make --unspanned { msg: "path parameter 'id_account' must be non-empty" } }
+  if ($id_transaction | is-empty) { error make --unspanned { msg: "path parameter 'id_transaction' must be non-empty" } }
   let qp = [(serialize-qp "expand" $expand "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({id_user: (encode-path-segment $id_user), id_connection: (encode-path-segment $id_connection), id_account: (encode-path-segment $id_account), id_transaction: (encode-path-segment $id_transaction)} | format pattern "/users/{id_user}/connections/{id_connection}/accounts/{id_account}/transactions/{id_transaction}/informations") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"expand": $expand} | compact), body: null}
 }
 
 # Add or edit transaction arbitrary key-value pairs
@@ -3485,17 +3650,21 @@ export def "users-connections-accounts-transactions-informations update" [
 ]: nothing -> record<id: int, id_transaction: int, key: string, value: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($id_user | is-empty) { error make --unspanned { msg: "path parameter 'id_user' must be non-empty" } }
+  if ($id_connection | is-empty) { error make --unspanned { msg: "path parameter 'id_connection' must be non-empty" } }
+  if ($id_account | is-empty) { error make --unspanned { msg: "path parameter 'id_account' must be non-empty" } }
+  if ($id_transaction | is-empty) { error make --unspanned { msg: "path parameter 'id_transaction' must be non-empty" } }
   let qp = [(serialize-qp "expand" $expand "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({id_user: (encode-path-segment $id_user), id_connection: (encode-path-segment $id_connection), id_account: (encode-path-segment $id_account), id_transaction: (encode-path-segment $id_transaction)} | format pattern "/users/{id_user}/connections/{id_connection}/accounts/{id_account}/transactions/{id_transaction}/informations") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"expand": $expand} | compact), body: null}
 }
 
 # Delete a particular key-value pair on a transaction.
 #
 # DELETE /users/{id_user}/connections/{id_connection}/accounts/{id_account}/transactions/{id_transaction}/informations/{id_information}
-export def "users-connections-accounts-transactions-informations delete-by-id_user-id_connection-id_account-id_transaction-id_information" [
+export def "users-connections-accounts-transactions-informations delete-by-id-user-id-connection-id-account-id-transaction-id-information" [
   id_user: string
   id_connection: int
   id_account: int
@@ -3514,11 +3683,16 @@ export def "users-connections-accounts-transactions-informations delete-by-id_us
 ]: nothing -> record<id: int, id_transaction: int, key: string, value: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($id_user | is-empty) { error make --unspanned { msg: "path parameter 'id_user' must be non-empty" } }
+  if ($id_connection | is-empty) { error make --unspanned { msg: "path parameter 'id_connection' must be non-empty" } }
+  if ($id_account | is-empty) { error make --unspanned { msg: "path parameter 'id_account' must be non-empty" } }
+  if ($id_transaction | is-empty) { error make --unspanned { msg: "path parameter 'id_transaction' must be non-empty" } }
+  if ($id_information | is-empty) { error make --unspanned { msg: "path parameter 'id_information' must be non-empty" } }
   let qp = [(serialize-qp "expand" $expand "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({id_user: (encode-path-segment $id_user), id_connection: (encode-path-segment $id_connection), id_account: (encode-path-segment $id_account), id_transaction: (encode-path-segment $id_transaction), id_information: (encode-path-segment $id_information)} | format pattern "/users/{id_user}/connections/{id_connection}/accounts/{id_account}/transactions/{id_transaction}/informations/{id_information}") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"expand": $expand} | compact), body: null}
 }
 
 # Get a particular arbitrary key-value pair on a transaction
@@ -3543,11 +3717,16 @@ export def "users-connections-accounts-transactions-informations get" [
 ]: nothing -> record<id: int, id_transaction: int, key: string, value: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($id_user | is-empty) { error make --unspanned { msg: "path parameter 'id_user' must be non-empty" } }
+  if ($id_connection | is-empty) { error make --unspanned { msg: "path parameter 'id_connection' must be non-empty" } }
+  if ($id_account | is-empty) { error make --unspanned { msg: "path parameter 'id_account' must be non-empty" } }
+  if ($id_transaction | is-empty) { error make --unspanned { msg: "path parameter 'id_transaction' must be non-empty" } }
+  if ($id_information | is-empty) { error make --unspanned { msg: "path parameter 'id_information' must be non-empty" } }
   let qp = [(serialize-qp "expand" $expand "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({id_user: (encode-path-segment $id_user), id_connection: (encode-path-segment $id_connection), id_account: (encode-path-segment $id_account), id_transaction: (encode-path-segment $id_transaction), id_information: (encode-path-segment $id_information)} | format pattern "/users/{id_user}/connections/{id_connection}/accounts/{id_account}/transactions/{id_transaction}/informations/{id_information}") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"expand": $expand} | compact), body: null}
 }
 
 # Get clustered transactions
@@ -3570,11 +3749,14 @@ export def "users-connections-accounts-transactionsclusters get" [
 ]: nothing -> record<total: float, transactionsclusters: table<created_by: string, enabled: bool, id: int, id_account: int, id_category: int, mean_amount: float, median_increment: int, next_date: string, wording: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($id_user | is-empty) { error make --unspanned { msg: "path parameter 'id_user' must be non-empty" } }
+  if ($id_connection | is-empty) { error make --unspanned { msg: "path parameter 'id_connection' must be non-empty" } }
+  if ($id_account | is-empty) { error make --unspanned { msg: "path parameter 'id_account' must be non-empty" } }
   let qp = [(serialize-qp "expand" $expand "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({id_user: (encode-path-segment $id_user), id_connection: (encode-path-segment $id_connection), id_account: (encode-path-segment $id_account)} | format pattern "/users/{id_user}/connections/{id_connection}/accounts/{id_account}/transactionsclusters") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"expand": $expand} | compact), body: null}
 }
 
 # Create clustered transaction
@@ -3597,11 +3779,14 @@ export def "users-connections-accounts-transactionsclusters create" [
 ]: nothing -> record<created_by: string, enabled: bool, id: int, id_account: int, id_category: int, mean_amount: float, median_increment: int, next_date: string, wording: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($id_user | is-empty) { error make --unspanned { msg: "path parameter 'id_user' must be non-empty" } }
+  if ($id_connection | is-empty) { error make --unspanned { msg: "path parameter 'id_connection' must be non-empty" } }
+  if ($id_account | is-empty) { error make --unspanned { msg: "path parameter 'id_account' must be non-empty" } }
   let qp = [(serialize-qp "expand" $expand "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({id_user: (encode-path-segment $id_user), id_connection: (encode-path-segment $id_connection), id_account: (encode-path-segment $id_account)} | format pattern "/users/{id_user}/connections/{id_connection}/accounts/{id_account}/transactionsclusters") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"expand": $expand} | compact), body: null}
 }
 
 # Delete a clustered transaction
@@ -3625,11 +3810,15 @@ export def "users-connections-accounts-transactionsclusters delete" [
 ]: nothing -> record<created_by: string, enabled: bool, id: int, id_account: int, id_category: int, mean_amount: float, median_increment: int, next_date: string, wording: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($id_user | is-empty) { error make --unspanned { msg: "path parameter 'id_user' must be non-empty" } }
+  if ($id_connection | is-empty) { error make --unspanned { msg: "path parameter 'id_connection' must be non-empty" } }
+  if ($id_account | is-empty) { error make --unspanned { msg: "path parameter 'id_account' must be non-empty" } }
+  if ($id_transactionscluster | is-empty) { error make --unspanned { msg: "path parameter 'id_transactionscluster' must be non-empty" } }
   let qp = [(serialize-qp "expand" $expand "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({id_user: (encode-path-segment $id_user), id_connection: (encode-path-segment $id_connection), id_account: (encode-path-segment $id_account), id_transactionscluster: (encode-path-segment $id_transactionscluster)} | format pattern "/users/{id_user}/connections/{id_connection}/accounts/{id_account}/transactionsclusters/{id_transactionscluster}") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"expand": $expand} | compact), body: null}
 }
 
 # Edit a clustered transaction
@@ -3653,11 +3842,15 @@ export def "users-connections-accounts-transactionsclusters update" [
 ]: nothing -> record<created_by: string, enabled: bool, id: int, id_account: int, id_category: int, mean_amount: float, median_increment: int, next_date: string, wording: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($id_user | is-empty) { error make --unspanned { msg: "path parameter 'id_user' must be non-empty" } }
+  if ($id_connection | is-empty) { error make --unspanned { msg: "path parameter 'id_connection' must be non-empty" } }
+  if ($id_account | is-empty) { error make --unspanned { msg: "path parameter 'id_account' must be non-empty" } }
+  if ($id_transactionscluster | is-empty) { error make --unspanned { msg: "path parameter 'id_transactionscluster' must be non-empty" } }
   let qp = [(serialize-qp "expand" $expand "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({id_user: (encode-path-segment $id_user), id_connection: (encode-path-segment $id_connection), id_account: (encode-path-segment $id_account), id_transactionscluster: (encode-path-segment $id_transactionscluster)} | format pattern "/users/{id_user}/connections/{id_connection}/accounts/{id_account}/transactionsclusters/{id_transactionscluster}") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"expand": $expand} | compact), body: null}
 }
 
 # Get connection additionnal informations
@@ -3680,11 +3873,13 @@ export def "users-connections-informations get" [
 ]: nothing -> record<connections: table<active: bool, created: string, id: int, id_connector: int, id_user: int, last_push: string, last_update: string, next_try: string>, total: float> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($id_user | is-empty) { error make --unspanned { msg: "path parameter 'id_user' must be non-empty" } }
+  if ($id_connection | is-empty) { error make --unspanned { msg: "path parameter 'id_connection' must be non-empty" } }
   let qp = [(serialize-qp "expand" $expand "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({id_user: (encode-path-segment $id_user), id_connection: (encode-path-segment $id_connection)} | format pattern "/users/{id_user}/connections/{id_connection}/informations") $qp)
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"expand": $expand} | compact), body: null}
 }
 
 # Get connection logs
@@ -3718,11 +3913,13 @@ export def "users-connections-logs get" [
 ]: nothing -> record<connectionlogs: table<error: string, error_message: string, error_uid: string, fields: string, id: int, id_connection: int, id_connector: int, id_source: int, id_user: int, login: string, nb_accounts: int, next_try: string, session_folder_id: string, start: string, statut: int, timestamp: string, worker: string>, total: float> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($id_user | is-empty) { error make --unspanned { msg: "path parameter 'id_user' must be non-empty" } }
+  if ($id_connection | is-empty) { error make --unspanned { msg: "path parameter 'id_connection' must be non-empty" } }
   let qp = [(serialize-qp "limit" $limit "scalar") (serialize-qp "offset" $offset "scalar") (serialize-qp "min_date" $min_date "scalar") (serialize-qp "max_date" $max_date "scalar") (serialize-qp "period" $period "scalar") (serialize-qp "id_user" $id_user "scalar") (serialize-qp "id_connection" $id_connection "scalar") (serialize-qp "id_connector" $id_connector "scalar") (serialize-qp "connector_uuid" $connector_uuid "scalar") (serialize-qp "error" $qp_error "scalar") (serialize-qp "id_source" $id_source "scalar") (serialize-qp "id_max" $id_max "scalar") (serialize-qp "expand" $expand "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({id_user: (encode-path-segment $id_user), id_connection: (encode-path-segment $id_connection)} | format pattern "/users/{id_user}/connections/{id_connection}/logs") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"limit": $limit, "offset": $offset, "min_date": $min_date, "max_date": $max_date, "period": $period, "id_user": $id_user, "id_connection": $id_connection, "id_connector": $id_connector, "connector_uuid": $connector_uuid, "error": $qp_error, "id_source": $id_source, "id_max": $id_max, "expand": $expand} | compact), body: null}
 }
 
 # Get connection sources
@@ -3744,11 +3941,13 @@ export def "users-connections-sources get" [
 ]: nothing -> record<sources: table<access_expire: string, created: string, disabled: string, expire: string, id: int, id_connection: int, id_connector_source: int, last_update: string, name: string, next_try: string, state: string>, total: float> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($id_user | is-empty) { error make --unspanned { msg: "path parameter 'id_user' must be non-empty" } }
+  if ($id_connection | is-empty) { error make --unspanned { msg: "path parameter 'id_connection' must be non-empty" } }
   let qp = [(serialize-qp "expand" $expand "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({id_user: (encode-path-segment $id_user), id_connection: (encode-path-segment $id_connection)} | format pattern "/users/{id_user}/connections/{id_connection}/sources") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"expand": $expand} | compact), body: null}
 }
 
 # Disable a connection source
@@ -3771,11 +3970,14 @@ export def "users-connections-sources delete" [
 ]: nothing -> record<access_expire: string, created: string, disabled: string, expire: string, id: int, id_connection: int, id_connector_source: int, last_update: string, name: string, next_try: string, state: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($id_user | is-empty) { error make --unspanned { msg: "path parameter 'id_user' must be non-empty" } }
+  if ($id_connection | is-empty) { error make --unspanned { msg: "path parameter 'id_connection' must be non-empty" } }
+  if ($id_source | is-empty) { error make --unspanned { msg: "path parameter 'id_source' must be non-empty" } }
   let qp = [(serialize-qp "expand" $expand "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({id_user: (encode-path-segment $id_user), id_connection: (encode-path-segment $id_connection), id_source: (encode-path-segment $id_source)} | format pattern "/users/{id_user}/connections/{id_connection}/sources/{id_source}") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"expand": $expand} | compact), body: null}
 }
 
 # "
@@ -3802,6 +4004,9 @@ export def "users-connections-sources create" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($id_user | is-empty) { error make --unspanned { msg: "path parameter 'id_user' must be non-empty" } }
+  if ($id_connection | is-empty) { error make --unspanned { msg: "path parameter 'id_connection' must be non-empty" } }
+  if ($id_source | is-empty) { error make --unspanned { msg: "path parameter 'id_source' must be non-empty" } }
   let qp = [(serialize-qp "background" $background "scalar") (serialize-qp "expand" $expand "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({id_user: (encode-path-segment $id_user), id_connection: (encode-path-segment $id_connection), id_source: (encode-path-segment $id_source)} | format pattern "/users/{id_user}/connections/{id_connection}/sources/{id_source}") $qp)
   let req_body = {"disabled": $disabled, "synchronize": $synchronize} | compact
@@ -3810,7 +4015,7 @@ export def "users-connections-sources create" [
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let req_body = if ($req_body | describe | str starts-with "record") { $req_body } else { {} }
   let mp = (build-multipart-body $req_body [] $dry_run)
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full $mp.content_type $mp.body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full $mp.content_type $mp.body {query: ({"background": $background, "expand": $expand} | compact), body: $req_body}
 }
 
 # Update connection source
@@ -3838,6 +4043,9 @@ export def "users-connections-sources update" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($id_user | is-empty) { error make --unspanned { msg: "path parameter 'id_user' must be non-empty" } }
+  if ($id_connection | is-empty) { error make --unspanned { msg: "path parameter 'id_connection' must be non-empty" } }
+  if ($id_source | is-empty) { error make --unspanned { msg: "path parameter 'id_source' must be non-empty" } }
   let qp = [(serialize-qp "background" $background "scalar") (serialize-qp "expand" $expand "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({id_user: (encode-path-segment $id_user), id_connection: (encode-path-segment $id_connection), id_source: (encode-path-segment $id_source)} | format pattern "/users/{id_user}/connections/{id_connection}/sources/{id_source}") $qp)
   let req_body = {"disabled": $disabled, "force": $force, "synchronize": $synchronize} | compact
@@ -3846,7 +4054,7 @@ export def "users-connections-sources update" [
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let req_body = if ($req_body | describe | str starts-with "record") { $req_body } else { {} }
   let mp = (build-multipart-body $req_body [] $dry_run)
-  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full $mp.content_type $mp.body
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full $mp.content_type $mp.body {query: ({"background": $background, "expand": $expand} | compact), body: $req_body}
 }
 
 # Get clustered transactions
@@ -3868,11 +4076,13 @@ export def "users-connections-transactionsclusters get" [
 ]: nothing -> record<total: float, transactionsclusters: table<created_by: string, enabled: bool, id: int, id_account: int, id_category: int, mean_amount: float, median_increment: int, next_date: string, wording: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($id_user | is-empty) { error make --unspanned { msg: "path parameter 'id_user' must be non-empty" } }
+  if ($id_connection | is-empty) { error make --unspanned { msg: "path parameter 'id_connection' must be non-empty" } }
   let qp = [(serialize-qp "expand" $expand "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({id_user: (encode-path-segment $id_user), id_connection: (encode-path-segment $id_connection)} | format pattern "/users/{id_user}/connections/{id_connection}/transactionsclusters") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"expand": $expand} | compact), body: null}
 }
 
 # Create clustered transaction
@@ -3894,11 +4104,13 @@ export def "users-connections-transactionsclusters create" [
 ]: nothing -> record<created_by: string, enabled: bool, id: int, id_account: int, id_category: int, mean_amount: float, median_increment: int, next_date: string, wording: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($id_user | is-empty) { error make --unspanned { msg: "path parameter 'id_user' must be non-empty" } }
+  if ($id_connection | is-empty) { error make --unspanned { msg: "path parameter 'id_connection' must be non-empty" } }
   let qp = [(serialize-qp "expand" $expand "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({id_user: (encode-path-segment $id_user), id_connection: (encode-path-segment $id_connection)} | format pattern "/users/{id_user}/connections/{id_connection}/transactionsclusters") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"expand": $expand} | compact), body: null}
 }
 
 # Delete a clustered transaction
@@ -3921,11 +4133,14 @@ export def "users-connections-transactionsclusters delete" [
 ]: nothing -> record<created_by: string, enabled: bool, id: int, id_account: int, id_category: int, mean_amount: float, median_increment: int, next_date: string, wording: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($id_user | is-empty) { error make --unspanned { msg: "path parameter 'id_user' must be non-empty" } }
+  if ($id_connection | is-empty) { error make --unspanned { msg: "path parameter 'id_connection' must be non-empty" } }
+  if ($id_transactionscluster | is-empty) { error make --unspanned { msg: "path parameter 'id_transactionscluster' must be non-empty" } }
   let qp = [(serialize-qp "expand" $expand "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({id_user: (encode-path-segment $id_user), id_connection: (encode-path-segment $id_connection), id_transactionscluster: (encode-path-segment $id_transactionscluster)} | format pattern "/users/{id_user}/connections/{id_connection}/transactionsclusters/{id_transactionscluster}") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"expand": $expand} | compact), body: null}
 }
 
 # Edit a clustered transaction
@@ -3948,11 +4163,14 @@ export def "users-connections-transactionsclusters update" [
 ]: nothing -> record<created_by: string, enabled: bool, id: int, id_account: int, id_category: int, mean_amount: float, median_increment: int, next_date: string, wording: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($id_user | is-empty) { error make --unspanned { msg: "path parameter 'id_user' must be non-empty" } }
+  if ($id_connection | is-empty) { error make --unspanned { msg: "path parameter 'id_connection' must be non-empty" } }
+  if ($id_transactionscluster | is-empty) { error make --unspanned { msg: "path parameter 'id_transactionscluster' must be non-empty" } }
   let qp = [(serialize-qp "expand" $expand "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({id_user: (encode-path-segment $id_user), id_connection: (encode-path-segment $id_connection), id_transactionscluster: (encode-path-segment $id_transactionscluster)} | format pattern "/users/{id_user}/connections/{id_connection}/transactionsclusters/{id_transactionscluster}") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"expand": $expand} | compact), body: null}
 }
 
 # Get forecast
@@ -3972,10 +4190,11 @@ export def "users-forecast get" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($id_user | is-empty) { error make --unspanned { msg: "path parameter 'id_user' must be non-empty" } }
   let full_url = (build-url $base ({id_user: (encode-path-segment $id_user)} | format pattern "/users/{id_user}/forecast"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
 }
 
 # Get connection logs
@@ -4008,11 +4227,12 @@ export def "users-logs get" [
 ]: nothing -> record<connectionlogs: table<error: string, error_message: string, error_uid: string, fields: string, id: int, id_connection: int, id_connector: int, id_source: int, id_user: int, login: string, nb_accounts: int, next_try: string, session_folder_id: string, start: string, statut: int, timestamp: string, worker: string>, total: float> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($id_user | is-empty) { error make --unspanned { msg: "path parameter 'id_user' must be non-empty" } }
   let qp = [(serialize-qp "limit" $limit "scalar") (serialize-qp "offset" $offset "scalar") (serialize-qp "min_date" $min_date "scalar") (serialize-qp "max_date" $max_date "scalar") (serialize-qp "period" $period "scalar") (serialize-qp "id_user" $id_user "scalar") (serialize-qp "id_connection" $id_connection "scalar") (serialize-qp "id_connector" $id_connector "scalar") (serialize-qp "connector_uuid" $connector_uuid "scalar") (serialize-qp "error" $qp_error "scalar") (serialize-qp "id_source" $id_source "scalar") (serialize-qp "id_max" $id_max "scalar") (serialize-qp "expand" $expand "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({id_user: (encode-path-segment $id_user)} | format pattern "/users/{id_user}/logs") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"limit": $limit, "offset": $offset, "min_date": $min_date, "max_date": $max_date, "period": $period, "id_user": $id_user, "id_connection": $id_connection, "id_connector": $id_connector, "connector_uuid": $connector_uuid, "error": $qp_error, "id_source": $id_source, "id_max": $id_max, "expand": $expand} | compact), body: null}
 }
 
 # Get profiles
@@ -4033,11 +4253,12 @@ export def "users-profiles list" [
 ]: nothing -> record<profiles: table<admin: bool, conf: string, email: string, id: int, id_user: int, lang: string, role: string, statut: int>, total: float> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($id_user | is-empty) { error make --unspanned { msg: "path parameter 'id_user' must be non-empty" } }
   let qp = [(serialize-qp "expand" $expand "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({id_user: (encode-path-segment $id_user)} | format pattern "/users/{id_user}/profiles") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"expand": $expand} | compact), body: null}
 }
 
 # Get the main profile
@@ -4058,11 +4279,12 @@ export def "users-profiles-main get" [
 ]: nothing -> record<admin: bool, conf: string, email: string, id: int, id_user: int, lang: string, role: string, statut: int> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($id_user | is-empty) { error make --unspanned { msg: "path parameter 'id_user' must be non-empty" } }
   let qp = [(serialize-qp "expand" $expand "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({id_user: (encode-path-segment $id_user)} | format pattern "/users/{id_user}/profiles/main") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"expand": $expand} | compact), body: null}
 }
 
 # Get a profile
@@ -4084,11 +4306,13 @@ export def "users-profiles get" [
 ]: nothing -> record<admin: bool, conf: string, email: string, id: int, id_user: int, lang: string, role: string, statut: int> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($id_user | is-empty) { error make --unspanned { msg: "path parameter 'id_user' must be non-empty" } }
+  if ($id_profile | is-empty) { error make --unspanned { msg: "path parameter 'id_profile' must be non-empty" } }
   let qp = [(serialize-qp "expand" $expand "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({id_user: (encode-path-segment $id_user), id_profile: (encode-path-segment $id_profile)} | format pattern "/users/{id_user}/profiles/{id_profile}") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"expand": $expand} | compact), body: null}
 }
 
 # Create a token
@@ -4111,6 +4335,7 @@ export def "users-token create" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($id_user | is-empty) { error make --unspanned { msg: "path parameter 'id_user' must be non-empty" } }
   let full_url = (build-url $base ({id_user: (encode-path-segment $id_user)} | format pattern "/users/{id_user}/token"))
   let req_body = {"application": $application} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
@@ -4118,7 +4343,7 @@ export def "users-token create" [
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let req_body = if ($req_body | describe | str starts-with "record") { $req_body } else { {} }
   let mp = (build-multipart-body $req_body [] $dry_run)
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full $mp.content_type $mp.body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full $mp.content_type $mp.body {query: {}, body: $req_body}
 }
 
 # Get clustered transactions
@@ -4139,11 +4364,12 @@ export def "users-transactionsclusters get" [
 ]: nothing -> record<total: float, transactionsclusters: table<created_by: string, enabled: bool, id: int, id_account: int, id_category: int, mean_amount: float, median_increment: int, next_date: string, wording: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($id_user | is-empty) { error make --unspanned { msg: "path parameter 'id_user' must be non-empty" } }
   let qp = [(serialize-qp "expand" $expand "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({id_user: (encode-path-segment $id_user)} | format pattern "/users/{id_user}/transactionsclusters") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"expand": $expand} | compact), body: null}
 }
 
 # Create clustered transaction
@@ -4164,11 +4390,12 @@ export def "users-transactionsclusters create" [
 ]: nothing -> record<created_by: string, enabled: bool, id: int, id_account: int, id_category: int, mean_amount: float, median_increment: int, next_date: string, wording: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($id_user | is-empty) { error make --unspanned { msg: "path parameter 'id_user' must be non-empty" } }
   let qp = [(serialize-qp "expand" $expand "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({id_user: (encode-path-segment $id_user)} | format pattern "/users/{id_user}/transactionsclusters") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"expand": $expand} | compact), body: null}
 }
 
 # Delete a clustered transaction
@@ -4190,11 +4417,13 @@ export def "users-transactionsclusters delete" [
 ]: nothing -> record<created_by: string, enabled: bool, id: int, id_account: int, id_category: int, mean_amount: float, median_increment: int, next_date: string, wording: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($id_user | is-empty) { error make --unspanned { msg: "path parameter 'id_user' must be non-empty" } }
+  if ($id_transactionscluster | is-empty) { error make --unspanned { msg: "path parameter 'id_transactionscluster' must be non-empty" } }
   let qp = [(serialize-qp "expand" $expand "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({id_user: (encode-path-segment $id_user), id_transactionscluster: (encode-path-segment $id_transactionscluster)} | format pattern "/users/{id_user}/transactionsclusters/{id_transactionscluster}") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"expand": $expand} | compact), body: null}
 }
 
 # Edit a clustered transaction
@@ -4216,11 +4445,13 @@ export def "users-transactionsclusters update" [
 ]: nothing -> record<created_by: string, enabled: bool, id: int, id_account: int, id_category: int, mean_amount: float, median_increment: int, next_date: string, wording: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($id_user | is-empty) { error make --unspanned { msg: "path parameter 'id_user' must be non-empty" } }
+  if ($id_transactionscluster | is-empty) { error make --unspanned { msg: "path parameter 'id_transactionscluster' must be non-empty" } }
   let qp = [(serialize-qp "expand" $expand "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({id_user: (encode-path-segment $id_user), id_transactionscluster: (encode-path-segment $id_transactionscluster)} | format pattern "/users/{id_user}/transactionsclusters/{id_transactionscluster}") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"expand": $expand} | compact), body: null}
 }
 
 # First step to establish an oAuth2 connection.
@@ -4251,7 +4482,7 @@ export def "webauth get" [
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let req_body = if ($req_body | describe | str starts-with "record") { $req_body } else { {} }
   let mp = (build-multipart-body $req_body [] $dry_run)
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full $mp.content_type $mp.body
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full $mp.content_type $mp.body {query: {}, body: $req_body}
 }
 
 # Deletes all webhooks
@@ -4275,7 +4506,7 @@ export def "webhooks delete" [
   let full_url = (build-url $base "/webhooks" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"expand": $expand} | compact), body: null}
 }
 
 # Get webhooks
@@ -4299,7 +4530,7 @@ export def "webhooks get" [
   let full_url = (build-url $base "/webhooks" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"expand": $expand} | compact), body: null}
 }
 
 # Adds a new webhook
@@ -4334,7 +4565,7 @@ export def "webhooks create" [
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let req_body = if ($req_body | describe | str starts-with "record") { $req_body } else { {} }
   let mp = (build-multipart-body $req_body [] $dry_run)
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full $mp.content_type $mp.body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full $mp.content_type $mp.body {query: ({"expand": $expand} | compact), body: $req_body}
 }
 
 # Deletes all webhook authentication types
@@ -4358,7 +4589,7 @@ export def "webhooks-auth delete" [
   let full_url = (build-url $base "/webhooks/auth" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"expand": $expand} | compact), body: null}
 }
 
 # Get webhooks authentication types
@@ -4382,7 +4613,7 @@ export def "webhooks-auth get" [
   let full_url = (build-url $base "/webhooks/auth" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"expand": $expand} | compact), body: null}
 }
 
 # Adds a new webhook authentication type
@@ -4414,13 +4645,13 @@ export def "webhooks-auth create" [
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let req_body = if ($req_body | describe | str starts-with "record") { $req_body } else { {} }
   let mp = (build-multipart-body $req_body [] $dry_run)
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full $mp.content_type $mp.body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full $mp.content_type $mp.body {query: ({"expand": $expand} | compact), body: $req_body}
 }
 
 # Deletes the webhook authentication type
 #
 # DELETE /webhooks/auth/{id_auth}
-export def "webhooks-auth delete-by-id_auth" [
+export def "webhooks-auth delete-by-id-auth" [
   id_auth: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -4435,17 +4666,18 @@ export def "webhooks-auth delete-by-id_auth" [
 ]: nothing -> record<id: int, name: string, type: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($id_auth | is-empty) { error make --unspanned { msg: "path parameter 'id_auth' must be non-empty" } }
   let qp = [(serialize-qp "expand" $expand "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({id_auth: (encode-path-segment $id_auth)} | format pattern "/webhooks/auth/{id_auth}") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"expand": $expand} | compact), body: null}
 }
 
 # Updates the webhook authentication type
 #
 # POST /webhooks/auth/{id_auth}
-export def "webhooks-auth create-by-id_auth" [
+export def "webhooks-auth create-by-id-auth" [
   id_auth: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -4464,6 +4696,7 @@ export def "webhooks-auth create-by-id_auth" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($id_auth | is-empty) { error make --unspanned { msg: "path parameter 'id_auth' must be non-empty" } }
   let qp = [(serialize-qp "expand" $expand "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({id_auth: (encode-path-segment $id_auth)} | format pattern "/webhooks/auth/{id_auth}") $qp)
   let req_body = {"config": $config, "name": $name, "type": $type} | compact
@@ -4472,7 +4705,7 @@ export def "webhooks-auth create-by-id_auth" [
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let req_body = if ($req_body | describe | str starts-with "record") { $req_body } else { {} }
   let mp = (build-multipart-body $req_body [] $dry_run)
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full $mp.content_type $mp.body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full $mp.content_type $mp.body {query: ({"expand": $expand} | compact), body: $req_body}
 }
 
 # Updates the webhook authentication type
@@ -4497,6 +4730,7 @@ export def "webhooks-auth update" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($id_auth | is-empty) { error make --unspanned { msg: "path parameter 'id_auth' must be non-empty" } }
   let qp = [(serialize-qp "expand" $expand "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({id_auth: (encode-path-segment $id_auth)} | format pattern "/webhooks/auth/{id_auth}") $qp)
   let req_body = {"config": $config, "name": $name, "type": $type} | compact
@@ -4505,13 +4739,13 @@ export def "webhooks-auth update" [
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let req_body = if ($req_body | describe | str starts-with "record") { $req_body } else { {} }
   let mp = (build-multipart-body $req_body [] $dry_run)
-  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full $mp.content_type $mp.body
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full $mp.content_type $mp.body {query: ({"expand": $expand} | compact), body: $req_body}
 }
 
 # Deletes a webhook
 #
 # DELETE /webhooks/{id_webhook}
-export def "webhooks delete-by-id_webhook" [
+export def "webhooks delete-by-id-webhook" [
   id_webhook: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -4526,17 +4760,18 @@ export def "webhooks delete-by-id_webhook" [
 ]: nothing -> record<add_to_data: string, created: string, deleted: string, flush_fail: string, id: int, id_auth: int, id_event: int, id_service: int, id_user: int, updated: string, url: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($id_webhook | is-empty) { error make --unspanned { msg: "path parameter 'id_webhook' must be non-empty" } }
   let qp = [(serialize-qp "expand" $expand "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({id_webhook: (encode-path-segment $id_webhook)} | format pattern "/webhooks/{id_webhook}") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"expand": $expand} | compact), body: null}
 }
 
 # Updates a webhook
 #
 # POST /webhooks/{id_webhook}
-export def "webhooks create-by-id_webhook" [
+export def "webhooks create-by-id-webhook" [
   id_webhook: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -4558,6 +4793,7 @@ export def "webhooks create-by-id_webhook" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($id_webhook | is-empty) { error make --unspanned { msg: "path parameter 'id_webhook' must be non-empty" } }
   let qp = [(serialize-qp "expand" $expand "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({id_webhook: (encode-path-segment $id_webhook)} | format pattern "/webhooks/{id_webhook}") $qp)
   let req_body = {"deleted": $deleted, "event": $event, "id_auth": $id_auth, "id_service": $id_service, "id_user": $id_user, "url": $url} | compact
@@ -4566,7 +4802,7 @@ export def "webhooks create-by-id_webhook" [
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let req_body = if ($req_body | describe | str starts-with "record") { $req_body } else { {} }
   let mp = (build-multipart-body $req_body [] $dry_run)
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full $mp.content_type $mp.body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full $mp.content_type $mp.body {query: ({"expand": $expand} | compact), body: $req_body}
 }
 
 # Updates a webhook
@@ -4594,6 +4830,7 @@ export def "webhooks update" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($id_webhook | is-empty) { error make --unspanned { msg: "path parameter 'id_webhook' must be non-empty" } }
   let qp = [(serialize-qp "expand" $expand "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({id_webhook: (encode-path-segment $id_webhook)} | format pattern "/webhooks/{id_webhook}") $qp)
   let req_body = {"deleted": $deleted, "event": $event, "id_auth": $id_auth, "id_service": $id_service, "id_user": $id_user, "url": $url} | compact
@@ -4602,13 +4839,13 @@ export def "webhooks update" [
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let req_body = if ($req_body | describe | str starts-with "record") { $req_body } else { {} }
   let mp = (build-multipart-body $req_body [] $dry_run)
-  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full $mp.content_type $mp.body
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full $mp.content_type $mp.body {query: ({"expand": $expand} | compact), body: $req_body}
 }
 
 # delete all entries
 #
 # DELETE /webhooks/{id_webhook}/add_to_data
-export def "webhooks-add-to-data delete-by-id_webhook" [
+export def "webhooks-add-to-data delete-by-id-webhook" [
   id_webhook: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -4623,11 +4860,12 @@ export def "webhooks-add-to-data delete-by-id_webhook" [
 ]: nothing -> record<add_to_data: string, created: string, deleted: string, flush_fail: string, id: int, id_auth: int, id_event: int, id_service: int, id_user: int, updated: string, url: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($id_webhook | is-empty) { error make --unspanned { msg: "path parameter 'id_webhook' must be non-empty" } }
   let qp = [(serialize-qp "expand" $expand "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({id_webhook: (encode-path-segment $id_webhook)} | format pattern "/webhooks/{id_webhook}/add_to_data") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"expand": $expand} | compact), body: null}
 }
 
 # retrieve the list of the value to add in webhooks when sending the requested webhook
@@ -4648,17 +4886,18 @@ export def "webhooks-add-to-data list" [
 ]: nothing -> record<total: float, webhooks: table<add_to_data: string, created: string, deleted: string, flush_fail: string, id: int, id_auth: int, id_event: int, id_service: int, id_user: int, updated: string, url: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($id_webhook | is-empty) { error make --unspanned { msg: "path parameter 'id_webhook' must be non-empty" } }
   let qp = [(serialize-qp "expand" $expand "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({id_webhook: (encode-path-segment $id_webhook)} | format pattern "/webhooks/{id_webhook}/add_to_data") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"expand": $expand} | compact), body: null}
 }
 
 # Setup a field to store in user config when calling the endpoint
 #
 # POST /webhooks/{id_webhook}/add_to_data
-export def "webhooks-add-to-data create-by-id_webhook" [
+export def "webhooks-add-to-data create-by-id-webhook" [
   id_webhook: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -4673,17 +4912,18 @@ export def "webhooks-add-to-data create-by-id_webhook" [
 ]: nothing -> record<add_to_data: string, created: string, deleted: string, flush_fail: string, id: int, id_auth: int, id_event: int, id_service: int, id_user: int, updated: string, url: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($id_webhook | is-empty) { error make --unspanned { msg: "path parameter 'id_webhook' must be non-empty" } }
   let qp = [(serialize-qp "expand" $expand "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({id_webhook: (encode-path-segment $id_webhook)} | format pattern "/webhooks/{id_webhook}/add_to_data") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"expand": $expand} | compact), body: null}
 }
 
 # delete the requested entry
 #
 # DELETE /webhooks/{id_webhook}/add_to_data/{key}
-export def "webhooks-add-to-data delete-by-id_webhook-key" [
+export def "webhooks-add-to-data delete-by-id-webhook-key" [
   id_webhook: int
   key: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -4699,11 +4939,13 @@ export def "webhooks-add-to-data delete-by-id_webhook-key" [
 ]: nothing -> record<add_to_data: string, created: string, deleted: string, flush_fail: string, id: int, id_auth: int, id_event: int, id_service: int, id_user: int, updated: string, url: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($id_webhook | is-empty) { error make --unspanned { msg: "path parameter 'id_webhook' must be non-empty" } }
+  if ($key | is-empty) { error make --unspanned { msg: "path parameter 'key' must be non-empty" } }
   let qp = [(serialize-qp "expand" $expand "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({id_webhook: (encode-path-segment $id_webhook), key: (encode-path-segment $key)} | format pattern "/webhooks/{id_webhook}/add_to_data/{key}") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"expand": $expand} | compact), body: null}
 }
 
 # retrieve the value to add in the requested webhook for the requested name
@@ -4725,17 +4967,19 @@ export def "webhooks-add-to-data get" [
 ]: nothing -> record<add_to_data: string, created: string, deleted: string, flush_fail: string, id: int, id_auth: int, id_event: int, id_service: int, id_user: int, updated: string, url: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($id_webhook | is-empty) { error make --unspanned { msg: "path parameter 'id_webhook' must be non-empty" } }
+  if ($key | is-empty) { error make --unspanned { msg: "path parameter 'key' must be non-empty" } }
   let qp = [(serialize-qp "expand" $expand "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({id_webhook: (encode-path-segment $id_webhook), key: (encode-path-segment $key)} | format pattern "/webhooks/{id_webhook}/add_to_data/{key}") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"expand": $expand} | compact), body: null}
 }
 
 # upate the requested field to store in user config when calling the endpoint
 #
 # POST /webhooks/{id_webhook}/add_to_data/{key}
-export def "webhooks-add-to-data create-by-id_webhook-key" [
+export def "webhooks-add-to-data create-by-id-webhook-key" [
   id_webhook: int
   key: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -4751,11 +4995,13 @@ export def "webhooks-add-to-data create-by-id_webhook-key" [
 ]: nothing -> record<add_to_data: string, created: string, deleted: string, flush_fail: string, id: int, id_auth: int, id_event: int, id_service: int, id_user: int, updated: string, url: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($id_webhook | is-empty) { error make --unspanned { msg: "path parameter 'id_webhook' must be non-empty" } }
+  if ($key | is-empty) { error make --unspanned { msg: "path parameter 'key' must be non-empty" } }
   let qp = [(serialize-qp "expand" $expand "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({id_webhook: (encode-path-segment $id_webhook), key: (encode-path-segment $key)} | format pattern "/webhooks/{id_webhook}/add_to_data/{key}") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"expand": $expand} | compact), body: null}
 }
 
 # Get webhooks logs.
@@ -4781,9 +5027,10 @@ export def "webhooks-logs get" [
 ]: nothing -> record<total: float, webhooklogs: table<id: int, id_service: int, id_user: int, id_webhook_data: int, next_try: string, response_code: int, response_date: string, timestamp: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($id_webhook | is-empty) { error make --unspanned { msg: "path parameter 'id_webhook' must be non-empty" } }
   let qp = [(serialize-qp "id_user" $id_user "scalar") (serialize-qp "limit" $limit "scalar") (serialize-qp "offset" $offset "scalar") (serialize-qp "min_date" $min_date "scalar") (serialize-qp "max_date" $max_date "scalar") (serialize-qp "expand" $expand "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({id_webhook: (encode-path-segment $id_webhook)} | format pattern "/webhooks/{id_webhook}/logs") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"id_user": $id_user, "limit": $limit, "offset": $offset, "min_date": $min_date, "max_date": $max_date, "expand": $expand} | compact), body: null}
 }

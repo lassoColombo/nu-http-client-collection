@@ -3,17 +3,18 @@
 # Auth: --token flag or $env.NETBOX_API_TOKEN
 
 const BASE_URL = "https://netboxdemo.com/api"
-const DEFAULT_AUTH = "bearer"
 
-# Build auth: returns {headers: record, query: string}
+# Build auth: returns {scheme: string, headers: record, query: string, location: string}.
+# `location` is "header" | "query" | "cookie" | "none" and tells dry-run callers
+# where the token went without inspecting headers/query themselves.
 def build-auth [token?: string, auth_scheme?: string]: nothing -> record {
   let token_val = if ($token != null) and ($token | is-not-empty) { $token } else { $env | get -o NETBOX_API_TOKEN | default "" }
   let scheme = ($auth_scheme | default "bearer")
-  if ($scheme == "none") or ($token_val | is-empty) { return {headers: {}, query: ""} }
+  if ($scheme == "none") or ($token_val | is-empty) { return {scheme: $scheme, headers: {}, query: "", location: "none"} }
   match $scheme {
-    "bearer" => { {headers: {Authorization: $"Bearer ($token_val)"}, query: ""} }
-    "none" => { {headers: {}, query: ""} }
-    _ => { {headers: {Authorization: $"Bearer ($token_val)"}, query: ""} }
+    "bearer" => { {scheme: $scheme, headers: {Authorization: $"Bearer ($token_val)"}, query: "", location: "header"} }
+    "none" => { {scheme: $scheme, headers: {}, query: "", location: "none"} }
+    _ => { {scheme: $scheme, headers: {Authorization: $"Bearer ($token_val)"}, query: "", location: "header"} }
   }
 }
 
@@ -22,8 +23,9 @@ def build-auth [token?: string, auth_scheme?: string]: nothing -> record {
 # ([A-Za-z0-9-._~]) stay literal; everything else gets %XX.
 def serialize-qp [name: string, value: any, style: string]: nothing -> list<string> {
   if ($value == null) { return [] }
-  let n = (encode-path-segment $name)
   let is_list = ($value | describe | str starts-with "list")
+  if $is_list and ($value | is-empty) { return [] }
+  let n = (encode-path-segment $name)
   if ($value | describe | str starts-with "record") { return ($value | transpose k v | each { $"($n)[(encode-path-segment $in.k)]=(encode-path-segment $in.v)" }) }
   if not $is_list { return [$"($n)=(encode-path-segment $value)"] }
   match $style {
@@ -54,22 +56,42 @@ def build-url [base: string, path: string, query?: string]: nothing -> string {
   if ($query != null) and ($query | is-not-empty) { $result | upsert query $query | url join } else { $result | url join }
 }
 
+# Build the dry-run record returned by --dry-run. Shape:
+#   {dry_run: true, method, url, query: <record>, headers, body, content_type, timeout,
+#    auth: {scheme, location}}
+# `meta` carries logical-form data (the query record by spec name, the pre-serialization
+# body) that do-request itself cannot reconstruct from its wire-format args.
+def build-dry-run-record [method: string, url: string, auth: record, content_type: string, timeout: duration, meta?: record]: nothing -> record {
+  let m = ($meta | default {})
+  {
+    dry_run: true
+    method: $method
+    url: $url
+    query: ($m | get -o query | default {})
+    headers: $auth.headers
+    body: ($m | get -o body)
+    content_type: $content_type
+    timeout: $timeout
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+}
+
 # Execute HTTP request with method dispatch
-def do-request [method: string, url: string, auth: record, insecure: bool, raw: bool, dry_run: bool, max_time?: duration, allow_errors?: bool, full?: bool, content_type?: string, body?: any]: nothing -> any {
+def do-request [method: string, url: string, auth: record, insecure: bool, raw: bool, dry_run: bool, max_time?: duration, allow_errors?: bool, full?: bool, content_type?: string, body?: any, dry_run_meta?: record]: nothing -> any {
   let req_url = if ($auth.query | is-not-empty) { if ($url | str contains "?") { $"($url)&($auth.query)" } else { $"($url)?($auth.query)" } } else { $url }
   let timeout = ($max_time | default 30min)
   let ct = ($content_type | default "application/json")
-  if $dry_run { return {method: $method, url: $req_url, headers: $auth.headers, query_string: $auth.query, content_type: $ct, timeout: $timeout, body: $body} }
+  if $dry_run { return (build-dry-run-record $method $req_url $auth $ct $timeout $dry_run_meta) }
   let resp = match $method {
     "get" => { http get --headers $auth.headers --full --allow-errors --max-time $timeout --insecure=$insecure --raw=$raw $req_url }
-    "head" => { http head --headers $auth.headers --max-time $timeout --insecure=$insecure $req_url }
-    "options" => { http options --headers $auth.headers --max-time $timeout --insecure=$insecure $req_url }
+    "head" => { http head --headers $auth.headers --full --allow-errors --max-time $timeout --insecure=$insecure $req_url }
+    "options" => { http options --headers $auth.headers --full --allow-errors --max-time $timeout --insecure=$insecure $req_url }
     "post" => { if ($body | is-empty) { http post --headers $auth.headers --full --allow-errors --max-time $timeout --insecure=$insecure --raw=$raw $req_url "" } else { http post --headers $auth.headers --content-type $ct --full --allow-errors --max-time $timeout --insecure=$insecure --raw=$raw $req_url $body } }
     "put" => { if ($body | is-empty) { http put --headers $auth.headers --full --allow-errors --max-time $timeout --insecure=$insecure --raw=$raw $req_url "" } else { http put --headers $auth.headers --content-type $ct --full --allow-errors --max-time $timeout --insecure=$insecure --raw=$raw $req_url $body } }
     "patch" => { if ($body | is-empty) { http patch --headers $auth.headers --full --allow-errors --max-time $timeout --insecure=$insecure --raw=$raw $req_url "" } else { http patch --headers $auth.headers --content-type $ct --full --allow-errors --max-time $timeout --insecure=$insecure --raw=$raw $req_url $body } }
     "delete" => { if ($body | is-empty) { http delete --headers $auth.headers --full --allow-errors --max-time $timeout --insecure=$insecure --raw=$raw $req_url } else { http delete --headers $auth.headers --content-type $ct --data $body --full --allow-errors --max-time $timeout --insecure=$insecure --raw=$raw $req_url } }
   }
-  if ($method in ["head" "options"]) { return $resp }
+  if ($method == "head") and (not $full) and (not $allow_errors) and $resp.status < 400 { return $resp.headers }
   if $allow_errors { $resp } else if $resp.status >= 400 { error make --unspanned { msg: $"HTTP ($resp.status): ($resp.body)" } } else if $full { {status: $resp.status, headers: $resp.headers, body: $resp.body} } else if $resp.status == 204 { null } else { $resp.body }
 }
 
@@ -188,7 +210,7 @@ export def "circuits-circuit-terminations list" [
   let full_url = (build-url $base "/circuits/circuit-terminations/" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"term_side": $term_side, "port_speed": $port_speed, "upstream_speed": $upstream_speed, "xconnect_id": $xconnect_id, "q": $q, "circuit_id": $circuit_id, "site_id": $site_id, "site": $site, "term_side__n": $term_side_n, "port_speed__n": $port_speed_n, "port_speed__lte": $port_speed_lte, "port_speed__lt": $port_speed_lt, "port_speed__gte": $port_speed_gte, "port_speed__gt": $port_speed_gt, "upstream_speed__n": $upstream_speed_n, "upstream_speed__lte": $upstream_speed_lte, "upstream_speed__lt": $upstream_speed_lt, "upstream_speed__gte": $upstream_speed_gte, "upstream_speed__gt": $upstream_speed_gt, "xconnect_id__n": $xconnect_id_n, "xconnect_id__ic": $xconnect_id_ic, "xconnect_id__nic": $xconnect_id_nic, "xconnect_id__iew": $xconnect_id_iew, "xconnect_id__niew": $xconnect_id_niew, "xconnect_id__isw": $xconnect_id_isw, "xconnect_id__nisw": $xconnect_id_nisw, "xconnect_id__ie": $xconnect_id_ie, "xconnect_id__nie": $xconnect_id_nie, "circuit_id__n": $circuit_id_n, "site_id__n": $site_id_n, "site__n": $site_n, "limit": $limit, "offset": $offset} | compact), body: null}
 }
 
 # POST /circuits/circuit-terminations/
@@ -224,7 +246,7 @@ export def "circuits-circuit-terminations create" [
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: {}, body: $req_body}
 }
 
 # DELETE /circuits/circuit-terminations/{id}/
@@ -244,10 +266,11 @@ export def "circuits-circuit-terminations delete" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
   let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/circuits/circuit-terminations/{id}/"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
 }
 
 # Call to super to allow for caching
@@ -268,10 +291,11 @@ export def "circuits-circuit-terminations get" [
 ]: nothing -> record<cable: record<id: int, label: string, url: string>, circuit: record<cid: string, id: int, url: string>, connected_endpoint: record, connected_endpoint_type: string, connection_status: record<label: string, value: bool>, description: string, id: int, port_speed: int, pp_info: string, site: record<id: int, name: string, slug: string, url: string>, term_side: string, upstream_speed: int, xconnect_id: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
   let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/circuits/circuit-terminations/{id}/"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
 }
 
 # PATCH /circuits/circuit-terminations/{id}/
@@ -303,12 +327,13 @@ export def "circuits-circuit-terminations update-by-id" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
   let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/circuits/circuit-terminations/{id}/"))
   let req_body = {"cable": $cable, "circuit": $circuit, "connection_status": $connection_status, "description": $description, "port_speed": $port_speed, "pp_info": $pp_info, "site": $site, "term_side": $term_side, "upstream_speed": $upstream_speed, "xconnect_id": $xconnect_id} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "patch" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body
+  do-request "patch" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: {}, body: $req_body}
 }
 
 # PUT /circuits/circuit-terminations/{id}/
@@ -340,12 +365,13 @@ export def "circuits-circuit-terminations update-by-id-1" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
   let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/circuits/circuit-terminations/{id}/"))
   let req_body = {"cable": $cable, "circuit": $circuit, "connection_status": $connection_status, "description": $description, "port_speed": $port_speed, "pp_info": $pp_info, "site": $site, "term_side": $term_side, "upstream_speed": $upstream_speed, "xconnect_id": $xconnect_id} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: {}, body: $req_body}
 }
 
 # Call to super to allow for caching
@@ -398,7 +424,7 @@ export def "circuits-circuit-types list" [
   let full_url = (build-url $base "/circuits/circuit-types/" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"id": $id, "name": $name, "slug": $slug, "q": $q, "id__n": $id_n, "id__lte": $id_lte, "id__lt": $id_lt, "id__gte": $id_gte, "id__gt": $id_gt, "name__n": $name_n, "name__ic": $name_ic, "name__nic": $name_nic, "name__iew": $name_iew, "name__niew": $name_niew, "name__isw": $name_isw, "name__nisw": $name_nisw, "name__ie": $name_ie, "name__nie": $name_nie, "slug__n": $slug_n, "slug__ic": $slug_ic, "slug__nic": $slug_nic, "slug__iew": $slug_iew, "slug__niew": $slug_niew, "slug__isw": $slug_isw, "slug__nisw": $slug_nisw, "slug__ie": $slug_ie, "slug__nie": $slug_nie, "limit": $limit, "offset": $offset} | compact), body: null}
 }
 
 # POST /circuits/circuit-types/
@@ -426,7 +452,7 @@ export def "circuits-circuit-types create" [
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: {}, body: $req_body}
 }
 
 # DELETE /circuits/circuit-types/{id}/
@@ -446,10 +472,11 @@ export def "circuits-circuit-types delete" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
   let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/circuits/circuit-types/{id}/"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
 }
 
 # Call to super to allow for caching
@@ -470,10 +497,11 @@ export def "circuits-circuit-types get" [
 ]: nothing -> record<circuit_count: int, description: string, id: int, name: string, slug: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
   let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/circuits/circuit-types/{id}/"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
 }
 
 # PATCH /circuits/circuit-types/{id}/
@@ -497,12 +525,13 @@ export def "circuits-circuit-types update-by-id" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
   let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/circuits/circuit-types/{id}/"))
   let req_body = {"description": $description, "name": $name, "slug": $slug} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "patch" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body
+  do-request "patch" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: {}, body: $req_body}
 }
 
 # PUT /circuits/circuit-types/{id}/
@@ -526,12 +555,13 @@ export def "circuits-circuit-types update-by-id-1" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
   let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/circuits/circuit-types/{id}/"))
   let req_body = {"description": $description, "name": $name, "slug": $slug} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: {}, body: $req_body}
 }
 
 # Call to super to allow for caching
@@ -620,7 +650,7 @@ export def "circuits-circuits list" [
   let full_url = (build-url $base "/circuits/circuits/" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"id": $id, "cid": $cid, "install_date": $install_date, "commit_rate": $commit_rate, "tenant_group_id": $tenant_group_id, "tenant_group": $tenant_group, "tenant_id": $tenant_id, "tenant": $tenant, "created": $created, "created__gte": $created_gte, "created__lte": $created_lte, "last_updated": $last_updated, "last_updated__gte": $last_updated_gte, "last_updated__lte": $last_updated_lte, "q": $q, "provider_id": $provider_id, "provider": $provider, "type_id": $type_id, "type": $type, "status": $status, "site_id": $site_id, "site": $site, "region_id": $region_id, "region": $region, "tag": $tag, "id__n": $id_n, "id__lte": $id_lte, "id__lt": $id_lt, "id__gte": $id_gte, "id__gt": $id_gt, "cid__n": $cid_n, "cid__ic": $cid_ic, "cid__nic": $cid_nic, "cid__iew": $cid_iew, "cid__niew": $cid_niew, "cid__isw": $cid_isw, "cid__nisw": $cid_nisw, "cid__ie": $cid_ie, "cid__nie": $cid_nie, "install_date__n": $install_date_n, "install_date__lte": $install_date_lte, "install_date__lt": $install_date_lt, "install_date__gte": $install_date_gte, "install_date__gt": $install_date_gt, "commit_rate__n": $commit_rate_n, "commit_rate__lte": $commit_rate_lte, "commit_rate__lt": $commit_rate_lt, "commit_rate__gte": $commit_rate_gte, "commit_rate__gt": $commit_rate_gt, "tenant_group_id__n": $tenant_group_id_n, "tenant_group__n": $tenant_group_n, "tenant_id__n": $tenant_id_n, "tenant__n": $tenant_n, "provider_id__n": $provider_id_n, "provider__n": $provider_n, "type_id__n": $type_id_n, "type__n": $type_n, "status__n": $status_n, "site_id__n": $site_id_n, "site__n": $site_n, "region_id__n": $region_id_n, "region__n": $region_n, "tag__n": $tag_n, "limit": $limit, "offset": $offset} | compact), body: null}
 }
 
 # POST /circuits/circuits/
@@ -656,7 +686,7 @@ export def "circuits-circuits create" [
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: {}, body: $req_body}
 }
 
 # DELETE /circuits/circuits/{id}/
@@ -676,10 +706,11 @@ export def "circuits-circuits delete" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
   let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/circuits/circuits/{id}/"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
 }
 
 # Call to super to allow for caching
@@ -700,10 +731,11 @@ export def "circuits-circuits get" [
 ]: nothing -> record<cid: string, comments: string, commit_rate: int, created: string, custom_fields: record, description: string, id: int, install_date: string, last_updated: string, provider: record<circuit_count: int, id: int, name: string, slug: string, url: string>, status: record<label: string, value: string>, tags: list<string>, tenant: record<id: int, name: string, slug: string, url: string>, termination_a: record<connected_endpoint: record<cable: int, connection_status: record, device: record, id: int, name: string, url: string>, id: int, port_speed: int, site: record<id: int, name: string, slug: string, url: string>, upstream_speed: int, url: string, xconnect_id: string>, termination_z: record<connected_endpoint: record<cable: int, connection_status: record, device: record, id: int, name: string, url: string>, id: int, port_speed: int, site: record<id: int, name: string, slug: string, url: string>, upstream_speed: int, url: string, xconnect_id: string>, type: record<circuit_count: int, id: int, name: string, slug: string, url: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
   let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/circuits/circuits/{id}/"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
 }
 
 # PATCH /circuits/circuits/{id}/
@@ -735,12 +767,13 @@ export def "circuits-circuits update-by-id" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
   let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/circuits/circuits/{id}/"))
   let req_body = {"cid": $cid, "comments": $comments, "commit_rate": $commit_rate, "custom_fields": $custom_fields, "description": $description, "install_date": $install_date, "provider": $provider, "status": $status, "tags": $tags, "tenant": $tenant, "type": $type} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "patch" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body
+  do-request "patch" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: {}, body: $req_body}
 }
 
 # PUT /circuits/circuits/{id}/
@@ -772,12 +805,13 @@ export def "circuits-circuits update-by-id-1" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
   let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/circuits/circuits/{id}/"))
   let req_body = {"cid": $cid, "comments": $comments, "commit_rate": $commit_rate, "custom_fields": $custom_fields, "description": $description, "install_date": $install_date, "provider": $provider, "status": $status, "tags": $tags, "tenant": $tenant, "type": $type} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: {}, body: $req_body}
 }
 
 # Call to super to allow for caching
@@ -862,7 +896,7 @@ export def "circuits-providers list" [
   let full_url = (build-url $base "/circuits/providers/" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"id": $id, "name": $name, "slug": $slug, "asn": $asn, "account": $account, "created": $created, "created__gte": $created_gte, "created__lte": $created_lte, "last_updated": $last_updated, "last_updated__gte": $last_updated_gte, "last_updated__lte": $last_updated_lte, "q": $q, "region_id": $region_id, "region": $region, "site_id": $site_id, "site": $site, "tag": $tag, "id__n": $id_n, "id__lte": $id_lte, "id__lt": $id_lt, "id__gte": $id_gte, "id__gt": $id_gt, "name__n": $name_n, "name__ic": $name_ic, "name__nic": $name_nic, "name__iew": $name_iew, "name__niew": $name_niew, "name__isw": $name_isw, "name__nisw": $name_nisw, "name__ie": $name_ie, "name__nie": $name_nie, "slug__n": $slug_n, "slug__ic": $slug_ic, "slug__nic": $slug_nic, "slug__iew": $slug_iew, "slug__niew": $slug_niew, "slug__isw": $slug_isw, "slug__nisw": $slug_nisw, "slug__ie": $slug_ie, "slug__nie": $slug_nie, "asn__n": $asn_n, "asn__lte": $asn_lte, "asn__lt": $asn_lt, "asn__gte": $asn_gte, "asn__gt": $asn_gt, "account__n": $account_n, "account__ic": $account_ic, "account__nic": $account_nic, "account__iew": $account_iew, "account__niew": $account_niew, "account__isw": $account_isw, "account__nisw": $account_nisw, "account__ie": $account_ie, "account__nie": $account_nie, "region_id__n": $region_id_n, "region__n": $region_n, "site_id__n": $site_id_n, "site__n": $site_n, "tag__n": $tag_n, "limit": $limit, "offset": $offset} | compact), body: null}
 }
 
 # POST /circuits/providers/
@@ -897,7 +931,7 @@ export def "circuits-providers create" [
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: {}, body: $req_body}
 }
 
 # DELETE /circuits/providers/{id}/
@@ -917,10 +951,11 @@ export def "circuits-providers delete" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
   let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/circuits/providers/{id}/"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
 }
 
 # Call to super to allow for caching
@@ -941,10 +976,11 @@ export def "circuits-providers get" [
 ]: nothing -> record<account: string, admin_contact: string, asn: int, circuit_count: int, comments: string, created: string, custom_fields: record, id: int, last_updated: string, name: string, noc_contact: string, portal_url: string, slug: string, tags: list<string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
   let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/circuits/providers/{id}/"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
 }
 
 # PATCH /circuits/providers/{id}/
@@ -975,12 +1011,13 @@ export def "circuits-providers update-by-id" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
   let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/circuits/providers/{id}/"))
   let req_body = {"account": $account, "admin_contact": $admin_contact, "asn": $asn, "comments": $comments, "custom_fields": $custom_fields, "name": $name, "noc_contact": $noc_contact, "portal_url": $portal_url, "slug": $slug, "tags": $tags} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "patch" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body
+  do-request "patch" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: {}, body: $req_body}
 }
 
 # PUT /circuits/providers/{id}/
@@ -1011,12 +1048,13 @@ export def "circuits-providers update-by-id-1" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
   let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/circuits/providers/{id}/"))
   let req_body = {"account": $account, "admin_contact": $admin_contact, "asn": $asn, "comments": $comments, "custom_fields": $custom_fields, "name": $name, "noc_contact": $noc_contact, "portal_url": $portal_url, "slug": $slug, "tags": $tags} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: {}, body: $req_body}
 }
 
 # A convenience method for rendering graphs for a particular provider.
@@ -1037,10 +1075,11 @@ export def "circuits-providers-graphs get" [
 ]: nothing -> record<account: string, admin_contact: string, asn: int, circuit_count: int, comments: string, created: string, custom_fields: record, id: int, last_updated: string, name: string, noc_contact: string, portal_url: string, slug: string, tags: list<string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
   let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/circuits/providers/{id}/graphs/"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
 }
 
 # Call to super to allow for caching
@@ -1105,7 +1144,7 @@ export def "dcim-cables list" [
   let full_url = (build-url $base "/dcim/cables/" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"id": $id, "label": $label, "length": $length, "length_unit": $length_unit, "q": $q, "type": $type, "status": $status, "color": $color, "device_id": $device_id, "device": $device, "rack_id": $rack_id, "rack": $rack, "site_id": $site_id, "site": $site, "tenant_id": $tenant_id, "tenant": $tenant, "id__n": $id_n, "id__lte": $id_lte, "id__lt": $id_lt, "id__gte": $id_gte, "id__gt": $id_gt, "label__n": $label_n, "label__ic": $label_ic, "label__nic": $label_nic, "label__iew": $label_iew, "label__niew": $label_niew, "label__isw": $label_isw, "label__nisw": $label_nisw, "label__ie": $label_ie, "label__nie": $label_nie, "length__n": $length_n, "length__lte": $length_lte, "length__lt": $length_lt, "length__gte": $length_gte, "length__gt": $length_gt, "length_unit__n": $length_unit_n, "type__n": $type_n, "status__n": $status_n, "color__n": $color_n, "limit": $limit, "offset": $offset} | compact), body: null}
 }
 
 # POST /dcim/cables/
@@ -1140,7 +1179,7 @@ export def "dcim-cables create" [
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: {}, body: $req_body}
 }
 
 # DELETE /dcim/cables/{id}/
@@ -1160,10 +1199,11 @@ export def "dcim-cables delete" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
   let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/dcim/cables/{id}/"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
 }
 
 # Call to super to allow for caching
@@ -1184,10 +1224,11 @@ export def "dcim-cables get" [
 ]: nothing -> record<color: string, id: int, label: string, length: int, length_unit: record<label: string, value: string>, status: record<label: string, value: string>, termination_a: record, termination_a_id: int, termination_a_type: string, termination_b: record, termination_b_id: int, termination_b_type: string, type: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
   let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/dcim/cables/{id}/"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
 }
 
 # PATCH /dcim/cables/{id}/
@@ -1218,12 +1259,13 @@ export def "dcim-cables update-by-id" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
   let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/dcim/cables/{id}/"))
   let req_body = {"color": $color, "label": $label, "length": $length, "length_unit": $length_unit, "status": $status, "termination_a_id": $termination_a_id, "termination_a_type": $termination_a_type, "termination_b_id": $termination_b_id, "termination_b_type": $termination_b_type, "type": $type} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "patch" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body
+  do-request "patch" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: {}, body: $req_body}
 }
 
 # PUT /dcim/cables/{id}/
@@ -1254,12 +1296,13 @@ export def "dcim-cables update-by-id-1" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
   let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/dcim/cables/{id}/"))
   let req_body = {"color": $color, "label": $label, "length": $length, "length_unit": $length_unit, "status": $status, "termination_a_id": $termination_a_id, "termination_a_type": $termination_a_type, "termination_b_id": $termination_b_id, "termination_b_type": $termination_b_type, "type": $type} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: {}, body: $req_body}
 }
 
 # This endpoint allows a user to determine what device (if any) is connected to a given peer device and peer interface. This is useful in a situation where a device boots with no configuration, but can detect its neighbors via a protocol such as LLDP. Two query parameters must be included in the request: * `peer_device`: The name of the peer device * `peer_interface`: The name of the peer interface
@@ -1285,7 +1328,7 @@ export def "dcim-connected-device list" [
   let full_url = (build-url $base "/dcim/connected-device/" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"peer_device": $peer_device, "peer_interface": $peer_interface} | compact), body: null}
 }
 
 # GET /dcim/console-connections/
@@ -1325,7 +1368,7 @@ export def "dcim-console-connections list" [
   let full_url = (build-url $base "/dcim/console-connections/" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"name": $name, "connection_status": $connection_status, "site": $site, "device_id": $device_id, "device": $device, "name__n": $name_n, "name__ic": $name_ic, "name__nic": $name_nic, "name__iew": $name_iew, "name__niew": $name_niew, "name__isw": $name_isw, "name__nisw": $name_nisw, "name__ie": $name_ie, "name__nie": $name_nie, "connection_status__n": $connection_status_n, "limit": $limit, "offset": $offset} | compact), body: null}
 }
 
 # Call to super to allow for caching
@@ -1372,7 +1415,7 @@ export def "dcim-console-port-templates list" [
   let full_url = (build-url $base "/dcim/console-port-templates/" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"id": $id, "name": $name, "type": $type, "q": $q, "devicetype_id": $devicetype_id, "id__n": $id_n, "id__lte": $id_lte, "id__lt": $id_lt, "id__gte": $id_gte, "id__gt": $id_gt, "name__n": $name_n, "name__ic": $name_ic, "name__nic": $name_nic, "name__iew": $name_iew, "name__niew": $name_niew, "name__isw": $name_isw, "name__nisw": $name_nisw, "name__ie": $name_ie, "name__nie": $name_nie, "type__n": $type_n, "devicetype_id__n": $devicetype_id_n, "limit": $limit, "offset": $offset} | compact), body: null}
 }
 
 # POST /dcim/console-port-templates/
@@ -1400,7 +1443,7 @@ export def "dcim-console-port-templates create" [
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: {}, body: $req_body}
 }
 
 # DELETE /dcim/console-port-templates/{id}/
@@ -1420,10 +1463,11 @@ export def "dcim-console-port-templates delete" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
   let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/dcim/console-port-templates/{id}/"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
 }
 
 # Call to super to allow for caching
@@ -1444,10 +1488,11 @@ export def "dcim-console-port-templates get" [
 ]: nothing -> record<device_type: record<device_count: int, display_name: string, id: int, manufacturer: record<devicetype_count: int, id: int, name: string, slug: string, url: string>, model: string, slug: string, url: string>, id: int, name: string, type: record<label: string, value: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
   let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/dcim/console-port-templates/{id}/"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
 }
 
 # PATCH /dcim/console-port-templates/{id}/
@@ -1471,12 +1516,13 @@ export def "dcim-console-port-templates update-by-id" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
   let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/dcim/console-port-templates/{id}/"))
   let req_body = {"device_type": $device_type, "name": $name, "type": $type} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "patch" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body
+  do-request "patch" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: {}, body: $req_body}
 }
 
 # PUT /dcim/console-port-templates/{id}/
@@ -1500,12 +1546,13 @@ export def "dcim-console-port-templates update-by-id-1" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
   let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/dcim/console-port-templates/{id}/"))
   let req_body = {"device_type": $device_type, "name": $name, "type": $type} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: {}, body: $req_body}
 }
 
 # Call to super to allow for caching
@@ -1577,7 +1624,7 @@ export def "dcim-console-ports list" [
   let full_url = (build-url $base "/dcim/console-ports/" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"id": $id, "name": $name, "description": $description, "connection_status": $connection_status, "q": $q, "region_id": $region_id, "region": $region, "site_id": $site_id, "site": $site, "device_id": $device_id, "device": $device, "tag": $tag, "type": $type, "cabled": $cabled, "id__n": $id_n, "id__lte": $id_lte, "id__lt": $id_lt, "id__gte": $id_gte, "id__gt": $id_gt, "name__n": $name_n, "name__ic": $name_ic, "name__nic": $name_nic, "name__iew": $name_iew, "name__niew": $name_niew, "name__isw": $name_isw, "name__nisw": $name_nisw, "name__ie": $name_ie, "name__nie": $name_nie, "description__n": $description_n, "description__ic": $description_ic, "description__nic": $description_nic, "description__iew": $description_iew, "description__niew": $description_niew, "description__isw": $description_isw, "description__nisw": $description_nisw, "description__ie": $description_ie, "description__nie": $description_nie, "connection_status__n": $connection_status_n, "region_id__n": $region_id_n, "region__n": $region_n, "site_id__n": $site_id_n, "site__n": $site_n, "device_id__n": $device_id_n, "device__n": $device_n, "tag__n": $tag_n, "type__n": $type_n, "limit": $limit, "offset": $offset} | compact), body: null}
 }
 
 # POST /dcim/console-ports/
@@ -1610,7 +1657,7 @@ export def "dcim-console-ports create" [
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: {}, body: $req_body}
 }
 
 # DELETE /dcim/console-ports/{id}/
@@ -1630,10 +1677,11 @@ export def "dcim-console-ports delete" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
   let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/dcim/console-ports/{id}/"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
 }
 
 # Call to super to allow for caching
@@ -1654,10 +1702,11 @@ export def "dcim-console-ports get" [
 ]: nothing -> record<cable: record<id: int, label: string, url: string>, connected_endpoint: record, connected_endpoint_type: string, connection_status: record<label: string, value: bool>, description: string, device: record<display_name: string, id: int, name: string, url: string>, id: int, name: string, tags: list<string>, type: record<label: string, value: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
   let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/dcim/console-ports/{id}/"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
 }
 
 # PATCH /dcim/console-ports/{id}/
@@ -1686,12 +1735,13 @@ export def "dcim-console-ports update-by-id" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
   let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/dcim/console-ports/{id}/"))
   let req_body = {"cable": $cable, "connection_status": $connection_status, "description": $description, "device": $device, "name": $name, "tags": $tags, "type": $type} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "patch" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body
+  do-request "patch" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: {}, body: $req_body}
 }
 
 # PUT /dcim/console-ports/{id}/
@@ -1720,12 +1770,13 @@ export def "dcim-console-ports update-by-id-1" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
   let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/dcim/console-ports/{id}/"))
   let req_body = {"cable": $cable, "connection_status": $connection_status, "description": $description, "device": $device, "name": $name, "tags": $tags, "type": $type} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: {}, body: $req_body}
 }
 
 # Trace a complete cable path and return each segment as a three-tuple of (termination, cable, termination).
@@ -1746,10 +1797,11 @@ export def "dcim-console-ports-trace get" [
 ]: nothing -> record<cable: record<id: int, label: string, url: string>, connected_endpoint: record, connected_endpoint_type: string, connection_status: record<label: string, value: bool>, description: string, device: record<display_name: string, id: int, name: string, url: string>, id: int, name: string, tags: list<string>, type: record<label: string, value: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
   let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/dcim/console-ports/{id}/trace/"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
 }
 
 # Call to super to allow for caching
@@ -1796,7 +1848,7 @@ export def "dcim-console-server-port-templates list" [
   let full_url = (build-url $base "/dcim/console-server-port-templates/" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"id": $id, "name": $name, "type": $type, "q": $q, "devicetype_id": $devicetype_id, "id__n": $id_n, "id__lte": $id_lte, "id__lt": $id_lt, "id__gte": $id_gte, "id__gt": $id_gt, "name__n": $name_n, "name__ic": $name_ic, "name__nic": $name_nic, "name__iew": $name_iew, "name__niew": $name_niew, "name__isw": $name_isw, "name__nisw": $name_nisw, "name__ie": $name_ie, "name__nie": $name_nie, "type__n": $type_n, "devicetype_id__n": $devicetype_id_n, "limit": $limit, "offset": $offset} | compact), body: null}
 }
 
 # POST /dcim/console-server-port-templates/
@@ -1824,7 +1876,7 @@ export def "dcim-console-server-port-templates create" [
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: {}, body: $req_body}
 }
 
 # DELETE /dcim/console-server-port-templates/{id}/
@@ -1844,10 +1896,11 @@ export def "dcim-console-server-port-templates delete" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
   let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/dcim/console-server-port-templates/{id}/"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
 }
 
 # Call to super to allow for caching
@@ -1868,10 +1921,11 @@ export def "dcim-console-server-port-templates get" [
 ]: nothing -> record<device_type: record<device_count: int, display_name: string, id: int, manufacturer: record<devicetype_count: int, id: int, name: string, slug: string, url: string>, model: string, slug: string, url: string>, id: int, name: string, type: record<label: string, value: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
   let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/dcim/console-server-port-templates/{id}/"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
 }
 
 # PATCH /dcim/console-server-port-templates/{id}/
@@ -1895,12 +1949,13 @@ export def "dcim-console-server-port-templates update-by-id" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
   let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/dcim/console-server-port-templates/{id}/"))
   let req_body = {"device_type": $device_type, "name": $name, "type": $type} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "patch" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body
+  do-request "patch" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: {}, body: $req_body}
 }
 
 # PUT /dcim/console-server-port-templates/{id}/
@@ -1924,12 +1979,13 @@ export def "dcim-console-server-port-templates update-by-id-1" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
   let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/dcim/console-server-port-templates/{id}/"))
   let req_body = {"device_type": $device_type, "name": $name, "type": $type} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: {}, body: $req_body}
 }
 
 # Call to super to allow for caching
@@ -2001,7 +2057,7 @@ export def "dcim-console-server-ports list" [
   let full_url = (build-url $base "/dcim/console-server-ports/" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"id": $id, "name": $name, "description": $description, "connection_status": $connection_status, "q": $q, "region_id": $region_id, "region": $region, "site_id": $site_id, "site": $site, "device_id": $device_id, "device": $device, "tag": $tag, "type": $type, "cabled": $cabled, "id__n": $id_n, "id__lte": $id_lte, "id__lt": $id_lt, "id__gte": $id_gte, "id__gt": $id_gt, "name__n": $name_n, "name__ic": $name_ic, "name__nic": $name_nic, "name__iew": $name_iew, "name__niew": $name_niew, "name__isw": $name_isw, "name__nisw": $name_nisw, "name__ie": $name_ie, "name__nie": $name_nie, "description__n": $description_n, "description__ic": $description_ic, "description__nic": $description_nic, "description__iew": $description_iew, "description__niew": $description_niew, "description__isw": $description_isw, "description__nisw": $description_nisw, "description__ie": $description_ie, "description__nie": $description_nie, "connection_status__n": $connection_status_n, "region_id__n": $region_id_n, "region__n": $region_n, "site_id__n": $site_id_n, "site__n": $site_n, "device_id__n": $device_id_n, "device__n": $device_n, "tag__n": $tag_n, "type__n": $type_n, "limit": $limit, "offset": $offset} | compact), body: null}
 }
 
 # POST /dcim/console-server-ports/
@@ -2034,7 +2090,7 @@ export def "dcim-console-server-ports create" [
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: {}, body: $req_body}
 }
 
 # DELETE /dcim/console-server-ports/{id}/
@@ -2054,10 +2110,11 @@ export def "dcim-console-server-ports delete" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
   let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/dcim/console-server-ports/{id}/"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
 }
 
 # Call to super to allow for caching
@@ -2078,10 +2135,11 @@ export def "dcim-console-server-ports get" [
 ]: nothing -> record<cable: record<id: int, label: string, url: string>, connected_endpoint: record, connected_endpoint_type: string, connection_status: record<label: string, value: bool>, description: string, device: record<display_name: string, id: int, name: string, url: string>, id: int, name: string, tags: list<string>, type: record<label: string, value: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
   let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/dcim/console-server-ports/{id}/"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
 }
 
 # PATCH /dcim/console-server-ports/{id}/
@@ -2110,12 +2168,13 @@ export def "dcim-console-server-ports update-by-id" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
   let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/dcim/console-server-ports/{id}/"))
   let req_body = {"cable": $cable, "connection_status": $connection_status, "description": $description, "device": $device, "name": $name, "tags": $tags, "type": $type} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "patch" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body
+  do-request "patch" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: {}, body: $req_body}
 }
 
 # PUT /dcim/console-server-ports/{id}/
@@ -2144,12 +2203,13 @@ export def "dcim-console-server-ports update-by-id-1" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
   let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/dcim/console-server-ports/{id}/"))
   let req_body = {"cable": $cable, "connection_status": $connection_status, "description": $description, "device": $device, "name": $name, "tags": $tags, "type": $type} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: {}, body: $req_body}
 }
 
 # Trace a complete cable path and return each segment as a three-tuple of (termination, cable, termination).
@@ -2170,10 +2230,11 @@ export def "dcim-console-server-ports-trace get" [
 ]: nothing -> record<cable: record<id: int, label: string, url: string>, connected_endpoint: record, connected_endpoint_type: string, connection_status: record<label: string, value: bool>, description: string, device: record<display_name: string, id: int, name: string, url: string>, id: int, name: string, tags: list<string>, type: record<label: string, value: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
   let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/dcim/console-server-ports/{id}/trace/"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
 }
 
 # Call to super to allow for caching
@@ -2218,7 +2279,7 @@ export def "dcim-device-bay-templates list" [
   let full_url = (build-url $base "/dcim/device-bay-templates/" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"id": $id, "name": $name, "q": $q, "devicetype_id": $devicetype_id, "id__n": $id_n, "id__lte": $id_lte, "id__lt": $id_lt, "id__gte": $id_gte, "id__gt": $id_gt, "name__n": $name_n, "name__ic": $name_ic, "name__nic": $name_nic, "name__iew": $name_iew, "name__niew": $name_niew, "name__isw": $name_isw, "name__nisw": $name_nisw, "name__ie": $name_ie, "name__nie": $name_nie, "devicetype_id__n": $devicetype_id_n, "limit": $limit, "offset": $offset} | compact), body: null}
 }
 
 # POST /dcim/device-bay-templates/
@@ -2245,7 +2306,7 @@ export def "dcim-device-bay-templates create" [
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: {}, body: $req_body}
 }
 
 # DELETE /dcim/device-bay-templates/{id}/
@@ -2265,10 +2326,11 @@ export def "dcim-device-bay-templates delete" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
   let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/dcim/device-bay-templates/{id}/"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
 }
 
 # Call to super to allow for caching
@@ -2289,10 +2351,11 @@ export def "dcim-device-bay-templates get" [
 ]: nothing -> record<device_type: record<device_count: int, display_name: string, id: int, manufacturer: record<devicetype_count: int, id: int, name: string, slug: string, url: string>, model: string, slug: string, url: string>, id: int, name: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
   let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/dcim/device-bay-templates/{id}/"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
 }
 
 # PATCH /dcim/device-bay-templates/{id}/
@@ -2315,12 +2378,13 @@ export def "dcim-device-bay-templates update-by-id" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
   let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/dcim/device-bay-templates/{id}/"))
   let req_body = {"device_type": $device_type, "name": $name} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "patch" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body
+  do-request "patch" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: {}, body: $req_body}
 }
 
 # PUT /dcim/device-bay-templates/{id}/
@@ -2343,12 +2407,13 @@ export def "dcim-device-bay-templates update-by-id-1" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
   let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/dcim/device-bay-templates/{id}/"))
   let req_body = {"device_type": $device_type, "name": $name} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: {}, body: $req_body}
 }
 
 # Call to super to allow for caching
@@ -2415,7 +2480,7 @@ export def "dcim-device-bays list" [
   let full_url = (build-url $base "/dcim/device-bays/" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"id": $id, "name": $name, "description": $description, "q": $q, "region_id": $region_id, "region": $region, "site_id": $site_id, "site": $site, "device_id": $device_id, "device": $device, "tag": $tag, "id__n": $id_n, "id__lte": $id_lte, "id__lt": $id_lt, "id__gte": $id_gte, "id__gt": $id_gt, "name__n": $name_n, "name__ic": $name_ic, "name__nic": $name_nic, "name__iew": $name_iew, "name__niew": $name_niew, "name__isw": $name_isw, "name__nisw": $name_nisw, "name__ie": $name_ie, "name__nie": $name_nie, "description__n": $description_n, "description__ic": $description_ic, "description__nic": $description_nic, "description__iew": $description_iew, "description__niew": $description_niew, "description__isw": $description_isw, "description__nisw": $description_nisw, "description__ie": $description_ie, "description__nie": $description_nie, "region_id__n": $region_id_n, "region__n": $region_n, "site_id__n": $site_id_n, "site__n": $site_n, "device_id__n": $device_id_n, "device__n": $device_n, "tag__n": $tag_n, "limit": $limit, "offset": $offset} | compact), body: null}
 }
 
 # POST /dcim/device-bays/
@@ -2445,7 +2510,7 @@ export def "dcim-device-bays create" [
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: {}, body: $req_body}
 }
 
 # DELETE /dcim/device-bays/{id}/
@@ -2465,10 +2530,11 @@ export def "dcim-device-bays delete" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
   let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/dcim/device-bays/{id}/"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
 }
 
 # Call to super to allow for caching
@@ -2489,10 +2555,11 @@ export def "dcim-device-bays get" [
 ]: nothing -> record<description: string, device: record<display_name: string, id: int, name: string, url: string>, id: int, installed_device: record<display_name: string, id: int, name: string, url: string>, name: string, tags: list<string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
   let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/dcim/device-bays/{id}/"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
 }
 
 # PATCH /dcim/device-bays/{id}/
@@ -2518,12 +2585,13 @@ export def "dcim-device-bays update-by-id" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
   let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/dcim/device-bays/{id}/"))
   let req_body = {"description": $description, "device": $device, "installed_device": $installed_device, "name": $name, "tags": $tags} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "patch" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body
+  do-request "patch" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: {}, body: $req_body}
 }
 
 # PUT /dcim/device-bays/{id}/
@@ -2549,12 +2617,13 @@ export def "dcim-device-bays update-by-id-1" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
   let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/dcim/device-bays/{id}/"))
   let req_body = {"description": $description, "device": $device, "installed_device": $installed_device, "name": $name, "tags": $tags} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: {}, body: $req_body}
 }
 
 # Call to super to allow for caching
@@ -2618,7 +2687,7 @@ export def "dcim-device-roles list" [
   let full_url = (build-url $base "/dcim/device-roles/" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"id": $id, "name": $name, "slug": $slug, "color": $color, "vm_role": $vm_role, "q": $q, "id__n": $id_n, "id__lte": $id_lte, "id__lt": $id_lt, "id__gte": $id_gte, "id__gt": $id_gt, "name__n": $name_n, "name__ic": $name_ic, "name__nic": $name_nic, "name__iew": $name_iew, "name__niew": $name_niew, "name__isw": $name_isw, "name__nisw": $name_nisw, "name__ie": $name_ie, "name__nie": $name_nie, "slug__n": $slug_n, "slug__ic": $slug_ic, "slug__nic": $slug_nic, "slug__iew": $slug_iew, "slug__niew": $slug_niew, "slug__isw": $slug_isw, "slug__nisw": $slug_nisw, "slug__ie": $slug_ie, "slug__nie": $slug_nie, "color__n": $color_n, "color__ic": $color_ic, "color__nic": $color_nic, "color__iew": $color_iew, "color__niew": $color_niew, "color__isw": $color_isw, "color__nisw": $color_nisw, "color__ie": $color_ie, "color__nie": $color_nie, "limit": $limit, "offset": $offset} | compact), body: null}
 }
 
 # POST /dcim/device-roles/
@@ -2648,7 +2717,7 @@ export def "dcim-device-roles create" [
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: {}, body: $req_body}
 }
 
 # DELETE /dcim/device-roles/{id}/
@@ -2668,10 +2737,11 @@ export def "dcim-device-roles delete" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
   let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/dcim/device-roles/{id}/"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
 }
 
 # Call to super to allow for caching
@@ -2692,10 +2762,11 @@ export def "dcim-device-roles get" [
 ]: nothing -> record<color: string, description: string, device_count: int, id: int, name: string, slug: string, virtualmachine_count: int, vm_role: bool> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
   let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/dcim/device-roles/{id}/"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
 }
 
 # PATCH /dcim/device-roles/{id}/
@@ -2721,12 +2792,13 @@ export def "dcim-device-roles update-by-id" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
   let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/dcim/device-roles/{id}/"))
   let req_body = {"color": $color, "description": $description, "name": $name, "slug": $slug, "vm_role": $vm_role} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "patch" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body
+  do-request "patch" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: {}, body: $req_body}
 }
 
 # PUT /dcim/device-roles/{id}/
@@ -2752,12 +2824,13 @@ export def "dcim-device-roles update-by-id-1" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
   let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/dcim/device-roles/{id}/"))
   let req_body = {"color": $color, "description": $description, "name": $name, "slug": $slug, "vm_role": $vm_role} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: {}, body: $req_body}
 }
 
 # Call to super to allow for caching
@@ -2848,7 +2921,7 @@ export def "dcim-device-types list" [
   let full_url = (build-url $base "/dcim/device-types/" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"id": $id, "model": $model, "slug": $slug, "part_number": $part_number, "u_height": $u_height, "is_full_depth": $is_full_depth, "subdevice_role": $subdevice_role, "created": $created, "created__gte": $created_gte, "created__lte": $created_lte, "last_updated": $last_updated, "last_updated__gte": $last_updated_gte, "last_updated__lte": $last_updated_lte, "q": $q, "manufacturer_id": $manufacturer_id, "manufacturer": $manufacturer, "console_ports": $console_ports, "console_server_ports": $console_server_ports, "power_ports": $power_ports, "power_outlets": $power_outlets, "interfaces": $interfaces, "pass_through_ports": $pass_through_ports, "device_bays": $device_bays, "tag": $tag, "id__n": $id_n, "id__lte": $id_lte, "id__lt": $id_lt, "id__gte": $id_gte, "id__gt": $id_gt, "model__n": $model_n, "model__ic": $model_ic, "model__nic": $model_nic, "model__iew": $model_iew, "model__niew": $model_niew, "model__isw": $model_isw, "model__nisw": $model_nisw, "model__ie": $model_ie, "model__nie": $model_nie, "slug__n": $slug_n, "slug__ic": $slug_ic, "slug__nic": $slug_nic, "slug__iew": $slug_iew, "slug__niew": $slug_niew, "slug__isw": $slug_isw, "slug__nisw": $slug_nisw, "slug__ie": $slug_ie, "slug__nie": $slug_nie, "part_number__n": $part_number_n, "part_number__ic": $part_number_ic, "part_number__nic": $part_number_nic, "part_number__iew": $part_number_iew, "part_number__niew": $part_number_niew, "part_number__isw": $part_number_isw, "part_number__nisw": $part_number_nisw, "part_number__ie": $part_number_ie, "part_number__nie": $part_number_nie, "u_height__n": $u_height_n, "u_height__lte": $u_height_lte, "u_height__lt": $u_height_lt, "u_height__gte": $u_height_gte, "u_height__gt": $u_height_gt, "subdevice_role__n": $subdevice_role_n, "manufacturer_id__n": $manufacturer_id_n, "manufacturer__n": $manufacturer_n, "tag__n": $tag_n, "limit": $limit, "offset": $offset} | compact), body: null}
 }
 
 # POST /dcim/device-types/
@@ -2883,7 +2956,7 @@ export def "dcim-device-types create" [
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: {}, body: $req_body}
 }
 
 # DELETE /dcim/device-types/{id}/
@@ -2903,10 +2976,11 @@ export def "dcim-device-types delete" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
   let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/dcim/device-types/{id}/"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
 }
 
 # Call to super to allow for caching
@@ -2927,10 +3001,11 @@ export def "dcim-device-types get" [
 ]: nothing -> record<comments: string, created: string, custom_fields: record, device_count: int, display_name: string, front_image: string, id: int, is_full_depth: bool, last_updated: string, manufacturer: record<devicetype_count: int, id: int, name: string, slug: string, url: string>, model: string, part_number: string, rear_image: string, slug: string, subdevice_role: record<label: string, value: string>, tags: list<string>, u_height: int> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
   let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/dcim/device-types/{id}/"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
 }
 
 # PATCH /dcim/device-types/{id}/
@@ -2961,12 +3036,13 @@ export def "dcim-device-types update-by-id" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
   let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/dcim/device-types/{id}/"))
   let req_body = {"comments": $comments, "custom_fields": $custom_fields, "is_full_depth": $is_full_depth, "manufacturer": $manufacturer, "model": $model, "part_number": $part_number, "slug": $slug, "subdevice_role": $subdevice_role, "tags": $tags, "u_height": $u_height} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "patch" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body
+  do-request "patch" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: {}, body: $req_body}
 }
 
 # PUT /dcim/device-types/{id}/
@@ -2997,12 +3073,13 @@ export def "dcim-device-types update-by-id-1" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
   let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/dcim/device-types/{id}/"))
   let req_body = {"comments": $comments, "custom_fields": $custom_fields, "is_full_depth": $is_full_depth, "manufacturer": $manufacturer, "model": $model, "part_number": $part_number, "slug": $slug, "subdevice_role": $subdevice_role, "tags": $tags, "u_height": $u_height} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: {}, body: $req_body}
 }
 
 # Call to super to allow for caching
@@ -3147,7 +3224,7 @@ export def "dcim-devices list" [
   let full_url = (build-url $base "/dcim/devices/" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"id": $id, "name": $name, "asset_tag": $asset_tag, "face": $face, "position": $position, "vc_position": $vc_position, "vc_priority": $vc_priority, "tenant_group_id": $tenant_group_id, "tenant_group": $tenant_group, "tenant_id": $tenant_id, "tenant": $tenant, "local_context_data": $local_context_data, "created": $created, "created__gte": $created_gte, "created__lte": $created_lte, "last_updated": $last_updated, "last_updated__gte": $last_updated_gte, "last_updated__lte": $last_updated_lte, "q": $q, "manufacturer_id": $manufacturer_id, "manufacturer": $manufacturer, "device_type_id": $device_type_id, "role_id": $role_id, "role": $role, "platform_id": $platform_id, "platform": $platform, "region_id": $region_id, "region": $region, "site_id": $site_id, "site": $site, "rack_group_id": $rack_group_id, "rack_id": $rack_id, "cluster_id": $cluster_id, "model": $model, "status": $status, "is_full_depth": $is_full_depth, "mac_address": $mac_address, "serial": $serial, "has_primary_ip": $has_primary_ip, "virtual_chassis_id": $virtual_chassis_id, "virtual_chassis_member": $virtual_chassis_member, "console_ports": $console_ports, "console_server_ports": $console_server_ports, "power_ports": $power_ports, "power_outlets": $power_outlets, "interfaces": $interfaces, "pass_through_ports": $pass_through_ports, "device_bays": $device_bays, "tag": $tag, "id__n": $id_n, "id__lte": $id_lte, "id__lt": $id_lt, "id__gte": $id_gte, "id__gt": $id_gt, "name__n": $name_n, "name__ic": $name_ic, "name__nic": $name_nic, "name__iew": $name_iew, "name__niew": $name_niew, "name__isw": $name_isw, "name__nisw": $name_nisw, "name__ie": $name_ie, "name__nie": $name_nie, "asset_tag__n": $asset_tag_n, "asset_tag__ic": $asset_tag_ic, "asset_tag__nic": $asset_tag_nic, "asset_tag__iew": $asset_tag_iew, "asset_tag__niew": $asset_tag_niew, "asset_tag__isw": $asset_tag_isw, "asset_tag__nisw": $asset_tag_nisw, "asset_tag__ie": $asset_tag_ie, "asset_tag__nie": $asset_tag_nie, "face__n": $face_n, "position__n": $position_n, "position__lte": $position_lte, "position__lt": $position_lt, "position__gte": $position_gte, "position__gt": $position_gt, "vc_position__n": $vc_position_n, "vc_position__lte": $vc_position_lte, "vc_position__lt": $vc_position_lt, "vc_position__gte": $vc_position_gte, "vc_position__gt": $vc_position_gt, "vc_priority__n": $vc_priority_n, "vc_priority__lte": $vc_priority_lte, "vc_priority__lt": $vc_priority_lt, "vc_priority__gte": $vc_priority_gte, "vc_priority__gt": $vc_priority_gt, "tenant_group_id__n": $tenant_group_id_n, "tenant_group__n": $tenant_group_n, "tenant_id__n": $tenant_id_n, "tenant__n": $tenant_n, "manufacturer_id__n": $manufacturer_id_n, "manufacturer__n": $manufacturer_n, "device_type_id__n": $device_type_id_n, "role_id__n": $role_id_n, "role__n": $role_n, "platform_id__n": $platform_id_n, "platform__n": $platform_n, "region_id__n": $region_id_n, "region__n": $region_n, "site_id__n": $site_id_n, "site__n": $site_n, "rack_group_id__n": $rack_group_id_n, "rack_id__n": $rack_id_n, "cluster_id__n": $cluster_id_n, "model__n": $model_n, "status__n": $status_n, "mac_address__n": $mac_address_n, "mac_address__ic": $mac_address_ic, "mac_address__nic": $mac_address_nic, "mac_address__iew": $mac_address_iew, "mac_address__niew": $mac_address_niew, "mac_address__isw": $mac_address_isw, "mac_address__nisw": $mac_address_nisw, "mac_address__ie": $mac_address_ie, "mac_address__nie": $mac_address_nie, "virtual_chassis_id__n": $virtual_chassis_id_n, "tag__n": $tag_n, "limit": $limit, "offset": $offset} | compact), body: null}
 }
 
 # POST /dcim/devices/
@@ -3196,7 +3273,7 @@ export def "dcim-devices create" [
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: {}, body: $req_body}
 }
 
 # DELETE /dcim/devices/{id}/
@@ -3216,10 +3293,11 @@ export def "dcim-devices delete" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
   let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/dcim/devices/{id}/"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
 }
 
 # Call to super to allow for caching
@@ -3240,10 +3318,11 @@ export def "dcim-devices get" [
 ]: nothing -> record<asset_tag: string, cluster: record<id: int, name: string, url: string, virtualmachine_count: int>, comments: string, config_context: record, created: string, custom_fields: record, device_role: record<device_count: int, id: int, name: string, slug: string, url: string, virtualmachine_count: int>, device_type: record<device_count: int, display_name: string, id: int, manufacturer: record<devicetype_count: int, id: int, name: string, slug: string, url: string>, model: string, slug: string, url: string>, display_name: string, face: record<label: string, value: string>, id: int, last_updated: string, local_context_data: string, name: string, parent_device: record<display_name: string, id: int, name: string, url: string>, platform: record<device_count: int, id: int, name: string, slug: string, url: string, virtualmachine_count: int>, position: int, primary_ip: record<address: string, family: string, id: int, url: string>, primary_ip4: record<address: string, family: string, id: int, url: string>, primary_ip6: record<address: string, family: string, id: int, url: string>, rack: record<device_count: int, display_name: string, id: int, name: string, url: string>, serial: string, site: record<id: int, name: string, slug: string, url: string>, status: record<label: string, value: string>, tags: list<string>, tenant: record<id: int, name: string, slug: string, url: string>, vc_position: int, vc_priority: int, virtual_chassis: record<id: int, master: record<display_name: string, id: int, name: string, url: string>, member_count: int, url: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
   let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/dcim/devices/{id}/"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
 }
 
 # PATCH /dcim/devices/{id}/
@@ -3288,12 +3367,13 @@ export def "dcim-devices update-by-id" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
   let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/dcim/devices/{id}/"))
   let req_body = {"asset_tag": $asset_tag, "cluster": $cluster, "comments": $comments, "custom_fields": $custom_fields, "device_role": $device_role, "device_type": $device_type, "face": $face, "local_context_data": $local_context_data, "name": $name, "parent_device": $parent_device, "platform": $platform, "position": $position, "primary_ip4": $primary_ip4, "primary_ip6": $primary_ip6, "rack": $rack, "serial": $serial, "site": $site, "status": $status, "tags": $tags, "tenant": $tenant, "vc_position": $vc_position, "vc_priority": $vc_priority, "virtual_chassis": $virtual_chassis} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "patch" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body
+  do-request "patch" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: {}, body: $req_body}
 }
 
 # PUT /dcim/devices/{id}/
@@ -3338,12 +3418,13 @@ export def "dcim-devices update-by-id-1" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
   let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/dcim/devices/{id}/"))
   let req_body = {"asset_tag": $asset_tag, "cluster": $cluster, "comments": $comments, "custom_fields": $custom_fields, "device_role": $device_role, "device_type": $device_type, "face": $face, "local_context_data": $local_context_data, "name": $name, "parent_device": $parent_device, "platform": $platform, "position": $position, "primary_ip4": $primary_ip4, "primary_ip6": $primary_ip6, "rack": $rack, "serial": $serial, "site": $site, "status": $status, "tags": $tags, "tenant": $tenant, "vc_position": $vc_position, "vc_priority": $vc_priority, "virtual_chassis": $virtual_chassis} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: {}, body: $req_body}
 }
 
 # A convenience method for rendering graphs for a particular Device.
@@ -3364,10 +3445,11 @@ export def "dcim-devices-graphs get" [
 ]: nothing -> record<asset_tag: string, cluster: record<id: int, name: string, url: string, virtualmachine_count: int>, comments: string, config_context: record, created: string, custom_fields: record, device_role: record<device_count: int, id: int, name: string, slug: string, url: string, virtualmachine_count: int>, device_type: record<device_count: int, display_name: string, id: int, manufacturer: record<devicetype_count: int, id: int, name: string, slug: string, url: string>, model: string, slug: string, url: string>, display_name: string, face: record<label: string, value: string>, id: int, last_updated: string, local_context_data: string, name: string, parent_device: record<display_name: string, id: int, name: string, url: string>, platform: record<device_count: int, id: int, name: string, slug: string, url: string, virtualmachine_count: int>, position: int, primary_ip: record<address: string, family: string, id: int, url: string>, primary_ip4: record<address: string, family: string, id: int, url: string>, primary_ip6: record<address: string, family: string, id: int, url: string>, rack: record<device_count: int, display_name: string, id: int, name: string, url: string>, serial: string, site: record<id: int, name: string, slug: string, url: string>, status: record<label: string, value: string>, tags: list<string>, tenant: record<id: int, name: string, slug: string, url: string>, vc_position: int, vc_priority: int, virtual_chassis: record<id: int, master: record<display_name: string, id: int, name: string, url: string>, member_count: int, url: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
   let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/dcim/devices/{id}/graphs/"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
 }
 
 # Execute a NAPALM method on a Device
@@ -3389,11 +3471,12 @@ export def "dcim-devices-napalm get" [
 ]: nothing -> record<method: record> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
   let qp = [(serialize-qp "method" $method "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/dcim/devices/{id}/napalm/") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"method": $method} | compact), body: null}
 }
 
 # Call to super to allow for caching
@@ -3440,7 +3523,7 @@ export def "dcim-front-port-templates list" [
   let full_url = (build-url $base "/dcim/front-port-templates/" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"id": $id, "name": $name, "type": $type, "q": $q, "devicetype_id": $devicetype_id, "id__n": $id_n, "id__lte": $id_lte, "id__lt": $id_lt, "id__gte": $id_gte, "id__gt": $id_gt, "name__n": $name_n, "name__ic": $name_ic, "name__nic": $name_nic, "name__iew": $name_iew, "name__niew": $name_niew, "name__isw": $name_isw, "name__nisw": $name_nisw, "name__ie": $name_ie, "name__nie": $name_nie, "type__n": $type_n, "devicetype_id__n": $devicetype_id_n, "limit": $limit, "offset": $offset} | compact), body: null}
 }
 
 # POST /dcim/front-port-templates/
@@ -3470,7 +3553,7 @@ export def "dcim-front-port-templates create" [
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: {}, body: $req_body}
 }
 
 # DELETE /dcim/front-port-templates/{id}/
@@ -3490,10 +3573,11 @@ export def "dcim-front-port-templates delete" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
   let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/dcim/front-port-templates/{id}/"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
 }
 
 # Call to super to allow for caching
@@ -3514,10 +3598,11 @@ export def "dcim-front-port-templates get" [
 ]: nothing -> record<device_type: record<device_count: int, display_name: string, id: int, manufacturer: record<devicetype_count: int, id: int, name: string, slug: string, url: string>, model: string, slug: string, url: string>, id: int, name: string, rear_port: record<id: int, name: string, url: string>, rear_port_position: int, type: record<label: string, value: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
   let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/dcim/front-port-templates/{id}/"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
 }
 
 # PATCH /dcim/front-port-templates/{id}/
@@ -3543,12 +3628,13 @@ export def "dcim-front-port-templates update-by-id" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
   let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/dcim/front-port-templates/{id}/"))
   let req_body = {"device_type": $device_type, "name": $name, "rear_port": $rear_port, "rear_port_position": $rear_port_position, "type": $type} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "patch" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body
+  do-request "patch" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: {}, body: $req_body}
 }
 
 # PUT /dcim/front-port-templates/{id}/
@@ -3574,12 +3660,13 @@ export def "dcim-front-port-templates update-by-id-1" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
   let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/dcim/front-port-templates/{id}/"))
   let req_body = {"device_type": $device_type, "name": $name, "rear_port": $rear_port, "rear_port_position": $rear_port_position, "type": $type} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: {}, body: $req_body}
 }
 
 # Call to super to allow for caching
@@ -3649,7 +3736,7 @@ export def "dcim-front-ports list" [
   let full_url = (build-url $base "/dcim/front-ports/" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"id": $id, "name": $name, "type": $type, "description": $description, "q": $q, "region_id": $region_id, "region": $region, "site_id": $site_id, "site": $site, "device_id": $device_id, "device": $device, "tag": $tag, "cabled": $cabled, "id__n": $id_n, "id__lte": $id_lte, "id__lt": $id_lt, "id__gte": $id_gte, "id__gt": $id_gt, "name__n": $name_n, "name__ic": $name_ic, "name__nic": $name_nic, "name__iew": $name_iew, "name__niew": $name_niew, "name__isw": $name_isw, "name__nisw": $name_nisw, "name__ie": $name_ie, "name__nie": $name_nie, "type__n": $type_n, "description__n": $description_n, "description__ic": $description_ic, "description__nic": $description_nic, "description__iew": $description_iew, "description__niew": $description_niew, "description__isw": $description_isw, "description__nisw": $description_nisw, "description__ie": $description_ie, "description__nie": $description_nie, "region_id__n": $region_id_n, "region__n": $region_n, "site_id__n": $site_id_n, "site__n": $site_n, "device_id__n": $device_id_n, "device__n": $device_n, "tag__n": $tag_n, "limit": $limit, "offset": $offset} | compact), body: null}
 }
 
 # POST /dcim/front-ports/
@@ -3683,7 +3770,7 @@ export def "dcim-front-ports create" [
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: {}, body: $req_body}
 }
 
 # DELETE /dcim/front-ports/{id}/
@@ -3703,10 +3790,11 @@ export def "dcim-front-ports delete" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
   let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/dcim/front-ports/{id}/"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
 }
 
 # Call to super to allow for caching
@@ -3727,10 +3815,11 @@ export def "dcim-front-ports get" [
 ]: nothing -> record<cable: record<id: int, label: string, url: string>, description: string, device: record<display_name: string, id: int, name: string, url: string>, id: int, name: string, rear_port: record<id: int, name: string, url: string>, rear_port_position: int, tags: list<string>, type: record<label: string, value: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
   let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/dcim/front-ports/{id}/"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
 }
 
 # PATCH /dcim/front-ports/{id}/
@@ -3760,12 +3849,13 @@ export def "dcim-front-ports update-by-id" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
   let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/dcim/front-ports/{id}/"))
   let req_body = {"cable": $cable, "description": $description, "device": $device, "name": $name, "rear_port": $rear_port, "rear_port_position": $rear_port_position, "tags": $tags, "type": $type} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "patch" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body
+  do-request "patch" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: {}, body: $req_body}
 }
 
 # PUT /dcim/front-ports/{id}/
@@ -3795,12 +3885,13 @@ export def "dcim-front-ports update-by-id-1" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
   let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/dcim/front-ports/{id}/"))
   let req_body = {"cable": $cable, "description": $description, "device": $device, "name": $name, "rear_port": $rear_port, "rear_port_position": $rear_port_position, "tags": $tags, "type": $type} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: {}, body: $req_body}
 }
 
 # Trace a complete cable path and return each segment as a three-tuple of (termination, cable, termination).
@@ -3821,10 +3912,11 @@ export def "dcim-front-ports-trace get" [
 ]: nothing -> record<cable: record<id: int, label: string, url: string>, description: string, device: record<display_name: string, id: int, name: string, url: string>, id: int, name: string, rear_port: record<id: int, name: string, url: string>, rear_port_position: int, tags: list<string>, type: record<label: string, value: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
   let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/dcim/front-ports/{id}/trace/"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
 }
 
 # GET /dcim/interface-connections/
@@ -3854,7 +3946,7 @@ export def "dcim-interface-connections list" [
   let full_url = (build-url $base "/dcim/interface-connections/" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"connection_status": $connection_status, "site": $site, "device_id": $device_id, "device": $device, "connection_status__n": $connection_status_n, "limit": $limit, "offset": $offset} | compact), body: null}
 }
 
 # Call to super to allow for caching
@@ -3902,7 +3994,7 @@ export def "dcim-interface-templates list" [
   let full_url = (build-url $base "/dcim/interface-templates/" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"id": $id, "name": $name, "type": $type, "mgmt_only": $mgmt_only, "q": $q, "devicetype_id": $devicetype_id, "id__n": $id_n, "id__lte": $id_lte, "id__lt": $id_lt, "id__gte": $id_gte, "id__gt": $id_gt, "name__n": $name_n, "name__ic": $name_ic, "name__nic": $name_nic, "name__iew": $name_iew, "name__niew": $name_niew, "name__isw": $name_isw, "name__nisw": $name_nisw, "name__ie": $name_ie, "name__nie": $name_nie, "type__n": $type_n, "devicetype_id__n": $devicetype_id_n, "limit": $limit, "offset": $offset} | compact), body: null}
 }
 
 # POST /dcim/interface-templates/
@@ -3931,7 +4023,7 @@ export def "dcim-interface-templates create" [
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: {}, body: $req_body}
 }
 
 # DELETE /dcim/interface-templates/{id}/
@@ -3951,10 +4043,11 @@ export def "dcim-interface-templates delete" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
   let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/dcim/interface-templates/{id}/"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
 }
 
 # Call to super to allow for caching
@@ -3975,10 +4068,11 @@ export def "dcim-interface-templates get" [
 ]: nothing -> record<device_type: record<device_count: int, display_name: string, id: int, manufacturer: record<devicetype_count: int, id: int, name: string, slug: string, url: string>, model: string, slug: string, url: string>, id: int, mgmt_only: bool, name: string, type: record<label: string, value: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
   let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/dcim/interface-templates/{id}/"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
 }
 
 # PATCH /dcim/interface-templates/{id}/
@@ -4003,12 +4097,13 @@ export def "dcim-interface-templates update-by-id" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
   let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/dcim/interface-templates/{id}/"))
   let req_body = {"device_type": $device_type, "mgmt_only": $mgmt_only, "name": $name, "type": $type} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "patch" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body
+  do-request "patch" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: {}, body: $req_body}
 }
 
 # PUT /dcim/interface-templates/{id}/
@@ -4033,12 +4128,13 @@ export def "dcim-interface-templates update-by-id-1" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
   let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/dcim/interface-templates/{id}/"))
   let req_body = {"device_type": $device_type, "mgmt_only": $mgmt_only, "name": $name, "type": $type} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: {}, body: $req_body}
 }
 
 # Call to super to allow for caching
@@ -4133,7 +4229,7 @@ export def "dcim-interfaces list" [
   let full_url = (build-url $base "/dcim/interfaces/" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"id": $id, "name": $name, "connection_status": $connection_status, "type": $type, "enabled": $enabled, "mtu": $mtu, "mgmt_only": $mgmt_only, "mode": $mode, "description": $description, "q": $q, "region_id": $region_id, "region": $region, "site_id": $site_id, "site": $site, "device_id": $device_id, "device": $device, "tag": $tag, "cabled": $cabled, "kind": $kind, "lag_id": $lag_id, "mac_address": $mac_address, "vlan_id": $vlan_id, "vlan": $vlan, "id__n": $id_n, "id__lte": $id_lte, "id__lt": $id_lt, "id__gte": $id_gte, "id__gt": $id_gt, "name__n": $name_n, "name__ic": $name_ic, "name__nic": $name_nic, "name__iew": $name_iew, "name__niew": $name_niew, "name__isw": $name_isw, "name__nisw": $name_nisw, "name__ie": $name_ie, "name__nie": $name_nie, "connection_status__n": $connection_status_n, "type__n": $type_n, "mtu__n": $mtu_n, "mtu__lte": $mtu_lte, "mtu__lt": $mtu_lt, "mtu__gte": $mtu_gte, "mtu__gt": $mtu_gt, "mode__n": $mode_n, "description__n": $description_n, "description__ic": $description_ic, "description__nic": $description_nic, "description__iew": $description_iew, "description__niew": $description_niew, "description__isw": $description_isw, "description__nisw": $description_nisw, "description__ie": $description_ie, "description__nie": $description_nie, "region_id__n": $region_id_n, "region__n": $region_n, "site_id__n": $site_id_n, "site__n": $site_n, "tag__n": $tag_n, "lag_id__n": $lag_id_n, "mac_address__n": $mac_address_n, "mac_address__ic": $mac_address_ic, "mac_address__nic": $mac_address_nic, "mac_address__iew": $mac_address_iew, "mac_address__niew": $mac_address_niew, "mac_address__isw": $mac_address_isw, "mac_address__nisw": $mac_address_nisw, "mac_address__ie": $mac_address_ie, "mac_address__nie": $mac_address_nie, "limit": $limit, "offset": $offset} | compact), body: null}
 }
 
 # POST /dcim/interfaces/
@@ -4174,7 +4270,7 @@ export def "dcim-interfaces create" [
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: {}, body: $req_body}
 }
 
 # DELETE /dcim/interfaces/{id}/
@@ -4194,10 +4290,11 @@ export def "dcim-interfaces delete" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
   let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/dcim/interfaces/{id}/"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
 }
 
 # Call to super to allow for caching
@@ -4218,10 +4315,11 @@ export def "dcim-interfaces get" [
 ]: nothing -> record<cable: record<id: int, label: string, url: string>, connected_endpoint: record, connected_endpoint_type: string, connection_status: record<label: string, value: bool>, count_ipaddresses: int, description: string, device: record<display_name: string, id: int, name: string, url: string>, enabled: bool, id: int, lag: record<cable: int, connection_status: record<label: string, value: bool>, device: record<display_name: string, id: int, name: string, url: string>, id: int, name: string, url: string>, mac_address: string, mgmt_only: bool, mode: record<label: string, value: string>, mtu: int, name: string, tagged_vlans: table<display_name: string, id: int, name: string, url: string, vid: int>, tags: list<string>, type: record<label: string, value: string>, untagged_vlan: record<display_name: string, id: int, name: string, url: string, vid: int>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
   let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/dcim/interfaces/{id}/"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
 }
 
 # PATCH /dcim/interfaces/{id}/
@@ -4258,12 +4356,13 @@ export def "dcim-interfaces update-by-id" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
   let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/dcim/interfaces/{id}/"))
   let req_body = {"cable": $cable, "connection_status": $connection_status, "description": $description, "device": $device, "enabled": $enabled, "lag": $lag, "mac_address": $mac_address, "mgmt_only": $mgmt_only, "mode": $mode, "mtu": $mtu, "name": $name, "tagged_vlans": $tagged_vlans, "tags": $tags, "type": $type, "untagged_vlan": $untagged_vlan} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "patch" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body
+  do-request "patch" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: {}, body: $req_body}
 }
 
 # PUT /dcim/interfaces/{id}/
@@ -4300,12 +4399,13 @@ export def "dcim-interfaces update-by-id-1" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
   let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/dcim/interfaces/{id}/"))
   let req_body = {"cable": $cable, "connection_status": $connection_status, "description": $description, "device": $device, "enabled": $enabled, "lag": $lag, "mac_address": $mac_address, "mgmt_only": $mgmt_only, "mode": $mode, "mtu": $mtu, "name": $name, "tagged_vlans": $tagged_vlans, "tags": $tags, "type": $type, "untagged_vlan": $untagged_vlan} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: {}, body: $req_body}
 }
 
 # A convenience method for rendering graphs for a particular interface.
@@ -4326,10 +4426,11 @@ export def "dcim-interfaces-graphs get" [
 ]: nothing -> record<cable: record<id: int, label: string, url: string>, connected_endpoint: record, connected_endpoint_type: string, connection_status: record<label: string, value: bool>, count_ipaddresses: int, description: string, device: record<display_name: string, id: int, name: string, url: string>, enabled: bool, id: int, lag: record<cable: int, connection_status: record<label: string, value: bool>, device: record<display_name: string, id: int, name: string, url: string>, id: int, name: string, url: string>, mac_address: string, mgmt_only: bool, mode: record<label: string, value: string>, mtu: int, name: string, tagged_vlans: table<display_name: string, id: int, name: string, url: string, vid: int>, tags: list<string>, type: record<label: string, value: string>, untagged_vlan: record<display_name: string, id: int, name: string, url: string, vid: int>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
   let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/dcim/interfaces/{id}/graphs/"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
 }
 
 # Trace a complete cable path and return each segment as a three-tuple of (termination, cable, termination).
@@ -4350,10 +4451,11 @@ export def "dcim-interfaces-trace get" [
 ]: nothing -> record<cable: record<id: int, label: string, url: string>, connected_endpoint: record, connected_endpoint_type: string, connection_status: record<label: string, value: bool>, count_ipaddresses: int, description: string, device: record<display_name: string, id: int, name: string, url: string>, enabled: bool, id: int, lag: record<cable: int, connection_status: record<label: string, value: bool>, device: record<display_name: string, id: int, name: string, url: string>, id: int, name: string, url: string>, mac_address: string, mgmt_only: bool, mode: record<label: string, value: string>, mtu: int, name: string, tagged_vlans: table<display_name: string, id: int, name: string, url: string, vid: int>, tags: list<string>, type: record<label: string, value: string>, untagged_vlan: record<display_name: string, id: int, name: string, url: string, vid: int>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
   let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/dcim/interfaces/{id}/trace/"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
 }
 
 # Call to super to allow for caching
@@ -4438,7 +4540,7 @@ export def "dcim-inventory-items list" [
   let full_url = (build-url $base "/dcim/inventory-items/" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"id": $id, "name": $name, "part_id": $part_id, "asset_tag": $asset_tag, "discovered": $discovered, "q": $q, "region_id": $region_id, "region": $region, "site_id": $site_id, "site": $site, "device_id": $device_id, "device": $device, "tag": $tag, "parent_id": $parent_id, "manufacturer_id": $manufacturer_id, "manufacturer": $manufacturer, "serial": $serial, "id__n": $id_n, "id__lte": $id_lte, "id__lt": $id_lt, "id__gte": $id_gte, "id__gt": $id_gt, "name__n": $name_n, "name__ic": $name_ic, "name__nic": $name_nic, "name__iew": $name_iew, "name__niew": $name_niew, "name__isw": $name_isw, "name__nisw": $name_nisw, "name__ie": $name_ie, "name__nie": $name_nie, "part_id__n": $part_id_n, "part_id__ic": $part_id_ic, "part_id__nic": $part_id_nic, "part_id__iew": $part_id_iew, "part_id__niew": $part_id_niew, "part_id__isw": $part_id_isw, "part_id__nisw": $part_id_nisw, "part_id__ie": $part_id_ie, "part_id__nie": $part_id_nie, "asset_tag__n": $asset_tag_n, "asset_tag__ic": $asset_tag_ic, "asset_tag__nic": $asset_tag_nic, "asset_tag__iew": $asset_tag_iew, "asset_tag__niew": $asset_tag_niew, "asset_tag__isw": $asset_tag_isw, "asset_tag__nisw": $asset_tag_nisw, "asset_tag__ie": $asset_tag_ie, "asset_tag__nie": $asset_tag_nie, "region_id__n": $region_id_n, "region__n": $region_n, "site_id__n": $site_id_n, "site__n": $site_n, "device_id__n": $device_id_n, "device__n": $device_n, "tag__n": $tag_n, "parent_id__n": $parent_id_n, "manufacturer_id__n": $manufacturer_id_n, "manufacturer__n": $manufacturer_n, "limit": $limit, "offset": $offset} | compact), body: null}
 }
 
 # POST /dcim/inventory-items/
@@ -4473,7 +4575,7 @@ export def "dcim-inventory-items create" [
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: {}, body: $req_body}
 }
 
 # DELETE /dcim/inventory-items/{id}/
@@ -4493,10 +4595,11 @@ export def "dcim-inventory-items delete" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
   let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/dcim/inventory-items/{id}/"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
 }
 
 # Call to super to allow for caching
@@ -4517,10 +4620,11 @@ export def "dcim-inventory-items get" [
 ]: nothing -> record<asset_tag: string, description: string, device: record<display_name: string, id: int, name: string, url: string>, discovered: bool, id: int, manufacturer: record<devicetype_count: int, id: int, name: string, slug: string, url: string>, name: string, parent: int, part_id: string, serial: string, tags: list<string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
   let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/dcim/inventory-items/{id}/"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
 }
 
 # PATCH /dcim/inventory-items/{id}/
@@ -4551,12 +4655,13 @@ export def "dcim-inventory-items update-by-id" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
   let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/dcim/inventory-items/{id}/"))
   let req_body = {"asset_tag": $asset_tag, "description": $description, "device": $device, "discovered": $discovered, "manufacturer": $manufacturer, "name": $name, "parent": $parent, "part_id": $part_id, "serial": $serial, "tags": $tags} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "patch" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body
+  do-request "patch" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: {}, body: $req_body}
 }
 
 # PUT /dcim/inventory-items/{id}/
@@ -4587,12 +4692,13 @@ export def "dcim-inventory-items update-by-id-1" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
   let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/dcim/inventory-items/{id}/"))
   let req_body = {"asset_tag": $asset_tag, "description": $description, "device": $device, "discovered": $discovered, "manufacturer": $manufacturer, "name": $name, "parent": $parent, "part_id": $part_id, "serial": $serial, "tags": $tags} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: {}, body: $req_body}
 }
 
 # Call to super to allow for caching
@@ -4655,7 +4761,7 @@ export def "dcim-manufacturers list" [
   let full_url = (build-url $base "/dcim/manufacturers/" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"id": $id, "name": $name, "slug": $slug, "description": $description, "q": $q, "id__n": $id_n, "id__lte": $id_lte, "id__lt": $id_lt, "id__gte": $id_gte, "id__gt": $id_gt, "name__n": $name_n, "name__ic": $name_ic, "name__nic": $name_nic, "name__iew": $name_iew, "name__niew": $name_niew, "name__isw": $name_isw, "name__nisw": $name_nisw, "name__ie": $name_ie, "name__nie": $name_nie, "slug__n": $slug_n, "slug__ic": $slug_ic, "slug__nic": $slug_nic, "slug__iew": $slug_iew, "slug__niew": $slug_niew, "slug__isw": $slug_isw, "slug__nisw": $slug_nisw, "slug__ie": $slug_ie, "slug__nie": $slug_nie, "description__n": $description_n, "description__ic": $description_ic, "description__nic": $description_nic, "description__iew": $description_iew, "description__niew": $description_niew, "description__isw": $description_isw, "description__nisw": $description_nisw, "description__ie": $description_ie, "description__nie": $description_nie, "limit": $limit, "offset": $offset} | compact), body: null}
 }
 
 # POST /dcim/manufacturers/
@@ -4683,7 +4789,7 @@ export def "dcim-manufacturers create" [
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: {}, body: $req_body}
 }
 
 # DELETE /dcim/manufacturers/{id}/
@@ -4703,10 +4809,11 @@ export def "dcim-manufacturers delete" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
   let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/dcim/manufacturers/{id}/"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
 }
 
 # Call to super to allow for caching
@@ -4727,10 +4834,11 @@ export def "dcim-manufacturers get" [
 ]: nothing -> record<description: string, devicetype_count: int, id: int, inventoryitem_count: int, name: string, platform_count: int, slug: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
   let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/dcim/manufacturers/{id}/"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
 }
 
 # PATCH /dcim/manufacturers/{id}/
@@ -4754,12 +4862,13 @@ export def "dcim-manufacturers update-by-id" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
   let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/dcim/manufacturers/{id}/"))
   let req_body = {"description": $description, "name": $name, "slug": $slug} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "patch" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body
+  do-request "patch" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: {}, body: $req_body}
 }
 
 # PUT /dcim/manufacturers/{id}/
@@ -4783,12 +4892,13 @@ export def "dcim-manufacturers update-by-id-1" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
   let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/dcim/manufacturers/{id}/"))
   let req_body = {"description": $description, "name": $name, "slug": $slug} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: {}, body: $req_body}
 }
 
 # Call to super to allow for caching
@@ -4865,7 +4975,7 @@ export def "dcim-platforms list" [
   let full_url = (build-url $base "/dcim/platforms/" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"id": $id, "name": $name, "slug": $slug, "napalm_driver": $napalm_driver, "description": $description, "q": $q, "manufacturer_id": $manufacturer_id, "manufacturer": $manufacturer, "id__n": $id_n, "id__lte": $id_lte, "id__lt": $id_lt, "id__gte": $id_gte, "id__gt": $id_gt, "name__n": $name_n, "name__ic": $name_ic, "name__nic": $name_nic, "name__iew": $name_iew, "name__niew": $name_niew, "name__isw": $name_isw, "name__nisw": $name_nisw, "name__ie": $name_ie, "name__nie": $name_nie, "slug__n": $slug_n, "slug__ic": $slug_ic, "slug__nic": $slug_nic, "slug__iew": $slug_iew, "slug__niew": $slug_niew, "slug__isw": $slug_isw, "slug__nisw": $slug_nisw, "slug__ie": $slug_ie, "slug__nie": $slug_nie, "napalm_driver__n": $napalm_driver_n, "napalm_driver__ic": $napalm_driver_ic, "napalm_driver__nic": $napalm_driver_nic, "napalm_driver__iew": $napalm_driver_iew, "napalm_driver__niew": $napalm_driver_niew, "napalm_driver__isw": $napalm_driver_isw, "napalm_driver__nisw": $napalm_driver_nisw, "napalm_driver__ie": $napalm_driver_ie, "napalm_driver__nie": $napalm_driver_nie, "description__n": $description_n, "description__ic": $description_ic, "description__nic": $description_nic, "description__iew": $description_iew, "description__niew": $description_niew, "description__isw": $description_isw, "description__nisw": $description_nisw, "description__ie": $description_ie, "description__nie": $description_nie, "manufacturer_id__n": $manufacturer_id_n, "manufacturer__n": $manufacturer_n, "limit": $limit, "offset": $offset} | compact), body: null}
 }
 
 # POST /dcim/platforms/
@@ -4896,7 +5006,7 @@ export def "dcim-platforms create" [
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: {}, body: $req_body}
 }
 
 # DELETE /dcim/platforms/{id}/
@@ -4916,10 +5026,11 @@ export def "dcim-platforms delete" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
   let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/dcim/platforms/{id}/"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
 }
 
 # Call to super to allow for caching
@@ -4940,10 +5051,11 @@ export def "dcim-platforms get" [
 ]: nothing -> record<description: string, device_count: int, id: int, manufacturer: record<devicetype_count: int, id: int, name: string, slug: string, url: string>, name: string, napalm_args: string, napalm_driver: string, slug: string, virtualmachine_count: int> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
   let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/dcim/platforms/{id}/"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
 }
 
 # PATCH /dcim/platforms/{id}/
@@ -4970,12 +5082,13 @@ export def "dcim-platforms update-by-id" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
   let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/dcim/platforms/{id}/"))
   let req_body = {"description": $description, "manufacturer": $manufacturer, "name": $name, "napalm_args": $napalm_args, "napalm_driver": $napalm_driver, "slug": $slug} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "patch" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body
+  do-request "patch" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: {}, body: $req_body}
 }
 
 # PUT /dcim/platforms/{id}/
@@ -5002,12 +5115,13 @@ export def "dcim-platforms update-by-id-1" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
   let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/dcim/platforms/{id}/"))
   let req_body = {"description": $description, "manufacturer": $manufacturer, "name": $name, "napalm_args": $napalm_args, "napalm_driver": $napalm_driver, "slug": $slug} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: {}, body: $req_body}
 }
 
 # GET /dcim/power-connections/
@@ -5047,7 +5161,7 @@ export def "dcim-power-connections list" [
   let full_url = (build-url $base "/dcim/power-connections/" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"name": $name, "connection_status": $connection_status, "site": $site, "device_id": $device_id, "device": $device, "name__n": $name_n, "name__ic": $name_ic, "name__nic": $name_nic, "name__iew": $name_iew, "name__niew": $name_niew, "name__isw": $name_isw, "name__nisw": $name_nisw, "name__ie": $name_ie, "name__nie": $name_nie, "connection_status__n": $connection_status_n, "limit": $limit, "offset": $offset} | compact), body: null}
 }
 
 # Call to super to allow for caching
@@ -5136,7 +5250,7 @@ export def "dcim-power-feeds list" [
   let full_url = (build-url $base "/dcim/power-feeds/" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"id": $id, "name": $name, "status": $status, "type": $type, "supply": $supply, "phase": $phase, "voltage": $voltage, "amperage": $amperage, "max_utilization": $max_utilization, "created": $created, "created__gte": $created_gte, "created__lte": $created_lte, "last_updated": $last_updated, "last_updated__gte": $last_updated_gte, "last_updated__lte": $last_updated_lte, "q": $q, "region_id": $region_id, "region": $region, "site_id": $site_id, "site": $site, "power_panel_id": $power_panel_id, "rack_id": $rack_id, "tag": $tag, "id__n": $id_n, "id__lte": $id_lte, "id__lt": $id_lt, "id__gte": $id_gte, "id__gt": $id_gt, "name__n": $name_n, "name__ic": $name_ic, "name__nic": $name_nic, "name__iew": $name_iew, "name__niew": $name_niew, "name__isw": $name_isw, "name__nisw": $name_nisw, "name__ie": $name_ie, "name__nie": $name_nie, "status__n": $status_n, "type__n": $type_n, "supply__n": $supply_n, "phase__n": $phase_n, "voltage__n": $voltage_n, "voltage__lte": $voltage_lte, "voltage__lt": $voltage_lt, "voltage__gte": $voltage_gte, "voltage__gt": $voltage_gt, "amperage__n": $amperage_n, "amperage__lte": $amperage_lte, "amperage__lt": $amperage_lt, "amperage__gte": $amperage_gte, "amperage__gt": $amperage_gt, "max_utilization__n": $max_utilization_n, "max_utilization__lte": $max_utilization_lte, "max_utilization__lt": $max_utilization_lt, "max_utilization__gte": $max_utilization_gte, "max_utilization__gt": $max_utilization_gt, "region_id__n": $region_id_n, "region__n": $region_n, "site_id__n": $site_id_n, "site__n": $site_n, "power_panel_id__n": $power_panel_id_n, "rack_id__n": $rack_id_n, "tag__n": $tag_n, "limit": $limit, "offset": $offset} | compact), body: null}
 }
 
 # POST /dcim/power-feeds/
@@ -5174,7 +5288,7 @@ export def "dcim-power-feeds create" [
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: {}, body: $req_body}
 }
 
 # DELETE /dcim/power-feeds/{id}/
@@ -5194,10 +5308,11 @@ export def "dcim-power-feeds delete" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
   let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/dcim/power-feeds/{id}/"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
 }
 
 # Call to super to allow for caching
@@ -5218,10 +5333,11 @@ export def "dcim-power-feeds get" [
 ]: nothing -> record<amperage: int, comments: string, created: string, custom_fields: record, id: int, last_updated: string, max_utilization: int, name: string, phase: record<label: string, value: string>, power_panel: record<id: int, name: string, powerfeed_count: int, url: string>, rack: record<device_count: int, display_name: string, id: int, name: string, url: string>, status: record<label: string, value: string>, supply: record<label: string, value: string>, tags: list<string>, type: record<label: string, value: string>, voltage: int> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
   let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/dcim/power-feeds/{id}/"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
 }
 
 # PATCH /dcim/power-feeds/{id}/
@@ -5255,12 +5371,13 @@ export def "dcim-power-feeds update-by-id" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
   let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/dcim/power-feeds/{id}/"))
   let req_body = {"amperage": $amperage, "comments": $comments, "custom_fields": $custom_fields, "max_utilization": $max_utilization, "name": $name, "phase": $phase, "power_panel": $power_panel, "rack": $rack, "status": $status, "supply": $supply, "tags": $tags, "type": $type, "voltage": $voltage} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "patch" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body
+  do-request "patch" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: {}, body: $req_body}
 }
 
 # PUT /dcim/power-feeds/{id}/
@@ -5294,12 +5411,13 @@ export def "dcim-power-feeds update-by-id-1" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
   let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/dcim/power-feeds/{id}/"))
   let req_body = {"amperage": $amperage, "comments": $comments, "custom_fields": $custom_fields, "max_utilization": $max_utilization, "name": $name, "phase": $phase, "power_panel": $power_panel, "rack": $rack, "status": $status, "supply": $supply, "tags": $tags, "type": $type, "voltage": $voltage} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: {}, body: $req_body}
 }
 
 # Call to super to allow for caching
@@ -5348,7 +5466,7 @@ export def "dcim-power-outlet-templates list" [
   let full_url = (build-url $base "/dcim/power-outlet-templates/" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"id": $id, "name": $name, "type": $type, "feed_leg": $feed_leg, "q": $q, "devicetype_id": $devicetype_id, "id__n": $id_n, "id__lte": $id_lte, "id__lt": $id_lt, "id__gte": $id_gte, "id__gt": $id_gt, "name__n": $name_n, "name__ic": $name_ic, "name__nic": $name_nic, "name__iew": $name_iew, "name__niew": $name_niew, "name__isw": $name_isw, "name__nisw": $name_nisw, "name__ie": $name_ie, "name__nie": $name_nie, "type__n": $type_n, "feed_leg__n": $feed_leg_n, "devicetype_id__n": $devicetype_id_n, "limit": $limit, "offset": $offset} | compact), body: null}
 }
 
 # POST /dcim/power-outlet-templates/
@@ -5378,7 +5496,7 @@ export def "dcim-power-outlet-templates create" [
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: {}, body: $req_body}
 }
 
 # DELETE /dcim/power-outlet-templates/{id}/
@@ -5398,10 +5516,11 @@ export def "dcim-power-outlet-templates delete" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
   let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/dcim/power-outlet-templates/{id}/"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
 }
 
 # Call to super to allow for caching
@@ -5422,10 +5541,11 @@ export def "dcim-power-outlet-templates get" [
 ]: nothing -> record<device_type: record<device_count: int, display_name: string, id: int, manufacturer: record<devicetype_count: int, id: int, name: string, slug: string, url: string>, model: string, slug: string, url: string>, feed_leg: record<label: string, value: string>, id: int, name: string, power_port: record<id: int, name: string, url: string>, type: record<label: string, value: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
   let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/dcim/power-outlet-templates/{id}/"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
 }
 
 # PATCH /dcim/power-outlet-templates/{id}/
@@ -5451,12 +5571,13 @@ export def "dcim-power-outlet-templates update-by-id" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
   let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/dcim/power-outlet-templates/{id}/"))
   let req_body = {"device_type": $device_type, "feed_leg": $feed_leg, "name": $name, "power_port": $power_port, "type": $type} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "patch" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body
+  do-request "patch" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: {}, body: $req_body}
 }
 
 # PUT /dcim/power-outlet-templates/{id}/
@@ -5482,12 +5603,13 @@ export def "dcim-power-outlet-templates update-by-id-1" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
   let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/dcim/power-outlet-templates/{id}/"))
   let req_body = {"device_type": $device_type, "feed_leg": $feed_leg, "name": $name, "power_port": $power_port, "type": $type} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: {}, body: $req_body}
 }
 
 # Call to super to allow for caching
@@ -5561,7 +5683,7 @@ export def "dcim-power-outlets list" [
   let full_url = (build-url $base "/dcim/power-outlets/" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"id": $id, "name": $name, "feed_leg": $feed_leg, "description": $description, "connection_status": $connection_status, "q": $q, "region_id": $region_id, "region": $region, "site_id": $site_id, "site": $site, "device_id": $device_id, "device": $device, "tag": $tag, "type": $type, "cabled": $cabled, "id__n": $id_n, "id__lte": $id_lte, "id__lt": $id_lt, "id__gte": $id_gte, "id__gt": $id_gt, "name__n": $name_n, "name__ic": $name_ic, "name__nic": $name_nic, "name__iew": $name_iew, "name__niew": $name_niew, "name__isw": $name_isw, "name__nisw": $name_nisw, "name__ie": $name_ie, "name__nie": $name_nie, "feed_leg__n": $feed_leg_n, "description__n": $description_n, "description__ic": $description_ic, "description__nic": $description_nic, "description__iew": $description_iew, "description__niew": $description_niew, "description__isw": $description_isw, "description__nisw": $description_nisw, "description__ie": $description_ie, "description__nie": $description_nie, "connection_status__n": $connection_status_n, "region_id__n": $region_id_n, "region__n": $region_n, "site_id__n": $site_id_n, "site__n": $site_n, "device_id__n": $device_id_n, "device__n": $device_n, "tag__n": $tag_n, "type__n": $type_n, "limit": $limit, "offset": $offset} | compact), body: null}
 }
 
 # POST /dcim/power-outlets/
@@ -5596,7 +5718,7 @@ export def "dcim-power-outlets create" [
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: {}, body: $req_body}
 }
 
 # DELETE /dcim/power-outlets/{id}/
@@ -5616,10 +5738,11 @@ export def "dcim-power-outlets delete" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
   let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/dcim/power-outlets/{id}/"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
 }
 
 # Call to super to allow for caching
@@ -5640,10 +5763,11 @@ export def "dcim-power-outlets get" [
 ]: nothing -> record<cable: record<id: int, label: string, url: string>, connected_endpoint: record, connected_endpoint_type: string, connection_status: record<label: string, value: bool>, description: string, device: record<display_name: string, id: int, name: string, url: string>, feed_leg: record<label: string, value: string>, id: int, name: string, power_port: record<cable: int, connection_status: record<label: string, value: bool>, device: record<display_name: string, id: int, name: string, url: string>, id: int, name: string, url: string>, tags: list<string>, type: record<label: string, value: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
   let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/dcim/power-outlets/{id}/"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
 }
 
 # PATCH /dcim/power-outlets/{id}/
@@ -5674,12 +5798,13 @@ export def "dcim-power-outlets update-by-id" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
   let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/dcim/power-outlets/{id}/"))
   let req_body = {"cable": $cable, "connection_status": $connection_status, "description": $description, "device": $device, "feed_leg": $feed_leg, "name": $name, "power_port": $power_port, "tags": $tags, "type": $type} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "patch" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body
+  do-request "patch" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: {}, body: $req_body}
 }
 
 # PUT /dcim/power-outlets/{id}/
@@ -5710,12 +5835,13 @@ export def "dcim-power-outlets update-by-id-1" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
   let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/dcim/power-outlets/{id}/"))
   let req_body = {"cable": $cable, "connection_status": $connection_status, "description": $description, "device": $device, "feed_leg": $feed_leg, "name": $name, "power_port": $power_port, "tags": $tags, "type": $type} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: {}, body: $req_body}
 }
 
 # Trace a complete cable path and return each segment as a three-tuple of (termination, cable, termination).
@@ -5736,10 +5862,11 @@ export def "dcim-power-outlets-trace get" [
 ]: nothing -> record<cable: record<id: int, label: string, url: string>, connected_endpoint: record, connected_endpoint_type: string, connection_status: record<label: string, value: bool>, description: string, device: record<display_name: string, id: int, name: string, url: string>, feed_leg: record<label: string, value: string>, id: int, name: string, power_port: record<cable: int, connection_status: record<label: string, value: bool>, device: record<display_name: string, id: int, name: string, url: string>, id: int, name: string, url: string>, tags: list<string>, type: record<label: string, value: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
   let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/dcim/power-outlets/{id}/trace/"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
 }
 
 # Call to super to allow for caching
@@ -5792,7 +5919,7 @@ export def "dcim-power-panels list" [
   let full_url = (build-url $base "/dcim/power-panels/" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"id": $id, "name": $name, "q": $q, "region_id": $region_id, "region": $region, "site_id": $site_id, "site": $site, "rack_group_id": $rack_group_id, "id__n": $id_n, "id__lte": $id_lte, "id__lt": $id_lt, "id__gte": $id_gte, "id__gt": $id_gt, "name__n": $name_n, "name__ic": $name_ic, "name__nic": $name_nic, "name__iew": $name_iew, "name__niew": $name_niew, "name__isw": $name_isw, "name__nisw": $name_nisw, "name__ie": $name_ie, "name__nie": $name_nie, "region_id__n": $region_id_n, "region__n": $region_n, "site_id__n": $site_id_n, "site__n": $site_n, "rack_group_id__n": $rack_group_id_n, "limit": $limit, "offset": $offset} | compact), body: null}
 }
 
 # POST /dcim/power-panels/
@@ -5820,7 +5947,7 @@ export def "dcim-power-panels create" [
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: {}, body: $req_body}
 }
 
 # DELETE /dcim/power-panels/{id}/
@@ -5840,10 +5967,11 @@ export def "dcim-power-panels delete" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
   let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/dcim/power-panels/{id}/"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
 }
 
 # Call to super to allow for caching
@@ -5864,10 +5992,11 @@ export def "dcim-power-panels get" [
 ]: nothing -> record<id: int, name: string, powerfeed_count: int, rack_group: record<id: int, name: string, rack_count: int, slug: string, url: string>, site: record<id: int, name: string, slug: string, url: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
   let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/dcim/power-panels/{id}/"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
 }
 
 # PATCH /dcim/power-panels/{id}/
@@ -5891,12 +6020,13 @@ export def "dcim-power-panels update-by-id" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
   let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/dcim/power-panels/{id}/"))
   let req_body = {"name": $name, "rack_group": $rack_group, "site": $site} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "patch" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body
+  do-request "patch" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: {}, body: $req_body}
 }
 
 # PUT /dcim/power-panels/{id}/
@@ -5920,12 +6050,13 @@ export def "dcim-power-panels update-by-id-1" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
   let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/dcim/power-panels/{id}/"))
   let req_body = {"name": $name, "rack_group": $rack_group, "site": $site} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: {}, body: $req_body}
 }
 
 # Call to super to allow for caching
@@ -5984,7 +6115,7 @@ export def "dcim-power-port-templates list" [
   let full_url = (build-url $base "/dcim/power-port-templates/" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"id": $id, "name": $name, "type": $type, "maximum_draw": $maximum_draw, "allocated_draw": $allocated_draw, "q": $q, "devicetype_id": $devicetype_id, "id__n": $id_n, "id__lte": $id_lte, "id__lt": $id_lt, "id__gte": $id_gte, "id__gt": $id_gt, "name__n": $name_n, "name__ic": $name_ic, "name__nic": $name_nic, "name__iew": $name_iew, "name__niew": $name_niew, "name__isw": $name_isw, "name__nisw": $name_nisw, "name__ie": $name_ie, "name__nie": $name_nie, "type__n": $type_n, "maximum_draw__n": $maximum_draw_n, "maximum_draw__lte": $maximum_draw_lte, "maximum_draw__lt": $maximum_draw_lt, "maximum_draw__gte": $maximum_draw_gte, "maximum_draw__gt": $maximum_draw_gt, "allocated_draw__n": $allocated_draw_n, "allocated_draw__lte": $allocated_draw_lte, "allocated_draw__lt": $allocated_draw_lt, "allocated_draw__gte": $allocated_draw_gte, "allocated_draw__gt": $allocated_draw_gt, "devicetype_id__n": $devicetype_id_n, "limit": $limit, "offset": $offset} | compact), body: null}
 }
 
 # POST /dcim/power-port-templates/
@@ -6014,7 +6145,7 @@ export def "dcim-power-port-templates create" [
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: {}, body: $req_body}
 }
 
 # DELETE /dcim/power-port-templates/{id}/
@@ -6034,10 +6165,11 @@ export def "dcim-power-port-templates delete" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
   let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/dcim/power-port-templates/{id}/"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
 }
 
 # Call to super to allow for caching
@@ -6058,10 +6190,11 @@ export def "dcim-power-port-templates get" [
 ]: nothing -> record<allocated_draw: int, device_type: record<device_count: int, display_name: string, id: int, manufacturer: record<devicetype_count: int, id: int, name: string, slug: string, url: string>, model: string, slug: string, url: string>, id: int, maximum_draw: int, name: string, type: record<label: string, value: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
   let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/dcim/power-port-templates/{id}/"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
 }
 
 # PATCH /dcim/power-port-templates/{id}/
@@ -6087,12 +6220,13 @@ export def "dcim-power-port-templates update-by-id" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
   let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/dcim/power-port-templates/{id}/"))
   let req_body = {"allocated_draw": $allocated_draw, "device_type": $device_type, "maximum_draw": $maximum_draw, "name": $name, "type": $type} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "patch" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body
+  do-request "patch" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: {}, body: $req_body}
 }
 
 # PUT /dcim/power-port-templates/{id}/
@@ -6118,12 +6252,13 @@ export def "dcim-power-port-templates update-by-id-1" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
   let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/dcim/power-port-templates/{id}/"))
   let req_body = {"allocated_draw": $allocated_draw, "device_type": $device_type, "maximum_draw": $maximum_draw, "name": $name, "type": $type} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: {}, body: $req_body}
 }
 
 # Call to super to allow for caching
@@ -6207,7 +6342,7 @@ export def "dcim-power-ports list" [
   let full_url = (build-url $base "/dcim/power-ports/" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"id": $id, "name": $name, "maximum_draw": $maximum_draw, "allocated_draw": $allocated_draw, "description": $description, "connection_status": $connection_status, "q": $q, "region_id": $region_id, "region": $region, "site_id": $site_id, "site": $site, "device_id": $device_id, "device": $device, "tag": $tag, "type": $type, "cabled": $cabled, "id__n": $id_n, "id__lte": $id_lte, "id__lt": $id_lt, "id__gte": $id_gte, "id__gt": $id_gt, "name__n": $name_n, "name__ic": $name_ic, "name__nic": $name_nic, "name__iew": $name_iew, "name__niew": $name_niew, "name__isw": $name_isw, "name__nisw": $name_nisw, "name__ie": $name_ie, "name__nie": $name_nie, "maximum_draw__n": $maximum_draw_n, "maximum_draw__lte": $maximum_draw_lte, "maximum_draw__lt": $maximum_draw_lt, "maximum_draw__gte": $maximum_draw_gte, "maximum_draw__gt": $maximum_draw_gt, "allocated_draw__n": $allocated_draw_n, "allocated_draw__lte": $allocated_draw_lte, "allocated_draw__lt": $allocated_draw_lt, "allocated_draw__gte": $allocated_draw_gte, "allocated_draw__gt": $allocated_draw_gt, "description__n": $description_n, "description__ic": $description_ic, "description__nic": $description_nic, "description__iew": $description_iew, "description__niew": $description_niew, "description__isw": $description_isw, "description__nisw": $description_nisw, "description__ie": $description_ie, "description__nie": $description_nie, "connection_status__n": $connection_status_n, "region_id__n": $region_id_n, "region__n": $region_n, "site_id__n": $site_id_n, "site__n": $site_n, "device_id__n": $device_id_n, "device__n": $device_n, "tag__n": $tag_n, "type__n": $type_n, "limit": $limit, "offset": $offset} | compact), body: null}
 }
 
 # POST /dcim/power-ports/
@@ -6242,7 +6377,7 @@ export def "dcim-power-ports create" [
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: {}, body: $req_body}
 }
 
 # DELETE /dcim/power-ports/{id}/
@@ -6262,10 +6397,11 @@ export def "dcim-power-ports delete" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
   let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/dcim/power-ports/{id}/"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
 }
 
 # Call to super to allow for caching
@@ -6286,10 +6422,11 @@ export def "dcim-power-ports get" [
 ]: nothing -> record<allocated_draw: int, cable: record<id: int, label: string, url: string>, connected_endpoint: record, connected_endpoint_type: string, connection_status: record<label: string, value: bool>, description: string, device: record<display_name: string, id: int, name: string, url: string>, id: int, maximum_draw: int, name: string, tags: list<string>, type: record<label: string, value: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
   let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/dcim/power-ports/{id}/"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
 }
 
 # PATCH /dcim/power-ports/{id}/
@@ -6320,12 +6457,13 @@ export def "dcim-power-ports update-by-id" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
   let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/dcim/power-ports/{id}/"))
   let req_body = {"allocated_draw": $allocated_draw, "cable": $cable, "connection_status": $connection_status, "description": $description, "device": $device, "maximum_draw": $maximum_draw, "name": $name, "tags": $tags, "type": $type} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "patch" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body
+  do-request "patch" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: {}, body: $req_body}
 }
 
 # PUT /dcim/power-ports/{id}/
@@ -6356,12 +6494,13 @@ export def "dcim-power-ports update-by-id-1" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
   let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/dcim/power-ports/{id}/"))
   let req_body = {"allocated_draw": $allocated_draw, "cable": $cable, "connection_status": $connection_status, "description": $description, "device": $device, "maximum_draw": $maximum_draw, "name": $name, "tags": $tags, "type": $type} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: {}, body: $req_body}
 }
 
 # Trace a complete cable path and return each segment as a three-tuple of (termination, cable, termination).
@@ -6382,10 +6521,11 @@ export def "dcim-power-ports-trace get" [
 ]: nothing -> record<allocated_draw: int, cable: record<id: int, label: string, url: string>, connected_endpoint: record, connected_endpoint_type: string, connection_status: record<label: string, value: bool>, description: string, device: record<display_name: string, id: int, name: string, url: string>, id: int, maximum_draw: int, name: string, tags: list<string>, type: record<label: string, value: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
   let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/dcim/power-ports/{id}/trace/"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
 }
 
 # Call to super to allow for caching
@@ -6460,7 +6600,7 @@ export def "dcim-rack-groups list" [
   let full_url = (build-url $base "/dcim/rack-groups/" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"id": $id, "name": $name, "slug": $slug, "description": $description, "q": $q, "region_id": $region_id, "region": $region, "site_id": $site_id, "site": $site, "parent_id": $parent_id, "parent": $parent, "id__n": $id_n, "id__lte": $id_lte, "id__lt": $id_lt, "id__gte": $id_gte, "id__gt": $id_gt, "name__n": $name_n, "name__ic": $name_ic, "name__nic": $name_nic, "name__iew": $name_iew, "name__niew": $name_niew, "name__isw": $name_isw, "name__nisw": $name_nisw, "name__ie": $name_ie, "name__nie": $name_nie, "slug__n": $slug_n, "slug__ic": $slug_ic, "slug__nic": $slug_nic, "slug__iew": $slug_iew, "slug__niew": $slug_niew, "slug__isw": $slug_isw, "slug__nisw": $slug_nisw, "slug__ie": $slug_ie, "slug__nie": $slug_nie, "description__n": $description_n, "description__ic": $description_ic, "description__nic": $description_nic, "description__iew": $description_iew, "description__niew": $description_niew, "description__isw": $description_isw, "description__nisw": $description_nisw, "description__ie": $description_ie, "description__nie": $description_nie, "region_id__n": $region_id_n, "region__n": $region_n, "site_id__n": $site_id_n, "site__n": $site_n, "parent_id__n": $parent_id_n, "parent__n": $parent_n, "limit": $limit, "offset": $offset} | compact), body: null}
 }
 
 # POST /dcim/rack-groups/
@@ -6490,7 +6630,7 @@ export def "dcim-rack-groups create" [
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: {}, body: $req_body}
 }
 
 # DELETE /dcim/rack-groups/{id}/
@@ -6510,10 +6650,11 @@ export def "dcim-rack-groups delete" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
   let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/dcim/rack-groups/{id}/"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
 }
 
 # Call to super to allow for caching
@@ -6534,10 +6675,11 @@ export def "dcim-rack-groups get" [
 ]: nothing -> record<description: string, id: int, name: string, parent: record<id: int, name: string, rack_count: int, slug: string, url: string>, rack_count: int, site: record<id: int, name: string, slug: string, url: string>, slug: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
   let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/dcim/rack-groups/{id}/"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
 }
 
 # PATCH /dcim/rack-groups/{id}/
@@ -6563,12 +6705,13 @@ export def "dcim-rack-groups update-by-id" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
   let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/dcim/rack-groups/{id}/"))
   let req_body = {"description": $description, "name": $name, "parent": $parent, "site": $site, "slug": $slug} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "patch" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body
+  do-request "patch" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: {}, body: $req_body}
 }
 
 # PUT /dcim/rack-groups/{id}/
@@ -6594,12 +6737,13 @@ export def "dcim-rack-groups update-by-id-1" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
   let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/dcim/rack-groups/{id}/"))
   let req_body = {"description": $description, "name": $name, "parent": $parent, "site": $site, "slug": $slug} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: {}, body: $req_body}
 }
 
 # Call to super to allow for caching
@@ -6660,7 +6804,7 @@ export def "dcim-rack-reservations list" [
   let full_url = (build-url $base "/dcim/rack-reservations/" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"id": $id, "created": $created, "tenant_group_id": $tenant_group_id, "tenant_group": $tenant_group, "tenant_id": $tenant_id, "tenant": $tenant, "q": $q, "rack_id": $rack_id, "site_id": $site_id, "site": $site, "group_id": $group_id, "group": $group, "user_id": $user_id, "user": $user, "id__n": $id_n, "id__lte": $id_lte, "id__lt": $id_lt, "id__gte": $id_gte, "id__gt": $id_gt, "created__n": $created_n, "created__lte": $created_lte, "created__lt": $created_lt, "created__gte": $created_gte, "created__gt": $created_gt, "tenant_group_id__n": $tenant_group_id_n, "tenant_group__n": $tenant_group_n, "tenant_id__n": $tenant_id_n, "tenant__n": $tenant_n, "rack_id__n": $rack_id_n, "site_id__n": $site_id_n, "site__n": $site_n, "group_id__n": $group_id_n, "group__n": $group_n, "user_id__n": $user_id_n, "user__n": $user_n, "limit": $limit, "offset": $offset} | compact), body: null}
 }
 
 # POST /dcim/rack-reservations/
@@ -6690,7 +6834,7 @@ export def "dcim-rack-reservations create" [
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: {}, body: $req_body}
 }
 
 # DELETE /dcim/rack-reservations/{id}/
@@ -6710,10 +6854,11 @@ export def "dcim-rack-reservations delete" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
   let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/dcim/rack-reservations/{id}/"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
 }
 
 # Call to super to allow for caching
@@ -6734,10 +6879,11 @@ export def "dcim-rack-reservations get" [
 ]: nothing -> record<created: string, description: string, id: int, rack: record<device_count: int, display_name: string, id: int, name: string, url: string>, tenant: record<id: int, name: string, slug: string, url: string>, units: list<int>, user: record<id: int, username: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
   let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/dcim/rack-reservations/{id}/"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
 }
 
 # PATCH /dcim/rack-reservations/{id}/
@@ -6763,12 +6909,13 @@ export def "dcim-rack-reservations update-by-id" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
   let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/dcim/rack-reservations/{id}/"))
   let req_body = {"description": $description, "rack": $rack, "tenant": $tenant, "units": $units, "user": $user} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "patch" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body
+  do-request "patch" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: {}, body: $req_body}
 }
 
 # PUT /dcim/rack-reservations/{id}/
@@ -6794,12 +6941,13 @@ export def "dcim-rack-reservations update-by-id-1" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
   let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/dcim/rack-reservations/{id}/"))
   let req_body = {"description": $description, "rack": $rack, "tenant": $tenant, "units": $units, "user": $user} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: {}, body: $req_body}
 }
 
 # Call to super to allow for caching
@@ -6862,7 +7010,7 @@ export def "dcim-rack-roles list" [
   let full_url = (build-url $base "/dcim/rack-roles/" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"id": $id, "name": $name, "slug": $slug, "color": $color, "q": $q, "id__n": $id_n, "id__lte": $id_lte, "id__lt": $id_lt, "id__gte": $id_gte, "id__gt": $id_gt, "name__n": $name_n, "name__ic": $name_ic, "name__nic": $name_nic, "name__iew": $name_iew, "name__niew": $name_niew, "name__isw": $name_isw, "name__nisw": $name_nisw, "name__ie": $name_ie, "name__nie": $name_nie, "slug__n": $slug_n, "slug__ic": $slug_ic, "slug__nic": $slug_nic, "slug__iew": $slug_iew, "slug__niew": $slug_niew, "slug__isw": $slug_isw, "slug__nisw": $slug_nisw, "slug__ie": $slug_ie, "slug__nie": $slug_nie, "color__n": $color_n, "color__ic": $color_ic, "color__nic": $color_nic, "color__iew": $color_iew, "color__niew": $color_niew, "color__isw": $color_isw, "color__nisw": $color_nisw, "color__ie": $color_ie, "color__nie": $color_nie, "limit": $limit, "offset": $offset} | compact), body: null}
 }
 
 # POST /dcim/rack-roles/
@@ -6891,7 +7039,7 @@ export def "dcim-rack-roles create" [
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: {}, body: $req_body}
 }
 
 # DELETE /dcim/rack-roles/{id}/
@@ -6911,10 +7059,11 @@ export def "dcim-rack-roles delete" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
   let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/dcim/rack-roles/{id}/"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
 }
 
 # Call to super to allow for caching
@@ -6935,10 +7084,11 @@ export def "dcim-rack-roles get" [
 ]: nothing -> record<color: string, description: string, id: int, name: string, rack_count: int, slug: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
   let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/dcim/rack-roles/{id}/"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
 }
 
 # PATCH /dcim/rack-roles/{id}/
@@ -6963,12 +7113,13 @@ export def "dcim-rack-roles update-by-id" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
   let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/dcim/rack-roles/{id}/"))
   let req_body = {"color": $color, "description": $description, "name": $name, "slug": $slug} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "patch" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body
+  do-request "patch" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: {}, body: $req_body}
 }
 
 # PUT /dcim/rack-roles/{id}/
@@ -6993,12 +7144,13 @@ export def "dcim-rack-roles update-by-id-1" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
   let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/dcim/rack-roles/{id}/"))
   let req_body = {"color": $color, "description": $description, "name": $name, "slug": $slug} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: {}, body: $req_body}
 }
 
 # Call to super to allow for caching
@@ -7121,7 +7273,7 @@ export def "dcim-racks list" [
   let full_url = (build-url $base "/dcim/racks/" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"id": $id, "name": $name, "facility_id": $facility_id, "asset_tag": $asset_tag, "type": $type, "width": $width, "u_height": $u_height, "desc_units": $desc_units, "outer_width": $outer_width, "outer_depth": $outer_depth, "outer_unit": $outer_unit, "tenant_group_id": $tenant_group_id, "tenant_group": $tenant_group, "tenant_id": $tenant_id, "tenant": $tenant, "created": $created, "created__gte": $created_gte, "created__lte": $created_lte, "last_updated": $last_updated, "last_updated__gte": $last_updated_gte, "last_updated__lte": $last_updated_lte, "q": $q, "region_id": $region_id, "region": $region, "site_id": $site_id, "site": $site, "group_id": $group_id, "group": $group, "status": $status, "role_id": $role_id, "role": $role, "serial": $serial, "tag": $tag, "id__n": $id_n, "id__lte": $id_lte, "id__lt": $id_lt, "id__gte": $id_gte, "id__gt": $id_gt, "name__n": $name_n, "name__ic": $name_ic, "name__nic": $name_nic, "name__iew": $name_iew, "name__niew": $name_niew, "name__isw": $name_isw, "name__nisw": $name_nisw, "name__ie": $name_ie, "name__nie": $name_nie, "facility_id__n": $facility_id_n, "facility_id__ic": $facility_id_ic, "facility_id__nic": $facility_id_nic, "facility_id__iew": $facility_id_iew, "facility_id__niew": $facility_id_niew, "facility_id__isw": $facility_id_isw, "facility_id__nisw": $facility_id_nisw, "facility_id__ie": $facility_id_ie, "facility_id__nie": $facility_id_nie, "asset_tag__n": $asset_tag_n, "asset_tag__ic": $asset_tag_ic, "asset_tag__nic": $asset_tag_nic, "asset_tag__iew": $asset_tag_iew, "asset_tag__niew": $asset_tag_niew, "asset_tag__isw": $asset_tag_isw, "asset_tag__nisw": $asset_tag_nisw, "asset_tag__ie": $asset_tag_ie, "asset_tag__nie": $asset_tag_nie, "type__n": $type_n, "width__n": $width_n, "u_height__n": $u_height_n, "u_height__lte": $u_height_lte, "u_height__lt": $u_height_lt, "u_height__gte": $u_height_gte, "u_height__gt": $u_height_gt, "outer_width__n": $outer_width_n, "outer_width__lte": $outer_width_lte, "outer_width__lt": $outer_width_lt, "outer_width__gte": $outer_width_gte, "outer_width__gt": $outer_width_gt, "outer_depth__n": $outer_depth_n, "outer_depth__lte": $outer_depth_lte, "outer_depth__lt": $outer_depth_lt, "outer_depth__gte": $outer_depth_gte, "outer_depth__gt": $outer_depth_gt, "outer_unit__n": $outer_unit_n, "tenant_group_id__n": $tenant_group_id_n, "tenant_group__n": $tenant_group_n, "tenant_id__n": $tenant_id_n, "tenant__n": $tenant_n, "region_id__n": $region_id_n, "region__n": $region_n, "site_id__n": $site_id_n, "site__n": $site_n, "group_id__n": $group_id_n, "group__n": $group_n, "status__n": $status_n, "role_id__n": $role_id_n, "role__n": $role_n, "tag__n": $tag_n, "limit": $limit, "offset": $offset} | compact), body: null}
 }
 
 # POST /dcim/racks/
@@ -7165,7 +7317,7 @@ export def "dcim-racks create" [
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: {}, body: $req_body}
 }
 
 # DELETE /dcim/racks/{id}/
@@ -7185,10 +7337,11 @@ export def "dcim-racks delete" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
   let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/dcim/racks/{id}/"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
 }
 
 # Call to super to allow for caching
@@ -7209,10 +7362,11 @@ export def "dcim-racks get" [
 ]: nothing -> record<asset_tag: string, comments: string, created: string, custom_fields: record, desc_units: bool, device_count: int, display_name: string, facility_id: string, group: record<id: int, name: string, rack_count: int, slug: string, url: string>, id: int, last_updated: string, name: string, outer_depth: int, outer_unit: record<label: string, value: string>, outer_width: int, powerfeed_count: int, role: record<id: int, name: string, rack_count: int, slug: string, url: string>, serial: string, site: record<id: int, name: string, slug: string, url: string>, status: record<label: string, value: string>, tags: list<string>, tenant: record<id: int, name: string, slug: string, url: string>, type: record<label: string, value: string>, u_height: int, width: record<label: string, value: int>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
   let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/dcim/racks/{id}/"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
 }
 
 # PATCH /dcim/racks/{id}/
@@ -7252,12 +7406,13 @@ export def "dcim-racks update-by-id" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
   let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/dcim/racks/{id}/"))
   let req_body = {"asset_tag": $asset_tag, "comments": $comments, "custom_fields": $custom_fields, "desc_units": $desc_units, "facility_id": $facility_id, "group": $group, "name": $name, "outer_depth": $outer_depth, "outer_unit": $outer_unit, "outer_width": $outer_width, "role": $role, "serial": $serial, "site": $site, "status": $status, "tags": $tags, "tenant": $tenant, "type": $type, "u_height": $u_height, "width": $width} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "patch" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body
+  do-request "patch" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: {}, body: $req_body}
 }
 
 # PUT /dcim/racks/{id}/
@@ -7297,12 +7452,13 @@ export def "dcim-racks update-by-id-1" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
   let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/dcim/racks/{id}/"))
   let req_body = {"asset_tag": $asset_tag, "comments": $comments, "custom_fields": $custom_fields, "desc_units": $desc_units, "facility_id": $facility_id, "group": $group, "name": $name, "outer_depth": $outer_depth, "outer_unit": $outer_unit, "outer_width": $outer_width, "role": $role, "serial": $serial, "site": $site, "status": $status, "tags": $tags, "tenant": $tenant, "type": $type, "u_height": $u_height, "width": $width} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: {}, body: $req_body}
 }
 
 # Rack elevation representing the list of rack units. Also supports rendering the elevation as an SVG.
@@ -7332,11 +7488,12 @@ export def "dcim-racks-elevation get" [
 ]: nothing -> table<device: record<display_name: string, id: int, name: string, url: string>, face: record<label: string, value: string>, id: int, name: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
   let qp = [(serialize-qp "q" $q "scalar") (serialize-qp "face" $face "scalar") (serialize-qp "render" $render "scalar") (serialize-qp "unit_width" $unit_width "scalar") (serialize-qp "unit_height" $unit_height "scalar") (serialize-qp "legend_width" $legend_width "scalar") (serialize-qp "exclude" $exclude "scalar") (serialize-qp "expand_devices" $expand_devices "scalar") (serialize-qp "include_images" $include_images "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/dcim/racks/{id}/elevation/") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"q": $q, "face": $face, "render": $render, "unit_width": $unit_width, "unit_height": $unit_height, "legend_width": $legend_width, "exclude": $exclude, "expand_devices": $expand_devices, "include_images": $include_images} | compact), body: null}
 }
 
 # Call to super to allow for caching
@@ -7389,7 +7546,7 @@ export def "dcim-rear-port-templates list" [
   let full_url = (build-url $base "/dcim/rear-port-templates/" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"id": $id, "name": $name, "type": $type, "positions": $positions, "q": $q, "devicetype_id": $devicetype_id, "id__n": $id_n, "id__lte": $id_lte, "id__lt": $id_lt, "id__gte": $id_gte, "id__gt": $id_gt, "name__n": $name_n, "name__ic": $name_ic, "name__nic": $name_nic, "name__iew": $name_iew, "name__niew": $name_niew, "name__isw": $name_isw, "name__nisw": $name_nisw, "name__ie": $name_ie, "name__nie": $name_nie, "type__n": $type_n, "positions__n": $positions_n, "positions__lte": $positions_lte, "positions__lt": $positions_lt, "positions__gte": $positions_gte, "positions__gt": $positions_gt, "devicetype_id__n": $devicetype_id_n, "limit": $limit, "offset": $offset} | compact), body: null}
 }
 
 # POST /dcim/rear-port-templates/
@@ -7418,7 +7575,7 @@ export def "dcim-rear-port-templates create" [
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: {}, body: $req_body}
 }
 
 # DELETE /dcim/rear-port-templates/{id}/
@@ -7438,10 +7595,11 @@ export def "dcim-rear-port-templates delete" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
   let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/dcim/rear-port-templates/{id}/"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
 }
 
 # Call to super to allow for caching
@@ -7462,10 +7620,11 @@ export def "dcim-rear-port-templates get" [
 ]: nothing -> record<device_type: record<device_count: int, display_name: string, id: int, manufacturer: record<devicetype_count: int, id: int, name: string, slug: string, url: string>, model: string, slug: string, url: string>, id: int, name: string, positions: int, type: record<label: string, value: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
   let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/dcim/rear-port-templates/{id}/"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
 }
 
 # PATCH /dcim/rear-port-templates/{id}/
@@ -7490,12 +7649,13 @@ export def "dcim-rear-port-templates update-by-id" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
   let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/dcim/rear-port-templates/{id}/"))
   let req_body = {"device_type": $device_type, "name": $name, "positions": $positions, "type": $type} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "patch" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body
+  do-request "patch" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: {}, body: $req_body}
 }
 
 # PUT /dcim/rear-port-templates/{id}/
@@ -7520,12 +7680,13 @@ export def "dcim-rear-port-templates update-by-id-1" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
   let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/dcim/rear-port-templates/{id}/"))
   let req_body = {"device_type": $device_type, "name": $name, "positions": $positions, "type": $type} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: {}, body: $req_body}
 }
 
 # Call to super to allow for caching
@@ -7601,7 +7762,7 @@ export def "dcim-rear-ports list" [
   let full_url = (build-url $base "/dcim/rear-ports/" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"id": $id, "name": $name, "type": $type, "positions": $positions, "description": $description, "q": $q, "region_id": $region_id, "region": $region, "site_id": $site_id, "site": $site, "device_id": $device_id, "device": $device, "tag": $tag, "cabled": $cabled, "id__n": $id_n, "id__lte": $id_lte, "id__lt": $id_lt, "id__gte": $id_gte, "id__gt": $id_gt, "name__n": $name_n, "name__ic": $name_ic, "name__nic": $name_nic, "name__iew": $name_iew, "name__niew": $name_niew, "name__isw": $name_isw, "name__nisw": $name_nisw, "name__ie": $name_ie, "name__nie": $name_nie, "type__n": $type_n, "positions__n": $positions_n, "positions__lte": $positions_lte, "positions__lt": $positions_lt, "positions__gte": $positions_gte, "positions__gt": $positions_gt, "description__n": $description_n, "description__ic": $description_ic, "description__nic": $description_nic, "description__iew": $description_iew, "description__niew": $description_niew, "description__isw": $description_isw, "description__nisw": $description_nisw, "description__ie": $description_ie, "description__nie": $description_nie, "region_id__n": $region_id_n, "region__n": $region_n, "site_id__n": $site_id_n, "site__n": $site_n, "device_id__n": $device_id_n, "device__n": $device_n, "tag__n": $tag_n, "limit": $limit, "offset": $offset} | compact), body: null}
 }
 
 # POST /dcim/rear-ports/
@@ -7634,7 +7795,7 @@ export def "dcim-rear-ports create" [
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: {}, body: $req_body}
 }
 
 # DELETE /dcim/rear-ports/{id}/
@@ -7654,10 +7815,11 @@ export def "dcim-rear-ports delete" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
   let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/dcim/rear-ports/{id}/"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
 }
 
 # Call to super to allow for caching
@@ -7678,10 +7840,11 @@ export def "dcim-rear-ports get" [
 ]: nothing -> record<cable: record<id: int, label: string, url: string>, description: string, device: record<display_name: string, id: int, name: string, url: string>, id: int, name: string, positions: int, tags: list<string>, type: record<label: string, value: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
   let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/dcim/rear-ports/{id}/"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
 }
 
 # PATCH /dcim/rear-ports/{id}/
@@ -7710,12 +7873,13 @@ export def "dcim-rear-ports update-by-id" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
   let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/dcim/rear-ports/{id}/"))
   let req_body = {"cable": $cable, "description": $description, "device": $device, "name": $name, "positions": $positions, "tags": $tags, "type": $type} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "patch" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body
+  do-request "patch" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: {}, body: $req_body}
 }
 
 # PUT /dcim/rear-ports/{id}/
@@ -7744,12 +7908,13 @@ export def "dcim-rear-ports update-by-id-1" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
   let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/dcim/rear-ports/{id}/"))
   let req_body = {"cable": $cable, "description": $description, "device": $device, "name": $name, "positions": $positions, "tags": $tags, "type": $type} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: {}, body: $req_body}
 }
 
 # Trace a complete cable path and return each segment as a three-tuple of (termination, cable, termination).
@@ -7770,10 +7935,11 @@ export def "dcim-rear-ports-trace get" [
 ]: nothing -> record<cable: record<id: int, label: string, url: string>, description: string, device: record<display_name: string, id: int, name: string, url: string>, id: int, name: string, positions: int, tags: list<string>, type: record<label: string, value: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
   let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/dcim/rear-ports/{id}/trace/"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
 }
 
 # Call to super to allow for caching
@@ -7840,7 +8006,7 @@ export def "dcim-regions list" [
   let full_url = (build-url $base "/dcim/regions/" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"id": $id, "name": $name, "slug": $slug, "description": $description, "q": $q, "parent_id": $parent_id, "parent": $parent, "id__n": $id_n, "id__lte": $id_lte, "id__lt": $id_lt, "id__gte": $id_gte, "id__gt": $id_gt, "name__n": $name_n, "name__ic": $name_ic, "name__nic": $name_nic, "name__iew": $name_iew, "name__niew": $name_niew, "name__isw": $name_isw, "name__nisw": $name_nisw, "name__ie": $name_ie, "name__nie": $name_nie, "slug__n": $slug_n, "slug__ic": $slug_ic, "slug__nic": $slug_nic, "slug__iew": $slug_iew, "slug__niew": $slug_niew, "slug__isw": $slug_isw, "slug__nisw": $slug_nisw, "slug__ie": $slug_ie, "slug__nie": $slug_nie, "description__n": $description_n, "description__ic": $description_ic, "description__nic": $description_nic, "description__iew": $description_iew, "description__niew": $description_niew, "description__isw": $description_isw, "description__nisw": $description_nisw, "description__ie": $description_ie, "description__nie": $description_nie, "parent_id__n": $parent_id_n, "parent__n": $parent_n, "limit": $limit, "offset": $offset} | compact), body: null}
 }
 
 # POST /dcim/regions/
@@ -7869,7 +8035,7 @@ export def "dcim-regions create" [
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: {}, body: $req_body}
 }
 
 # DELETE /dcim/regions/{id}/
@@ -7889,10 +8055,11 @@ export def "dcim-regions delete" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
   let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/dcim/regions/{id}/"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
 }
 
 # Call to super to allow for caching
@@ -7913,10 +8080,11 @@ export def "dcim-regions get" [
 ]: nothing -> record<description: string, id: int, name: string, parent: record<id: int, name: string, site_count: int, slug: string, url: string>, site_count: int, slug: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
   let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/dcim/regions/{id}/"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
 }
 
 # PATCH /dcim/regions/{id}/
@@ -7941,12 +8109,13 @@ export def "dcim-regions update-by-id" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
   let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/dcim/regions/{id}/"))
   let req_body = {"description": $description, "name": $name, "parent": $parent, "slug": $slug} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "patch" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body
+  do-request "patch" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: {}, body: $req_body}
 }
 
 # PUT /dcim/regions/{id}/
@@ -7971,12 +8140,13 @@ export def "dcim-regions update-by-id-1" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
   let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/dcim/regions/{id}/"))
   let req_body = {"description": $description, "name": $name, "parent": $parent, "slug": $slug} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: {}, body: $req_body}
 }
 
 # Call to super to allow for caching
@@ -8109,7 +8279,7 @@ export def "dcim-sites list" [
   let full_url = (build-url $base "/dcim/sites/" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"id": $id, "name": $name, "slug": $slug, "facility": $facility, "asn": $asn, "latitude": $latitude, "longitude": $longitude, "contact_name": $contact_name, "contact_phone": $contact_phone, "contact_email": $contact_email, "tenant_group_id": $tenant_group_id, "tenant_group": $tenant_group, "tenant_id": $tenant_id, "tenant": $tenant, "created": $created, "created__gte": $created_gte, "created__lte": $created_lte, "last_updated": $last_updated, "last_updated__gte": $last_updated_gte, "last_updated__lte": $last_updated_lte, "q": $q, "status": $status, "region_id": $region_id, "region": $region, "tag": $tag, "id__n": $id_n, "id__lte": $id_lte, "id__lt": $id_lt, "id__gte": $id_gte, "id__gt": $id_gt, "name__n": $name_n, "name__ic": $name_ic, "name__nic": $name_nic, "name__iew": $name_iew, "name__niew": $name_niew, "name__isw": $name_isw, "name__nisw": $name_nisw, "name__ie": $name_ie, "name__nie": $name_nie, "slug__n": $slug_n, "slug__ic": $slug_ic, "slug__nic": $slug_nic, "slug__iew": $slug_iew, "slug__niew": $slug_niew, "slug__isw": $slug_isw, "slug__nisw": $slug_nisw, "slug__ie": $slug_ie, "slug__nie": $slug_nie, "facility__n": $facility_n, "facility__ic": $facility_ic, "facility__nic": $facility_nic, "facility__iew": $facility_iew, "facility__niew": $facility_niew, "facility__isw": $facility_isw, "facility__nisw": $facility_nisw, "facility__ie": $facility_ie, "facility__nie": $facility_nie, "asn__n": $asn_n, "asn__lte": $asn_lte, "asn__lt": $asn_lt, "asn__gte": $asn_gte, "asn__gt": $asn_gt, "latitude__n": $latitude_n, "latitude__lte": $latitude_lte, "latitude__lt": $latitude_lt, "latitude__gte": $latitude_gte, "latitude__gt": $latitude_gt, "longitude__n": $longitude_n, "longitude__lte": $longitude_lte, "longitude__lt": $longitude_lt, "longitude__gte": $longitude_gte, "longitude__gt": $longitude_gt, "contact_name__n": $contact_name_n, "contact_name__ic": $contact_name_ic, "contact_name__nic": $contact_name_nic, "contact_name__iew": $contact_name_iew, "contact_name__niew": $contact_name_niew, "contact_name__isw": $contact_name_isw, "contact_name__nisw": $contact_name_nisw, "contact_name__ie": $contact_name_ie, "contact_name__nie": $contact_name_nie, "contact_phone__n": $contact_phone_n, "contact_phone__ic": $contact_phone_ic, "contact_phone__nic": $contact_phone_nic, "contact_phone__iew": $contact_phone_iew, "contact_phone__niew": $contact_phone_niew, "contact_phone__isw": $contact_phone_isw, "contact_phone__nisw": $contact_phone_nisw, "contact_phone__ie": $contact_phone_ie, "contact_phone__nie": $contact_phone_nie, "contact_email__n": $contact_email_n, "contact_email__ic": $contact_email_ic, "contact_email__nic": $contact_email_nic, "contact_email__iew": $contact_email_iew, "contact_email__niew": $contact_email_niew, "contact_email__isw": $contact_email_isw, "contact_email__nisw": $contact_email_nisw, "contact_email__ie": $contact_email_ie, "contact_email__nie": $contact_email_nie, "tenant_group_id__n": $tenant_group_id_n, "tenant_group__n": $tenant_group_n, "tenant_id__n": $tenant_id_n, "tenant__n": $tenant_n, "status__n": $status_n, "region_id__n": $region_id_n, "region__n": $region_n, "tag__n": $tag_n, "limit": $limit, "offset": $offset} | compact), body: null}
 }
 
 # POST /dcim/sites/
@@ -8153,7 +8323,7 @@ export def "dcim-sites create" [
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: {}, body: $req_body}
 }
 
 # DELETE /dcim/sites/{id}/
@@ -8173,10 +8343,11 @@ export def "dcim-sites delete" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
   let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/dcim/sites/{id}/"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
 }
 
 # Call to super to allow for caching
@@ -8197,10 +8368,11 @@ export def "dcim-sites get" [
 ]: nothing -> record<asn: int, circuit_count: int, comments: string, contact_email: string, contact_name: string, contact_phone: string, created: string, custom_fields: record, description: string, device_count: int, facility: string, id: int, last_updated: string, latitude: string, longitude: string, name: string, physical_address: string, prefix_count: int, rack_count: int, region: record<id: int, name: string, site_count: int, slug: string, url: string>, shipping_address: string, slug: string, status: record<label: string, value: string>, tags: list<string>, tenant: record<id: int, name: string, slug: string, url: string>, time_zone: string, virtualmachine_count: int, vlan_count: int> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
   let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/dcim/sites/{id}/"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
 }
 
 # PATCH /dcim/sites/{id}/
@@ -8240,12 +8412,13 @@ export def "dcim-sites update-by-id" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
   let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/dcim/sites/{id}/"))
   let req_body = {"asn": $asn, "comments": $comments, "contact_email": $contact_email, "contact_name": $contact_name, "contact_phone": $contact_phone, "custom_fields": $custom_fields, "description": $description, "facility": $facility, "latitude": $latitude, "longitude": $longitude, "name": $name, "physical_address": $physical_address, "region": $region, "shipping_address": $shipping_address, "slug": $slug, "status": $status, "tags": $tags, "tenant": $tenant, "time_zone": $time_zone} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "patch" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body
+  do-request "patch" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: {}, body: $req_body}
 }
 
 # PUT /dcim/sites/{id}/
@@ -8285,12 +8458,13 @@ export def "dcim-sites update-by-id-1" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
   let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/dcim/sites/{id}/"))
   let req_body = {"asn": $asn, "comments": $comments, "contact_email": $contact_email, "contact_name": $contact_name, "contact_phone": $contact_phone, "custom_fields": $custom_fields, "description": $description, "facility": $facility, "latitude": $latitude, "longitude": $longitude, "name": $name, "physical_address": $physical_address, "region": $region, "shipping_address": $shipping_address, "slug": $slug, "status": $status, "tags": $tags, "tenant": $tenant, "time_zone": $time_zone} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: {}, body: $req_body}
 }
 
 # A convenience method for rendering graphs for a particular site.
@@ -8311,10 +8485,11 @@ export def "dcim-sites-graphs get" [
 ]: nothing -> record<asn: int, circuit_count: int, comments: string, contact_email: string, contact_name: string, contact_phone: string, created: string, custom_fields: record, description: string, device_count: int, facility: string, id: int, last_updated: string, latitude: string, longitude: string, name: string, physical_address: string, prefix_count: int, rack_count: int, region: record<id: int, name: string, site_count: int, slug: string, url: string>, shipping_address: string, slug: string, status: record<label: string, value: string>, tags: list<string>, tenant: record<id: int, name: string, slug: string, url: string>, time_zone: string, virtualmachine_count: int, vlan_count: int> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
   let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/dcim/sites/{id}/graphs/"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
 }
 
 # Call to super to allow for caching
@@ -8371,7 +8546,7 @@ export def "dcim-virtual-chassis list" [
   let full_url = (build-url $base "/dcim/virtual-chassis/" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"id": $id, "domain": $domain, "q": $q, "region_id": $region_id, "region": $region, "site_id": $site_id, "site": $site, "tenant_id": $tenant_id, "tenant": $tenant, "tag": $tag, "id__n": $id_n, "id__lte": $id_lte, "id__lt": $id_lt, "id__gte": $id_gte, "id__gt": $id_gt, "domain__n": $domain_n, "domain__ic": $domain_ic, "domain__nic": $domain_nic, "domain__iew": $domain_iew, "domain__niew": $domain_niew, "domain__isw": $domain_isw, "domain__nisw": $domain_nisw, "domain__ie": $domain_ie, "domain__nie": $domain_nie, "region_id__n": $region_id_n, "region__n": $region_n, "site_id__n": $site_id_n, "site__n": $site_n, "tenant_id__n": $tenant_id_n, "tenant__n": $tenant_n, "tag__n": $tag_n, "limit": $limit, "offset": $offset} | compact), body: null}
 }
 
 # POST /dcim/virtual-chassis/
@@ -8399,7 +8574,7 @@ export def "dcim-virtual-chassis create" [
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: {}, body: $req_body}
 }
 
 # DELETE /dcim/virtual-chassis/{id}/
@@ -8419,10 +8594,11 @@ export def "dcim-virtual-chassis delete" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
   let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/dcim/virtual-chassis/{id}/"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
 }
 
 # Call to super to allow for caching
@@ -8443,10 +8619,11 @@ export def "dcim-virtual-chassis get" [
 ]: nothing -> record<domain: string, id: int, master: record<display_name: string, id: int, name: string, url: string>, member_count: int, tags: list<string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
   let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/dcim/virtual-chassis/{id}/"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
 }
 
 # PATCH /dcim/virtual-chassis/{id}/
@@ -8470,12 +8647,13 @@ export def "dcim-virtual-chassis update-by-id" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
   let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/dcim/virtual-chassis/{id}/"))
   let req_body = {"domain": $domain, "master": $master, "tags": $tags} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "patch" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body
+  do-request "patch" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: {}, body: $req_body}
 }
 
 # PUT /dcim/virtual-chassis/{id}/
@@ -8499,12 +8677,13 @@ export def "dcim-virtual-chassis update-by-id-1" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
   let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/dcim/virtual-chassis/{id}/"))
   let req_body = {"domain": $domain, "master": $master, "tags": $tags} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: {}, body: $req_body}
 }
 
 # GET /extras/_custom_field_choices/
@@ -8526,7 +8705,7 @@ export def "extras-custom-field-choices list" [
   let full_url = (build-url $base "/extras/_custom_field_choices/")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
 }
 
 # GET /extras/_custom_field_choices/{id}/
@@ -8546,10 +8725,11 @@ export def "extras-custom-field-choices get" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
   let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/extras/_custom_field_choices/{id}/"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
 }
 
 # Call to super to allow for caching
@@ -8625,7 +8805,7 @@ export def "extras-config-contexts list" [
   let full_url = (build-url $base "/extras/config-contexts/" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"id": $id, "name": $name, "is_active": $is_active, "q": $q, "region_id": $region_id, "region": $region, "site_id": $site_id, "site": $site, "role_id": $role_id, "role": $role, "platform_id": $platform_id, "platform": $platform, "cluster_group_id": $cluster_group_id, "cluster_group": $cluster_group, "cluster_id": $cluster_id, "tenant_group_id": $tenant_group_id, "tenant_group": $tenant_group, "tenant_id": $tenant_id, "tenant": $tenant, "tag": $tag, "id__n": $id_n, "id__lte": $id_lte, "id__lt": $id_lt, "id__gte": $id_gte, "id__gt": $id_gt, "name__n": $name_n, "name__ic": $name_ic, "name__nic": $name_nic, "name__iew": $name_iew, "name__niew": $name_niew, "name__isw": $name_isw, "name__nisw": $name_nisw, "name__ie": $name_ie, "name__nie": $name_nie, "region_id__n": $region_id_n, "region__n": $region_n, "site_id__n": $site_id_n, "site__n": $site_n, "role_id__n": $role_id_n, "role__n": $role_n, "platform_id__n": $platform_id_n, "platform__n": $platform_n, "cluster_group_id__n": $cluster_group_id_n, "cluster_group__n": $cluster_group_n, "cluster_id__n": $cluster_id_n, "tenant_group_id__n": $tenant_group_id_n, "tenant_group__n": $tenant_group_n, "tenant_id__n": $tenant_id_n, "tenant__n": $tenant_n, "tag__n": $tag_n, "limit": $limit, "offset": $offset} | compact), body: null}
 }
 
 # POST /extras/config-contexts/
@@ -8664,7 +8844,7 @@ export def "extras-config-contexts create" [
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: {}, body: $req_body}
 }
 
 # DELETE /extras/config-contexts/{id}/
@@ -8684,10 +8864,11 @@ export def "extras-config-contexts delete" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
   let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/extras/config-contexts/{id}/"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
 }
 
 # Call to super to allow for caching
@@ -8708,10 +8889,11 @@ export def "extras-config-contexts get" [
 ]: nothing -> record<cluster_groups: table<cluster_count: int, id: int, name: string, slug: string, url: string>, clusters: table<id: int, name: string, url: string, virtualmachine_count: int>, data: string, description: string, id: int, is_active: bool, name: string, platforms: table<device_count: int, id: int, name: string, slug: string, url: string, virtualmachine_count: int>, regions: table<id: int, name: string, site_count: int, slug: string, url: string>, roles: table<device_count: int, id: int, name: string, slug: string, url: string, virtualmachine_count: int>, sites: table<id: int, name: string, slug: string, url: string>, tags: list<string>, tenant_groups: table<id: int, name: string, slug: string, tenant_count: int, url: string>, tenants: table<id: int, name: string, slug: string, url: string>, weight: int> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
   let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/extras/config-contexts/{id}/"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
 }
 
 # PATCH /extras/config-contexts/{id}/
@@ -8746,12 +8928,13 @@ export def "extras-config-contexts update-by-id" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
   let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/extras/config-contexts/{id}/"))
   let req_body = {"cluster_groups": $cluster_groups, "clusters": $clusters, "data": $data, "description": $description, "is_active": $is_active, "name": $name, "platforms": $platforms, "regions": $regions, "roles": $roles, "sites": $sites, "tags": $tags, "tenant_groups": $tenant_groups, "tenants": $tenants, "weight": $weight} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "patch" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body
+  do-request "patch" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: {}, body: $req_body}
 }
 
 # PUT /extras/config-contexts/{id}/
@@ -8786,12 +8969,13 @@ export def "extras-config-contexts update-by-id-1" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
   let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/extras/config-contexts/{id}/"))
   let req_body = {"cluster_groups": $cluster_groups, "clusters": $clusters, "data": $data, "description": $description, "is_active": $is_active, "name": $name, "platforms": $platforms, "regions": $regions, "roles": $roles, "sites": $sites, "tags": $tags, "tenant_groups": $tenant_groups, "tenants": $tenants, "weight": $weight} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: {}, body: $req_body}
 }
 
 # Call to super to allow for caching
@@ -8837,7 +9021,7 @@ export def "extras-export-templates list" [
   let full_url = (build-url $base "/extras/export-templates/" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"id": $id, "content_type": $content_type, "name": $name, "template_language": $template_language, "id__n": $id_n, "id__lte": $id_lte, "id__lt": $id_lt, "id__gte": $id_gte, "id__gt": $id_gt, "content_type__n": $content_type_n, "name__n": $name_n, "name__ic": $name_ic, "name__nic": $name_nic, "name__iew": $name_iew, "name__niew": $name_niew, "name__isw": $name_isw, "name__nisw": $name_nisw, "name__ie": $name_ie, "name__nie": $name_nie, "template_language__n": $template_language_n, "limit": $limit, "offset": $offset} | compact), body: null}
 }
 
 # POST /extras/export-templates/
@@ -8869,7 +9053,7 @@ export def "extras-export-templates create" [
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: {}, body: $req_body}
 }
 
 # DELETE /extras/export-templates/{id}/
@@ -8889,10 +9073,11 @@ export def "extras-export-templates delete" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
   let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/extras/export-templates/{id}/"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
 }
 
 # Call to super to allow for caching
@@ -8913,10 +9098,11 @@ export def "extras-export-templates get" [
 ]: nothing -> record<content_type: string, description: string, file_extension: string, id: int, mime_type: string, name: string, template_code: string, template_language: record<label: string, value: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
   let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/extras/export-templates/{id}/"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
 }
 
 # PATCH /extras/export-templates/{id}/
@@ -8944,12 +9130,13 @@ export def "extras-export-templates update-by-id" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
   let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/extras/export-templates/{id}/"))
   let req_body = {"content_type": $content_type, "description": $description, "file_extension": $file_extension, "mime_type": $mime_type, "name": $name, "template_code": $template_code, "template_language": $template_language} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "patch" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body
+  do-request "patch" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: {}, body: $req_body}
 }
 
 # PUT /extras/export-templates/{id}/
@@ -8977,12 +9164,13 @@ export def "extras-export-templates update-by-id-1" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
   let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/extras/export-templates/{id}/"))
   let req_body = {"content_type": $content_type, "description": $description, "file_extension": $file_extension, "mime_type": $mime_type, "name": $name, "template_code": $template_code, "template_language": $template_language} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: {}, body: $req_body}
 }
 
 # Call to super to allow for caching
@@ -9028,7 +9216,7 @@ export def "extras-graphs list" [
   let full_url = (build-url $base "/extras/graphs/" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"id": $id, "type": $type, "name": $name, "template_language": $template_language, "id__n": $id_n, "id__lte": $id_lte, "id__lt": $id_lt, "id__gte": $id_gte, "id__gt": $id_gt, "type__n": $type_n, "name__n": $name_n, "name__ic": $name_ic, "name__nic": $name_nic, "name__iew": $name_iew, "name__niew": $name_niew, "name__isw": $name_isw, "name__nisw": $name_nisw, "name__ie": $name_ie, "name__nie": $name_nie, "template_language__n": $template_language_n, "limit": $limit, "offset": $offset} | compact), body: null}
 }
 
 # POST /extras/graphs/
@@ -9059,7 +9247,7 @@ export def "extras-graphs create" [
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: {}, body: $req_body}
 }
 
 # DELETE /extras/graphs/{id}/
@@ -9079,10 +9267,11 @@ export def "extras-graphs delete" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
   let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/extras/graphs/{id}/"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
 }
 
 # Call to super to allow for caching
@@ -9103,10 +9292,11 @@ export def "extras-graphs get" [
 ]: nothing -> record<id: int, link: string, name: string, source: string, template_language: string, type: string, weight: int> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
   let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/extras/graphs/{id}/"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
 }
 
 # PATCH /extras/graphs/{id}/
@@ -9133,12 +9323,13 @@ export def "extras-graphs update-by-id" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
   let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/extras/graphs/{id}/"))
   let req_body = {"link": $link, "name": $name, "source": $body_source, "template_language": $template_language, "type": $type, "weight": $weight} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "patch" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body
+  do-request "patch" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: {}, body: $req_body}
 }
 
 # PUT /extras/graphs/{id}/
@@ -9165,12 +9356,13 @@ export def "extras-graphs update-by-id-1" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
   let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/extras/graphs/{id}/"))
   let req_body = {"link": $link, "name": $name, "source": $body_source, "template_language": $template_language, "type": $type, "weight": $weight} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: {}, body: $req_body}
 }
 
 # Call to super to allow for caching
@@ -9196,7 +9388,7 @@ export def "extras-image-attachments list" [
   let full_url = (build-url $base "/extras/image-attachments/" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"limit": $limit, "offset": $offset} | compact), body: null}
 }
 
 # POST /extras/image-attachments/
@@ -9226,7 +9418,7 @@ export def "extras-image-attachments create" [
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: {}, body: $req_body}
 }
 
 # DELETE /extras/image-attachments/{id}/
@@ -9246,10 +9438,11 @@ export def "extras-image-attachments delete" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
   let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/extras/image-attachments/{id}/"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
 }
 
 # Call to super to allow for caching
@@ -9270,10 +9463,11 @@ export def "extras-image-attachments get" [
 ]: nothing -> record<content_type: string, created: string, id: int, image: string, image_height: int, image_width: int, name: string, object_id: int, parent: record> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
   let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/extras/image-attachments/{id}/"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
 }
 
 # PATCH /extras/image-attachments/{id}/
@@ -9299,12 +9493,13 @@ export def "extras-image-attachments update-by-id" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
   let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/extras/image-attachments/{id}/"))
   let req_body = {"content_type": $content_type, "image_height": $image_height, "image_width": $image_width, "name": $name, "object_id": $object_id} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "patch" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body
+  do-request "patch" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: {}, body: $req_body}
 }
 
 # PUT /extras/image-attachments/{id}/
@@ -9330,12 +9525,13 @@ export def "extras-image-attachments update-by-id-1" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
   let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/extras/image-attachments/{id}/"))
   let req_body = {"content_type": $content_type, "image_height": $image_height, "image_width": $image_width, "name": $name, "object_id": $object_id} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: {}, body: $req_body}
 }
 
 # Retrieve a list of recent changes.
@@ -9402,7 +9598,7 @@ export def "extras-object-changes list" [
   let full_url = (build-url $base "/extras/object-changes/" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"id": $id, "user": $user, "user_name": $user_name, "request_id": $request_id, "action": $action, "changed_object_type": $changed_object_type, "changed_object_id": $changed_object_id, "object_repr": $object_repr, "q": $q, "time": $time, "id__n": $id_n, "id__lte": $id_lte, "id__lt": $id_lt, "id__gte": $id_gte, "id__gt": $id_gt, "user__n": $user_n, "user_name__n": $user_name_n, "user_name__ic": $user_name_ic, "user_name__nic": $user_name_nic, "user_name__iew": $user_name_iew, "user_name__niew": $user_name_niew, "user_name__isw": $user_name_isw, "user_name__nisw": $user_name_nisw, "user_name__ie": $user_name_ie, "user_name__nie": $user_name_nie, "action__n": $action_n, "changed_object_type__n": $changed_object_type_n, "changed_object_id__n": $changed_object_id_n, "changed_object_id__lte": $changed_object_id_lte, "changed_object_id__lt": $changed_object_id_lt, "changed_object_id__gte": $changed_object_id_gte, "changed_object_id__gt": $changed_object_id_gt, "object_repr__n": $object_repr_n, "object_repr__ic": $object_repr_ic, "object_repr__nic": $object_repr_nic, "object_repr__iew": $object_repr_iew, "object_repr__niew": $object_repr_niew, "object_repr__isw": $object_repr_isw, "object_repr__nisw": $object_repr_nisw, "object_repr__ie": $object_repr_ie, "object_repr__nie": $object_repr_nie, "limit": $limit, "offset": $offset} | compact), body: null}
 }
 
 # Retrieve a list of recent changes.
@@ -9423,10 +9619,11 @@ export def "extras-object-changes get" [
 ]: nothing -> record<action: record<label: string, value: string>, changed_object: record, changed_object_id: int, changed_object_type: string, id: int, object_data: string, request_id: string, time: string, user: record<id: int, username: string>, user_name: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
   let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/extras/object-changes/{id}/"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
 }
 
 # Compile all reports and their related results (if any). Result data is deferred in the list view.
@@ -9449,7 +9646,7 @@ export def "extras-reports list" [
   let full_url = (build-url $base "/extras/reports/")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
 }
 
 # Retrieve a single Report identified as ".".
@@ -9470,10 +9667,11 @@ export def "extras-reports get" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
   let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/extras/reports/{id}/"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
 }
 
 # Run a Report and create a new ReportResult, overwriting any previous result for the Report.
@@ -9494,10 +9692,11 @@ export def "extras-reports-run create" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
   let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/extras/reports/{id}/run/"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
 }
 
 # GET /extras/scripts/
@@ -9519,7 +9718,7 @@ export def "extras-scripts list" [
   let full_url = (build-url $base "/extras/scripts/")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
 }
 
 # GET /extras/scripts/{id}/
@@ -9539,10 +9738,11 @@ export def "extras-scripts get" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
   let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/extras/scripts/{id}/"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
 }
 
 # Call to super to allow for caching
@@ -9605,7 +9805,7 @@ export def "extras-tags list" [
   let full_url = (build-url $base "/extras/tags/" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"id": $id, "name": $name, "slug": $slug, "color": $color, "q": $q, "id__n": $id_n, "id__lte": $id_lte, "id__lt": $id_lt, "id__gte": $id_gte, "id__gt": $id_gt, "name__n": $name_n, "name__ic": $name_ic, "name__nic": $name_nic, "name__iew": $name_iew, "name__niew": $name_niew, "name__isw": $name_isw, "name__nisw": $name_nisw, "name__ie": $name_ie, "name__nie": $name_nie, "slug__n": $slug_n, "slug__ic": $slug_ic, "slug__nic": $slug_nic, "slug__iew": $slug_iew, "slug__niew": $slug_niew, "slug__isw": $slug_isw, "slug__nisw": $slug_nisw, "slug__ie": $slug_ie, "slug__nie": $slug_nie, "color__n": $color_n, "color__ic": $color_ic, "color__nic": $color_nic, "color__iew": $color_iew, "color__niew": $color_niew, "color__isw": $color_isw, "color__nisw": $color_nisw, "color__ie": $color_ie, "color__nie": $color_nie, "limit": $limit, "offset": $offset} | compact), body: null}
 }
 
 # POST /extras/tags/
@@ -9634,7 +9834,7 @@ export def "extras-tags create" [
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: {}, body: $req_body}
 }
 
 # DELETE /extras/tags/{id}/
@@ -9654,10 +9854,11 @@ export def "extras-tags delete" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
   let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/extras/tags/{id}/"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
 }
 
 # Call to super to allow for caching
@@ -9678,10 +9879,11 @@ export def "extras-tags get" [
 ]: nothing -> record<color: string, description: string, id: int, name: string, slug: string, tagged_items: int> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
   let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/extras/tags/{id}/"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
 }
 
 # PATCH /extras/tags/{id}/
@@ -9706,12 +9908,13 @@ export def "extras-tags update-by-id" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
   let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/extras/tags/{id}/"))
   let req_body = {"color": $color, "description": $description, "name": $name, "slug": $slug} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "patch" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body
+  do-request "patch" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: {}, body: $req_body}
 }
 
 # PUT /extras/tags/{id}/
@@ -9736,12 +9939,13 @@ export def "extras-tags update-by-id-1" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
   let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/extras/tags/{id}/"))
   let req_body = {"color": $color, "description": $description, "name": $name, "slug": $slug} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: {}, body: $req_body}
 }
 
 # Call to super to allow for caching
@@ -9794,7 +9998,7 @@ export def "ipam-aggregates list" [
   let full_url = (build-url $base "/ipam/aggregates/" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"id": $id, "date_added": $date_added, "created": $created, "created__gte": $created_gte, "created__lte": $created_lte, "last_updated": $last_updated, "last_updated__gte": $last_updated_gte, "last_updated__lte": $last_updated_lte, "q": $q, "family": $family, "prefix": $prefix, "rir_id": $rir_id, "rir": $rir, "tag": $tag, "id__n": $id_n, "id__lte": $id_lte, "id__lt": $id_lt, "id__gte": $id_gte, "id__gt": $id_gt, "date_added__n": $date_added_n, "date_added__lte": $date_added_lte, "date_added__lt": $date_added_lt, "date_added__gte": $date_added_gte, "date_added__gt": $date_added_gt, "rir_id__n": $rir_id_n, "rir__n": $rir_n, "tag__n": $tag_n, "limit": $limit, "offset": $offset} | compact), body: null}
 }
 
 # POST /ipam/aggregates/
@@ -9825,7 +10029,7 @@ export def "ipam-aggregates create" [
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: {}, body: $req_body}
 }
 
 # DELETE /ipam/aggregates/{id}/
@@ -9845,10 +10049,11 @@ export def "ipam-aggregates delete" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
   let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/ipam/aggregates/{id}/"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
 }
 
 # Call to super to allow for caching
@@ -9869,10 +10074,11 @@ export def "ipam-aggregates get" [
 ]: nothing -> record<created: string, custom_fields: record, date_added: string, description: string, family: record<label: string, value: int>, id: int, last_updated: string, prefix: string, rir: record<aggregate_count: int, id: int, name: string, slug: string, url: string>, tags: list<string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
   let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/ipam/aggregates/{id}/"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
 }
 
 # PATCH /ipam/aggregates/{id}/
@@ -9899,12 +10105,13 @@ export def "ipam-aggregates update-by-id" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
   let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/ipam/aggregates/{id}/"))
   let req_body = {"custom_fields": $custom_fields, "date_added": $date_added, "description": $description, "prefix": $prefix, "rir": $rir, "tags": $tags} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "patch" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body
+  do-request "patch" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: {}, body: $req_body}
 }
 
 # PUT /ipam/aggregates/{id}/
@@ -9931,12 +10138,13 @@ export def "ipam-aggregates update-by-id-1" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
   let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/ipam/aggregates/{id}/"))
   let req_body = {"custom_fields": $custom_fields, "date_added": $date_added, "description": $description, "prefix": $prefix, "rir": $rir, "tags": $tags} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: {}, body: $req_body}
 }
 
 # Call to super to allow for caching
@@ -10018,7 +10226,7 @@ export def "ipam-ip-addresses list" [
   let full_url = (build-url $base "/ipam/ip-addresses/" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"id": $id, "dns_name": $dns_name, "tenant_group_id": $tenant_group_id, "tenant_group": $tenant_group, "tenant_id": $tenant_id, "tenant": $tenant, "created": $created, "created__gte": $created_gte, "created__lte": $created_lte, "last_updated": $last_updated, "last_updated__gte": $last_updated_gte, "last_updated__lte": $last_updated_lte, "q": $q, "family": $family, "parent": $parent, "address": $address, "mask_length": $mask_length, "vrf_id": $vrf_id, "vrf": $vrf, "device": $device, "device_id": $device_id, "virtual_machine_id": $virtual_machine_id, "virtual_machine": $virtual_machine, "interface": $interface, "interface_id": $interface_id, "assigned_to_interface": $assigned_to_interface, "status": $status, "role": $role, "tag": $tag, "id__n": $id_n, "id__lte": $id_lte, "id__lt": $id_lt, "id__gte": $id_gte, "id__gt": $id_gt, "dns_name__n": $dns_name_n, "dns_name__ic": $dns_name_ic, "dns_name__nic": $dns_name_nic, "dns_name__iew": $dns_name_iew, "dns_name__niew": $dns_name_niew, "dns_name__isw": $dns_name_isw, "dns_name__nisw": $dns_name_nisw, "dns_name__ie": $dns_name_ie, "dns_name__nie": $dns_name_nie, "tenant_group_id__n": $tenant_group_id_n, "tenant_group__n": $tenant_group_n, "tenant_id__n": $tenant_id_n, "tenant__n": $tenant_n, "vrf_id__n": $vrf_id_n, "vrf__n": $vrf_n, "virtual_machine_id__n": $virtual_machine_id_n, "virtual_machine__n": $virtual_machine_n, "interface__n": $interface_n, "interface_id__n": $interface_id_n, "status__n": $status_n, "role__n": $role_n, "tag__n": $tag_n, "limit": $limit, "offset": $offset} | compact), body: null}
 }
 
 # POST /ipam/ip-addresses/
@@ -10055,7 +10263,7 @@ export def "ipam-ip-addresses create" [
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: {}, body: $req_body}
 }
 
 # DELETE /ipam/ip-addresses/{id}/
@@ -10075,10 +10283,11 @@ export def "ipam-ip-addresses delete" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
   let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/ipam/ip-addresses/{id}/"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
 }
 
 # Call to super to allow for caching
@@ -10099,10 +10308,11 @@ export def "ipam-ip-addresses get" [
 ]: nothing -> record<address: string, created: string, custom_fields: record, description: string, dns_name: string, family: record<label: string, value: int>, id: int, interface: record<device: record<display_name: string, id: int, name: string, url: string>, id: int, name: string, url: string, virtual_machine: record<id: int, name: string, url: string>>, last_updated: string, nat_inside: record<address: string, family: string, id: int, url: string>, nat_outside: record<address: string, family: string, id: int, url: string>, role: record<label: string, value: string>, status: record<label: string, value: string>, tags: list<string>, tenant: record<id: int, name: string, slug: string, url: string>, vrf: record<id: int, name: string, prefix_count: int, rd: string, url: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
   let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/ipam/ip-addresses/{id}/"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
 }
 
 # PATCH /ipam/ip-addresses/{id}/
@@ -10135,12 +10345,13 @@ export def "ipam-ip-addresses update-by-id" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
   let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/ipam/ip-addresses/{id}/"))
   let req_body = {"address": $address, "custom_fields": $custom_fields, "description": $description, "dns_name": $dns_name, "interface": $interface, "nat_inside": $nat_inside, "nat_outside": $nat_outside, "role": $role, "status": $status, "tags": $tags, "tenant": $tenant, "vrf": $vrf} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "patch" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body
+  do-request "patch" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: {}, body: $req_body}
 }
 
 # PUT /ipam/ip-addresses/{id}/
@@ -10173,12 +10384,13 @@ export def "ipam-ip-addresses update-by-id-1" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
   let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/ipam/ip-addresses/{id}/"))
   let req_body = {"address": $address, "custom_fields": $custom_fields, "description": $description, "dns_name": $dns_name, "interface": $interface, "nat_inside": $nat_inside, "nat_outside": $nat_outside, "role": $role, "status": $status, "tags": $tags, "tenant": $tenant, "vrf": $vrf} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: {}, body: $req_body}
 }
 
 # Call to super to allow for caching
@@ -10255,7 +10467,7 @@ export def "ipam-prefixes list" [
   let full_url = (build-url $base "/ipam/prefixes/" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"id": $id, "is_pool": $is_pool, "tenant_group_id": $tenant_group_id, "tenant_group": $tenant_group, "tenant_id": $tenant_id, "tenant": $tenant, "created": $created, "created__gte": $created_gte, "created__lte": $created_lte, "last_updated": $last_updated, "last_updated__gte": $last_updated_gte, "last_updated__lte": $last_updated_lte, "q": $q, "family": $family, "prefix": $prefix, "within": $within, "within_include": $within_include, "contains": $contains, "mask_length": $mask_length, "vrf_id": $vrf_id, "vrf": $vrf, "region_id": $region_id, "region": $region, "site_id": $site_id, "site": $site, "vlan_id": $vlan_id, "vlan_vid": $vlan_vid, "role_id": $role_id, "role": $role, "status": $status, "tag": $tag, "id__n": $id_n, "id__lte": $id_lte, "id__lt": $id_lt, "id__gte": $id_gte, "id__gt": $id_gt, "tenant_group_id__n": $tenant_group_id_n, "tenant_group__n": $tenant_group_n, "tenant_id__n": $tenant_id_n, "tenant__n": $tenant_n, "vrf_id__n": $vrf_id_n, "vrf__n": $vrf_n, "region_id__n": $region_id_n, "region__n": $region_n, "site_id__n": $site_id_n, "site__n": $site_n, "vlan_id__n": $vlan_id_n, "role_id__n": $role_id_n, "role__n": $role_n, "status__n": $status_n, "tag__n": $tag_n, "limit": $limit, "offset": $offset} | compact), body: null}
 }
 
 # POST /ipam/prefixes/
@@ -10291,7 +10503,7 @@ export def "ipam-prefixes create" [
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: {}, body: $req_body}
 }
 
 # DELETE /ipam/prefixes/{id}/
@@ -10311,10 +10523,11 @@ export def "ipam-prefixes delete" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
   let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/ipam/prefixes/{id}/"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
 }
 
 # Call to super to allow for caching
@@ -10335,10 +10548,11 @@ export def "ipam-prefixes get" [
 ]: nothing -> record<created: string, custom_fields: record, description: string, family: record<label: string, value: int>, id: int, is_pool: bool, last_updated: string, prefix: string, role: record<id: int, name: string, prefix_count: int, slug: string, url: string, vlan_count: int>, site: record<id: int, name: string, slug: string, url: string>, status: record<label: string, value: string>, tags: list<string>, tenant: record<id: int, name: string, slug: string, url: string>, vlan: record<display_name: string, id: int, name: string, url: string, vid: int>, vrf: record<id: int, name: string, prefix_count: int, rd: string, url: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
   let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/ipam/prefixes/{id}/"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
 }
 
 # PATCH /ipam/prefixes/{id}/
@@ -10370,12 +10584,13 @@ export def "ipam-prefixes update-by-id" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
   let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/ipam/prefixes/{id}/"))
   let req_body = {"custom_fields": $custom_fields, "description": $description, "is_pool": $is_pool, "prefix": $prefix, "role": $role, "site": $site, "status": $status, "tags": $tags, "tenant": $tenant, "vlan": $vlan, "vrf": $vrf} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "patch" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body
+  do-request "patch" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: {}, body: $req_body}
 }
 
 # PUT /ipam/prefixes/{id}/
@@ -10407,12 +10622,13 @@ export def "ipam-prefixes update-by-id-1" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
   let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/ipam/prefixes/{id}/"))
   let req_body = {"custom_fields": $custom_fields, "description": $description, "is_pool": $is_pool, "prefix": $prefix, "role": $role, "site": $site, "status": $status, "tags": $tags, "tenant": $tenant, "vlan": $vlan, "vrf": $vrf} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: {}, body: $req_body}
 }
 
 # A convenience method for returning available IP addresses within a prefix. By default, the number of IPs returned will be equivalent to PAGINATE_COUNT. An arbitrary limit (up to MAX_PAGE_SIZE, if set) may be passed, however results will not be paginated. The advisory lock decorator uses a PostgreSQL advisory lock to prevent this API from being invoked in parallel, which results in a race condition where multiple insertions can occur.
@@ -10433,10 +10649,11 @@ export def "ipam-prefixes-available-ips get" [
 ]: nothing -> table<address: string, family: int, vrf: record<id: int, name: string, prefix_count: int, rd: string, url: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
   let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/ipam/prefixes/{id}/available-ips/"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
 }
 
 # A convenience method for returning available IP addresses within a prefix. By default, the number of IPs returned will be equivalent to PAGINATE_COUNT. An arbitrary limit (up to MAX_PAGE_SIZE, if set) may be passed, however results will not be paginated. The advisory lock decorator uses a PostgreSQL advisory lock to prevent this API from being invoked in parallel, which results in a race condition where multiple insertions can occur.
@@ -10459,12 +10676,13 @@ export def "ipam-prefixes-available-ips create" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
   let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/ipam/prefixes/{id}/available-ips/"))
   let req_body = $body
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: {}, body: $req_body}
 }
 
 # A convenience method for returning available child prefixes within a parent.
@@ -10485,10 +10703,11 @@ export def "ipam-prefixes-available-prefixes get" [
 ]: nothing -> table<family: int, prefix: string, vrf: record<id: int, name: string, prefix_count: int, rd: string, url: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
   let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/ipam/prefixes/{id}/available-prefixes/"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
 }
 
 # A convenience method for returning available child prefixes within a parent.
@@ -10521,12 +10740,13 @@ export def "ipam-prefixes-available-prefixes create" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
   let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/ipam/prefixes/{id}/available-prefixes/"))
   let req_body = {"custom_fields": $custom_fields, "description": $description, "is_pool": $is_pool, "prefix": $prefix, "role": $role, "site": $site, "status": $status, "tags": $tags, "tenant": $tenant, "vlan": $vlan, "vrf": $vrf} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: {}, body: $req_body}
 }
 
 # Call to super to allow for caching
@@ -10590,7 +10810,7 @@ export def "ipam-rirs list" [
   let full_url = (build-url $base "/ipam/rirs/" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"id": $id, "name": $name, "slug": $slug, "is_private": $is_private, "description": $description, "q": $q, "id__n": $id_n, "id__lte": $id_lte, "id__lt": $id_lt, "id__gte": $id_gte, "id__gt": $id_gt, "name__n": $name_n, "name__ic": $name_ic, "name__nic": $name_nic, "name__iew": $name_iew, "name__niew": $name_niew, "name__isw": $name_isw, "name__nisw": $name_nisw, "name__ie": $name_ie, "name__nie": $name_nie, "slug__n": $slug_n, "slug__ic": $slug_ic, "slug__nic": $slug_nic, "slug__iew": $slug_iew, "slug__niew": $slug_niew, "slug__isw": $slug_isw, "slug__nisw": $slug_nisw, "slug__ie": $slug_ie, "slug__nie": $slug_nie, "description__n": $description_n, "description__ic": $description_ic, "description__nic": $description_nic, "description__iew": $description_iew, "description__niew": $description_niew, "description__isw": $description_isw, "description__nisw": $description_nisw, "description__ie": $description_ie, "description__nie": $description_nie, "limit": $limit, "offset": $offset} | compact), body: null}
 }
 
 # POST /ipam/rirs/
@@ -10619,7 +10839,7 @@ export def "ipam-rirs create" [
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: {}, body: $req_body}
 }
 
 # DELETE /ipam/rirs/{id}/
@@ -10639,10 +10859,11 @@ export def "ipam-rirs delete" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
   let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/ipam/rirs/{id}/"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
 }
 
 # Call to super to allow for caching
@@ -10663,10 +10884,11 @@ export def "ipam-rirs get" [
 ]: nothing -> record<aggregate_count: int, description: string, id: int, is_private: bool, name: string, slug: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
   let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/ipam/rirs/{id}/"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
 }
 
 # PATCH /ipam/rirs/{id}/
@@ -10691,12 +10913,13 @@ export def "ipam-rirs update-by-id" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
   let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/ipam/rirs/{id}/"))
   let req_body = {"description": $description, "is_private": $is_private, "name": $name, "slug": $slug} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "patch" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body
+  do-request "patch" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: {}, body: $req_body}
 }
 
 # PUT /ipam/rirs/{id}/
@@ -10721,12 +10944,13 @@ export def "ipam-rirs update-by-id-1" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
   let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/ipam/rirs/{id}/"))
   let req_body = {"description": $description, "is_private": $is_private, "name": $name, "slug": $slug} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: {}, body: $req_body}
 }
 
 # Call to super to allow for caching
@@ -10779,7 +11003,7 @@ export def "ipam-roles list" [
   let full_url = (build-url $base "/ipam/roles/" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"id": $id, "name": $name, "slug": $slug, "q": $q, "id__n": $id_n, "id__lte": $id_lte, "id__lt": $id_lt, "id__gte": $id_gte, "id__gt": $id_gt, "name__n": $name_n, "name__ic": $name_ic, "name__nic": $name_nic, "name__iew": $name_iew, "name__niew": $name_niew, "name__isw": $name_isw, "name__nisw": $name_nisw, "name__ie": $name_ie, "name__nie": $name_nie, "slug__n": $slug_n, "slug__ic": $slug_ic, "slug__nic": $slug_nic, "slug__iew": $slug_iew, "slug__niew": $slug_niew, "slug__isw": $slug_isw, "slug__nisw": $slug_nisw, "slug__ie": $slug_ie, "slug__nie": $slug_nie, "limit": $limit, "offset": $offset} | compact), body: null}
 }
 
 # POST /ipam/roles/
@@ -10808,7 +11032,7 @@ export def "ipam-roles create" [
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: {}, body: $req_body}
 }
 
 # DELETE /ipam/roles/{id}/
@@ -10828,10 +11052,11 @@ export def "ipam-roles delete" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
   let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/ipam/roles/{id}/"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
 }
 
 # Call to super to allow for caching
@@ -10852,10 +11077,11 @@ export def "ipam-roles get" [
 ]: nothing -> record<description: string, id: int, name: string, prefix_count: int, slug: string, vlan_count: int, weight: int> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
   let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/ipam/roles/{id}/"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
 }
 
 # PATCH /ipam/roles/{id}/
@@ -10880,12 +11106,13 @@ export def "ipam-roles update-by-id" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
   let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/ipam/roles/{id}/"))
   let req_body = {"description": $description, "name": $name, "slug": $slug, "weight": $weight} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "patch" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body
+  do-request "patch" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: {}, body: $req_body}
 }
 
 # PUT /ipam/roles/{id}/
@@ -10910,12 +11137,13 @@ export def "ipam-roles update-by-id-1" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
   let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/ipam/roles/{id}/"))
   let req_body = {"description": $description, "name": $name, "slug": $slug, "weight": $weight} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: {}, body: $req_body}
 }
 
 # Call to super to allow for caching
@@ -10982,7 +11210,7 @@ export def "ipam-services list" [
   let full_url = (build-url $base "/ipam/services/" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"id": $id, "name": $name, "protocol": $protocol, "port": $port, "created": $created, "created__gte": $created_gte, "created__lte": $created_lte, "last_updated": $last_updated, "last_updated__gte": $last_updated_gte, "last_updated__lte": $last_updated_lte, "q": $q, "device_id": $device_id, "device": $device, "virtual_machine_id": $virtual_machine_id, "virtual_machine": $virtual_machine, "tag": $tag, "id__n": $id_n, "id__lte": $id_lte, "id__lt": $id_lt, "id__gte": $id_gte, "id__gt": $id_gt, "name__n": $name_n, "name__ic": $name_ic, "name__nic": $name_nic, "name__iew": $name_iew, "name__niew": $name_niew, "name__isw": $name_isw, "name__nisw": $name_nisw, "name__ie": $name_ie, "name__nie": $name_nie, "protocol__n": $protocol_n, "port__n": $port_n, "port__lte": $port_lte, "port__lt": $port_lt, "port__gte": $port_gte, "port__gt": $port_gt, "device_id__n": $device_id_n, "device__n": $device_n, "virtual_machine_id__n": $virtual_machine_id_n, "virtual_machine__n": $virtual_machine_n, "tag__n": $tag_n, "limit": $limit, "offset": $offset} | compact), body: null}
 }
 
 # POST /ipam/services/
@@ -11016,7 +11244,7 @@ export def "ipam-services create" [
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: {}, body: $req_body}
 }
 
 # DELETE /ipam/services/{id}/
@@ -11036,10 +11264,11 @@ export def "ipam-services delete" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
   let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/ipam/services/{id}/"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
 }
 
 # Call to super to allow for caching
@@ -11060,10 +11289,11 @@ export def "ipam-services get" [
 ]: nothing -> record<created: string, custom_fields: record, description: string, device: record<display_name: string, id: int, name: string, url: string>, id: int, ipaddresses: table<address: string, family: string, id: int, url: string>, last_updated: string, name: string, port: int, protocol: record<label: string, value: string>, tags: list<string>, virtual_machine: record<id: int, name: string, url: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
   let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/ipam/services/{id}/"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
 }
 
 # PATCH /ipam/services/{id}/
@@ -11093,12 +11323,13 @@ export def "ipam-services update-by-id" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
   let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/ipam/services/{id}/"))
   let req_body = {"custom_fields": $custom_fields, "description": $description, "device": $device, "ipaddresses": $ipaddresses, "name": $name, "port": $port, "protocol": $protocol, "tags": $tags, "virtual_machine": $virtual_machine} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "patch" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body
+  do-request "patch" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: {}, body: $req_body}
 }
 
 # PUT /ipam/services/{id}/
@@ -11128,12 +11359,13 @@ export def "ipam-services update-by-id-1" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
   let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/ipam/services/{id}/"))
   let req_body = {"custom_fields": $custom_fields, "description": $description, "device": $device, "ipaddresses": $ipaddresses, "name": $name, "port": $port, "protocol": $protocol, "tags": $tags, "virtual_machine": $virtual_machine} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: {}, body: $req_body}
 }
 
 # Call to super to allow for caching
@@ -11204,7 +11436,7 @@ export def "ipam-vlan-groups list" [
   let full_url = (build-url $base "/ipam/vlan-groups/" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"id": $id, "name": $name, "slug": $slug, "description": $description, "q": $q, "region_id": $region_id, "region": $region, "site_id": $site_id, "site": $site, "id__n": $id_n, "id__lte": $id_lte, "id__lt": $id_lt, "id__gte": $id_gte, "id__gt": $id_gt, "name__n": $name_n, "name__ic": $name_ic, "name__nic": $name_nic, "name__iew": $name_iew, "name__niew": $name_niew, "name__isw": $name_isw, "name__nisw": $name_nisw, "name__ie": $name_ie, "name__nie": $name_nie, "slug__n": $slug_n, "slug__ic": $slug_ic, "slug__nic": $slug_nic, "slug__iew": $slug_iew, "slug__niew": $slug_niew, "slug__isw": $slug_isw, "slug__nisw": $slug_nisw, "slug__ie": $slug_ie, "slug__nie": $slug_nie, "description__n": $description_n, "description__ic": $description_ic, "description__nic": $description_nic, "description__iew": $description_iew, "description__niew": $description_niew, "description__isw": $description_isw, "description__nisw": $description_nisw, "description__ie": $description_ie, "description__nie": $description_nie, "region_id__n": $region_id_n, "region__n": $region_n, "site_id__n": $site_id_n, "site__n": $site_n, "limit": $limit, "offset": $offset} | compact), body: null}
 }
 
 # POST /ipam/vlan-groups/
@@ -11233,7 +11465,7 @@ export def "ipam-vlan-groups create" [
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: {}, body: $req_body}
 }
 
 # DELETE /ipam/vlan-groups/{id}/
@@ -11253,10 +11485,11 @@ export def "ipam-vlan-groups delete" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
   let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/ipam/vlan-groups/{id}/"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
 }
 
 # Call to super to allow for caching
@@ -11277,10 +11510,11 @@ export def "ipam-vlan-groups get" [
 ]: nothing -> record<description: string, id: int, name: string, site: record<id: int, name: string, slug: string, url: string>, slug: string, vlan_count: int> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
   let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/ipam/vlan-groups/{id}/"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
 }
 
 # PATCH /ipam/vlan-groups/{id}/
@@ -11305,12 +11539,13 @@ export def "ipam-vlan-groups update-by-id" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
   let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/ipam/vlan-groups/{id}/"))
   let req_body = {"description": $description, "name": $name, "site": $site, "slug": $slug} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "patch" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body
+  do-request "patch" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: {}, body: $req_body}
 }
 
 # PUT /ipam/vlan-groups/{id}/
@@ -11335,12 +11570,13 @@ export def "ipam-vlan-groups update-by-id-1" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
   let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/ipam/vlan-groups/{id}/"))
   let req_body = {"description": $description, "name": $name, "site": $site, "slug": $slug} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: {}, body: $req_body}
 }
 
 # Call to super to allow for caching
@@ -11423,7 +11659,7 @@ export def "ipam-vlans list" [
   let full_url = (build-url $base "/ipam/vlans/" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"id": $id, "vid": $vid, "name": $name, "tenant_group_id": $tenant_group_id, "tenant_group": $tenant_group, "tenant_id": $tenant_id, "tenant": $tenant, "created": $created, "created__gte": $created_gte, "created__lte": $created_lte, "last_updated": $last_updated, "last_updated__gte": $last_updated_gte, "last_updated__lte": $last_updated_lte, "q": $q, "region_id": $region_id, "region": $region, "site_id": $site_id, "site": $site, "group_id": $group_id, "group": $group, "role_id": $role_id, "role": $role, "status": $status, "tag": $tag, "id__n": $id_n, "id__lte": $id_lte, "id__lt": $id_lt, "id__gte": $id_gte, "id__gt": $id_gt, "vid__n": $vid_n, "vid__lte": $vid_lte, "vid__lt": $vid_lt, "vid__gte": $vid_gte, "vid__gt": $vid_gt, "name__n": $name_n, "name__ic": $name_ic, "name__nic": $name_nic, "name__iew": $name_iew, "name__niew": $name_niew, "name__isw": $name_isw, "name__nisw": $name_nisw, "name__ie": $name_ie, "name__nie": $name_nie, "tenant_group_id__n": $tenant_group_id_n, "tenant_group__n": $tenant_group_n, "tenant_id__n": $tenant_id_n, "tenant__n": $tenant_n, "region_id__n": $region_id_n, "region__n": $region_n, "site_id__n": $site_id_n, "site__n": $site_n, "group_id__n": $group_id_n, "group__n": $group_n, "role_id__n": $role_id_n, "role__n": $role_n, "status__n": $status_n, "tag__n": $tag_n, "limit": $limit, "offset": $offset} | compact), body: null}
 }
 
 # POST /ipam/vlans/
@@ -11458,7 +11694,7 @@ export def "ipam-vlans create" [
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: {}, body: $req_body}
 }
 
 # DELETE /ipam/vlans/{id}/
@@ -11478,10 +11714,11 @@ export def "ipam-vlans delete" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
   let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/ipam/vlans/{id}/"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
 }
 
 # Call to super to allow for caching
@@ -11502,10 +11739,11 @@ export def "ipam-vlans get" [
 ]: nothing -> record<created: string, custom_fields: record, description: string, display_name: string, group: record<id: int, name: string, slug: string, url: string, vlan_count: int>, id: int, last_updated: string, name: string, prefix_count: int, role: record<id: int, name: string, prefix_count: int, slug: string, url: string, vlan_count: int>, site: record<id: int, name: string, slug: string, url: string>, status: record<label: string, value: string>, tags: list<string>, tenant: record<id: int, name: string, slug: string, url: string>, vid: int> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
   let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/ipam/vlans/{id}/"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
 }
 
 # PATCH /ipam/vlans/{id}/
@@ -11536,12 +11774,13 @@ export def "ipam-vlans update-by-id" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
   let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/ipam/vlans/{id}/"))
   let req_body = {"custom_fields": $custom_fields, "description": $description, "group": $group, "name": $name, "role": $role, "site": $site, "status": $status, "tags": $tags, "tenant": $tenant, "vid": $vid} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "patch" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body
+  do-request "patch" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: {}, body: $req_body}
 }
 
 # PUT /ipam/vlans/{id}/
@@ -11572,12 +11811,13 @@ export def "ipam-vlans update-by-id-1" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
   let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/ipam/vlans/{id}/"))
   let req_body = {"custom_fields": $custom_fields, "description": $description, "group": $group, "name": $name, "role": $role, "site": $site, "status": $status, "tags": $tags, "tenant": $tenant, "vid": $vid} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: {}, body: $req_body}
 }
 
 # Call to super to allow for caching
@@ -11647,7 +11887,7 @@ export def "ipam-vrfs list" [
   let full_url = (build-url $base "/ipam/vrfs/" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"id": $id, "name": $name, "rd": $rd, "enforce_unique": $enforce_unique, "tenant_group_id": $tenant_group_id, "tenant_group": $tenant_group, "tenant_id": $tenant_id, "tenant": $tenant, "created": $created, "created__gte": $created_gte, "created__lte": $created_lte, "last_updated": $last_updated, "last_updated__gte": $last_updated_gte, "last_updated__lte": $last_updated_lte, "q": $q, "tag": $tag, "id__n": $id_n, "id__lte": $id_lte, "id__lt": $id_lt, "id__gte": $id_gte, "id__gt": $id_gt, "name__n": $name_n, "name__ic": $name_ic, "name__nic": $name_nic, "name__iew": $name_iew, "name__niew": $name_niew, "name__isw": $name_isw, "name__nisw": $name_nisw, "name__ie": $name_ie, "name__nie": $name_nie, "rd__n": $rd_n, "rd__ic": $rd_ic, "rd__nic": $rd_nic, "rd__iew": $rd_iew, "rd__niew": $rd_niew, "rd__isw": $rd_isw, "rd__nisw": $rd_nisw, "rd__ie": $rd_ie, "rd__nie": $rd_nie, "tenant_group_id__n": $tenant_group_id_n, "tenant_group__n": $tenant_group_n, "tenant_id__n": $tenant_id_n, "tenant__n": $tenant_n, "tag__n": $tag_n, "limit": $limit, "offset": $offset} | compact), body: null}
 }
 
 # POST /ipam/vrfs/
@@ -11679,7 +11919,7 @@ export def "ipam-vrfs create" [
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: {}, body: $req_body}
 }
 
 # DELETE /ipam/vrfs/{id}/
@@ -11699,10 +11939,11 @@ export def "ipam-vrfs delete" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
   let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/ipam/vrfs/{id}/"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
 }
 
 # Call to super to allow for caching
@@ -11723,10 +11964,11 @@ export def "ipam-vrfs get" [
 ]: nothing -> record<created: string, custom_fields: record, description: string, display_name: string, enforce_unique: bool, id: int, ipaddress_count: int, last_updated: string, name: string, prefix_count: int, rd: string, tags: list<string>, tenant: record<id: int, name: string, slug: string, url: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
   let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/ipam/vrfs/{id}/"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
 }
 
 # PATCH /ipam/vrfs/{id}/
@@ -11754,12 +11996,13 @@ export def "ipam-vrfs update-by-id" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
   let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/ipam/vrfs/{id}/"))
   let req_body = {"custom_fields": $custom_fields, "description": $description, "enforce_unique": $enforce_unique, "name": $name, "rd": $rd, "tags": $tags, "tenant": $tenant} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "patch" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body
+  do-request "patch" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: {}, body: $req_body}
 }
 
 # PUT /ipam/vrfs/{id}/
@@ -11787,12 +12030,13 @@ export def "ipam-vrfs update-by-id-1" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
   let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/ipam/vrfs/{id}/"))
   let req_body = {"custom_fields": $custom_fields, "description": $description, "enforce_unique": $enforce_unique, "name": $name, "rd": $rd, "tags": $tags, "tenant": $tenant} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: {}, body: $req_body}
 }
 
 # This endpoint can be used to generate a new RSA key pair. The keys are returned in PEM format.
@@ -11815,7 +12059,7 @@ export def "secrets-generate-rsa-key-pair list" [
   let full_url = (build-url $base "/secrets/generate-rsa-key-pair/")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
 }
 
 # Retrieve a temporary session key to use for encrypting and decrypting secrets via the API. The user's private RSA key is POSTed with the name `private_key`. An example: curl -v -X POST -H "Authorization: Token " -H "Accept: application/json; indent=4" \ --data-urlencode "private_key@" https://netbox/api/secrets/get-session-key/ This request will yield a base64-encoded session key to be included in an `X-Session-Key` header in future requests: { "session_key": "+8t4SI6XikgVmB5+/urhozx9O5qCQANyOk1MNe6taRf=" } This endpoint accepts one optional parameter: `preserve_key`. If True and a session key exists, the existing session key will be returned instead of a new one.
@@ -11838,7 +12082,7 @@ export def "secrets-get-session-key create" [
   let full_url = (build-url $base "/secrets/get-session-key/")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
 }
 
 # Call to super to allow for caching
@@ -11891,7 +12135,7 @@ export def "secrets-secret-roles list" [
   let full_url = (build-url $base "/secrets/secret-roles/" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"id": $id, "name": $name, "slug": $slug, "q": $q, "id__n": $id_n, "id__lte": $id_lte, "id__lt": $id_lt, "id__gte": $id_gte, "id__gt": $id_gt, "name__n": $name_n, "name__ic": $name_ic, "name__nic": $name_nic, "name__iew": $name_iew, "name__niew": $name_niew, "name__isw": $name_isw, "name__nisw": $name_nisw, "name__ie": $name_ie, "name__nie": $name_nie, "slug__n": $slug_n, "slug__ic": $slug_ic, "slug__nic": $slug_nic, "slug__iew": $slug_iew, "slug__niew": $slug_niew, "slug__isw": $slug_isw, "slug__nisw": $slug_nisw, "slug__ie": $slug_ie, "slug__nie": $slug_nie, "limit": $limit, "offset": $offset} | compact), body: null}
 }
 
 # POST /secrets/secret-roles/
@@ -11919,7 +12163,7 @@ export def "secrets-secret-roles create" [
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: {}, body: $req_body}
 }
 
 # DELETE /secrets/secret-roles/{id}/
@@ -11939,10 +12183,11 @@ export def "secrets-secret-roles delete" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
   let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/secrets/secret-roles/{id}/"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
 }
 
 # Call to super to allow for caching
@@ -11963,10 +12208,11 @@ export def "secrets-secret-roles get" [
 ]: nothing -> record<description: string, id: int, name: string, secret_count: int, slug: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
   let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/secrets/secret-roles/{id}/"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
 }
 
 # PATCH /secrets/secret-roles/{id}/
@@ -11990,12 +12236,13 @@ export def "secrets-secret-roles update-by-id" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
   let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/secrets/secret-roles/{id}/"))
   let req_body = {"description": $description, "name": $name, "slug": $slug} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "patch" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body
+  do-request "patch" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: {}, body: $req_body}
 }
 
 # PUT /secrets/secret-roles/{id}/
@@ -12019,12 +12266,13 @@ export def "secrets-secret-roles update-by-id-1" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
   let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/secrets/secret-roles/{id}/"))
   let req_body = {"description": $description, "name": $name, "slug": $slug} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: {}, body: $req_body}
 }
 
 # GET /secrets/secrets/
@@ -12082,7 +12330,7 @@ export def "secrets-secrets list" [
   let full_url = (build-url $base "/secrets/secrets/" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"id": $id, "name": $name, "created": $created, "created__gte": $created_gte, "created__lte": $created_lte, "last_updated": $last_updated, "last_updated__gte": $last_updated_gte, "last_updated__lte": $last_updated_lte, "q": $q, "role_id": $role_id, "role": $role, "device_id": $device_id, "device": $device, "tag": $tag, "id__n": $id_n, "id__lte": $id_lte, "id__lt": $id_lt, "id__gte": $id_gte, "id__gt": $id_gt, "name__n": $name_n, "name__ic": $name_ic, "name__nic": $name_nic, "name__iew": $name_iew, "name__niew": $name_niew, "name__isw": $name_isw, "name__nisw": $name_nisw, "name__ie": $name_ie, "name__nie": $name_nie, "role_id__n": $role_id_n, "role__n": $role_n, "device_id__n": $device_id_n, "device__n": $device_n, "tag__n": $tag_n, "limit": $limit, "offset": $offset} | compact), body: null}
 }
 
 # POST /secrets/secrets/
@@ -12113,7 +12361,7 @@ export def "secrets-secrets create" [
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: {}, body: $req_body}
 }
 
 # DELETE /secrets/secrets/{id}/
@@ -12133,10 +12381,11 @@ export def "secrets-secrets delete" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
   let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/secrets/secrets/{id}/"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
 }
 
 # GET /secrets/secrets/{id}/
@@ -12156,10 +12405,11 @@ export def "secrets-secrets get" [
 ]: nothing -> record<created: string, custom_fields: record, device: record<display_name: string, id: int, name: string, url: string>, hash: string, id: int, last_updated: string, name: string, plaintext: string, role: record<id: int, name: string, secret_count: int, slug: string, url: string>, tags: list<string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
   let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/secrets/secrets/{id}/"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
 }
 
 # PATCH /secrets/secrets/{id}/
@@ -12186,12 +12436,13 @@ export def "secrets-secrets update-by-id" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
   let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/secrets/secrets/{id}/"))
   let req_body = {"custom_fields": $custom_fields, "device": $device, "name": $name, "plaintext": $plaintext, "role": $role, "tags": $tags} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "patch" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body
+  do-request "patch" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: {}, body: $req_body}
 }
 
 # PUT /secrets/secrets/{id}/
@@ -12218,12 +12469,13 @@ export def "secrets-secrets update-by-id-1" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
   let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/secrets/secrets/{id}/"))
   let req_body = {"custom_fields": $custom_fields, "device": $device, "name": $name, "plaintext": $plaintext, "role": $role, "tags": $tags} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: {}, body: $req_body}
 }
 
 # Call to super to allow for caching
@@ -12290,7 +12542,7 @@ export def "tenancy-tenant-groups list" [
   let full_url = (build-url $base "/tenancy/tenant-groups/" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"id": $id, "name": $name, "slug": $slug, "description": $description, "q": $q, "parent_id": $parent_id, "parent": $parent, "id__n": $id_n, "id__lte": $id_lte, "id__lt": $id_lt, "id__gte": $id_gte, "id__gt": $id_gt, "name__n": $name_n, "name__ic": $name_ic, "name__nic": $name_nic, "name__iew": $name_iew, "name__niew": $name_niew, "name__isw": $name_isw, "name__nisw": $name_nisw, "name__ie": $name_ie, "name__nie": $name_nie, "slug__n": $slug_n, "slug__ic": $slug_ic, "slug__nic": $slug_nic, "slug__iew": $slug_iew, "slug__niew": $slug_niew, "slug__isw": $slug_isw, "slug__nisw": $slug_nisw, "slug__ie": $slug_ie, "slug__nie": $slug_nie, "description__n": $description_n, "description__ic": $description_ic, "description__nic": $description_nic, "description__iew": $description_iew, "description__niew": $description_niew, "description__isw": $description_isw, "description__nisw": $description_nisw, "description__ie": $description_ie, "description__nie": $description_nie, "parent_id__n": $parent_id_n, "parent__n": $parent_n, "limit": $limit, "offset": $offset} | compact), body: null}
 }
 
 # POST /tenancy/tenant-groups/
@@ -12319,7 +12571,7 @@ export def "tenancy-tenant-groups create" [
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: {}, body: $req_body}
 }
 
 # DELETE /tenancy/tenant-groups/{id}/
@@ -12339,10 +12591,11 @@ export def "tenancy-tenant-groups delete" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
   let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/tenancy/tenant-groups/{id}/"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
 }
 
 # Call to super to allow for caching
@@ -12363,10 +12616,11 @@ export def "tenancy-tenant-groups get" [
 ]: nothing -> record<description: string, id: int, name: string, parent: record<id: int, name: string, slug: string, tenant_count: int, url: string>, slug: string, tenant_count: int> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
   let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/tenancy/tenant-groups/{id}/"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
 }
 
 # PATCH /tenancy/tenant-groups/{id}/
@@ -12391,12 +12645,13 @@ export def "tenancy-tenant-groups update-by-id" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
   let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/tenancy/tenant-groups/{id}/"))
   let req_body = {"description": $description, "name": $name, "parent": $parent, "slug": $slug} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "patch" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body
+  do-request "patch" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: {}, body: $req_body}
 }
 
 # PUT /tenancy/tenant-groups/{id}/
@@ -12421,12 +12676,13 @@ export def "tenancy-tenant-groups update-by-id-1" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
   let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/tenancy/tenant-groups/{id}/"))
   let req_body = {"description": $description, "name": $name, "parent": $parent, "slug": $slug} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: {}, body: $req_body}
 }
 
 # Call to super to allow for caching
@@ -12491,7 +12747,7 @@ export def "tenancy-tenants list" [
   let full_url = (build-url $base "/tenancy/tenants/" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"id": $id, "name": $name, "slug": $slug, "created": $created, "created__gte": $created_gte, "created__lte": $created_lte, "last_updated": $last_updated, "last_updated__gte": $last_updated_gte, "last_updated__lte": $last_updated_lte, "q": $q, "group_id": $group_id, "group": $group, "tag": $tag, "id__n": $id_n, "id__lte": $id_lte, "id__lt": $id_lt, "id__gte": $id_gte, "id__gt": $id_gt, "name__n": $name_n, "name__ic": $name_ic, "name__nic": $name_nic, "name__iew": $name_iew, "name__niew": $name_niew, "name__isw": $name_isw, "name__nisw": $name_nisw, "name__ie": $name_ie, "name__nie": $name_nie, "slug__n": $slug_n, "slug__ic": $slug_ic, "slug__nic": $slug_nic, "slug__iew": $slug_iew, "slug__niew": $slug_niew, "slug__isw": $slug_isw, "slug__nisw": $slug_nisw, "slug__ie": $slug_ie, "slug__nie": $slug_nie, "group_id__n": $group_id_n, "group__n": $group_n, "tag__n": $tag_n, "limit": $limit, "offset": $offset} | compact), body: null}
 }
 
 # POST /tenancy/tenants/
@@ -12523,7 +12779,7 @@ export def "tenancy-tenants create" [
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: {}, body: $req_body}
 }
 
 # DELETE /tenancy/tenants/{id}/
@@ -12543,10 +12799,11 @@ export def "tenancy-tenants delete" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
   let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/tenancy/tenants/{id}/"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
 }
 
 # Call to super to allow for caching
@@ -12567,10 +12824,11 @@ export def "tenancy-tenants get" [
 ]: nothing -> record<circuit_count: int, cluster_count: int, comments: string, created: string, custom_fields: record, description: string, device_count: int, group: record<id: int, name: string, slug: string, tenant_count: int, url: string>, id: int, ipaddress_count: int, last_updated: string, name: string, prefix_count: int, rack_count: int, site_count: int, slug: string, tags: list<string>, virtualmachine_count: int, vlan_count: int, vrf_count: int> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
   let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/tenancy/tenants/{id}/"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
 }
 
 # PATCH /tenancy/tenants/{id}/
@@ -12598,12 +12856,13 @@ export def "tenancy-tenants update-by-id" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
   let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/tenancy/tenants/{id}/"))
   let req_body = {"comments": $comments, "custom_fields": $custom_fields, "description": $description, "group": $group, "name": $name, "slug": $slug, "tags": $tags} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "patch" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body
+  do-request "patch" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: {}, body: $req_body}
 }
 
 # PUT /tenancy/tenants/{id}/
@@ -12631,12 +12890,13 @@ export def "tenancy-tenants update-by-id-1" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
   let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/tenancy/tenants/{id}/"))
   let req_body = {"comments": $comments, "custom_fields": $custom_fields, "description": $description, "group": $group, "name": $name, "slug": $slug, "tags": $tags} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: {}, body: $req_body}
 }
 
 # Call to super to allow for caching
@@ -12699,7 +12959,7 @@ export def "virtualization-cluster-groups list" [
   let full_url = (build-url $base "/virtualization/cluster-groups/" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"id": $id, "name": $name, "slug": $slug, "description": $description, "q": $q, "id__n": $id_n, "id__lte": $id_lte, "id__lt": $id_lt, "id__gte": $id_gte, "id__gt": $id_gt, "name__n": $name_n, "name__ic": $name_ic, "name__nic": $name_nic, "name__iew": $name_iew, "name__niew": $name_niew, "name__isw": $name_isw, "name__nisw": $name_nisw, "name__ie": $name_ie, "name__nie": $name_nie, "slug__n": $slug_n, "slug__ic": $slug_ic, "slug__nic": $slug_nic, "slug__iew": $slug_iew, "slug__niew": $slug_niew, "slug__isw": $slug_isw, "slug__nisw": $slug_nisw, "slug__ie": $slug_ie, "slug__nie": $slug_nie, "description__n": $description_n, "description__ic": $description_ic, "description__nic": $description_nic, "description__iew": $description_iew, "description__niew": $description_niew, "description__isw": $description_isw, "description__nisw": $description_nisw, "description__ie": $description_ie, "description__nie": $description_nie, "limit": $limit, "offset": $offset} | compact), body: null}
 }
 
 # POST /virtualization/cluster-groups/
@@ -12727,7 +12987,7 @@ export def "virtualization-cluster-groups create" [
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: {}, body: $req_body}
 }
 
 # DELETE /virtualization/cluster-groups/{id}/
@@ -12747,10 +13007,11 @@ export def "virtualization-cluster-groups delete" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
   let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/virtualization/cluster-groups/{id}/"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
 }
 
 # Call to super to allow for caching
@@ -12771,10 +13032,11 @@ export def "virtualization-cluster-groups get" [
 ]: nothing -> record<cluster_count: int, description: string, id: int, name: string, slug: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
   let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/virtualization/cluster-groups/{id}/"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
 }
 
 # PATCH /virtualization/cluster-groups/{id}/
@@ -12798,12 +13060,13 @@ export def "virtualization-cluster-groups update-by-id" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
   let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/virtualization/cluster-groups/{id}/"))
   let req_body = {"description": $description, "name": $name, "slug": $slug} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "patch" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body
+  do-request "patch" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: {}, body: $req_body}
 }
 
 # PUT /virtualization/cluster-groups/{id}/
@@ -12827,12 +13090,13 @@ export def "virtualization-cluster-groups update-by-id-1" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
   let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/virtualization/cluster-groups/{id}/"))
   let req_body = {"description": $description, "name": $name, "slug": $slug} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: {}, body: $req_body}
 }
 
 # Call to super to allow for caching
@@ -12895,7 +13159,7 @@ export def "virtualization-cluster-types list" [
   let full_url = (build-url $base "/virtualization/cluster-types/" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"id": $id, "name": $name, "slug": $slug, "description": $description, "q": $q, "id__n": $id_n, "id__lte": $id_lte, "id__lt": $id_lt, "id__gte": $id_gte, "id__gt": $id_gt, "name__n": $name_n, "name__ic": $name_ic, "name__nic": $name_nic, "name__iew": $name_iew, "name__niew": $name_niew, "name__isw": $name_isw, "name__nisw": $name_nisw, "name__ie": $name_ie, "name__nie": $name_nie, "slug__n": $slug_n, "slug__ic": $slug_ic, "slug__nic": $slug_nic, "slug__iew": $slug_iew, "slug__niew": $slug_niew, "slug__isw": $slug_isw, "slug__nisw": $slug_nisw, "slug__ie": $slug_ie, "slug__nie": $slug_nie, "description__n": $description_n, "description__ic": $description_ic, "description__nic": $description_nic, "description__iew": $description_iew, "description__niew": $description_niew, "description__isw": $description_isw, "description__nisw": $description_nisw, "description__ie": $description_ie, "description__nie": $description_nie, "limit": $limit, "offset": $offset} | compact), body: null}
 }
 
 # POST /virtualization/cluster-types/
@@ -12923,7 +13187,7 @@ export def "virtualization-cluster-types create" [
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: {}, body: $req_body}
 }
 
 # DELETE /virtualization/cluster-types/{id}/
@@ -12943,10 +13207,11 @@ export def "virtualization-cluster-types delete" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
   let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/virtualization/cluster-types/{id}/"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
 }
 
 # Call to super to allow for caching
@@ -12967,10 +13232,11 @@ export def "virtualization-cluster-types get" [
 ]: nothing -> record<cluster_count: int, description: string, id: int, name: string, slug: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
   let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/virtualization/cluster-types/{id}/"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
 }
 
 # PATCH /virtualization/cluster-types/{id}/
@@ -12994,12 +13260,13 @@ export def "virtualization-cluster-types update-by-id" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
   let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/virtualization/cluster-types/{id}/"))
   let req_body = {"description": $description, "name": $name, "slug": $slug} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "patch" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body
+  do-request "patch" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: {}, body: $req_body}
 }
 
 # PUT /virtualization/cluster-types/{id}/
@@ -13023,12 +13290,13 @@ export def "virtualization-cluster-types update-by-id-1" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
   let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/virtualization/cluster-types/{id}/"))
   let req_body = {"description": $description, "name": $name, "slug": $slug} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: {}, body: $req_body}
 }
 
 # Call to super to allow for caching
@@ -13103,7 +13371,7 @@ export def "virtualization-clusters list" [
   let full_url = (build-url $base "/virtualization/clusters/" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"id": $id, "name": $name, "tenant_group_id": $tenant_group_id, "tenant_group": $tenant_group, "tenant_id": $tenant_id, "tenant": $tenant, "created": $created, "created__gte": $created_gte, "created__lte": $created_lte, "last_updated": $last_updated, "last_updated__gte": $last_updated_gte, "last_updated__lte": $last_updated_lte, "q": $q, "region_id": $region_id, "region": $region, "site_id": $site_id, "site": $site, "group_id": $group_id, "group": $group, "type_id": $type_id, "type": $type, "tag": $tag, "id__n": $id_n, "id__lte": $id_lte, "id__lt": $id_lt, "id__gte": $id_gte, "id__gt": $id_gt, "name__n": $name_n, "name__ic": $name_ic, "name__nic": $name_nic, "name__iew": $name_iew, "name__niew": $name_niew, "name__isw": $name_isw, "name__nisw": $name_nisw, "name__ie": $name_ie, "name__nie": $name_nie, "tenant_group_id__n": $tenant_group_id_n, "tenant_group__n": $tenant_group_n, "tenant_id__n": $tenant_id_n, "tenant__n": $tenant_n, "region_id__n": $region_id_n, "region__n": $region_n, "site_id__n": $site_id_n, "site__n": $site_n, "group_id__n": $group_id_n, "group__n": $group_n, "type_id__n": $type_id_n, "type__n": $type_n, "tag__n": $tag_n, "limit": $limit, "offset": $offset} | compact), body: null}
 }
 
 # POST /virtualization/clusters/
@@ -13136,7 +13404,7 @@ export def "virtualization-clusters create" [
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: {}, body: $req_body}
 }
 
 # DELETE /virtualization/clusters/{id}/
@@ -13156,10 +13424,11 @@ export def "virtualization-clusters delete" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
   let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/virtualization/clusters/{id}/"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
 }
 
 # Call to super to allow for caching
@@ -13180,10 +13449,11 @@ export def "virtualization-clusters get" [
 ]: nothing -> record<comments: string, created: string, custom_fields: record, device_count: int, group: record<cluster_count: int, id: int, name: string, slug: string, url: string>, id: int, last_updated: string, name: string, site: record<id: int, name: string, slug: string, url: string>, tags: list<string>, tenant: record<id: int, name: string, slug: string, url: string>, type: record<cluster_count: int, id: int, name: string, slug: string, url: string>, virtualmachine_count: int> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
   let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/virtualization/clusters/{id}/"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
 }
 
 # PATCH /virtualization/clusters/{id}/
@@ -13212,12 +13482,13 @@ export def "virtualization-clusters update-by-id" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
   let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/virtualization/clusters/{id}/"))
   let req_body = {"comments": $comments, "custom_fields": $custom_fields, "group": $group, "name": $name, "site": $site, "tags": $tags, "tenant": $tenant, "type": $type} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "patch" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body
+  do-request "patch" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: {}, body: $req_body}
 }
 
 # PUT /virtualization/clusters/{id}/
@@ -13246,12 +13517,13 @@ export def "virtualization-clusters update-by-id-1" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
   let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/virtualization/clusters/{id}/"))
   let req_body = {"comments": $comments, "custom_fields": $custom_fields, "group": $group, "name": $name, "site": $site, "tags": $tags, "tenant": $tenant, "type": $type} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: {}, body: $req_body}
 }
 
 # Call to super to allow for caching
@@ -13315,7 +13587,7 @@ export def "virtualization-interfaces list" [
   let full_url = (build-url $base "/virtualization/interfaces/" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"id": $id, "name": $name, "enabled": $enabled, "mtu": $mtu, "q": $q, "virtual_machine_id": $virtual_machine_id, "virtual_machine": $virtual_machine, "mac_address": $mac_address, "id__n": $id_n, "id__lte": $id_lte, "id__lt": $id_lt, "id__gte": $id_gte, "id__gt": $id_gt, "name__n": $name_n, "name__ic": $name_ic, "name__nic": $name_nic, "name__iew": $name_iew, "name__niew": $name_niew, "name__isw": $name_isw, "name__nisw": $name_nisw, "name__ie": $name_ie, "name__nie": $name_nie, "mtu__n": $mtu_n, "mtu__lte": $mtu_lte, "mtu__lt": $mtu_lt, "mtu__gte": $mtu_gte, "mtu__gt": $mtu_gt, "virtual_machine_id__n": $virtual_machine_id_n, "virtual_machine__n": $virtual_machine_n, "mac_address__n": $mac_address_n, "mac_address__ic": $mac_address_ic, "mac_address__nic": $mac_address_nic, "mac_address__iew": $mac_address_iew, "mac_address__niew": $mac_address_niew, "mac_address__isw": $mac_address_isw, "mac_address__nisw": $mac_address_nisw, "mac_address__ie": $mac_address_ie, "mac_address__nie": $mac_address_nie, "limit": $limit, "offset": $offset} | compact), body: null}
 }
 
 # POST /virtualization/interfaces/
@@ -13351,7 +13623,7 @@ export def "virtualization-interfaces create" [
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: {}, body: $req_body}
 }
 
 # DELETE /virtualization/interfaces/{id}/
@@ -13371,10 +13643,11 @@ export def "virtualization-interfaces delete" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
   let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/virtualization/interfaces/{id}/"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
 }
 
 # Call to super to allow for caching
@@ -13395,10 +13668,11 @@ export def "virtualization-interfaces get" [
 ]: nothing -> record<description: string, enabled: bool, id: int, mac_address: string, mode: record<label: string, value: string>, mtu: int, name: string, tagged_vlans: table<display_name: string, id: int, name: string, url: string, vid: int>, tags: list<string>, type: record<label: string, value: string>, untagged_vlan: record<display_name: string, id: int, name: string, url: string, vid: int>, virtual_machine: record<id: int, name: string, url: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
   let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/virtualization/interfaces/{id}/"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
 }
 
 # PATCH /virtualization/interfaces/{id}/
@@ -13430,12 +13704,13 @@ export def "virtualization-interfaces update-by-id" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
   let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/virtualization/interfaces/{id}/"))
   let req_body = {"description": $description, "enabled": $enabled, "mac_address": $mac_address, "mode": $mode, "mtu": $mtu, "name": $name, "tagged_vlans": $tagged_vlans, "tags": $tags, "type": $type, "untagged_vlan": $untagged_vlan, "virtual_machine": $virtual_machine} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "patch" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body
+  do-request "patch" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: {}, body: $req_body}
 }
 
 # PUT /virtualization/interfaces/{id}/
@@ -13467,12 +13742,13 @@ export def "virtualization-interfaces update-by-id-1" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
   let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/virtualization/interfaces/{id}/"))
   let req_body = {"description": $description, "enabled": $enabled, "mac_address": $mac_address, "mode": $mode, "mtu": $mtu, "name": $name, "tagged_vlans": $tagged_vlans, "tags": $tags, "type": $type, "untagged_vlan": $untagged_vlan, "virtual_machine": $virtual_machine} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: {}, body: $req_body}
 }
 
 # Call to super to allow for caching
@@ -13590,7 +13866,7 @@ export def "virtualization-virtual-machines list" [
   let full_url = (build-url $base "/virtualization/virtual-machines/" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"id": $id, "name": $name, "cluster": $cluster, "vcpus": $vcpus, "memory": $memory, "disk": $disk, "local_context_data": $local_context_data, "tenant_group_id": $tenant_group_id, "tenant_group": $tenant_group, "tenant_id": $tenant_id, "tenant": $tenant, "created": $created, "created__gte": $created_gte, "created__lte": $created_lte, "last_updated": $last_updated, "last_updated__gte": $last_updated_gte, "last_updated__lte": $last_updated_lte, "q": $q, "status": $status, "cluster_group_id": $cluster_group_id, "cluster_group": $cluster_group, "cluster_type_id": $cluster_type_id, "cluster_type": $cluster_type, "cluster_id": $cluster_id, "region_id": $region_id, "region": $region, "site_id": $site_id, "site": $site, "role_id": $role_id, "role": $role, "platform_id": $platform_id, "platform": $platform, "mac_address": $mac_address, "tag": $tag, "id__n": $id_n, "id__lte": $id_lte, "id__lt": $id_lt, "id__gte": $id_gte, "id__gt": $id_gt, "name__n": $name_n, "name__ic": $name_ic, "name__nic": $name_nic, "name__iew": $name_iew, "name__niew": $name_niew, "name__isw": $name_isw, "name__nisw": $name_nisw, "name__ie": $name_ie, "name__nie": $name_nie, "cluster__n": $cluster_n, "vcpus__n": $vcpus_n, "vcpus__lte": $vcpus_lte, "vcpus__lt": $vcpus_lt, "vcpus__gte": $vcpus_gte, "vcpus__gt": $vcpus_gt, "memory__n": $memory_n, "memory__lte": $memory_lte, "memory__lt": $memory_lt, "memory__gte": $memory_gte, "memory__gt": $memory_gt, "disk__n": $disk_n, "disk__lte": $disk_lte, "disk__lt": $disk_lt, "disk__gte": $disk_gte, "disk__gt": $disk_gt, "tenant_group_id__n": $tenant_group_id_n, "tenant_group__n": $tenant_group_n, "tenant_id__n": $tenant_id_n, "tenant__n": $tenant_n, "status__n": $status_n, "cluster_group_id__n": $cluster_group_id_n, "cluster_group__n": $cluster_group_n, "cluster_type_id__n": $cluster_type_id_n, "cluster_type__n": $cluster_type_n, "cluster_id__n": $cluster_id_n, "region_id__n": $region_id_n, "region__n": $region_n, "site_id__n": $site_id_n, "site__n": $site_n, "role_id__n": $role_id_n, "role__n": $role_n, "platform_id__n": $platform_id_n, "platform__n": $platform_n, "mac_address__n": $mac_address_n, "mac_address__ic": $mac_address_ic, "mac_address__nic": $mac_address_nic, "mac_address__iew": $mac_address_iew, "mac_address__niew": $mac_address_niew, "mac_address__isw": $mac_address_isw, "mac_address__nisw": $mac_address_nisw, "mac_address__ie": $mac_address_ie, "mac_address__nie": $mac_address_nie, "tag__n": $tag_n, "limit": $limit, "offset": $offset} | compact), body: null}
 }
 
 # POST /virtualization/virtual-machines/
@@ -13630,7 +13906,7 @@ export def "virtualization-virtual-machines create" [
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: {}, body: $req_body}
 }
 
 # DELETE /virtualization/virtual-machines/{id}/
@@ -13650,10 +13926,11 @@ export def "virtualization-virtual-machines delete" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
   let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/virtualization/virtual-machines/{id}/"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
 }
 
 # Call to super to allow for caching
@@ -13674,10 +13951,11 @@ export def "virtualization-virtual-machines get" [
 ]: nothing -> record<cluster: record<id: int, name: string, url: string, virtualmachine_count: int>, comments: string, config_context: record, created: string, custom_fields: record, disk: int, id: int, last_updated: string, local_context_data: string, memory: int, name: string, platform: record<device_count: int, id: int, name: string, slug: string, url: string, virtualmachine_count: int>, primary_ip: record<address: string, family: string, id: int, url: string>, primary_ip4: record<address: string, family: string, id: int, url: string>, primary_ip6: record<address: string, family: string, id: int, url: string>, role: record<device_count: int, id: int, name: string, slug: string, url: string, virtualmachine_count: int>, site: record<id: int, name: string, slug: string, url: string>, status: record<label: string, value: string>, tags: list<string>, tenant: record<id: int, name: string, slug: string, url: string>, vcpus: int> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
   let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/virtualization/virtual-machines/{id}/"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
 }
 
 # PATCH /virtualization/virtual-machines/{id}/
@@ -13713,12 +13991,13 @@ export def "virtualization-virtual-machines update-by-id" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
   let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/virtualization/virtual-machines/{id}/"))
   let req_body = {"cluster": $cluster, "comments": $comments, "custom_fields": $custom_fields, "disk": $disk, "local_context_data": $local_context_data, "memory": $memory, "name": $name, "platform": $platform, "primary_ip4": $primary_ip4, "primary_ip6": $primary_ip6, "role": $role, "status": $status, "tags": $tags, "tenant": $tenant, "vcpus": $vcpus} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "patch" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body
+  do-request "patch" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: {}, body: $req_body}
 }
 
 # PUT /virtualization/virtual-machines/{id}/
@@ -13754,10 +14033,11 @@ export def "virtualization-virtual-machines update-by-id-1" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
   let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/virtualization/virtual-machines/{id}/"))
   let req_body = {"cluster": $cluster, "comments": $comments, "custom_fields": $custom_fields, "disk": $disk, "local_context_data": $local_context_data, "memory": $memory, "name": $name, "platform": $platform, "primary_ip4": $primary_ip4, "primary_ip6": $primary_ip6, "role": $role, "status": $status, "tags": $tags, "tenant": $tenant, "vcpus": $vcpus} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: {}, body: $req_body}
 }

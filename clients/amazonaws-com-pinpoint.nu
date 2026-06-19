@@ -3,17 +3,18 @@
 # Auth: --token flag or $env.AMAZON_PINPOINT_TOKEN
 
 const BASE_URL = "http://pinpoint.us-east-1.amazonaws.com"
-const DEFAULT_AUTH = "bearer"
 
-# Build auth: returns {headers: record, query: string}
+# Build auth: returns {scheme: string, headers: record, query: string, location: string}.
+# `location` is "header" | "query" | "cookie" | "none" and tells dry-run callers
+# where the token went without inspecting headers/query themselves.
 def build-auth [token?: string, auth_scheme?: string]: nothing -> record {
   let token_val = if ($token != null) and ($token | is-not-empty) { $token } else { $env | get -o AMAZON_PINPOINT_TOKEN | default "" }
   let scheme = ($auth_scheme | default "bearer")
-  if ($scheme == "none") or ($token_val | is-empty) { return {headers: {}, query: ""} }
+  if ($scheme == "none") or ($token_val | is-empty) { return {scheme: $scheme, headers: {}, query: "", location: "none"} }
   match $scheme {
-    "bearer" => { {headers: {Authorization: $"Bearer ($token_val)"}, query: ""} }
-    "none" => { {headers: {}, query: ""} }
-    _ => { {headers: {Authorization: $"Bearer ($token_val)"}, query: ""} }
+    "bearer" => { {scheme: $scheme, headers: {Authorization: $"Bearer ($token_val)"}, query: "", location: "header"} }
+    "none" => { {scheme: $scheme, headers: {}, query: "", location: "none"} }
+    _ => { {scheme: $scheme, headers: {Authorization: $"Bearer ($token_val)"}, query: "", location: "header"} }
   }
 }
 
@@ -22,8 +23,9 @@ def build-auth [token?: string, auth_scheme?: string]: nothing -> record {
 # ([A-Za-z0-9-._~]) stay literal; everything else gets %XX.
 def serialize-qp [name: string, value: any, style: string]: nothing -> list<string> {
   if ($value == null) { return [] }
-  let n = (encode-path-segment $name)
   let is_list = ($value | describe | str starts-with "list")
+  if $is_list and ($value | is-empty) { return [] }
+  let n = (encode-path-segment $name)
   if ($value | describe | str starts-with "record") { return ($value | transpose k v | each { $"($n)[(encode-path-segment $in.k)]=(encode-path-segment $in.v)" }) }
   if not $is_list { return [$"($n)=(encode-path-segment $value)"] }
   match $style {
@@ -54,22 +56,42 @@ def build-url [base: string, path: string, query?: string]: nothing -> string {
   if ($query != null) and ($query | is-not-empty) { $result | upsert query $query | url join } else { $result | url join }
 }
 
+# Build the dry-run record returned by --dry-run. Shape:
+#   {dry_run: true, method, url, query: <record>, headers, body, content_type, timeout,
+#    auth: {scheme, location}}
+# `meta` carries logical-form data (the query record by spec name, the pre-serialization
+# body) that do-request itself cannot reconstruct from its wire-format args.
+def build-dry-run-record [method: string, url: string, auth: record, content_type: string, timeout: duration, meta?: record]: nothing -> record {
+  let m = ($meta | default {})
+  {
+    dry_run: true
+    method: $method
+    url: $url
+    query: ($m | get -o query | default {})
+    headers: $auth.headers
+    body: ($m | get -o body)
+    content_type: $content_type
+    timeout: $timeout
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+}
+
 # Execute HTTP request with method dispatch
-def do-request [method: string, url: string, auth: record, insecure: bool, raw: bool, dry_run: bool, max_time?: duration, allow_errors?: bool, full?: bool, content_type?: string, body?: any]: nothing -> any {
+def do-request [method: string, url: string, auth: record, insecure: bool, raw: bool, dry_run: bool, max_time?: duration, allow_errors?: bool, full?: bool, content_type?: string, body?: any, dry_run_meta?: record]: nothing -> any {
   let req_url = if ($auth.query | is-not-empty) { if ($url | str contains "?") { $"($url)&($auth.query)" } else { $"($url)?($auth.query)" } } else { $url }
   let timeout = ($max_time | default 30min)
   let ct = ($content_type | default "application/json")
-  if $dry_run { return {method: $method, url: $req_url, headers: $auth.headers, query_string: $auth.query, content_type: $ct, timeout: $timeout, body: $body} }
+  if $dry_run { return (build-dry-run-record $method $req_url $auth $ct $timeout $dry_run_meta) }
   let resp = match $method {
     "get" => { http get --headers $auth.headers --full --allow-errors --max-time $timeout --insecure=$insecure --raw=$raw $req_url }
-    "head" => { http head --headers $auth.headers --max-time $timeout --insecure=$insecure $req_url }
-    "options" => { http options --headers $auth.headers --max-time $timeout --insecure=$insecure $req_url }
+    "head" => { http head --headers $auth.headers --full --allow-errors --max-time $timeout --insecure=$insecure $req_url }
+    "options" => { http options --headers $auth.headers --full --allow-errors --max-time $timeout --insecure=$insecure $req_url }
     "post" => { if ($body | is-empty) { http post --headers $auth.headers --full --allow-errors --max-time $timeout --insecure=$insecure --raw=$raw $req_url "" } else { http post --headers $auth.headers --content-type $ct --full --allow-errors --max-time $timeout --insecure=$insecure --raw=$raw $req_url $body } }
     "put" => { if ($body | is-empty) { http put --headers $auth.headers --full --allow-errors --max-time $timeout --insecure=$insecure --raw=$raw $req_url "" } else { http put --headers $auth.headers --content-type $ct --full --allow-errors --max-time $timeout --insecure=$insecure --raw=$raw $req_url $body } }
     "patch" => { if ($body | is-empty) { http patch --headers $auth.headers --full --allow-errors --max-time $timeout --insecure=$insecure --raw=$raw $req_url "" } else { http patch --headers $auth.headers --content-type $ct --full --allow-errors --max-time $timeout --insecure=$insecure --raw=$raw $req_url $body } }
     "delete" => { if ($body | is-empty) { http delete --headers $auth.headers --full --allow-errors --max-time $timeout --insecure=$insecure --raw=$raw $req_url } else { http delete --headers $auth.headers --content-type $ct --data $body --full --allow-errors --max-time $timeout --insecure=$insecure --raw=$raw $req_url } }
   }
-  if ($method in ["head" "options"]) { return $resp }
+  if ($method == "head") and (not $full) and (not $allow_errors) and $resp.status < 400 { return $resp.headers }
   if $allow_errors { $resp } else if $resp.status >= 400 { error make --unspanned { msg: $"HTTP ($resp.status): ($resp.body)" } } else if $full { {status: $resp.status, headers: $resp.headers, body: $resp.body} } else if $resp.status == 204 { null } else { $resp.body }
 }
 
@@ -134,7 +156,7 @@ export def "apps create" [
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: {}, body: $req_body}
 }
 
 # Retrieves information about all the applications that are associated with your Amazon Pinpoint account.
@@ -169,7 +191,7 @@ export def "apps list" [
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"page-size": $page_size, "token": $qp_token} | compact), body: null}
 }
 
 # Creates a new campaign for an application or updates the settings of an existing campaign for an application.
@@ -200,6 +222,7 @@ export def "apps-campaigns create" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($application_id | is-empty) { error make --unspanned { msg: "path parameter 'application-id' must be non-empty" } }
   let full_url = (build-url $base ({application_id: (encode-path-segment $application_id)} | format pattern "/v1/apps/{application_id}/campaigns"))
   let req_body = {"WriteCampaignRequest": $write_campaign_request} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
@@ -207,7 +230,7 @@ export def "apps-campaigns create" [
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: {}, body: $req_body}
 }
 
 # Retrieves information about the status, configuration, and other settings for all the campaigns that are associated with an application.
@@ -237,13 +260,14 @@ export def "apps-campaigns list" [
 ]: nothing -> record<CampaignsResponse: record<Item: record, NextToken: record>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($application_id | is-empty) { error make --unspanned { msg: "path parameter 'application-id' must be non-empty" } }
   let qp = [(serialize-qp "page-size" $page_size "scalar") (serialize-qp "token" $qp_token "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({application_id: (encode-path-segment $application_id)} | format pattern "/v1/apps/{application_id}/campaigns") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"page-size": $page_size, "token": $qp_token} | compact), body: null}
 }
 
 # Creates a message template for messages that are sent through the email channel.
@@ -274,6 +298,7 @@ export def "templates-email create" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($template_name | is-empty) { error make --unspanned { msg: "path parameter 'template-name' must be non-empty" } }
   let full_url = (build-url $base ({template_name: (encode-path-segment $template_name)} | format pattern "/v1/templates/{template_name}/email"))
   let req_body = {"EmailTemplateRequest": $email_template_request} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
@@ -281,7 +306,7 @@ export def "templates-email create" [
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: {}, body: $req_body}
 }
 
 # Deletes a message template for messages that were sent through the email channel.
@@ -310,13 +335,14 @@ export def "templates-email delete" [
 ]: nothing -> record<MessageBody: record<Message: record, RequestID: record>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($template_name | is-empty) { error make --unspanned { msg: "path parameter 'template-name' must be non-empty" } }
   let qp = [(serialize-qp "version" $version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({template_name: (encode-path-segment $template_name)} | format pattern "/v1/templates/{template_name}/email") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"version": $version} | compact), body: null}
 }
 
 # Retrieves the content and settings of a message template for messages that are sent through the email channel.
@@ -345,13 +371,14 @@ export def "templates-email get" [
 ]: nothing -> record<EmailTemplateResponse: record<Arn: record, CreationDate: record, DefaultSubstitutions: record, HtmlPart: record, LastModifiedDate: record, RecommenderId: record, Subject: record, tags: record, TemplateDescription: record, TemplateName: record, TemplateType: record, TextPart: record, Version: record>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($template_name | is-empty) { error make --unspanned { msg: "path parameter 'template-name' must be non-empty" } }
   let qp = [(serialize-qp "version" $version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({template_name: (encode-path-segment $template_name)} | format pattern "/v1/templates/{template_name}/email") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"version": $version} | compact), body: null}
 }
 
 # Updates an existing message template for messages that are sent through the email channel.
@@ -384,6 +411,7 @@ export def "templates-email update" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($template_name | is-empty) { error make --unspanned { msg: "path parameter 'template-name' must be non-empty" } }
   let qp = [(serialize-qp "create-new-version" $create_new_version "scalar") (serialize-qp "version" $version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({template_name: (encode-path-segment $template_name)} | format pattern "/v1/templates/{template_name}/email") $qp)
   let req_body = {"EmailTemplateRequest": $email_template_request} | compact
@@ -392,7 +420,7 @@ export def "templates-email update" [
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: ({"create-new-version": $create_new_version, "version": $version} | compact), body: $req_body}
 }
 
 # Creates an export job for an application.
@@ -423,6 +451,7 @@ export def "apps-jobs-export create" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($application_id | is-empty) { error make --unspanned { msg: "path parameter 'application-id' must be non-empty" } }
   let full_url = (build-url $base ({application_id: (encode-path-segment $application_id)} | format pattern "/v1/apps/{application_id}/jobs/export"))
   let req_body = {"ExportJobRequest": $export_job_request} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
@@ -430,7 +459,7 @@ export def "apps-jobs-export create" [
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: {}, body: $req_body}
 }
 
 # Retrieves information about the status and settings of all the export jobs for an application.
@@ -460,13 +489,14 @@ export def "apps-jobs-export list" [
 ]: nothing -> record<ExportJobsResponse: record<Item: record, NextToken: record>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($application_id | is-empty) { error make --unspanned { msg: "path parameter 'application-id' must be non-empty" } }
   let qp = [(serialize-qp "page-size" $page_size "scalar") (serialize-qp "token" $qp_token "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({application_id: (encode-path-segment $application_id)} | format pattern "/v1/apps/{application_id}/jobs/export") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"page-size": $page_size, "token": $qp_token} | compact), body: null}
 }
 
 # Creates an import job for an application.
@@ -497,6 +527,7 @@ export def "apps-jobs-import create" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($application_id | is-empty) { error make --unspanned { msg: "path parameter 'application-id' must be non-empty" } }
   let full_url = (build-url $base ({application_id: (encode-path-segment $application_id)} | format pattern "/v1/apps/{application_id}/jobs/import"))
   let req_body = {"ImportJobRequest": $import_job_request} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
@@ -504,7 +535,7 @@ export def "apps-jobs-import create" [
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: {}, body: $req_body}
 }
 
 # Retrieves information about the status and settings of all the import jobs for an application.
@@ -534,13 +565,14 @@ export def "apps-jobs-import list" [
 ]: nothing -> record<ImportJobsResponse: record<Item: record, NextToken: record>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($application_id | is-empty) { error make --unspanned { msg: "path parameter 'application-id' must be non-empty" } }
   let qp = [(serialize-qp "page-size" $page_size "scalar") (serialize-qp "token" $qp_token "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({application_id: (encode-path-segment $application_id)} | format pattern "/v1/apps/{application_id}/jobs/import") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"page-size": $page_size, "token": $qp_token} | compact), body: null}
 }
 
 # Creates a new message template for messages using the in-app message channel.
@@ -571,6 +603,7 @@ export def "templates-inapp create-in-app" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($template_name | is-empty) { error make --unspanned { msg: "path parameter 'template-name' must be non-empty" } }
   let full_url = (build-url $base ({template_name: (encode-path-segment $template_name)} | format pattern "/v1/templates/{template_name}/inapp"))
   let req_body = {"InAppTemplateRequest": $in_app_template_request} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
@@ -578,7 +611,7 @@ export def "templates-inapp create-in-app" [
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: {}, body: $req_body}
 }
 
 # Deletes a message template for messages sent using the in-app message channel.
@@ -607,13 +640,14 @@ export def "templates-inapp delete-in-app" [
 ]: nothing -> record<MessageBody: record<Message: record, RequestID: record>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($template_name | is-empty) { error make --unspanned { msg: "path parameter 'template-name' must be non-empty" } }
   let qp = [(serialize-qp "version" $version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({template_name: (encode-path-segment $template_name)} | format pattern "/v1/templates/{template_name}/inapp") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"version": $version} | compact), body: null}
 }
 
 # Retrieves the content and settings of a message template for messages sent through the in-app channel.
@@ -642,13 +676,14 @@ export def "templates-inapp get-in-app" [
 ]: nothing -> record<InAppTemplateResponse: record<Arn: record, Content: record, CreationDate: record, CustomConfig: record, LastModifiedDate: record, Layout: record, tags: record, TemplateDescription: record, TemplateName: record, TemplateType: record, Version: record>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($template_name | is-empty) { error make --unspanned { msg: "path parameter 'template-name' must be non-empty" } }
   let qp = [(serialize-qp "version" $version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({template_name: (encode-path-segment $template_name)} | format pattern "/v1/templates/{template_name}/inapp") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"version": $version} | compact), body: null}
 }
 
 # Updates an existing message template for messages sent through the in-app message channel.
@@ -681,6 +716,7 @@ export def "templates-inapp update-in-app" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($template_name | is-empty) { error make --unspanned { msg: "path parameter 'template-name' must be non-empty" } }
   let qp = [(serialize-qp "create-new-version" $create_new_version "scalar") (serialize-qp "version" $version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({template_name: (encode-path-segment $template_name)} | format pattern "/v1/templates/{template_name}/inapp") $qp)
   let req_body = {"InAppTemplateRequest": $in_app_template_request} | compact
@@ -689,7 +725,7 @@ export def "templates-inapp update-in-app" [
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: ({"create-new-version": $create_new_version, "version": $version} | compact), body: $req_body}
 }
 
 # Creates a journey for an application.
@@ -720,6 +756,7 @@ export def "apps-journeys create" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($application_id | is-empty) { error make --unspanned { msg: "path parameter 'application-id' must be non-empty" } }
   let full_url = (build-url $base ({application_id: (encode-path-segment $application_id)} | format pattern "/v1/apps/{application_id}/journeys"))
   let req_body = {"WriteJourneyRequest": $write_journey_request} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
@@ -727,7 +764,7 @@ export def "apps-journeys create" [
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: {}, body: $req_body}
 }
 
 # Retrieves information about the status, configuration, and other settings for all the journeys that are associated with an application.
@@ -757,13 +794,14 @@ export def "apps-journeys list" [
 ]: nothing -> record<JourneysResponse: record<Item: record, NextToken: record>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($application_id | is-empty) { error make --unspanned { msg: "path parameter 'application-id' must be non-empty" } }
   let qp = [(serialize-qp "page-size" $page_size "scalar") (serialize-qp "token" $qp_token "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({application_id: (encode-path-segment $application_id)} | format pattern "/v1/apps/{application_id}/journeys") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"page-size": $page_size, "token": $qp_token} | compact), body: null}
 }
 
 # Creates a message template for messages that are sent through a push notification channel.
@@ -794,6 +832,7 @@ export def "templates-push create" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($template_name | is-empty) { error make --unspanned { msg: "path parameter 'template-name' must be non-empty" } }
   let full_url = (build-url $base ({template_name: (encode-path-segment $template_name)} | format pattern "/v1/templates/{template_name}/push"))
   let req_body = {"PushNotificationTemplateRequest": $push_notification_template_request} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
@@ -801,7 +840,7 @@ export def "templates-push create" [
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: {}, body: $req_body}
 }
 
 # Deletes a message template for messages that were sent through a push notification channel.
@@ -830,13 +869,14 @@ export def "templates-push delete" [
 ]: nothing -> record<MessageBody: record<Message: record, RequestID: record>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($template_name | is-empty) { error make --unspanned { msg: "path parameter 'template-name' must be non-empty" } }
   let qp = [(serialize-qp "version" $version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({template_name: (encode-path-segment $template_name)} | format pattern "/v1/templates/{template_name}/push") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"version": $version} | compact), body: null}
 }
 
 # Retrieves the content and settings of a message template for messages that are sent through a push notification channel.
@@ -865,13 +905,14 @@ export def "templates-push get" [
 ]: nothing -> record<PushNotificationTemplateResponse: record<ADM: record<Action: record, Body: record, ImageIconUrl: record, ImageUrl: record, RawContent: record, SmallImageIconUrl: record, Sound: record, Title: record, Url: record>, APNS: record<Action: record, Body: record, MediaUrl: record, RawContent: record, Sound: record, Title: record, Url: record>, Arn: record, Baidu: record<Action: record, Body: record, ImageIconUrl: record, ImageUrl: record, RawContent: record, SmallImageIconUrl: record, Sound: record, Title: record, Url: record>, CreationDate: record, Default: record<Action: record, Body: record, Sound: record, Title: record, Url: record>, DefaultSubstitutions: record, GCM: record<Action: record, Body: record, ImageIconUrl: record, ImageUrl: record, RawContent: record, SmallImageIconUrl: record, Sound: record, Title: record, Url: record>, LastModifiedDate: record, RecommenderId: record, tags: record, TemplateDescription: record, TemplateName: record, TemplateType: record, Version: record>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($template_name | is-empty) { error make --unspanned { msg: "path parameter 'template-name' must be non-empty" } }
   let qp = [(serialize-qp "version" $version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({template_name: (encode-path-segment $template_name)} | format pattern "/v1/templates/{template_name}/push") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"version": $version} | compact), body: null}
 }
 
 # Updates an existing message template for messages that are sent through a push notification channel.
@@ -904,6 +945,7 @@ export def "templates-push update" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($template_name | is-empty) { error make --unspanned { msg: "path parameter 'template-name' must be non-empty" } }
   let qp = [(serialize-qp "create-new-version" $create_new_version "scalar") (serialize-qp "version" $version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({template_name: (encode-path-segment $template_name)} | format pattern "/v1/templates/{template_name}/push") $qp)
   let req_body = {"PushNotificationTemplateRequest": $push_notification_template_request} | compact
@@ -912,7 +954,7 @@ export def "templates-push update" [
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: ({"create-new-version": $create_new_version, "version": $version} | compact), body: $req_body}
 }
 
 # Creates an Amazon Pinpoint configuration for a recommender model.
@@ -949,7 +991,7 @@ export def "recommenders create-configuration" [
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: {}, body: $req_body}
 }
 
 # Retrieves information about all the recommender model configurations that are associated with your Amazon Pinpoint account.
@@ -984,7 +1026,7 @@ export def "recommenders get-configurations" [
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"page-size": $page_size, "token": $qp_token} | compact), body: null}
 }
 
 # Creates a new segment for an application or updates the configuration, dimension, and other settings for an existing segment that's associated with an application.
@@ -1015,6 +1057,7 @@ export def "apps-segments create" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($application_id | is-empty) { error make --unspanned { msg: "path parameter 'application-id' must be non-empty" } }
   let full_url = (build-url $base ({application_id: (encode-path-segment $application_id)} | format pattern "/v1/apps/{application_id}/segments"))
   let req_body = {"WriteSegmentRequest": $write_segment_request} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
@@ -1022,7 +1065,7 @@ export def "apps-segments create" [
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: {}, body: $req_body}
 }
 
 # Retrieves information about the configuration, dimension, and other settings for all the segments that are associated with an application.
@@ -1052,13 +1095,14 @@ export def "apps-segments list" [
 ]: nothing -> record<SegmentsResponse: record<Item: record, NextToken: record>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($application_id | is-empty) { error make --unspanned { msg: "path parameter 'application-id' must be non-empty" } }
   let qp = [(serialize-qp "page-size" $page_size "scalar") (serialize-qp "token" $qp_token "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({application_id: (encode-path-segment $application_id)} | format pattern "/v1/apps/{application_id}/segments") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"page-size": $page_size, "token": $qp_token} | compact), body: null}
 }
 
 # Creates a message template for messages that are sent through the SMS channel.
@@ -1089,6 +1133,7 @@ export def "templates-sms create" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($template_name | is-empty) { error make --unspanned { msg: "path parameter 'template-name' must be non-empty" } }
   let full_url = (build-url $base ({template_name: (encode-path-segment $template_name)} | format pattern "/v1/templates/{template_name}/sms"))
   let req_body = {"SMSTemplateRequest": $sms_template_request} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
@@ -1096,7 +1141,7 @@ export def "templates-sms create" [
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: {}, body: $req_body}
 }
 
 # Deletes a message template for messages that were sent through the SMS channel.
@@ -1125,13 +1170,14 @@ export def "templates-sms delete" [
 ]: nothing -> record<MessageBody: record<Message: record, RequestID: record>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($template_name | is-empty) { error make --unspanned { msg: "path parameter 'template-name' must be non-empty" } }
   let qp = [(serialize-qp "version" $version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({template_name: (encode-path-segment $template_name)} | format pattern "/v1/templates/{template_name}/sms") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"version": $version} | compact), body: null}
 }
 
 # Retrieves the content and settings of a message template for messages that are sent through the SMS channel.
@@ -1160,13 +1206,14 @@ export def "templates-sms get" [
 ]: nothing -> record<SMSTemplateResponse: record<Arn: record, Body: record, CreationDate: record, DefaultSubstitutions: record, LastModifiedDate: record, RecommenderId: record, tags: record, TemplateDescription: record, TemplateName: record, TemplateType: record, Version: record>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($template_name | is-empty) { error make --unspanned { msg: "path parameter 'template-name' must be non-empty" } }
   let qp = [(serialize-qp "version" $version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({template_name: (encode-path-segment $template_name)} | format pattern "/v1/templates/{template_name}/sms") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"version": $version} | compact), body: null}
 }
 
 # Updates an existing message template for messages that are sent through the SMS channel.
@@ -1199,6 +1246,7 @@ export def "templates-sms update" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($template_name | is-empty) { error make --unspanned { msg: "path parameter 'template-name' must be non-empty" } }
   let qp = [(serialize-qp "create-new-version" $create_new_version "scalar") (serialize-qp "version" $version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({template_name: (encode-path-segment $template_name)} | format pattern "/v1/templates/{template_name}/sms") $qp)
   let req_body = {"SMSTemplateRequest": $sms_template_request} | compact
@@ -1207,7 +1255,7 @@ export def "templates-sms update" [
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: ({"create-new-version": $create_new_version, "version": $version} | compact), body: $req_body}
 }
 
 # Creates a message template for messages that are sent through the voice channel.
@@ -1238,6 +1286,7 @@ export def "templates-voice create" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($template_name | is-empty) { error make --unspanned { msg: "path parameter 'template-name' must be non-empty" } }
   let full_url = (build-url $base ({template_name: (encode-path-segment $template_name)} | format pattern "/v1/templates/{template_name}/voice"))
   let req_body = {"VoiceTemplateRequest": $voice_template_request} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
@@ -1245,7 +1294,7 @@ export def "templates-voice create" [
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: {}, body: $req_body}
 }
 
 # Deletes a message template for messages that were sent through the voice channel.
@@ -1274,13 +1323,14 @@ export def "templates-voice delete" [
 ]: nothing -> record<MessageBody: record<Message: record, RequestID: record>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($template_name | is-empty) { error make --unspanned { msg: "path parameter 'template-name' must be non-empty" } }
   let qp = [(serialize-qp "version" $version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({template_name: (encode-path-segment $template_name)} | format pattern "/v1/templates/{template_name}/voice") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"version": $version} | compact), body: null}
 }
 
 # Retrieves the content and settings of a message template for messages that are sent through the voice channel.
@@ -1309,13 +1359,14 @@ export def "templates-voice get" [
 ]: nothing -> record<VoiceTemplateResponse: record<Arn: record, Body: record, CreationDate: record, DefaultSubstitutions: record, LanguageCode: record, LastModifiedDate: record, tags: record, TemplateDescription: record, TemplateName: record, TemplateType: record, Version: record, VoiceId: record>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($template_name | is-empty) { error make --unspanned { msg: "path parameter 'template-name' must be non-empty" } }
   let qp = [(serialize-qp "version" $version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({template_name: (encode-path-segment $template_name)} | format pattern "/v1/templates/{template_name}/voice") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"version": $version} | compact), body: null}
 }
 
 # Updates an existing message template for messages that are sent through the voice channel.
@@ -1348,6 +1399,7 @@ export def "templates-voice update" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($template_name | is-empty) { error make --unspanned { msg: "path parameter 'template-name' must be non-empty" } }
   let qp = [(serialize-qp "create-new-version" $create_new_version "scalar") (serialize-qp "version" $version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({template_name: (encode-path-segment $template_name)} | format pattern "/v1/templates/{template_name}/voice") $qp)
   let req_body = {"VoiceTemplateRequest": $voice_template_request} | compact
@@ -1356,7 +1408,7 @@ export def "templates-voice update" [
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: ({"create-new-version": $create_new_version, "version": $version} | compact), body: $req_body}
 }
 
 # Disables the ADM channel for an application and deletes any existing settings for the channel.
@@ -1384,12 +1436,13 @@ export def "apps-channels-adm delete" [
 ]: nothing -> record<ADMChannelResponse: record<ApplicationId: record, CreationDate: record, Enabled: record, HasCredential: record, Id: record, IsArchived: record, LastModifiedBy: record, LastModifiedDate: record, Platform: record, Version: record>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($application_id | is-empty) { error make --unspanned { msg: "path parameter 'application-id' must be non-empty" } }
   let full_url = (build-url $base ({application_id: (encode-path-segment $application_id)} | format pattern "/v1/apps/{application_id}/channels/adm"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
 }
 
 # Retrieves information about the status and settings of the ADM channel for an application.
@@ -1417,12 +1470,13 @@ export def "apps-channels-adm get" [
 ]: nothing -> record<ADMChannelResponse: record<ApplicationId: record, CreationDate: record, Enabled: record, HasCredential: record, Id: record, IsArchived: record, LastModifiedBy: record, LastModifiedDate: record, Platform: record, Version: record>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($application_id | is-empty) { error make --unspanned { msg: "path parameter 'application-id' must be non-empty" } }
   let full_url = (build-url $base ({application_id: (encode-path-segment $application_id)} | format pattern "/v1/apps/{application_id}/channels/adm"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
 }
 
 # Enables the ADM channel for an application or updates the status and settings of the ADM channel for an application.
@@ -1453,6 +1507,7 @@ export def "apps-channels-adm update" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($application_id | is-empty) { error make --unspanned { msg: "path parameter 'application-id' must be non-empty" } }
   let full_url = (build-url $base ({application_id: (encode-path-segment $application_id)} | format pattern "/v1/apps/{application_id}/channels/adm"))
   let req_body = {"ADMChannelRequest": $adm_channel_request} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
@@ -1460,7 +1515,7 @@ export def "apps-channels-adm update" [
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: {}, body: $req_body}
 }
 
 # Disables the APNs channel for an application and deletes any existing settings for the channel.
@@ -1488,12 +1543,13 @@ export def "apps-channels-apns delete" [
 ]: nothing -> record<APNSChannelResponse: record<ApplicationId: record, CreationDate: record, DefaultAuthenticationMethod: record, Enabled: record, HasCredential: record, HasTokenKey: record, Id: record, IsArchived: record, LastModifiedBy: record, LastModifiedDate: record, Platform: record, Version: record>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($application_id | is-empty) { error make --unspanned { msg: "path parameter 'application-id' must be non-empty" } }
   let full_url = (build-url $base ({application_id: (encode-path-segment $application_id)} | format pattern "/v1/apps/{application_id}/channels/apns"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
 }
 
 # Retrieves information about the status and settings of the APNs channel for an application.
@@ -1521,12 +1577,13 @@ export def "apps-channels-apns get" [
 ]: nothing -> record<APNSChannelResponse: record<ApplicationId: record, CreationDate: record, DefaultAuthenticationMethod: record, Enabled: record, HasCredential: record, HasTokenKey: record, Id: record, IsArchived: record, LastModifiedBy: record, LastModifiedDate: record, Platform: record, Version: record>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($application_id | is-empty) { error make --unspanned { msg: "path parameter 'application-id' must be non-empty" } }
   let full_url = (build-url $base ({application_id: (encode-path-segment $application_id)} | format pattern "/v1/apps/{application_id}/channels/apns"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
 }
 
 # Enables the APNs channel for an application or updates the status and settings of the APNs channel for an application.
@@ -1557,6 +1614,7 @@ export def "apps-channels-apns update" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($application_id | is-empty) { error make --unspanned { msg: "path parameter 'application-id' must be non-empty" } }
   let full_url = (build-url $base ({application_id: (encode-path-segment $application_id)} | format pattern "/v1/apps/{application_id}/channels/apns"))
   let req_body = {"APNSChannelRequest": $apns_channel_request} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
@@ -1564,7 +1622,7 @@ export def "apps-channels-apns update" [
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: {}, body: $req_body}
 }
 
 # Disables the APNs sandbox channel for an application and deletes any existing settings for the channel.
@@ -1592,12 +1650,13 @@ export def "apps-channels-apns-sandbox delete" [
 ]: nothing -> record<APNSSandboxChannelResponse: record<ApplicationId: record, CreationDate: record, DefaultAuthenticationMethod: record, Enabled: record, HasCredential: record, HasTokenKey: record, Id: record, IsArchived: record, LastModifiedBy: record, LastModifiedDate: record, Platform: record, Version: record>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($application_id | is-empty) { error make --unspanned { msg: "path parameter 'application-id' must be non-empty" } }
   let full_url = (build-url $base ({application_id: (encode-path-segment $application_id)} | format pattern "/v1/apps/{application_id}/channels/apns_sandbox"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
 }
 
 # Retrieves information about the status and settings of the APNs sandbox channel for an application.
@@ -1625,12 +1684,13 @@ export def "apps-channels-apns-sandbox get" [
 ]: nothing -> record<APNSSandboxChannelResponse: record<ApplicationId: record, CreationDate: record, DefaultAuthenticationMethod: record, Enabled: record, HasCredential: record, HasTokenKey: record, Id: record, IsArchived: record, LastModifiedBy: record, LastModifiedDate: record, Platform: record, Version: record>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($application_id | is-empty) { error make --unspanned { msg: "path parameter 'application-id' must be non-empty" } }
   let full_url = (build-url $base ({application_id: (encode-path-segment $application_id)} | format pattern "/v1/apps/{application_id}/channels/apns_sandbox"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
 }
 
 # Enables the APNs sandbox channel for an application or updates the status and settings of the APNs sandbox channel for an application.
@@ -1661,6 +1721,7 @@ export def "apps-channels-apns-sandbox update" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($application_id | is-empty) { error make --unspanned { msg: "path parameter 'application-id' must be non-empty" } }
   let full_url = (build-url $base ({application_id: (encode-path-segment $application_id)} | format pattern "/v1/apps/{application_id}/channels/apns_sandbox"))
   let req_body = {"APNSSandboxChannelRequest": $apns_sandbox_channel_request} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
@@ -1668,7 +1729,7 @@ export def "apps-channels-apns-sandbox update" [
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: {}, body: $req_body}
 }
 
 # Disables the APNs VoIP channel for an application and deletes any existing settings for the channel.
@@ -1696,12 +1757,13 @@ export def "apps-channels-apns-voip delete" [
 ]: nothing -> record<APNSVoipChannelResponse: record<ApplicationId: record, CreationDate: record, DefaultAuthenticationMethod: record, Enabled: record, HasCredential: record, HasTokenKey: record, Id: record, IsArchived: record, LastModifiedBy: record, LastModifiedDate: record, Platform: record, Version: record>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($application_id | is-empty) { error make --unspanned { msg: "path parameter 'application-id' must be non-empty" } }
   let full_url = (build-url $base ({application_id: (encode-path-segment $application_id)} | format pattern "/v1/apps/{application_id}/channels/apns_voip"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
 }
 
 # Retrieves information about the status and settings of the APNs VoIP channel for an application.
@@ -1729,12 +1791,13 @@ export def "apps-channels-apns-voip get" [
 ]: nothing -> record<APNSVoipChannelResponse: record<ApplicationId: record, CreationDate: record, DefaultAuthenticationMethod: record, Enabled: record, HasCredential: record, HasTokenKey: record, Id: record, IsArchived: record, LastModifiedBy: record, LastModifiedDate: record, Platform: record, Version: record>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($application_id | is-empty) { error make --unspanned { msg: "path parameter 'application-id' must be non-empty" } }
   let full_url = (build-url $base ({application_id: (encode-path-segment $application_id)} | format pattern "/v1/apps/{application_id}/channels/apns_voip"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
 }
 
 # Enables the APNs VoIP channel for an application or updates the status and settings of the APNs VoIP channel for an application.
@@ -1765,6 +1828,7 @@ export def "apps-channels-apns-voip update" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($application_id | is-empty) { error make --unspanned { msg: "path parameter 'application-id' must be non-empty" } }
   let full_url = (build-url $base ({application_id: (encode-path-segment $application_id)} | format pattern "/v1/apps/{application_id}/channels/apns_voip"))
   let req_body = {"APNSVoipChannelRequest": $apns_voip_channel_request} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
@@ -1772,7 +1836,7 @@ export def "apps-channels-apns-voip update" [
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: {}, body: $req_body}
 }
 
 # Disables the APNs VoIP sandbox channel for an application and deletes any existing settings for the channel.
@@ -1800,12 +1864,13 @@ export def "apps-channels-apns-voip-sandbox delete" [
 ]: nothing -> record<APNSVoipSandboxChannelResponse: record<ApplicationId: record, CreationDate: record, DefaultAuthenticationMethod: record, Enabled: record, HasCredential: record, HasTokenKey: record, Id: record, IsArchived: record, LastModifiedBy: record, LastModifiedDate: record, Platform: record, Version: record>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($application_id | is-empty) { error make --unspanned { msg: "path parameter 'application-id' must be non-empty" } }
   let full_url = (build-url $base ({application_id: (encode-path-segment $application_id)} | format pattern "/v1/apps/{application_id}/channels/apns_voip_sandbox"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
 }
 
 # Retrieves information about the status and settings of the APNs VoIP sandbox channel for an application.
@@ -1833,12 +1898,13 @@ export def "apps-channels-apns-voip-sandbox get" [
 ]: nothing -> record<APNSVoipSandboxChannelResponse: record<ApplicationId: record, CreationDate: record, DefaultAuthenticationMethod: record, Enabled: record, HasCredential: record, HasTokenKey: record, Id: record, IsArchived: record, LastModifiedBy: record, LastModifiedDate: record, Platform: record, Version: record>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($application_id | is-empty) { error make --unspanned { msg: "path parameter 'application-id' must be non-empty" } }
   let full_url = (build-url $base ({application_id: (encode-path-segment $application_id)} | format pattern "/v1/apps/{application_id}/channels/apns_voip_sandbox"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
 }
 
 # Enables the APNs VoIP sandbox channel for an application or updates the status and settings of the APNs VoIP sandbox channel for an application.
@@ -1869,6 +1935,7 @@ export def "apps-channels-apns-voip-sandbox update" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($application_id | is-empty) { error make --unspanned { msg: "path parameter 'application-id' must be non-empty" } }
   let full_url = (build-url $base ({application_id: (encode-path-segment $application_id)} | format pattern "/v1/apps/{application_id}/channels/apns_voip_sandbox"))
   let req_body = {"APNSVoipSandboxChannelRequest": $apns_voip_sandbox_channel_request} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
@@ -1876,7 +1943,7 @@ export def "apps-channels-apns-voip-sandbox update" [
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: {}, body: $req_body}
 }
 
 # Deletes an application.
@@ -1904,12 +1971,13 @@ export def "apps delete" [
 ]: nothing -> record<ApplicationResponse: record<Arn: record, Id: record, Name: record, tags: record, CreationDate: record>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($application_id | is-empty) { error make --unspanned { msg: "path parameter 'application-id' must be non-empty" } }
   let full_url = (build-url $base ({application_id: (encode-path-segment $application_id)} | format pattern "/v1/apps/{application_id}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
 }
 
 # Retrieves information about an application.
@@ -1937,12 +2005,13 @@ export def "apps get" [
 ]: nothing -> record<ApplicationResponse: record<Arn: record, Id: record, Name: record, tags: record, CreationDate: record>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($application_id | is-empty) { error make --unspanned { msg: "path parameter 'application-id' must be non-empty" } }
   let full_url = (build-url $base ({application_id: (encode-path-segment $application_id)} | format pattern "/v1/apps/{application_id}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
 }
 
 # Disables the Baidu channel for an application and deletes any existing settings for the channel.
@@ -1970,12 +2039,13 @@ export def "apps-channels-baidu delete" [
 ]: nothing -> record<BaiduChannelResponse: record<ApplicationId: record, CreationDate: record, Credential: record, Enabled: record, HasCredential: record, Id: record, IsArchived: record, LastModifiedBy: record, LastModifiedDate: record, Platform: record, Version: record>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($application_id | is-empty) { error make --unspanned { msg: "path parameter 'application-id' must be non-empty" } }
   let full_url = (build-url $base ({application_id: (encode-path-segment $application_id)} | format pattern "/v1/apps/{application_id}/channels/baidu"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
 }
 
 # Retrieves information about the status and settings of the Baidu channel for an application.
@@ -2003,12 +2073,13 @@ export def "apps-channels-baidu get" [
 ]: nothing -> record<BaiduChannelResponse: record<ApplicationId: record, CreationDate: record, Credential: record, Enabled: record, HasCredential: record, Id: record, IsArchived: record, LastModifiedBy: record, LastModifiedDate: record, Platform: record, Version: record>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($application_id | is-empty) { error make --unspanned { msg: "path parameter 'application-id' must be non-empty" } }
   let full_url = (build-url $base ({application_id: (encode-path-segment $application_id)} | format pattern "/v1/apps/{application_id}/channels/baidu"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
 }
 
 # Enables the Baidu channel for an application or updates the status and settings of the Baidu channel for an application.
@@ -2039,6 +2110,7 @@ export def "apps-channels-baidu update" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($application_id | is-empty) { error make --unspanned { msg: "path parameter 'application-id' must be non-empty" } }
   let full_url = (build-url $base ({application_id: (encode-path-segment $application_id)} | format pattern "/v1/apps/{application_id}/channels/baidu"))
   let req_body = {"BaiduChannelRequest": $baidu_channel_request} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
@@ -2046,7 +2118,7 @@ export def "apps-channels-baidu update" [
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: {}, body: $req_body}
 }
 
 # Deletes a campaign from an application.
@@ -2075,12 +2147,14 @@ export def "apps-campaigns delete" [
 ]: nothing -> record<CampaignResponse: record<AdditionalTreatments: record, ApplicationId: record, Arn: record, CreationDate: record, CustomDeliveryConfiguration: record<DeliveryUri: record, EndpointTypes: record>, DefaultState: record<CampaignStatus: record>, Description: record, HoldoutPercent: record, Hook: record<LambdaFunctionName: record, Mode: record, WebUrl: record>, Id: record, IsPaused: record, LastModifiedDate: record, Limits: record<Daily: record, MaximumDuration: record, MessagesPerSecond: record, Total: record, Session: record>, MessageConfiguration: record<ADMMessage: record, APNSMessage: record, BaiduMessage: record, CustomMessage: record, DefaultMessage: record, EmailMessage: record, GCMMessage: record, SMSMessage: record, InAppMessage: record>, Name: record, Schedule: record<EndTime: record, EventFilter: record, Frequency: record, IsLocalTime: record, QuietTime: record, StartTime: record, Timezone: record>, SegmentId: record, SegmentVersion: record, State: record<CampaignStatus: record>, tags: record, TemplateConfiguration: record<EmailTemplate: record, PushTemplate: record, SMSTemplate: record, VoiceTemplate: record>, TreatmentDescription: record, TreatmentName: record, Version: record, Priority: record>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($application_id | is-empty) { error make --unspanned { msg: "path parameter 'application-id' must be non-empty" } }
+  if ($campaign_id | is-empty) { error make --unspanned { msg: "path parameter 'campaign-id' must be non-empty" } }
   let full_url = (build-url $base ({application_id: (encode-path-segment $application_id), campaign_id: (encode-path-segment $campaign_id)} | format pattern "/v1/apps/{application_id}/campaigns/{campaign_id}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
 }
 
 # Retrieves information about the status, configuration, and other settings for a campaign.
@@ -2109,12 +2183,14 @@ export def "apps-campaigns get" [
 ]: nothing -> record<CampaignResponse: record<AdditionalTreatments: record, ApplicationId: record, Arn: record, CreationDate: record, CustomDeliveryConfiguration: record<DeliveryUri: record, EndpointTypes: record>, DefaultState: record<CampaignStatus: record>, Description: record, HoldoutPercent: record, Hook: record<LambdaFunctionName: record, Mode: record, WebUrl: record>, Id: record, IsPaused: record, LastModifiedDate: record, Limits: record<Daily: record, MaximumDuration: record, MessagesPerSecond: record, Total: record, Session: record>, MessageConfiguration: record<ADMMessage: record, APNSMessage: record, BaiduMessage: record, CustomMessage: record, DefaultMessage: record, EmailMessage: record, GCMMessage: record, SMSMessage: record, InAppMessage: record>, Name: record, Schedule: record<EndTime: record, EventFilter: record, Frequency: record, IsLocalTime: record, QuietTime: record, StartTime: record, Timezone: record>, SegmentId: record, SegmentVersion: record, State: record<CampaignStatus: record>, tags: record, TemplateConfiguration: record<EmailTemplate: record, PushTemplate: record, SMSTemplate: record, VoiceTemplate: record>, TreatmentDescription: record, TreatmentName: record, Version: record, Priority: record>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($application_id | is-empty) { error make --unspanned { msg: "path parameter 'application-id' must be non-empty" } }
+  if ($campaign_id | is-empty) { error make --unspanned { msg: "path parameter 'campaign-id' must be non-empty" } }
   let full_url = (build-url $base ({application_id: (encode-path-segment $application_id), campaign_id: (encode-path-segment $campaign_id)} | format pattern "/v1/apps/{application_id}/campaigns/{campaign_id}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
 }
 
 # Updates the configuration and other settings for a campaign.
@@ -2146,6 +2222,8 @@ export def "apps-campaigns update" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($application_id | is-empty) { error make --unspanned { msg: "path parameter 'application-id' must be non-empty" } }
+  if ($campaign_id | is-empty) { error make --unspanned { msg: "path parameter 'campaign-id' must be non-empty" } }
   let full_url = (build-url $base ({application_id: (encode-path-segment $application_id), campaign_id: (encode-path-segment $campaign_id)} | format pattern "/v1/apps/{application_id}/campaigns/{campaign_id}"))
   let req_body = {"WriteCampaignRequest": $write_campaign_request} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
@@ -2153,7 +2231,7 @@ export def "apps-campaigns update" [
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: {}, body: $req_body}
 }
 
 # Disables the email channel for an application and deletes any existing settings for the channel.
@@ -2181,12 +2259,13 @@ export def "apps-channels-email delete" [
 ]: nothing -> record<EmailChannelResponse: record<ApplicationId: record, ConfigurationSet: record, CreationDate: record, Enabled: record, FromAddress: record, HasCredential: record, Id: record, Identity: record, IsArchived: record, LastModifiedBy: record, LastModifiedDate: record, MessagesPerSecond: record, Platform: record, RoleArn: record, Version: record>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($application_id | is-empty) { error make --unspanned { msg: "path parameter 'application-id' must be non-empty" } }
   let full_url = (build-url $base ({application_id: (encode-path-segment $application_id)} | format pattern "/v1/apps/{application_id}/channels/email"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
 }
 
 # Retrieves information about the status and settings of the email channel for an application.
@@ -2214,12 +2293,13 @@ export def "apps-channels-email get" [
 ]: nothing -> record<EmailChannelResponse: record<ApplicationId: record, ConfigurationSet: record, CreationDate: record, Enabled: record, FromAddress: record, HasCredential: record, Id: record, Identity: record, IsArchived: record, LastModifiedBy: record, LastModifiedDate: record, MessagesPerSecond: record, Platform: record, RoleArn: record, Version: record>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($application_id | is-empty) { error make --unspanned { msg: "path parameter 'application-id' must be non-empty" } }
   let full_url = (build-url $base ({application_id: (encode-path-segment $application_id)} | format pattern "/v1/apps/{application_id}/channels/email"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
 }
 
 # Enables the email channel for an application or updates the status and settings of the email channel for an application.
@@ -2250,6 +2330,7 @@ export def "apps-channels-email update" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($application_id | is-empty) { error make --unspanned { msg: "path parameter 'application-id' must be non-empty" } }
   let full_url = (build-url $base ({application_id: (encode-path-segment $application_id)} | format pattern "/v1/apps/{application_id}/channels/email"))
   let req_body = {"EmailChannelRequest": $email_channel_request} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
@@ -2257,7 +2338,7 @@ export def "apps-channels-email update" [
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: {}, body: $req_body}
 }
 
 # Deletes an endpoint from an application.
@@ -2286,12 +2367,14 @@ export def "apps-endpoints delete" [
 ]: nothing -> record<EndpointResponse: record<Address: record, ApplicationId: record, Attributes: record, ChannelType: record, CohortId: record, CreationDate: record, Demographic: record<AppVersion: record, Locale: record, Make: record, Model: record, ModelVersion: record, Platform: record, PlatformVersion: record, Timezone: record>, EffectiveDate: record, EndpointStatus: record, Id: record, Location: record<City: record, Country: record, Latitude: record, Longitude: record, PostalCode: record, Region: record>, Metrics: record, OptOut: record, RequestId: record, User: record<UserAttributes: record, UserId: record>>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($application_id | is-empty) { error make --unspanned { msg: "path parameter 'application-id' must be non-empty" } }
+  if ($endpoint_id | is-empty) { error make --unspanned { msg: "path parameter 'endpoint-id' must be non-empty" } }
   let full_url = (build-url $base ({application_id: (encode-path-segment $application_id), endpoint_id: (encode-path-segment $endpoint_id)} | format pattern "/v1/apps/{application_id}/endpoints/{endpoint_id}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
 }
 
 # Retrieves information about the settings and attributes of a specific endpoint for an application.
@@ -2320,12 +2403,14 @@ export def "apps-endpoints get" [
 ]: nothing -> record<EndpointResponse: record<Address: record, ApplicationId: record, Attributes: record, ChannelType: record, CohortId: record, CreationDate: record, Demographic: record<AppVersion: record, Locale: record, Make: record, Model: record, ModelVersion: record, Platform: record, PlatformVersion: record, Timezone: record>, EffectiveDate: record, EndpointStatus: record, Id: record, Location: record<City: record, Country: record, Latitude: record, Longitude: record, PostalCode: record, Region: record>, Metrics: record, OptOut: record, RequestId: record, User: record<UserAttributes: record, UserId: record>>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($application_id | is-empty) { error make --unspanned { msg: "path parameter 'application-id' must be non-empty" } }
+  if ($endpoint_id | is-empty) { error make --unspanned { msg: "path parameter 'endpoint-id' must be non-empty" } }
   let full_url = (build-url $base ({application_id: (encode-path-segment $application_id), endpoint_id: (encode-path-segment $endpoint_id)} | format pattern "/v1/apps/{application_id}/endpoints/{endpoint_id}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
 }
 
 # Creates a new endpoint for an application or updates the settings and attributes of an existing endpoint for an application. You can also use this operation to define custom attributes for an endpoint. If an update includes one or more values for a custom attribute, Amazon Pinpoint replaces (overwrites) any existing values with the new values.
@@ -2357,6 +2442,8 @@ export def "apps-endpoints update" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($application_id | is-empty) { error make --unspanned { msg: "path parameter 'application-id' must be non-empty" } }
+  if ($endpoint_id | is-empty) { error make --unspanned { msg: "path parameter 'endpoint-id' must be non-empty" } }
   let full_url = (build-url $base ({application_id: (encode-path-segment $application_id), endpoint_id: (encode-path-segment $endpoint_id)} | format pattern "/v1/apps/{application_id}/endpoints/{endpoint_id}"))
   let req_body = {"EndpointRequest": $endpoint_request} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
@@ -2364,7 +2451,7 @@ export def "apps-endpoints update" [
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: {}, body: $req_body}
 }
 
 # Deletes the event stream for an application.
@@ -2392,12 +2479,13 @@ export def "apps-eventstream delete-event-stream" [
 ]: nothing -> record<EventStream: record<ApplicationId: record, DestinationStreamArn: record, ExternalId: record, LastModifiedDate: record, LastUpdatedBy: record, RoleArn: record>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($application_id | is-empty) { error make --unspanned { msg: "path parameter 'application-id' must be non-empty" } }
   let full_url = (build-url $base ({application_id: (encode-path-segment $application_id)} | format pattern "/v1/apps/{application_id}/eventstream"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
 }
 
 # Retrieves information about the event stream settings for an application.
@@ -2425,12 +2513,13 @@ export def "apps-eventstream get-event-stream" [
 ]: nothing -> record<EventStream: record<ApplicationId: record, DestinationStreamArn: record, ExternalId: record, LastModifiedDate: record, LastUpdatedBy: record, RoleArn: record>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($application_id | is-empty) { error make --unspanned { msg: "path parameter 'application-id' must be non-empty" } }
   let full_url = (build-url $base ({application_id: (encode-path-segment $application_id)} | format pattern "/v1/apps/{application_id}/eventstream"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
 }
 
 # Creates a new event stream for an application or updates the settings of an existing event stream for an application.
@@ -2461,6 +2550,7 @@ export def "apps-eventstream update-event-stream" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($application_id | is-empty) { error make --unspanned { msg: "path parameter 'application-id' must be non-empty" } }
   let full_url = (build-url $base ({application_id: (encode-path-segment $application_id)} | format pattern "/v1/apps/{application_id}/eventstream"))
   let req_body = {"WriteEventStream": $write_event_stream} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
@@ -2468,7 +2558,7 @@ export def "apps-eventstream update-event-stream" [
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: {}, body: $req_body}
 }
 
 # Disables the GCM channel for an application and deletes any existing settings for the channel.
@@ -2496,12 +2586,13 @@ export def "apps-channels-gcm delete" [
 ]: nothing -> record<GCMChannelResponse: record<ApplicationId: record, CreationDate: record, Credential: record, Enabled: record, HasCredential: record, Id: record, IsArchived: record, LastModifiedBy: record, LastModifiedDate: record, Platform: record, Version: record>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($application_id | is-empty) { error make --unspanned { msg: "path parameter 'application-id' must be non-empty" } }
   let full_url = (build-url $base ({application_id: (encode-path-segment $application_id)} | format pattern "/v1/apps/{application_id}/channels/gcm"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
 }
 
 # Retrieves information about the status and settings of the GCM channel for an application.
@@ -2529,12 +2620,13 @@ export def "apps-channels-gcm get" [
 ]: nothing -> record<GCMChannelResponse: record<ApplicationId: record, CreationDate: record, Credential: record, Enabled: record, HasCredential: record, Id: record, IsArchived: record, LastModifiedBy: record, LastModifiedDate: record, Platform: record, Version: record>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($application_id | is-empty) { error make --unspanned { msg: "path parameter 'application-id' must be non-empty" } }
   let full_url = (build-url $base ({application_id: (encode-path-segment $application_id)} | format pattern "/v1/apps/{application_id}/channels/gcm"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
 }
 
 # Enables the GCM channel for an application or updates the status and settings of the GCM channel for an application.
@@ -2565,6 +2657,7 @@ export def "apps-channels-gcm update" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($application_id | is-empty) { error make --unspanned { msg: "path parameter 'application-id' must be non-empty" } }
   let full_url = (build-url $base ({application_id: (encode-path-segment $application_id)} | format pattern "/v1/apps/{application_id}/channels/gcm"))
   let req_body = {"GCMChannelRequest": $gcm_channel_request} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
@@ -2572,7 +2665,7 @@ export def "apps-channels-gcm update" [
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: {}, body: $req_body}
 }
 
 # Deletes a journey from an application.
@@ -2601,12 +2694,14 @@ export def "apps-journeys delete" [
 ]: nothing -> record<JourneyResponse: record<Activities: record, ApplicationId: record, CreationDate: record, Id: record, LastModifiedDate: record, Limits: record<DailyCap: record, EndpointReentryCap: record, MessagesPerSecond: record, EndpointReentryInterval: record>, LocalTime: record, Name: record, QuietTime: record<End: record, Start: record>, RefreshFrequency: record, Schedule: record<EndTime: record, StartTime: record, Timezone: record>, StartActivity: record, StartCondition: record<Description: record, EventStartCondition: record, SegmentStartCondition: record>, State: record, tags: record, WaitForQuietTime: record, RefreshOnSegmentUpdate: record, JourneyChannelSettings: record<ConnectCampaignArn: record, ConnectCampaignExecutionRoleArn: record>, SendingSchedule: record, OpenHours: record<EMAIL: record, SMS: record, PUSH: record, VOICE: record, CUSTOM: record>, ClosedDays: record<EMAIL: record, SMS: record, PUSH: record, VOICE: record, CUSTOM: record>>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($application_id | is-empty) { error make --unspanned { msg: "path parameter 'application-id' must be non-empty" } }
+  if ($journey_id | is-empty) { error make --unspanned { msg: "path parameter 'journey-id' must be non-empty" } }
   let full_url = (build-url $base ({application_id: (encode-path-segment $application_id), journey_id: (encode-path-segment $journey_id)} | format pattern "/v1/apps/{application_id}/journeys/{journey_id}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
 }
 
 # Retrieves information about the status, configuration, and other settings for a journey.
@@ -2635,12 +2730,14 @@ export def "apps-journeys get" [
 ]: nothing -> record<JourneyResponse: record<Activities: record, ApplicationId: record, CreationDate: record, Id: record, LastModifiedDate: record, Limits: record<DailyCap: record, EndpointReentryCap: record, MessagesPerSecond: record, EndpointReentryInterval: record>, LocalTime: record, Name: record, QuietTime: record<End: record, Start: record>, RefreshFrequency: record, Schedule: record<EndTime: record, StartTime: record, Timezone: record>, StartActivity: record, StartCondition: record<Description: record, EventStartCondition: record, SegmentStartCondition: record>, State: record, tags: record, WaitForQuietTime: record, RefreshOnSegmentUpdate: record, JourneyChannelSettings: record<ConnectCampaignArn: record, ConnectCampaignExecutionRoleArn: record>, SendingSchedule: record, OpenHours: record<EMAIL: record, SMS: record, PUSH: record, VOICE: record, CUSTOM: record>, ClosedDays: record<EMAIL: record, SMS: record, PUSH: record, VOICE: record, CUSTOM: record>>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($application_id | is-empty) { error make --unspanned { msg: "path parameter 'application-id' must be non-empty" } }
+  if ($journey_id | is-empty) { error make --unspanned { msg: "path parameter 'journey-id' must be non-empty" } }
   let full_url = (build-url $base ({application_id: (encode-path-segment $application_id), journey_id: (encode-path-segment $journey_id)} | format pattern "/v1/apps/{application_id}/journeys/{journey_id}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
 }
 
 # Updates the configuration and other settings for a journey.
@@ -2672,6 +2769,8 @@ export def "apps-journeys update" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($application_id | is-empty) { error make --unspanned { msg: "path parameter 'application-id' must be non-empty" } }
+  if ($journey_id | is-empty) { error make --unspanned { msg: "path parameter 'journey-id' must be non-empty" } }
   let full_url = (build-url $base ({application_id: (encode-path-segment $application_id), journey_id: (encode-path-segment $journey_id)} | format pattern "/v1/apps/{application_id}/journeys/{journey_id}"))
   let req_body = {"WriteJourneyRequest": $write_journey_request} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
@@ -2679,7 +2778,7 @@ export def "apps-journeys update" [
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: {}, body: $req_body}
 }
 
 # Deletes an Amazon Pinpoint configuration for a recommender model.
@@ -2707,12 +2806,13 @@ export def "recommenders delete-configuration" [
 ]: nothing -> record<RecommenderConfigurationResponse: record<Attributes: record, CreationDate: record, Description: record, Id: record, LastModifiedDate: record, Name: record, RecommendationProviderIdType: record, RecommendationProviderRoleArn: record, RecommendationProviderUri: record, RecommendationTransformerUri: record, RecommendationsDisplayName: record, RecommendationsPerMessage: record>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($recommender_id | is-empty) { error make --unspanned { msg: "path parameter 'recommender-id' must be non-empty" } }
   let full_url = (build-url $base ({recommender_id: (encode-path-segment $recommender_id)} | format pattern "/v1/recommenders/{recommender_id}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
 }
 
 # Retrieves information about an Amazon Pinpoint configuration for a recommender model.
@@ -2740,12 +2840,13 @@ export def "recommenders get-configuration" [
 ]: nothing -> record<RecommenderConfigurationResponse: record<Attributes: record, CreationDate: record, Description: record, Id: record, LastModifiedDate: record, Name: record, RecommendationProviderIdType: record, RecommendationProviderRoleArn: record, RecommendationProviderUri: record, RecommendationTransformerUri: record, RecommendationsDisplayName: record, RecommendationsPerMessage: record>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($recommender_id | is-empty) { error make --unspanned { msg: "path parameter 'recommender-id' must be non-empty" } }
   let full_url = (build-url $base ({recommender_id: (encode-path-segment $recommender_id)} | format pattern "/v1/recommenders/{recommender_id}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
 }
 
 # Updates an Amazon Pinpoint configuration for a recommender model.
@@ -2776,6 +2877,7 @@ export def "recommenders update-configuration" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($recommender_id | is-empty) { error make --unspanned { msg: "path parameter 'recommender-id' must be non-empty" } }
   let full_url = (build-url $base ({recommender_id: (encode-path-segment $recommender_id)} | format pattern "/v1/recommenders/{recommender_id}"))
   let req_body = {"UpdateRecommenderConfiguration": $update_recommender_configuration} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
@@ -2783,7 +2885,7 @@ export def "recommenders update-configuration" [
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: {}, body: $req_body}
 }
 
 # Deletes a segment from an application.
@@ -2812,12 +2914,14 @@ export def "apps-segments delete" [
 ]: nothing -> record<SegmentResponse: record<ApplicationId: record, Arn: record, CreationDate: record, Dimensions: record<Attributes: record, Behavior: record, Demographic: record, Location: record, Metrics: record, UserAttributes: record>, Id: record, ImportDefinition: record<ChannelCounts: record, ExternalId: record, Format: record, RoleArn: record, S3Url: record, Size: record>, LastModifiedDate: record, Name: record, SegmentGroups: record<Groups: record, Include: record>, SegmentType: record, tags: record, Version: record>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($application_id | is-empty) { error make --unspanned { msg: "path parameter 'application-id' must be non-empty" } }
+  if ($segment_id | is-empty) { error make --unspanned { msg: "path parameter 'segment-id' must be non-empty" } }
   let full_url = (build-url $base ({application_id: (encode-path-segment $application_id), segment_id: (encode-path-segment $segment_id)} | format pattern "/v1/apps/{application_id}/segments/{segment_id}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
 }
 
 # Retrieves information about the configuration, dimension, and other settings for a specific segment that's associated with an application.
@@ -2846,12 +2950,14 @@ export def "apps-segments get" [
 ]: nothing -> record<SegmentResponse: record<ApplicationId: record, Arn: record, CreationDate: record, Dimensions: record<Attributes: record, Behavior: record, Demographic: record, Location: record, Metrics: record, UserAttributes: record>, Id: record, ImportDefinition: record<ChannelCounts: record, ExternalId: record, Format: record, RoleArn: record, S3Url: record, Size: record>, LastModifiedDate: record, Name: record, SegmentGroups: record<Groups: record, Include: record>, SegmentType: record, tags: record, Version: record>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($application_id | is-empty) { error make --unspanned { msg: "path parameter 'application-id' must be non-empty" } }
+  if ($segment_id | is-empty) { error make --unspanned { msg: "path parameter 'segment-id' must be non-empty" } }
   let full_url = (build-url $base ({application_id: (encode-path-segment $application_id), segment_id: (encode-path-segment $segment_id)} | format pattern "/v1/apps/{application_id}/segments/{segment_id}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
 }
 
 # Creates a new segment for an application or updates the configuration, dimension, and other settings for an existing segment that's associated with an application.
@@ -2883,6 +2989,8 @@ export def "apps-segments update" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($application_id | is-empty) { error make --unspanned { msg: "path parameter 'application-id' must be non-empty" } }
+  if ($segment_id | is-empty) { error make --unspanned { msg: "path parameter 'segment-id' must be non-empty" } }
   let full_url = (build-url $base ({application_id: (encode-path-segment $application_id), segment_id: (encode-path-segment $segment_id)} | format pattern "/v1/apps/{application_id}/segments/{segment_id}"))
   let req_body = {"WriteSegmentRequest": $write_segment_request} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
@@ -2890,7 +2998,7 @@ export def "apps-segments update" [
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: {}, body: $req_body}
 }
 
 # Disables the SMS channel for an application and deletes any existing settings for the channel.
@@ -2918,12 +3026,13 @@ export def "apps-channels-sms delete" [
 ]: nothing -> record<SMSChannelResponse: record<ApplicationId: record, CreationDate: record, Enabled: record, HasCredential: record, Id: record, IsArchived: record, LastModifiedBy: record, LastModifiedDate: record, Platform: record, PromotionalMessagesPerSecond: record, SenderId: record, ShortCode: record, TransactionalMessagesPerSecond: record, Version: record>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($application_id | is-empty) { error make --unspanned { msg: "path parameter 'application-id' must be non-empty" } }
   let full_url = (build-url $base ({application_id: (encode-path-segment $application_id)} | format pattern "/v1/apps/{application_id}/channels/sms"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
 }
 
 # Retrieves information about the status and settings of the SMS channel for an application.
@@ -2951,12 +3060,13 @@ export def "apps-channels-sms get" [
 ]: nothing -> record<SMSChannelResponse: record<ApplicationId: record, CreationDate: record, Enabled: record, HasCredential: record, Id: record, IsArchived: record, LastModifiedBy: record, LastModifiedDate: record, Platform: record, PromotionalMessagesPerSecond: record, SenderId: record, ShortCode: record, TransactionalMessagesPerSecond: record, Version: record>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($application_id | is-empty) { error make --unspanned { msg: "path parameter 'application-id' must be non-empty" } }
   let full_url = (build-url $base ({application_id: (encode-path-segment $application_id)} | format pattern "/v1/apps/{application_id}/channels/sms"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
 }
 
 # Enables the SMS channel for an application or updates the status and settings of the SMS channel for an application.
@@ -2987,6 +3097,7 @@ export def "apps-channels-sms update" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($application_id | is-empty) { error make --unspanned { msg: "path parameter 'application-id' must be non-empty" } }
   let full_url = (build-url $base ({application_id: (encode-path-segment $application_id)} | format pattern "/v1/apps/{application_id}/channels/sms"))
   let req_body = {"SMSChannelRequest": $sms_channel_request} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
@@ -2994,7 +3105,7 @@ export def "apps-channels-sms update" [
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: {}, body: $req_body}
 }
 
 # Deletes all the endpoints that are associated with a specific user ID.
@@ -3023,12 +3134,14 @@ export def "apps-users delete-endpoints" [
 ]: nothing -> record<EndpointsResponse: record<Item: record>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($application_id | is-empty) { error make --unspanned { msg: "path parameter 'application-id' must be non-empty" } }
+  if ($user_id | is-empty) { error make --unspanned { msg: "path parameter 'user-id' must be non-empty" } }
   let full_url = (build-url $base ({application_id: (encode-path-segment $application_id), user_id: (encode-path-segment $user_id)} | format pattern "/v1/apps/{application_id}/users/{user_id}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
 }
 
 # Retrieves information about all the endpoints that are associated with a specific user ID.
@@ -3057,12 +3170,14 @@ export def "apps-users get-endpoints" [
 ]: nothing -> record<EndpointsResponse: record<Item: record>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($application_id | is-empty) { error make --unspanned { msg: "path parameter 'application-id' must be non-empty" } }
+  if ($user_id | is-empty) { error make --unspanned { msg: "path parameter 'user-id' must be non-empty" } }
   let full_url = (build-url $base ({application_id: (encode-path-segment $application_id), user_id: (encode-path-segment $user_id)} | format pattern "/v1/apps/{application_id}/users/{user_id}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
 }
 
 # Disables the voice channel for an application and deletes any existing settings for the channel.
@@ -3090,12 +3205,13 @@ export def "apps-channels-voice delete" [
 ]: nothing -> record<VoiceChannelResponse: record<ApplicationId: record, CreationDate: record, Enabled: record, HasCredential: record, Id: record, IsArchived: record, LastModifiedBy: record, LastModifiedDate: record, Platform: record, Version: record>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($application_id | is-empty) { error make --unspanned { msg: "path parameter 'application-id' must be non-empty" } }
   let full_url = (build-url $base ({application_id: (encode-path-segment $application_id)} | format pattern "/v1/apps/{application_id}/channels/voice"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
 }
 
 # Retrieves information about the status and settings of the voice channel for an application.
@@ -3123,12 +3239,13 @@ export def "apps-channels-voice get" [
 ]: nothing -> record<VoiceChannelResponse: record<ApplicationId: record, CreationDate: record, Enabled: record, HasCredential: record, Id: record, IsArchived: record, LastModifiedBy: record, LastModifiedDate: record, Platform: record, Version: record>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($application_id | is-empty) { error make --unspanned { msg: "path parameter 'application-id' must be non-empty" } }
   let full_url = (build-url $base ({application_id: (encode-path-segment $application_id)} | format pattern "/v1/apps/{application_id}/channels/voice"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
 }
 
 # Enables the voice channel for an application or updates the status and settings of the voice channel for an application.
@@ -3159,6 +3276,7 @@ export def "apps-channels-voice update" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($application_id | is-empty) { error make --unspanned { msg: "path parameter 'application-id' must be non-empty" } }
   let full_url = (build-url $base ({application_id: (encode-path-segment $application_id)} | format pattern "/v1/apps/{application_id}/channels/voice"))
   let req_body = {"VoiceChannelRequest": $voice_channel_request} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
@@ -3166,7 +3284,7 @@ export def "apps-channels-voice update" [
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: {}, body: $req_body}
 }
 
 # Retrieves (queries) pre-aggregated data for a standard metric that applies to an application.
@@ -3199,13 +3317,15 @@ export def "apps-kpis-daterange get-date-range" [
 ]: nothing -> record<ApplicationDateRangeKpiResponse: record<ApplicationId: record, EndTime: record, KpiName: record, KpiResult: record<Rows: record>, NextToken: record, StartTime: record>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($application_id | is-empty) { error make --unspanned { msg: "path parameter 'application-id' must be non-empty" } }
+  if ($kpi_name | is-empty) { error make --unspanned { msg: "path parameter 'kpi-name' must be non-empty" } }
   let qp = [(serialize-qp "end-time" $end_time "scalar") (serialize-qp "next-token" $next_token "scalar") (serialize-qp "page-size" $page_size "scalar") (serialize-qp "start-time" $start_time "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({application_id: (encode-path-segment $application_id), kpi_name: (encode-path-segment $kpi_name)} | format pattern "/v1/apps/{application_id}/kpis/daterange/{kpi_name}") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"end-time": $end_time, "next-token": $next_token, "page-size": $page_size, "start-time": $start_time} | compact), body: null}
 }
 
 # Retrieves information about the settings for an application.
@@ -3233,12 +3353,13 @@ export def "apps-settings get" [
 ]: nothing -> record<ApplicationSettingsResource: record<ApplicationId: record, CampaignHook: record<LambdaFunctionName: record, Mode: record, WebUrl: record>, LastModifiedDate: record, Limits: record<Daily: record, MaximumDuration: record, MessagesPerSecond: record, Total: record, Session: record>, QuietTime: record<End: record, Start: record>>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($application_id | is-empty) { error make --unspanned { msg: "path parameter 'application-id' must be non-empty" } }
   let full_url = (build-url $base ({application_id: (encode-path-segment $application_id)} | format pattern "/v1/apps/{application_id}/settings"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
 }
 
 # Updates the settings for an application.
@@ -3269,6 +3390,7 @@ export def "apps-settings update" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($application_id | is-empty) { error make --unspanned { msg: "path parameter 'application-id' must be non-empty" } }
   let full_url = (build-url $base ({application_id: (encode-path-segment $application_id)} | format pattern "/v1/apps/{application_id}/settings"))
   let req_body = {"WriteApplicationSettingsRequest": $write_application_settings_request} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
@@ -3276,7 +3398,7 @@ export def "apps-settings update" [
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: {}, body: $req_body}
 }
 
 # Retrieves information about all the activities for a campaign.
@@ -3307,13 +3429,15 @@ export def "apps-campaigns-activities get" [
 ]: nothing -> record<ActivitiesResponse: record<Item: record, NextToken: record>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($application_id | is-empty) { error make --unspanned { msg: "path parameter 'application-id' must be non-empty" } }
+  if ($campaign_id | is-empty) { error make --unspanned { msg: "path parameter 'campaign-id' must be non-empty" } }
   let qp = [(serialize-qp "page-size" $page_size "scalar") (serialize-qp "token" $qp_token "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({application_id: (encode-path-segment $application_id), campaign_id: (encode-path-segment $campaign_id)} | format pattern "/v1/apps/{application_id}/campaigns/{campaign_id}/activities") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"page-size": $page_size, "token": $qp_token} | compact), body: null}
 }
 
 # Retrieves (queries) pre-aggregated data for a standard metric that applies to a campaign.
@@ -3347,13 +3471,16 @@ export def "apps-campaigns-kpis-daterange get-date-range" [
 ]: nothing -> record<CampaignDateRangeKpiResponse: record<ApplicationId: record, CampaignId: record, EndTime: record, KpiName: record, KpiResult: record<Rows: record>, NextToken: record, StartTime: record>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($application_id | is-empty) { error make --unspanned { msg: "path parameter 'application-id' must be non-empty" } }
+  if ($campaign_id | is-empty) { error make --unspanned { msg: "path parameter 'campaign-id' must be non-empty" } }
+  if ($kpi_name | is-empty) { error make --unspanned { msg: "path parameter 'kpi-name' must be non-empty" } }
   let qp = [(serialize-qp "end-time" $end_time "scalar") (serialize-qp "next-token" $next_token "scalar") (serialize-qp "page-size" $page_size "scalar") (serialize-qp "start-time" $start_time "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({application_id: (encode-path-segment $application_id), campaign_id: (encode-path-segment $campaign_id), kpi_name: (encode-path-segment $kpi_name)} | format pattern "/v1/apps/{application_id}/campaigns/{campaign_id}/kpis/daterange/{kpi_name}") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"end-time": $end_time, "next-token": $next_token, "page-size": $page_size, "start-time": $start_time} | compact), body: null}
 }
 
 # Retrieves information about the status, configuration, and other settings for a specific version of a campaign.
@@ -3383,12 +3510,15 @@ export def "apps-campaigns-versions get" [
 ]: nothing -> record<CampaignResponse: record<AdditionalTreatments: record, ApplicationId: record, Arn: record, CreationDate: record, CustomDeliveryConfiguration: record<DeliveryUri: record, EndpointTypes: record>, DefaultState: record<CampaignStatus: record>, Description: record, HoldoutPercent: record, Hook: record<LambdaFunctionName: record, Mode: record, WebUrl: record>, Id: record, IsPaused: record, LastModifiedDate: record, Limits: record<Daily: record, MaximumDuration: record, MessagesPerSecond: record, Total: record, Session: record>, MessageConfiguration: record<ADMMessage: record, APNSMessage: record, BaiduMessage: record, CustomMessage: record, DefaultMessage: record, EmailMessage: record, GCMMessage: record, SMSMessage: record, InAppMessage: record>, Name: record, Schedule: record<EndTime: record, EventFilter: record, Frequency: record, IsLocalTime: record, QuietTime: record, StartTime: record, Timezone: record>, SegmentId: record, SegmentVersion: record, State: record<CampaignStatus: record>, tags: record, TemplateConfiguration: record<EmailTemplate: record, PushTemplate: record, SMSTemplate: record, VoiceTemplate: record>, TreatmentDescription: record, TreatmentName: record, Version: record, Priority: record>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($application_id | is-empty) { error make --unspanned { msg: "path parameter 'application-id' must be non-empty" } }
+  if ($campaign_id | is-empty) { error make --unspanned { msg: "path parameter 'campaign-id' must be non-empty" } }
+  if ($version | is-empty) { error make --unspanned { msg: "path parameter 'version' must be non-empty" } }
   let full_url = (build-url $base ({application_id: (encode-path-segment $application_id), campaign_id: (encode-path-segment $campaign_id), version: (encode-path-segment $version)} | format pattern "/v1/apps/{application_id}/campaigns/{campaign_id}/versions/{version}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
 }
 
 # Retrieves information about the status, configuration, and other settings for all versions of a campaign.
@@ -3419,13 +3549,15 @@ export def "apps-campaigns-versions list" [
 ]: nothing -> record<CampaignsResponse: record<Item: record, NextToken: record>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($application_id | is-empty) { error make --unspanned { msg: "path parameter 'application-id' must be non-empty" } }
+  if ($campaign_id | is-empty) { error make --unspanned { msg: "path parameter 'campaign-id' must be non-empty" } }
   let qp = [(serialize-qp "page-size" $page_size "scalar") (serialize-qp "token" $qp_token "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({application_id: (encode-path-segment $application_id), campaign_id: (encode-path-segment $campaign_id)} | format pattern "/v1/apps/{application_id}/campaigns/{campaign_id}/versions") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"page-size": $page_size, "token": $qp_token} | compact), body: null}
 }
 
 # Retrieves information about the history and status of each channel for an application.
@@ -3453,12 +3585,13 @@ export def "apps-channels get" [
 ]: nothing -> record<ChannelsResponse: record<Channels: record>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($application_id | is-empty) { error make --unspanned { msg: "path parameter 'application-id' must be non-empty" } }
   let full_url = (build-url $base ({application_id: (encode-path-segment $application_id)} | format pattern "/v1/apps/{application_id}/channels"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
 }
 
 # Retrieves information about the status and settings of a specific export job for an application.
@@ -3487,12 +3620,14 @@ export def "apps-jobs-export get" [
 ]: nothing -> record<ExportJobResponse: record<ApplicationId: record, CompletedPieces: record, CompletionDate: record, CreationDate: record, Definition: record<RoleArn: record, S3UrlPrefix: record, SegmentId: record, SegmentVersion: record>, FailedPieces: record, Failures: record, Id: record, JobStatus: record, TotalFailures: record, TotalPieces: record, TotalProcessed: record, Type: record>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($application_id | is-empty) { error make --unspanned { msg: "path parameter 'application-id' must be non-empty" } }
+  if ($job_id | is-empty) { error make --unspanned { msg: "path parameter 'job-id' must be non-empty" } }
   let full_url = (build-url $base ({application_id: (encode-path-segment $application_id), job_id: (encode-path-segment $job_id)} | format pattern "/v1/apps/{application_id}/jobs/export/{job_id}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
 }
 
 # Retrieves information about the status and settings of a specific import job for an application.
@@ -3521,12 +3656,14 @@ export def "apps-jobs-import get" [
 ]: nothing -> record<ImportJobResponse: record<ApplicationId: record, CompletedPieces: record, CompletionDate: record, CreationDate: record, Definition: record<DefineSegment: record, ExternalId: record, Format: record, RegisterEndpoints: record, RoleArn: record, S3Url: record, SegmentId: record, SegmentName: record>, FailedPieces: record, Failures: record, Id: record, JobStatus: record, TotalFailures: record, TotalPieces: record, TotalProcessed: record, Type: record>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($application_id | is-empty) { error make --unspanned { msg: "path parameter 'application-id' must be non-empty" } }
+  if ($job_id | is-empty) { error make --unspanned { msg: "path parameter 'job-id' must be non-empty" } }
   let full_url = (build-url $base ({application_id: (encode-path-segment $application_id), job_id: (encode-path-segment $job_id)} | format pattern "/v1/apps/{application_id}/jobs/import/{job_id}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
 }
 
 # Retrieves the in-app messages targeted for the provided endpoint ID.
@@ -3555,12 +3692,14 @@ export def "apps-endpoints-inappmessages get-in-messages" [
 ]: nothing -> record<InAppMessagesResponse: record<InAppMessageCampaigns: record>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($application_id | is-empty) { error make --unspanned { msg: "path parameter 'application-id' must be non-empty" } }
+  if ($endpoint_id | is-empty) { error make --unspanned { msg: "path parameter 'endpoint-id' must be non-empty" } }
   let full_url = (build-url $base ({application_id: (encode-path-segment $application_id), endpoint_id: (encode-path-segment $endpoint_id)} | format pattern "/v1/apps/{application_id}/endpoints/{endpoint_id}/inappmessages"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
 }
 
 # Retrieves (queries) pre-aggregated data for a standard engagement metric that applies to a journey.
@@ -3594,13 +3733,16 @@ export def "apps-journeys-kpis-daterange get-date-range" [
 ]: nothing -> record<JourneyDateRangeKpiResponse: record<ApplicationId: record, EndTime: record, JourneyId: record, KpiName: record, KpiResult: record<Rows: record>, NextToken: record, StartTime: record>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($application_id | is-empty) { error make --unspanned { msg: "path parameter 'application-id' must be non-empty" } }
+  if ($journey_id | is-empty) { error make --unspanned { msg: "path parameter 'journey-id' must be non-empty" } }
+  if ($kpi_name | is-empty) { error make --unspanned { msg: "path parameter 'kpi-name' must be non-empty" } }
   let qp = [(serialize-qp "end-time" $end_time "scalar") (serialize-qp "next-token" $next_token "scalar") (serialize-qp "page-size" $page_size "scalar") (serialize-qp "start-time" $start_time "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({application_id: (encode-path-segment $application_id), journey_id: (encode-path-segment $journey_id), kpi_name: (encode-path-segment $kpi_name)} | format pattern "/v1/apps/{application_id}/journeys/{journey_id}/kpis/daterange/{kpi_name}") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"end-time": $end_time, "next-token": $next_token, "page-size": $page_size, "start-time": $start_time} | compact), body: null}
 }
 
 # Retrieves (queries) pre-aggregated data for a standard execution metric that applies to a journey activity.
@@ -3632,13 +3774,16 @@ export def "apps-journeys-activities-execution-metrics get" [
 ]: nothing -> record<JourneyExecutionActivityMetricsResponse: record<ActivityType: record, ApplicationId: record, JourneyActivityId: record, JourneyId: record, LastEvaluatedTime: record, Metrics: record>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($application_id | is-empty) { error make --unspanned { msg: "path parameter 'application-id' must be non-empty" } }
+  if ($journey_id | is-empty) { error make --unspanned { msg: "path parameter 'journey-id' must be non-empty" } }
+  if ($journey_activity_id | is-empty) { error make --unspanned { msg: "path parameter 'journey-activity-id' must be non-empty" } }
   let qp = [(serialize-qp "next-token" $next_token "scalar") (serialize-qp "page-size" $page_size "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({application_id: (encode-path-segment $application_id), journey_id: (encode-path-segment $journey_id), journey_activity_id: (encode-path-segment $journey_activity_id)} | format pattern "/v1/apps/{application_id}/journeys/{journey_id}/activities/{journey_activity_id}/execution-metrics") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"next-token": $next_token, "page-size": $page_size} | compact), body: null}
 }
 
 # Retrieves (queries) pre-aggregated data for a standard execution metric that applies to a journey.
@@ -3669,13 +3814,15 @@ export def "apps-journeys-execution-metrics get" [
 ]: nothing -> record<JourneyExecutionMetricsResponse: record<ApplicationId: record, JourneyId: record, LastEvaluatedTime: record, Metrics: record>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($application_id | is-empty) { error make --unspanned { msg: "path parameter 'application-id' must be non-empty" } }
+  if ($journey_id | is-empty) { error make --unspanned { msg: "path parameter 'journey-id' must be non-empty" } }
   let qp = [(serialize-qp "next-token" $next_token "scalar") (serialize-qp "page-size" $page_size "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({application_id: (encode-path-segment $application_id), journey_id: (encode-path-segment $journey_id)} | format pattern "/v1/apps/{application_id}/journeys/{journey_id}/execution-metrics") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"next-token": $next_token, "page-size": $page_size} | compact), body: null}
 }
 
 # Retrieves information about the status and settings of the export jobs for a segment.
@@ -3706,13 +3853,15 @@ export def "apps-segments-jobs-export get" [
 ]: nothing -> record<ExportJobsResponse: record<Item: record, NextToken: record>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($application_id | is-empty) { error make --unspanned { msg: "path parameter 'application-id' must be non-empty" } }
+  if ($segment_id | is-empty) { error make --unspanned { msg: "path parameter 'segment-id' must be non-empty" } }
   let qp = [(serialize-qp "page-size" $page_size "scalar") (serialize-qp "token" $qp_token "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({application_id: (encode-path-segment $application_id), segment_id: (encode-path-segment $segment_id)} | format pattern "/v1/apps/{application_id}/segments/{segment_id}/jobs/export") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"page-size": $page_size, "token": $qp_token} | compact), body: null}
 }
 
 # Retrieves information about the status and settings of the import jobs for a segment.
@@ -3743,13 +3892,15 @@ export def "apps-segments-jobs-import get" [
 ]: nothing -> record<ImportJobsResponse: record<Item: record, NextToken: record>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($application_id | is-empty) { error make --unspanned { msg: "path parameter 'application-id' must be non-empty" } }
+  if ($segment_id | is-empty) { error make --unspanned { msg: "path parameter 'segment-id' must be non-empty" } }
   let qp = [(serialize-qp "page-size" $page_size "scalar") (serialize-qp "token" $qp_token "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({application_id: (encode-path-segment $application_id), segment_id: (encode-path-segment $segment_id)} | format pattern "/v1/apps/{application_id}/segments/{segment_id}/jobs/import") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"page-size": $page_size, "token": $qp_token} | compact), body: null}
 }
 
 # Retrieves information about the configuration, dimension, and other settings for a specific version of a segment that's associated with an application.
@@ -3779,12 +3930,15 @@ export def "apps-segments-versions get" [
 ]: nothing -> record<SegmentResponse: record<ApplicationId: record, Arn: record, CreationDate: record, Dimensions: record<Attributes: record, Behavior: record, Demographic: record, Location: record, Metrics: record, UserAttributes: record>, Id: record, ImportDefinition: record<ChannelCounts: record, ExternalId: record, Format: record, RoleArn: record, S3Url: record, Size: record>, LastModifiedDate: record, Name: record, SegmentGroups: record<Groups: record, Include: record>, SegmentType: record, tags: record, Version: record>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($application_id | is-empty) { error make --unspanned { msg: "path parameter 'application-id' must be non-empty" } }
+  if ($segment_id | is-empty) { error make --unspanned { msg: "path parameter 'segment-id' must be non-empty" } }
+  if ($version | is-empty) { error make --unspanned { msg: "path parameter 'version' must be non-empty" } }
   let full_url = (build-url $base ({application_id: (encode-path-segment $application_id), segment_id: (encode-path-segment $segment_id), version: (encode-path-segment $version)} | format pattern "/v1/apps/{application_id}/segments/{segment_id}/versions/{version}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
 }
 
 # Retrieves information about the configuration, dimension, and other settings for all the versions of a specific segment that's associated with an application.
@@ -3815,13 +3969,15 @@ export def "apps-segments-versions list" [
 ]: nothing -> record<SegmentsResponse: record<Item: record, NextToken: record>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($application_id | is-empty) { error make --unspanned { msg: "path parameter 'application-id' must be non-empty" } }
+  if ($segment_id | is-empty) { error make --unspanned { msg: "path parameter 'segment-id' must be non-empty" } }
   let qp = [(serialize-qp "page-size" $page_size "scalar") (serialize-qp "token" $qp_token "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({application_id: (encode-path-segment $application_id), segment_id: (encode-path-segment $segment_id)} | format pattern "/v1/apps/{application_id}/segments/{segment_id}/versions") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"page-size": $page_size, "token": $qp_token} | compact), body: null}
 }
 
 # Retrieves all the tags (keys and values) that are associated with an application, campaign, message template, or segment.
@@ -3849,12 +4005,13 @@ export def "tags list" [
 ]: nothing -> record<TagsModel: record<tags: record>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($resource_arn | is-empty) { error make --unspanned { msg: "path parameter 'resource-arn' must be non-empty" } }
   let full_url = (build-url $base ({resource_arn: (encode-path-segment $resource_arn)} | format pattern "/v1/tags/{resource_arn}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
 }
 
 # Adds one or more tags (keys and values) to an application, campaign, message template, or segment.
@@ -3885,6 +4042,7 @@ export def "tags tag" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($resource_arn | is-empty) { error make --unspanned { msg: "path parameter 'resource-arn' must be non-empty" } }
   let full_url = (build-url $base ({resource_arn: (encode-path-segment $resource_arn)} | format pattern "/v1/tags/{resource_arn}"))
   let req_body = {"TagsModel": $tags_model} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
@@ -3892,7 +4050,7 @@ export def "tags tag" [
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: {}, body: $req_body}
 }
 
 # Retrieves information about all the versions of a specific message template.
@@ -3923,13 +4081,15 @@ export def "templates-versions list" [
 ]: nothing -> record<TemplateVersionsResponse: record<Item: record, Message: record, NextToken: record, RequestID: record>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($template_name | is-empty) { error make --unspanned { msg: "path parameter 'template-name' must be non-empty" } }
+  if ($template_type | is-empty) { error make --unspanned { msg: "path parameter 'template-type' must be non-empty" } }
   let qp = [(serialize-qp "next-token" $next_token "scalar") (serialize-qp "page-size" $page_size "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({template_name: (encode-path-segment $template_name), template_type: (encode-path-segment $template_type)} | format pattern "/v1/templates/{template_name}/{template_type}/versions") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"next-token": $next_token, "page-size": $page_size} | compact), body: null}
 }
 
 # Retrieves information about all the message templates that are associated with your Amazon Pinpoint account.
@@ -3966,7 +4126,7 @@ export def "templates list" [
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"next-token": $next_token, "page-size": $page_size, "prefix": $prefix, "template-type": $template_type} | compact), body: null}
 }
 
 # Retrieves information about a phone number.
@@ -4003,7 +4163,7 @@ export def "phone-number-validate validate" [
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: {}, body: $req_body}
 }
 
 # Creates a new event to record for endpoints, or creates or updates endpoint data that existing events are associated with.
@@ -4034,6 +4194,7 @@ export def "apps-events update" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($application_id | is-empty) { error make --unspanned { msg: "path parameter 'application-id' must be non-empty" } }
   let full_url = (build-url $base ({application_id: (encode-path-segment $application_id)} | format pattern "/v1/apps/{application_id}/events"))
   let req_body = {"EventsRequest": $events_request} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
@@ -4041,7 +4202,7 @@ export def "apps-events update" [
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: {}, body: $req_body}
 }
 
 # Removes one or more attributes, of the same attribute type, from all the endpoints that are associated with an application.
@@ -4073,6 +4234,8 @@ export def "apps-attributes delete" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($application_id | is-empty) { error make --unspanned { msg: "path parameter 'application-id' must be non-empty" } }
+  if ($attribute_type | is-empty) { error make --unspanned { msg: "path parameter 'attribute-type' must be non-empty" } }
   let full_url = (build-url $base ({application_id: (encode-path-segment $application_id), attribute_type: (encode-path-segment $attribute_type)} | format pattern "/v1/apps/{application_id}/attributes/{attribute_type}"))
   let req_body = {"UpdateAttributesRequest": $update_attributes_request} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
@@ -4080,7 +4243,7 @@ export def "apps-attributes delete" [
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: {}, body: $req_body}
 }
 
 # Creates and sends a direct message.
@@ -4111,6 +4274,7 @@ export def "apps-messages send" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($application_id | is-empty) { error make --unspanned { msg: "path parameter 'application-id' must be non-empty" } }
   let full_url = (build-url $base ({application_id: (encode-path-segment $application_id)} | format pattern "/v1/apps/{application_id}/messages"))
   let req_body = {"MessageRequest": $message_request} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
@@ -4118,7 +4282,7 @@ export def "apps-messages send" [
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: {}, body: $req_body}
 }
 
 # Send an OTP message
@@ -4149,6 +4313,7 @@ export def "apps-otp send-message" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($application_id | is-empty) { error make --unspanned { msg: "path parameter 'application-id' must be non-empty" } }
   let full_url = (build-url $base ({application_id: (encode-path-segment $application_id)} | format pattern "/v1/apps/{application_id}/otp"))
   let req_body = {"SendOTPMessageRequestParameters": $send_otp_message_request_parameters} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
@@ -4156,7 +4321,7 @@ export def "apps-otp send-message" [
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: {}, body: $req_body}
 }
 
 # Creates and sends a message to a list of users.
@@ -4187,6 +4352,7 @@ export def "apps-users-messages send" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($application_id | is-empty) { error make --unspanned { msg: "path parameter 'application-id' must be non-empty" } }
   let full_url = (build-url $base ({application_id: (encode-path-segment $application_id)} | format pattern "/v1/apps/{application_id}/users-messages"))
   let req_body = {"SendUsersMessageRequest": $send_users_message_request} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
@@ -4194,12 +4360,12 @@ export def "apps-users-messages send" [
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: {}, body: $req_body}
 }
 
 # Removes one or more tags (keys and values) from an application, campaign, message template, or segment.
 #
-# DELETE /v1/tags/{resource-arn}#tagKeys
+# DELETE /v1/tags/{resource-arn}
 # operationId: UntagResource
 export def "tags untag" [
   resource_arn: string
@@ -4223,13 +4389,14 @@ export def "tags untag" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($resource_arn | is-empty) { error make --unspanned { msg: "path parameter 'resource-arn' must be non-empty" } }
   let qp = [(serialize-qp "tagKeys" $tag_keys "multi")] | flatten | str join "&"
-  let full_url = (build-url $base ({resource_arn: (encode-path-segment $resource_arn)} | format pattern "/v1/tags/{resource_arn}#tagKeys") $qp)
+  let full_url = (build-url $base ({resource_arn: (encode-path-segment $resource_arn)} | format pattern "/v1/tags/{resource_arn}") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"tagKeys": $tag_keys} | compact), body: null}
 }
 
 # Creates a new batch of endpoints for an application or updates the settings and attributes of a batch of existing endpoints for an application. You can also use this operation to define custom attributes for a batch of endpoints. If an update includes one or more values for a custom attribute, Amazon Pinpoint replaces (overwrites) any existing values with the new values.
@@ -4260,6 +4427,7 @@ export def "apps-endpoints update-batch" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($application_id | is-empty) { error make --unspanned { msg: "path parameter 'application-id' must be non-empty" } }
   let full_url = (build-url $base ({application_id: (encode-path-segment $application_id)} | format pattern "/v1/apps/{application_id}/endpoints"))
   let req_body = {"EndpointBatchRequest": $endpoint_batch_request} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
@@ -4267,7 +4435,7 @@ export def "apps-endpoints update-batch" [
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: {}, body: $req_body}
 }
 
 # Cancels (stops) an active journey.
@@ -4299,6 +4467,8 @@ export def "apps-journeys-state update" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($application_id | is-empty) { error make --unspanned { msg: "path parameter 'application-id' must be non-empty" } }
+  if ($journey_id | is-empty) { error make --unspanned { msg: "path parameter 'journey-id' must be non-empty" } }
   let full_url = (build-url $base ({application_id: (encode-path-segment $application_id), journey_id: (encode-path-segment $journey_id)} | format pattern "/v1/apps/{application_id}/journeys/{journey_id}/state"))
   let req_body = {"JourneyStateRequest": $journey_state_request} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
@@ -4306,7 +4476,7 @@ export def "apps-journeys-state update" [
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: {}, body: $req_body}
 }
 
 # Changes the status of a specific version of a message template to active.
@@ -4338,6 +4508,8 @@ export def "templates-active-version update" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($template_name | is-empty) { error make --unspanned { msg: "path parameter 'template-name' must be non-empty" } }
+  if ($template_type | is-empty) { error make --unspanned { msg: "path parameter 'template-type' must be non-empty" } }
   let full_url = (build-url $base ({template_name: (encode-path-segment $template_name), template_type: (encode-path-segment $template_type)} | format pattern "/v1/templates/{template_name}/{template_type}/active-version"))
   let req_body = {"TemplateActiveVersionRequest": $template_active_version_request} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
@@ -4345,7 +4517,7 @@ export def "templates-active-version update" [
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: {}, body: $req_body}
 }
 
 # Verify an OTP
@@ -4376,6 +4548,7 @@ export def "apps-verify-otp verify-message" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($application_id | is-empty) { error make --unspanned { msg: "path parameter 'application-id' must be non-empty" } }
   let full_url = (build-url $base ({application_id: (encode-path-segment $application_id)} | format pattern "/v1/apps/{application_id}/verify-otp"))
   let req_body = {"VerifyOTPMessageRequestParameters": $verify_otp_message_request_parameters} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
@@ -4383,5 +4556,5 @@ export def "apps-verify-otp verify-message" [
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: {}, body: $req_body}
 }

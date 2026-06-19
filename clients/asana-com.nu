@@ -3,17 +3,18 @@
 # Auth: --token flag or $env.ASANA_TOKEN
 
 const BASE_URL = "https://app.asana.com/api/1.0"
-const DEFAULT_AUTH = "bearer"
 
-# Build auth: returns {headers: record, query: string}
+# Build auth: returns {scheme: string, headers: record, query: string, location: string}.
+# `location` is "header" | "query" | "cookie" | "none" and tells dry-run callers
+# where the token went without inspecting headers/query themselves.
 def build-auth [token?: string, auth_scheme?: string]: nothing -> record {
   let token_val = if ($token != null) and ($token | is-not-empty) { $token } else { $env | get -o ASANA_TOKEN | default "" }
   let scheme = ($auth_scheme | default "bearer")
-  if ($scheme == "none") or ($token_val | is-empty) { return {headers: {}, query: ""} }
+  if ($scheme == "none") or ($token_val | is-empty) { return {scheme: $scheme, headers: {}, query: "", location: "none"} }
   match $scheme {
-    "bearer" => { {headers: {Authorization: $"Bearer ($token_val)"}, query: ""} }
-    "none" => { {headers: {}, query: ""} }
-    _ => { {headers: {Authorization: $"Bearer ($token_val)"}, query: ""} }
+    "bearer" => { {scheme: $scheme, headers: {Authorization: $"Bearer ($token_val)"}, query: "", location: "header"} }
+    "none" => { {scheme: $scheme, headers: {}, query: "", location: "none"} }
+    _ => { {scheme: $scheme, headers: {Authorization: $"Bearer ($token_val)"}, query: "", location: "header"} }
   }
 }
 
@@ -22,8 +23,9 @@ def build-auth [token?: string, auth_scheme?: string]: nothing -> record {
 # ([A-Za-z0-9-._~]) stay literal; everything else gets %XX.
 def serialize-qp [name: string, value: any, style: string]: nothing -> list<string> {
   if ($value == null) { return [] }
-  let n = (encode-path-segment $name)
   let is_list = ($value | describe | str starts-with "list")
+  if $is_list and ($value | is-empty) { return [] }
+  let n = (encode-path-segment $name)
   if ($value | describe | str starts-with "record") { return ($value | transpose k v | each { $"($n)[(encode-path-segment $in.k)]=(encode-path-segment $in.v)" }) }
   if not $is_list { return [$"($n)=(encode-path-segment $value)"] }
   match $style {
@@ -54,22 +56,42 @@ def build-url [base: string, path: string, query?: string]: nothing -> string {
   if ($query != null) and ($query | is-not-empty) { $result | upsert query $query | url join } else { $result | url join }
 }
 
+# Build the dry-run record returned by --dry-run. Shape:
+#   {dry_run: true, method, url, query: <record>, headers, body, content_type, timeout,
+#    auth: {scheme, location}}
+# `meta` carries logical-form data (the query record by spec name, the pre-serialization
+# body) that do-request itself cannot reconstruct from its wire-format args.
+def build-dry-run-record [method: string, url: string, auth: record, content_type: string, timeout: duration, meta?: record]: nothing -> record {
+  let m = ($meta | default {})
+  {
+    dry_run: true
+    method: $method
+    url: $url
+    query: ($m | get -o query | default {})
+    headers: $auth.headers
+    body: ($m | get -o body)
+    content_type: $content_type
+    timeout: $timeout
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+}
+
 # Execute HTTP request with method dispatch
-def do-request [method: string, url: string, auth: record, insecure: bool, raw: bool, dry_run: bool, max_time?: duration, allow_errors?: bool, full?: bool, content_type?: string, body?: any]: nothing -> any {
+def do-request [method: string, url: string, auth: record, insecure: bool, raw: bool, dry_run: bool, max_time?: duration, allow_errors?: bool, full?: bool, content_type?: string, body?: any, dry_run_meta?: record]: nothing -> any {
   let req_url = if ($auth.query | is-not-empty) { if ($url | str contains "?") { $"($url)&($auth.query)" } else { $"($url)?($auth.query)" } } else { $url }
   let timeout = ($max_time | default 30min)
   let ct = ($content_type | default "application/json")
-  if $dry_run { return {method: $method, url: $req_url, headers: $auth.headers, query_string: $auth.query, content_type: $ct, timeout: $timeout, body: $body} }
+  if $dry_run { return (build-dry-run-record $method $req_url $auth $ct $timeout $dry_run_meta) }
   let resp = match $method {
     "get" => { http get --headers $auth.headers --full --allow-errors --max-time $timeout --insecure=$insecure --raw=$raw $req_url }
-    "head" => { http head --headers $auth.headers --max-time $timeout --insecure=$insecure $req_url }
-    "options" => { http options --headers $auth.headers --max-time $timeout --insecure=$insecure $req_url }
+    "head" => { http head --headers $auth.headers --full --allow-errors --max-time $timeout --insecure=$insecure $req_url }
+    "options" => { http options --headers $auth.headers --full --allow-errors --max-time $timeout --insecure=$insecure $req_url }
     "post" => { if ($body | is-empty) { http post --headers $auth.headers --full --allow-errors --max-time $timeout --insecure=$insecure --raw=$raw $req_url "" } else { http post --headers $auth.headers --content-type $ct --full --allow-errors --max-time $timeout --insecure=$insecure --raw=$raw $req_url $body } }
     "put" => { if ($body | is-empty) { http put --headers $auth.headers --full --allow-errors --max-time $timeout --insecure=$insecure --raw=$raw $req_url "" } else { http put --headers $auth.headers --content-type $ct --full --allow-errors --max-time $timeout --insecure=$insecure --raw=$raw $req_url $body } }
     "patch" => { if ($body | is-empty) { http patch --headers $auth.headers --full --allow-errors --max-time $timeout --insecure=$insecure --raw=$raw $req_url "" } else { http patch --headers $auth.headers --content-type $ct --full --allow-errors --max-time $timeout --insecure=$insecure --raw=$raw $req_url $body } }
     "delete" => { if ($body | is-empty) { http delete --headers $auth.headers --full --allow-errors --max-time $timeout --insecure=$insecure --raw=$raw $req_url } else { http delete --headers $auth.headers --content-type $ct --data $body --full --allow-errors --max-time $timeout --insecure=$insecure --raw=$raw $req_url } }
   }
-  if ($method in ["head" "options"]) { return $resp }
+  if ($method == "head") and (not $full) and (not $allow_errors) and $resp.status < 400 { return $resp.headers }
   if $allow_errors { $resp } else if $resp.status >= 400 { error make --unspanned { msg: $"HTTP ($resp.status): ($resp.body)" } } else if $full { {status: $resp.status, headers: $resp.headers, body: $resp.body} } else if $resp.status == 204 { null } else { $resp.body }
 }
 
@@ -160,7 +182,7 @@ export def "attachments get-for-object" [
   let full_url = (build-url $base "/attachments" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"limit": $limit, "offset": $offset, "parent": $parent} | compact), body: null}
 }
 
 # Upload an attachment
@@ -197,7 +219,7 @@ export def "attachments create-for-object" [
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let req_body = if ($req_body | describe | str starts-with "record") { $req_body } else { {} }
   let mp = (build-multipart-body $req_body ["file"] $dry_run)
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full $mp.content_type $mp.body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full $mp.content_type $mp.body {query: ({"opt_pretty": $opt_pretty, "opt_fields": $opt_fields} | compact), body: $req_body}
 }
 
 # Delete an attachment
@@ -220,11 +242,12 @@ export def "attachments delete" [
 ]: nothing -> record<data: record> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($attachment_gid | is-empty) { error make --unspanned { msg: "path parameter 'attachment_gid' must be non-empty" } }
   let qp = [(serialize-qp "opt_pretty" $opt_pretty "scalar") (serialize-qp "opt_fields" $opt_fields "csv")] | flatten | str join "&"
   let full_url = (build-url $base ({attachment_gid: (encode-path-segment $attachment_gid)} | format pattern "/attachments/{attachment_gid}") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"opt_pretty": $opt_pretty, "opt_fields": $opt_fields} | compact), body: null}
 }
 
 # Get an attachment
@@ -247,11 +270,12 @@ export def "attachments get" [
 ]: nothing -> record<data: record<connected_to_app: bool, created_at: string, download_url: string, host: string, parent: record<resource_subtype: string>, permanent_url: string, size: int, view_url: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($attachment_gid | is-empty) { error make --unspanned { msg: "path parameter 'attachment_gid' must be non-empty" } }
   let qp = [(serialize-qp "opt_pretty" $opt_pretty "scalar") (serialize-qp "opt_fields" $opt_fields "csv")] | flatten | str join "&"
   let full_url = (build-url $base ({attachment_gid: (encode-path-segment $attachment_gid)} | format pattern "/attachments/{attachment_gid}") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"opt_pretty": $opt_pretty, "opt_fields": $opt_fields} | compact), body: null}
 }
 
 # Submit parallel requests
@@ -282,7 +306,7 @@ export def "batch create-request" [
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: ({"opt_pretty": $opt_pretty, "opt_fields": $opt_fields} | compact), body: $req_body}
 }
 
 # Create a custom field
@@ -314,7 +338,7 @@ export def "custom-fields create" [
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: ({"opt_pretty": $opt_pretty, "opt_fields": $opt_fields, "limit": $limit, "offset": $offset} | compact), body: $req_body}
 }
 
 # Delete a custom field
@@ -337,11 +361,12 @@ export def "custom-fields delete" [
 ]: nothing -> record<data: record> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($custom_field_gid | is-empty) { error make --unspanned { msg: "path parameter 'custom_field_gid' must be non-empty" } }
   let qp = [(serialize-qp "opt_pretty" $opt_pretty "scalar") (serialize-qp "opt_fields" $opt_fields "csv")] | flatten | str join "&"
   let full_url = (build-url $base ({custom_field_gid: (encode-path-segment $custom_field_gid)} | format pattern "/custom_fields/{custom_field_gid}") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"opt_pretty": $opt_pretty, "opt_fields": $opt_fields} | compact), body: null}
 }
 
 # Get a custom field
@@ -364,11 +389,12 @@ export def "custom-fields get" [
 ]: nothing -> record<data: record<created_by: record<gid: string, resource_type: string, name: string>, people_value: list<record>>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($custom_field_gid | is-empty) { error make --unspanned { msg: "path parameter 'custom_field_gid' must be non-empty" } }
   let qp = [(serialize-qp "opt_pretty" $opt_pretty "scalar") (serialize-qp "opt_fields" $opt_fields "csv")] | flatten | str join "&"
   let full_url = (build-url $base ({custom_field_gid: (encode-path-segment $custom_field_gid)} | format pattern "/custom_fields/{custom_field_gid}") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"opt_pretty": $opt_pretty, "opt_fields": $opt_fields} | compact), body: null}
 }
 
 # Update a custom field
@@ -393,13 +419,14 @@ export def "custom-fields update" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($custom_field_gid | is-empty) { error make --unspanned { msg: "path parameter 'custom_field_gid' must be non-empty" } }
   let qp = [(serialize-qp "opt_pretty" $opt_pretty "scalar") (serialize-qp "opt_fields" $opt_fields "csv")] | flatten | str join "&"
   let full_url = (build-url $base ({custom_field_gid: (encode-path-segment $custom_field_gid)} | format pattern "/custom_fields/{custom_field_gid}") $qp)
   let req_body = {"data": $data} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: ({"opt_pretty": $opt_pretty, "opt_fields": $opt_fields} | compact), body: $req_body}
 }
 
 # Create an enum option
@@ -426,13 +453,14 @@ export def "custom-fields-enum-options create" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($custom_field_gid | is-empty) { error make --unspanned { msg: "path parameter 'custom_field_gid' must be non-empty" } }
   let qp = [(serialize-qp "opt_pretty" $opt_pretty "scalar") (serialize-qp "opt_fields" $opt_fields "csv") (serialize-qp "limit" $limit "scalar") (serialize-qp "offset" $offset "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({custom_field_gid: (encode-path-segment $custom_field_gid)} | format pattern "/custom_fields/{custom_field_gid}/enum_options") $qp)
   let req_body = {"data": $data} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: ({"opt_pretty": $opt_pretty, "opt_fields": $opt_fields, "limit": $limit, "offset": $offset} | compact), body: $req_body}
 }
 
 # Reorder a custom field's enum
@@ -458,13 +486,14 @@ export def "custom-fields-enum-options-insert create" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($custom_field_gid | is-empty) { error make --unspanned { msg: "path parameter 'custom_field_gid' must be non-empty" } }
   let qp = [(serialize-qp "opt_pretty" $opt_pretty "scalar") (serialize-qp "opt_fields" $opt_fields "csv")] | flatten | str join "&"
   let full_url = (build-url $base ({custom_field_gid: (encode-path-segment $custom_field_gid)} | format pattern "/custom_fields/{custom_field_gid}/enum_options/insert") $qp)
   let req_body = {"data": $data} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: ({"opt_pretty": $opt_pretty, "opt_fields": $opt_fields} | compact), body: $req_body}
 }
 
 # Update an enum option
@@ -489,13 +518,14 @@ export def "enum-options update" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($enum_option_gid | is-empty) { error make --unspanned { msg: "path parameter 'enum_option_gid' must be non-empty" } }
   let qp = [(serialize-qp "opt_pretty" $opt_pretty "scalar") (serialize-qp "opt_fields" $opt_fields "csv")] | flatten | str join "&"
   let full_url = (build-url $base ({enum_option_gid: (encode-path-segment $enum_option_gid)} | format pattern "/enum_options/{enum_option_gid}") $qp)
   let req_body = {"data": $data} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: ({"opt_pretty": $opt_pretty, "opt_fields": $opt_fields} | compact), body: $req_body}
 }
 
 # Get events on a resource
@@ -523,7 +553,7 @@ export def "events get" [
   let full_url = (build-url $base "/events" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"resource": $resource, "sync": $sync, "opt_pretty": $opt_pretty, "opt_fields": $opt_fields} | compact), body: null}
 }
 
 # Get goal relationships
@@ -551,7 +581,7 @@ export def "goal-relationships list" [
   let full_url = (build-url $base "/goal_relationships" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"opt_pretty": $opt_pretty, "opt_fields": $opt_fields, "supported_goal": $supported_goal, "resource_subtype": $resource_subtype} | compact), body: null}
 }
 
 # Get a goal relationship
@@ -574,11 +604,12 @@ export def "goal-relationships get" [
 ]: nothing -> record<data: record> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($goal_relationship_gid | is-empty) { error make --unspanned { msg: "path parameter 'goal_relationship_gid' must be non-empty" } }
   let qp = [(serialize-qp "opt_pretty" $opt_pretty "scalar") (serialize-qp "opt_fields" $opt_fields "csv")] | flatten | str join "&"
   let full_url = (build-url $base ({goal_relationship_gid: (encode-path-segment $goal_relationship_gid)} | format pattern "/goal_relationships/{goal_relationship_gid}") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"opt_pretty": $opt_pretty, "opt_fields": $opt_fields} | compact), body: null}
 }
 
 # Update a goal relationship
@@ -603,13 +634,14 @@ export def "goal-relationships update" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($goal_relationship_gid | is-empty) { error make --unspanned { msg: "path parameter 'goal_relationship_gid' must be non-empty" } }
   let qp = [(serialize-qp "opt_pretty" $opt_pretty "scalar") (serialize-qp "opt_fields" $opt_fields "csv")] | flatten | str join "&"
   let full_url = (build-url $base ({goal_relationship_gid: (encode-path-segment $goal_relationship_gid)} | format pattern "/goal_relationships/{goal_relationship_gid}") $qp)
   let req_body = {"data": $data} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: ({"opt_pretty": $opt_pretty, "opt_fields": $opt_fields} | compact), body: $req_body}
 }
 
 # Get goals
@@ -643,7 +675,7 @@ export def "goals list" [
   let full_url = (build-url $base "/goals" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"opt_pretty": $opt_pretty, "opt_fields": $opt_fields, "limit": $limit, "offset": $offset, "portfolio": $portfolio, "project": $project, "is_workspace_level": $is_workspace_level, "team": $team, "workspace": $workspace, "time_periods": $time_periods} | compact), body: null}
 }
 
 # Create a goal
@@ -675,7 +707,7 @@ export def "goals create" [
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: ({"opt_pretty": $opt_pretty, "opt_fields": $opt_fields, "limit": $limit, "offset": $offset} | compact), body: $req_body}
 }
 
 # Delete a goal
@@ -698,11 +730,12 @@ export def "goals delete" [
 ]: nothing -> record<data: record> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($goal_gid | is-empty) { error make --unspanned { msg: "path parameter 'goal_gid' must be non-empty" } }
   let qp = [(serialize-qp "opt_pretty" $opt_pretty "scalar") (serialize-qp "opt_fields" $opt_fields "csv")] | flatten | str join "&"
   let full_url = (build-url $base ({goal_gid: (encode-path-segment $goal_gid)} | format pattern "/goals/{goal_gid}") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"opt_pretty": $opt_pretty, "opt_fields": $opt_fields} | compact), body: null}
 }
 
 # Get a goal
@@ -725,11 +758,12 @@ export def "goals get" [
 ]: nothing -> record<data: record<current_status_update: record, followers: list<record>, likes: list<record>, metric: record<can_manage: bool>, num_likes: int, owner: record, team: record, time_period: record, workspace: record>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($goal_gid | is-empty) { error make --unspanned { msg: "path parameter 'goal_gid' must be non-empty" } }
   let qp = [(serialize-qp "opt_pretty" $opt_pretty "scalar") (serialize-qp "opt_fields" $opt_fields "csv")] | flatten | str join "&"
   let full_url = (build-url $base ({goal_gid: (encode-path-segment $goal_gid)} | format pattern "/goals/{goal_gid}") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"opt_pretty": $opt_pretty, "opt_fields": $opt_fields} | compact), body: null}
 }
 
 # Update a goal
@@ -754,13 +788,14 @@ export def "goals update" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($goal_gid | is-empty) { error make --unspanned { msg: "path parameter 'goal_gid' must be non-empty" } }
   let qp = [(serialize-qp "opt_pretty" $opt_pretty "scalar") (serialize-qp "opt_fields" $opt_fields "csv")] | flatten | str join "&"
   let full_url = (build-url $base ({goal_gid: (encode-path-segment $goal_gid)} | format pattern "/goals/{goal_gid}") $qp)
   let req_body = {"data": $data} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: ({"opt_pretty": $opt_pretty, "opt_fields": $opt_fields} | compact), body: $req_body}
 }
 
 # Add a collaborator to a goal
@@ -786,13 +821,14 @@ export def "goals-add-followers create" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($goal_gid | is-empty) { error make --unspanned { msg: "path parameter 'goal_gid' must be non-empty" } }
   let qp = [(serialize-qp "opt_pretty" $opt_pretty "scalar") (serialize-qp "opt_fields" $opt_fields "csv")] | flatten | str join "&"
   let full_url = (build-url $base ({goal_gid: (encode-path-segment $goal_gid)} | format pattern "/goals/{goal_gid}/addFollowers") $qp)
   let req_body = {"data": $data} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: ({"opt_pretty": $opt_pretty, "opt_fields": $opt_fields} | compact), body: $req_body}
 }
 
 # Add a supporting goal relationship
@@ -818,13 +854,14 @@ export def "goals-add-supporting-relationship create" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($goal_gid | is-empty) { error make --unspanned { msg: "path parameter 'goal_gid' must be non-empty" } }
   let qp = [(serialize-qp "opt_pretty" $opt_pretty "scalar") (serialize-qp "opt_fields" $opt_fields "csv")] | flatten | str join "&"
   let full_url = (build-url $base ({goal_gid: (encode-path-segment $goal_gid)} | format pattern "/goals/{goal_gid}/addSupportingRelationship") $qp)
   let req_body = {"data": $data} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: ({"opt_pretty": $opt_pretty, "opt_fields": $opt_fields} | compact), body: $req_body}
 }
 
 # Get parent goals from a goal
@@ -847,11 +884,12 @@ export def "goals-parent-goals get" [
 ]: nothing -> record<data: table<gid: string, resource_type: string, name: string, owner: record>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($goal_gid | is-empty) { error make --unspanned { msg: "path parameter 'goal_gid' must be non-empty" } }
   let qp = [(serialize-qp "opt_pretty" $opt_pretty "scalar") (serialize-qp "opt_fields" $opt_fields "csv")] | flatten | str join "&"
   let full_url = (build-url $base ({goal_gid: (encode-path-segment $goal_gid)} | format pattern "/goals/{goal_gid}/parentGoals") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"opt_pretty": $opt_pretty, "opt_fields": $opt_fields} | compact), body: null}
 }
 
 # Remove a collaborator from a goal
@@ -877,13 +915,14 @@ export def "goals-remove-followers delete" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($goal_gid | is-empty) { error make --unspanned { msg: "path parameter 'goal_gid' must be non-empty" } }
   let qp = [(serialize-qp "opt_pretty" $opt_pretty "scalar") (serialize-qp "opt_fields" $opt_fields "csv")] | flatten | str join "&"
   let full_url = (build-url $base ({goal_gid: (encode-path-segment $goal_gid)} | format pattern "/goals/{goal_gid}/removeFollowers") $qp)
   let req_body = {"data": $data} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: ({"opt_pretty": $opt_pretty, "opt_fields": $opt_fields} | compact), body: $req_body}
 }
 
 # Removes a supporting goal relationship
@@ -909,13 +948,14 @@ export def "goals-remove-supporting-relationship delete" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($goal_gid | is-empty) { error make --unspanned { msg: "path parameter 'goal_gid' must be non-empty" } }
   let qp = [(serialize-qp "opt_pretty" $opt_pretty "scalar") (serialize-qp "opt_fields" $opt_fields "csv")] | flatten | str join "&"
   let full_url = (build-url $base ({goal_gid: (encode-path-segment $goal_gid)} | format pattern "/goals/{goal_gid}/removeSupportingRelationship") $qp)
   let req_body = {"data": $data} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: ({"opt_pretty": $opt_pretty, "opt_fields": $opt_fields} | compact), body: $req_body}
 }
 
 # Create a goal metric
@@ -940,13 +980,14 @@ export def "goals-set-metric create" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($goal_gid | is-empty) { error make --unspanned { msg: "path parameter 'goal_gid' must be non-empty" } }
   let qp = [(serialize-qp "opt_pretty" $opt_pretty "scalar") (serialize-qp "opt_fields" $opt_fields "csv")] | flatten | str join "&"
   let full_url = (build-url $base ({goal_gid: (encode-path-segment $goal_gid)} | format pattern "/goals/{goal_gid}/setMetric") $qp)
   let req_body = {"data": $data} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: ({"opt_pretty": $opt_pretty, "opt_fields": $opt_fields} | compact), body: $req_body}
 }
 
 # Update a goal metric
@@ -971,13 +1012,14 @@ export def "goals-set-metric-current-value update" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($goal_gid | is-empty) { error make --unspanned { msg: "path parameter 'goal_gid' must be non-empty" } }
   let qp = [(serialize-qp "opt_pretty" $opt_pretty "scalar") (serialize-qp "opt_fields" $opt_fields "csv")] | flatten | str join "&"
   let full_url = (build-url $base ({goal_gid: (encode-path-segment $goal_gid)} | format pattern "/goals/{goal_gid}/setMetricCurrentValue") $qp)
   let req_body = {"data": $data} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: ({"opt_pretty": $opt_pretty, "opt_fields": $opt_fields} | compact), body: $req_body}
 }
 
 # Get a job by id
@@ -1000,11 +1042,12 @@ export def "jobs get" [
 ]: nothing -> record<data: record<gid: string, resource_type: string, new_project: record<gid: string, resource_type: string, name: string>, new_project_template: record<gid: string, resource_type: string, name: string>, new_task: record<gid: string, resource_type: string, name: string, resource_subtype: string>, resource_subtype: string, status: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($job_gid | is-empty) { error make --unspanned { msg: "path parameter 'job_gid' must be non-empty" } }
   let qp = [(serialize-qp "opt_pretty" $opt_pretty "scalar") (serialize-qp "opt_fields" $opt_fields "csv")] | flatten | str join "&"
   let full_url = (build-url $base ({job_gid: (encode-path-segment $job_gid)} | format pattern "/jobs/{job_gid}") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"opt_pretty": $opt_pretty, "opt_fields": $opt_fields} | compact), body: null}
 }
 
 # Create an organization export request
@@ -1037,7 +1080,7 @@ export def "organization-exports create" [
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: ({"opt_pretty": $opt_pretty, "opt_fields": $opt_fields, "limit": $limit, "offset": $offset} | compact), body: $req_body}
 }
 
 # Get details on an org export request
@@ -1060,11 +1103,12 @@ export def "organization-exports get" [
 ]: nothing -> record<data: record<gid: string, resource_type: string, created_at: string, download_url: string, organization: record<gid: string, resource_type: string, name: string>, state: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($organization_export_gid | is-empty) { error make --unspanned { msg: "path parameter 'organization_export_gid' must be non-empty" } }
   let qp = [(serialize-qp "opt_pretty" $opt_pretty "scalar") (serialize-qp "opt_fields" $opt_fields "csv")] | flatten | str join "&"
   let full_url = (build-url $base ({organization_export_gid: (encode-path-segment $organization_export_gid)} | format pattern "/organization_exports/{organization_export_gid}") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"opt_pretty": $opt_pretty, "opt_fields": $opt_fields} | compact), body: null}
 }
 
 # Get multiple portfolio memberships
@@ -1095,7 +1139,7 @@ export def "portfolio-memberships list" [
   let full_url = (build-url $base "/portfolio_memberships" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"portfolio": $portfolio, "workspace": $workspace, "user": $user, "opt_pretty": $opt_pretty, "opt_fields": $opt_fields, "limit": $limit, "offset": $offset} | compact), body: null}
 }
 
 # Get a portfolio membership
@@ -1118,11 +1162,12 @@ export def "portfolio-memberships get" [
 ]: nothing -> record<data: record<gid: string, resource_type: string, portfolio: record<gid: string, resource_type: string, name: string>, user: record<gid: string, resource_type: string, name: string>>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($portfolio_membership_gid | is-empty) { error make --unspanned { msg: "path parameter 'portfolio_membership_gid' must be non-empty" } }
   let qp = [(serialize-qp "opt_pretty" $opt_pretty "scalar") (serialize-qp "opt_fields" $opt_fields "csv")] | flatten | str join "&"
   let full_url = (build-url $base ({portfolio_membership_gid: (encode-path-segment $portfolio_membership_gid)} | format pattern "/portfolio_memberships/{portfolio_membership_gid}") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"opt_pretty": $opt_pretty, "opt_fields": $opt_fields} | compact), body: null}
 }
 
 # Get multiple portfolios
@@ -1150,7 +1195,7 @@ export def "portfolios list" [
   let full_url = (build-url $base "/portfolios" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"limit": $limit, "offset": $offset, "workspace": $workspace, "owner": $owner} | compact), body: null}
 }
 
 # Create a portfolio
@@ -1180,7 +1225,7 @@ export def "portfolios create" [
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: ({"opt_pretty": $opt_pretty, "opt_fields": $opt_fields} | compact), body: $req_body}
 }
 
 # Delete a portfolio
@@ -1203,11 +1248,12 @@ export def "portfolios delete" [
 ]: nothing -> record<data: record> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($portfolio_gid | is-empty) { error make --unspanned { msg: "path parameter 'portfolio_gid' must be non-empty" } }
   let qp = [(serialize-qp "opt_pretty" $opt_pretty "scalar") (serialize-qp "opt_fields" $opt_fields "csv")] | flatten | str join "&"
   let full_url = (build-url $base ({portfolio_gid: (encode-path-segment $portfolio_gid)} | format pattern "/portfolios/{portfolio_gid}") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"opt_pretty": $opt_pretty, "opt_fields": $opt_fields} | compact), body: null}
 }
 
 # Get a portfolio
@@ -1230,11 +1276,12 @@ export def "portfolios get" [
 ]: nothing -> record<data: record<created_at: string, created_by: record<gid: string, resource_type: string, name: string>, current_status_update: record, custom_field_settings: list<record>, custom_fields: list<record>, due_on: string, members: list<record>, owner: record<gid: string, resource_type: string, name: string>, permalink_url: string, public: bool, start_on: string, workspace: record>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($portfolio_gid | is-empty) { error make --unspanned { msg: "path parameter 'portfolio_gid' must be non-empty" } }
   let qp = [(serialize-qp "opt_pretty" $opt_pretty "scalar") (serialize-qp "opt_fields" $opt_fields "csv")] | flatten | str join "&"
   let full_url = (build-url $base ({portfolio_gid: (encode-path-segment $portfolio_gid)} | format pattern "/portfolios/{portfolio_gid}") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"opt_pretty": $opt_pretty, "opt_fields": $opt_fields} | compact), body: null}
 }
 
 # Update a portfolio
@@ -1259,13 +1306,14 @@ export def "portfolios update" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($portfolio_gid | is-empty) { error make --unspanned { msg: "path parameter 'portfolio_gid' must be non-empty" } }
   let qp = [(serialize-qp "opt_pretty" $opt_pretty "scalar") (serialize-qp "opt_fields" $opt_fields "csv")] | flatten | str join "&"
   let full_url = (build-url $base ({portfolio_gid: (encode-path-segment $portfolio_gid)} | format pattern "/portfolios/{portfolio_gid}") $qp)
   let req_body = {"data": $data} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: ({"opt_pretty": $opt_pretty, "opt_fields": $opt_fields} | compact), body: $req_body}
 }
 
 # Add a custom field to a portfolio
@@ -1290,13 +1338,14 @@ export def "portfolios-add-custom-field-setting create" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($portfolio_gid | is-empty) { error make --unspanned { msg: "path parameter 'portfolio_gid' must be non-empty" } }
   let qp = [(serialize-qp "opt_pretty" $opt_pretty "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({portfolio_gid: (encode-path-segment $portfolio_gid)} | format pattern "/portfolios/{portfolio_gid}/addCustomFieldSetting") $qp)
   let req_body = {"data": $data} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: ({"opt_pretty": $opt_pretty} | compact), body: $req_body}
 }
 
 # Add a portfolio item
@@ -1322,13 +1371,14 @@ export def "portfolios-add-item create" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($portfolio_gid | is-empty) { error make --unspanned { msg: "path parameter 'portfolio_gid' must be non-empty" } }
   let qp = [(serialize-qp "opt_pretty" $opt_pretty "scalar") (serialize-qp "opt_fields" $opt_fields "csv")] | flatten | str join "&"
   let full_url = (build-url $base ({portfolio_gid: (encode-path-segment $portfolio_gid)} | format pattern "/portfolios/{portfolio_gid}/addItem") $qp)
   let req_body = {"data": $data} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: ({"opt_pretty": $opt_pretty, "opt_fields": $opt_fields} | compact), body: $req_body}
 }
 
 # Add users to a portfolio
@@ -1354,13 +1404,14 @@ export def "portfolios-add-members create" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($portfolio_gid | is-empty) { error make --unspanned { msg: "path parameter 'portfolio_gid' must be non-empty" } }
   let qp = [(serialize-qp "opt_pretty" $opt_pretty "scalar") (serialize-qp "opt_fields" $opt_fields "csv")] | flatten | str join "&"
   let full_url = (build-url $base ({portfolio_gid: (encode-path-segment $portfolio_gid)} | format pattern "/portfolios/{portfolio_gid}/addMembers") $qp)
   let req_body = {"data": $data} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: ({"opt_pretty": $opt_pretty, "opt_fields": $opt_fields} | compact), body: $req_body}
 }
 
 # Get a portfolio's custom fields
@@ -1385,11 +1436,12 @@ export def "portfolios-custom-field-settings get" [
 ]: nothing -> record<data: table<custom_field: record, is_important: bool, parent: record, project: record>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($portfolio_gid | is-empty) { error make --unspanned { msg: "path parameter 'portfolio_gid' must be non-empty" } }
   let qp = [(serialize-qp "opt_pretty" $opt_pretty "scalar") (serialize-qp "opt_fields" $opt_fields "csv") (serialize-qp "limit" $limit "scalar") (serialize-qp "offset" $offset "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({portfolio_gid: (encode-path-segment $portfolio_gid)} | format pattern "/portfolios/{portfolio_gid}/custom_field_settings") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"opt_pretty": $opt_pretty, "opt_fields": $opt_fields, "limit": $limit, "offset": $offset} | compact), body: null}
 }
 
 # Get portfolio items
@@ -1414,11 +1466,12 @@ export def "portfolios-items get" [
 ]: nothing -> record<data: table<gid: string, resource_type: string, name: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($portfolio_gid | is-empty) { error make --unspanned { msg: "path parameter 'portfolio_gid' must be non-empty" } }
   let qp = [(serialize-qp "opt_pretty" $opt_pretty "scalar") (serialize-qp "opt_fields" $opt_fields "csv") (serialize-qp "limit" $limit "scalar") (serialize-qp "offset" $offset "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({portfolio_gid: (encode-path-segment $portfolio_gid)} | format pattern "/portfolios/{portfolio_gid}/items") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"opt_pretty": $opt_pretty, "opt_fields": $opt_fields, "limit": $limit, "offset": $offset} | compact), body: null}
 }
 
 # Get memberships from a portfolio
@@ -1444,11 +1497,12 @@ export def "portfolios-portfolio-memberships get" [
 ]: nothing -> record<data: table<gid: string, resource_type: string, portfolio: record, user: record>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($portfolio_gid | is-empty) { error make --unspanned { msg: "path parameter 'portfolio_gid' must be non-empty" } }
   let qp = [(serialize-qp "user" $user "scalar") (serialize-qp "opt_pretty" $opt_pretty "scalar") (serialize-qp "opt_fields" $opt_fields "csv") (serialize-qp "limit" $limit "scalar") (serialize-qp "offset" $offset "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({portfolio_gid: (encode-path-segment $portfolio_gid)} | format pattern "/portfolios/{portfolio_gid}/portfolio_memberships") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"user": $user, "opt_pretty": $opt_pretty, "opt_fields": $opt_fields, "limit": $limit, "offset": $offset} | compact), body: null}
 }
 
 # Remove a custom field from a portfolio
@@ -1473,13 +1527,14 @@ export def "portfolios-remove-custom-field-setting delete" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($portfolio_gid | is-empty) { error make --unspanned { msg: "path parameter 'portfolio_gid' must be non-empty" } }
   let qp = [(serialize-qp "opt_pretty" $opt_pretty "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({portfolio_gid: (encode-path-segment $portfolio_gid)} | format pattern "/portfolios/{portfolio_gid}/removeCustomFieldSetting") $qp)
   let req_body = {"data": $data} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: ({"opt_pretty": $opt_pretty} | compact), body: $req_body}
 }
 
 # Remove a portfolio item
@@ -1505,13 +1560,14 @@ export def "portfolios-remove-item delete" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($portfolio_gid | is-empty) { error make --unspanned { msg: "path parameter 'portfolio_gid' must be non-empty" } }
   let qp = [(serialize-qp "opt_pretty" $opt_pretty "scalar") (serialize-qp "opt_fields" $opt_fields "csv")] | flatten | str join "&"
   let full_url = (build-url $base ({portfolio_gid: (encode-path-segment $portfolio_gid)} | format pattern "/portfolios/{portfolio_gid}/removeItem") $qp)
   let req_body = {"data": $data} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: ({"opt_pretty": $opt_pretty, "opt_fields": $opt_fields} | compact), body: $req_body}
 }
 
 # Remove users from a portfolio
@@ -1537,13 +1593,14 @@ export def "portfolios-remove-members delete" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($portfolio_gid | is-empty) { error make --unspanned { msg: "path parameter 'portfolio_gid' must be non-empty" } }
   let qp = [(serialize-qp "opt_pretty" $opt_pretty "scalar") (serialize-qp "opt_fields" $opt_fields "csv")] | flatten | str join "&"
   let full_url = (build-url $base ({portfolio_gid: (encode-path-segment $portfolio_gid)} | format pattern "/portfolios/{portfolio_gid}/removeMembers") $qp)
   let req_body = {"data": $data} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: ({"opt_pretty": $opt_pretty, "opt_fields": $opt_fields} | compact), body: $req_body}
 }
 
 # Delete a project brief
@@ -1566,11 +1623,12 @@ export def "project-briefs delete" [
 ]: nothing -> record<data: record> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($project_brief_gid | is-empty) { error make --unspanned { msg: "path parameter 'project_brief_gid' must be non-empty" } }
   let qp = [(serialize-qp "opt_pretty" $opt_pretty "scalar") (serialize-qp "opt_fields" $opt_fields "csv")] | flatten | str join "&"
   let full_url = (build-url $base ({project_brief_gid: (encode-path-segment $project_brief_gid)} | format pattern "/project_briefs/{project_brief_gid}") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"opt_pretty": $opt_pretty, "opt_fields": $opt_fields} | compact), body: null}
 }
 
 # Get a project brief
@@ -1593,11 +1651,12 @@ export def "project-briefs get" [
 ]: nothing -> record<data: record<permalink_url: string, project: record, text: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($project_brief_gid | is-empty) { error make --unspanned { msg: "path parameter 'project_brief_gid' must be non-empty" } }
   let qp = [(serialize-qp "opt_pretty" $opt_pretty "scalar") (serialize-qp "opt_fields" $opt_fields "csv")] | flatten | str join "&"
   let full_url = (build-url $base ({project_brief_gid: (encode-path-segment $project_brief_gid)} | format pattern "/project_briefs/{project_brief_gid}") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"opt_pretty": $opt_pretty, "opt_fields": $opt_fields} | compact), body: null}
 }
 
 # Update a project brief
@@ -1622,13 +1681,14 @@ export def "project-briefs update" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($project_brief_gid | is-empty) { error make --unspanned { msg: "path parameter 'project_brief_gid' must be non-empty" } }
   let qp = [(serialize-qp "opt_pretty" $opt_pretty "scalar") (serialize-qp "opt_fields" $opt_fields "csv")] | flatten | str join "&"
   let full_url = (build-url $base ({project_brief_gid: (encode-path-segment $project_brief_gid)} | format pattern "/project_briefs/{project_brief_gid}") $qp)
   let req_body = {"data": $data} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: ({"opt_pretty": $opt_pretty, "opt_fields": $opt_fields} | compact), body: $req_body}
 }
 
 # Get a project membership
@@ -1651,11 +1711,12 @@ export def "project-memberships get" [
 ]: nothing -> record<data: record<project: record<gid: string, resource_type: string, name: string>, write_access: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($project_membership_gid | is-empty) { error make --unspanned { msg: "path parameter 'project_membership_gid' must be non-empty" } }
   let qp = [(serialize-qp "opt_pretty" $opt_pretty "scalar") (serialize-qp "opt_fields" $opt_fields "csv")] | flatten | str join "&"
   let full_url = (build-url $base ({project_membership_gid: (encode-path-segment $project_membership_gid)} | format pattern "/project_memberships/{project_membership_gid}") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"opt_pretty": $opt_pretty, "opt_fields": $opt_fields} | compact), body: null}
 }
 
 # Delete a project status
@@ -1678,11 +1739,12 @@ export def "project-statuses delete" [
 ]: nothing -> record<data: record> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($project_status_gid | is-empty) { error make --unspanned { msg: "path parameter 'project_status_gid' must be non-empty" } }
   let qp = [(serialize-qp "opt_pretty" $opt_pretty "scalar") (serialize-qp "opt_fields" $opt_fields "csv")] | flatten | str join "&"
   let full_url = (build-url $base ({project_status_gid: (encode-path-segment $project_status_gid)} | format pattern "/project_statuses/{project_status_gid}") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"opt_pretty": $opt_pretty, "opt_fields": $opt_fields} | compact), body: null}
 }
 
 # Get a project status
@@ -1705,11 +1767,12 @@ export def "project-statuses get" [
 ]: nothing -> record<data: record<author: record<gid: string, resource_type: string, name: string>, created_at: string, created_by: record<gid: string, resource_type: string, name: string>, modified_at: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($project_status_gid | is-empty) { error make --unspanned { msg: "path parameter 'project_status_gid' must be non-empty" } }
   let qp = [(serialize-qp "opt_pretty" $opt_pretty "scalar") (serialize-qp "opt_fields" $opt_fields "csv")] | flatten | str join "&"
   let full_url = (build-url $base ({project_status_gid: (encode-path-segment $project_status_gid)} | format pattern "/project_statuses/{project_status_gid}") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"opt_pretty": $opt_pretty, "opt_fields": $opt_fields} | compact), body: null}
 }
 
 # Get multiple project templates
@@ -1737,7 +1800,7 @@ export def "project-templates list" [
   let full_url = (build-url $base "/project_templates" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"workspace": $workspace, "team": $team, "limit": $limit, "offset": $offset} | compact), body: null}
 }
 
 # Get a project template
@@ -1760,11 +1823,12 @@ export def "project-templates get" [
 ]: nothing -> record<data: record> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($project_template_gid | is-empty) { error make --unspanned { msg: "path parameter 'project_template_gid' must be non-empty" } }
   let qp = [(serialize-qp "opt_pretty" $opt_pretty "scalar") (serialize-qp "opt_fields" $opt_fields "csv")] | flatten | str join "&"
   let full_url = (build-url $base ({project_template_gid: (encode-path-segment $project_template_gid)} | format pattern "/project_templates/{project_template_gid}") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"opt_pretty": $opt_pretty, "opt_fields": $opt_fields} | compact), body: null}
 }
 
 # Instantiate a project from a project template
@@ -1790,13 +1854,14 @@ export def "project-templates-instantiate-project create" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($project_template_gid | is-empty) { error make --unspanned { msg: "path parameter 'project_template_gid' must be non-empty" } }
   let qp = [(serialize-qp "opt_pretty" $opt_pretty "scalar") (serialize-qp "opt_fields" $opt_fields "csv")] | flatten | str join "&"
   let full_url = (build-url $base ({project_template_gid: (encode-path-segment $project_template_gid)} | format pattern "/project_templates/{project_template_gid}/instantiateProject") $qp)
   let req_body = {"data": $data} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: ({"opt_pretty": $opt_pretty, "opt_fields": $opt_fields} | compact), body: $req_body}
 }
 
 # Get multiple projects
@@ -1825,7 +1890,7 @@ export def "projects list" [
   let full_url = (build-url $base "/projects" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"limit": $limit, "offset": $offset, "workspace": $workspace, "team": $team, "archived": $archived} | compact), body: null}
 }
 
 # Create a project
@@ -1855,7 +1920,7 @@ export def "projects create" [
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: ({"opt_pretty": $opt_pretty, "opt_fields": $opt_fields} | compact), body: $req_body}
 }
 
 # Delete a project
@@ -1878,11 +1943,12 @@ export def "projects delete" [
 ]: nothing -> record<data: record> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($project_gid | is-empty) { error make --unspanned { msg: "path parameter 'project_gid' must be non-empty" } }
   let qp = [(serialize-qp "opt_pretty" $opt_pretty "scalar") (serialize-qp "opt_fields" $opt_fields "csv")] | flatten | str join "&"
   let full_url = (build-url $base ({project_gid: (encode-path-segment $project_gid)} | format pattern "/projects/{project_gid}") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"opt_pretty": $opt_pretty, "opt_fields": $opt_fields} | compact), body: null}
 }
 
 # Get a project
@@ -1905,11 +1971,12 @@ export def "projects get" [
 ]: nothing -> record<data: record<completed: bool, completed_at: string, completed_by: record<gid: string, resource_type: string, name: string>, created_from_template: record, custom_fields: list<record>, followers: list<record>, icon: string, owner: record, permalink_url: string, project_brief: record, team: record>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($project_gid | is-empty) { error make --unspanned { msg: "path parameter 'project_gid' must be non-empty" } }
   let qp = [(serialize-qp "opt_pretty" $opt_pretty "scalar") (serialize-qp "opt_fields" $opt_fields "csv")] | flatten | str join "&"
   let full_url = (build-url $base ({project_gid: (encode-path-segment $project_gid)} | format pattern "/projects/{project_gid}") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"opt_pretty": $opt_pretty, "opt_fields": $opt_fields} | compact), body: null}
 }
 
 # Update a project
@@ -1934,13 +2001,14 @@ export def "projects update" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($project_gid | is-empty) { error make --unspanned { msg: "path parameter 'project_gid' must be non-empty" } }
   let qp = [(serialize-qp "opt_pretty" $opt_pretty "scalar") (serialize-qp "opt_fields" $opt_fields "csv")] | flatten | str join "&"
   let full_url = (build-url $base ({project_gid: (encode-path-segment $project_gid)} | format pattern "/projects/{project_gid}") $qp)
   let req_body = {"data": $data} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: ({"opt_pretty": $opt_pretty, "opt_fields": $opt_fields} | compact), body: $req_body}
 }
 
 # Add a custom field to a project
@@ -1965,13 +2033,14 @@ export def "projects-add-custom-field-setting create" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($project_gid | is-empty) { error make --unspanned { msg: "path parameter 'project_gid' must be non-empty" } }
   let qp = [(serialize-qp "opt_pretty" $opt_pretty "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({project_gid: (encode-path-segment $project_gid)} | format pattern "/projects/{project_gid}/addCustomFieldSetting") $qp)
   let req_body = {"data": $data} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: ({"opt_pretty": $opt_pretty} | compact), body: $req_body}
 }
 
 # Add followers to a project
@@ -1997,13 +2066,14 @@ export def "projects-add-followers create" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($project_gid | is-empty) { error make --unspanned { msg: "path parameter 'project_gid' must be non-empty" } }
   let qp = [(serialize-qp "opt_pretty" $opt_pretty "scalar") (serialize-qp "opt_fields" $opt_fields "csv")] | flatten | str join "&"
   let full_url = (build-url $base ({project_gid: (encode-path-segment $project_gid)} | format pattern "/projects/{project_gid}/addFollowers") $qp)
   let req_body = {"data": $data} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: ({"opt_pretty": $opt_pretty, "opt_fields": $opt_fields} | compact), body: $req_body}
 }
 
 # Add users to a project
@@ -2029,13 +2099,14 @@ export def "projects-add-members create" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($project_gid | is-empty) { error make --unspanned { msg: "path parameter 'project_gid' must be non-empty" } }
   let qp = [(serialize-qp "opt_pretty" $opt_pretty "scalar") (serialize-qp "opt_fields" $opt_fields "csv")] | flatten | str join "&"
   let full_url = (build-url $base ({project_gid: (encode-path-segment $project_gid)} | format pattern "/projects/{project_gid}/addMembers") $qp)
   let req_body = {"data": $data} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: ({"opt_pretty": $opt_pretty, "opt_fields": $opt_fields} | compact), body: $req_body}
 }
 
 # Get a project's custom fields
@@ -2060,11 +2131,12 @@ export def "projects-custom-field-settings get" [
 ]: nothing -> record<data: table<custom_field: record, is_important: bool, parent: record, project: record>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($project_gid | is-empty) { error make --unspanned { msg: "path parameter 'project_gid' must be non-empty" } }
   let qp = [(serialize-qp "opt_pretty" $opt_pretty "scalar") (serialize-qp "opt_fields" $opt_fields "csv") (serialize-qp "limit" $limit "scalar") (serialize-qp "offset" $offset "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({project_gid: (encode-path-segment $project_gid)} | format pattern "/projects/{project_gid}/custom_field_settings") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"opt_pretty": $opt_pretty, "opt_fields": $opt_fields, "limit": $limit, "offset": $offset} | compact), body: null}
 }
 
 # Duplicate a project
@@ -2090,13 +2162,14 @@ export def "projects-duplicate create" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($project_gid | is-empty) { error make --unspanned { msg: "path parameter 'project_gid' must be non-empty" } }
   let qp = [(serialize-qp "opt_pretty" $opt_pretty "scalar") (serialize-qp "opt_fields" $opt_fields "csv")] | flatten | str join "&"
   let full_url = (build-url $base ({project_gid: (encode-path-segment $project_gid)} | format pattern "/projects/{project_gid}/duplicate") $qp)
   let req_body = {"data": $data} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: ({"opt_pretty": $opt_pretty, "opt_fields": $opt_fields} | compact), body: $req_body}
 }
 
 # Create a project brief
@@ -2121,13 +2194,14 @@ export def "projects-project-briefs create" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($project_gid | is-empty) { error make --unspanned { msg: "path parameter 'project_gid' must be non-empty" } }
   let qp = [(serialize-qp "opt_pretty" $opt_pretty "scalar") (serialize-qp "opt_fields" $opt_fields "csv")] | flatten | str join "&"
   let full_url = (build-url $base ({project_gid: (encode-path-segment $project_gid)} | format pattern "/projects/{project_gid}/project_briefs") $qp)
   let req_body = {"data": $data} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: ({"opt_pretty": $opt_pretty, "opt_fields": $opt_fields} | compact), body: $req_body}
 }
 
 # Get memberships from a project
@@ -2153,11 +2227,12 @@ export def "projects-project-memberships get" [
 ]: nothing -> record<data: table<gid: string, resource_type: string, user: record>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($project_gid | is-empty) { error make --unspanned { msg: "path parameter 'project_gid' must be non-empty" } }
   let qp = [(serialize-qp "user" $user "scalar") (serialize-qp "opt_pretty" $opt_pretty "scalar") (serialize-qp "opt_fields" $opt_fields "csv") (serialize-qp "limit" $limit "scalar") (serialize-qp "offset" $offset "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({project_gid: (encode-path-segment $project_gid)} | format pattern "/projects/{project_gid}/project_memberships") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"user": $user, "opt_pretty": $opt_pretty, "opt_fields": $opt_fields, "limit": $limit, "offset": $offset} | compact), body: null}
 }
 
 # Get statuses from a project
@@ -2182,11 +2257,12 @@ export def "projects-project-statuses get" [
 ]: nothing -> record<data: table<gid: string, resource_type: string, title: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($project_gid | is-empty) { error make --unspanned { msg: "path parameter 'project_gid' must be non-empty" } }
   let qp = [(serialize-qp "opt_pretty" $opt_pretty "scalar") (serialize-qp "opt_fields" $opt_fields "csv") (serialize-qp "limit" $limit "scalar") (serialize-qp "offset" $offset "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({project_gid: (encode-path-segment $project_gid)} | format pattern "/projects/{project_gid}/project_statuses") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"opt_pretty": $opt_pretty, "opt_fields": $opt_fields, "limit": $limit, "offset": $offset} | compact), body: null}
 }
 
 # Create a project status
@@ -2211,13 +2287,14 @@ export def "projects-project-statuses create-status" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($project_gid | is-empty) { error make --unspanned { msg: "path parameter 'project_gid' must be non-empty" } }
   let qp = [(serialize-qp "opt_pretty" $opt_pretty "scalar") (serialize-qp "opt_fields" $opt_fields "csv")] | flatten | str join "&"
   let full_url = (build-url $base ({project_gid: (encode-path-segment $project_gid)} | format pattern "/projects/{project_gid}/project_statuses") $qp)
   let req_body = {"data": $data} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: ({"opt_pretty": $opt_pretty, "opt_fields": $opt_fields} | compact), body: $req_body}
 }
 
 # Remove a custom field from a project
@@ -2242,13 +2319,14 @@ export def "projects-remove-custom-field-setting delete" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($project_gid | is-empty) { error make --unspanned { msg: "path parameter 'project_gid' must be non-empty" } }
   let qp = [(serialize-qp "opt_pretty" $opt_pretty "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({project_gid: (encode-path-segment $project_gid)} | format pattern "/projects/{project_gid}/removeCustomFieldSetting") $qp)
   let req_body = {"data": $data} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: ({"opt_pretty": $opt_pretty} | compact), body: $req_body}
 }
 
 # Remove followers from a project
@@ -2274,13 +2352,14 @@ export def "projects-remove-followers delete" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($project_gid | is-empty) { error make --unspanned { msg: "path parameter 'project_gid' must be non-empty" } }
   let qp = [(serialize-qp "opt_pretty" $opt_pretty "scalar") (serialize-qp "opt_fields" $opt_fields "csv")] | flatten | str join "&"
   let full_url = (build-url $base ({project_gid: (encode-path-segment $project_gid)} | format pattern "/projects/{project_gid}/removeFollowers") $qp)
   let req_body = {"data": $data} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: ({"opt_pretty": $opt_pretty, "opt_fields": $opt_fields} | compact), body: $req_body}
 }
 
 # Remove users from a project
@@ -2306,13 +2385,14 @@ export def "projects-remove-members delete" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($project_gid | is-empty) { error make --unspanned { msg: "path parameter 'project_gid' must be non-empty" } }
   let qp = [(serialize-qp "opt_pretty" $opt_pretty "scalar") (serialize-qp "opt_fields" $opt_fields "csv")] | flatten | str join "&"
   let full_url = (build-url $base ({project_gid: (encode-path-segment $project_gid)} | format pattern "/projects/{project_gid}/removeMembers") $qp)
   let req_body = {"data": $data} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: ({"opt_pretty": $opt_pretty, "opt_fields": $opt_fields} | compact), body: $req_body}
 }
 
 # Create a project template from a project
@@ -2338,13 +2418,14 @@ export def "projects-save-as-template create" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($project_gid | is-empty) { error make --unspanned { msg: "path parameter 'project_gid' must be non-empty" } }
   let qp = [(serialize-qp "opt_pretty" $opt_pretty "scalar") (serialize-qp "opt_fields" $opt_fields "csv")] | flatten | str join "&"
   let full_url = (build-url $base ({project_gid: (encode-path-segment $project_gid)} | format pattern "/projects/{project_gid}/saveAsTemplate") $qp)
   let req_body = {"data": $data} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: ({"opt_pretty": $opt_pretty, "opt_fields": $opt_fields} | compact), body: $req_body}
 }
 
 # Get sections in a project
@@ -2367,11 +2448,12 @@ export def "projects-sections get" [
 ]: nothing -> record<data: table<gid: string, resource_type: string, name: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($project_gid | is-empty) { error make --unspanned { msg: "path parameter 'project_gid' must be non-empty" } }
   let qp = [(serialize-qp "limit" $limit "scalar") (serialize-qp "offset" $offset "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({project_gid: (encode-path-segment $project_gid)} | format pattern "/projects/{project_gid}/sections") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"limit": $limit, "offset": $offset} | compact), body: null}
 }
 
 # Create a section in a project
@@ -2397,13 +2479,14 @@ export def "projects-sections create" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($project_gid | is-empty) { error make --unspanned { msg: "path parameter 'project_gid' must be non-empty" } }
   let qp = [(serialize-qp "opt_pretty" $opt_pretty "scalar") (serialize-qp "opt_fields" $opt_fields "csv")] | flatten | str join "&"
   let full_url = (build-url $base ({project_gid: (encode-path-segment $project_gid)} | format pattern "/projects/{project_gid}/sections") $qp)
   let req_body = {"data": $data} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: ({"opt_pretty": $opt_pretty, "opt_fields": $opt_fields} | compact), body: $req_body}
 }
 
 # Move or Insert sections
@@ -2429,13 +2512,14 @@ export def "projects-sections-insert create" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($project_gid | is-empty) { error make --unspanned { msg: "path parameter 'project_gid' must be non-empty" } }
   let qp = [(serialize-qp "opt_pretty" $opt_pretty "scalar") (serialize-qp "opt_fields" $opt_fields "csv")] | flatten | str join "&"
   let full_url = (build-url $base ({project_gid: (encode-path-segment $project_gid)} | format pattern "/projects/{project_gid}/sections/insert") $qp)
   let req_body = {"data": $data} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: ({"opt_pretty": $opt_pretty, "opt_fields": $opt_fields} | compact), body: $req_body}
 }
 
 # Get task count of a project
@@ -2460,11 +2544,12 @@ export def "projects-task-counts get" [
 ]: nothing -> record<data: record<num_completed_milestones: int, num_completed_tasks: int, num_incomplete_milestones: int, num_incomplete_tasks: int, num_milestones: int, num_tasks: int>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($project_gid | is-empty) { error make --unspanned { msg: "path parameter 'project_gid' must be non-empty" } }
   let qp = [(serialize-qp "opt_pretty" $opt_pretty "scalar") (serialize-qp "opt_fields" $opt_fields "csv") (serialize-qp "limit" $limit "scalar") (serialize-qp "offset" $offset "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({project_gid: (encode-path-segment $project_gid)} | format pattern "/projects/{project_gid}/task_counts") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"opt_pretty": $opt_pretty, "opt_fields": $opt_fields, "limit": $limit, "offset": $offset} | compact), body: null}
 }
 
 # Get tasks from a project
@@ -2490,11 +2575,12 @@ export def "projects-tasks get" [
 ]: nothing -> record<data: table<gid: string, resource_type: string, name: string, resource_subtype: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($project_gid | is-empty) { error make --unspanned { msg: "path parameter 'project_gid' must be non-empty" } }
   let qp = [(serialize-qp "completed_since" $completed_since "scalar") (serialize-qp "opt_pretty" $opt_pretty "scalar") (serialize-qp "opt_fields" $opt_fields "csv") (serialize-qp "limit" $limit "scalar") (serialize-qp "offset" $offset "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({project_gid: (encode-path-segment $project_gid)} | format pattern "/projects/{project_gid}/tasks") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"completed_since": $completed_since, "opt_pretty": $opt_pretty, "opt_fields": $opt_fields, "limit": $limit, "offset": $offset} | compact), body: null}
 }
 
 # Delete a section
@@ -2517,11 +2603,12 @@ export def "sections delete" [
 ]: nothing -> record<data: record> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($section_gid | is-empty) { error make --unspanned { msg: "path parameter 'section_gid' must be non-empty" } }
   let qp = [(serialize-qp "opt_pretty" $opt_pretty "scalar") (serialize-qp "opt_fields" $opt_fields "csv")] | flatten | str join "&"
   let full_url = (build-url $base ({section_gid: (encode-path-segment $section_gid)} | format pattern "/sections/{section_gid}") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"opt_pretty": $opt_pretty, "opt_fields": $opt_fields} | compact), body: null}
 }
 
 # Get a section
@@ -2544,11 +2631,12 @@ export def "sections get" [
 ]: nothing -> record<data: record<created_at: string, project: record<gid: string, resource_type: string, name: string>, projects: list<record>>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($section_gid | is-empty) { error make --unspanned { msg: "path parameter 'section_gid' must be non-empty" } }
   let qp = [(serialize-qp "opt_pretty" $opt_pretty "scalar") (serialize-qp "opt_fields" $opt_fields "csv")] | flatten | str join "&"
   let full_url = (build-url $base ({section_gid: (encode-path-segment $section_gid)} | format pattern "/sections/{section_gid}") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"opt_pretty": $opt_pretty, "opt_fields": $opt_fields} | compact), body: null}
 }
 
 # Update a section
@@ -2574,13 +2662,14 @@ export def "sections update" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($section_gid | is-empty) { error make --unspanned { msg: "path parameter 'section_gid' must be non-empty" } }
   let qp = [(serialize-qp "opt_pretty" $opt_pretty "scalar") (serialize-qp "opt_fields" $opt_fields "csv")] | flatten | str join "&"
   let full_url = (build-url $base ({section_gid: (encode-path-segment $section_gid)} | format pattern "/sections/{section_gid}") $qp)
   let req_body = {"data": $data} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: ({"opt_pretty": $opt_pretty, "opt_fields": $opt_fields} | compact), body: $req_body}
 }
 
 # Add task to section
@@ -2606,13 +2695,14 @@ export def "sections-add-task create" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($section_gid | is-empty) { error make --unspanned { msg: "path parameter 'section_gid' must be non-empty" } }
   let qp = [(serialize-qp "opt_pretty" $opt_pretty "scalar") (serialize-qp "opt_fields" $opt_fields "csv")] | flatten | str join "&"
   let full_url = (build-url $base ({section_gid: (encode-path-segment $section_gid)} | format pattern "/sections/{section_gid}/addTask") $qp)
   let req_body = {"data": $data} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: ({"opt_pretty": $opt_pretty, "opt_fields": $opt_fields} | compact), body: $req_body}
 }
 
 # Get tasks from a section
@@ -2637,11 +2727,12 @@ export def "sections-tasks get" [
 ]: nothing -> record<data: table<gid: string, resource_type: string, name: string, resource_subtype: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($section_gid | is-empty) { error make --unspanned { msg: "path parameter 'section_gid' must be non-empty" } }
   let qp = [(serialize-qp "opt_pretty" $opt_pretty "scalar") (serialize-qp "opt_fields" $opt_fields "csv") (serialize-qp "limit" $limit "scalar") (serialize-qp "offset" $offset "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({section_gid: (encode-path-segment $section_gid)} | format pattern "/sections/{section_gid}/tasks") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"opt_pretty": $opt_pretty, "opt_fields": $opt_fields, "limit": $limit, "offset": $offset} | compact), body: null}
 }
 
 # Get status updates from an object
@@ -2671,7 +2762,7 @@ export def "status-updates get-statuses-for-object" [
   let full_url = (build-url $base "/status_updates" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"opt_pretty": $opt_pretty, "opt_fields": $opt_fields, "limit": $limit, "offset": $offset, "parent": $parent, "created_since": $created_since} | compact), body: null}
 }
 
 # Create a status update
@@ -2703,7 +2794,7 @@ export def "status-updates create-for-object" [
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: ({"opt_pretty": $opt_pretty, "opt_fields": $opt_fields, "limit": $limit, "offset": $offset} | compact), body: $req_body}
 }
 
 # Delete a status update
@@ -2726,11 +2817,12 @@ export def "status-updates delete" [
 ]: nothing -> record<data: record> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($status_gid | is-empty) { error make --unspanned { msg: "path parameter 'status_gid' must be non-empty" } }
   let qp = [(serialize-qp "opt_pretty" $opt_pretty "scalar") (serialize-qp "opt_fields" $opt_fields "csv")] | flatten | str join "&"
   let full_url = (build-url $base ({status_gid: (encode-path-segment $status_gid)} | format pattern "/status_updates/{status_gid}") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"opt_pretty": $opt_pretty, "opt_fields": $opt_fields} | compact), body: null}
 }
 
 # Get a status update
@@ -2753,11 +2845,12 @@ export def "status-updates get" [
 ]: nothing -> record<data: record<author: record<gid: string, resource_type: string, name: string>, created_at: string, created_by: record<gid: string, resource_type: string, name: string>, hearted: bool, hearts: list<record>, liked: bool, likes: list<record>, modified_at: string, num_hearts: int, num_likes: int, parent: record>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($status_gid | is-empty) { error make --unspanned { msg: "path parameter 'status_gid' must be non-empty" } }
   let qp = [(serialize-qp "opt_pretty" $opt_pretty "scalar") (serialize-qp "opt_fields" $opt_fields "csv")] | flatten | str join "&"
   let full_url = (build-url $base ({status_gid: (encode-path-segment $status_gid)} | format pattern "/status_updates/{status_gid}") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"opt_pretty": $opt_pretty, "opt_fields": $opt_fields} | compact), body: null}
 }
 
 # Delete a story
@@ -2780,11 +2873,12 @@ export def "stories delete" [
 ]: nothing -> record<data: record> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($story_gid | is-empty) { error make --unspanned { msg: "path parameter 'story_gid' must be non-empty" } }
   let qp = [(serialize-qp "opt_pretty" $opt_pretty "scalar") (serialize-qp "opt_fields" $opt_fields "csv")] | flatten | str join "&"
   let full_url = (build-url $base ({story_gid: (encode-path-segment $story_gid)} | format pattern "/stories/{story_gid}") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"opt_pretty": $opt_pretty, "opt_fields": $opt_fields} | compact), body: null}
 }
 
 # Get a story
@@ -2807,11 +2901,12 @@ export def "stories get" [
 ]: nothing -> record<data: record<assignee: record<gid: string, resource_type: string, name: string>, created_by: record<gid: string, resource_type: string, name: string>, custom_field: record<gid: string, resource_type: string, date_value: record, display_value: string, enabled: bool, enum_options: list, enum_value: record, multi_enum_values: list, name: string, number_value: float, resource_subtype: string, text_value: string, type: string>, dependency: record<gid: string, resource_type: string, name: string, resource_subtype: string>, duplicate_of: record<gid: string, resource_type: string, name: string, resource_subtype: string>, duplicated_from: record<gid: string, resource_type: string, name: string, resource_subtype: string>, follower: record<gid: string, resource_type: string, name: string>, hearted: bool, hearts: list<record>, is_editable: bool, is_edited: bool, liked: bool, likes: list<record>, new_approval_status: string, new_date_value: record<due_at: string, due_on: string, start_on: string>, new_dates: record<due_at: string, due_on: string, start_on: string>, new_enum_value: record<gid: string, resource_type: string, color: string, enabled: bool, name: string>, new_multi_enum_values: list<record>, new_name: string, new_number_value: int, new_people_value: list<record>, new_resource_subtype: string, new_section: record<gid: string, resource_type: string, name: string>, new_text_value: string, num_hearts: int, num_likes: int, old_approval_status: string, old_date_value: record<due_at: string, due_on: string, start_on: string>, old_dates: record<due_at: string, due_on: string, start_on: string>, old_enum_value: record<gid: string, resource_type: string, color: string, enabled: bool, name: string>, old_multi_enum_values: list<record>, old_name: string, old_number_value: int, old_people_value: list<record>, old_resource_subtype: string, old_section: record<gid: string, resource_type: string, name: string>, old_text_value: string, previews: list<record>, project: record<gid: string, resource_type: string, name: string>, source: string, story: record<gid: string, resource_type: string, created_at: string, created_by: record, resource_subtype: string, text: string>, tag: record<gid: string, resource_type: string, name: string>, target: record, task: record<gid: string, resource_type: string, name: string, resource_subtype: string>, type: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($story_gid | is-empty) { error make --unspanned { msg: "path parameter 'story_gid' must be non-empty" } }
   let qp = [(serialize-qp "limit" $limit "scalar") (serialize-qp "offset" $offset "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({story_gid: (encode-path-segment $story_gid)} | format pattern "/stories/{story_gid}") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"limit": $limit, "offset": $offset} | compact), body: null}
 }
 
 # Update a story
@@ -2836,13 +2931,14 @@ export def "stories update" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($story_gid | is-empty) { error make --unspanned { msg: "path parameter 'story_gid' must be non-empty" } }
   let qp = [(serialize-qp "opt_pretty" $opt_pretty "scalar") (serialize-qp "opt_fields" $opt_fields "csv")] | flatten | str join "&"
   let full_url = (build-url $base ({story_gid: (encode-path-segment $story_gid)} | format pattern "/stories/{story_gid}") $qp)
   let req_body = {"data": $data} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: ({"opt_pretty": $opt_pretty, "opt_fields": $opt_fields} | compact), body: $req_body}
 }
 
 # Get multiple tags
@@ -2869,7 +2965,7 @@ export def "tags list" [
   let full_url = (build-url $base "/tags" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"limit": $limit, "offset": $offset, "workspace": $workspace} | compact), body: null}
 }
 
 # Create a tag
@@ -2899,7 +2995,7 @@ export def "tags create" [
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: ({"opt_pretty": $opt_pretty, "opt_fields": $opt_fields} | compact), body: $req_body}
 }
 
 # Delete a tag
@@ -2924,11 +3020,12 @@ export def "tags delete" [
 ]: nothing -> record<data: record> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($tag_gid | is-empty) { error make --unspanned { msg: "path parameter 'tag_gid' must be non-empty" } }
   let qp = [(serialize-qp "opt_pretty" $opt_pretty "scalar") (serialize-qp "opt_fields" $opt_fields "csv") (serialize-qp "limit" $limit "scalar") (serialize-qp "offset" $offset "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({tag_gid: (encode-path-segment $tag_gid)} | format pattern "/tags/{tag_gid}") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"opt_pretty": $opt_pretty, "opt_fields": $opt_fields, "limit": $limit, "offset": $offset} | compact), body: null}
 }
 
 # Get a tag
@@ -2953,11 +3050,12 @@ export def "tags get" [
 ]: nothing -> record<data: record<created_at: string, followers: list<record>, permalink_url: string, workspace: record<gid: string, resource_type: string, name: string>>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($tag_gid | is-empty) { error make --unspanned { msg: "path parameter 'tag_gid' must be non-empty" } }
   let qp = [(serialize-qp "opt_pretty" $opt_pretty "scalar") (serialize-qp "opt_fields" $opt_fields "csv") (serialize-qp "limit" $limit "scalar") (serialize-qp "offset" $offset "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({tag_gid: (encode-path-segment $tag_gid)} | format pattern "/tags/{tag_gid}") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"opt_pretty": $opt_pretty, "opt_fields": $opt_fields, "limit": $limit, "offset": $offset} | compact), body: null}
 }
 
 # Update a tag
@@ -2982,11 +3080,12 @@ export def "tags update" [
 ]: nothing -> record<data: record<created_at: string, followers: list<record>, permalink_url: string, workspace: record<gid: string, resource_type: string, name: string>>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($tag_gid | is-empty) { error make --unspanned { msg: "path parameter 'tag_gid' must be non-empty" } }
   let qp = [(serialize-qp "opt_pretty" $opt_pretty "scalar") (serialize-qp "opt_fields" $opt_fields "csv") (serialize-qp "limit" $limit "scalar") (serialize-qp "offset" $offset "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({tag_gid: (encode-path-segment $tag_gid)} | format pattern "/tags/{tag_gid}") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"opt_pretty": $opt_pretty, "opt_fields": $opt_fields, "limit": $limit, "offset": $offset} | compact), body: null}
 }
 
 # Get tasks from a tag
@@ -3011,11 +3110,12 @@ export def "tags-tasks get" [
 ]: nothing -> record<data: table<gid: string, resource_type: string, name: string, resource_subtype: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($tag_gid | is-empty) { error make --unspanned { msg: "path parameter 'tag_gid' must be non-empty" } }
   let qp = [(serialize-qp "opt_pretty" $opt_pretty "scalar") (serialize-qp "opt_fields" $opt_fields "csv") (serialize-qp "limit" $limit "scalar") (serialize-qp "offset" $offset "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({tag_gid: (encode-path-segment $tag_gid)} | format pattern "/tags/{tag_gid}/tasks") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"opt_pretty": $opt_pretty, "opt_fields": $opt_fields, "limit": $limit, "offset": $offset} | compact), body: null}
 }
 
 # Get multiple tasks
@@ -3047,7 +3147,7 @@ export def "tasks list" [
   let full_url = (build-url $base "/tasks" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"limit": $limit, "offset": $offset, "assignee": $assignee, "project": $project, "section": $section, "workspace": $workspace, "completed_since": $completed_since, "modified_since": $modified_since} | compact), body: null}
 }
 
 # Create a task
@@ -3077,7 +3177,7 @@ export def "tasks create" [
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: ({"opt_pretty": $opt_pretty, "opt_fields": $opt_fields} | compact), body: $req_body}
 }
 
 # Delete a task
@@ -3100,11 +3200,12 @@ export def "tasks delete" [
 ]: nothing -> record<data: record> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($task_gid | is-empty) { error make --unspanned { msg: "path parameter 'task_gid' must be non-empty" } }
   let qp = [(serialize-qp "opt_pretty" $opt_pretty "scalar") (serialize-qp "opt_fields" $opt_fields "csv")] | flatten | str join "&"
   let full_url = (build-url $base ({task_gid: (encode-path-segment $task_gid)} | format pattern "/tasks/{task_gid}") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"opt_pretty": $opt_pretty, "opt_fields": $opt_fields} | compact), body: null}
 }
 
 # Get a task
@@ -3127,11 +3228,12 @@ export def "tasks get" [
 ]: nothing -> record<data: record<assignee: record, assignee_section: record, custom_fields: list<record>, followers: list<record>, parent: record, permalink_url: string, projects: list<record>, tags: list<record>, workspace: record>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($task_gid | is-empty) { error make --unspanned { msg: "path parameter 'task_gid' must be non-empty" } }
   let qp = [(serialize-qp "opt_pretty" $opt_pretty "scalar") (serialize-qp "opt_fields" $opt_fields "csv")] | flatten | str join "&"
   let full_url = (build-url $base ({task_gid: (encode-path-segment $task_gid)} | format pattern "/tasks/{task_gid}") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"opt_pretty": $opt_pretty, "opt_fields": $opt_fields} | compact), body: null}
 }
 
 # Update a task
@@ -3156,13 +3258,14 @@ export def "tasks update" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($task_gid | is-empty) { error make --unspanned { msg: "path parameter 'task_gid' must be non-empty" } }
   let qp = [(serialize-qp "opt_pretty" $opt_pretty "scalar") (serialize-qp "opt_fields" $opt_fields "csv")] | flatten | str join "&"
   let full_url = (build-url $base ({task_gid: (encode-path-segment $task_gid)} | format pattern "/tasks/{task_gid}") $qp)
   let req_body = {"data": $data} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: ({"opt_pretty": $opt_pretty, "opt_fields": $opt_fields} | compact), body: $req_body}
 }
 
 # Set dependencies for a task
@@ -3188,13 +3291,14 @@ export def "tasks-add-dependencies create" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($task_gid | is-empty) { error make --unspanned { msg: "path parameter 'task_gid' must be non-empty" } }
   let qp = [(serialize-qp "opt_pretty" $opt_pretty "scalar") (serialize-qp "opt_fields" $opt_fields "csv")] | flatten | str join "&"
   let full_url = (build-url $base ({task_gid: (encode-path-segment $task_gid)} | format pattern "/tasks/{task_gid}/addDependencies") $qp)
   let req_body = {"data": $data} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: ({"opt_pretty": $opt_pretty, "opt_fields": $opt_fields} | compact), body: $req_body}
 }
 
 # Set dependents for a task
@@ -3220,13 +3324,14 @@ export def "tasks-add-dependents create" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($task_gid | is-empty) { error make --unspanned { msg: "path parameter 'task_gid' must be non-empty" } }
   let qp = [(serialize-qp "opt_pretty" $opt_pretty "scalar") (serialize-qp "opt_fields" $opt_fields "csv")] | flatten | str join "&"
   let full_url = (build-url $base ({task_gid: (encode-path-segment $task_gid)} | format pattern "/tasks/{task_gid}/addDependents") $qp)
   let req_body = {"data": $data} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: ({"opt_pretty": $opt_pretty, "opt_fields": $opt_fields} | compact), body: $req_body}
 }
 
 # Add followers to a task
@@ -3252,13 +3357,14 @@ export def "tasks-add-followers create" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($task_gid | is-empty) { error make --unspanned { msg: "path parameter 'task_gid' must be non-empty" } }
   let qp = [(serialize-qp "opt_pretty" $opt_pretty "scalar") (serialize-qp "opt_fields" $opt_fields "csv")] | flatten | str join "&"
   let full_url = (build-url $base ({task_gid: (encode-path-segment $task_gid)} | format pattern "/tasks/{task_gid}/addFollowers") $qp)
   let req_body = {"data": $data} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: ({"opt_pretty": $opt_pretty, "opt_fields": $opt_fields} | compact), body: $req_body}
 }
 
 # Add a project to a task
@@ -3284,13 +3390,14 @@ export def "tasks-add-project create" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($task_gid | is-empty) { error make --unspanned { msg: "path parameter 'task_gid' must be non-empty" } }
   let qp = [(serialize-qp "opt_pretty" $opt_pretty "scalar") (serialize-qp "opt_fields" $opt_fields "csv")] | flatten | str join "&"
   let full_url = (build-url $base ({task_gid: (encode-path-segment $task_gid)} | format pattern "/tasks/{task_gid}/addProject") $qp)
   let req_body = {"data": $data} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: ({"opt_pretty": $opt_pretty, "opt_fields": $opt_fields} | compact), body: $req_body}
 }
 
 # Add a tag to a task
@@ -3316,13 +3423,14 @@ export def "tasks-add-tag create" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($task_gid | is-empty) { error make --unspanned { msg: "path parameter 'task_gid' must be non-empty" } }
   let qp = [(serialize-qp "opt_pretty" $opt_pretty "scalar") (serialize-qp "opt_fields" $opt_fields "csv")] | flatten | str join "&"
   let full_url = (build-url $base ({task_gid: (encode-path-segment $task_gid)} | format pattern "/tasks/{task_gid}/addTag") $qp)
   let req_body = {"data": $data} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: ({"opt_pretty": $opt_pretty, "opt_fields": $opt_fields} | compact), body: $req_body}
 }
 
 # Get dependencies from a task
@@ -3347,11 +3455,12 @@ export def "tasks-dependencies get" [
 ]: nothing -> record<data: table<gid: string, resource_type: string, name: string, resource_subtype: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($task_gid | is-empty) { error make --unspanned { msg: "path parameter 'task_gid' must be non-empty" } }
   let qp = [(serialize-qp "opt_pretty" $opt_pretty "scalar") (serialize-qp "opt_fields" $opt_fields "csv") (serialize-qp "limit" $limit "scalar") (serialize-qp "offset" $offset "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({task_gid: (encode-path-segment $task_gid)} | format pattern "/tasks/{task_gid}/dependencies") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"opt_pretty": $opt_pretty, "opt_fields": $opt_fields, "limit": $limit, "offset": $offset} | compact), body: null}
 }
 
 # Get dependents from a task
@@ -3376,11 +3485,12 @@ export def "tasks-dependents get" [
 ]: nothing -> record<data: table<gid: string, resource_type: string, name: string, resource_subtype: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($task_gid | is-empty) { error make --unspanned { msg: "path parameter 'task_gid' must be non-empty" } }
   let qp = [(serialize-qp "opt_pretty" $opt_pretty "scalar") (serialize-qp "opt_fields" $opt_fields "csv") (serialize-qp "limit" $limit "scalar") (serialize-qp "offset" $offset "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({task_gid: (encode-path-segment $task_gid)} | format pattern "/tasks/{task_gid}/dependents") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"opt_pretty": $opt_pretty, "opt_fields": $opt_fields, "limit": $limit, "offset": $offset} | compact), body: null}
 }
 
 # Duplicate a task
@@ -3406,13 +3516,14 @@ export def "tasks-duplicate create" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($task_gid | is-empty) { error make --unspanned { msg: "path parameter 'task_gid' must be non-empty" } }
   let qp = [(serialize-qp "opt_pretty" $opt_pretty "scalar") (serialize-qp "opt_fields" $opt_fields "csv")] | flatten | str join "&"
   let full_url = (build-url $base ({task_gid: (encode-path-segment $task_gid)} | format pattern "/tasks/{task_gid}/duplicate") $qp)
   let req_body = {"data": $data} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: ({"opt_pretty": $opt_pretty, "opt_fields": $opt_fields} | compact), body: $req_body}
 }
 
 # Get projects a task is in
@@ -3437,11 +3548,12 @@ export def "tasks-projects get" [
 ]: nothing -> record<data: table<gid: string, resource_type: string, name: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($task_gid | is-empty) { error make --unspanned { msg: "path parameter 'task_gid' must be non-empty" } }
   let qp = [(serialize-qp "opt_pretty" $opt_pretty "scalar") (serialize-qp "opt_fields" $opt_fields "csv") (serialize-qp "limit" $limit "scalar") (serialize-qp "offset" $offset "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({task_gid: (encode-path-segment $task_gid)} | format pattern "/tasks/{task_gid}/projects") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"opt_pretty": $opt_pretty, "opt_fields": $opt_fields, "limit": $limit, "offset": $offset} | compact), body: null}
 }
 
 # Unlink dependencies from a task
@@ -3467,13 +3579,14 @@ export def "tasks-remove-dependencies delete" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($task_gid | is-empty) { error make --unspanned { msg: "path parameter 'task_gid' must be non-empty" } }
   let qp = [(serialize-qp "opt_pretty" $opt_pretty "scalar") (serialize-qp "opt_fields" $opt_fields "csv")] | flatten | str join "&"
   let full_url = (build-url $base ({task_gid: (encode-path-segment $task_gid)} | format pattern "/tasks/{task_gid}/removeDependencies") $qp)
   let req_body = {"data": $data} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: ({"opt_pretty": $opt_pretty, "opt_fields": $opt_fields} | compact), body: $req_body}
 }
 
 # Unlink dependents from a task
@@ -3499,13 +3612,14 @@ export def "tasks-remove-dependents delete" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($task_gid | is-empty) { error make --unspanned { msg: "path parameter 'task_gid' must be non-empty" } }
   let qp = [(serialize-qp "opt_pretty" $opt_pretty "scalar") (serialize-qp "opt_fields" $opt_fields "csv")] | flatten | str join "&"
   let full_url = (build-url $base ({task_gid: (encode-path-segment $task_gid)} | format pattern "/tasks/{task_gid}/removeDependents") $qp)
   let req_body = {"data": $data} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: ({"opt_pretty": $opt_pretty, "opt_fields": $opt_fields} | compact), body: $req_body}
 }
 
 # Remove followers from a task
@@ -3531,13 +3645,14 @@ export def "tasks-remove-followers delete" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($task_gid | is-empty) { error make --unspanned { msg: "path parameter 'task_gid' must be non-empty" } }
   let qp = [(serialize-qp "opt_pretty" $opt_pretty "scalar") (serialize-qp "opt_fields" $opt_fields "csv")] | flatten | str join "&"
   let full_url = (build-url $base ({task_gid: (encode-path-segment $task_gid)} | format pattern "/tasks/{task_gid}/removeFollowers") $qp)
   let req_body = {"data": $data} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: ({"opt_pretty": $opt_pretty, "opt_fields": $opt_fields} | compact), body: $req_body}
 }
 
 # Remove a project from a task
@@ -3563,13 +3678,14 @@ export def "tasks-remove-project delete" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($task_gid | is-empty) { error make --unspanned { msg: "path parameter 'task_gid' must be non-empty" } }
   let qp = [(serialize-qp "opt_pretty" $opt_pretty "scalar") (serialize-qp "opt_fields" $opt_fields "csv")] | flatten | str join "&"
   let full_url = (build-url $base ({task_gid: (encode-path-segment $task_gid)} | format pattern "/tasks/{task_gid}/removeProject") $qp)
   let req_body = {"data": $data} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: ({"opt_pretty": $opt_pretty, "opt_fields": $opt_fields} | compact), body: $req_body}
 }
 
 # Remove a tag from a task
@@ -3595,13 +3711,14 @@ export def "tasks-remove-tag delete" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($task_gid | is-empty) { error make --unspanned { msg: "path parameter 'task_gid' must be non-empty" } }
   let qp = [(serialize-qp "opt_pretty" $opt_pretty "scalar") (serialize-qp "opt_fields" $opt_fields "csv")] | flatten | str join "&"
   let full_url = (build-url $base ({task_gid: (encode-path-segment $task_gid)} | format pattern "/tasks/{task_gid}/removeTag") $qp)
   let req_body = {"data": $data} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: ({"opt_pretty": $opt_pretty, "opt_fields": $opt_fields} | compact), body: $req_body}
 }
 
 # Set the parent of a task
@@ -3627,13 +3744,14 @@ export def "tasks-set-parent update" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($task_gid | is-empty) { error make --unspanned { msg: "path parameter 'task_gid' must be non-empty" } }
   let qp = [(serialize-qp "opt_pretty" $opt_pretty "scalar") (serialize-qp "opt_fields" $opt_fields "csv")] | flatten | str join "&"
   let full_url = (build-url $base ({task_gid: (encode-path-segment $task_gid)} | format pattern "/tasks/{task_gid}/setParent") $qp)
   let req_body = {"data": $data} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: ({"opt_pretty": $opt_pretty, "opt_fields": $opt_fields} | compact), body: $req_body}
 }
 
 # Get stories from a task
@@ -3656,11 +3774,12 @@ export def "tasks-stories get" [
 ]: nothing -> record<data: list<record<gid: string, resource_type: string, created_at: string, created_by: record, resource_subtype: string, text: string>>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($task_gid | is-empty) { error make --unspanned { msg: "path parameter 'task_gid' must be non-empty" } }
   let qp = [(serialize-qp "limit" $limit "scalar") (serialize-qp "offset" $offset "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({task_gid: (encode-path-segment $task_gid)} | format pattern "/tasks/{task_gid}/stories") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"limit": $limit, "offset": $offset} | compact), body: null}
 }
 
 # Create a story on a task
@@ -3685,13 +3804,14 @@ export def "tasks-stories create-story" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($task_gid | is-empty) { error make --unspanned { msg: "path parameter 'task_gid' must be non-empty" } }
   let qp = [(serialize-qp "opt_pretty" $opt_pretty "scalar") (serialize-qp "opt_fields" $opt_fields "csv")] | flatten | str join "&"
   let full_url = (build-url $base ({task_gid: (encode-path-segment $task_gid)} | format pattern "/tasks/{task_gid}/stories") $qp)
   let req_body = {"data": $data} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: ({"opt_pretty": $opt_pretty, "opt_fields": $opt_fields} | compact), body: $req_body}
 }
 
 # Get subtasks from a task
@@ -3714,11 +3834,12 @@ export def "tasks-subtasks get" [
 ]: nothing -> record<data: table<gid: string, resource_type: string, name: string, resource_subtype: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($task_gid | is-empty) { error make --unspanned { msg: "path parameter 'task_gid' must be non-empty" } }
   let qp = [(serialize-qp "limit" $limit "scalar") (serialize-qp "offset" $offset "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({task_gid: (encode-path-segment $task_gid)} | format pattern "/tasks/{task_gid}/subtasks") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"limit": $limit, "offset": $offset} | compact), body: null}
 }
 
 # Create a subtask
@@ -3743,13 +3864,14 @@ export def "tasks-subtasks create" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($task_gid | is-empty) { error make --unspanned { msg: "path parameter 'task_gid' must be non-empty" } }
   let qp = [(serialize-qp "opt_pretty" $opt_pretty "scalar") (serialize-qp "opt_fields" $opt_fields "csv")] | flatten | str join "&"
   let full_url = (build-url $base ({task_gid: (encode-path-segment $task_gid)} | format pattern "/tasks/{task_gid}/subtasks") $qp)
   let req_body = {"data": $data} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: ({"opt_pretty": $opt_pretty, "opt_fields": $opt_fields} | compact), body: $req_body}
 }
 
 # Get a task's tags
@@ -3774,11 +3896,12 @@ export def "tasks-tags get" [
 ]: nothing -> record<data: table<gid: string, resource_type: string, name: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($task_gid | is-empty) { error make --unspanned { msg: "path parameter 'task_gid' must be non-empty" } }
   let qp = [(serialize-qp "opt_pretty" $opt_pretty "scalar") (serialize-qp "opt_fields" $opt_fields "csv") (serialize-qp "limit" $limit "scalar") (serialize-qp "offset" $offset "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({task_gid: (encode-path-segment $task_gid)} | format pattern "/tasks/{task_gid}/tags") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"opt_pretty": $opt_pretty, "opt_fields": $opt_fields, "limit": $limit, "offset": $offset} | compact), body: null}
 }
 
 # Get team memberships
@@ -3809,7 +3932,7 @@ export def "team-memberships list" [
   let full_url = (build-url $base "/team_memberships" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"opt_pretty": $opt_pretty, "opt_fields": $opt_fields, "limit": $limit, "offset": $offset, "team": $team, "user": $user, "workspace": $workspace} | compact), body: null}
 }
 
 # Get a team membership
@@ -3832,11 +3955,12 @@ export def "team-memberships get" [
 ]: nothing -> record<data: record<gid: string, resource_type: string, is_guest: bool, team: record<gid: string, resource_type: string, name: string>, user: record<gid: string, resource_type: string, name: string>>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($team_membership_gid | is-empty) { error make --unspanned { msg: "path parameter 'team_membership_gid' must be non-empty" } }
   let qp = [(serialize-qp "opt_pretty" $opt_pretty "scalar") (serialize-qp "opt_fields" $opt_fields "csv")] | flatten | str join "&"
   let full_url = (build-url $base ({team_membership_gid: (encode-path-segment $team_membership_gid)} | format pattern "/team_memberships/{team_membership_gid}") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"opt_pretty": $opt_pretty, "opt_fields": $opt_fields} | compact), body: null}
 }
 
 # Create a team
@@ -3868,7 +3992,7 @@ export def "teams create" [
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: ({"opt_pretty": $opt_pretty, "opt_fields": $opt_fields, "limit": $limit, "offset": $offset} | compact), body: $req_body}
 }
 
 # Update a team
@@ -3900,7 +4024,7 @@ export def "teams update" [
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: ({"opt_pretty": $opt_pretty, "opt_fields": $opt_fields, "limit": $limit, "offset": $offset} | compact), body: $req_body}
 }
 
 # Get a team
@@ -3925,11 +4049,12 @@ export def "teams get" [
 ]: nothing -> record<data: record<description: string, html_description: string, organization: record, permalink_url: string, visibility: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($team_gid | is-empty) { error make --unspanned { msg: "path parameter 'team_gid' must be non-empty" } }
   let qp = [(serialize-qp "opt_pretty" $opt_pretty "scalar") (serialize-qp "opt_fields" $opt_fields "csv") (serialize-qp "limit" $limit "scalar") (serialize-qp "offset" $offset "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({team_gid: (encode-path-segment $team_gid)} | format pattern "/teams/{team_gid}") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"opt_pretty": $opt_pretty, "opt_fields": $opt_fields, "limit": $limit, "offset": $offset} | compact), body: null}
 }
 
 # Add a user to a team
@@ -3955,13 +4080,14 @@ export def "teams-add-user create" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($team_gid | is-empty) { error make --unspanned { msg: "path parameter 'team_gid' must be non-empty" } }
   let qp = [(serialize-qp "opt_pretty" $opt_pretty "scalar") (serialize-qp "opt_fields" $opt_fields "csv")] | flatten | str join "&"
   let full_url = (build-url $base ({team_gid: (encode-path-segment $team_gid)} | format pattern "/teams/{team_gid}/addUser") $qp)
   let req_body = {"data": $data} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: ({"opt_pretty": $opt_pretty, "opt_fields": $opt_fields} | compact), body: $req_body}
 }
 
 # Get a team's project templates
@@ -3984,11 +4110,12 @@ export def "teams-project-templates get" [
 ]: nothing -> record<data: table<gid: string, resource_type: string, name: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($team_gid | is-empty) { error make --unspanned { msg: "path parameter 'team_gid' must be non-empty" } }
   let qp = [(serialize-qp "limit" $limit "scalar") (serialize-qp "offset" $offset "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({team_gid: (encode-path-segment $team_gid)} | format pattern "/teams/{team_gid}/project_templates") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"limit": $limit, "offset": $offset} | compact), body: null}
 }
 
 # Get a team's projects
@@ -4012,11 +4139,12 @@ export def "teams-projects get" [
 ]: nothing -> record<data: table<gid: string, resource_type: string, name: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($team_gid | is-empty) { error make --unspanned { msg: "path parameter 'team_gid' must be non-empty" } }
   let qp = [(serialize-qp "limit" $limit "scalar") (serialize-qp "offset" $offset "scalar") (serialize-qp "archived" $archived "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({team_gid: (encode-path-segment $team_gid)} | format pattern "/teams/{team_gid}/projects") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"limit": $limit, "offset": $offset, "archived": $archived} | compact), body: null}
 }
 
 # Create a project in a team
@@ -4041,13 +4169,14 @@ export def "teams-projects create" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($team_gid | is-empty) { error make --unspanned { msg: "path parameter 'team_gid' must be non-empty" } }
   let qp = [(serialize-qp "opt_pretty" $opt_pretty "scalar") (serialize-qp "opt_fields" $opt_fields "csv")] | flatten | str join "&"
   let full_url = (build-url $base ({team_gid: (encode-path-segment $team_gid)} | format pattern "/teams/{team_gid}/projects") $qp)
   let req_body = {"data": $data} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: ({"opt_pretty": $opt_pretty, "opt_fields": $opt_fields} | compact), body: $req_body}
 }
 
 # Remove a user from a team
@@ -4073,13 +4202,14 @@ export def "teams-remove-user delete" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($team_gid | is-empty) { error make --unspanned { msg: "path parameter 'team_gid' must be non-empty" } }
   let qp = [(serialize-qp "opt_pretty" $opt_pretty "scalar") (serialize-qp "opt_fields" $opt_fields "csv")] | flatten | str join "&"
   let full_url = (build-url $base ({team_gid: (encode-path-segment $team_gid)} | format pattern "/teams/{team_gid}/removeUser") $qp)
   let req_body = {"data": $data} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: ({"opt_pretty": $opt_pretty, "opt_fields": $opt_fields} | compact), body: $req_body}
 }
 
 # Get memberships from a team
@@ -4104,11 +4234,12 @@ export def "teams-team-memberships get" [
 ]: nothing -> record<data: table<gid: string, resource_type: string, is_guest: bool, team: record, user: record>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($team_gid | is-empty) { error make --unspanned { msg: "path parameter 'team_gid' must be non-empty" } }
   let qp = [(serialize-qp "opt_pretty" $opt_pretty "scalar") (serialize-qp "opt_fields" $opt_fields "csv") (serialize-qp "limit" $limit "scalar") (serialize-qp "offset" $offset "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({team_gid: (encode-path-segment $team_gid)} | format pattern "/teams/{team_gid}/team_memberships") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"opt_pretty": $opt_pretty, "opt_fields": $opt_fields, "limit": $limit, "offset": $offset} | compact), body: null}
 }
 
 # Get users in a team
@@ -4132,11 +4263,12 @@ export def "teams-users get" [
 ]: nothing -> record<data: table<gid: string, resource_type: string, name: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($team_gid | is-empty) { error make --unspanned { msg: "path parameter 'team_gid' must be non-empty" } }
   let qp = [(serialize-qp "opt_pretty" $opt_pretty "scalar") (serialize-qp "opt_fields" $opt_fields "csv") (serialize-qp "offset" $offset "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({team_gid: (encode-path-segment $team_gid)} | format pattern "/teams/{team_gid}/users") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"opt_pretty": $opt_pretty, "opt_fields": $opt_fields, "offset": $offset} | compact), body: null}
 }
 
 # Get time periods
@@ -4167,7 +4299,7 @@ export def "time-periods list" [
   let full_url = (build-url $base "/time_periods" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"opt_pretty": $opt_pretty, "opt_fields": $opt_fields, "limit": $limit, "offset": $offset, "start_on": $start_on, "end_on": $end_on, "workspace": $workspace} | compact), body: null}
 }
 
 # Get a time period
@@ -4190,11 +4322,12 @@ export def "time-periods get" [
 ]: nothing -> record<data: record> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($time_period_gid | is-empty) { error make --unspanned { msg: "path parameter 'time_period_gid' must be non-empty" } }
   let qp = [(serialize-qp "opt_pretty" $opt_pretty "scalar") (serialize-qp "opt_fields" $opt_fields "csv")] | flatten | str join "&"
   let full_url = (build-url $base ({time_period_gid: (encode-path-segment $time_period_gid)} | format pattern "/time_periods/{time_period_gid}") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"opt_pretty": $opt_pretty, "opt_fields": $opt_fields} | compact), body: null}
 }
 
 # Get a user task list
@@ -4217,11 +4350,12 @@ export def "user-task-lists get" [
 ]: nothing -> record<data: record<gid: string, resource_type: string, name: string, owner: record, workspace: record>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($user_task_list_gid | is-empty) { error make --unspanned { msg: "path parameter 'user_task_list_gid' must be non-empty" } }
   let qp = [(serialize-qp "opt_pretty" $opt_pretty "scalar") (serialize-qp "opt_fields" $opt_fields "csv")] | flatten | str join "&"
   let full_url = (build-url $base ({user_task_list_gid: (encode-path-segment $user_task_list_gid)} | format pattern "/user_task_lists/{user_task_list_gid}") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"opt_pretty": $opt_pretty, "opt_fields": $opt_fields} | compact), body: null}
 }
 
 # Get tasks from a user task list
@@ -4247,11 +4381,12 @@ export def "user-task-lists-tasks get" [
 ]: nothing -> record<data: table<gid: string, resource_type: string, name: string, resource_subtype: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($user_task_list_gid | is-empty) { error make --unspanned { msg: "path parameter 'user_task_list_gid' must be non-empty" } }
   let qp = [(serialize-qp "completed_since" $completed_since "scalar") (serialize-qp "opt_pretty" $opt_pretty "scalar") (serialize-qp "opt_fields" $opt_fields "csv") (serialize-qp "limit" $limit "scalar") (serialize-qp "offset" $offset "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({user_task_list_gid: (encode-path-segment $user_task_list_gid)} | format pattern "/user_task_lists/{user_task_list_gid}/tasks") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"completed_since": $completed_since, "opt_pretty": $opt_pretty, "opt_fields": $opt_fields, "limit": $limit, "offset": $offset} | compact), body: null}
 }
 
 # Get multiple users
@@ -4281,7 +4416,7 @@ export def "users list" [
   let full_url = (build-url $base "/users" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"workspace": $workspace, "team": $team, "opt_pretty": $opt_pretty, "opt_fields": $opt_fields, "limit": $limit, "offset": $offset} | compact), body: null}
 }
 
 # Get a user
@@ -4304,11 +4439,12 @@ export def "users get" [
 ]: nothing -> record<data: record<workspaces: list<record>>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($user_gid | is-empty) { error make --unspanned { msg: "path parameter 'user_gid' must be non-empty" } }
   let qp = [(serialize-qp "opt_pretty" $opt_pretty "scalar") (serialize-qp "opt_fields" $opt_fields "csv")] | flatten | str join "&"
   let full_url = (build-url $base ({user_gid: (encode-path-segment $user_gid)} | format pattern "/users/{user_gid}") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"opt_pretty": $opt_pretty, "opt_fields": $opt_fields} | compact), body: null}
 }
 
 # Get a user's favorites
@@ -4333,11 +4469,12 @@ export def "users-favorites get" [
 ]: nothing -> record<data: table<gid: string, resource_type: string, name: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($user_gid | is-empty) { error make --unspanned { msg: "path parameter 'user_gid' must be non-empty" } }
   let qp = [(serialize-qp "opt_pretty" $opt_pretty "scalar") (serialize-qp "opt_fields" $opt_fields "csv") (serialize-qp "resource_type" $resource_type "scalar") (serialize-qp "workspace" $workspace "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({user_gid: (encode-path-segment $user_gid)} | format pattern "/users/{user_gid}/favorites") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"opt_pretty": $opt_pretty, "opt_fields": $opt_fields, "resource_type": $resource_type, "workspace": $workspace} | compact), body: null}
 }
 
 # Get memberships from a user
@@ -4363,11 +4500,12 @@ export def "users-team-memberships get" [
 ]: nothing -> record<data: table<gid: string, resource_type: string, is_guest: bool, team: record, user: record>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($user_gid | is-empty) { error make --unspanned { msg: "path parameter 'user_gid' must be non-empty" } }
   let qp = [(serialize-qp "opt_pretty" $opt_pretty "scalar") (serialize-qp "opt_fields" $opt_fields "csv") (serialize-qp "limit" $limit "scalar") (serialize-qp "offset" $offset "scalar") (serialize-qp "workspace" $workspace "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({user_gid: (encode-path-segment $user_gid)} | format pattern "/users/{user_gid}/team_memberships") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"opt_pretty": $opt_pretty, "opt_fields": $opt_fields, "limit": $limit, "offset": $offset, "workspace": $workspace} | compact), body: null}
 }
 
 # Get teams for a user
@@ -4393,11 +4531,12 @@ export def "users-teams get" [
 ]: nothing -> record<data: table<gid: string, resource_type: string, name: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($user_gid | is-empty) { error make --unspanned { msg: "path parameter 'user_gid' must be non-empty" } }
   let qp = [(serialize-qp "opt_pretty" $opt_pretty "scalar") (serialize-qp "opt_fields" $opt_fields "csv") (serialize-qp "limit" $limit "scalar") (serialize-qp "offset" $offset "scalar") (serialize-qp "organization" $organization "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({user_gid: (encode-path-segment $user_gid)} | format pattern "/users/{user_gid}/teams") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"opt_pretty": $opt_pretty, "opt_fields": $opt_fields, "limit": $limit, "offset": $offset, "organization": $organization} | compact), body: null}
 }
 
 # Get a user's task list
@@ -4421,11 +4560,12 @@ export def "users-user-task-list get" [
 ]: nothing -> record<data: record<gid: string, resource_type: string, name: string, owner: record, workspace: record>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($user_gid | is-empty) { error make --unspanned { msg: "path parameter 'user_gid' must be non-empty" } }
   let qp = [(serialize-qp "opt_pretty" $opt_pretty "scalar") (serialize-qp "opt_fields" $opt_fields "csv") (serialize-qp "workspace" $workspace "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({user_gid: (encode-path-segment $user_gid)} | format pattern "/users/{user_gid}/user_task_list") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"opt_pretty": $opt_pretty, "opt_fields": $opt_fields, "workspace": $workspace} | compact), body: null}
 }
 
 # Get workspace memberships for a user
@@ -4450,11 +4590,12 @@ export def "users-workspace-memberships get" [
 ]: nothing -> record<data: table<gid: string, resource_type: string, user: record, workspace: record>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($user_gid | is-empty) { error make --unspanned { msg: "path parameter 'user_gid' must be non-empty" } }
   let qp = [(serialize-qp "opt_pretty" $opt_pretty "scalar") (serialize-qp "opt_fields" $opt_fields "csv") (serialize-qp "limit" $limit "scalar") (serialize-qp "offset" $offset "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({user_gid: (encode-path-segment $user_gid)} | format pattern "/users/{user_gid}/workspace_memberships") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"opt_pretty": $opt_pretty, "opt_fields": $opt_fields, "limit": $limit, "offset": $offset} | compact), body: null}
 }
 
 # Get multiple webhooks
@@ -4482,7 +4623,7 @@ export def "webhooks list" [
   let full_url = (build-url $base "/webhooks" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"limit": $limit, "offset": $offset, "workspace": $workspace, "resource": $resource} | compact), body: null}
 }
 
 # Establish a webhook
@@ -4513,7 +4654,7 @@ export def "webhooks create" [
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: ({"opt_pretty": $opt_pretty, "opt_fields": $opt_fields} | compact), body: $req_body}
 }
 
 # Delete a webhook
@@ -4536,11 +4677,12 @@ export def "webhooks delete" [
 ]: nothing -> record<data: record> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($webhook_gid | is-empty) { error make --unspanned { msg: "path parameter 'webhook_gid' must be non-empty" } }
   let qp = [(serialize-qp "opt_pretty" $opt_pretty "scalar") (serialize-qp "opt_fields" $opt_fields "csv")] | flatten | str join "&"
   let full_url = (build-url $base ({webhook_gid: (encode-path-segment $webhook_gid)} | format pattern "/webhooks/{webhook_gid}") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"opt_pretty": $opt_pretty, "opt_fields": $opt_fields} | compact), body: null}
 }
 
 # Get a webhook
@@ -4563,11 +4705,12 @@ export def "webhooks get" [
 ]: nothing -> record<data: record<created_at: string, filters: list<record>, last_failure_at: string, last_failure_content: string, last_success_at: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($webhook_gid | is-empty) { error make --unspanned { msg: "path parameter 'webhook_gid' must be non-empty" } }
   let qp = [(serialize-qp "opt_pretty" $opt_pretty "scalar") (serialize-qp "opt_fields" $opt_fields "csv")] | flatten | str join "&"
   let full_url = (build-url $base ({webhook_gid: (encode-path-segment $webhook_gid)} | format pattern "/webhooks/{webhook_gid}") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"opt_pretty": $opt_pretty, "opt_fields": $opt_fields} | compact), body: null}
 }
 
 # Update a webhook
@@ -4593,13 +4736,14 @@ export def "webhooks update" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($webhook_gid | is-empty) { error make --unspanned { msg: "path parameter 'webhook_gid' must be non-empty" } }
   let qp = [(serialize-qp "opt_pretty" $opt_pretty "scalar") (serialize-qp "opt_fields" $opt_fields "csv")] | flatten | str join "&"
   let full_url = (build-url $base ({webhook_gid: (encode-path-segment $webhook_gid)} | format pattern "/webhooks/{webhook_gid}") $qp)
   let req_body = {"data": $data} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: ({"opt_pretty": $opt_pretty, "opt_fields": $opt_fields} | compact), body: $req_body}
 }
 
 # Get a workspace membership
@@ -4622,11 +4766,12 @@ export def "workspace-memberships get" [
 ]: nothing -> record<data: record<is_active: bool, is_admin: bool, is_guest: bool, user_task_list: record<gid: string, resource_type: string, name: string, owner: record, workspace: record>, vacation_dates: record<end_on: string, start_on: string>>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($workspace_membership_gid | is-empty) { error make --unspanned { msg: "path parameter 'workspace_membership_gid' must be non-empty" } }
   let qp = [(serialize-qp "opt_pretty" $opt_pretty "scalar") (serialize-qp "opt_fields" $opt_fields "csv")] | flatten | str join "&"
   let full_url = (build-url $base ({workspace_membership_gid: (encode-path-segment $workspace_membership_gid)} | format pattern "/workspace_memberships/{workspace_membership_gid}") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"opt_pretty": $opt_pretty, "opt_fields": $opt_fields} | compact), body: null}
 }
 
 # Get multiple workspaces
@@ -4654,7 +4799,7 @@ export def "workspaces list" [
   let full_url = (build-url $base "/workspaces" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"opt_pretty": $opt_pretty, "opt_fields": $opt_fields, "limit": $limit, "offset": $offset} | compact), body: null}
 }
 
 # Get a workspace
@@ -4677,11 +4822,12 @@ export def "workspaces get" [
 ]: nothing -> record<data: record<email_domains: list<string>, is_organization: bool>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($workspace_gid | is-empty) { error make --unspanned { msg: "path parameter 'workspace_gid' must be non-empty" } }
   let qp = [(serialize-qp "opt_pretty" $opt_pretty "scalar") (serialize-qp "opt_fields" $opt_fields "csv")] | flatten | str join "&"
   let full_url = (build-url $base ({workspace_gid: (encode-path-segment $workspace_gid)} | format pattern "/workspaces/{workspace_gid}") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"opt_pretty": $opt_pretty, "opt_fields": $opt_fields} | compact), body: null}
 }
 
 # Update a workspace
@@ -4706,13 +4852,14 @@ export def "workspaces update" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($workspace_gid | is-empty) { error make --unspanned { msg: "path parameter 'workspace_gid' must be non-empty" } }
   let qp = [(serialize-qp "opt_pretty" $opt_pretty "scalar") (serialize-qp "opt_fields" $opt_fields "csv")] | flatten | str join "&"
   let full_url = (build-url $base ({workspace_gid: (encode-path-segment $workspace_gid)} | format pattern "/workspaces/{workspace_gid}") $qp)
   let req_body = {"data": $data} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: ({"opt_pretty": $opt_pretty, "opt_fields": $opt_fields} | compact), body: $req_body}
 }
 
 # Add a user to a workspace or organization
@@ -4738,13 +4885,14 @@ export def "workspaces-add-user create" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($workspace_gid | is-empty) { error make --unspanned { msg: "path parameter 'workspace_gid' must be non-empty" } }
   let qp = [(serialize-qp "opt_pretty" $opt_pretty "scalar") (serialize-qp "opt_fields" $opt_fields "csv")] | flatten | str join "&"
   let full_url = (build-url $base ({workspace_gid: (encode-path-segment $workspace_gid)} | format pattern "/workspaces/{workspace_gid}/addUser") $qp)
   let req_body = {"data": $data} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: ({"opt_pretty": $opt_pretty, "opt_fields": $opt_fields} | compact), body: $req_body}
 }
 
 # Get audit log events
@@ -4773,11 +4921,12 @@ export def "workspaces-audit-log-events get" [
 ]: nothing -> record<data: table<actor: record, context: record, created_at: string, details: record, event_category: string, event_type: string, gid: string, resource: record>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($workspace_gid | is-empty) { error make --unspanned { msg: "path parameter 'workspace_gid' must be non-empty" } }
   let qp = [(serialize-qp "start_at" $start_at "scalar") (serialize-qp "end_at" $end_at "scalar") (serialize-qp "event_type" $event_type "scalar") (serialize-qp "actor_type" $actor_type "scalar") (serialize-qp "actor_gid" $actor_gid "scalar") (serialize-qp "resource_gid" $resource_gid "scalar") (serialize-qp "limit" $limit "scalar") (serialize-qp "offset" $offset "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({workspace_gid: (encode-path-segment $workspace_gid)} | format pattern "/workspaces/{workspace_gid}/audit_log_events") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"start_at": $start_at, "end_at": $end_at, "event_type": $event_type, "actor_type": $actor_type, "actor_gid": $actor_gid, "resource_gid": $resource_gid, "limit": $limit, "offset": $offset} | compact), body: null}
 }
 
 # Get a workspace's custom fields
@@ -4802,11 +4951,12 @@ export def "workspaces-custom-fields get" [
 ]: nothing -> record<data: table<created_by: record, people_value: list>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($workspace_gid | is-empty) { error make --unspanned { msg: "path parameter 'workspace_gid' must be non-empty" } }
   let qp = [(serialize-qp "opt_pretty" $opt_pretty "scalar") (serialize-qp "opt_fields" $opt_fields "csv") (serialize-qp "limit" $limit "scalar") (serialize-qp "offset" $offset "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({workspace_gid: (encode-path-segment $workspace_gid)} | format pattern "/workspaces/{workspace_gid}/custom_fields") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"opt_pretty": $opt_pretty, "opt_fields": $opt_fields, "limit": $limit, "offset": $offset} | compact), body: null}
 }
 
 # Get all projects in a workspace
@@ -4830,11 +4980,12 @@ export def "workspaces-projects get" [
 ]: nothing -> record<data: table<gid: string, resource_type: string, name: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($workspace_gid | is-empty) { error make --unspanned { msg: "path parameter 'workspace_gid' must be non-empty" } }
   let qp = [(serialize-qp "limit" $limit "scalar") (serialize-qp "offset" $offset "scalar") (serialize-qp "archived" $archived "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({workspace_gid: (encode-path-segment $workspace_gid)} | format pattern "/workspaces/{workspace_gid}/projects") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"limit": $limit, "offset": $offset, "archived": $archived} | compact), body: null}
 }
 
 # Create a project in a workspace
@@ -4859,13 +5010,14 @@ export def "workspaces-projects create" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($workspace_gid | is-empty) { error make --unspanned { msg: "path parameter 'workspace_gid' must be non-empty" } }
   let qp = [(serialize-qp "opt_pretty" $opt_pretty "scalar") (serialize-qp "opt_fields" $opt_fields "csv")] | flatten | str join "&"
   let full_url = (build-url $base ({workspace_gid: (encode-path-segment $workspace_gid)} | format pattern "/workspaces/{workspace_gid}/projects") $qp)
   let req_body = {"data": $data} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: ({"opt_pretty": $opt_pretty, "opt_fields": $opt_fields} | compact), body: $req_body}
 }
 
 # Remove a user from a workspace or organization
@@ -4891,13 +5043,14 @@ export def "workspaces-remove-user delete" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($workspace_gid | is-empty) { error make --unspanned { msg: "path parameter 'workspace_gid' must be non-empty" } }
   let qp = [(serialize-qp "opt_pretty" $opt_pretty "scalar") (serialize-qp "opt_fields" $opt_fields "csv")] | flatten | str join "&"
   let full_url = (build-url $base ({workspace_gid: (encode-path-segment $workspace_gid)} | format pattern "/workspaces/{workspace_gid}/removeUser") $qp)
   let req_body = {"data": $data} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: ({"opt_pretty": $opt_pretty, "opt_fields": $opt_fields} | compact), body: $req_body}
 }
 
 # Get tags in a workspace
@@ -4920,11 +5073,12 @@ export def "workspaces-tags get" [
 ]: nothing -> record<data: table<gid: string, resource_type: string, name: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($workspace_gid | is-empty) { error make --unspanned { msg: "path parameter 'workspace_gid' must be non-empty" } }
   let qp = [(serialize-qp "limit" $limit "scalar") (serialize-qp "offset" $offset "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({workspace_gid: (encode-path-segment $workspace_gid)} | format pattern "/workspaces/{workspace_gid}/tags") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"limit": $limit, "offset": $offset} | compact), body: null}
 }
 
 # Create a tag in a workspace
@@ -4949,13 +5103,14 @@ export def "workspaces-tags create" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($workspace_gid | is-empty) { error make --unspanned { msg: "path parameter 'workspace_gid' must be non-empty" } }
   let qp = [(serialize-qp "opt_pretty" $opt_pretty "scalar") (serialize-qp "opt_fields" $opt_fields "csv")] | flatten | str join "&"
   let full_url = (build-url $base ({workspace_gid: (encode-path-segment $workspace_gid)} | format pattern "/workspaces/{workspace_gid}/tags") $qp)
   let req_body = {"data": $data} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: ({"opt_pretty": $opt_pretty, "opt_fields": $opt_fields} | compact), body: $req_body}
 }
 
 # Search tasks in a workspace
@@ -5030,11 +5185,12 @@ export def "workspaces-tasks-search list" [
 ]: nothing -> record<data: table<gid: string, resource_type: string, name: string, resource_subtype: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($workspace_gid | is-empty) { error make --unspanned { msg: "path parameter 'workspace_gid' must be non-empty" } }
   let qp = [(serialize-qp "opt_pretty" $opt_pretty "scalar") (serialize-qp "opt_fields" $opt_fields "csv") (serialize-qp "text" $text "scalar") (serialize-qp "resource_subtype" $resource_subtype "scalar") (serialize-qp "assignee.any" $assignee_any "scalar") (serialize-qp "assignee.not" $assignee_not "scalar") (serialize-qp "portfolios.any" $portfolios_any "scalar") (serialize-qp "projects.any" $projects_any "scalar") (serialize-qp "projects.not" $projects_not "scalar") (serialize-qp "projects.all" $projects_all "scalar") (serialize-qp "sections.any" $sections_any "scalar") (serialize-qp "sections.not" $sections_not "scalar") (serialize-qp "sections.all" $sections_all "scalar") (serialize-qp "tags.any" $tags_any "scalar") (serialize-qp "tags.not" $tags_not "scalar") (serialize-qp "tags.all" $tags_all "scalar") (serialize-qp "teams.any" $teams_any "scalar") (serialize-qp "followers.not" $followers_not "scalar") (serialize-qp "created_by.any" $created_by_any "scalar") (serialize-qp "created_by.not" $created_by_not "scalar") (serialize-qp "assigned_by.any" $assigned_by_any "scalar") (serialize-qp "assigned_by.not" $assigned_by_not "scalar") (serialize-qp "liked_by.not" $liked_by_not "scalar") (serialize-qp "commented_on_by.not" $commented_on_by_not "scalar") (serialize-qp "due_on.before" $due_on_before "scalar") (serialize-qp "due_on.after" $due_on_after "scalar") (serialize-qp "due_on" $due_on "scalar") (serialize-qp "due_at.before" $due_at_before "scalar") (serialize-qp "due_at.after" $due_at_after "scalar") (serialize-qp "start_on.before" $start_on_before "scalar") (serialize-qp "start_on.after" $start_on_after "scalar") (serialize-qp "start_on" $start_on "scalar") (serialize-qp "created_on.before" $created_on_before "scalar") (serialize-qp "created_on.after" $created_on_after "scalar") (serialize-qp "created_on" $created_on "scalar") (serialize-qp "created_at.before" $created_at_before "scalar") (serialize-qp "created_at.after" $created_at_after "scalar") (serialize-qp "completed_on.before" $completed_on_before "scalar") (serialize-qp "completed_on.after" $completed_on_after "scalar") (serialize-qp "completed_on" $completed_on "scalar") (serialize-qp "completed_at.before" $completed_at_before "scalar") (serialize-qp "completed_at.after" $completed_at_after "scalar") (serialize-qp "modified_on.before" $modified_on_before "scalar") (serialize-qp "modified_on.after" $modified_on_after "scalar") (serialize-qp "modified_on" $modified_on "scalar") (serialize-qp "modified_at.before" $modified_at_before "scalar") (serialize-qp "modified_at.after" $modified_at_after "scalar") (serialize-qp "is_blocking" $is_blocking "scalar") (serialize-qp "is_blocked" $is_blocked "scalar") (serialize-qp "has_attachment" $has_attachment "scalar") (serialize-qp "completed" $completed "scalar") (serialize-qp "is_subtask" $is_subtask "scalar") (serialize-qp "sort_by" $sort_by "scalar") (serialize-qp "sort_ascending" $sort_ascending "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({workspace_gid: (encode-path-segment $workspace_gid)} | format pattern "/workspaces/{workspace_gid}/tasks/search") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"opt_pretty": $opt_pretty, "opt_fields": $opt_fields, "text": $text, "resource_subtype": $resource_subtype, "assignee.any": $assignee_any, "assignee.not": $assignee_not, "portfolios.any": $portfolios_any, "projects.any": $projects_any, "projects.not": $projects_not, "projects.all": $projects_all, "sections.any": $sections_any, "sections.not": $sections_not, "sections.all": $sections_all, "tags.any": $tags_any, "tags.not": $tags_not, "tags.all": $tags_all, "teams.any": $teams_any, "followers.not": $followers_not, "created_by.any": $created_by_any, "created_by.not": $created_by_not, "assigned_by.any": $assigned_by_any, "assigned_by.not": $assigned_by_not, "liked_by.not": $liked_by_not, "commented_on_by.not": $commented_on_by_not, "due_on.before": $due_on_before, "due_on.after": $due_on_after, "due_on": $due_on, "due_at.before": $due_at_before, "due_at.after": $due_at_after, "start_on.before": $start_on_before, "start_on.after": $start_on_after, "start_on": $start_on, "created_on.before": $created_on_before, "created_on.after": $created_on_after, "created_on": $created_on, "created_at.before": $created_at_before, "created_at.after": $created_at_after, "completed_on.before": $completed_on_before, "completed_on.after": $completed_on_after, "completed_on": $completed_on, "completed_at.before": $completed_at_before, "completed_at.after": $completed_at_after, "modified_on.before": $modified_on_before, "modified_on.after": $modified_on_after, "modified_on": $modified_on, "modified_at.before": $modified_at_before, "modified_at.after": $modified_at_after, "is_blocking": $is_blocking, "is_blocked": $is_blocked, "has_attachment": $has_attachment, "completed": $completed, "is_subtask": $is_subtask, "sort_by": $sort_by, "sort_ascending": $sort_ascending} | compact), body: null}
 }
 
 # Get teams in a workspace
@@ -5059,11 +5215,12 @@ export def "workspaces-teams get" [
 ]: nothing -> record<data: table<gid: string, resource_type: string, name: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($workspace_gid | is-empty) { error make --unspanned { msg: "path parameter 'workspace_gid' must be non-empty" } }
   let qp = [(serialize-qp "opt_pretty" $opt_pretty "scalar") (serialize-qp "opt_fields" $opt_fields "csv") (serialize-qp "limit" $limit "scalar") (serialize-qp "offset" $offset "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({workspace_gid: (encode-path-segment $workspace_gid)} | format pattern "/workspaces/{workspace_gid}/teams") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"opt_pretty": $opt_pretty, "opt_fields": $opt_fields, "limit": $limit, "offset": $offset} | compact), body: null}
 }
 
 # Get objects via typeahead
@@ -5090,11 +5247,12 @@ export def "workspaces-typeahead get" [
 ]: nothing -> record<data: table<gid: string, resource_type: string, name: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($workspace_gid | is-empty) { error make --unspanned { msg: "path parameter 'workspace_gid' must be non-empty" } }
   let qp = [(serialize-qp "resource_type" $resource_type "scalar") (serialize-qp "type" $type "scalar") (serialize-qp "query" $query "scalar") (serialize-qp "count" $count "scalar") (serialize-qp "opt_pretty" $opt_pretty "scalar") (serialize-qp "opt_fields" $opt_fields "csv")] | flatten | str join "&"
   let full_url = (build-url $base ({workspace_gid: (encode-path-segment $workspace_gid)} | format pattern "/workspaces/{workspace_gid}/typeahead") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"resource_type": $resource_type, "type": $type, "query": $query, "count": $count, "opt_pretty": $opt_pretty, "opt_fields": $opt_fields} | compact), body: null}
 }
 
 # Get users in a workspace or organization
@@ -5118,11 +5276,12 @@ export def "workspaces-users get" [
 ]: nothing -> record<data: table<gid: string, resource_type: string, name: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($workspace_gid | is-empty) { error make --unspanned { msg: "path parameter 'workspace_gid' must be non-empty" } }
   let qp = [(serialize-qp "opt_pretty" $opt_pretty "scalar") (serialize-qp "opt_fields" $opt_fields "csv") (serialize-qp "offset" $offset "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({workspace_gid: (encode-path-segment $workspace_gid)} | format pattern "/workspaces/{workspace_gid}/users") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"opt_pretty": $opt_pretty, "opt_fields": $opt_fields, "offset": $offset} | compact), body: null}
 }
 
 # Get the workspace memberships for a workspace
@@ -5148,9 +5307,10 @@ export def "workspaces-workspace-memberships get" [
 ]: nothing -> record<data: table<gid: string, resource_type: string, user: record, workspace: record>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($workspace_gid | is-empty) { error make --unspanned { msg: "path parameter 'workspace_gid' must be non-empty" } }
   let qp = [(serialize-qp "user" $user "scalar") (serialize-qp "opt_pretty" $opt_pretty "scalar") (serialize-qp "opt_fields" $opt_fields "csv") (serialize-qp "limit" $limit "scalar") (serialize-qp "offset" $offset "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({workspace_gid: (encode-path-segment $workspace_gid)} | format pattern "/workspaces/{workspace_gid}/workspace_memberships") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"user": $user, "opt_pretty": $opt_pretty, "opt_fields": $opt_fields, "limit": $limit, "offset": $offset} | compact), body: null}
 }

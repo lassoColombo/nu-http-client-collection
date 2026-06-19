@@ -3,20 +3,21 @@
 # Auth: --token flag or $env.AIRFLOW_API_STABLE_TOKEN
 
 const BASE_URL = "http://localhost/api/v1"
-const DEFAULT_AUTH = "basic"
 
-# Build auth: returns {headers: record, query: string}
+# Build auth: returns {scheme: string, headers: record, query: string, location: string}.
+# `location` is "header" | "query" | "cookie" | "none" and tells dry-run callers
+# where the token went without inspecting headers/query themselves.
 def build-auth [token?: string, auth_scheme?: string]: nothing -> record {
   let token_val = if ($token != null) and ($token | is-not-empty) { $token } else { $env | get -o AIRFLOW_API_STABLE_TOKEN | default "" }
   let scheme = ($auth_scheme | default "bearer")
-  if ($scheme == "none") or ($token_val | is-empty) { return {headers: {}, query: ""} }
+  if ($scheme == "none") or ($token_val | is-empty) { return {scheme: $scheme, headers: {}, query: "", location: "none"} }
   match $scheme {
-    "basic" => { {headers: {Authorization: $"Basic ($token_val)"}, query: ""} }
-    "bearer" => { {headers: {Authorization: $"Bearer ($token_val)"}, query: ""} }
-    "negotiate" => { {headers: {Authorization: $"Negotiate ($token_val)"}, query: ""} }
-    "basic-credentials" => { {headers: {Authorization: $"Basic ($token_val | encode base64)"}, query: ""} }
-    "none" => { {headers: {}, query: ""} }
-    _ => { {headers: {Authorization: $"Bearer ($token_val)"}, query: ""} }
+    "basic" => { {scheme: $scheme, headers: {Authorization: $"Basic ($token_val)"}, query: "", location: "header"} }
+    "bearer" => { {scheme: $scheme, headers: {Authorization: $"Bearer ($token_val)"}, query: "", location: "header"} }
+    "negotiate" => { {scheme: $scheme, headers: {Authorization: $"Negotiate ($token_val)"}, query: "", location: "header"} }
+    "basic-credentials" => { {scheme: $scheme, headers: {Authorization: $"Basic ($token_val | encode base64)"}, query: "", location: "header"} }
+    "none" => { {scheme: $scheme, headers: {}, query: "", location: "none"} }
+    _ => { {scheme: $scheme, headers: {Authorization: $"Bearer ($token_val)"}, query: "", location: "header"} }
   }
 }
 
@@ -25,8 +26,9 @@ def build-auth [token?: string, auth_scheme?: string]: nothing -> record {
 # ([A-Za-z0-9-._~]) stay literal; everything else gets %XX.
 def serialize-qp [name: string, value: any, style: string]: nothing -> list<string> {
   if ($value == null) { return [] }
-  let n = (encode-path-segment $name)
   let is_list = ($value | describe | str starts-with "list")
+  if $is_list and ($value | is-empty) { return [] }
+  let n = (encode-path-segment $name)
   if ($value | describe | str starts-with "record") { return ($value | transpose k v | each { $"($n)[(encode-path-segment $in.k)]=(encode-path-segment $in.v)" }) }
   if not $is_list { return [$"($n)=(encode-path-segment $value)"] }
   match $style {
@@ -57,22 +59,42 @@ def build-url [base: string, path: string, query?: string]: nothing -> string {
   if ($query != null) and ($query | is-not-empty) { $result | upsert query $query | url join } else { $result | url join }
 }
 
+# Build the dry-run record returned by --dry-run. Shape:
+#   {dry_run: true, method, url, query: <record>, headers, body, content_type, timeout,
+#    auth: {scheme, location}}
+# `meta` carries logical-form data (the query record by spec name, the pre-serialization
+# body) that do-request itself cannot reconstruct from its wire-format args.
+def build-dry-run-record [method: string, url: string, auth: record, content_type: string, timeout: duration, meta?: record]: nothing -> record {
+  let m = ($meta | default {})
+  {
+    dry_run: true
+    method: $method
+    url: $url
+    query: ($m | get -o query | default {})
+    headers: $auth.headers
+    body: ($m | get -o body)
+    content_type: $content_type
+    timeout: $timeout
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+}
+
 # Execute HTTP request with method dispatch
-def do-request [method: string, url: string, auth: record, insecure: bool, raw: bool, dry_run: bool, max_time?: duration, allow_errors?: bool, full?: bool, content_type?: string, body?: any]: nothing -> any {
+def do-request [method: string, url: string, auth: record, insecure: bool, raw: bool, dry_run: bool, max_time?: duration, allow_errors?: bool, full?: bool, content_type?: string, body?: any, dry_run_meta?: record]: nothing -> any {
   let req_url = if ($auth.query | is-not-empty) { if ($url | str contains "?") { $"($url)&($auth.query)" } else { $"($url)?($auth.query)" } } else { $url }
   let timeout = ($max_time | default 30min)
   let ct = ($content_type | default "application/json")
-  if $dry_run { return {method: $method, url: $req_url, headers: $auth.headers, query_string: $auth.query, content_type: $ct, timeout: $timeout, body: $body} }
+  if $dry_run { return (build-dry-run-record $method $req_url $auth $ct $timeout $dry_run_meta) }
   let resp = match $method {
     "get" => { http get --headers $auth.headers --full --allow-errors --max-time $timeout --insecure=$insecure --raw=$raw $req_url }
-    "head" => { http head --headers $auth.headers --max-time $timeout --insecure=$insecure $req_url }
-    "options" => { http options --headers $auth.headers --max-time $timeout --insecure=$insecure $req_url }
+    "head" => { http head --headers $auth.headers --full --allow-errors --max-time $timeout --insecure=$insecure $req_url }
+    "options" => { http options --headers $auth.headers --full --allow-errors --max-time $timeout --insecure=$insecure $req_url }
     "post" => { if ($body | is-empty) { http post --headers $auth.headers --full --allow-errors --max-time $timeout --insecure=$insecure --raw=$raw $req_url "" } else { http post --headers $auth.headers --content-type $ct --full --allow-errors --max-time $timeout --insecure=$insecure --raw=$raw $req_url $body } }
     "put" => { if ($body | is-empty) { http put --headers $auth.headers --full --allow-errors --max-time $timeout --insecure=$insecure --raw=$raw $req_url "" } else { http put --headers $auth.headers --content-type $ct --full --allow-errors --max-time $timeout --insecure=$insecure --raw=$raw $req_url $body } }
     "patch" => { if ($body | is-empty) { http patch --headers $auth.headers --full --allow-errors --max-time $timeout --insecure=$insecure --raw=$raw $req_url "" } else { http patch --headers $auth.headers --content-type $ct --full --allow-errors --max-time $timeout --insecure=$insecure --raw=$raw $req_url $body } }
     "delete" => { if ($body | is-empty) { http delete --headers $auth.headers --full --allow-errors --max-time $timeout --insecure=$insecure --raw=$raw $req_url } else { http delete --headers $auth.headers --content-type $ct --data $body --full --allow-errors --max-time $timeout --insecure=$insecure --raw=$raw $req_url } }
   }
-  if ($method in ["head" "options"]) { return $resp }
+  if ($method == "head") and (not $full) and (not $allow_errors) and $resp.status < 400 { return $resp.headers }
   if $allow_errors { $resp } else if $resp.status >= 400 { error make --unspanned { msg: $"HTTP ($resp.status): ($resp.body)" } } else if $full { {status: $resp.status, headers: $resp.headers, body: $resp.body} } else if $resp.status == 204 { null } else { $resp.body }
 }
 
@@ -130,7 +152,7 @@ export def "config get" [
   let full_url = (build-url $base "/config")
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
 }
 
 # List connections
@@ -157,7 +179,7 @@ export def "connections list" [
   let full_url = (build-url $base "/connections" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"limit": $limit, "offset": $offset, "order_by": $order_by} | compact), body: null}
 }
 
 # Create a connection
@@ -192,7 +214,7 @@ export def "connections create" [
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: {}, body: $req_body}
 }
 
 # Test a connection
@@ -227,7 +249,7 @@ export def "connections-test test" [
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: {}, body: $req_body}
 }
 
 # Delete a connection
@@ -248,10 +270,11 @@ export def "connections delete" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
+  if ($connection_id | is-empty) { error make --unspanned { msg: "path parameter 'connection_id' must be non-empty" } }
   let full_url = (build-url $base ({connection_id: (encode-path-segment $connection_id)} | format pattern "/connections/{connection_id}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
 }
 
 # Get a connection
@@ -272,10 +295,11 @@ export def "connections get" [
 ]: nothing -> record<conn_type: string, connection_id: string, description: string, host: string, login: string, port: int, schema: string, extra: string, password: string> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
+  if ($connection_id | is-empty) { error make --unspanned { msg: "path parameter 'connection_id' must be non-empty" } }
   let full_url = (build-url $base ({connection_id: (encode-path-segment $connection_id)} | format pattern "/connections/{connection_id}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
 }
 
 # Update a connection
@@ -307,13 +331,14 @@ export def "connections update" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
+  if ($connection_id | is-empty) { error make --unspanned { msg: "path parameter 'connection_id' must be non-empty" } }
   let qp = [(serialize-qp "update_mask" $update_mask "csv")] | flatten | str join "&"
   let full_url = (build-url $base ({connection_id: (encode-path-segment $connection_id)} | format pattern "/connections/{connection_id}") $qp)
   let req_body = {"conn_type": $conn_type, "connection_id": $body_connection_id, "description": $description, "host": $host, "login": $login, "port": $port, "schema": $schema, "extra": $extra, "password": $password} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "patch" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body
+  do-request "patch" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: ({"update_mask": $update_mask} | compact), body: $req_body}
 }
 
 # Get a source code
@@ -335,10 +360,11 @@ export def "dag-sources get" [
 ]: nothing -> record<content: string> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
+  if ($file_token | is-empty) { error make --unspanned { msg: "path parameter 'file_token' must be non-empty" } }
   let full_url = (build-url $base ({file_token: (encode-path-segment $file_token)} | format pattern "/dagSources/{file_token}"))
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
 }
 
 # List dag warnings
@@ -367,7 +393,7 @@ export def "dag-warnings get" [
   let full_url = (build-url $base "/dagWarnings" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"dag_id": $dag_id, "warning_type": $warning_type, "limit": $limit, "offset": $offset, "order_by": $order_by} | compact), body: null}
 }
 
 # List DAGs
@@ -397,7 +423,7 @@ export def "dags list" [
   let full_url = (build-url $base "/dags" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"limit": $limit, "offset": $offset, "order_by": $order_by, "tags": $tags, "only_active": $only_active, "dag_id_pattern": $dag_id_pattern} | compact), body: null}
 }
 
 # Update DAGs
@@ -432,7 +458,7 @@ export def "dags update" [
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "patch" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body
+  do-request "patch" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: ({"limit": $limit, "offset": $offset, "tags": $tags, "update_mask": $update_mask, "only_active": $only_active, "dag_id_pattern": $dag_id_pattern} | compact), body: $req_body}
 }
 
 # Delete a DAG
@@ -453,10 +479,11 @@ export def "dags delete" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
+  if ($dag_id | is-empty) { error make --unspanned { msg: "path parameter 'dag_id' must be non-empty" } }
   let full_url = (build-url $base ({dag_id: (encode-path-segment $dag_id)} | format pattern "/dags/{dag_id}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
 }
 
 # Get basic information about a DAG
@@ -477,10 +504,11 @@ export def "dags get" [
 ]: nothing -> record<dag_id: string, default_view: string, description: string, file_token: string, fileloc: string, has_import_errors: bool, has_task_concurrency_limits: bool, is_active: bool, is_paused: bool, is_subdag: bool, last_expired: string, last_parsed_time: string, last_pickled: string, max_active_runs: int, max_active_tasks: int, next_dagrun: string, next_dagrun_create_after: string, next_dagrun_data_interval_end: string, next_dagrun_data_interval_start: string, owners: list<string>, pickle_id: string, root_dag_id: string, schedule_interval: any, scheduler_lock: bool, tags: table<name: string>, timetable_description: string> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
+  if ($dag_id | is-empty) { error make --unspanned { msg: "path parameter 'dag_id' must be non-empty" } }
   let full_url = (build-url $base ({dag_id: (encode-path-segment $dag_id)} | format pattern "/dags/{dag_id}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
 }
 
 # Update a DAG
@@ -488,7 +516,7 @@ export def "dags get" [
 # PATCH /dags/{dag_id}
 # operationId: patch_dag
 # --tags item shape: {name?: string}
-export def "dags update-by-dag_id" [
+export def "dags update-by-dag-id" [
   dag_id: any
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -505,13 +533,14 @@ export def "dags update-by-dag_id" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
+  if ($dag_id | is-empty) { error make --unspanned { msg: "path parameter 'dag_id' must be non-empty" } }
   let qp = [(serialize-qp "update_mask" $update_mask "csv")] | flatten | str join "&"
   let full_url = (build-url $base ({dag_id: (encode-path-segment $dag_id)} | format pattern "/dags/{dag_id}") $qp)
   let req_body = {"is_paused": $is_paused} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "patch" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body
+  do-request "patch" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: ({"update_mask": $update_mask} | compact), body: $req_body}
 }
 
 # Clear a set of task instances
@@ -547,12 +576,13 @@ export def "dags-clear-task-instances create" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
+  if ($dag_id | is-empty) { error make --unspanned { msg: "path parameter 'dag_id' must be non-empty" } }
   let full_url = (build-url $base ({dag_id: (encode-path-segment $dag_id)} | format pattern "/dags/{dag_id}/clearTaskInstances"))
   let req_body = {"dag_run_id": $dag_run_id, "dry_run": $body_dry_run, "end_date": $end_date, "include_downstream": $include_downstream, "include_future": $include_future, "include_parentdag": $include_parentdag, "include_past": $include_past, "include_subdags": $include_subdags, "include_upstream": $include_upstream, "only_failed": $only_failed, "only_running": $only_running, "reset_dag_runs": $reset_dag_runs, "start_date": $start_date, "task_ids": $task_ids} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: {}, body: $req_body}
 }
 
 # List DAG runs
@@ -583,11 +613,12 @@ export def "dags-dag-runs list" [
 ]: nothing -> record {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
+  if ($dag_id | is-empty) { error make --unspanned { msg: "path parameter 'dag_id' must be non-empty" } }
   let qp = [(serialize-qp "limit" $limit "scalar") (serialize-qp "offset" $offset "scalar") (serialize-qp "execution_date_gte" $execution_date_gte "scalar") (serialize-qp "execution_date_lte" $execution_date_lte "scalar") (serialize-qp "start_date_gte" $start_date_gte "scalar") (serialize-qp "start_date_lte" $start_date_lte "scalar") (serialize-qp "end_date_gte" $end_date_gte "scalar") (serialize-qp "end_date_lte" $end_date_lte "scalar") (serialize-qp "state" $state "multi") (serialize-qp "order_by" $order_by "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({dag_id: (encode-path-segment $dag_id)} | format pattern "/dags/{dag_id}/dagRuns") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"limit": $limit, "offset": $offset, "execution_date_gte": $execution_date_gte, "execution_date_lte": $execution_date_lte, "start_date_gte": $start_date_gte, "start_date_lte": $start_date_lte, "end_date_gte": $end_date_gte, "end_date_lte": $end_date_lte, "state": $state, "order_by": $order_by} | compact), body: null}
 }
 
 # Trigger a new DAG run
@@ -616,12 +647,13 @@ export def "dags-dag-runs create" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
+  if ($dag_id | is-empty) { error make --unspanned { msg: "path parameter 'dag_id' must be non-empty" } }
   let full_url = (build-url $base ({dag_id: (encode-path-segment $dag_id)} | format pattern "/dags/{dag_id}/dagRuns"))
   let req_body = {"conf": $conf, "dag_run_id": $dag_run_id, "execution_date": $execution_date, "logical_date": $logical_date, "note": $note, "state": $state} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: {}, body: $req_body}
 }
 
 # Delete a DAG run
@@ -643,10 +675,12 @@ export def "dags-dag-runs delete" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
+  if ($dag_id | is-empty) { error make --unspanned { msg: "path parameter 'dag_id' must be non-empty" } }
+  if ($dag_run_id | is-empty) { error make --unspanned { msg: "path parameter 'dag_run_id' must be non-empty" } }
   let full_url = (build-url $base ({dag_id: (encode-path-segment $dag_id), dag_run_id: (encode-path-segment $dag_run_id)} | format pattern "/dags/{dag_id}/dagRuns/{dag_run_id}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
 }
 
 # Get a DAG run
@@ -668,10 +702,12 @@ export def "dags-dag-runs get" [
 ]: nothing -> record<conf: record, dag_id: string, dag_run_id: string, data_interval_end: string, data_interval_start: string, end_date: string, execution_date: string, external_trigger: bool, last_scheduling_decision: string, logical_date: string, note: string, run_type: string, start_date: string, state: string> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
+  if ($dag_id | is-empty) { error make --unspanned { msg: "path parameter 'dag_id' must be non-empty" } }
+  if ($dag_run_id | is-empty) { error make --unspanned { msg: "path parameter 'dag_run_id' must be non-empty" } }
   let full_url = (build-url $base ({dag_id: (encode-path-segment $dag_id), dag_run_id: (encode-path-segment $dag_run_id)} | format pattern "/dags/{dag_id}/dagRuns/{dag_run_id}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
 }
 
 # Modify a DAG run
@@ -695,12 +731,14 @@ export def "dags-dag-runs update-state" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
+  if ($dag_id | is-empty) { error make --unspanned { msg: "path parameter 'dag_id' must be non-empty" } }
+  if ($dag_run_id | is-empty) { error make --unspanned { msg: "path parameter 'dag_run_id' must be non-empty" } }
   let full_url = (build-url $base ({dag_id: (encode-path-segment $dag_id), dag_run_id: (encode-path-segment $dag_run_id)} | format pattern "/dags/{dag_id}/dagRuns/{dag_run_id}"))
   let req_body = {"state": $state} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "patch" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body
+  do-request "patch" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: {}, body: $req_body}
 }
 
 # Clear a DAG run
@@ -724,12 +762,14 @@ export def "dags-dag-runs-clear create" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
+  if ($dag_id | is-empty) { error make --unspanned { msg: "path parameter 'dag_id' must be non-empty" } }
+  if ($dag_run_id | is-empty) { error make --unspanned { msg: "path parameter 'dag_run_id' must be non-empty" } }
   let full_url = (build-url $base ({dag_id: (encode-path-segment $dag_id), dag_run_id: (encode-path-segment $dag_run_id)} | format pattern "/dags/{dag_id}/dagRuns/{dag_run_id}/clear"))
   let req_body = {"dry_run": $body_dry_run} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: {}, body: $req_body}
 }
 
 # Update the DagRun note.
@@ -753,12 +793,14 @@ export def "dags-dag-runs-set-note update" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
+  if ($dag_id | is-empty) { error make --unspanned { msg: "path parameter 'dag_id' must be non-empty" } }
+  if ($dag_run_id | is-empty) { error make --unspanned { msg: "path parameter 'dag_run_id' must be non-empty" } }
   let full_url = (build-url $base ({dag_id: (encode-path-segment $dag_id), dag_run_id: (encode-path-segment $dag_run_id)} | format pattern "/dags/{dag_id}/dagRuns/{dag_run_id}/setNote"))
   let req_body = {"note": $note} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "patch" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body
+  do-request "patch" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: {}, body: $req_body}
 }
 
 # List task instances
@@ -782,11 +824,13 @@ export def "dags-dag-runs-task-instances list" [
 ]: nothing -> record {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
+  if ($dag_id | is-empty) { error make --unspanned { msg: "path parameter 'dag_id' must be non-empty" } }
+  if ($dag_run_id | is-empty) { error make --unspanned { msg: "path parameter 'dag_run_id' must be non-empty" } }
   let qp = [(serialize-qp "limit" $limit "scalar") (serialize-qp "offset" $offset "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({dag_id: (encode-path-segment $dag_id), dag_run_id: (encode-path-segment $dag_run_id)} | format pattern "/dags/{dag_id}/dagRuns/{dag_run_id}/taskInstances") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"limit": $limit, "offset": $offset} | compact), body: null}
 }
 
 # Get a task instance
@@ -809,10 +853,13 @@ export def "dags-dag-runs-task-instances get" [
 ]: nothing -> record<dag_id: string, dag_run_id: string, duration: float, end_date: string, execution_date: string, executor_config: string, hostname: string, map_index: int, max_tries: int, note: string, operator: string, pid: int, pool: string, pool_slots: int, priority_weight: int, queue: string, queued_when: string, rendered_fields: record, sla_miss: record<dag_id: string, description: string, email_sent: bool, execution_date: string, notification_sent: bool, task_id: string, timestamp: string>, start_date: string, state: string, task_id: string, trigger: record<classpath: string, created_date: string, id: int, kwargs: string, triggerer_id: int>, triggerer_job: record<dag_id: string, end_date: string, executor_class: string, hostname: string, id: int, job_type: string, latest_heartbeat: string, start_date: string, state: string, unixname: string>, try_number: int, unixname: string> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
+  if ($dag_id | is-empty) { error make --unspanned { msg: "path parameter 'dag_id' must be non-empty" } }
+  if ($dag_run_id | is-empty) { error make --unspanned { msg: "path parameter 'dag_run_id' must be non-empty" } }
+  if ($task_id | is-empty) { error make --unspanned { msg: "path parameter 'task_id' must be non-empty" } }
   let full_url = (build-url $base ({dag_id: (encode-path-segment $dag_id), dag_run_id: (encode-path-segment $dag_run_id), task_id: (encode-path-segment $task_id)} | format pattern "/dags/{dag_id}/dagRuns/{dag_run_id}/taskInstances/{task_id}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
 }
 
 # Updates the state of a task instance
@@ -838,12 +885,15 @@ export def "dags-dag-runs-task-instances update" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
+  if ($dag_id | is-empty) { error make --unspanned { msg: "path parameter 'dag_id' must be non-empty" } }
+  if ($dag_run_id | is-empty) { error make --unspanned { msg: "path parameter 'dag_run_id' must be non-empty" } }
+  if ($task_id | is-empty) { error make --unspanned { msg: "path parameter 'task_id' must be non-empty" } }
   let full_url = (build-url $base ({dag_id: (encode-path-segment $dag_id), dag_run_id: (encode-path-segment $dag_run_id), task_id: (encode-path-segment $task_id)} | format pattern "/dags/{dag_id}/dagRuns/{dag_run_id}/taskInstances/{task_id}"))
   let req_body = {"dry_run": $body_dry_run, "new_state": $new_state} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "patch" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body
+  do-request "patch" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: {}, body: $req_body}
 }
 
 # List extra links
@@ -866,10 +916,13 @@ export def "dags-dag-runs-task-instances-links get-extra" [
 ]: nothing -> record<extra_links: table<class_ref: record, href: string, name: string>> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
+  if ($dag_id | is-empty) { error make --unspanned { msg: "path parameter 'dag_id' must be non-empty" } }
+  if ($dag_run_id | is-empty) { error make --unspanned { msg: "path parameter 'dag_run_id' must be non-empty" } }
+  if ($task_id | is-empty) { error make --unspanned { msg: "path parameter 'task_id' must be non-empty" } }
   let full_url = (build-url $base ({dag_id: (encode-path-segment $dag_id), dag_run_id: (encode-path-segment $dag_run_id), task_id: (encode-path-segment $task_id)} | format pattern "/dags/{dag_id}/dagRuns/{dag_run_id}/taskInstances/{task_id}/links"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
 }
 
 # List mapped task instances
@@ -906,11 +959,14 @@ export def "dags-dag-runs-task-instances-list-mapped get" [
 ]: nothing -> record {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
+  if ($dag_id | is-empty) { error make --unspanned { msg: "path parameter 'dag_id' must be non-empty" } }
+  if ($dag_run_id | is-empty) { error make --unspanned { msg: "path parameter 'dag_run_id' must be non-empty" } }
+  if ($task_id | is-empty) { error make --unspanned { msg: "path parameter 'task_id' must be non-empty" } }
   let qp = [(serialize-qp "limit" $limit "scalar") (serialize-qp "offset" $offset "scalar") (serialize-qp "execution_date_gte" $execution_date_gte "scalar") (serialize-qp "execution_date_lte" $execution_date_lte "scalar") (serialize-qp "start_date_gte" $start_date_gte "scalar") (serialize-qp "start_date_lte" $start_date_lte "scalar") (serialize-qp "end_date_gte" $end_date_gte "scalar") (serialize-qp "end_date_lte" $end_date_lte "scalar") (serialize-qp "duration_gte" $duration_gte "scalar") (serialize-qp "duration_lte" $duration_lte "scalar") (serialize-qp "state" $state "multi") (serialize-qp "pool" $pool "multi") (serialize-qp "queue" $queue "multi") (serialize-qp "order_by" $order_by "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({dag_id: (encode-path-segment $dag_id), dag_run_id: (encode-path-segment $dag_run_id), task_id: (encode-path-segment $task_id)} | format pattern "/dags/{dag_id}/dagRuns/{dag_run_id}/taskInstances/{task_id}/listMapped") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"limit": $limit, "offset": $offset, "execution_date_gte": $execution_date_gte, "execution_date_lte": $execution_date_lte, "start_date_gte": $start_date_gte, "start_date_lte": $start_date_lte, "end_date_gte": $end_date_gte, "end_date_lte": $end_date_lte, "duration_gte": $duration_gte, "duration_lte": $duration_lte, "state": $state, "pool": $pool, "queue": $queue, "order_by": $order_by} | compact), body: null}
 }
 
 # Get logs
@@ -938,11 +994,15 @@ export def "dags-dag-runs-task-instances-logs get" [
 ]: nothing -> record<content: string, continuation_token: string> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
+  if ($dag_id | is-empty) { error make --unspanned { msg: "path parameter 'dag_id' must be non-empty" } }
+  if ($dag_run_id | is-empty) { error make --unspanned { msg: "path parameter 'dag_run_id' must be non-empty" } }
+  if ($task_id | is-empty) { error make --unspanned { msg: "path parameter 'task_id' must be non-empty" } }
+  if ($task_try_number | is-empty) { error make --unspanned { msg: "path parameter 'task_try_number' must be non-empty" } }
   let qp = [(serialize-qp "full_content" $full_content "scalar") (serialize-qp "map_index" $map_index "scalar") (serialize-qp "token" $qp_token "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({dag_id: (encode-path-segment $dag_id), dag_run_id: (encode-path-segment $dag_run_id), task_id: (encode-path-segment $task_id), task_try_number: (encode-path-segment $task_try_number)} | format pattern "/dags/{dag_id}/dagRuns/{dag_run_id}/taskInstances/{task_id}/logs/{task_try_number}") $qp)
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"full_content": $full_content, "map_index": $map_index, "token": $qp_token} | compact), body: null}
 }
 
 # Update the TaskInstance note.
@@ -967,12 +1027,15 @@ export def "dags-dag-runs-task-instances-set-note update" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
+  if ($dag_id | is-empty) { error make --unspanned { msg: "path parameter 'dag_id' must be non-empty" } }
+  if ($dag_run_id | is-empty) { error make --unspanned { msg: "path parameter 'dag_run_id' must be non-empty" } }
+  if ($task_id | is-empty) { error make --unspanned { msg: "path parameter 'task_id' must be non-empty" } }
   let full_url = (build-url $base ({dag_id: (encode-path-segment $dag_id), dag_run_id: (encode-path-segment $dag_run_id), task_id: (encode-path-segment $task_id)} | format pattern "/dags/{dag_id}/dagRuns/{dag_run_id}/taskInstances/{task_id}/setNote"))
   let req_body = {"note": $note} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "patch" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body
+  do-request "patch" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: {}, body: $req_body}
 }
 
 # List XCom entries
@@ -997,11 +1060,14 @@ export def "dags-dag-runs-task-instances-xcom-entries get" [
 ]: nothing -> record {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
+  if ($dag_id | is-empty) { error make --unspanned { msg: "path parameter 'dag_id' must be non-empty" } }
+  if ($dag_run_id | is-empty) { error make --unspanned { msg: "path parameter 'dag_run_id' must be non-empty" } }
+  if ($task_id | is-empty) { error make --unspanned { msg: "path parameter 'task_id' must be non-empty" } }
   let qp = [(serialize-qp "limit" $limit "scalar") (serialize-qp "offset" $offset "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({dag_id: (encode-path-segment $dag_id), dag_run_id: (encode-path-segment $dag_run_id), task_id: (encode-path-segment $task_id)} | format pattern "/dags/{dag_id}/dagRuns/{dag_run_id}/taskInstances/{task_id}/xcomEntries") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"limit": $limit, "offset": $offset} | compact), body: null}
 }
 
 # Get an XCom entry
@@ -1026,11 +1092,15 @@ export def "dags-dag-runs-task-instances-xcom-entries get-entry" [
 ]: nothing -> record<dag_id: string, execution_date: string, key: string, task_id: string, timestamp: string, value: string> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
+  if ($dag_id | is-empty) { error make --unspanned { msg: "path parameter 'dag_id' must be non-empty" } }
+  if ($dag_run_id | is-empty) { error make --unspanned { msg: "path parameter 'dag_run_id' must be non-empty" } }
+  if ($task_id | is-empty) { error make --unspanned { msg: "path parameter 'task_id' must be non-empty" } }
+  if ($xcom_key | is-empty) { error make --unspanned { msg: "path parameter 'xcom_key' must be non-empty" } }
   let qp = [(serialize-qp "deserialize" $deserialize "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({dag_id: (encode-path-segment $dag_id), dag_run_id: (encode-path-segment $dag_run_id), task_id: (encode-path-segment $task_id), xcom_key: (encode-path-segment $xcom_key)} | format pattern "/dags/{dag_id}/dagRuns/{dag_run_id}/taskInstances/{task_id}/xcomEntries/{xcom_key}") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"deserialize": $deserialize} | compact), body: null}
 }
 
 # Get a mapped task instance
@@ -1054,10 +1124,14 @@ export def "dags-dag-runs-task-instances get-mapped" [
 ]: nothing -> record<dag_id: string, dag_run_id: string, duration: float, end_date: string, execution_date: string, executor_config: string, hostname: string, map_index: int, max_tries: int, note: string, operator: string, pid: int, pool: string, pool_slots: int, priority_weight: int, queue: string, queued_when: string, rendered_fields: record, sla_miss: record<dag_id: string, description: string, email_sent: bool, execution_date: string, notification_sent: bool, task_id: string, timestamp: string>, start_date: string, state: string, task_id: string, trigger: record<classpath: string, created_date: string, id: int, kwargs: string, triggerer_id: int>, triggerer_job: record<dag_id: string, end_date: string, executor_class: string, hostname: string, id: int, job_type: string, latest_heartbeat: string, start_date: string, state: string, unixname: string>, try_number: int, unixname: string> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
+  if ($dag_id | is-empty) { error make --unspanned { msg: "path parameter 'dag_id' must be non-empty" } }
+  if ($dag_run_id | is-empty) { error make --unspanned { msg: "path parameter 'dag_run_id' must be non-empty" } }
+  if ($task_id | is-empty) { error make --unspanned { msg: "path parameter 'task_id' must be non-empty" } }
+  if ($map_index | is-empty) { error make --unspanned { msg: "path parameter 'map_index' must be non-empty" } }
   let full_url = (build-url $base ({dag_id: (encode-path-segment $dag_id), dag_run_id: (encode-path-segment $dag_run_id), task_id: (encode-path-segment $task_id), map_index: (encode-path-segment $map_index)} | format pattern "/dags/{dag_id}/dagRuns/{dag_run_id}/taskInstances/{task_id}/{map_index}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
 }
 
 # Updates the state of a mapped task instance
@@ -1084,12 +1158,16 @@ export def "dags-dag-runs-task-instances update-mapped" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
+  if ($dag_id | is-empty) { error make --unspanned { msg: "path parameter 'dag_id' must be non-empty" } }
+  if ($dag_run_id | is-empty) { error make --unspanned { msg: "path parameter 'dag_run_id' must be non-empty" } }
+  if ($task_id | is-empty) { error make --unspanned { msg: "path parameter 'task_id' must be non-empty" } }
+  if ($map_index | is-empty) { error make --unspanned { msg: "path parameter 'map_index' must be non-empty" } }
   let full_url = (build-url $base ({dag_id: (encode-path-segment $dag_id), dag_run_id: (encode-path-segment $dag_run_id), task_id: (encode-path-segment $task_id), map_index: (encode-path-segment $map_index)} | format pattern "/dags/{dag_id}/dagRuns/{dag_run_id}/taskInstances/{task_id}/{map_index}"))
   let req_body = {"dry_run": $body_dry_run, "new_state": $new_state} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "patch" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body
+  do-request "patch" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: {}, body: $req_body}
 }
 
 # Update the TaskInstance note.
@@ -1115,12 +1193,16 @@ export def "dags-dag-runs-task-instances-set-note update-mapped" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
+  if ($dag_id | is-empty) { error make --unspanned { msg: "path parameter 'dag_id' must be non-empty" } }
+  if ($dag_run_id | is-empty) { error make --unspanned { msg: "path parameter 'dag_run_id' must be non-empty" } }
+  if ($task_id | is-empty) { error make --unspanned { msg: "path parameter 'task_id' must be non-empty" } }
+  if ($map_index | is-empty) { error make --unspanned { msg: "path parameter 'map_index' must be non-empty" } }
   let full_url = (build-url $base ({dag_id: (encode-path-segment $dag_id), dag_run_id: (encode-path-segment $dag_run_id), task_id: (encode-path-segment $task_id), map_index: (encode-path-segment $map_index)} | format pattern "/dags/{dag_id}/dagRuns/{dag_run_id}/taskInstances/{task_id}/{map_index}/setNote"))
   let req_body = {"note": $note} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "patch" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body
+  do-request "patch" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: {}, body: $req_body}
 }
 
 # Get dataset events for a DAG run
@@ -1142,10 +1224,12 @@ export def "dags-dag-runs-upstream-dataset-events get" [
 ]: nothing -> record {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
+  if ($dag_id | is-empty) { error make --unspanned { msg: "path parameter 'dag_id' must be non-empty" } }
+  if ($dag_run_id | is-empty) { error make --unspanned { msg: "path parameter 'dag_run_id' must be non-empty" } }
   let full_url = (build-url $base ({dag_id: (encode-path-segment $dag_id), dag_run_id: (encode-path-segment $dag_run_id)} | format pattern "/dags/{dag_id}/dagRuns/{dag_run_id}/upstreamDatasetEvents"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
 }
 
 # Get a simplified representation of DAG
@@ -1166,10 +1250,11 @@ export def "dags-details get" [
 ]: nothing -> record<dag_id: string, default_view: string, description: string, file_token: string, fileloc: string, has_import_errors: bool, has_task_concurrency_limits: bool, is_active: bool, is_paused: bool, is_subdag: bool, last_expired: string, last_parsed_time: string, last_pickled: string, max_active_runs: int, max_active_tasks: int, next_dagrun: string, next_dagrun_create_after: string, next_dagrun_data_interval_end: string, next_dagrun_data_interval_start: string, owners: list<string>, pickle_id: string, root_dag_id: string, schedule_interval: any, scheduler_lock: bool, tags: table<name: string>, timetable_description: string, catchup: bool, concurrency: float, dag_run_timeout: record<__type: string, days: int, microseconds: int, seconds: int>, doc_md: string, end_date: string, is_paused_upon_creation: bool, last_parsed: string, orientation: string, params: record, render_template_as_native_obj: bool, start_date: string, template_search_path: list<string>, timezone: string> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
+  if ($dag_id | is-empty) { error make --unspanned { msg: "path parameter 'dag_id' must be non-empty" } }
   let full_url = (build-url $base ({dag_id: (encode-path-segment $dag_id)} | format pattern "/dags/{dag_id}/details"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
 }
 
 # Get tasks for DAG
@@ -1191,11 +1276,12 @@ export def "dags-tasks list" [
 ]: nothing -> record<tasks: table<class_ref: record, depends_on_past: bool, downstream_task_ids: list, end_date: string, execution_timeout: record, extra_links: list, is_mapped: bool, owner: string, pool: string, pool_slots: float, priority_weight: float, queue: string, retries: float, retry_delay: record, retry_exponential_backoff: bool, start_date: string, sub_dag: record, task_id: string, template_fields: list, trigger_rule: string, ui_color: string, ui_fgcolor: string, wait_for_downstream: bool, weight_rule: string>> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
+  if ($dag_id | is-empty) { error make --unspanned { msg: "path parameter 'dag_id' must be non-empty" } }
   let qp = [(serialize-qp "order_by" $order_by "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({dag_id: (encode-path-segment $dag_id)} | format pattern "/dags/{dag_id}/tasks") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"order_by": $order_by} | compact), body: null}
 }
 
 # Get simplified representation of a task
@@ -1217,10 +1303,12 @@ export def "dags-tasks get" [
 ]: nothing -> record<class_ref: record<class_name: string, module_path: string>, depends_on_past: bool, downstream_task_ids: list<string>, end_date: string, execution_timeout: record<__type: string, days: int, microseconds: int, seconds: int>, extra_links: table<class_ref: record>, is_mapped: bool, owner: string, pool: string, pool_slots: float, priority_weight: float, queue: string, retries: float, retry_delay: record<__type: string, days: int, microseconds: int, seconds: int>, retry_exponential_backoff: bool, start_date: string, sub_dag: record<dag_id: string, default_view: string, description: string, file_token: string, fileloc: string, has_import_errors: bool, has_task_concurrency_limits: bool, is_active: bool, is_paused: bool, is_subdag: bool, last_expired: string, last_parsed_time: string, last_pickled: string, max_active_runs: int, max_active_tasks: int, next_dagrun: string, next_dagrun_create_after: string, next_dagrun_data_interval_end: string, next_dagrun_data_interval_start: string, owners: list<string>, pickle_id: string, root_dag_id: string, schedule_interval: any, scheduler_lock: bool, tags: list<record>, timetable_description: string>, task_id: string, template_fields: list<string>, trigger_rule: string, ui_color: string, ui_fgcolor: string, wait_for_downstream: bool, weight_rule: string> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
+  if ($dag_id | is-empty) { error make --unspanned { msg: "path parameter 'dag_id' must be non-empty" } }
+  if ($task_id | is-empty) { error make --unspanned { msg: "path parameter 'task_id' must be non-empty" } }
   let full_url = (build-url $base ({dag_id: (encode-path-segment $dag_id), task_id: (encode-path-segment $task_id)} | format pattern "/dags/{dag_id}/tasks/{task_id}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
 }
 
 # Set a state of task instances
@@ -1251,12 +1339,13 @@ export def "dags-update-task-instances-state create-update" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
+  if ($dag_id | is-empty) { error make --unspanned { msg: "path parameter 'dag_id' must be non-empty" } }
   let full_url = (build-url $base ({dag_id: (encode-path-segment $dag_id)} | format pattern "/dags/{dag_id}/updateTaskInstancesState"))
   let req_body = {"dag_run_id": $dag_run_id, "dry_run": $body_dry_run, "execution_date": $execution_date, "include_downstream": $include_downstream, "include_future": $include_future, "include_past": $include_past, "include_upstream": $include_upstream, "new_state": $new_state, "task_id": $task_id} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: {}, body: $req_body}
 }
 
 # List DAG runs (batch)
@@ -1293,7 +1382,7 @@ export def "dags-dag-runs-list get-batch" [
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: {}, body: $req_body}
 }
 
 # List task instances (batch)
@@ -1331,7 +1420,7 @@ export def "dags-dag-runs-task-instances-list get-batch" [
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: {}, body: $req_body}
 }
 
 # List datasets
@@ -1359,7 +1448,7 @@ export def "datasets list" [
   let full_url = (build-url $base "/datasets" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"limit": $limit, "offset": $offset, "order_by": $order_by, "uri_pattern": $uri_pattern} | compact), body: null}
 }
 
 # Get dataset events
@@ -1391,7 +1480,7 @@ export def "datasets-events get" [
   let full_url = (build-url $base "/datasets/events" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"limit": $limit, "offset": $offset, "order_by": $order_by, "dataset_id": $dataset_id, "source_dag_id": $source_dag_id, "source_task_id": $source_task_id, "source_run_id": $source_run_id, "source_map_index": $source_map_index} | compact), body: null}
 }
 
 # Get a dataset
@@ -1412,10 +1501,11 @@ export def "datasets get" [
 ]: nothing -> record<consuming_dags: table<created_at: string, dag_id: string, updated_at: string>, created_at: string, extra: record, id: int, producing_tasks: table<created_at: string, dag_id: string, task_id: string, updated_at: string>, updated_at: string, uri: string> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
+  if ($uri | is-empty) { error make --unspanned { msg: "path parameter 'uri' must be non-empty" } }
   let full_url = (build-url $base ({uri: (encode-path-segment $uri)} | format pattern "/datasets/{uri}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
 }
 
 # List log entries
@@ -1442,7 +1532,7 @@ export def "event-logs list" [
   let full_url = (build-url $base "/eventLogs" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"limit": $limit, "offset": $offset, "order_by": $order_by} | compact), body: null}
 }
 
 # Get a log entry
@@ -1463,10 +1553,11 @@ export def "event-logs get" [
 ]: nothing -> record<dag_id: string, event: string, event_log_id: int, execution_date: string, extra: string, owner: string, task_id: string, when: string> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
+  if ($event_log_id | is-empty) { error make --unspanned { msg: "path parameter 'event_log_id' must be non-empty" } }
   let full_url = (build-url $base ({event_log_id: (encode-path-segment $event_log_id)} | format pattern "/eventLogs/{event_log_id}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
 }
 
 # Get instance status
@@ -1489,7 +1580,7 @@ export def "health get" [
   let full_url = (build-url $base "/health")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
 }
 
 # List import errors
@@ -1516,7 +1607,7 @@ export def "import-errors list" [
   let full_url = (build-url $base "/importErrors" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"limit": $limit, "offset": $offset, "order_by": $order_by} | compact), body: null}
 }
 
 # Get an import error
@@ -1537,10 +1628,11 @@ export def "import-errors get" [
 ]: nothing -> record<filename: string, import_error_id: int, stack_trace: string, timestamp: string> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
+  if ($import_error_id | is-empty) { error make --unspanned { msg: "path parameter 'import_error_id' must be non-empty" } }
   let full_url = (build-url $base ({import_error_id: (encode-path-segment $import_error_id)} | format pattern "/importErrors/{import_error_id}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
 }
 
 # List permissions
@@ -1566,7 +1658,7 @@ export def "permissions get" [
   let full_url = (build-url $base "/permissions" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"limit": $limit, "offset": $offset} | compact), body: null}
 }
 
 # Get a list of loaded plugins
@@ -1592,7 +1684,7 @@ export def "plugins get" [
   let full_url = (build-url $base "/plugins" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"limit": $limit, "offset": $offset} | compact), body: null}
 }
 
 # List pools
@@ -1619,7 +1711,7 @@ export def "pools list" [
   let full_url = (build-url $base "/pools" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"limit": $limit, "offset": $offset, "order_by": $order_by} | compact), body: null}
 }
 
 # Create a pool
@@ -1648,7 +1740,7 @@ export def "pools create" [
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: {}, body: $req_body}
 }
 
 # Delete a pool
@@ -1669,10 +1761,11 @@ export def "pools delete" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
+  if ($pool_name | is-empty) { error make --unspanned { msg: "path parameter 'pool_name' must be non-empty" } }
   let full_url = (build-url $base ({pool_name: (encode-path-segment $pool_name)} | format pattern "/pools/{pool_name}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
 }
 
 # Get a pool
@@ -1693,10 +1786,11 @@ export def "pools get" [
 ]: nothing -> record<description: string, name: string, occupied_slots: int, open_slots: int, queued_slots: int, slots: int, used_slots: int> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
+  if ($pool_name | is-empty) { error make --unspanned { msg: "path parameter 'pool_name' must be non-empty" } }
   let full_url = (build-url $base ({pool_name: (encode-path-segment $pool_name)} | format pattern "/pools/{pool_name}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
 }
 
 # Update a pool
@@ -1722,13 +1816,14 @@ export def "pools update" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
+  if ($pool_name | is-empty) { error make --unspanned { msg: "path parameter 'pool_name' must be non-empty" } }
   let qp = [(serialize-qp "update_mask" $update_mask "csv")] | flatten | str join "&"
   let full_url = (build-url $base ({pool_name: (encode-path-segment $pool_name)} | format pattern "/pools/{pool_name}") $qp)
   let req_body = {"description": $description, "name": $name, "slots": $slots} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "patch" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body
+  do-request "patch" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: ({"update_mask": $update_mask} | compact), body: $req_body}
 }
 
 # List providers
@@ -1751,7 +1846,7 @@ export def "providers get" [
   let full_url = (build-url $base "/providers")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
 }
 
 # List roles
@@ -1778,7 +1873,7 @@ export def "roles list" [
   let full_url = (build-url $base "/roles" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"limit": $limit, "offset": $offset, "order_by": $order_by} | compact), body: null}
 }
 
 # Create a role
@@ -1807,7 +1902,7 @@ export def "roles create" [
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: {}, body: $req_body}
 }
 
 # Delete a role
@@ -1828,10 +1923,11 @@ export def "roles delete" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
+  if ($role_name | is-empty) { error make --unspanned { msg: "path parameter 'role_name' must be non-empty" } }
   let full_url = (build-url $base ({role_name: (encode-path-segment $role_name)} | format pattern "/roles/{role_name}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
 }
 
 # Get a role
@@ -1852,10 +1948,11 @@ export def "roles get" [
 ]: nothing -> record<actions: table<action: record, resource: record>, name: string> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
+  if ($role_name | is-empty) { error make --unspanned { msg: "path parameter 'role_name' must be non-empty" } }
   let full_url = (build-url $base ({role_name: (encode-path-segment $role_name)} | format pattern "/roles/{role_name}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
 }
 
 # Update a role
@@ -1881,13 +1978,14 @@ export def "roles update" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
+  if ($role_name | is-empty) { error make --unspanned { msg: "path parameter 'role_name' must be non-empty" } }
   let qp = [(serialize-qp "update_mask" $update_mask "csv")] | flatten | str join "&"
   let full_url = (build-url $base ({role_name: (encode-path-segment $role_name)} | format pattern "/roles/{role_name}") $qp)
   let req_body = {"actions": $actions, "name": $name} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "patch" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body
+  do-request "patch" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: ({"update_mask": $update_mask} | compact), body: $req_body}
 }
 
 # List users
@@ -1914,7 +2012,7 @@ export def "users list" [
   let full_url = (build-url $base "/users" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"limit": $limit, "offset": $offset, "order_by": $order_by} | compact), body: null}
 }
 
 # Create a user
@@ -1947,7 +2045,7 @@ export def "users create" [
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: {}, body: $req_body}
 }
 
 # Delete a user
@@ -1968,10 +2066,11 @@ export def "users delete" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
+  if ($username | is-empty) { error make --unspanned { msg: "path parameter 'username' must be non-empty" } }
   let full_url = (build-url $base ({username: (encode-path-segment $username)} | format pattern "/users/{username}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
 }
 
 # Get a user
@@ -1992,10 +2091,11 @@ export def "users get" [
 ]: nothing -> record<active: bool, changed_on: string, created_on: string, email: string, failed_login_count: int, first_name: string, last_login: string, last_name: string, login_count: int, roles: table<name: string>, username: string> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
+  if ($username | is-empty) { error make --unspanned { msg: "path parameter 'username' must be non-empty" } }
   let full_url = (build-url $base ({username: (encode-path-segment $username)} | format pattern "/users/{username}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
 }
 
 # Update a user
@@ -2025,13 +2125,14 @@ export def "users update" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
+  if ($username | is-empty) { error make --unspanned { msg: "path parameter 'username' must be non-empty" } }
   let qp = [(serialize-qp "update_mask" $update_mask "csv")] | flatten | str join "&"
   let full_url = (build-url $base ({username: (encode-path-segment $username)} | format pattern "/users/{username}") $qp)
   let req_body = {"email": $email, "first_name": $first_name, "last_name": $last_name, "roles": $roles, "username": $body_username, "password": $password} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "patch" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body
+  do-request "patch" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: ({"update_mask": $update_mask} | compact), body: $req_body}
 }
 
 # List variables
@@ -2058,7 +2159,7 @@ export def "variables list" [
   let full_url = (build-url $base "/variables" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"limit": $limit, "offset": $offset, "order_by": $order_by} | compact), body: null}
 }
 
 # Create a variable
@@ -2087,7 +2188,7 @@ export def "variables create" [
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: {}, body: $req_body}
 }
 
 # Delete a variable
@@ -2108,10 +2209,11 @@ export def "variables delete" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
+  if ($variable_key | is-empty) { error make --unspanned { msg: "path parameter 'variable_key' must be non-empty" } }
   let full_url = (build-url $base ({variable_key: (encode-path-segment $variable_key)} | format pattern "/variables/{variable_key}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
 }
 
 # Get a variable
@@ -2132,10 +2234,11 @@ export def "variables get" [
 ]: nothing -> record<description: string, key: string, value: string> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
+  if ($variable_key | is-empty) { error make --unspanned { msg: "path parameter 'variable_key' must be non-empty" } }
   let full_url = (build-url $base ({variable_key: (encode-path-segment $variable_key)} | format pattern "/variables/{variable_key}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
 }
 
 # Update a variable
@@ -2161,13 +2264,14 @@ export def "variables update" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
+  if ($variable_key | is-empty) { error make --unspanned { msg: "path parameter 'variable_key' must be non-empty" } }
   let qp = [(serialize-qp "update_mask" $update_mask "csv")] | flatten | str join "&"
   let full_url = (build-url $base ({variable_key: (encode-path-segment $variable_key)} | format pattern "/variables/{variable_key}") $qp)
   let req_body = {"description": $description, "key": $key, "value": $value} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "patch" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body
+  do-request "patch" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: ({"update_mask": $update_mask} | compact), body: $req_body}
 }
 
 # Get version information
@@ -2190,5 +2294,5 @@ export def "version get" [
   let full_url = (build-url $base "/version")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
 }

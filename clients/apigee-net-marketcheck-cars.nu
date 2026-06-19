@@ -3,18 +3,19 @@
 # Auth: --token flag or $env.MARKETCHECK_APIS_TOKEN
 
 const BASE_URL = "https://marketcheck-prod.apigee.net/v2"
-const DEFAULT_AUTH = "basic"
 
-# Build auth: returns {headers: record, query: string}
+# Build auth: returns {scheme: string, headers: record, query: string, location: string}.
+# `location` is "header" | "query" | "cookie" | "none" and tells dry-run callers
+# where the token went without inspecting headers/query themselves.
 def build-auth [token?: string, auth_scheme?: string]: nothing -> record {
   let token_val = if ($token != null) and ($token | is-not-empty) { $token } else { $env | get -o MARKETCHECK_APIS_TOKEN | default "" }
   let scheme = ($auth_scheme | default "bearer")
-  if ($scheme == "none") or ($token_val | is-empty) { return {headers: {}, query: ""} }
+  if ($scheme == "none") or ($token_val | is-empty) { return {scheme: $scheme, headers: {}, query: "", location: "none"} }
   match $scheme {
-    "basic" => { {headers: {Authorization: $"Basic ($token_val)"}, query: ""} }
-    "basic-credentials" => { {headers: {Authorization: $"Basic ($token_val | encode base64)"}, query: ""} }
-    "none" => { {headers: {}, query: ""} }
-    _ => { {headers: {Authorization: $"Bearer ($token_val)"}, query: ""} }
+    "basic" => { {scheme: $scheme, headers: {Authorization: $"Basic ($token_val)"}, query: "", location: "header"} }
+    "basic-credentials" => { {scheme: $scheme, headers: {Authorization: $"Basic ($token_val | encode base64)"}, query: "", location: "header"} }
+    "none" => { {scheme: $scheme, headers: {}, query: "", location: "none"} }
+    _ => { {scheme: $scheme, headers: {Authorization: $"Bearer ($token_val)"}, query: "", location: "header"} }
   }
 }
 
@@ -23,8 +24,9 @@ def build-auth [token?: string, auth_scheme?: string]: nothing -> record {
 # ([A-Za-z0-9-._~]) stay literal; everything else gets %XX.
 def serialize-qp [name: string, value: any, style: string]: nothing -> list<string> {
   if ($value == null) { return [] }
-  let n = (encode-path-segment $name)
   let is_list = ($value | describe | str starts-with "list")
+  if $is_list and ($value | is-empty) { return [] }
+  let n = (encode-path-segment $name)
   if ($value | describe | str starts-with "record") { return ($value | transpose k v | each { $"($n)[(encode-path-segment $in.k)]=(encode-path-segment $in.v)" }) }
   if not $is_list { return [$"($n)=(encode-path-segment $value)"] }
   match $style {
@@ -55,22 +57,42 @@ def build-url [base: string, path: string, query?: string]: nothing -> string {
   if ($query != null) and ($query | is-not-empty) { $result | upsert query $query | url join } else { $result | url join }
 }
 
+# Build the dry-run record returned by --dry-run. Shape:
+#   {dry_run: true, method, url, query: <record>, headers, body, content_type, timeout,
+#    auth: {scheme, location}}
+# `meta` carries logical-form data (the query record by spec name, the pre-serialization
+# body) that do-request itself cannot reconstruct from its wire-format args.
+def build-dry-run-record [method: string, url: string, auth: record, content_type: string, timeout: duration, meta?: record]: nothing -> record {
+  let m = ($meta | default {})
+  {
+    dry_run: true
+    method: $method
+    url: $url
+    query: ($m | get -o query | default {})
+    headers: $auth.headers
+    body: ($m | get -o body)
+    content_type: $content_type
+    timeout: $timeout
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+}
+
 # Execute HTTP request with method dispatch
-def do-request [method: string, url: string, auth: record, insecure: bool, raw: bool, dry_run: bool, max_time?: duration, allow_errors?: bool, full?: bool, content_type?: string, body?: any]: nothing -> any {
+def do-request [method: string, url: string, auth: record, insecure: bool, raw: bool, dry_run: bool, max_time?: duration, allow_errors?: bool, full?: bool, content_type?: string, body?: any, dry_run_meta?: record]: nothing -> any {
   let req_url = if ($auth.query | is-not-empty) { if ($url | str contains "?") { $"($url)&($auth.query)" } else { $"($url)?($auth.query)" } } else { $url }
   let timeout = ($max_time | default 30min)
   let ct = ($content_type | default "application/json")
-  if $dry_run { return {method: $method, url: $req_url, headers: $auth.headers, query_string: $auth.query, content_type: $ct, timeout: $timeout, body: $body} }
+  if $dry_run { return (build-dry-run-record $method $req_url $auth $ct $timeout $dry_run_meta) }
   let resp = match $method {
     "get" => { http get --headers $auth.headers --full --allow-errors --max-time $timeout --insecure=$insecure --raw=$raw $req_url }
-    "head" => { http head --headers $auth.headers --max-time $timeout --insecure=$insecure $req_url }
-    "options" => { http options --headers $auth.headers --max-time $timeout --insecure=$insecure $req_url }
+    "head" => { http head --headers $auth.headers --full --allow-errors --max-time $timeout --insecure=$insecure $req_url }
+    "options" => { http options --headers $auth.headers --full --allow-errors --max-time $timeout --insecure=$insecure $req_url }
     "post" => { if ($body | is-empty) { http post --headers $auth.headers --full --allow-errors --max-time $timeout --insecure=$insecure --raw=$raw $req_url "" } else { http post --headers $auth.headers --content-type $ct --full --allow-errors --max-time $timeout --insecure=$insecure --raw=$raw $req_url $body } }
     "put" => { if ($body | is-empty) { http put --headers $auth.headers --full --allow-errors --max-time $timeout --insecure=$insecure --raw=$raw $req_url "" } else { http put --headers $auth.headers --content-type $ct --full --allow-errors --max-time $timeout --insecure=$insecure --raw=$raw $req_url $body } }
     "patch" => { if ($body | is-empty) { http patch --headers $auth.headers --full --allow-errors --max-time $timeout --insecure=$insecure --raw=$raw $req_url "" } else { http patch --headers $auth.headers --content-type $ct --full --allow-errors --max-time $timeout --insecure=$insecure --raw=$raw $req_url $body } }
     "delete" => { if ($body | is-empty) { http delete --headers $auth.headers --full --allow-errors --max-time $timeout --insecure=$insecure --raw=$raw $req_url } else { http delete --headers $auth.headers --content-type $ct --data $body --full --allow-errors --max-time $timeout --insecure=$insecure --raw=$raw $req_url } }
   }
-  if ($method in ["head" "options"]) { return $resp }
+  if ($method == "head") and (not $full) and (not $allow_errors) and $resp.status < 400 { return $resp.headers }
   if $allow_errors { $resp } else if $resp.status >= 400 { error make --unspanned { msg: $"HTTP ($resp.status): ($resp.body)" } } else if $full { {status: $resp.status, headers: $resp.headers, body: $resp.body} } else if $resp.status == 204 { null } else { $resp.body }
 }
 
@@ -280,7 +302,7 @@ export def "car-dealer-inventory-active get" [
   let full_url = (build-url $base "/car/dealer/inventory/active" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"api_key": $api_key, "append_api_key": $append_api_key, "latitude": $latitude, "longitude": $longitude, "radius": $radius, "zip": $zip, "include_lease": $include_lease, "include_finance": $include_finance, "lease_term": $lease_term, "lease_down_payment": $lease_down_payment, "lease_emp": $lease_emp, "finance_loan_term": $finance_loan_term, "finance_loan_apr": $finance_loan_apr, "finance_emp": $finance_emp, "finance_down_payment": $finance_down_payment, "finance_down_payment_per": $finance_down_payment_per, "car_type": $car_type, "carfax_1_owner": $carfax_1_owner, "carfax_clean_title": $carfax_clean_title, "year_range": $year_range, "year": $year, "make": $make, "model": $model, "trim": $trim, "dealer_id": $dealer_id, "vin": $vin, "source": $qp_source, "body_type": $body_type, "body_subtype": $body_subtype, "vehicle_type": $vehicle_type, "vins": $vins, "taxonomy_vins": $taxonomy_vins, "mm": $mm, "ymm": $ymm, "ymmt": $ymmt, "match": $qp_match, "cylinders": $cylinders, "transmission": $transmission, "doors": $doors, "drivetrain": $drivetrain, "exterior_color": $exterior_color, "interior_color": $interior_color, "base_exterior_color": $base_exterior_color, "base_interior_color": $base_interior_color, "engine": $engine, "engine_size": $engine_size, "engine_aspiration": $engine_aspiration, "engine_block": $engine_block, "highway_mpg_range": $highway_mpg_range, "city_mpg_range": $city_mpg_range, "miles_range": $miles_range, "price_range": $price_range, "msrp_range": $msrp_range, "dom_range": $dom_range, "sort_by": $sort_by, "sort_order": $sort_order, "rows": $rows, "start": $start, "include_non_vin_listings": $include_non_vin_listings, "msa_code": $msa_code, "facets": $facets, "range_facets": $range_facets, "facet_sort": $facet_sort, "stats": $stats, "country": $country, "plot": $plot, "nodedup": $nodedup, "dedup": $dedup, "owned": $owned, "state": $state, "city": $city, "dealer_name": $dealer_name, "dealership_group_name": $dealership_group_name, "trim_o": $trim_o, "trim_r": $trim_r, "dom_active_range": $dom_active_range, "dom_180_range": $dom_180_range, "exclude_certified": $exclude_certified, "fuel_type": $fuel_type, "dealer_type": $dealer_type, "photo_links": $photo_links, "photo_links_cached": $photo_links_cached, "stock_no": $stock_no, "last_seen_range": $last_seen_range, "first_seen_range": $first_seen_range, "first_seen_at_source_range": $first_seen_at_source_range, "first_seen_at_mc_range": $first_seen_at_mc_range, "last_seen_days": $last_seen_days, "first_seen_days": $first_seen_days, "first_seen_at_source_days": $first_seen_at_source_days, "first_seen_at_mc_days": $first_seen_at_mc_days, "include_relevant_links": $include_relevant_links, "inventory_count_range": $inventory_count_range, "in_transit": $in_transit, "seating_capacity": $seating_capacity, "engine_size_range": $engine_size_range, "powertrain_type": $powertrain_type, "min_photo_links": $min_photo_links, "min_photo_links_cached": $min_photo_links_cached} | compact), body: null}
 }
 
 # Recall info by vin
@@ -303,11 +325,12 @@ export def "car-recall get-history" [
 ]: nothing -> record<facets: record<base_exterior_color: list<record>, base_interior_color: list<record>, body_subtype: list<record>, body_type: list<record>, car_type: list<record>, carfax_1_owner: list<record>, carfax_clean_title: list<record>, city: list<record>, cylinders: list<record>, data_source: list<record>, dealer_id: list<record>, dealer_type: list<record>, doors: list<record>, drivetrain: list<record>, engine: list<record>, engine_aspiration: list<record>, engine_block: list<record>, engine_size: list<record>, exterior_color: list<record>, fuel_type: list<record>, interior_color: list<record>, make: list<record>, model: list<record>, seller_name: list<record>, seller_name_o: list<record>, seller_type: list<record>, source: list<record>, state: list<record>, transmission: list<record>, trim: list<record>, trim_o: list<record>, trim_r: list<record>, vehicle_type: list<record>, year: list<record>>, listings: table<base_ext_color: string, base_int_color: string, build: record, carfax_1_owner: bool, carfax_clean_title: bool, data_source: string, dealer: record, dist: float, dom: int, dom_180: int, dom_active: int, exterior_color: string, financing_options: list, first_seen_at: int, first_seen_at_date: string, heading: string, id: string, in_transit: bool, interior_color: string, inventory_type: string, is_certified: int, is_translated: bool, last_seen_at: int, last_seen_at_date: string, leasing_options: list, media: record, miles: int, model_code: string, msrp: int, price: int, price_change_percent: float, ref_miles: string, ref_miles_dt: int, ref_price: string, ref_price_dt: int, scraped_at: float, scraped_at_date: string, seller_type: string, source: string, stock_no: string, title_type: string, vdp_url: string, vin: string>, num_found: int, range_facets: record<dom: record, dom_180: record, dom_active: record, finance_down_payment: record, finance_emp: record, finance_loan_apr: record, finance_loan_term: record, lease_down_payment: record, lease_emp: record, lease_term: record, miles: record, msrp: record, price: record>, stats: record<dom: record<count: int, max: int, mean: float, median: float, min: int, missing: int, stddev: float, sum: int, sum_of_squares: float>, dom_180: record<count: int, max: int, mean: float, median: float, min: int, missing: int, stddev: float, sum: int, sum_of_squares: float>, dom_active: record<count: int, max: int, mean: float, median: float, min: int, missing: int, stddev: float, sum: int, sum_of_squares: float>, finance_down_payment: record<count: int, max: int, mean: float, median: float, min: int, missing: int, stddev: float, sum: int, sum_of_squares: float>, finance_down_payment_per: record<count: int, max: int, mean: float, median: float, min: int, missing: int, stddev: float, sum: int, sum_of_squares: float>, finance_emp: record<count: int, max: int, mean: float, median: float, min: int, missing: int, stddev: float, sum: int, sum_of_squares: float>, finance_loan_apr: record<count: int, max: int, mean: float, median: float, min: int, missing: int, stddev: float, sum: int, sum_of_squares: float>, finance_loan_term: record<count: int, max: int, mean: float, median: float, min: int, missing: int, stddev: float, sum: int, sum_of_squares: float>, lease_down_payment: record<count: int, max: int, mean: float, median: float, min: int, missing: int, stddev: float, sum: int, sum_of_squares: float>, lease_emp: record<count: int, max: int, mean: float, median: float, min: int, missing: int, stddev: float, sum: int, sum_of_squares: float>, lease_term: record<count: int, max: int, mean: float, median: float, min: int, missing: int, stddev: float, sum: int, sum_of_squares: float>, miles: record<count: int, max: int, mean: float, median: float, min: int, missing: int, stddev: float, sum: int, sum_of_squares: float>, msrp: record<count: int, max: int, mean: float, median: float, min: int, missing: int, stddev: float, sum: int, sum_of_squares: float>, price: record<count: int, max: int, mean: float, median: float, min: int, missing: int, stddev: float, sum: int, sum_of_squares: float>>> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
+  if ($vin | is-empty) { error make --unspanned { msg: "path parameter 'vin' must be non-empty" } }
   let qp = [(serialize-qp "api_key" $api_key "scalar") (serialize-qp "page" $page "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({vin: (encode-path-segment $vin)} | format pattern "/car/recall/{vin}") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"api_key": $api_key, "page": $page} | compact), body: null}
 }
 
 # get client filters
@@ -333,7 +356,7 @@ export def "client-configure-get get" [
   let full_url = (build-url $base "/client/configure/get" $qp)
   let accept_val = "text/csv"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"api_key": $api_key, "country": $country} | compact), body: null}
 }
 
 # set client filters
@@ -365,7 +388,7 @@ export def "client-configure-set update" [
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let req_body = if ($req_body | describe | str starts-with "record") { $req_body } else { {} }
   let mp = (build-multipart-body $req_body ["csvfile"] $dry_run)
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full $mp.content_type $mp.body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full $mp.content_type $mp.body {query: ({"api_key": $api_key, "country": $country} | compact), body: $req_body}
 }
 
 # CRM check of a particular vin
@@ -388,11 +411,12 @@ export def "crm-check-car check" [
 ]: nothing -> record<for_sale: string> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
+  if ($vin | is-empty) { error make --unspanned { msg: "path parameter 'vin' must be non-empty" } }
   let qp = [(serialize-qp "api_key" $api_key "scalar") (serialize-qp "sale_date" $sale_date "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({vin: (encode-path-segment $vin)} | format pattern "/crm_check/car/{vin}") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"api_key": $api_key, "sale_date": $sale_date} | compact), body: null}
 }
 
 # Dealer by id
@@ -414,11 +438,12 @@ export def "dealer-car-uk get" [
 ]: nothing -> record<city: string, country: string, data_source: string, dealer_type: string, dealership_group_name: string, distance: float, id: string, inventory_url: string, latitude: string, listing_count: int, location_ll: string, longitude: string, seller_email: string, seller_name: string, seller_phone: string, state: string, status: string, street: string, zip: string> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
+  if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
   let qp = [(serialize-qp "api_key" $api_key "scalar") (serialize-qp "provider" $provider "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/dealer/car/uk/{id}") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"api_key": $api_key, "provider": $provider} | compact), body: null}
 }
 
 # Dealer by id
@@ -441,11 +466,12 @@ export def "dealer-car get" [
 ]: nothing -> record<city: string, country: string, data_source: string, dealer_type: string, dealership_group_name: string, distance: float, id: string, inventory_url: string, latitude: string, listing_count: int, location_ll: string, longitude: string, seller_email: string, seller_name: string, seller_phone: string, state: string, status: string, street: string, zip: string> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
+  if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
   let qp = [(serialize-qp "api_key" $api_key "scalar") (serialize-qp "provider" $provider "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/dealer/car/{id}") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"api_key": $api_key, "provider": $provider} | compact), body: null}
 }
 
 # Dealer by id
@@ -467,11 +493,12 @@ export def "dealer-heavy-equipment get" [
 ]: nothing -> record<city: string, country: string, data_source: string, dealer_type: string, dealership_group_name: string, distance: float, id: string, inventory_url: string, latitude: string, listing_count: int, location_ll: string, longitude: string, seller_email: string, seller_name: string, seller_phone: string, state: string, status: string, street: string, zip: string> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
+  if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
   let qp = [(serialize-qp "api_key" $api_key "scalar") (serialize-qp "provider" $provider "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/dealer/heavy-equipment/{id}") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"api_key": $api_key, "provider": $provider} | compact), body: null}
 }
 
 # Dealer by id
@@ -493,11 +520,12 @@ export def "dealer-motorcycle get" [
 ]: nothing -> record<city: string, country: string, data_source: string, dealer_type: string, dealership_group_name: string, distance: float, id: string, inventory_url: string, latitude: string, listing_count: int, location_ll: string, longitude: string, seller_email: string, seller_name: string, seller_phone: string, state: string, status: string, street: string, zip: string> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
+  if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
   let qp = [(serialize-qp "api_key" $api_key "scalar") (serialize-qp "provider" $provider "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/dealer/motorcycle/{id}") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"api_key": $api_key, "provider": $provider} | compact), body: null}
 }
 
 # Dealer by id
@@ -519,11 +547,12 @@ export def "dealer-rv get" [
 ]: nothing -> record<city: string, country: string, data_source: string, dealer_type: string, dealership_group_name: string, distance: float, id: string, inventory_url: string, latitude: string, listing_count: int, location_ll: string, longitude: string, seller_email: string, seller_name: string, seller_phone: string, state: string, status: string, street: string, zip: string> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
+  if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
   let qp = [(serialize-qp "api_key" $api_key "scalar") (serialize-qp "provider" $provider "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/dealer/rv/{id}") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"api_key": $api_key, "provider": $provider} | compact), body: null}
 }
 
 # Find car dealers around
@@ -565,7 +594,7 @@ export def "dealers-car list" [
   let full_url = (build-url $base "/dealers/car" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"api_key": $api_key, "latitude": $latitude, "longitude": $longitude, "radius": $radius, "rows": $rows, "start": $start, "country": $country, "dealer_type": $dealer_type, "city": $city, "state": $state, "listing_count_range": $listing_count_range, "inventory_url": $inventory_url, "zip": $zip, "sort_by": $sort_by, "sort_order": $sort_order, "provider": $provider, "facets": $facets, "range_facets": $range_facets} | compact), body: null}
 }
 
 # Find car dealers around
@@ -606,7 +635,7 @@ export def "dealers-car-uk get" [
   let full_url = (build-url $base "/dealers/car/uk" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"api_key": $api_key, "latitude": $latitude, "longitude": $longitude, "radius": $radius, "rows": $rows, "start": $start, "country": $country, "dealer_type": $dealer_type, "city": $city, "county": $county, "listing_count_range": $listing_count_range, "inventory_url": $inventory_url, "postal_code": $postal_code, "sort_by": $sort_by, "sort_order": $sort_order, "provider": $provider, "facets": $facets, "range_facets": $range_facets} | compact), body: null}
 }
 
 # Find car dealers around
@@ -647,7 +676,7 @@ export def "dealers-heavy-equipment get" [
   let full_url = (build-url $base "/dealers/heavy-equipment" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"api_key": $api_key, "latitude": $latitude, "longitude": $longitude, "radius": $radius, "rows": $rows, "start": $start, "country": $country, "dealer_type": $dealer_type, "city": $city, "state": $state, "listing_count_range": $listing_count_range, "inventory_url": $inventory_url, "zip": $zip, "sort_by": $sort_by, "sort_order": $sort_order, "provider": $provider, "facets": $facets, "range_facets": $range_facets} | compact), body: null}
 }
 
 # Find car dealers around
@@ -688,7 +717,7 @@ export def "dealers-motorcycle get" [
   let full_url = (build-url $base "/dealers/motorcycle" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"api_key": $api_key, "latitude": $latitude, "longitude": $longitude, "radius": $radius, "rows": $rows, "start": $start, "country": $country, "dealer_type": $dealer_type, "city": $city, "state": $state, "listing_count_range": $listing_count_range, "inventory_url": $inventory_url, "zip": $zip, "sort_by": $sort_by, "sort_order": $sort_order, "provider": $provider, "facets": $facets, "range_facets": $range_facets} | compact), body: null}
 }
 
 # Find car dealers around
@@ -729,7 +758,7 @@ export def "dealers-rv get" [
   let full_url = (build-url $base "/dealers/rv" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"api_key": $api_key, "latitude": $latitude, "longitude": $longitude, "radius": $radius, "rows": $rows, "start": $start, "country": $country, "dealer_type": $dealer_type, "city": $city, "state": $state, "listing_count_range": $listing_count_range, "inventory_url": $inventory_url, "zip": $zip, "sort_by": $sort_by, "sort_order": $sort_order, "provider": $provider, "facets": $facets, "range_facets": $range_facets} | compact), body: null}
 }
 
 # EPI VIN Decoder
@@ -751,11 +780,12 @@ export def "decode-car-epi-specs get-via" [
 ]: nothing -> record<antibrake_sys: string, body_subtype: string, body_type: string, city_miles: string, city_mpg: int, cylinders: int, doors: int, drivetrain: string, engine: string, engine_aspiration: string, engine_block: string, engine_measure: string, engine_size: float, fuel_type: string, highway_miles: string, highway_mpg: int, made_in: string, make: string, model: string, opt_seating: string, overall_height: string, overall_length: string, overall_width: string, powertrain_type: string, short_trim: string, std_seating: string, steering_type: string, tank_size: string, transmission: string, trim: string, trim_r: string, vehicle_type: string, year: int> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
+  if ($vin | is-empty) { error make --unspanned { msg: "path parameter 'vin' must be non-empty" } }
   let qp = [(serialize-qp "api_key" $api_key "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({vin: (encode-path-segment $vin)} | format pattern "/decode/car/epi/{vin}/specs") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"api_key": $api_key} | compact), body: null}
 }
 
 # NeoVIN Decoder
@@ -779,11 +809,12 @@ export def "decode-car-neovin-specs get-via-neo" [
 ]: nothing -> record<available_options_details: record, body_subtype: string, body_type: string, city_mpg: float, combined_msrp: float, created_at: int, created_at_date: string, decode_version: int, delivery_charges: float, doors: int, drivetrain: string, engine: string, exterior_color: record, features: record, fuel_type: string, height: float, highway_mpg: float, installed_equipment: record, installed_options_details: record, installed_options_msrp: float, interior_color: record, length: float, listing_confidence: string, make: string, manufacturer_code: string, model: string, msrp: float, options_packages: string, package_code: string, package_description: string, seating_capacity: float, squish_vin: string, transmission: string, transmission_confidence: string, transmission_description: string, trim: string, trim_confidence: string, updated_at: int, updated_at_date: string, version: string, version_confidence: string, vin: string, weight: float, width: float, year: int> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
+  if ($vin | is-empty) { error make --unspanned { msg: "path parameter 'vin' must be non-empty" } }
   let qp = [(serialize-qp "api_key" $api_key "scalar") (serialize-qp "include_generic" $include_generic "scalar") (serialize-qp "force_decode" $force_decode "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({vin: (encode-path-segment $vin)} | format pattern "/decode/car/neovin/{vin}/specs") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"api_key": $api_key, "include_generic": $include_generic, "force_decode": $force_decode} | compact), body: null}
 }
 
 # VIN Decoder
@@ -805,11 +836,12 @@ export def "decode-car-specs get" [
 ]: nothing -> record<antibrake_sys: string, body_subtype: string, body_type: string, city_miles: string, city_mpg: int, cylinders: int, doors: int, drivetrain: string, engine: string, engine_aspiration: string, engine_block: string, engine_measure: string, engine_size: float, fuel_type: string, highway_miles: string, highway_mpg: int, made_in: string, make: string, model: string, opt_seating: string, overall_height: string, overall_length: string, overall_width: string, powertrain_type: string, short_trim: string, std_seating: string, steering_type: string, tank_size: string, transmission: string, trim: string, trim_r: string, vehicle_type: string, year: int> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
+  if ($vin | is-empty) { error make --unspanned { msg: "path parameter 'vin' must be non-empty" } }
   let qp = [(serialize-qp "api_key" $api_key "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({vin: (encode-path-segment $vin)} | format pattern "/decode/car/{vin}/specs") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"api_key": $api_key} | compact), body: null}
 }
 
 # Get a cars online listing history
@@ -833,11 +865,12 @@ export def "history-car-uk get" [
 ]: nothing -> table<carfax_1_owner: bool, carfax_clean_title: bool, city: string, data_source: string, dealer_id: int, dom: int, dom_180: int, dom_active: int, exterior_color: string, financing_options: list<record>, first_seen_at: int, first_seen_at_date: string, heading: string, id: string, interior_color: string, inventory_type: string, is_certified: int, is_searchable: string, last_seen_at: int, last_seen_at_date: string, latitude: string, leasing_options: list<record>, longitude: string, miles: int, msrp: int, price: int, ref_miles: string, ref_miles_dt: int, ref_price: string, ref_price_dt: int, scraped_at: int, scraped_at_date: string, seller_name: string, seller_name_o: string, seller_type: string, source: string, state: string, status_date: int, stock_no: string, street: string, trim_r: string, vdp_url: string, vin: string, zip: string> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
+  if ($vrm | is-empty) { error make --unspanned { msg: "path parameter 'vrm' must be non-empty" } }
   let qp = [(serialize-qp "api_key" $api_key "scalar") (serialize-qp "page" $page "scalar") (serialize-qp "include_duplicates" $include_duplicates "scalar") (serialize-qp "sort_order" $sort_order "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({vrm: (encode-path-segment $vrm)} | format pattern "/history/car/uk/{vrm}") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"api_key": $api_key, "page": $page, "include_duplicates": $include_duplicates, "sort_order": $sort_order} | compact), body: null}
 }
 
 # Get a cars online listing history
@@ -863,11 +896,12 @@ export def "history-car get" [
 ]: nothing -> table<carfax_1_owner: bool, carfax_clean_title: bool, city: string, data_source: string, dealer_id: int, dom: int, dom_180: int, dom_active: int, exterior_color: string, financing_options: list<record>, first_seen_at: int, first_seen_at_date: string, heading: string, id: string, interior_color: string, inventory_type: string, is_certified: int, is_searchable: string, last_seen_at: int, last_seen_at_date: string, latitude: string, leasing_options: list<record>, longitude: string, miles: int, msrp: int, price: int, ref_miles: string, ref_miles_dt: int, ref_price: string, ref_price_dt: int, scraped_at: int, scraped_at_date: string, seller_name: string, seller_name_o: string, seller_type: string, source: string, state: string, status_date: int, stock_no: string, street: string, trim_r: string, vdp_url: string, vin: string, zip: string> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
+  if ($vin | is-empty) { error make --unspanned { msg: "path parameter 'vin' must be non-empty" } }
   let qp = [(serialize-qp "api_key" $api_key "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "page" $page "scalar") (serialize-qp "include_duplicates" $include_duplicates "scalar") (serialize-qp "sort_order" $sort_order "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({vin: (encode-path-segment $vin)} | format pattern "/history/car/{vin}") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"api_key": $api_key, "fields": $fields, "page": $page, "include_duplicates": $include_duplicates, "sort_order": $sort_order} | compact), body: null}
 }
 
 # Fetch cached image
@@ -890,11 +924,13 @@ export def "image-cache-car get-cached" [
 ]: nothing -> string {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
+  if ($listing_id | is-empty) { error make --unspanned { msg: "path parameter 'listingID' must be non-empty" } }
+  if ($image_id | is-empty) { error make --unspanned { msg: "path parameter 'imageID' must be non-empty" } }
   let qp = [(serialize-qp "api_key" $api_key "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({listing_id: (encode-path-segment $listing_id), image_id: (encode-path-segment $image_id)} | format pattern "/image/cache/car/{listing_id}/{image_id}") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"api_key": $api_key} | compact), body: null}
 }
 
 # Listing by id
@@ -917,11 +953,12 @@ export def "listing-car-auction get" [
 ]: nothing -> record<base_ext_color: string, base_int_color: string, build: record<antibrake_sys: string, body_subtype: string, body_type: string, city_miles: string, city_mpg: int, cylinders: int, doors: int, drivetrain: string, engine: string, engine_aspiration: string, engine_block: string, engine_measure: string, engine_size: float, fuel_type: string, highway_miles: string, highway_mpg: int, made_in: string, make: string, model: string, opt_seating: string, overall_height: string, overall_length: string, overall_width: string, powertrain_type: string, short_trim: string, std_seating: string, steering_type: string, tank_size: string, transmission: string, trim: string, trim_r: string, vehicle_type: string, year: int>, carfax_1_owner: bool, carfax_clean_title: bool, data_source: string, dealer: record<city: string, country: string, county: string, dealer_type: string, dealership_group_name: string, id: int, latitude: string, longitude: string, msa_code: string, name: string, phone: string, seller_email: string, state: string, street: string, website: string, zip: string>, dom: int, dom_180: int, dom_active: int, exterior_color: string, extra: record<dealer_added_f: list<string>, electronics_f: list<string>, exterior_f: list<string>, features: list<string>, interior_f: list<string>, options: list<string>, safety_f: list<string>, seller_comments: string, standard_f: list<string>, technical_f: list<string>>, financing_options: table<down_payment: float, down_payment_percentage: float, estimated_monthly_payment: float, loan_apr: float, loan_term: int>, first_seen_at: int, first_seen_at_date: string, first_seen_at_mc: int, first_seen_at_mc_date: string, first_seen_at_source: int, first_seen_at_source_date: string, heading: string, id: string, interior_color: string, inventory_type: string, is_certified: int, last_seen_at: int, last_seen_at_date: string, leasing_options: table<down_payment: float, estimated_monthly_payment: float, lease_term: int>, media: record<photo_links: list<string>, photo_links_cached: list<string>>, miles: int, msrp: int, price: int, price_change_percent: float, rank: int, ref_miles: string, ref_miles_dt: int, ref_price: string, ref_price_dt: int, score: float, scraped_at: int, scraped_at_date: string, seller_type: string, source: string, stock_no: string, vdp_url: string, vehicle_registration_mark: string, vin: string> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
+  if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
   let qp = [(serialize-qp "api_key" $api_key "scalar") (serialize-qp "append_api_key" $append_api_key "scalar") (serialize-qp "include_relevant_links" $include_relevant_links "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/listing/car/auction/{id}") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"api_key": $api_key, "append_api_key": $append_api_key, "include_relevant_links": $include_relevant_links} | compact), body: null}
 }
 
 # Long text Listings attributes for Listing with the given id
@@ -942,11 +979,12 @@ export def "listing-car-auction-extra get" [
 ]: nothing -> record<dealer_added_f: list<string>, electronics_f: list<string>, exterior_f: list<string>, features: list<string>, id: string, interior_f: list<string>, options: list<string>, safety_f: list<string>, seller_cmts: string, standard_f: list<string>, technical_f: list<string>> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
+  if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
   let qp = [(serialize-qp "api_key" $api_key "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/listing/car/auction/{id}/extra") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"api_key": $api_key} | compact), body: null}
 }
 
 # Listing media by id
@@ -968,11 +1006,12 @@ export def "listing-car-auction-media get" [
 ]: nothing -> record<id: string, photo_links: list<string>, photo_url: string> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
+  if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
   let qp = [(serialize-qp "api_key" $api_key "scalar") (serialize-qp "append_api_key" $append_api_key "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/listing/car/auction/{id}/media") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"api_key": $api_key, "append_api_key": $append_api_key} | compact), body: null}
 }
 
 # Listing by id
@@ -995,11 +1034,12 @@ export def "listing-car-fsbo get" [
 ]: nothing -> record<base_ext_color: string, base_int_color: string, build: record<antibrake_sys: string, body_subtype: string, body_type: string, city_miles: string, city_mpg: int, cylinders: int, doors: int, drivetrain: string, engine: string, engine_aspiration: string, engine_block: string, engine_measure: string, engine_size: float, fuel_type: string, highway_miles: string, highway_mpg: int, made_in: string, make: string, model: string, opt_seating: string, overall_height: string, overall_length: string, overall_width: string, powertrain_type: string, short_trim: string, std_seating: string, steering_type: string, tank_size: string, transmission: string, trim: string, trim_r: string, vehicle_type: string, year: int>, carfax_1_owner: bool, carfax_clean_title: bool, data_source: string, dealer: record<city: string, country: string, county: string, dealer_type: string, dealership_group_name: string, id: int, latitude: string, longitude: string, msa_code: string, name: string, phone: string, seller_email: string, state: string, street: string, website: string, zip: string>, dom: int, dom_180: int, dom_active: int, exterior_color: string, extra: record<dealer_added_f: list<string>, electronics_f: list<string>, exterior_f: list<string>, features: list<string>, interior_f: list<string>, options: list<string>, safety_f: list<string>, seller_comments: string, standard_f: list<string>, technical_f: list<string>>, financing_options: table<down_payment: float, down_payment_percentage: float, estimated_monthly_payment: float, loan_apr: float, loan_term: int>, first_seen_at: int, first_seen_at_date: string, first_seen_at_mc: int, first_seen_at_mc_date: string, first_seen_at_source: int, first_seen_at_source_date: string, heading: string, id: string, interior_color: string, inventory_type: string, is_certified: int, last_seen_at: int, last_seen_at_date: string, leasing_options: table<down_payment: float, estimated_monthly_payment: float, lease_term: int>, media: record<photo_links: list<string>, photo_links_cached: list<string>>, miles: int, msrp: int, price: int, price_change_percent: float, rank: int, ref_miles: string, ref_miles_dt: int, ref_price: string, ref_price_dt: int, score: float, scraped_at: int, scraped_at_date: string, seller_type: string, source: string, stock_no: string, vdp_url: string, vehicle_registration_mark: string, vin: string> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
+  if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
   let qp = [(serialize-qp "api_key" $api_key "scalar") (serialize-qp "append_api_key" $append_api_key "scalar") (serialize-qp "include_relevant_links" $include_relevant_links "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/listing/car/fsbo/{id}") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"api_key": $api_key, "append_api_key": $append_api_key, "include_relevant_links": $include_relevant_links} | compact), body: null}
 }
 
 # Long text Listings attributes for Listing with the given id
@@ -1020,11 +1060,12 @@ export def "listing-car-fsbo-extra get" [
 ]: nothing -> record<dealer_added_f: list<string>, electronics_f: list<string>, exterior_f: list<string>, features: list<string>, id: string, interior_f: list<string>, options: list<string>, safety_f: list<string>, seller_cmts: string, standard_f: list<string>, technical_f: list<string>> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
+  if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
   let qp = [(serialize-qp "api_key" $api_key "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/listing/car/fsbo/{id}/extra") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"api_key": $api_key} | compact), body: null}
 }
 
 # Listing media by id
@@ -1046,11 +1087,12 @@ export def "listing-car-fsbo-media get" [
 ]: nothing -> record<id: string, photo_links: list<string>, photo_url: string> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
+  if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
   let qp = [(serialize-qp "api_key" $api_key "scalar") (serialize-qp "append_api_key" $append_api_key "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/listing/car/fsbo/{id}/media") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"api_key": $api_key, "append_api_key": $append_api_key} | compact), body: null}
 }
 
 # Listing by id
@@ -1072,11 +1114,12 @@ export def "listing-car-uk get" [
 ]: nothing -> record<base_ext_color: string, base_int_color: string, build: record<antibrake_sys: string, body_subtype: string, body_type: string, city_miles: string, city_mpg: int, cylinders: int, doors: int, drivetrain: string, engine: string, engine_aspiration: string, engine_block: string, engine_measure: string, engine_size: float, fuel_type: string, highway_miles: string, highway_mpg: int, made_in: string, make: string, model: string, opt_seating: string, overall_height: string, overall_length: string, overall_width: string, powertrain_type: string, short_trim: string, std_seating: string, steering_type: string, tank_size: string, transmission: string, trim: string, trim_r: string, vehicle_type: string, year: int>, carfax_1_owner: bool, carfax_clean_title: bool, data_source: string, dealer: record<city: string, country: string, county: string, dealer_type: string, dealership_group_name: string, id: int, latitude: string, longitude: string, msa_code: string, name: string, phone: string, seller_email: string, state: string, street: string, website: string, zip: string>, dom: int, dom_180: int, dom_active: int, exterior_color: string, extra: record<dealer_added_f: list<string>, electronics_f: list<string>, exterior_f: list<string>, features: list<string>, interior_f: list<string>, options: list<string>, safety_f: list<string>, seller_comments: string, standard_f: list<string>, technical_f: list<string>>, financing_options: table<down_payment: float, down_payment_percentage: float, estimated_monthly_payment: float, loan_apr: float, loan_term: int>, first_seen_at: int, first_seen_at_date: string, first_seen_at_mc: int, first_seen_at_mc_date: string, first_seen_at_source: int, first_seen_at_source_date: string, heading: string, id: string, interior_color: string, inventory_type: string, is_certified: int, last_seen_at: int, last_seen_at_date: string, leasing_options: table<down_payment: float, estimated_monthly_payment: float, lease_term: int>, media: record<photo_links: list<string>, photo_links_cached: list<string>>, miles: int, msrp: int, price: int, price_change_percent: float, rank: int, ref_miles: string, ref_miles_dt: int, ref_price: string, ref_price_dt: int, score: float, scraped_at: int, scraped_at_date: string, seller_type: string, source: string, stock_no: string, vdp_url: string, vehicle_registration_mark: string, vin: string> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
+  if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
   let qp = [(serialize-qp "api_key" $api_key "scalar") (serialize-qp "append_api_key" $append_api_key "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/listing/car/uk/{id}") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"api_key": $api_key, "append_api_key": $append_api_key} | compact), body: null}
 }
 
 # Long text Listings attributes for Listing with the given id
@@ -1097,11 +1140,12 @@ export def "listing-car-uk-extra get" [
 ]: nothing -> record<dealer_added_f: list<string>, electronics_f: list<string>, exterior_f: list<string>, features: list<string>, id: string, interior_f: list<string>, options: list<string>, safety_f: list<string>, seller_cmts: string, standard_f: list<string>, technical_f: list<string>> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
+  if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
   let qp = [(serialize-qp "api_key" $api_key "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/listing/car/uk/{id}/extra") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"api_key": $api_key} | compact), body: null}
 }
 
 # Listing media by id
@@ -1123,11 +1167,12 @@ export def "listing-car-uk-media get" [
 ]: nothing -> record<id: string, photo_links: list<string>, photo_url: string> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
+  if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
   let qp = [(serialize-qp "api_key" $api_key "scalar") (serialize-qp "append_api_key" $append_api_key "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/listing/car/uk/{id}/media") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"api_key": $api_key, "append_api_key": $append_api_key} | compact), body: null}
 }
 
 # Listing by id
@@ -1151,11 +1196,12 @@ export def "listing-car get" [
 ]: nothing -> record<base_ext_color: string, base_int_color: string, build: record<antibrake_sys: string, body_subtype: string, body_type: string, city_miles: string, city_mpg: int, cylinders: int, doors: int, drivetrain: string, engine: string, engine_aspiration: string, engine_block: string, engine_measure: string, engine_size: float, fuel_type: string, highway_miles: string, highway_mpg: int, made_in: string, make: string, model: string, opt_seating: string, overall_height: string, overall_length: string, overall_width: string, powertrain_type: string, short_trim: string, std_seating: string, steering_type: string, tank_size: string, transmission: string, trim: string, trim_r: string, vehicle_type: string, year: int>, carfax_1_owner: bool, carfax_clean_title: bool, data_source: string, dealer: record<city: string, country: string, county: string, dealer_type: string, dealership_group_name: string, id: int, latitude: string, longitude: string, msa_code: string, name: string, phone: string, seller_email: string, state: string, street: string, website: string, zip: string>, dom: int, dom_180: int, dom_active: int, exterior_color: string, extra: record<dealer_added_f: list<string>, electronics_f: list<string>, exterior_f: list<string>, features: list<string>, interior_f: list<string>, options: list<string>, safety_f: list<string>, seller_comments: string, standard_f: list<string>, technical_f: list<string>>, financing_options: table<down_payment: float, down_payment_percentage: float, estimated_monthly_payment: float, loan_apr: float, loan_term: int>, first_seen_at: int, first_seen_at_date: string, first_seen_at_mc: int, first_seen_at_mc_date: string, first_seen_at_source: int, first_seen_at_source_date: string, heading: string, id: string, interior_color: string, inventory_type: string, is_certified: int, last_seen_at: int, last_seen_at_date: string, leasing_options: table<down_payment: float, estimated_monthly_payment: float, lease_term: int>, media: record<photo_links: list<string>, photo_links_cached: list<string>>, miles: int, msrp: int, price: int, price_change_percent: float, rank: int, ref_miles: string, ref_miles_dt: int, ref_price: string, ref_price_dt: int, score: float, scraped_at: int, scraped_at_date: string, seller_type: string, source: string, stock_no: string, vdp_url: string, vehicle_registration_mark: string, vin: string> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
+  if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
   let qp = [(serialize-qp "api_key" $api_key "scalar") (serialize-qp "append_api_key" $append_api_key "scalar") (serialize-qp "include_relevant_links" $include_relevant_links "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/listing/car/{id}") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"api_key": $api_key, "append_api_key": $append_api_key, "include_relevant_links": $include_relevant_links} | compact), body: null}
 }
 
 # Long text Listings attributes for Listing with the given id
@@ -1176,11 +1222,12 @@ export def "listing-car-extra get" [
 ]: nothing -> record<dealer_added_f: list<string>, electronics_f: list<string>, exterior_f: list<string>, features: list<string>, id: string, interior_f: list<string>, options: list<string>, safety_f: list<string>, seller_cmts: string, standard_f: list<string>, technical_f: list<string>> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
+  if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
   let qp = [(serialize-qp "api_key" $api_key "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/listing/car/{id}/extra") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"api_key": $api_key} | compact), body: null}
 }
 
 # Listing media by id
@@ -1202,11 +1249,12 @@ export def "listing-car-media get" [
 ]: nothing -> record<id: string, photo_links: list<string>, photo_url: string> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
+  if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
   let qp = [(serialize-qp "api_key" $api_key "scalar") (serialize-qp "append_api_key" $append_api_key "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/listing/car/{id}/media") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"api_key": $api_key, "append_api_key": $append_api_key} | compact), body: null}
 }
 
 # Heavy equipment listing by id
@@ -1227,11 +1275,12 @@ export def "listing-heavy-equipment get" [
 ]: nothing -> record<build: record<area: string, class: string, engine: string, fuel_type: string, gvwr: string, length: string, made_in: string, make: string, model: string, sleeps: string, slideouts: string, transmission: string, year: int>, dealer: record<city: string, country: string, county: string, dealer_type: string, dealership_group_name: string, id: int, latitude: string, longitude: string, msa_code: string, name: string, phone: string, seller_email: string, state: string, street: string, website: string, zip: string>, dp_url: string, exterior_color: string, extra: record<dealer_added_f: list<string>, electronics_f: list<string>, exterior_f: list<string>, features: list<string>, interior_f: list<string>, options: list<string>, safety_f: list<string>, seller_comments: string, standard_f: list<string>, technical_f: list<string>>, first_seen_at: int, first_seen_at_date: string, heading: string, id: string, interior_color: string, inventory_type: string, last_seen_at: int, last_seen_at_date: string, media: record<photo_links: list<string>, photo_links_cached: list<string>>, miles: int, msrp: int, price: int, scraped_at: float, scraped_at_date: string, seller_type: string, source: string, stock_no: string, vin: string> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
+  if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
   let qp = [(serialize-qp "api_key" $api_key "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/listing/heavy-equipment/{id}") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"api_key": $api_key} | compact), body: null}
 }
 
 # Long text Heavy equipment Listings attributes for Listing with the given id
@@ -1252,11 +1301,12 @@ export def "listing-heavy-equipment-extra get" [
 ]: nothing -> record<dealer_added_f: list<string>, electronics_f: list<string>, exterior_f: list<string>, features: list<string>, id: string, interior_f: list<string>, options: list<string>, safety_f: list<string>, seller_cmts: string, standard_f: list<string>, technical_f: list<string>> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
+  if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
   let qp = [(serialize-qp "api_key" $api_key "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/listing/heavy-equipment/{id}/extra") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"api_key": $api_key} | compact), body: null}
 }
 
 # Listing media by id
@@ -1277,11 +1327,12 @@ export def "listing-heavy-equipment-media get" [
 ]: nothing -> record<id: string, photo_links: list<string>, photo_url: string> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
+  if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
   let qp = [(serialize-qp "api_key" $api_key "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/listing/heavy-equipment/{id}/media") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"api_key": $api_key} | compact), body: null}
 }
 
 # Motorcycle listing by id
@@ -1302,11 +1353,12 @@ export def "listing-motorcycle get" [
 ]: nothing -> record<build: record<body_type: string, cylinders: int, drivetrain: string, dry_weight: string, engine: string, fuel_type: string, made_in: string, make: string, model: string, transmission: string, trim: string, vehicle_type: string, year: int>, color: string, dealer: record<city: string, country: string, county: string, dealer_type: string, dealership_group_name: string, id: int, latitude: string, longitude: string, msa_code: string, name: string, phone: string, seller_email: string, state: string, street: string, website: string, zip: string>, dp_url: string, extra: record<dealer_added_f: list<string>, electronics_f: list<string>, exterior_f: list<string>, features: list<string>, interior_f: list<string>, options: list<string>, safety_f: list<string>, seller_comments: string, standard_f: list<string>, technical_f: list<string>>, first_seen_at: int, first_seen_at_date: string, heading: string, id: string, inventory_type: string, last_seen_at: int, last_seen_at_date: string, media: record<photo_links: list<string>, photo_links_cached: list<string>>, miles: int, msrp: int, price: int, scraped_at: float, scraped_at_date: string, seller_type: string, source: string, stock_no: string, vin: string> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
+  if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
   let qp = [(serialize-qp "api_key" $api_key "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/listing/motorcycle/{id}") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"api_key": $api_key} | compact), body: null}
 }
 
 # Long text Motorcycle Listings attributes for Listing with the given id
@@ -1327,11 +1379,12 @@ export def "listing-motorcycle-extra get" [
 ]: nothing -> record<dealer_added_f: list<string>, electronics_f: list<string>, exterior_f: list<string>, features: list<string>, id: string, interior_f: list<string>, options: list<string>, safety_f: list<string>, seller_cmts: string, standard_f: list<string>, technical_f: list<string>> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
+  if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
   let qp = [(serialize-qp "api_key" $api_key "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/listing/motorcycle/{id}/extra") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"api_key": $api_key} | compact), body: null}
 }
 
 # Motorcycle listing media by id
@@ -1352,11 +1405,12 @@ export def "listing-motorcycle-media get" [
 ]: nothing -> record<id: string, photo_links: list<string>, photo_url: string> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
+  if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
   let qp = [(serialize-qp "api_key" $api_key "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/listing/motorcycle/{id}/media") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"api_key": $api_key} | compact), body: null}
 }
 
 # RV listing by id
@@ -1377,11 +1431,12 @@ export def "listing-rv-uk get" [
 ]: nothing -> record<build: record<area: string, class: string, engine: string, fuel_type: string, gvwr: string, length: string, made_in: string, make: string, model: string, sleeps: string, slideouts: string, transmission: string, year: int>, dealer: record<city: string, country: string, county: string, dealer_type: string, dealership_group_name: string, id: int, latitude: string, longitude: string, msa_code: string, name: string, phone: string, seller_email: string, state: string, street: string, website: string, zip: string>, dp_url: string, exterior_color: string, extra: record<dealer_added_f: list<string>, electronics_f: list<string>, exterior_f: list<string>, features: list<string>, interior_f: list<string>, options: list<string>, safety_f: list<string>, seller_comments: string, standard_f: list<string>, technical_f: list<string>>, first_seen_at: int, first_seen_at_date: string, heading: string, id: string, interior_color: string, inventory_type: string, last_seen_at: int, last_seen_at_date: string, media: record<photo_links: list<string>, photo_links_cached: list<string>>, miles: int, msrp: int, price: int, scraped_at: float, scraped_at_date: string, seller_type: string, source: string, stock_no: string, vin: string> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
+  if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
   let qp = [(serialize-qp "api_key" $api_key "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/listing/rv/uk/{id}") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"api_key": $api_key} | compact), body: null}
 }
 
 # Long text RV Listings attributes for Listing with the given id
@@ -1402,11 +1457,12 @@ export def "listing-rv-uk-extra get" [
 ]: nothing -> record<dealer_added_f: list<string>, electronics_f: list<string>, exterior_f: list<string>, features: list<string>, id: string, interior_f: list<string>, options: list<string>, safety_f: list<string>, seller_cmts: string, standard_f: list<string>, technical_f: list<string>> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
+  if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
   let qp = [(serialize-qp "api_key" $api_key "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/listing/rv/uk/{id}/extra") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"api_key": $api_key} | compact), body: null}
 }
 
 # Listing media by id
@@ -1427,11 +1483,12 @@ export def "listing-rv-uk-media get" [
 ]: nothing -> record<id: string, photo_links: list<string>, photo_url: string> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
+  if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
   let qp = [(serialize-qp "api_key" $api_key "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/listing/rv/uk/{id}/media") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"api_key": $api_key} | compact), body: null}
 }
 
 # RV listing by id
@@ -1452,11 +1509,12 @@ export def "listing-rv get" [
 ]: nothing -> record<build: record<area: string, class: string, engine: string, fuel_type: string, gvwr: string, length: string, made_in: string, make: string, model: string, sleeps: string, slideouts: string, transmission: string, year: int>, dealer: record<city: string, country: string, county: string, dealer_type: string, dealership_group_name: string, id: int, latitude: string, longitude: string, msa_code: string, name: string, phone: string, seller_email: string, state: string, street: string, website: string, zip: string>, dp_url: string, exterior_color: string, extra: record<dealer_added_f: list<string>, electronics_f: list<string>, exterior_f: list<string>, features: list<string>, interior_f: list<string>, options: list<string>, safety_f: list<string>, seller_comments: string, standard_f: list<string>, technical_f: list<string>>, first_seen_at: int, first_seen_at_date: string, heading: string, id: string, interior_color: string, inventory_type: string, last_seen_at: int, last_seen_at_date: string, media: record<photo_links: list<string>, photo_links_cached: list<string>>, miles: int, msrp: int, price: int, scraped_at: float, scraped_at_date: string, seller_type: string, source: string, stock_no: string, vin: string> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
+  if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
   let qp = [(serialize-qp "api_key" $api_key "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/listing/rv/{id}") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"api_key": $api_key} | compact), body: null}
 }
 
 # Long text RV Listings attributes for Listing with the given id
@@ -1477,11 +1535,12 @@ export def "listing-rv-extra get" [
 ]: nothing -> record<dealer_added_f: list<string>, electronics_f: list<string>, exterior_f: list<string>, features: list<string>, id: string, interior_f: list<string>, options: list<string>, safety_f: list<string>, seller_cmts: string, standard_f: list<string>, technical_f: list<string>> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
+  if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
   let qp = [(serialize-qp "api_key" $api_key "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/listing/rv/{id}/extra") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"api_key": $api_key} | compact), body: null}
 }
 
 # Listing media by id
@@ -1502,11 +1561,12 @@ export def "listing-rv-media get" [
 ]: nothing -> record<id: string, photo_links: list<string>, photo_url: string> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
+  if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
   let qp = [(serialize-qp "api_key" $api_key "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/listing/rv/{id}/media") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"api_key": $api_key} | compact), body: null}
 }
 
 # Market Days Supply
@@ -1588,7 +1648,7 @@ export def "mds-car get" [
   let full_url = (build-url $base "/mds/car" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"api_key": $api_key, "vin": $vin, "exact": $exact, "latitude": $latitude, "longitude": $longitude, "radius": $radius, "zip": $zip, "msa_code": $msa_code, "debug": $debug, "include_sold": $include_sold, "country": $country, "state": $state, "city": $city, "ymmt": $ymmt, "car_type": $car_type, "lease_term": $lease_term, "lease_down_payment": $lease_down_payment, "lease_emp": $lease_emp, "finance_loan_term": $finance_loan_term, "finance_loan_apr": $finance_loan_apr, "finance_emp": $finance_emp, "finance_down_payment": $finance_down_payment, "finance_down_payment_per": $finance_down_payment_per, "carfax_1_owner": $carfax_1_owner, "carfax_clean_title": $carfax_clean_title, "year": $year, "make": $make, "model": $model, "trim": $trim, "dealer_id": $dealer_id, "source": $qp_source, "body_type": $body_type, "body_subtype": $body_subtype, "vehicle_type": $vehicle_type, "cylinders": $cylinders, "transmission": $transmission, "doors": $doors, "drivetrain": $drivetrain, "exterior_color": $exterior_color, "interior_color": $interior_color, "base_exterior_color": $base_exterior_color, "base_interior_color": $base_interior_color, "engine": $engine, "engine_size": $engine_size, "engine_aspiration": $engine_aspiration, "engine_block": $engine_block, "highway_mpg_range": $highway_mpg_range, "city_mpg_range": $city_mpg_range, "miles_range": $miles_range, "price_range": $price_range, "msrp_range": $msrp_range, "dom_range": $dom_range, "dealership_group_name": $dealership_group_name, "dom_active_range": $dom_active_range, "dom_180_range": $dom_180_range, "fuel_type": $fuel_type, "dealer_type": $dealer_type, "engine_size_range": $engine_size_range} | compact), body: null}
 }
 
 # Get make model wise top 50 popular cars on national, state, city level
@@ -1617,7 +1677,7 @@ export def "popular-cars get" [
   let full_url = (build-url $base "/popular/cars" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"api_key": $api_key, "state": $state, "city_state": $city_state, "car_type": $car_type, "country": $country} | compact), body: null}
 }
 
 # Predict car price based on it's specifications
@@ -1666,7 +1726,7 @@ export def "predict-car-price get" [
   let full_url = (build-url $base "/predict/car/price" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"api_key": $api_key, "vin": $vin, "car_type": $car_type, "year": $year, "make": $make, "model": $model, "trim": $trim, "is_certified": $is_certified, "carfax_1_owner": $carfax_1_owner, "carfax_clean_title": $carfax_clean_title, "base_exterior_color": $base_exterior_color, "base_interior_color": $base_interior_color, "transmission": $transmission, "drivetrain": $drivetrain, "engine_size": $engine_size, "engine_block": $engine_block, "cylinders": $cylinders, "doors": $doors, "highway_mpg": $highway_mpg, "city_mpg": $city_mpg, "latitude": $latitude, "longitude": $longitude, "miles": $miles, "zip": $zip, "country": $country} | compact), body: null}
 }
 
 # Predict fare value of car for UK based on YMMT & miles
@@ -1699,7 +1759,7 @@ export def "predict-car-uk-fmv get-fare-value" [
   let full_url = (build-url $base "/predict/car/uk/fmv" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"api_key": $api_key, "vrm": $vrm, "year": $year, "make": $make, "model": $model, "variant": $variant, "miles": $miles, "postal_code": $postal_code, "radius": $radius} | compact), body: null}
 }
 
 # Predict car price for UK based on it's specifications
@@ -1743,7 +1803,7 @@ export def "predict-car-uk-price get" [
   let full_url = (build-url $base "/predict/car/uk/price" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"api_key": $api_key, "vrm": $vrm, "year": $year, "make": $make, "model": $model, "trim": $trim, "base_exterior_color": $base_exterior_color, "transmission": $transmission, "drivetrain": $drivetrain, "engine_size": $engine_size, "cylinders": $cylinders, "doors": $doors, "fuel_type": $fuel_type, "highway_mpg": $highway_mpg, "city_mpg": $city_mpg, "combined_mpg": $combined_mpg, "latitude": $latitude, "longitude": $longitude, "miles": $miles, "zip": $zip} | compact), body: null}
 }
 
 # Get sales count by make, model, year, trim or taxonomy vin
@@ -1778,7 +1838,7 @@ export def "sales-car get-count" [
   let full_url = (build-url $base "/sales/car" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"api_key": $api_key, "car_type": $car_type, "make": $make, "mm": $mm, "ymm": $ymm, "ymmt": $ymmt, "taxonomy_vin": $taxonomy_vin, "state": $state, "city_state": $city_state, "vin": $vin, "country": $country} | compact), body: null}
 }
 
 # Gets active car listings for the given search criteria
@@ -1904,7 +1964,7 @@ export def "search-car-active get" [
   let full_url = (build-url $base "/search/car/active" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"api_key": $api_key, "append_api_key": $append_api_key, "latitude": $latitude, "longitude": $longitude, "radius": $radius, "zip": $zip, "include_lease": $include_lease, "include_finance": $include_finance, "lease_term": $lease_term, "lease_down_payment": $lease_down_payment, "lease_emp": $lease_emp, "finance_loan_term": $finance_loan_term, "finance_loan_apr": $finance_loan_apr, "finance_emp": $finance_emp, "finance_down_payment": $finance_down_payment, "finance_down_payment_per": $finance_down_payment_per, "car_type": $car_type, "carfax_1_owner": $carfax_1_owner, "carfax_clean_title": $carfax_clean_title, "year_range": $year_range, "year": $year, "make": $make, "model": $model, "trim": $trim, "vin": $vin, "body_type": $body_type, "body_subtype": $body_subtype, "vehicle_type": $vehicle_type, "vins": $vins, "taxonomy_vins": $taxonomy_vins, "mm": $mm, "ymm": $ymm, "ymmt": $ymmt, "match": $qp_match, "cylinders": $cylinders, "transmission": $transmission, "doors": $doors, "drivetrain": $drivetrain, "exterior_color": $exterior_color, "interior_color": $interior_color, "base_exterior_color": $base_exterior_color, "base_interior_color": $base_interior_color, "engine": $engine, "engine_size": $engine_size, "engine_aspiration": $engine_aspiration, "engine_block": $engine_block, "highway_mpg_range": $highway_mpg_range, "city_mpg_range": $city_mpg_range, "miles_range": $miles_range, "price_range": $price_range, "msrp_range": $msrp_range, "dom_range": $dom_range, "sort_by": $sort_by, "sort_order": $sort_order, "rows": $rows, "start": $start, "include_non_vin_listings": $include_non_vin_listings, "msa_code": $msa_code, "facets": $facets, "range_facets": $range_facets, "facet_sort": $facet_sort, "stats": $stats, "country": $country, "plot": $plot, "nodedup": $nodedup, "dedup": $dedup, "owned": $owned, "source": $qp_source, "state": $state, "city": $city, "trim_o": $trim_o, "trim_r": $trim_r, "dom_active_range": $dom_active_range, "dom_180_range": $dom_180_range, "exclude_certified": $exclude_certified, "fuel_type": $fuel_type, "dealer_type": $dealer_type, "photo_links": $photo_links, "photo_links_cached": $photo_links_cached, "stock_no": $stock_no, "last_seen_range": $last_seen_range, "first_seen_range": $first_seen_range, "first_seen_at_source_range": $first_seen_at_source_range, "first_seen_at_mc_range": $first_seen_at_mc_range, "last_seen_days": $last_seen_days, "first_seen_days": $first_seen_days, "first_seen_at_source_days": $first_seen_at_source_days, "first_seen_at_mc_days": $first_seen_at_mc_days, "include_relevant_links": $include_relevant_links, "inventory_count_range": $inventory_count_range, "dealer_id": $dealer_id, "exclude_dealer_ids": $exclude_dealer_ids, "exclude_sources": $exclude_sources, "in_transit": $in_transit, "seating_capacity": $seating_capacity, "powertrain_type": $powertrain_type, "price_change": $price_change, "price_change_range": $price_change_range, "active_inventory_date_range": $active_inventory_date_range, "engine_size_range": $engine_size_range, "high_value_features": $high_value_features, "min_photo_links": $min_photo_links, "min_photo_links_cached": $min_photo_links_cached} | compact), body: null}
 }
 
 # Compute relative rank for car listings.
@@ -2019,7 +2079,7 @@ export def "search-car-active-rank list-and" [
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: ({"api_key": $api_key, "append_api_key": $append_api_key, "latitude": $latitude, "longitude": $longitude, "radius": $radius, "zip": $zip, "include_lease": $include_lease, "include_finance": $include_finance, "lease_term": $lease_term, "lease_down_payment": $lease_down_payment, "lease_emp": $lease_emp, "finance_loan_term": $finance_loan_term, "finance_loan_apr": $finance_loan_apr, "finance_emp": $finance_emp, "finance_down_payment": $finance_down_payment, "finance_down_payment_per": $finance_down_payment_per, "car_type": $car_type, "carfax_1_owner": $carfax_1_owner, "carfax_clean_title": $carfax_clean_title, "year": $year, "make": $make, "model": $model, "trim": $trim, "vin": $vin, "body_type": $body_type, "body_subtype": $body_subtype, "vehicle_type": $vehicle_type, "vins": $vins, "taxonomy_vins": $taxonomy_vins, "ymmt": $ymmt, "match": $qp_match, "cylinders": $cylinders, "transmission": $transmission, "doors": $doors, "drivetrain": $drivetrain, "exterior_color": $exterior_color, "interior_color": $interior_color, "base_exterior_color": $base_exterior_color, "base_interior_color": $base_interior_color, "engine": $engine, "engine_size": $engine_size, "engine_aspiration": $engine_aspiration, "engine_block": $engine_block, "highway_mpg_range": $highway_mpg_range, "city_mpg_range": $city_mpg_range, "miles_range": $miles_range, "price_range": $price_range, "msrp_range": $msrp_range, "dom_range": $dom_range, "sort_by": $sort_by, "sort_order": $sort_order, "rows": $rows, "start": $start, "include_non_vin_listings": $include_non_vin_listings, "msa_code": $msa_code, "facets": $facets, "range_facets": $range_facets, "facet_sort": $facet_sort, "stats": $stats, "country": $country, "plot": $plot, "nodedup": $nodedup, "dedup": $dedup, "owned": $owned, "state": $state, "city": $city, "trim_o": $trim_o, "trim_r": $trim_r, "dom_active_range": $dom_active_range, "dom_180_range": $dom_180_range, "exclude_certified": $exclude_certified, "fuel_type": $fuel_type, "dealer_type": $dealer_type, "photo_links": $photo_links, "photo_links_cached": $photo_links_cached, "stock_no": $stock_no, "last_seen_range": $last_seen_range, "first_seen_range": $first_seen_range, "first_seen_at_source_range": $first_seen_at_source_range, "first_seen_at_mc_range": $first_seen_at_mc_range, "last_seen_days": $last_seen_days, "first_seen_days": $first_seen_days, "first_seen_at_source_days": $first_seen_at_source_days, "first_seen_at_mc_days": $first_seen_at_mc_days, "inventory_type": $inventory_type, "page": $page} | compact), body: $req_body}
 }
 
 # Compute relative rank for car listings.
@@ -2050,7 +2110,7 @@ export def "search-car-active-rank-listings create" [
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: ({"api_key": $api_key, "append_api_key": $append_api_key} | compact), body: $req_body}
 }
 
 # Gets active auction car listings for the given search criteria
@@ -2172,7 +2232,7 @@ export def "search-car-auction-active get" [
   let full_url = (build-url $base "/search/car/auction/active" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"api_key": $api_key, "append_api_key": $append_api_key, "latitude": $latitude, "longitude": $longitude, "radius": $radius, "zip": $zip, "include_lease": $include_lease, "include_finance": $include_finance, "lease_term": $lease_term, "lease_down_payment": $lease_down_payment, "lease_emp": $lease_emp, "finance_loan_term": $finance_loan_term, "finance_loan_apr": $finance_loan_apr, "finance_emp": $finance_emp, "finance_down_payment": $finance_down_payment, "finance_down_payment_per": $finance_down_payment_per, "car_type": $car_type, "carfax_1_owner": $carfax_1_owner, "carfax_clean_title": $carfax_clean_title, "year_range": $year_range, "year": $year, "make": $make, "model": $model, "trim": $trim, "vin": $vin, "body_type": $body_type, "body_subtype": $body_subtype, "vehicle_type": $vehicle_type, "vins": $vins, "taxonomy_vins": $taxonomy_vins, "mm": $mm, "ymm": $ymm, "ymmt": $ymmt, "match": $qp_match, "cylinders": $cylinders, "transmission": $transmission, "doors": $doors, "drivetrain": $drivetrain, "exterior_color": $exterior_color, "interior_color": $interior_color, "base_exterior_color": $base_exterior_color, "base_interior_color": $base_interior_color, "engine": $engine, "engine_size": $engine_size, "engine_aspiration": $engine_aspiration, "engine_block": $engine_block, "highway_mpg_range": $highway_mpg_range, "city_mpg_range": $city_mpg_range, "miles_range": $miles_range, "price_range": $price_range, "msrp_range": $msrp_range, "dom_range": $dom_range, "sort_by": $sort_by, "sort_order": $sort_order, "rows": $rows, "start": $start, "include_non_vin_listings": $include_non_vin_listings, "msa_code": $msa_code, "facets": $facets, "range_facets": $range_facets, "facet_sort": $facet_sort, "stats": $stats, "country": $country, "plot": $plot, "nodedup": $nodedup, "dedup": $dedup, "owned": $owned, "state": $state, "city": $city, "source": $qp_source, "dealer_id": $dealer_id, "trim_o": $trim_o, "trim_r": $trim_r, "dom_active_range": $dom_active_range, "dom_180_range": $dom_180_range, "exclude_certified": $exclude_certified, "fuel_type": $fuel_type, "dealer_type": $dealer_type, "photo_links": $photo_links, "photo_links_cached": $photo_links_cached, "stock_no": $stock_no, "last_seen_range": $last_seen_range, "first_seen_range": $first_seen_range, "first_seen_at_source_range": $first_seen_at_source_range, "first_seen_at_mc_range": $first_seen_at_mc_range, "last_seen_days": $last_seen_days, "first_seen_days": $first_seen_days, "first_seen_at_source_days": $first_seen_at_source_days, "first_seen_at_mc_days": $first_seen_at_mc_days, "include_relevant_links": $include_relevant_links, "inventory_count_range": $inventory_count_range, "exclude_dealer_ids": $exclude_dealer_ids, "exclude_sources": $exclude_sources, "in_transit": $in_transit, "title_type": $title_type, "seating_capacity": $seating_capacity, "engine_size_range": $engine_size_range, "min_photo_links": $min_photo_links, "min_photo_links_cached": $min_photo_links_cached} | compact), body: null}
 }
 
 # API for auto-completion of inputs
@@ -2232,7 +2292,7 @@ export def "search-car-auto-complete complete" [
   let full_url = (build-url $base "/search/car/auto-complete" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"api_key": $api_key, "field": $field, "input": $input, "year": $year, "make": $make, "model": $model, "trim": $trim, "body_type": $body_type, "body_subtype": $body_subtype, "vehicle_type": $vehicle_type, "transmission": $transmission, "drivetrain": $drivetrain, "fuel_type": $fuel_type, "exterior_color": $exterior_color, "interior_color": $interior_color, "engine": $engine, "engine_size": $engine_size, "engine_block": $engine_block, "state": $state, "city": $city, "source": $qp_source, "dealer_id": $dealer_id, "country": $country, "car_type": $car_type, "include_non_vin_listings": $include_non_vin_listings, "ignore_case": $ignore_case, "term_counts": $term_counts, "sort_by": $sort_by, "seller_type": $seller_type, "radius": $radius, "zip": $zip, "inventory_count_range": $inventory_count_range, "exclude_dealer_ids": $exclude_dealer_ids, "exclude_sources": $exclude_sources, "in_transit": $in_transit, "facet_min_count": $facet_min_count} | compact), body: null}
 }
 
 # Gets active private party car listings for the given search criteria
@@ -2354,7 +2414,7 @@ export def "search-car-fsbo-active get" [
   let full_url = (build-url $base "/search/car/fsbo/active" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"api_key": $api_key, "append_api_key": $append_api_key, "latitude": $latitude, "longitude": $longitude, "radius": $radius, "zip": $zip, "include_lease": $include_lease, "include_finance": $include_finance, "lease_term": $lease_term, "lease_down_payment": $lease_down_payment, "lease_emp": $lease_emp, "finance_loan_term": $finance_loan_term, "finance_loan_apr": $finance_loan_apr, "finance_emp": $finance_emp, "finance_down_payment": $finance_down_payment, "finance_down_payment_per": $finance_down_payment_per, "car_type": $car_type, "carfax_1_owner": $carfax_1_owner, "carfax_clean_title": $carfax_clean_title, "year_range": $year_range, "year": $year, "make": $make, "model": $model, "trim": $trim, "vin": $vin, "body_type": $body_type, "body_subtype": $body_subtype, "vehicle_type": $vehicle_type, "vins": $vins, "taxonomy_vins": $taxonomy_vins, "mm": $mm, "ymm": $ymm, "ymmt": $ymmt, "match": $qp_match, "cylinders": $cylinders, "transmission": $transmission, "doors": $doors, "drivetrain": $drivetrain, "exterior_color": $exterior_color, "interior_color": $interior_color, "base_exterior_color": $base_exterior_color, "base_interior_color": $base_interior_color, "engine": $engine, "engine_size": $engine_size, "engine_aspiration": $engine_aspiration, "engine_block": $engine_block, "highway_mpg_range": $highway_mpg_range, "city_mpg_range": $city_mpg_range, "miles_range": $miles_range, "price_range": $price_range, "msrp_range": $msrp_range, "dom_range": $dom_range, "sort_by": $sort_by, "sort_order": $sort_order, "rows": $rows, "start": $start, "include_non_vin_listings": $include_non_vin_listings, "msa_code": $msa_code, "facets": $facets, "range_facets": $range_facets, "facet_sort": $facet_sort, "stats": $stats, "country": $country, "plot": $plot, "nodedup": $nodedup, "dedup": $dedup, "owned": $owned, "state": $state, "city": $city, "source": $qp_source, "dealer_id": $dealer_id, "trim_o": $trim_o, "trim_r": $trim_r, "dom_active_range": $dom_active_range, "dom_180_range": $dom_180_range, "exclude_certified": $exclude_certified, "fuel_type": $fuel_type, "dealer_type": $dealer_type, "photo_links": $photo_links, "photo_links_cached": $photo_links_cached, "stock_no": $stock_no, "last_seen_range": $last_seen_range, "first_seen_range": $first_seen_range, "first_seen_at_source_range": $first_seen_at_source_range, "first_seen_at_mc_range": $first_seen_at_mc_range, "last_seen_days": $last_seen_days, "first_seen_days": $first_seen_days, "first_seen_at_source_days": $first_seen_at_source_days, "first_seen_at_mc_days": $first_seen_at_mc_days, "include_relevant_links": $include_relevant_links, "inventory_count_range": $inventory_count_range, "exclude_dealer_ids": $exclude_dealer_ids, "exclude_sources": $exclude_sources, "exclude_dealer_listings": $exclude_dealer_listings, "in_transit": $in_transit, "seating_capacity": $seating_capacity, "engine_size_range": $engine_size_range, "min_photo_links": $min_photo_links, "min_photo_links_cached": $min_photo_links_cached} | compact), body: null}
 }
 
 # Gets oem incentive listings for the given search criteria
@@ -2421,7 +2481,7 @@ export def "search-car-incentive-oem list" [
   let full_url = (build-url $base "/search/car/incentive/oem" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"api_key": $api_key, "offer_type": $offer_type, "year": $year, "make": $make, "model": $model, "trim": $trim, "msrp": $msrp, "apr": $apr, "monthly": $monthly, "monthly_per_thousand": $monthly_per_thousand, "down_payment": $down_payment, "due_at_signing": $due_at_signing, "security_deposit": $security_deposit, "disposition_fee": $disposition_fee, "acquisition_fee": $acquisition_fee, "duration": $duration, "dealer_contribution": $dealer_contribution, "mileage_charge": $mileage_charge, "mileage_charge_limit": $mileage_charge_limit, "cashback_amount": $cashback_amount, "cashback_target_group": $cashback_target_group, "lease_end_purchase_option": $lease_end_purchase_option, "net_capitalised_cost": $net_capitalised_cost, "gross_capitalised_cost": $gross_capitalised_cost, "total_monthly_payment": $total_monthly_payment, "zip": $zip, "city": $city, "state": $state, "country": $country, "latitude": $latitude, "longitude": $longitude, "radius": $radius, "search_text": $search_text, "last_seen_range": $last_seen_range, "first_seen_range": $first_seen_range, "sort_by": $sort_by, "sort_order": $sort_order, "rows": $rows, "start": $start, "facets": $facets, "range_facets": $range_facets, "facet_sort": $facet_sort, "stats": $stats} | compact), body: null}
 }
 
 # Gets Recent car listings for the given search criteria
@@ -2543,7 +2603,7 @@ export def "search-car-recents get" [
   let full_url = (build-url $base "/search/car/recents" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"api_key": $api_key, "append_api_key": $append_api_key, "latitude": $latitude, "longitude": $longitude, "radius": $radius, "zip": $zip, "include_lease": $include_lease, "include_finance": $include_finance, "lease_term": $lease_term, "lease_down_payment": $lease_down_payment, "lease_emp": $lease_emp, "finance_loan_term": $finance_loan_term, "finance_loan_apr": $finance_loan_apr, "finance_emp": $finance_emp, "finance_down_payment": $finance_down_payment, "finance_down_payment_per": $finance_down_payment_per, "car_type": $car_type, "carfax_1_owner": $carfax_1_owner, "carfax_clean_title": $carfax_clean_title, "year_range": $year_range, "year": $year, "make": $make, "model": $model, "trim": $trim, "dealer_id": $dealer_id, "vin": $vin, "source": $qp_source, "body_type": $body_type, "body_subtype": $body_subtype, "vehicle_type": $vehicle_type, "vins": $vins, "taxonomy_vins": $taxonomy_vins, "ymmt": $ymmt, "match": $qp_match, "cylinders": $cylinders, "transmission": $transmission, "doors": $doors, "drivetrain": $drivetrain, "exterior_color": $exterior_color, "interior_color": $interior_color, "base_exterior_color": $base_exterior_color, "base_interior_color": $base_interior_color, "engine": $engine, "engine_size": $engine_size, "engine_aspiration": $engine_aspiration, "engine_block": $engine_block, "highway_mpg_range": $highway_mpg_range, "city_mpg_range": $city_mpg_range, "miles_range": $miles_range, "price_range": $price_range, "msrp_range": $msrp_range, "dom_range": $dom_range, "last_seen_range": $last_seen_range, "first_seen_range": $first_seen_range, "first_seen_at_source_range": $first_seen_at_source_range, "first_seen_at_mc_range": $first_seen_at_mc_range, "last_seen_days": $last_seen_days, "first_seen_days": $first_seen_days, "first_seen_at_source_days": $first_seen_at_source_days, "first_seen_at_mc_days": $first_seen_at_mc_days, "sort_by": $sort_by, "sort_order": $sort_order, "rows": $rows, "start": $start, "include_non_vin_listings": $include_non_vin_listings, "facets": $facets, "range_facets": $range_facets, "facet_sort": $facet_sort, "stats": $stats, "country": $country, "plot": $plot, "nodedup": $nodedup, "dedup": $dedup, "owned": $owned, "state": $state, "city": $city, "msa_code": $msa_code, "dealer_name": $dealer_name, "dealership_group_name": $dealership_group_name, "trim_o": $trim_o, "trim_r": $trim_r, "dom_active_range": $dom_active_range, "dom_180_range": $dom_180_range, "exclude_certified": $exclude_certified, "fuel_type": $fuel_type, "dealer_type": $dealer_type, "photo_links": $photo_links, "photo_links_cached": $photo_links_cached, "stock_no": $stock_no, "sold": $sold, "include_relevant_links": $include_relevant_links, "expired": $expired, "exclude_dealer_ids": $exclude_dealer_ids, "exclude_sources": $exclude_sources, "in_transit": $in_transit, "seating_capacity": $seating_capacity, "active_inventory_date_range": $active_inventory_date_range, "engine_size_range": $engine_size_range, "price_change_range": $price_change_range} | compact), body: null}
 }
 
 # Gets active car listings in UK for the given search criteria
@@ -2665,7 +2725,7 @@ export def "search-car-uk-active list" [
   let full_url = (build-url $base "/search/car/uk/active" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"api_key": $api_key, "latitude": $latitude, "longitude": $longitude, "radius": $radius, "postal_code": $postal_code, "zip": $zip, "car_type": $car_type, "year": $year, "year_range": $year_range, "make": $make, "model": $model, "variant": $variant, "trim": $trim, "vin": $vin, "body_type": $body_type, "ymmt": $ymmt, "transmission": $transmission, "doors": $doors, "drivetrain": $drivetrain, "exterior_color": $exterior_color, "interior_color": $interior_color, "engine": $engine, "miles_range": $miles_range, "price_range": $price_range, "msrp_range": $msrp_range, "sort_by": $sort_by, "sort_order": $sort_order, "rows": $rows, "start": $start, "msa_code": $msa_code, "facets": $facets, "range_facets": $range_facets, "facet_sort": $facet_sort, "stats": $stats, "country": $country, "plot": $plot, "nodedup": $nodedup, "dedup": $dedup, "county": $county, "state": $state, "city": $city, "fuel_type": $fuel_type, "stock_no": $stock_no, "dom_range": $dom_range, "dom_active_range": $dom_active_range, "dom_180_range": $dom_180_range, "last_seen_range": $last_seen_range, "first_seen_range": $first_seen_range, "first_seen_at_source_range": $first_seen_at_source_range, "first_seen_at_mc_range": $first_seen_at_mc_range, "last_seen_days": $last_seen_days, "first_seen_days": $first_seen_days, "first_seen_at_source_days": $first_seen_at_source_days, "first_seen_at_mc_days": $first_seen_at_mc_days, "co2_emissions": $co2_emissions, "insurance_group": $insurance_group, "vehicle_registration_mark": $vehicle_registration_mark, "vehicle_registration_date_range": $vehicle_registration_date_range, "num_owners": $num_owners, "inventory_count_range": $inventory_count_range, "source": $qp_source, "dealer_id": $dealer_id, "exclude_sources": $exclude_sources, "exclude_dealer_ids": $exclude_dealer_ids, "in_transit": $in_transit, "include_non_vin_listings": $include_non_vin_listings, "cylinders": $cylinders, "photo_links": $photo_links, "photo_links_cached": $photo_links_cached, "base_exterior_color": $base_exterior_color, "base_interior_color": $base_interior_color, "write_off_category": $write_off_category, "exclude_write_off_category": $exclude_write_off_category, "fca_status": $fca_status, "seating_capacity": $seating_capacity, "vrm": $vrm, "powertrain_type": $powertrain_type, "client_filters": $client_filters, "boost": $boost, "car_location_seller_name": $car_location_seller_name, "car_location_street": $car_location_street, "car_location_city": $car_location_city, "car_location_county": $car_location_county, "car_location_zip": $car_location_zip, "car_location_latitude": $car_location_latitude, "car_location_longitude": $car_location_longitude, "price_change": $price_change, "price_change_range": $price_change_range, "active_inventory_date_range": $active_inventory_date_range, "engine_size": $engine_size, "engine_size_range": $engine_size_range, "uvc_id": $uvc_id, "highway_mpg_range": $highway_mpg_range, "city_mpg_range": $city_mpg_range, "combined_mpg_range": $combined_mpg_range, "owned": $owned, "min_photo_links": $min_photo_links, "min_photo_links_cached": $min_photo_links_cached} | compact), body: null}
 }
 
 # Gets Recent UK car listings for the given search criteria
@@ -2795,7 +2855,7 @@ export def "search-car-uk-recents get" [
   let full_url = (build-url $base "/search/car/uk/recents" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"api_key": $api_key, "append_api_key": $append_api_key, "latitude": $latitude, "longitude": $longitude, "radius": $radius, "zip": $zip, "include_lease": $include_lease, "include_finance": $include_finance, "lease_term": $lease_term, "lease_down_payment": $lease_down_payment, "lease_emp": $lease_emp, "finance_loan_term": $finance_loan_term, "finance_loan_apr": $finance_loan_apr, "finance_emp": $finance_emp, "finance_down_payment": $finance_down_payment, "finance_down_payment_per": $finance_down_payment_per, "car_type": $car_type, "carfax_1_owner": $carfax_1_owner, "carfax_clean_title": $carfax_clean_title, "year_range": $year_range, "year": $year, "make": $make, "model": $model, "trim": $trim, "dealer_id": $dealer_id, "vin": $vin, "source": $qp_source, "body_type": $body_type, "body_subtype": $body_subtype, "vehicle_type": $vehicle_type, "vins": $vins, "taxonomy_vins": $taxonomy_vins, "ymmt": $ymmt, "match": $qp_match, "cylinders": $cylinders, "transmission": $transmission, "doors": $doors, "drivetrain": $drivetrain, "exterior_color": $exterior_color, "interior_color": $interior_color, "base_exterior_color": $base_exterior_color, "base_interior_color": $base_interior_color, "engine": $engine, "engine_size": $engine_size, "engine_aspiration": $engine_aspiration, "engine_block": $engine_block, "highway_mpg_range": $highway_mpg_range, "city_mpg_range": $city_mpg_range, "combined_mpg_range": $combined_mpg_range, "miles_range": $miles_range, "price_range": $price_range, "msrp_range": $msrp_range, "dom_range": $dom_range, "last_seen_range": $last_seen_range, "first_seen_range": $first_seen_range, "first_seen_at_source_range": $first_seen_at_source_range, "first_seen_at_mc_range": $first_seen_at_mc_range, "last_seen_days": $last_seen_days, "first_seen_days": $first_seen_days, "first_seen_at_source_days": $first_seen_at_source_days, "first_seen_at_mc_days": $first_seen_at_mc_days, "sort_by": $sort_by, "sort_order": $sort_order, "rows": $rows, "start": $start, "include_non_vin_listings": $include_non_vin_listings, "facets": $facets, "range_facets": $range_facets, "facet_sort": $facet_sort, "stats": $stats, "country": $country, "plot": $plot, "nodedup": $nodedup, "dedup": $dedup, "owned": $owned, "state": $state, "city": $city, "msa_code": $msa_code, "dealer_name": $dealer_name, "dealership_group_name": $dealership_group_name, "trim_o": $trim_o, "trim_r": $trim_r, "dom_active_range": $dom_active_range, "dom_180_range": $dom_180_range, "exclude_certified": $exclude_certified, "fuel_type": $fuel_type, "dealer_type": $dealer_type, "photo_links": $photo_links, "photo_links_cached": $photo_links_cached, "stock_no": $stock_no, "sold": $sold, "include_relevant_links": $include_relevant_links, "expired": $expired, "exclude_dealer_ids": $exclude_dealer_ids, "exclude_sources": $exclude_sources, "in_transit": $in_transit, "seating_capacity": $seating_capacity, "insurance_group": $insurance_group, "vrm": $vrm, "num_owners": $num_owners, "variant": $variant, "postal_code": $postal_code, "write_off_category": $write_off_category, "fca_status": $fca_status, "active_inventory_date_range": $active_inventory_date_range, "engine_size_range": $engine_size_range, "price_change_range": $price_change_range} | compact), body: null}
 }
 
 # Gets active heavy equipment listings for the given search criteria
@@ -2862,7 +2922,7 @@ export def "search-heavy-equipment-active get" [
   let full_url = (build-url $base "/search/heavy-equipment/active" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"api_key": $api_key, "price_range": $price_range, "miles_range": $miles_range, "msrp_range": $msrp_range, "latitude": $latitude, "longitude": $longitude, "radius": $radius, "search_text": $search_text, "year": $year, "make": $make, "model": $model, "trim": $trim, "vin": $vin, "inventory_type": $inventory_type, "stock_no": $stock_no, "source": $qp_source, "dealer_name": $dealer_name, "dealer_id": $dealer_id, "exterior_color": $exterior_color, "interior_color": $interior_color, "engine": $engine, "fuel_type": $fuel_type, "transmission": $transmission, "drivetrain": $drivetrain, "body_type": $body_type, "category": $category, "sub_category": $sub_category, "hours_used_range": $hours_used_range, "state": $state, "city": $city, "zip": $zip, "msa_code": $msa_code, "sort_by": $sort_by, "sort_order": $sort_order, "rows": $rows, "start": $start, "facets": $facets, "range_facets": $range_facets, "facet_sort": $facet_sort, "stats": $stats, "last_seen_range": $last_seen_range, "first_seen_range": $first_seen_range, "last_seen_days": $last_seen_days, "first_seen_days": $first_seen_days} | compact), body: null}
 }
 
 # API for auto-completion of inputs
@@ -2909,7 +2969,7 @@ export def "search-heavy-equipment-auto-complete get" [
   let full_url = (build-url $base "/search/heavy-equipment/auto-complete" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"api_key": $api_key, "field": $field, "input": $input, "year": $year, "make": $make, "model": $model, "trim": $trim, "body_type": $body_type, "vehicle_type": $vehicle_type, "transmission": $transmission, "drivetrain": $drivetrain, "fuel_type": $fuel_type, "color": $color, "engine": $engine, "state": $state, "city": $city, "inventory_type": $inventory_type, "ignore_case": $ignore_case, "term_counts": $term_counts, "sort_by": $sort_by, "seller_type": $seller_type, "radius": $radius, "zip": $zip, "facet_min_count": $facet_min_count} | compact), body: null}
 }
 
 # Gets active motorcycle listings for the given search criteria
@@ -2974,7 +3034,7 @@ export def "search-motorcycle-active get" [
   let full_url = (build-url $base "/search/motorcycle/active" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"api_key": $api_key, "price_range": $price_range, "miles_range": $miles_range, "msrp_range": $msrp_range, "latitude": $latitude, "longitude": $longitude, "radius": $radius, "search_text": $search_text, "year": $year, "make": $make, "model": $model, "trim": $trim, "vin": $vin, "taxonomy_vin": $taxonomy_vin, "inventory_type": $inventory_type, "stock_no": $stock_no, "source": $qp_source, "dealer_id": $dealer_id, "color": $color, "body_type": $body_type, "vehicle_type": $vehicle_type, "cylinders": $cylinders, "drivetrain": $drivetrain, "engine": $engine, "fuel_type": $fuel_type, "transmission": $transmission, "state": $state, "city": $city, "zip": $zip, "msa_code": $msa_code, "sort_by": $sort_by, "sort_order": $sort_order, "rows": $rows, "start": $start, "facets": $facets, "range_facets": $range_facets, "facet_sort": $facet_sort, "stats": $stats, "last_seen_range": $last_seen_range, "first_seen_range": $first_seen_range, "last_seen_days": $last_seen_days, "first_seen_days": $first_seen_days} | compact), body: null}
 }
 
 # API for auto-completion of inputs
@@ -3021,7 +3081,7 @@ export def "search-motorcycle-auto-complete get" [
   let full_url = (build-url $base "/search/motorcycle/auto-complete" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"api_key": $api_key, "field": $field, "input": $input, "year": $year, "make": $make, "model": $model, "trim": $trim, "body_type": $body_type, "vehicle_type": $vehicle_type, "transmission": $transmission, "drivetrain": $drivetrain, "fuel_type": $fuel_type, "color": $color, "engine": $engine, "state": $state, "city": $city, "inventory_type": $inventory_type, "ignore_case": $ignore_case, "term_counts": $term_counts, "sort_by": $sort_by, "seller_type": $seller_type, "radius": $radius, "zip": $zip, "facet_min_count": $facet_min_count} | compact), body: null}
 }
 
 # Gets active RV listings for the given search criteria
@@ -3097,7 +3157,7 @@ export def "search-rv-active get" [
   let full_url = (build-url $base "/search/rv/active" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"api_key": $api_key, "price_range": $price_range, "miles_range": $miles_range, "msrp_range": $msrp_range, "year_range": $year_range, "search_text": $search_text, "latitude": $latitude, "longitude": $longitude, "radius": $radius, "year": $year, "make": $make, "model": $model, "model_o": $model_o, "vin": $vin, "inventory_type": $inventory_type, "stock_no": $stock_no, "source": $qp_source, "dealer_name": $dealer_name, "dealer_id": $dealer_id, "exterior_color": $exterior_color, "interior_color": $interior_color, "engine": $engine, "fuel_type": $fuel_type, "transmission": $transmission, "class": $class, "state": $state, "city": $city, "zip": $zip, "msa_code": $msa_code, "sort_by": $sort_by, "sort_order": $sort_order, "rows": $rows, "start": $start, "facets": $facets, "range_facets": $range_facets, "facet_sort": $facet_sort, "stats": $stats, "last_seen_range": $last_seen_range, "first_seen_range": $first_seen_range, "last_seen_days": $last_seen_days, "first_seen_days": $first_seen_days, "slideouts": $slideouts, "length_range": $length_range, "length": $length, "base_exterior_color": $base_exterior_color, "base_interior_color": $base_interior_color, "seating_capacity": $seating_capacity, "fresh_water_capacity": $fresh_water_capacity, "sleeps": $sleeps, "cylinders": $cylinders, "number_of_awnings": $number_of_awnings, "doors": $doors, "gvwr": $gvwr} | compact), body: null}
 }
 
 # API for auto-completion of inputs
@@ -3144,7 +3204,7 @@ export def "search-rv-auto-complete get" [
   let full_url = (build-url $base "/search/rv/auto-complete" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"api_key": $api_key, "field": $field, "input": $input, "year": $year, "make": $make, "model": $model, "trim": $trim, "body_type": $body_type, "vehicle_type": $vehicle_type, "transmission": $transmission, "drivetrain": $drivetrain, "fuel_type": $fuel_type, "color": $color, "engine": $engine, "state": $state, "city": $city, "inventory_type": $inventory_type, "ignore_case": $ignore_case, "term_counts": $term_counts, "sort_by": $sort_by, "seller_type": $seller_type, "radius": $radius, "zip": $zip, "facet_min_count": $facet_min_count} | compact), body: null}
 }
 
 # Gets active RV listings for the given search criteria
@@ -3222,7 +3282,7 @@ export def "search-rv-uk-active get" [
   let full_url = (build-url $base "/search/rv/uk/active" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"api_key": $api_key, "price_range": $price_range, "miles_range": $miles_range, "msrp_range": $msrp_range, "year_range": $year_range, "search_text": $search_text, "latitude": $latitude, "longitude": $longitude, "radius": $radius, "year": $year, "make": $make, "model": $model, "vin": $vin, "source": $qp_source, "dealer_name": $dealer_name, "dealer_id": $dealer_id, "exterior_color": $exterior_color, "interior_color": $interior_color, "engine_size": $engine_size, "fuel_type": $fuel_type, "category": $category, "state": $state, "city": $city, "county": $county, "postal_code": $postal_code, "zip": $zip, "sort_by": $sort_by, "sort_order": $sort_order, "rows": $rows, "start": $start, "facets": $facets, "range_facets": $range_facets, "facet_sort": $facet_sort, "stats": $stats, "last_seen_range": $last_seen_range, "first_seen_range": $first_seen_range, "last_seen_days": $last_seen_days, "first_seen_days": $first_seen_days, "base_exterior_color": $base_exterior_color, "base_interior_color": $base_interior_color, "seating_capacity": $seating_capacity, "cylinders": $cylinders, "doors": $doors, "mtplm": $mtplm, "sub_category": $sub_category, "availability_status": $availability_status, "berths": $berths, "inventory_type": $inventory_type, "width_range": $width_range, "exterior_length_range": $exterior_length_range, "interior_length_range": $interior_length_range, "drive_type": $drive_type, "steering": $steering, "chassis": $chassis, "transmission": $transmission} | compact), body: null}
 }
 
 # API for auto-completion of inputs based on taxonomy
@@ -3263,7 +3323,7 @@ export def "specs-car-auto-complete get" [
   let full_url = (build-url $base "/specs/car/auto-complete" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"api_key": $api_key, "field": $field, "input": $input, "year": $year, "make": $make, "model": $model, "trim": $trim, "body_type": $body_type, "body_subtype": $body_subtype, "vehicle_type": $vehicle_type, "transmission": $transmission, "drivetrain": $drivetrain, "fuel_type": $fuel_type, "engine": $engine, "engine_size": $engine_size, "engine_block": $engine_block, "ignore_case": $ignore_case, "facet_min_count": $facet_min_count} | compact), body: null}
 }
 
 # API for getting terms from taxonomy
@@ -3302,7 +3362,7 @@ export def "specs-car-terms get-taxonomy" [
   let full_url = (build-url $base "/specs/car/terms" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"api_key": $api_key, "field": $field, "year": $year, "make": $make, "model": $model, "trim": $trim, "body_type": $body_type, "body_subtype": $body_subtype, "vehicle_type": $vehicle_type, "transmission": $transmission, "drivetrain": $drivetrain, "fuel_type": $fuel_type, "engine": $engine, "engine_size": $engine_size, "engine_block": $engine_block} | compact), body: null}
 }
 
 # Price, Miles and Days on Market stats
@@ -3335,5 +3395,5 @@ export def "stats-car get-daily" [
   let full_url = (build-url $base "/stats/car" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"api_key": $api_key, "country": $country, "car_type": $car_type, "ymm": $ymm, "ymmt": $ymmt, "taxonomy_vin": $taxonomy_vin, "vin": $vin, "state": $state, "city_state": $city_state} | compact), body: null}
 }

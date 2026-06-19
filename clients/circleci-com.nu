@@ -3,17 +3,18 @@
 # Auth: --token flag or $env.CIRCLECI_REST_API_TOKEN
 
 const BASE_URL = "https://circleci.com/api/v1"
-const DEFAULT_AUTH = "query-circle-token"
 
-# Build auth: returns {headers: record, query: string}
+# Build auth: returns {scheme: string, headers: record, query: string, location: string}.
+# `location` is "header" | "query" | "cookie" | "none" and tells dry-run callers
+# where the token went without inspecting headers/query themselves.
 def build-auth [token?: string, auth_scheme?: string]: nothing -> record {
   let token_val = if ($token != null) and ($token | is-not-empty) { $token } else { $env | get -o CIRCLECI_REST_API_TOKEN | default "" }
   let scheme = ($auth_scheme | default "bearer")
-  if ($scheme == "none") or ($token_val | is-empty) { return {headers: {}, query: ""} }
+  if ($scheme == "none") or ($token_val | is-empty) { return {scheme: $scheme, headers: {}, query: "", location: "none"} }
   match $scheme {
-    "query-circle-token" => { {headers: {}, query: $"(encode-path-segment "circle-token")=(encode-path-segment $token_val)"} }
-    "none" => { {headers: {}, query: ""} }
-    _ => { {headers: {Authorization: $"Bearer ($token_val)"}, query: ""} }
+    "query-circle-token" => { {scheme: $scheme, headers: {}, query: $"(encode-path-segment "circle-token")=(encode-path-segment $token_val)", location: "query"} }
+    "none" => { {scheme: $scheme, headers: {}, query: "", location: "none"} }
+    _ => { {scheme: $scheme, headers: {Authorization: $"Bearer ($token_val)"}, query: "", location: "header"} }
   }
 }
 
@@ -22,8 +23,9 @@ def build-auth [token?: string, auth_scheme?: string]: nothing -> record {
 # ([A-Za-z0-9-._~]) stay literal; everything else gets %XX.
 def serialize-qp [name: string, value: any, style: string]: nothing -> list<string> {
   if ($value == null) { return [] }
-  let n = (encode-path-segment $name)
   let is_list = ($value | describe | str starts-with "list")
+  if $is_list and ($value | is-empty) { return [] }
+  let n = (encode-path-segment $name)
   if ($value | describe | str starts-with "record") { return ($value | transpose k v | each { $"($n)[(encode-path-segment $in.k)]=(encode-path-segment $in.v)" }) }
   if not $is_list { return [$"($n)=(encode-path-segment $value)"] }
   match $style {
@@ -54,22 +56,42 @@ def build-url [base: string, path: string, query?: string]: nothing -> string {
   if ($query != null) and ($query | is-not-empty) { $result | upsert query $query | url join } else { $result | url join }
 }
 
+# Build the dry-run record returned by --dry-run. Shape:
+#   {dry_run: true, method, url, query: <record>, headers, body, content_type, timeout,
+#    auth: {scheme, location}}
+# `meta` carries logical-form data (the query record by spec name, the pre-serialization
+# body) that do-request itself cannot reconstruct from its wire-format args.
+def build-dry-run-record [method: string, url: string, auth: record, content_type: string, timeout: duration, meta?: record]: nothing -> record {
+  let m = ($meta | default {})
+  {
+    dry_run: true
+    method: $method
+    url: $url
+    query: ($m | get -o query | default {})
+    headers: $auth.headers
+    body: ($m | get -o body)
+    content_type: $content_type
+    timeout: $timeout
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+}
+
 # Execute HTTP request with method dispatch
-def do-request [method: string, url: string, auth: record, insecure: bool, raw: bool, dry_run: bool, max_time?: duration, allow_errors?: bool, full?: bool, content_type?: string, body?: any]: nothing -> any {
+def do-request [method: string, url: string, auth: record, insecure: bool, raw: bool, dry_run: bool, max_time?: duration, allow_errors?: bool, full?: bool, content_type?: string, body?: any, dry_run_meta?: record]: nothing -> any {
   let req_url = if ($auth.query | is-not-empty) { if ($url | str contains "?") { $"($url)&($auth.query)" } else { $"($url)?($auth.query)" } } else { $url }
   let timeout = ($max_time | default 30min)
   let ct = ($content_type | default "application/json")
-  if $dry_run { return {method: $method, url: $req_url, headers: $auth.headers, query_string: $auth.query, content_type: $ct, timeout: $timeout, body: $body} }
+  if $dry_run { return (build-dry-run-record $method $req_url $auth $ct $timeout $dry_run_meta) }
   let resp = match $method {
     "get" => { http get --headers $auth.headers --full --allow-errors --max-time $timeout --insecure=$insecure --raw=$raw $req_url }
-    "head" => { http head --headers $auth.headers --max-time $timeout --insecure=$insecure $req_url }
-    "options" => { http options --headers $auth.headers --max-time $timeout --insecure=$insecure $req_url }
+    "head" => { http head --headers $auth.headers --full --allow-errors --max-time $timeout --insecure=$insecure $req_url }
+    "options" => { http options --headers $auth.headers --full --allow-errors --max-time $timeout --insecure=$insecure $req_url }
     "post" => { if ($body | is-empty) { http post --headers $auth.headers --full --allow-errors --max-time $timeout --insecure=$insecure --raw=$raw $req_url "" } else { http post --headers $auth.headers --content-type $ct --full --allow-errors --max-time $timeout --insecure=$insecure --raw=$raw $req_url $body } }
     "put" => { if ($body | is-empty) { http put --headers $auth.headers --full --allow-errors --max-time $timeout --insecure=$insecure --raw=$raw $req_url "" } else { http put --headers $auth.headers --content-type $ct --full --allow-errors --max-time $timeout --insecure=$insecure --raw=$raw $req_url $body } }
     "patch" => { if ($body | is-empty) { http patch --headers $auth.headers --full --allow-errors --max-time $timeout --insecure=$insecure --raw=$raw $req_url "" } else { http patch --headers $auth.headers --content-type $ct --full --allow-errors --max-time $timeout --insecure=$insecure --raw=$raw $req_url $body } }
     "delete" => { if ($body | is-empty) { http delete --headers $auth.headers --full --allow-errors --max-time $timeout --insecure=$insecure --raw=$raw $req_url } else { http delete --headers $auth.headers --content-type $ct --data $body --full --allow-errors --max-time $timeout --insecure=$insecure --raw=$raw $req_url } }
   }
-  if ($method in ["head" "options"]) { return $resp }
+  if ($method == "head") and (not $full) and (not $allow_errors) and $resp.status < 400 { return $resp.headers }
   if $allow_errors { $resp } else if $resp.status >= 400 { error make --unspanned { msg: $"HTTP ($resp.status): ($resp.body)" } } else if $full { {status: $resp.status, headers: $resp.headers, body: $resp.body} } else if $resp.status == 204 { null } else { $resp.body }
 }
 
@@ -122,7 +144,7 @@ export def "me get" [
   let full_url = (build-url $base "/me")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
 }
 
 # Build summary for each of the last 30 builds for a single git repo.
@@ -146,11 +168,13 @@ export def "project list" [
 ]: nothing -> table<body: string, branch: string, build_time_millis: int, build_url: string, committer_email: string, committer_name: string, dont_build: string, lifecycle: string, previous: record<build_num: int, build_time_millis: int, status: string>, queued_at: string, reponame: string, retry_of: int, start_time: string, stop_time: string, subject: string, username: string, vcs_url: string, why: string> {
   let auth = (build-auth $token ($auth_scheme | default "query-circle-token"))
   let base = ($base_url | default $BASE_URL)
+  if ($username | is-empty) { error make --unspanned { msg: "path parameter 'username' must be non-empty" } }
+  if ($project | is-empty) { error make --unspanned { msg: "path parameter 'project' must be non-empty" } }
   let qp = [(serialize-qp "limit" $limit "scalar") (serialize-qp "offset" $offset "scalar") (serialize-qp "filter" $filter "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({username: (encode-path-segment $username), project: (encode-path-segment $project)} | format pattern "/project/{username}/{project}") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"limit": $limit, "offset": $offset, "filter": $filter} | compact), body: null}
 }
 
 # Triggers a new build, returns a summary of the build.
@@ -176,12 +200,14 @@ export def "project create" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "query-circle-token"))
   let base = ($base_url | default $BASE_URL)
+  if ($username | is-empty) { error make --unspanned { msg: "path parameter 'username' must be non-empty" } }
+  if ($project | is-empty) { error make --unspanned { msg: "path parameter 'project' must be non-empty" } }
   let full_url = (build-url $base ({username: (encode-path-segment $username), project: (encode-path-segment $project)} | format pattern "/project/{username}/{project}"))
   let req_body = {"build_parameters": $build_parameters, "parallel": $parallel, "revision": $revision, "tag": $tag} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: {}, body: $req_body}
 }
 
 # Clears the cache for a project.
@@ -202,10 +228,12 @@ export def "project-build-cache delete" [
 ]: nothing -> record<status: string> {
   let auth = (build-auth $token ($auth_scheme | default "query-circle-token"))
   let base = ($base_url | default $BASE_URL)
+  if ($username | is-empty) { error make --unspanned { msg: "path parameter 'username' must be non-empty" } }
+  if ($project | is-empty) { error make --unspanned { msg: "path parameter 'project' must be non-empty" } }
   let full_url = (build-url $base ({username: (encode-path-segment $username), project: (encode-path-segment $project)} | format pattern "/project/{username}/{project}/build-cache"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
 }
 
 # Lists checkout keys.
@@ -226,10 +254,12 @@ export def "project-checkout-key list" [
 ]: nothing -> table<fingerprint: string, preferred: bool, public_key: string, time: string, type: string> {
   let auth = (build-auth $token ($auth_scheme | default "query-circle-token"))
   let base = ($base_url | default $BASE_URL)
+  if ($username | is-empty) { error make --unspanned { msg: "path parameter 'username' must be non-empty" } }
+  if ($project | is-empty) { error make --unspanned { msg: "path parameter 'project' must be non-empty" } }
   let full_url = (build-url $base ({username: (encode-path-segment $username), project: (encode-path-segment $project)} | format pattern "/project/{username}/{project}/checkout-key"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
 }
 
 # Creates a new checkout key. Only usable with a user API token.
@@ -252,12 +282,14 @@ export def "project-checkout-key create" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "query-circle-token"))
   let base = ($base_url | default $BASE_URL)
+  if ($username | is-empty) { error make --unspanned { msg: "path parameter 'username' must be non-empty" } }
+  if ($project | is-empty) { error make --unspanned { msg: "path parameter 'project' must be non-empty" } }
   let full_url = (build-url $base ({username: (encode-path-segment $username), project: (encode-path-segment $project)} | format pattern "/project/{username}/{project}/checkout-key"))
   let req_body = $body
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else if (($input | is-not-empty) and ($req_body | is-empty)) { $input } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: {}, body: $req_body}
 }
 
 # Delete a checkout key.
@@ -279,10 +311,13 @@ export def "project-checkout-key delete" [
 ]: nothing -> record<message: string> {
   let auth = (build-auth $token ($auth_scheme | default "query-circle-token"))
   let base = ($base_url | default $BASE_URL)
+  if ($username | is-empty) { error make --unspanned { msg: "path parameter 'username' must be non-empty" } }
+  if ($project | is-empty) { error make --unspanned { msg: "path parameter 'project' must be non-empty" } }
+  if ($fingerprint | is-empty) { error make --unspanned { msg: "path parameter 'fingerprint' must be non-empty" } }
   let full_url = (build-url $base ({username: (encode-path-segment $username), project: (encode-path-segment $project), fingerprint: (encode-path-segment $fingerprint)} | format pattern "/project/{username}/{project}/checkout-key/{fingerprint}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
 }
 
 # Get a checkout key.
@@ -304,10 +339,13 @@ export def "project-checkout-key get" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "query-circle-token"))
   let base = ($base_url | default $BASE_URL)
+  if ($username | is-empty) { error make --unspanned { msg: "path parameter 'username' must be non-empty" } }
+  if ($project | is-empty) { error make --unspanned { msg: "path parameter 'project' must be non-empty" } }
+  if ($fingerprint | is-empty) { error make --unspanned { msg: "path parameter 'fingerprint' must be non-empty" } }
   let full_url = (build-url $base ({username: (encode-path-segment $username), project: (encode-path-segment $project), fingerprint: (encode-path-segment $fingerprint)} | format pattern "/project/{username}/{project}/checkout-key/{fingerprint}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
 }
 
 # Lists the environment variables for :project
@@ -328,10 +366,12 @@ export def "project-envvar list" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "query-circle-token"))
   let base = ($base_url | default $BASE_URL)
+  if ($username | is-empty) { error make --unspanned { msg: "path parameter 'username' must be non-empty" } }
+  if ($project | is-empty) { error make --unspanned { msg: "path parameter 'project' must be non-empty" } }
   let full_url = (build-url $base ({username: (encode-path-segment $username), project: (encode-path-segment $project)} | format pattern "/project/{username}/{project}/envvar"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
 }
 
 # Creates a new environment variable
@@ -352,10 +392,12 @@ export def "project-envvar create" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "query-circle-token"))
   let base = ($base_url | default $BASE_URL)
+  if ($username | is-empty) { error make --unspanned { msg: "path parameter 'username' must be non-empty" } }
+  if ($project | is-empty) { error make --unspanned { msg: "path parameter 'project' must be non-empty" } }
   let full_url = (build-url $base ({username: (encode-path-segment $username), project: (encode-path-segment $project)} | format pattern "/project/{username}/{project}/envvar"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
 }
 
 # Deletes the environment variable named ':name'
@@ -377,10 +419,13 @@ export def "project-envvar delete" [
 ]: nothing -> record<message: string> {
   let auth = (build-auth $token ($auth_scheme | default "query-circle-token"))
   let base = ($base_url | default $BASE_URL)
+  if ($username | is-empty) { error make --unspanned { msg: "path parameter 'username' must be non-empty" } }
+  if ($project | is-empty) { error make --unspanned { msg: "path parameter 'project' must be non-empty" } }
+  if ($name | is-empty) { error make --unspanned { msg: "path parameter 'name' must be non-empty" } }
   let full_url = (build-url $base ({username: (encode-path-segment $username), project: (encode-path-segment $project), name: (encode-path-segment $name)} | format pattern "/project/{username}/{project}/envvar/{name}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
 }
 
 # Gets the hidden value of environment variable :name
@@ -402,10 +447,13 @@ export def "project-envvar get" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "query-circle-token"))
   let base = ($base_url | default $BASE_URL)
+  if ($username | is-empty) { error make --unspanned { msg: "path parameter 'username' must be non-empty" } }
+  if ($project | is-empty) { error make --unspanned { msg: "path parameter 'project' must be non-empty" } }
+  if ($name | is-empty) { error make --unspanned { msg: "path parameter 'name' must be non-empty" } }
   let full_url = (build-url $base ({username: (encode-path-segment $username), project: (encode-path-segment $project), name: (encode-path-segment $name)} | format pattern "/project/{username}/{project}/envvar/{name}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
 }
 
 # Create an ssh key used to access external systems that require SSH key-based authentication
@@ -430,6 +478,8 @@ export def "project-ssh-key create" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "query-circle-token"))
   let base = ($base_url | default $BASE_URL)
+  if ($username | is-empty) { error make --unspanned { msg: "path parameter 'username' must be non-empty" } }
+  if ($project | is-empty) { error make --unspanned { msg: "path parameter 'project' must be non-empty" } }
   let full_url = (build-url $base ({username: (encode-path-segment $username), project: (encode-path-segment $project)} | format pattern "/project/{username}/{project}/ssh-key"))
   let req_body = {"hostname": $hostname, "private_key": $private_key} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
@@ -438,8 +488,8 @@ export def "project-ssh-key create" [
   let extra_headers = {"Content-Type": $content_type} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let effective_ct = ($content_type | default "application/json")
-  let req_body = if $effective_ct == "application/x-www-form-urlencoded" { $req_body | transpose k v | where v != null | reduce -f {} {|p, acc| $acc | upsert $p.k $p.v } | url build-query } else { $req_body }
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full $effective_ct $req_body
+  let req_body_wire = if $effective_ct == "application/x-www-form-urlencoded" { $req_body | transpose k v | where v != null | reduce -f {} {|p, acc| $acc | upsert $p.k $p.v } | url build-query } else { $req_body }
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full $effective_ct $req_body_wire {query: {}, body: $req_body}
 }
 
 # Triggers a new build, returns a summary of the build. Optional build parameters can be set using an experimental API. Note: For more about build parameters, read about [using parameterized builds](https://circleci.com/docs/parameterized-builds/)
@@ -465,12 +515,15 @@ export def "project-tree create" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "query-circle-token"))
   let base = ($base_url | default $BASE_URL)
+  if ($username | is-empty) { error make --unspanned { msg: "path parameter 'username' must be non-empty" } }
+  if ($project | is-empty) { error make --unspanned { msg: "path parameter 'project' must be non-empty" } }
+  if ($branch | is-empty) { error make --unspanned { msg: "path parameter 'branch' must be non-empty" } }
   let full_url = (build-url $base ({username: (encode-path-segment $username), project: (encode-path-segment $project), branch: (encode-path-segment $branch)} | format pattern "/project/{username}/{project}/tree/{branch}"))
   let req_body = {"build_parameters": $build_parameters, "parallel": $parallel, "revision": $revision} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: {}, body: $req_body}
 }
 
 # Full details for a single build. The response includes all of the fields from the build summary. This is also the payload for the [notification webhooks](/docs/configuration/#notify), in which case this object is the value to a key named 'payload'.
@@ -492,10 +545,13 @@ export def "project get" [
 ]: nothing -> record<all_commit_details: table<author_date: string, author_email: string, author_login: string, author_name: string, body: string, commit: string, commit_url: string, committer_date: string, committer_email: string, committer_login: string, committer_name: string, subject: string>, compare: string, job_name: string, node: any, previous_successful_build: record<build_num: int, build_time_millis: int, status: string>, retries: bool, ssh_enabled: bool, timedout: bool, usage_queued_at: string, user: record<admin: bool, all_emails: list<string>, analytics_id: string, avatar_url: string, basic_email_prefs: string, bitbucket: int, bitbucket_authorized: bool, containers: int, created_at: string, days_left_in_trial: int, dev_admin: bool, enrolled_betas: list<string>, github_id: int, github_oauth_scopes: list<string>, gravatar_id: int, heroku_api_key: string, in_beta_program: bool, login: string, name: string, organization_prefs: record, parallelism: int, plan: string, projects: record, pusher_id: string, selected_email: string, sign_in_count: int, trial_end: string>> {
   let auth = (build-auth $token ($auth_scheme | default "query-circle-token"))
   let base = ($base_url | default $BASE_URL)
+  if ($username | is-empty) { error make --unspanned { msg: "path parameter 'username' must be non-empty" } }
+  if ($project | is-empty) { error make --unspanned { msg: "path parameter 'project' must be non-empty" } }
+  if ($build_num | is-empty) { error make --unspanned { msg: "path parameter 'build_num' must be non-empty" } }
   let full_url = (build-url $base ({username: (encode-path-segment $username), project: (encode-path-segment $project), build_num: (encode-path-segment $build_num)} | format pattern "/project/{username}/{project}/{build_num}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
 }
 
 # List the artifacts produced by a given build.
@@ -517,10 +573,13 @@ export def "project-artifacts get" [
 ]: nothing -> table<node_index: int, path: string, pretty_path: string, url: string> {
   let auth = (build-auth $token ($auth_scheme | default "query-circle-token"))
   let base = ($base_url | default $BASE_URL)
+  if ($username | is-empty) { error make --unspanned { msg: "path parameter 'username' must be non-empty" } }
+  if ($project | is-empty) { error make --unspanned { msg: "path parameter 'project' must be non-empty" } }
+  if ($build_num | is-empty) { error make --unspanned { msg: "path parameter 'build_num' must be non-empty" } }
   let full_url = (build-url $base ({username: (encode-path-segment $username), project: (encode-path-segment $project), build_num: (encode-path-segment $build_num)} | format pattern "/project/{username}/{project}/{build_num}/artifacts"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
 }
 
 # Cancels the build, returns a summary of the build.
@@ -542,10 +601,13 @@ export def "project-cancel create" [
 ]: nothing -> record<body: string, branch: string, build_time_millis: int, build_url: string, committer_email: string, committer_name: string, dont_build: string, lifecycle: string, previous: record<build_num: int, build_time_millis: int, status: string>, queued_at: string, reponame: string, retry_of: int, start_time: string, stop_time: string, subject: string, username: string, vcs_url: string, why: string> {
   let auth = (build-auth $token ($auth_scheme | default "query-circle-token"))
   let base = ($base_url | default $BASE_URL)
+  if ($username | is-empty) { error make --unspanned { msg: "path parameter 'username' must be non-empty" } }
+  if ($project | is-empty) { error make --unspanned { msg: "path parameter 'project' must be non-empty" } }
+  if ($build_num | is-empty) { error make --unspanned { msg: "path parameter 'build_num' must be non-empty" } }
   let full_url = (build-url $base ({username: (encode-path-segment $username), project: (encode-path-segment $project), build_num: (encode-path-segment $build_num)} | format pattern "/project/{username}/{project}/{build_num}/cancel"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
 }
 
 # Retries the build, returns a summary of the new build.
@@ -567,10 +629,13 @@ export def "project-retry create" [
 ]: nothing -> record<body: string, branch: string, build_time_millis: int, build_url: string, committer_email: string, committer_name: string, dont_build: string, lifecycle: string, previous: record<build_num: int, build_time_millis: int, status: string>, queued_at: string, reponame: string, retry_of: int, start_time: string, stop_time: string, subject: string, username: string, vcs_url: string, why: string> {
   let auth = (build-auth $token ($auth_scheme | default "query-circle-token"))
   let base = ($base_url | default $BASE_URL)
+  if ($username | is-empty) { error make --unspanned { msg: "path parameter 'username' must be non-empty" } }
+  if ($project | is-empty) { error make --unspanned { msg: "path parameter 'project' must be non-empty" } }
+  if ($build_num | is-empty) { error make --unspanned { msg: "path parameter 'build_num' must be non-empty" } }
   let full_url = (build-url $base ({username: (encode-path-segment $username), project: (encode-path-segment $project), build_num: (encode-path-segment $build_num)} | format pattern "/project/{username}/{project}/{build_num}/retry"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
 }
 
 # Provides test metadata for a build Note: [Learn how to set up your builds to collect test metadata](https://circleci.com/docs/test-metadata/)
@@ -592,10 +657,13 @@ export def "project-tests get" [
 ]: nothing -> record<tests: table<classname: string, file: string, message: string, name: string, result: string, run_time: float, source: string>> {
   let auth = (build-auth $token ($auth_scheme | default "query-circle-token"))
   let base = ($base_url | default $BASE_URL)
+  if ($username | is-empty) { error make --unspanned { msg: "path parameter 'username' must be non-empty" } }
+  if ($project | is-empty) { error make --unspanned { msg: "path parameter 'project' must be non-empty" } }
+  if ($build_num | is-empty) { error make --unspanned { msg: "path parameter 'build_num' must be non-empty" } }
   let full_url = (build-url $base ({username: (encode-path-segment $username), project: (encode-path-segment $project), build_num: (encode-path-segment $build_num)} | format pattern "/project/{username}/{project}/{build_num}/tests"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
 }
 
 # List of all the projects you're following on CircleCI, with build information organized by branch.
@@ -617,7 +685,7 @@ export def "projects get" [
   let full_url = (build-url $base "/projects")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
 }
 
 # Build summary for each of the last 30 recent builds, ordered by build_num.
@@ -642,7 +710,7 @@ export def "recent-builds get" [
   let full_url = (build-url $base "/recent-builds" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"limit": $limit, "offset": $offset} | compact), body: null}
 }
 
 # Adds your Heroku API key to CircleCI, takes apikey as form param name.
@@ -664,5 +732,5 @@ export def "user-heroku-key create" [
   let full_url = (build-url $base "/user/heroku-key")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
 }

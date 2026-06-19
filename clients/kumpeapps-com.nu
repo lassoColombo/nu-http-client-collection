@@ -3,17 +3,18 @@
 # Auth: --token flag or $env.KUMPEAPPS_API_TOKEN
 
 const BASE_URL = "https://restapi.kumpeapps.com/v5"
-const DEFAULT_AUTH = "x-auth"
 
-# Build auth: returns {headers: record, query: string}
+# Build auth: returns {scheme: string, headers: record, query: string, location: string}.
+# `location` is "header" | "query" | "cookie" | "none" and tells dry-run callers
+# where the token went without inspecting headers/query themselves.
 def build-auth [token?: string, auth_scheme?: string]: nothing -> record {
   let token_val = if ($token != null) and ($token | is-not-empty) { $token } else { $env | get -o KUMPEAPPS_API_TOKEN | default "" }
   let scheme = ($auth_scheme | default "bearer")
-  if ($scheme == "none") or ($token_val | is-empty) { return {headers: {}, query: ""} }
+  if ($scheme == "none") or ($token_val | is-empty) { return {scheme: $scheme, headers: {}, query: "", location: "none"} }
   match $scheme {
-    "x-auth" => { {headers: {X-Auth: $token_val}, query: ""} }
-    "none" => { {headers: {}, query: ""} }
-    _ => { {headers: {Authorization: $"Bearer ($token_val)"}, query: ""} }
+    "x-auth" => { {scheme: $scheme, headers: {X-Auth: $token_val}, query: "", location: "header"} }
+    "none" => { {scheme: $scheme, headers: {}, query: "", location: "none"} }
+    _ => { {scheme: $scheme, headers: {Authorization: $"Bearer ($token_val)"}, query: "", location: "header"} }
   }
 }
 
@@ -22,8 +23,9 @@ def build-auth [token?: string, auth_scheme?: string]: nothing -> record {
 # ([A-Za-z0-9-._~]) stay literal; everything else gets %XX.
 def serialize-qp [name: string, value: any, style: string]: nothing -> list<string> {
   if ($value == null) { return [] }
-  let n = (encode-path-segment $name)
   let is_list = ($value | describe | str starts-with "list")
+  if $is_list and ($value | is-empty) { return [] }
+  let n = (encode-path-segment $name)
   if ($value | describe | str starts-with "record") { return ($value | transpose k v | each { $"($n)[(encode-path-segment $in.k)]=(encode-path-segment $in.v)" }) }
   if not $is_list { return [$"($n)=(encode-path-segment $value)"] }
   match $style {
@@ -54,22 +56,42 @@ def build-url [base: string, path: string, query?: string]: nothing -> string {
   if ($query != null) and ($query | is-not-empty) { $result | upsert query $query | url join } else { $result | url join }
 }
 
+# Build the dry-run record returned by --dry-run. Shape:
+#   {dry_run: true, method, url, query: <record>, headers, body, content_type, timeout,
+#    auth: {scheme, location}}
+# `meta` carries logical-form data (the query record by spec name, the pre-serialization
+# body) that do-request itself cannot reconstruct from its wire-format args.
+def build-dry-run-record [method: string, url: string, auth: record, content_type: string, timeout: duration, meta?: record]: nothing -> record {
+  let m = ($meta | default {})
+  {
+    dry_run: true
+    method: $method
+    url: $url
+    query: ($m | get -o query | default {})
+    headers: $auth.headers
+    body: ($m | get -o body)
+    content_type: $content_type
+    timeout: $timeout
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+}
+
 # Execute HTTP request with method dispatch
-def do-request [method: string, url: string, auth: record, insecure: bool, raw: bool, dry_run: bool, max_time?: duration, allow_errors?: bool, full?: bool, content_type?: string, body?: any]: nothing -> any {
+def do-request [method: string, url: string, auth: record, insecure: bool, raw: bool, dry_run: bool, max_time?: duration, allow_errors?: bool, full?: bool, content_type?: string, body?: any, dry_run_meta?: record]: nothing -> any {
   let req_url = if ($auth.query | is-not-empty) { if ($url | str contains "?") { $"($url)&($auth.query)" } else { $"($url)?($auth.query)" } } else { $url }
   let timeout = ($max_time | default 30min)
   let ct = ($content_type | default "application/json")
-  if $dry_run { return {method: $method, url: $req_url, headers: $auth.headers, query_string: $auth.query, content_type: $ct, timeout: $timeout, body: $body} }
+  if $dry_run { return (build-dry-run-record $method $req_url $auth $ct $timeout $dry_run_meta) }
   let resp = match $method {
     "get" => { http get --headers $auth.headers --full --allow-errors --max-time $timeout --insecure=$insecure --raw=$raw $req_url }
-    "head" => { http head --headers $auth.headers --max-time $timeout --insecure=$insecure $req_url }
-    "options" => { http options --headers $auth.headers --max-time $timeout --insecure=$insecure $req_url }
+    "head" => { http head --headers $auth.headers --full --allow-errors --max-time $timeout --insecure=$insecure $req_url }
+    "options" => { http options --headers $auth.headers --full --allow-errors --max-time $timeout --insecure=$insecure $req_url }
     "post" => { if ($body | is-empty) { http post --headers $auth.headers --full --allow-errors --max-time $timeout --insecure=$insecure --raw=$raw $req_url "" } else { http post --headers $auth.headers --content-type $ct --full --allow-errors --max-time $timeout --insecure=$insecure --raw=$raw $req_url $body } }
     "put" => { if ($body | is-empty) { http put --headers $auth.headers --full --allow-errors --max-time $timeout --insecure=$insecure --raw=$raw $req_url "" } else { http put --headers $auth.headers --content-type $ct --full --allow-errors --max-time $timeout --insecure=$insecure --raw=$raw $req_url $body } }
     "patch" => { if ($body | is-empty) { http patch --headers $auth.headers --full --allow-errors --max-time $timeout --insecure=$insecure --raw=$raw $req_url "" } else { http patch --headers $auth.headers --content-type $ct --full --allow-errors --max-time $timeout --insecure=$insecure --raw=$raw $req_url $body } }
     "delete" => { if ($body | is-empty) { http delete --headers $auth.headers --full --allow-errors --max-time $timeout --insecure=$insecure --raw=$raw $req_url } else { http delete --headers $auth.headers --content-type $ct --data $body --full --allow-errors --max-time $timeout --insecure=$insecure --raw=$raw $req_url } }
   }
-  if ($method in ["head" "options"]) { return $resp }
+  if ($method == "head") and (not $full) and (not $allow_errors) and $resp.status < 400 { return $resp.headers }
   if $allow_errors { $resp } else if $resp.status >= 400 { error make --unspanned { msg: $"HTTP ($resp.status): ($resp.body)" } } else if $full { {status: $resp.status, headers: $resp.headers, body: $resp.body} } else if $resp.status == 204 { null } else { $resp.body }
 }
 
@@ -138,7 +160,7 @@ export def "appkey update" [
   let full_url = (build-url $base "/appkey" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "patch" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "patch" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"app_key": $app_key, "comments": $comments} | compact), body: null}
 }
 
 # Request app key
@@ -167,7 +189,7 @@ export def "appkey create" [
   let full_url = (build-url $base "/appkey" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"username": $username, "password": $password, "supportsYubikey": $supports_yubikey} | compact), body: null}
 }
 
 # Deactivate app key
@@ -194,7 +216,7 @@ export def "appkey update-1" [
   let full_url = (build-url $base "/appkey" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"app_key": $app_key} | compact), body: null}
 }
 
 # Compromise app key
@@ -220,7 +242,7 @@ export def "authentication-appkey update-auth" [
   let full_url = (build-url $base "/authentication/appkey" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "patch" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "patch" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"app_key": $app_key, "comments": $comments} | compact), body: null}
 }
 
 # Request app key
@@ -247,7 +269,7 @@ export def "authentication-appkey create-auth" [
   let full_url = (build-url $base "/authentication/appkey" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"username": $username, "password": $password, "supportsYubikey": $supports_yubikey} | compact), body: null}
 }
 
 # Deactivate app key
@@ -272,7 +294,7 @@ export def "authentication-appkey update-auth-1" [
   let full_url = (build-url $base "/authentication/appkey" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"app_key": $app_key} | compact), body: null}
 }
 
 # Request auth key for user (login user)
@@ -301,7 +323,7 @@ export def "authentication-authkey get-auth" [
   let full_url = (build-url $base "/authentication/authkey" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"username": $username, "password": $password, "otp": $otp, "deviceName": $device_name, "identifierForVendor": $identifier_for_vendor} | compact), body: null}
 }
 
 # Compromise auth key
@@ -327,7 +349,7 @@ export def "authentication-authkey update-auth" [
   let full_url = (build-url $base "/authentication/authkey" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "patch" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "patch" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"auth_key": $auth_key, "comments": $comments} | compact), body: null}
 }
 
 # Request auth key for user (login user)
@@ -354,7 +376,7 @@ export def "authentication-authkey create-auth" [
   let full_url = (build-url $base "/authentication/authkey" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"username": $username, "password": $password, "otp": $otp} | compact), body: null}
 }
 
 # Deactivate auth key (logout)
@@ -379,7 +401,7 @@ export def "authentication-authkey update-auth-1" [
   let full_url = (build-url $base "/authentication/authkey" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"auth_key": $auth_key} | compact), body: null}
 }
 
 # Verifies YubiKey OTP for authenticated user
@@ -404,7 +426,7 @@ export def "authentication-verifyotp get-auth" [
   let full_url = (build-url $base "/authentication/verifyotp" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"otp": $otp} | compact), body: null}
 }
 
 # Request auth key for user (login user)
@@ -433,7 +455,7 @@ export def "authkey get" [
   let full_url = (build-url $base "/authkey" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"username": $username, "password": $password, "otp": $otp} | compact), body: null}
 }
 
 # Compromise auth key
@@ -461,7 +483,7 @@ export def "authkey update" [
   let full_url = (build-url $base "/authkey" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "patch" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "patch" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"auth_key": $auth_key, "comments": $comments} | compact), body: null}
 }
 
 # Request auth key for user (login user)
@@ -490,7 +512,7 @@ export def "authkey create" [
   let full_url = (build-url $base "/authkey" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"username": $username, "password": $password, "otp": $otp} | compact), body: null}
 }
 
 # Deactivate auth key (logout)
@@ -517,7 +539,7 @@ export def "authkey update-1" [
   let full_url = (build-url $base "/authkey" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"auth_key": $auth_key} | compact), body: null}
 }
 
 # returns allowance balance and allowance transactions
@@ -543,7 +565,7 @@ export def "kkid-allowance get" [
   let full_url = (build-url $base "/kkid/allowance" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"kidUserId": $kid_user_id, "transactionDays": $transaction_days} | compact), body: null}
 }
 
 # adds new allowance transaction to kidUserID
@@ -571,7 +593,7 @@ export def "kkid-allowance create" [
   let full_url = (build-url $base "/kkid/allowance" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"kidUserId": $kid_user_id, "amount": $amount, "description": $description, "transactionType": $transaction_type} | compact), body: null}
 }
 
 # subscribes/unsubscribes/registers for apns push notifications
@@ -605,7 +627,7 @@ export def "kkid-apns create" [
   let full_url = (build-url $base "/kkid/apns" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"kidUserId": $kid_user_id, "tool": $tool, "token": $qp_token, "devicename": $devicename, "title": $title, "message": $message, "badge": $badge, "sound": $sound, "section": $section, "priority": $priority} | compact), body: null}
 }
 
 # deletes chore for given chore id
@@ -630,7 +652,7 @@ export def "kkid-chorelist delete" [
   let full_url = (build-url $base "/kkid/chorelist" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"idChoreList": $id_chore_list} | compact), body: null}
 }
 
 # returns list of chores for given user
@@ -661,7 +683,7 @@ export def "kkid-chorelist get" [
   let full_url = (build-url $base "/kkid/chorelist" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"kidUsername": $kid_username, "day": $day, "status": $status, "blockDash": $block_dash, "optional": $optional, "canSteal": $can_steal, "includeCalendar": $include_calendar} | compact), body: null}
 }
 
 # adds chore for given user
@@ -705,7 +727,7 @@ export def "kkid-chorelist create" [
   let full_url = (build-url $base "/kkid/chorelist" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"kidUsername": $kid_username, "day": $day, "nfcTag": $nfc_tag, "status": $status, "choreName": $chore_name, "choreDescription": $chore_description, "choreNumber": $chore_number, "blockDash": $block_dash, "oneTime": $one_time, "extraAllowance": $extra_allowance, "optional": $optional, "reassignable": $reassignable, "canSteal": $can_steal, "startDate": $start_date, "notes": $notes, "requireObjectDetection": $require_object_detection, "objectDetectionTag": $object_detection_tag, "updatedByAutomation": $updated_by_automation, "aiIcon": $ai_icon, "isCalendar": $is_calendar} | compact), body: null}
 }
 
 # updates chore for given chore id
@@ -742,7 +764,7 @@ export def "kkid-chorelist update" [
   let full_url = (build-url $base "/kkid/chorelist" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"idChoreList": $id_chore_list, "status": $status, "stolen": $stolen, "stolenBy": $stolen_by, "nfcTag": $nfc_tag, "notes": $notes, "latitude": $latitude, "longitude": $longitude, "altitude": $altitude, "updatedByAutomation": $updated_by_automation, "whereDay": $where_day, "whereStatus": $where_status, "whereName": $where_name} | compact), body: null}
 }
 
 # adds new master user account
@@ -771,7 +793,7 @@ export def "kkid-masteruser create" [
   let full_url = (build-url $base "/kkid/masteruser" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"username": $username, "password": $password, "email": $email, "firstName": $first_name, "lastName": $last_name} | compact), body: null}
 }
 
 # Create Share Link
@@ -801,7 +823,7 @@ export def "kkid-share get" [
   let full_url = (build-url $base "/kkid/share" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"linkUserId": $link_user_id, "link": $link, "scope": $scope, "scope2": $scope2, "scope3": $scope3, "scope4": $scope4} | compact), body: null}
 }
 
 # Gets user info
@@ -826,7 +848,7 @@ export def "kkid-user get" [
   let full_url = (build-url $base "/kkid/user" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"enableBool": $enable_bool} | compact), body: null}
 }
 
 # deletes user
@@ -851,7 +873,7 @@ export def "kkid-userlist delete" [
   let full_url = (build-url $base "/kkid/userlist" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"userID": $user_id} | compact), body: null}
 }
 
 # returns list of users
@@ -883,7 +905,7 @@ export def "kkid-userlist get" [
   let full_url = (build-url $base "/kkid/userlist" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"isChild": $is_child, "isActive": $is_active, "isAdmin": $is_admin, "enableAllowance": $enable_allowance, "enableChores": $enable_chores, "userID": $user_id, "username": $username, "email": $email} | compact), body: null}
 }
 
 # adds new child user
@@ -912,7 +934,7 @@ export def "kkid-userlist create" [
   let full_url = (build-url $base "/kkid/userlist" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"username": $username, "password": $password, "email": $email, "firstName": $first_name, "lastName": $last_name} | compact), body: null}
 }
 
 # updates user
@@ -949,7 +971,7 @@ export def "kkid-userlist update" [
   let full_url = (build-url $base "/kkid/userlist" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"userID": $user_id, "username": $username, "email": $email, "firstName": $first_name, "lastName": $last_name, "emoji": $emoji, "tmdbKey": $tmdb_key, "enableWishList": $enable_wish_list, "enableChores": $enable_chores, "enableAllowance": $enable_allowance, "enableAdmin": $enable_admin, "enableTmdb": $enable_tmdb, "enableObjectDetection": $enable_object_detection} | compact), body: null}
 }
 
 # Delete item from wishlist
@@ -974,7 +996,7 @@ export def "kkid-wishlist delete" [
   let full_url = (build-url $base "/kkid/wishlist" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"wishId": $wish_id} | compact), body: null}
 }
 
 # Get list of wishlist items
@@ -999,7 +1021,7 @@ export def "kkid-wishlist get" [
   let full_url = (build-url $base "/kkid/wishlist" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"kidUserId": $kid_user_id} | compact), body: null}
 }
 
 # Add item to kid's wishlist
@@ -1028,7 +1050,7 @@ export def "kkid-wishlist create" [
   let full_url = (build-url $base "/kkid/wishlist" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"kidUserId": $kid_user_id, "title": $title, "description": $description, "priority": $priority, "link": $link} | compact), body: null}
 }
 
 # Update item on kid's wishlist
@@ -1057,5 +1079,5 @@ export def "kkid-wishlist update" [
   let full_url = (build-url $base "/kkid/wishlist" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"wishId": $wish_id, "title": $title, "description": $description, "priority": $priority, "link": $link} | compact), body: null}
 }

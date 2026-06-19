@@ -3,16 +3,17 @@
 # Auth: --token flag or $env.NBA_STATS_API_TOKEN
 
 const BASE_URL = "https://stats.nba.com/stats"
-const DEFAULT_AUTH = "bearer"
 
-# Build auth: returns {headers: record, query: string}
+# Build auth: returns {scheme: string, headers: record, query: string, location: string}.
+# `location` is "header" | "query" | "cookie" | "none" and tells dry-run callers
+# where the token went without inspecting headers/query themselves.
 def build-auth [token?: string, auth_scheme?: string]: nothing -> record {
   let token_val = if ($token != null) and ($token | is-not-empty) { $token } else { $env | get -o NBA_STATS_API_TOKEN | default "" }
   let scheme = ($auth_scheme | default "bearer")
-  if ($scheme == "none") or ($token_val | is-empty) { return {headers: {}, query: ""} }
+  if ($scheme == "none") or ($token_val | is-empty) { return {scheme: $scheme, headers: {}, query: "", location: "none"} }
   match $scheme {
-    "none" => { {headers: {}, query: ""} }
-    _ => { {headers: {Authorization: $"Bearer ($token_val)"}, query: ""} }
+    "none" => { {scheme: $scheme, headers: {}, query: "", location: "none"} }
+    _ => { {scheme: $scheme, headers: {Authorization: $"Bearer ($token_val)"}, query: "", location: "header"} }
   }
 }
 
@@ -21,8 +22,9 @@ def build-auth [token?: string, auth_scheme?: string]: nothing -> record {
 # ([A-Za-z0-9-._~]) stay literal; everything else gets %XX.
 def serialize-qp [name: string, value: any, style: string]: nothing -> list<string> {
   if ($value == null) { return [] }
-  let n = (encode-path-segment $name)
   let is_list = ($value | describe | str starts-with "list")
+  if $is_list and ($value | is-empty) { return [] }
+  let n = (encode-path-segment $name)
   if ($value | describe | str starts-with "record") { return ($value | transpose k v | each { $"($n)[(encode-path-segment $in.k)]=(encode-path-segment $in.v)" }) }
   if not $is_list { return [$"($n)=(encode-path-segment $value)"] }
   match $style {
@@ -53,22 +55,42 @@ def build-url [base: string, path: string, query?: string]: nothing -> string {
   if ($query != null) and ($query | is-not-empty) { $result | upsert query $query | url join } else { $result | url join }
 }
 
+# Build the dry-run record returned by --dry-run. Shape:
+#   {dry_run: true, method, url, query: <record>, headers, body, content_type, timeout,
+#    auth: {scheme, location}}
+# `meta` carries logical-form data (the query record by spec name, the pre-serialization
+# body) that do-request itself cannot reconstruct from its wire-format args.
+def build-dry-run-record [method: string, url: string, auth: record, content_type: string, timeout: duration, meta?: record]: nothing -> record {
+  let m = ($meta | default {})
+  {
+    dry_run: true
+    method: $method
+    url: $url
+    query: ($m | get -o query | default {})
+    headers: $auth.headers
+    body: ($m | get -o body)
+    content_type: $content_type
+    timeout: $timeout
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+}
+
 # Execute HTTP request with method dispatch
-def do-request [method: string, url: string, auth: record, insecure: bool, raw: bool, dry_run: bool, max_time?: duration, allow_errors?: bool, full?: bool, content_type?: string, body?: any]: nothing -> any {
+def do-request [method: string, url: string, auth: record, insecure: bool, raw: bool, dry_run: bool, max_time?: duration, allow_errors?: bool, full?: bool, content_type?: string, body?: any, dry_run_meta?: record]: nothing -> any {
   let req_url = if ($auth.query | is-not-empty) { if ($url | str contains "?") { $"($url)&($auth.query)" } else { $"($url)?($auth.query)" } } else { $url }
   let timeout = ($max_time | default 30min)
   let ct = ($content_type | default "application/json")
-  if $dry_run { return {method: $method, url: $req_url, headers: $auth.headers, query_string: $auth.query, content_type: $ct, timeout: $timeout, body: $body} }
+  if $dry_run { return (build-dry-run-record $method $req_url $auth $ct $timeout $dry_run_meta) }
   let resp = match $method {
     "get" => { http get --headers $auth.headers --full --allow-errors --max-time $timeout --insecure=$insecure --raw=$raw $req_url }
-    "head" => { http head --headers $auth.headers --max-time $timeout --insecure=$insecure $req_url }
-    "options" => { http options --headers $auth.headers --max-time $timeout --insecure=$insecure $req_url }
+    "head" => { http head --headers $auth.headers --full --allow-errors --max-time $timeout --insecure=$insecure $req_url }
+    "options" => { http options --headers $auth.headers --full --allow-errors --max-time $timeout --insecure=$insecure $req_url }
     "post" => { if ($body | is-empty) { http post --headers $auth.headers --full --allow-errors --max-time $timeout --insecure=$insecure --raw=$raw $req_url "" } else { http post --headers $auth.headers --content-type $ct --full --allow-errors --max-time $timeout --insecure=$insecure --raw=$raw $req_url $body } }
     "put" => { if ($body | is-empty) { http put --headers $auth.headers --full --allow-errors --max-time $timeout --insecure=$insecure --raw=$raw $req_url "" } else { http put --headers $auth.headers --content-type $ct --full --allow-errors --max-time $timeout --insecure=$insecure --raw=$raw $req_url $body } }
     "patch" => { if ($body | is-empty) { http patch --headers $auth.headers --full --allow-errors --max-time $timeout --insecure=$insecure --raw=$raw $req_url "" } else { http patch --headers $auth.headers --content-type $ct --full --allow-errors --max-time $timeout --insecure=$insecure --raw=$raw $req_url $body } }
     "delete" => { if ($body | is-empty) { http delete --headers $auth.headers --full --allow-errors --max-time $timeout --insecure=$insecure --raw=$raw $req_url } else { http delete --headers $auth.headers --content-type $ct --data $body --full --allow-errors --max-time $timeout --insecure=$insecure --raw=$raw $req_url } }
   }
-  if ($method in ["head" "options"]) { return $resp }
+  if ($method == "head") and (not $full) and (not $allow_errors) and $resp.status < 400 { return $resp.headers }
   if $allow_errors { $resp } else if $resp.status >= 400 { error make --unspanned { msg: $"HTTP ($resp.status): ($resp.body)" } } else if $full { {status: $resp.status, headers: $resp.headers, body: $resp.body} } else if $resp.status == 204 { null } else { $resp.body }
 }
 
@@ -131,7 +153,7 @@ export def "allstarballotpredictor get" [
   let full_url = (build-url $base "/allstarballotpredictor" $qp)
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"PointCap": $point_cap, "WestPlayer1": $west_player1, "WestPlayer2": $west_player2, "WestPlayer3": $west_player3, "WestPlayer4": $west_player4, "WestPlayer5": $west_player5, "EastPlayer1": $east_player1, "EastPlayer2": $east_player2, "EastPlayer3": $east_player3, "EastPlayer4": $east_player4, "EastPlayer5": $east_player5} | compact), body: null}
 }
 
 # GET /boxscore
@@ -162,7 +184,7 @@ export def "boxscore get" [
   let full_url = (build-url $base "/boxscore" $qp)
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"GameID": $game_id, "StartPeriod": $start_period, "EndPeriod": $end_period, "StartRange": $start_range, "EndRange": $end_range, "RangeType": $range_type} | compact), body: null}
 }
 
 # GET /boxscoreadvanced
@@ -193,7 +215,7 @@ export def "boxscoreadvanced get" [
   let full_url = (build-url $base "/boxscoreadvanced" $qp)
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"GameID": $game_id, "StartPeriod": $start_period, "EndPeriod": $end_period, "StartRange": $start_range, "EndRange": $end_range, "RangeType": $range_type} | compact), body: null}
 }
 
 # GET /boxscoreadvancedv2
@@ -221,7 +243,7 @@ export def "boxscoreadvancedv2 get" [
   let full_url = (build-url $base "/boxscoreadvancedv2" $qp)
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"GameID": $game_id, "StartPeriod": $start_period, "EndPeriod": $end_period, "StartRange": $start_range, "EndRange": $end_range, "RangeType": $range_type} | compact), body: null}
 }
 
 # GET /boxscorefourfactors
@@ -252,7 +274,7 @@ export def "boxscorefourfactors get" [
   let full_url = (build-url $base "/boxscorefourfactors" $qp)
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"GameID": $game_id, "StartPeriod": $start_period, "EndPeriod": $end_period, "StartRange": $start_range, "EndRange": $end_range, "RangeType": $range_type} | compact), body: null}
 }
 
 # GET /boxscorefourfactorsv2
@@ -280,7 +302,7 @@ export def "boxscorefourfactorsv2 get" [
   let full_url = (build-url $base "/boxscorefourfactorsv2" $qp)
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"GameID": $game_id, "StartPeriod": $start_period, "EndPeriod": $end_period, "StartRange": $start_range, "EndRange": $end_range, "RangeType": $range_type} | compact), body: null}
 }
 
 # GET /boxscoremisc
@@ -311,7 +333,7 @@ export def "boxscoremisc get" [
   let full_url = (build-url $base "/boxscoremisc" $qp)
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"GameID": $game_id, "StartPeriod": $start_period, "EndPeriod": $end_period, "StartRange": $start_range, "EndRange": $end_range, "RangeType": $range_type} | compact), body: null}
 }
 
 # GET /boxscoremiscv2
@@ -339,7 +361,7 @@ export def "boxscoremiscv2 get" [
   let full_url = (build-url $base "/boxscoremiscv2" $qp)
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"GameID": $game_id, "StartPeriod": $start_period, "EndPeriod": $end_period, "StartRange": $start_range, "EndRange": $end_range, "RangeType": $range_type} | compact), body: null}
 }
 
 # GET /boxscoreplayertrackv2
@@ -362,7 +384,7 @@ export def "boxscoreplayertrackv2 get" [
   let full_url = (build-url $base "/boxscoreplayertrackv2" $qp)
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"GameID": $game_id} | compact), body: null}
 }
 
 # GET /boxscorescoring
@@ -393,7 +415,7 @@ export def "boxscorescoring get" [
   let full_url = (build-url $base "/boxscorescoring" $qp)
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"GameID": $game_id, "StartPeriod": $start_period, "EndPeriod": $end_period, "StartRange": $start_range, "EndRange": $end_range, "RangeType": $range_type} | compact), body: null}
 }
 
 # GET /boxscorescoringv2
@@ -421,7 +443,7 @@ export def "boxscorescoringv2 get" [
   let full_url = (build-url $base "/boxscorescoringv2" $qp)
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"GameID": $game_id, "StartPeriod": $start_period, "EndPeriod": $end_period, "StartRange": $start_range, "EndRange": $end_range, "RangeType": $range_type} | compact), body: null}
 }
 
 # GET /boxscoresummaryv2
@@ -444,7 +466,7 @@ export def "boxscoresummaryv2 get" [
   let full_url = (build-url $base "/boxscoresummaryv2" $qp)
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"GameID": $game_id} | compact), body: null}
 }
 
 # GET /boxscoretraditionalv2
@@ -472,7 +494,7 @@ export def "boxscoretraditionalv2 get" [
   let full_url = (build-url $base "/boxscoretraditionalv2" $qp)
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"GameID": $game_id, "StartPeriod": $start_period, "EndPeriod": $end_period, "StartRange": $start_range, "EndRange": $end_range, "RangeType": $range_type} | compact), body: null}
 }
 
 # GET /boxscoreusage
@@ -503,7 +525,7 @@ export def "boxscoreusage get" [
   let full_url = (build-url $base "/boxscoreusage" $qp)
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"GameID": $game_id, "StartPeriod": $start_period, "EndPeriod": $end_period, "StartRange": $start_range, "EndRange": $end_range, "RangeType": $range_type} | compact), body: null}
 }
 
 # GET /boxscoreusagev2
@@ -531,7 +553,7 @@ export def "boxscoreusagev2 get" [
   let full_url = (build-url $base "/boxscoreusagev2" $qp)
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"GameID": $game_id, "StartPeriod": $start_period, "EndPeriod": $end_period, "StartRange": $start_range, "EndRange": $end_range, "RangeType": $range_type} | compact), body: null}
 }
 
 # GET /commonTeamYears
@@ -554,7 +576,7 @@ export def "common-team-years get" [
   let full_url = (build-url $base "/commonTeamYears" $qp)
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"LeagueID": $league_id} | compact), body: null}
 }
 
 # GET /commonallplayers
@@ -579,7 +601,7 @@ export def "commonallplayers get" [
   let full_url = (build-url $base "/commonallplayers" $qp)
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"LeagueID": $league_id, "Season": $season, "IsOnlyCurrentSeason": $is_only_current_season} | compact), body: null}
 }
 
 # GET /commonplayerinfo
@@ -602,7 +624,7 @@ export def "commonplayerinfo get" [
   let full_url = (build-url $base "/commonplayerinfo" $qp)
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"PlayerID": $player_id} | compact), body: null}
 }
 
 # GET /commonplayoffseries
@@ -626,7 +648,7 @@ export def "commonplayoffseries get" [
   let full_url = (build-url $base "/commonplayoffseries" $qp)
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"LeagueID": $league_id, "Season": $season} | compact), body: null}
 }
 
 # GET /commonteamroster
@@ -650,7 +672,7 @@ export def "commonteamroster get" [
   let full_url = (build-url $base "/commonteamroster" $qp)
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"Season": $season, "TeamID": $team_id} | compact), body: null}
 }
 
 # GET /draftcombinedrillresults
@@ -674,7 +696,7 @@ export def "draftcombinedrillresults get" [
   let full_url = (build-url $base "/draftcombinedrillresults" $qp)
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"LeagueID": $league_id, "SeasonYear": $season_year} | compact), body: null}
 }
 
 # GET /draftcombinenonstationaryshooting
@@ -698,7 +720,7 @@ export def "draftcombinenonstationaryshooting get" [
   let full_url = (build-url $base "/draftcombinenonstationaryshooting" $qp)
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"LeagueID": $league_id, "SeasonYear": $season_year} | compact), body: null}
 }
 
 # GET /draftcombineplayeranthro
@@ -722,7 +744,7 @@ export def "draftcombineplayeranthro get" [
   let full_url = (build-url $base "/draftcombineplayeranthro" $qp)
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"LeagueID": $league_id, "SeasonYear": $season_year} | compact), body: null}
 }
 
 # GET /draftcombinespotshooting
@@ -746,7 +768,7 @@ export def "draftcombinespotshooting get" [
   let full_url = (build-url $base "/draftcombinespotshooting" $qp)
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"LeagueID": $league_id, "SeasonYear": $season_year} | compact), body: null}
 }
 
 # GET /draftcombinestats
@@ -770,7 +792,7 @@ export def "draftcombinestats get" [
   let full_url = (build-url $base "/draftcombinestats" $qp)
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"LeagueID": $league_id, "SeasonYear": $season_year} | compact), body: null}
 }
 
 # GET /drafthistory
@@ -793,7 +815,7 @@ export def "drafthistory get" [
   let full_url = (build-url $base "/drafthistory" $qp)
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"LeagueID": $league_id} | compact), body: null}
 }
 
 # GET /franchisehistory
@@ -816,7 +838,7 @@ export def "franchisehistory get" [
   let full_url = (build-url $base "/franchisehistory" $qp)
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"LeagueID": $league_id} | compact), body: null}
 }
 
 # GET /homepageleaders
@@ -847,7 +869,7 @@ export def "homepageleaders get" [
   let full_url = (build-url $base "/homepageleaders" $qp)
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"StatCategory": $stat_category, "LeagueID": $league_id, "Season": $season, "SeasonType": $season_type, "PlayerOrTeam": $player_or_team, "Game": $game, "Player": $player, "PlayerScope": $player_scope, "GameScope": $game_scope} | compact), body: null}
 }
 
 # GET /homepagev2
@@ -878,7 +900,7 @@ export def "homepagev2 get" [
   let full_url = (build-url $base "/homepagev2" $qp)
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"StatType": $stat_type, "LeagueID": $league_id, "Season": $season, "SeasonType": $season_type, "PlayerOrTeam": $player_or_team, "Game": $game, "Player": $player, "PlayerScope": $player_scope, "GameScope": $game_scope} | compact), body: null}
 }
 
 # GET /leaderstiles
@@ -909,7 +931,7 @@ export def "leaderstiles get" [
   let full_url = (build-url $base "/leaderstiles" $qp)
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"Stat": $stat, "LeagueID": $league_id, "Season": $season, "SeasonType": $season_type, "PlayerOrTeam": $player_or_team, "Game": $game, "Player": $player, "PlayerScope": $player_scope, "GameScope": $game_scope} | compact), body: null}
 }
 
 # GET /leaguedashlineups
@@ -951,7 +973,7 @@ export def "leaguedashlineups get" [
   let full_url = (build-url $base "/leaguedashlineups" $qp)
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"GroupQuantity": $group_quantity, "SeasonType": $season_type, "MeasureType": $measure_type, "PerMode": $per_mode, "PlusMinus": $plus_minus, "PaceAdjust": $pace_adjust, "Rank": $rank, "Season": $season, "Outcome": $outcome, "Location": $location, "Month": $month, "SeasonSegment": $season_segment, "DateFrom": $date_from, "DateTo": $date_to, "OpponentTeamID": $opponent_team_id, "VsConference": $vs_conference, "VsDivision": $vs_division, "GameSegment": $game_segment, "Period": $period, "LastNGames": $last_n_games} | compact), body: null}
 }
 
 # GET /leaguedashplayerbiostats
@@ -977,7 +999,7 @@ export def "leaguedashplayerbiostats get" [
   let full_url = (build-url $base "/leaguedashplayerbiostats" $qp)
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"PerMode": $per_mode, "LeagueID": $league_id, "Season": $season, "SeasonType": $season_type} | compact), body: null}
 }
 
 # GET /leaguedashplayerclutch
@@ -1025,7 +1047,7 @@ export def "leaguedashplayerclutch get" [
   let full_url = (build-url $base "/leaguedashplayerclutch" $qp)
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"ClutchTime": $clutch_time, "AheadBehind": $ahead_behind, "PointDiff": $point_diff, "GameScope": $game_scope, "PlayerExperience": $player_experience, "PlayerPosition": $player_position, "StarterBench": $starter_bench, "MeasureType": $measure_type, "PerMode": $per_mode, "PlusMinus": $plus_minus, "PaceAdjust": $pace_adjust, "Rank": $rank, "Season": $season, "SeasonType": $season_type, "Outcome": $outcome, "Location": $location, "Month": $month, "SeasonSegment": $season_segment, "DateFrom": $date_from, "DateTo": $date_to, "OpponentTeamID": $opponent_team_id, "VsConference": $vs_conference, "VsDivision": $vs_division, "GameSegment": $game_segment, "Period": $period, "LastNGames": $last_n_games} | compact), body: null}
 }
 
 # GET /leaguedashplayerptshot
@@ -1051,7 +1073,7 @@ export def "leaguedashplayerptshot get" [
   let full_url = (build-url $base "/leaguedashplayerptshot" $qp)
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"LeagueID": $league_id, "PerMode": $per_mode, "Season": $season, "SeasonType": $season_type} | compact), body: null}
 }
 
 # GET /leaguedashplayershotlocations
@@ -1097,7 +1119,7 @@ export def "leaguedashplayershotlocations get" [
   let full_url = (build-url $base "/leaguedashplayershotlocations" $qp)
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"MeasureType": $measure_type, "PerMode": $per_mode, "PlusMinus": $plus_minus, "PaceAdjust": $pace_adjust, "Rank": $rank, "Season": $season, "SeasonType": $season_type, "Outcome": $outcome, "Location": $location, "Month": $month, "SeasonSegment": $season_segment, "DateFrom": $date_from, "DateTo": $date_to, "OpponentTeamID": $opponent_team_id, "VsConference": $vs_conference, "VsDivision": $vs_division, "GameSegment": $game_segment, "Period": $period, "LastNGames": $last_n_games, "DistanceRange": $distance_range, "GameScope": $game_scope, "PlayerExperience": $player_experience, "PlayerPosition": $player_position, "StarterBench": $starter_bench} | compact), body: null}
 }
 
 # GET /leaguedashplayerstats
@@ -1142,7 +1164,7 @@ export def "leaguedashplayerstats get" [
   let full_url = (build-url $base "/leaguedashplayerstats" $qp)
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"GameScope": $game_scope, "PlayerExperience": $player_experience, "PlayerPosition": $player_position, "StarterBench": $starter_bench, "MeasureType": $measure_type, "PerMode": $per_mode, "PlusMinus": $plus_minus, "PaceAdjust": $pace_adjust, "Rank": $rank, "Season": $season, "SeasonType": $season_type, "Outcome": $outcome, "Location": $location, "Month": $month, "SeasonSegment": $season_segment, "DateFrom": $date_from, "DateTo": $date_to, "OpponentTeamID": $opponent_team_id, "VsConference": $vs_conference, "VsDivision": $vs_division, "GameSegment": $game_segment, "Period": $period, "LastNGames": $last_n_games} | compact), body: null}
 }
 
 # GET /leaguedashptdefend
@@ -1169,7 +1191,7 @@ export def "leaguedashptdefend get" [
   let full_url = (build-url $base "/leaguedashptdefend" $qp)
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"LeagueID": $league_id, "PerMode": $per_mode, "Season": $season, "SeasonType": $season_type, "DefenseCategory": $defense_category} | compact), body: null}
 }
 
 # GET /leaguedashptteamdefend
@@ -1196,7 +1218,7 @@ export def "leaguedashptteamdefend get" [
   let full_url = (build-url $base "/leaguedashptteamdefend" $qp)
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"LeagueID": $league_id, "PerMode": $per_mode, "Season": $season, "SeasonType": $season_type, "DefenseCategory": $defense_category} | compact), body: null}
 }
 
 # GET /leaguedashteamclutch
@@ -1244,7 +1266,7 @@ export def "leaguedashteamclutch get" [
   let full_url = (build-url $base "/leaguedashteamclutch" $qp)
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"ClutchTime": $clutch_time, "AheadBehind": $ahead_behind, "PointDiff": $point_diff, "GameScope": $game_scope, "PlayerExperience": $player_experience, "PlayerPosition": $player_position, "StarterBench": $starter_bench, "MeasureType": $measure_type, "PerMode": $per_mode, "PlusMinus": $plus_minus, "PaceAdjust": $pace_adjust, "Rank": $rank, "Season": $season, "SeasonType": $season_type, "Outcome": $outcome, "Location": $location, "Month": $month, "SeasonSegment": $season_segment, "DateFrom": $date_from, "DateTo": $date_to, "OpponentTeamID": $opponent_team_id, "VsConference": $vs_conference, "VsDivision": $vs_division, "GameSegment": $game_segment, "Period": $period, "LastNGames": $last_n_games} | compact), body: null}
 }
 
 # GET /leaguedashteamptshot
@@ -1270,7 +1292,7 @@ export def "leaguedashteamptshot get" [
   let full_url = (build-url $base "/leaguedashteamptshot" $qp)
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"LeagueID": $league_id, "PerMode": $per_mode, "Season": $season, "SeasonType": $season_type} | compact), body: null}
 }
 
 # GET /leaguedashteamshotlocations
@@ -1316,7 +1338,7 @@ export def "leaguedashteamshotlocations get" [
   let full_url = (build-url $base "/leaguedashteamshotlocations" $qp)
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"MeasureType": $measure_type, "PerMode": $per_mode, "PlusMinus": $plus_minus, "PaceAdjust": $pace_adjust, "Rank": $rank, "Season": $season, "SeasonType": $season_type, "Outcome": $outcome, "Location": $location, "Month": $month, "SeasonSegment": $season_segment, "DateFrom": $date_from, "DateTo": $date_to, "OpponentTeamID": $opponent_team_id, "VsConference": $vs_conference, "VsDivision": $vs_division, "GameSegment": $game_segment, "Period": $period, "LastNGames": $last_n_games, "DistanceRange": $distance_range, "GameScope": $game_scope, "PlayerExperience": $player_experience, "PlayerPosition": $player_position, "StarterBench": $starter_bench} | compact), body: null}
 }
 
 # GET /leaguedashteamstats
@@ -1357,7 +1379,7 @@ export def "leaguedashteamstats get" [
   let full_url = (build-url $base "/leaguedashteamstats" $qp)
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"MeasureType": $measure_type, "PerMode": $per_mode, "PlusMinus": $plus_minus, "PaceAdjust": $pace_adjust, "Rank": $rank, "Season": $season, "SeasonType": $season_type, "Outcome": $outcome, "Location": $location, "Month": $month, "SeasonSegment": $season_segment, "DateFrom": $date_from, "DateTo": $date_to, "OpponentTeamID": $opponent_team_id, "VsConference": $vs_conference, "VsDivision": $vs_division, "GameSegment": $game_segment, "Period": $period, "LastNGames": $last_n_games} | compact), body: null}
 }
 
 # GET /leagueleaders
@@ -1385,7 +1407,7 @@ export def "leagueleaders get" [
   let full_url = (build-url $base "/leagueleaders" $qp)
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"LeagueID": $league_id, "PerMode": $per_mode, "StatCategory": $stat_category, "Season": $season, "SeasonType": $season_type, "Scope": $scope} | compact), body: null}
 }
 
 # GET /playbyplay
@@ -1410,7 +1432,7 @@ export def "playbyplay get" [
   let full_url = (build-url $base "/playbyplay" $qp)
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"GameID": $game_id, "StartPeriod": $start_period, "EndPeriod": $end_period} | compact), body: null}
 }
 
 # GET /playbyplayv2
@@ -1435,7 +1457,7 @@ export def "playbyplayv2 get" [
   let full_url = (build-url $base "/playbyplayv2" $qp)
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"GameID": $game_id, "StartPeriod": $start_period, "EndPeriod": $end_period} | compact), body: null}
 }
 
 # GET /playercareerstats
@@ -1459,7 +1481,7 @@ export def "playercareerstats get" [
   let full_url = (build-url $base "/playercareerstats" $qp)
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"PerMode": $per_mode, "PlayerID": $player_id} | compact), body: null}
 }
 
 # GET /playercompare
@@ -1502,7 +1524,7 @@ export def "playercompare get" [
   let full_url = (build-url $base "/playercompare" $qp)
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"PlayerIDList": $player_id_list, "VsPlayerIDList": $vs_player_id_list, "SeasonType": $season_type, "MeasureType": $measure_type, "PerMode": $per_mode, "PlusMinus": $plus_minus, "PaceAdjust": $pace_adjust, "Rank": $rank, "Season": $season, "Outcome": $outcome, "Location": $location, "Month": $month, "SeasonSegment": $season_segment, "DateFrom": $date_from, "DateTo": $date_to, "OpponentTeamID": $opponent_team_id, "VsConference": $vs_conference, "VsDivision": $vs_division, "GameSegment": $game_segment, "Period": $period, "LastNGames": $last_n_games} | compact), body: null}
 }
 
 # GET /playerdashboardbyclutch
@@ -1544,7 +1566,7 @@ export def "playerdashboardbyclutch get" [
   let full_url = (build-url $base "/playerdashboardbyclutch" $qp)
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"MeasureType": $measure_type, "PerMode": $per_mode, "PlusMinus": $plus_minus, "PaceAdjust": $pace_adjust, "Rank": $rank, "Season": $season, "SeasonType": $season_type, "PlayerID": $player_id, "Outcome": $outcome, "Location": $location, "Month": $month, "SeasonSegment": $season_segment, "DateFrom": $date_from, "DateTo": $date_to, "OpponentTeamID": $opponent_team_id, "VsConference": $vs_conference, "VsDivision": $vs_division, "GameSegment": $game_segment, "Period": $period, "LastNGames": $last_n_games} | compact), body: null}
 }
 
 # GET /playerdashboardbygamesplits
@@ -1586,7 +1608,7 @@ export def "playerdashboardbygamesplits get" [
   let full_url = (build-url $base "/playerdashboardbygamesplits" $qp)
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"MeasureType": $measure_type, "PerMode": $per_mode, "PlusMinus": $plus_minus, "PaceAdjust": $pace_adjust, "Rank": $rank, "Season": $season, "SeasonType": $season_type, "PlayerID": $player_id, "Outcome": $outcome, "Location": $location, "Month": $month, "SeasonSegment": $season_segment, "DateFrom": $date_from, "DateTo": $date_to, "OpponentTeamID": $opponent_team_id, "VsConference": $vs_conference, "VsDivision": $vs_division, "GameSegment": $game_segment, "Period": $period, "LastNGames": $last_n_games} | compact), body: null}
 }
 
 # GET /playerdashboardbygeneralsplits
@@ -1628,7 +1650,7 @@ export def "playerdashboardbygeneralsplits get" [
   let full_url = (build-url $base "/playerdashboardbygeneralsplits" $qp)
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"MeasureType": $measure_type, "PerMode": $per_mode, "PlusMinus": $plus_minus, "PaceAdjust": $pace_adjust, "Rank": $rank, "Season": $season, "SeasonType": $season_type, "PlayerID": $player_id, "Outcome": $outcome, "Location": $location, "Month": $month, "SeasonSegment": $season_segment, "DateFrom": $date_from, "DateTo": $date_to, "OpponentTeamID": $opponent_team_id, "VsConference": $vs_conference, "VsDivision": $vs_division, "GameSegment": $game_segment, "Period": $period, "LastNGames": $last_n_games} | compact), body: null}
 }
 
 # GET /playerdashboardbylastngames
@@ -1670,7 +1692,7 @@ export def "playerdashboardbylastngames get" [
   let full_url = (build-url $base "/playerdashboardbylastngames" $qp)
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"MeasureType": $measure_type, "PerMode": $per_mode, "PlusMinus": $plus_minus, "PaceAdjust": $pace_adjust, "Rank": $rank, "Season": $season, "SeasonType": $season_type, "PlayerID": $player_id, "Outcome": $outcome, "Location": $location, "Month": $month, "SeasonSegment": $season_segment, "DateFrom": $date_from, "DateTo": $date_to, "OpponentTeamID": $opponent_team_id, "VsConference": $vs_conference, "VsDivision": $vs_division, "GameSegment": $game_segment, "Period": $period, "LastNGames": $last_n_games} | compact), body: null}
 }
 
 # GET /playerdashboardbyopponent
@@ -1712,7 +1734,7 @@ export def "playerdashboardbyopponent get" [
   let full_url = (build-url $base "/playerdashboardbyopponent" $qp)
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"MeasureType": $measure_type, "PerMode": $per_mode, "PlusMinus": $plus_minus, "PaceAdjust": $pace_adjust, "Rank": $rank, "Season": $season, "SeasonType": $season_type, "PlayerID": $player_id, "Outcome": $outcome, "Location": $location, "Month": $month, "SeasonSegment": $season_segment, "DateFrom": $date_from, "DateTo": $date_to, "OpponentTeamID": $opponent_team_id, "VsConference": $vs_conference, "VsDivision": $vs_division, "GameSegment": $game_segment, "Period": $period, "LastNGames": $last_n_games} | compact), body: null}
 }
 
 # GET /playerdashboardbyshootingsplits
@@ -1754,7 +1776,7 @@ export def "playerdashboardbyshootingsplits get" [
   let full_url = (build-url $base "/playerdashboardbyshootingsplits" $qp)
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"MeasureType": $measure_type, "PerMode": $per_mode, "PlusMinus": $plus_minus, "PaceAdjust": $pace_adjust, "Rank": $rank, "Season": $season, "SeasonType": $season_type, "PlayerID": $player_id, "Outcome": $outcome, "Location": $location, "Month": $month, "SeasonSegment": $season_segment, "DateFrom": $date_from, "DateTo": $date_to, "OpponentTeamID": $opponent_team_id, "VsConference": $vs_conference, "VsDivision": $vs_division, "GameSegment": $game_segment, "Period": $period, "LastNGames": $last_n_games} | compact), body: null}
 }
 
 # GET /playerdashboardbyteamperformance
@@ -1796,7 +1818,7 @@ export def "playerdashboardbyteamperformance get" [
   let full_url = (build-url $base "/playerdashboardbyteamperformance" $qp)
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"MeasureType": $measure_type, "PerMode": $per_mode, "PlusMinus": $plus_minus, "PaceAdjust": $pace_adjust, "Rank": $rank, "Season": $season, "SeasonType": $season_type, "PlayerID": $player_id, "Outcome": $outcome, "Location": $location, "Month": $month, "SeasonSegment": $season_segment, "DateFrom": $date_from, "DateTo": $date_to, "OpponentTeamID": $opponent_team_id, "VsConference": $vs_conference, "VsDivision": $vs_division, "GameSegment": $game_segment, "Period": $period, "LastNGames": $last_n_games} | compact), body: null}
 }
 
 # GET /playerdashboardbyyearoveryear
@@ -1838,7 +1860,7 @@ export def "playerdashboardbyyearoveryear get" [
   let full_url = (build-url $base "/playerdashboardbyyearoveryear" $qp)
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"MeasureType": $measure_type, "PerMode": $per_mode, "PlusMinus": $plus_minus, "PaceAdjust": $pace_adjust, "Rank": $rank, "Season": $season, "SeasonType": $season_type, "PlayerID": $player_id, "Outcome": $outcome, "Location": $location, "Month": $month, "SeasonSegment": $season_segment, "DateFrom": $date_from, "DateTo": $date_to, "OpponentTeamID": $opponent_team_id, "VsConference": $vs_conference, "VsDivision": $vs_division, "GameSegment": $game_segment, "Period": $period, "LastNGames": $last_n_games} | compact), body: null}
 }
 
 # GET /playerdashptpass
@@ -1875,7 +1897,7 @@ export def "playerdashptpass get" [
   let full_url = (build-url $base "/playerdashptpass" $qp)
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"PerMode": $per_mode, "Season": $season, "SeasonType": $season_type, "PlayerID": $player_id, "TeamID": $team_id, "Outcome": $outcome, "Location": $location, "Month": $month, "SeasonSegment": $season_segment, "DateFrom": $date_from, "DateTo": $date_to, "OpponentTeamID": $opponent_team_id, "VsConference": $vs_conference, "VsDivision": $vs_division, "LastNGames": $last_n_games} | compact), body: null}
 }
 
 # GET /playerdashptreb
@@ -1914,7 +1936,7 @@ export def "playerdashptreb get" [
   let full_url = (build-url $base "/playerdashptreb" $qp)
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"PerMode": $per_mode, "Season": $season, "SeasonType": $season_type, "PlayerID": $player_id, "TeamID": $team_id, "Outcome": $outcome, "Location": $location, "Month": $month, "SeasonSegment": $season_segment, "DateFrom": $date_from, "DateTo": $date_to, "OpponentTeamID": $opponent_team_id, "VsConference": $vs_conference, "VsDivision": $vs_division, "GameSegment": $game_segment, "Period": $period, "LastNGames": $last_n_games} | compact), body: null}
 }
 
 # GET /playerdashptreboundlogs
@@ -1955,7 +1977,7 @@ export def "playerdashptreboundlogs get" [
   let full_url = (build-url $base "/playerdashptreboundlogs" $qp)
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"Season": $season, "SeasonType": $season_type, "PlayerID": $player_id, "TeamID": $team_id, "Outcome": $outcome, "Location": $location, "Month": $month, "SeasonSegment": $season_segment, "DateFrom": $date_from, "DateTo": $date_to, "OpponentTeamID": $opponent_team_id, "VsConference": $vs_conference, "VsDivision": $vs_division, "GameSegment": $game_segment, "Period": $period, "LastNGames": $last_n_games} | compact), body: null}
 }
 
 # GET /playerdashptshotdefend
@@ -1994,7 +2016,7 @@ export def "playerdashptshotdefend get" [
   let full_url = (build-url $base "/playerdashptshotdefend" $qp)
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"PerMode": $per_mode, "Season": $season, "SeasonType": $season_type, "PlayerID": $player_id, "TeamID": $team_id, "Outcome": $outcome, "Location": $location, "Month": $month, "SeasonSegment": $season_segment, "DateFrom": $date_from, "DateTo": $date_to, "OpponentTeamID": $opponent_team_id, "VsConference": $vs_conference, "VsDivision": $vs_division, "GameSegment": $game_segment, "Period": $period, "LastNGames": $last_n_games} | compact), body: null}
 }
 
 # GET /playerdashptshotlog
@@ -2024,7 +2046,7 @@ export def "playerdashptshotlog get" [
   let full_url = (build-url $base "/playerdashptshotlog" $qp)
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"LeagueID": $league_id, "Season": $season, "SeasonType": $season_type, "PlayerID": $player_id, "TeamID": $team_id} | compact), body: null}
 }
 
 # GET /playerdashptshots
@@ -2063,7 +2085,7 @@ export def "playerdashptshots get" [
   let full_url = (build-url $base "/playerdashptshots" $qp)
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"PerMode": $per_mode, "Season": $season, "SeasonType": $season_type, "PlayerID": $player_id, "TeamID": $team_id, "Outcome": $outcome, "Location": $location, "Month": $month, "SeasonSegment": $season_segment, "DateFrom": $date_from, "DateTo": $date_to, "OpponentTeamID": $opponent_team_id, "VsConference": $vs_conference, "VsDivision": $vs_division, "GameSegment": $game_segment, "Period": $period, "LastNGames": $last_n_games} | compact), body: null}
 }
 
 # GET /playergamelog
@@ -2088,7 +2110,7 @@ export def "playergamelog get" [
   let full_url = (build-url $base "/playergamelog" $qp)
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"PlayerID": $player_id, "Season": $season, "SeasonType": $season_type} | compact), body: null}
 }
 
 # GET /playerprofile
@@ -2117,7 +2139,7 @@ export def "playerprofile get" [
   let full_url = (build-url $base "/playerprofile" $qp)
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"LeagueID": $league_id, "PlayerID": $player_id, "Season": $season, "SeasonType": $season_type, "GraphStartSeason": $graph_start_season, "GraphEndSeason": $graph_end_season, "GraphStat": $graph_stat} | compact), body: null}
 }
 
 # GET /playerprofilev2
@@ -2141,7 +2163,7 @@ export def "playerprofilev2 get" [
   let full_url = (build-url $base "/playerprofilev2" $qp)
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"PerMode": $per_mode, "PlayerID": $player_id} | compact), body: null}
 }
 
 # GET /playersvsplayers
@@ -2194,7 +2216,7 @@ export def "playersvsplayers get" [
   let full_url = (build-url $base "/playersvsplayers" $qp)
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"PlayerTeamID": $player_team_id, "PlayerID1": $player_id1, "PlayerID2": $player_id2, "PlayerID3": $player_id3, "PlayerID4": $player_id4, "PlayerID5": $player_id5, "VsTeamID": $vs_team_id, "VsPlayerID1": $vs_player_id1, "VsPlayerID2": $vs_player_id2, "VsPlayerID3": $vs_player_id3, "VsPlayerID4": $vs_player_id4, "VsPlayerID5": $vs_player_id5, "SeasonType": $season_type, "MeasureType": $measure_type, "PerMode": $per_mode, "PlusMinus": $plus_minus, "PaceAdjust": $pace_adjust, "Rank": $rank, "Season": $season, "Outcome": $outcome, "Location": $location, "Month": $month, "SeasonSegment": $season_segment, "DateFrom": $date_from, "DateTo": $date_to, "OpponentTeamID": $opponent_team_id, "VsConference": $vs_conference, "VsDivision": $vs_division, "GameSegment": $game_segment, "Period": $period, "LastNGames": $last_n_games} | compact), body: null}
 }
 
 # GET /playervsplayer
@@ -2237,7 +2259,7 @@ export def "playervsplayer get" [
   let full_url = (build-url $base "/playervsplayer" $qp)
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"PlayerID": $player_id, "VsPlayerID": $vs_player_id, "SeasonType": $season_type, "MeasureType": $measure_type, "PerMode": $per_mode, "PlusMinus": $plus_minus, "PaceAdjust": $pace_adjust, "Rank": $rank, "Season": $season, "Outcome": $outcome, "Location": $location, "Month": $month, "SeasonSegment": $season_segment, "DateFrom": $date_from, "DateTo": $date_to, "OpponentTeamID": $opponent_team_id, "VsConference": $vs_conference, "VsDivision": $vs_division, "GameSegment": $game_segment, "Period": $period, "LastNGames": $last_n_games} | compact), body: null}
 }
 
 # GET /playoffpicture
@@ -2261,7 +2283,7 @@ export def "playoffpicture get" [
   let full_url = (build-url $base "/playoffpicture" $qp)
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"LeagueID": $league_id, "SeasonID": $season_id} | compact), body: null}
 }
 
 # GET /scoreboard
@@ -2286,7 +2308,7 @@ export def "scoreboard get" [
   let full_url = (build-url $base "/scoreboard" $qp)
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"GameDate": $game_date, "LeagueID": $league_id, "DayOffset": $day_offset} | compact), body: null}
 }
 
 # GET /scoreboardV2
@@ -2311,7 +2333,7 @@ export def "scoreboard-v2 get" [
   let full_url = (build-url $base "/scoreboardV2" $qp)
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"GameDate": $game_date, "LeagueID": $league_id, "DayOffset": $day_offset} | compact), body: null}
 }
 
 # GET /shotchartdetail
@@ -2352,7 +2374,7 @@ export def "shotchartdetail get" [
   let full_url = (build-url $base "/shotchartdetail" $qp)
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"SeasonType": $season_type, "TeamID": $team_id, "PlayerID": $player_id, "GameID": $game_id, "Outcome": $outcome, "Location": $location, "Month": $month, "SeasonSegment": $season_segment, "DateFrom": $date_from, "DateTo": $date_to, "OpponentTeamID": $opponent_team_id, "VsConference": $vs_conference, "VsDivision": $vs_division, "Position": $position, "RookieYear": $rookie_year, "GameSegment": $game_segment, "Period": $period, "LastNGames": $last_n_games, "ContextMeasure": $context_measure} | compact), body: null}
 }
 
 # GET /shotchartlineupdetail
@@ -2394,7 +2416,7 @@ export def "shotchartlineupdetail get" [
   let full_url = (build-url $base "/shotchartlineupdetail" $qp)
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"LeagueID": $league_id, "Season": $season, "SeasonType": $season_type, "TeamID": $team_id, "Outcome": $outcome, "Location": $location, "Month": $month, "SeasonSegment": $season_segment, "DateFrom": $date_from, "DateTo": $date_to, "OpponentTeamID": $opponent_team_id, "VsConference": $vs_conference, "VsDivision": $vs_division, "GameSegment": $game_segment, "Period": $period, "LastNGames": $last_n_games, "GameID": $game_id, "GROUP_ID": $group_id, "ContextMeasure": $context_measure, "ContextFilter": $context_filter} | compact), body: null}
 }
 
 # GET /teamdashboardbyclutch
@@ -2436,7 +2458,7 @@ export def "teamdashboardbyclutch get" [
   let full_url = (build-url $base "/teamdashboardbyclutch" $qp)
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"TeamID": $team_id, "MeasureType": $measure_type, "PerMode": $per_mode, "PlusMinus": $plus_minus, "PaceAdjust": $pace_adjust, "Rank": $rank, "Season": $season, "SeasonType": $season_type, "Outcome": $outcome, "Location": $location, "Month": $month, "SeasonSegment": $season_segment, "DateFrom": $date_from, "DateTo": $date_to, "OpponentTeamID": $opponent_team_id, "VsConference": $vs_conference, "VsDivision": $vs_division, "GameSegment": $game_segment, "Period": $period, "LastNGames": $last_n_games} | compact), body: null}
 }
 
 # GET /teamdashboardbygamesplits
@@ -2478,7 +2500,7 @@ export def "teamdashboardbygamesplits get" [
   let full_url = (build-url $base "/teamdashboardbygamesplits" $qp)
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"TeamID": $team_id, "MeasureType": $measure_type, "PerMode": $per_mode, "PlusMinus": $plus_minus, "PaceAdjust": $pace_adjust, "Rank": $rank, "Season": $season, "SeasonType": $season_type, "Outcome": $outcome, "Location": $location, "Month": $month, "SeasonSegment": $season_segment, "DateFrom": $date_from, "DateTo": $date_to, "OpponentTeamID": $opponent_team_id, "VsConference": $vs_conference, "VsDivision": $vs_division, "GameSegment": $game_segment, "Period": $period, "LastNGames": $last_n_games} | compact), body: null}
 }
 
 # GET /teamdashboardbygeneralsplits
@@ -2520,7 +2542,7 @@ export def "teamdashboardbygeneralsplits get" [
   let full_url = (build-url $base "/teamdashboardbygeneralsplits" $qp)
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"SeasonType": $season_type, "TeamID": $team_id, "MeasureType": $measure_type, "PerMode": $per_mode, "PlusMinus": $plus_minus, "PaceAdjust": $pace_adjust, "Rank": $rank, "Season": $season, "Outcome": $outcome, "Location": $location, "Month": $month, "SeasonSegment": $season_segment, "DateFrom": $date_from, "DateTo": $date_to, "OpponentTeamID": $opponent_team_id, "VsConference": $vs_conference, "VsDivision": $vs_division, "GameSegment": $game_segment, "Period": $period, "LastNGames": $last_n_games} | compact), body: null}
 }
 
 # GET /teamdashboardbylastngames
@@ -2562,7 +2584,7 @@ export def "teamdashboardbylastngames get" [
   let full_url = (build-url $base "/teamdashboardbylastngames" $qp)
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"TeamID": $team_id, "MeasureType": $measure_type, "PerMode": $per_mode, "PlusMinus": $plus_minus, "PaceAdjust": $pace_adjust, "Rank": $rank, "Season": $season, "SeasonType": $season_type, "Outcome": $outcome, "Location": $location, "Month": $month, "SeasonSegment": $season_segment, "DateFrom": $date_from, "DateTo": $date_to, "OpponentTeamID": $opponent_team_id, "VsConference": $vs_conference, "VsDivision": $vs_division, "GameSegment": $game_segment, "Period": $period, "LastNGames": $last_n_games} | compact), body: null}
 }
 
 # GET /teamdashboardbyopponent
@@ -2604,7 +2626,7 @@ export def "teamdashboardbyopponent get" [
   let full_url = (build-url $base "/teamdashboardbyopponent" $qp)
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"TeamID": $team_id, "MeasureType": $measure_type, "PerMode": $per_mode, "PlusMinus": $plus_minus, "PaceAdjust": $pace_adjust, "Rank": $rank, "Season": $season, "SeasonType": $season_type, "Outcome": $outcome, "Location": $location, "Month": $month, "SeasonSegment": $season_segment, "DateFrom": $date_from, "DateTo": $date_to, "OpponentTeamID": $opponent_team_id, "VsConference": $vs_conference, "VsDivision": $vs_division, "GameSegment": $game_segment, "Period": $period, "LastNGames": $last_n_games} | compact), body: null}
 }
 
 # GET /teamdashboardbyshootingsplits
@@ -2646,7 +2668,7 @@ export def "teamdashboardbyshootingsplits get" [
   let full_url = (build-url $base "/teamdashboardbyshootingsplits" $qp)
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"TeamID": $team_id, "MeasureType": $measure_type, "PerMode": $per_mode, "PlusMinus": $plus_minus, "PaceAdjust": $pace_adjust, "Rank": $rank, "Season": $season, "SeasonType": $season_type, "Outcome": $outcome, "Location": $location, "Month": $month, "SeasonSegment": $season_segment, "DateFrom": $date_from, "DateTo": $date_to, "OpponentTeamID": $opponent_team_id, "VsConference": $vs_conference, "VsDivision": $vs_division, "GameSegment": $game_segment, "Period": $period, "LastNGames": $last_n_games} | compact), body: null}
 }
 
 # GET /teamdashboardbyteamperformance
@@ -2688,7 +2710,7 @@ export def "teamdashboardbyteamperformance get" [
   let full_url = (build-url $base "/teamdashboardbyteamperformance" $qp)
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"TeamID": $team_id, "MeasureType": $measure_type, "PerMode": $per_mode, "PlusMinus": $plus_minus, "PaceAdjust": $pace_adjust, "Rank": $rank, "Season": $season, "SeasonType": $season_type, "Outcome": $outcome, "Location": $location, "Month": $month, "SeasonSegment": $season_segment, "DateFrom": $date_from, "DateTo": $date_to, "OpponentTeamID": $opponent_team_id, "VsConference": $vs_conference, "VsDivision": $vs_division, "GameSegment": $game_segment, "Period": $period, "LastNGames": $last_n_games} | compact), body: null}
 }
 
 # GET /teamdashboardbyyearoveryear
@@ -2730,7 +2752,7 @@ export def "teamdashboardbyyearoveryear get" [
   let full_url = (build-url $base "/teamdashboardbyyearoveryear" $qp)
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"TeamID": $team_id, "MeasureType": $measure_type, "PerMode": $per_mode, "PlusMinus": $plus_minus, "PaceAdjust": $pace_adjust, "Rank": $rank, "Season": $season, "SeasonType": $season_type, "Outcome": $outcome, "Location": $location, "Month": $month, "SeasonSegment": $season_segment, "DateFrom": $date_from, "DateTo": $date_to, "OpponentTeamID": $opponent_team_id, "VsConference": $vs_conference, "VsDivision": $vs_division, "GameSegment": $game_segment, "Period": $period, "LastNGames": $last_n_games} | compact), body: null}
 }
 
 # GET /teamdashlineups
@@ -2774,7 +2796,7 @@ export def "teamdashlineups get" [
   let full_url = (build-url $base "/teamdashlineups" $qp)
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"GroupQuantity": $group_quantity, "GameID": $game_id, "SeasonType": $season_type, "TeamID": $team_id, "MeasureType": $measure_type, "PerMode": $per_mode, "PlusMinus": $plus_minus, "PaceAdjust": $pace_adjust, "Rank": $rank, "Season": $season, "Outcome": $outcome, "Location": $location, "Month": $month, "SeasonSegment": $season_segment, "DateFrom": $date_from, "DateTo": $date_to, "OpponentTeamID": $opponent_team_id, "VsConference": $vs_conference, "VsDivision": $vs_division, "GameSegment": $game_segment, "Period": $period, "LastNGames": $last_n_games} | compact), body: null}
 }
 
 # GET /teamdashptpass
@@ -2810,7 +2832,7 @@ export def "teamdashptpass get" [
   let full_url = (build-url $base "/teamdashptpass" $qp)
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"PerMode": $per_mode, "Season": $season, "SeasonType": $season_type, "TeamID": $team_id, "Outcome": $outcome, "Location": $location, "Month": $month, "SeasonSegment": $season_segment, "DateFrom": $date_from, "DateTo": $date_to, "OpponentTeamID": $opponent_team_id, "VsConference": $vs_conference, "VsDivision": $vs_division, "LastNGames": $last_n_games} | compact), body: null}
 }
 
 # GET /teamdashptreb
@@ -2848,7 +2870,7 @@ export def "teamdashptreb get" [
   let full_url = (build-url $base "/teamdashptreb" $qp)
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"PerMode": $per_mode, "Season": $season, "SeasonType": $season_type, "TeamID": $team_id, "Outcome": $outcome, "Location": $location, "Month": $month, "SeasonSegment": $season_segment, "DateFrom": $date_from, "DateTo": $date_to, "OpponentTeamID": $opponent_team_id, "VsConference": $vs_conference, "VsDivision": $vs_division, "GameSegment": $game_segment, "Period": $period, "LastNGames": $last_n_games} | compact), body: null}
 }
 
 # GET /teamdashptshots
@@ -2886,7 +2908,7 @@ export def "teamdashptshots get" [
   let full_url = (build-url $base "/teamdashptshots" $qp)
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"PerMode": $per_mode, "Season": $season, "SeasonType": $season_type, "TeamID": $team_id, "Outcome": $outcome, "Location": $location, "Month": $month, "SeasonSegment": $season_segment, "DateFrom": $date_from, "DateTo": $date_to, "OpponentTeamID": $opponent_team_id, "VsConference": $vs_conference, "VsDivision": $vs_division, "GameSegment": $game_segment, "Period": $period, "LastNGames": $last_n_games} | compact), body: null}
 }
 
 # GET /teamgamelog
@@ -2911,7 +2933,7 @@ export def "teamgamelog get" [
   let full_url = (build-url $base "/teamgamelog" $qp)
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"TeamID": $team_id, "Season": $season, "SeasonType": $season_type} | compact), body: null}
 }
 
 # GET /teaminfocommon
@@ -2937,7 +2959,7 @@ export def "teaminfocommon get" [
   let full_url = (build-url $base "/teaminfocommon" $qp)
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"Season": $season, "TeamID": $team_id, "LeagueID": $league_id, "SeasonType": $season_type} | compact), body: null}
 }
 
 # GET /teamplayerdashboard
@@ -2979,7 +3001,7 @@ export def "teamplayerdashboard get" [
   let full_url = (build-url $base "/teamplayerdashboard" $qp)
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"SeasonType": $season_type, "TeamID": $team_id, "MeasureType": $measure_type, "PerMode": $per_mode, "PlusMinus": $plus_minus, "PaceAdjust": $pace_adjust, "Rank": $rank, "Season": $season, "Outcome": $outcome, "Location": $location, "Month": $month, "SeasonSegment": $season_segment, "DateFrom": $date_from, "DateTo": $date_to, "OpponentTeamID": $opponent_team_id, "VsConference": $vs_conference, "VsDivision": $vs_division, "GameSegment": $game_segment, "Period": $period, "LastNGames": $last_n_games} | compact), body: null}
 }
 
 # GET /teamplayeronoffdetails
@@ -3021,7 +3043,7 @@ export def "teamplayeronoffdetails get" [
   let full_url = (build-url $base "/teamplayeronoffdetails" $qp)
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"TeamID": $team_id, "MeasureType": $measure_type, "PerMode": $per_mode, "PlusMinus": $plus_minus, "PaceAdjust": $pace_adjust, "Rank": $rank, "Season": $season, "SeasonType": $season_type, "Outcome": $outcome, "Location": $location, "Month": $month, "SeasonSegment": $season_segment, "DateFrom": $date_from, "DateTo": $date_to, "OpponentTeamID": $opponent_team_id, "VsConference": $vs_conference, "VsDivision": $vs_division, "GameSegment": $game_segment, "Period": $period, "LastNGames": $last_n_games} | compact), body: null}
 }
 
 # GET /teamplayeronoffsummary
@@ -3063,7 +3085,7 @@ export def "teamplayeronoffsummary get" [
   let full_url = (build-url $base "/teamplayeronoffsummary" $qp)
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"TeamID": $team_id, "MeasureType": $measure_type, "PerMode": $per_mode, "PlusMinus": $plus_minus, "PaceAdjust": $pace_adjust, "Rank": $rank, "Season": $season, "SeasonType": $season_type, "Outcome": $outcome, "Location": $location, "Month": $month, "SeasonSegment": $season_segment, "DateFrom": $date_from, "DateTo": $date_to, "OpponentTeamID": $opponent_team_id, "VsConference": $vs_conference, "VsDivision": $vs_division, "GameSegment": $game_segment, "Period": $period, "LastNGames": $last_n_games} | compact), body: null}
 }
 
 # GET /teamvsplayer
@@ -3106,7 +3128,7 @@ export def "teamvsplayer get" [
   let full_url = (build-url $base "/teamvsplayer" $qp)
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"TeamID": $team_id, "VsPlayerID": $vs_player_id, "SeasonType": $season_type, "MeasureType": $measure_type, "PerMode": $per_mode, "PlusMinus": $plus_minus, "PaceAdjust": $pace_adjust, "Rank": $rank, "Season": $season, "Outcome": $outcome, "Location": $location, "Month": $month, "SeasonSegment": $season_segment, "DateFrom": $date_from, "DateTo": $date_to, "OpponentTeamID": $opponent_team_id, "VsConference": $vs_conference, "VsDivision": $vs_division, "GameSegment": $game_segment, "Period": $period, "LastNGames": $last_n_games} | compact), body: null}
 }
 
 # GET /teamyearbyyearstats
@@ -3132,7 +3154,7 @@ export def "teamyearbyyearstats get" [
   let full_url = (build-url $base "/teamyearbyyearstats" $qp)
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"LeagueID": $league_id, "SeasonType": $season_type, "PerMode": $per_mode, "TeamID": $team_id} | compact), body: null}
 }
 
 # GET /videoStatus
@@ -3156,5 +3178,5 @@ export def "video-status get" [
   let full_url = (build-url $base "/videoStatus" $qp)
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"LeagueID": $league_id, "GameDate": $game_date} | compact), body: null}
 }

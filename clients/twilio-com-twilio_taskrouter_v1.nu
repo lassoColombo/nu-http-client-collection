@@ -3,18 +3,19 @@
 # Auth: --token flag or $env.TWILIO_TASKROUTER_TOKEN
 
 const BASE_URL = "https://taskrouter.twilio.com"
-const DEFAULT_AUTH = "basic"
 
-# Build auth: returns {headers: record, query: string}
+# Build auth: returns {scheme: string, headers: record, query: string, location: string}.
+# `location` is "header" | "query" | "cookie" | "none" and tells dry-run callers
+# where the token went without inspecting headers/query themselves.
 def build-auth [token?: string, auth_scheme?: string]: nothing -> record {
   let token_val = if ($token != null) and ($token | is-not-empty) { $token } else { $env | get -o TWILIO_TASKROUTER_TOKEN | default "" }
   let scheme = ($auth_scheme | default "bearer")
-  if ($scheme == "none") or ($token_val | is-empty) { return {headers: {}, query: ""} }
+  if ($scheme == "none") or ($token_val | is-empty) { return {scheme: $scheme, headers: {}, query: "", location: "none"} }
   match $scheme {
-    "basic" => { {headers: {Authorization: $"Basic ($token_val)"}, query: ""} }
-    "basic-credentials" => { {headers: {Authorization: $"Basic ($token_val | encode base64)"}, query: ""} }
-    "none" => { {headers: {}, query: ""} }
-    _ => { {headers: {Authorization: $"Bearer ($token_val)"}, query: ""} }
+    "basic" => { {scheme: $scheme, headers: {Authorization: $"Basic ($token_val)"}, query: "", location: "header"} }
+    "basic-credentials" => { {scheme: $scheme, headers: {Authorization: $"Basic ($token_val | encode base64)"}, query: "", location: "header"} }
+    "none" => { {scheme: $scheme, headers: {}, query: "", location: "none"} }
+    _ => { {scheme: $scheme, headers: {Authorization: $"Bearer ($token_val)"}, query: "", location: "header"} }
   }
 }
 
@@ -23,8 +24,9 @@ def build-auth [token?: string, auth_scheme?: string]: nothing -> record {
 # ([A-Za-z0-9-._~]) stay literal; everything else gets %XX.
 def serialize-qp [name: string, value: any, style: string]: nothing -> list<string> {
   if ($value == null) { return [] }
-  let n = (encode-path-segment $name)
   let is_list = ($value | describe | str starts-with "list")
+  if $is_list and ($value | is-empty) { return [] }
+  let n = (encode-path-segment $name)
   if ($value | describe | str starts-with "record") { return ($value | transpose k v | each { $"($n)[(encode-path-segment $in.k)]=(encode-path-segment $in.v)" }) }
   if not $is_list { return [$"($n)=(encode-path-segment $value)"] }
   match $style {
@@ -55,22 +57,42 @@ def build-url [base: string, path: string, query?: string]: nothing -> string {
   if ($query != null) and ($query | is-not-empty) { $result | upsert query $query | url join } else { $result | url join }
 }
 
+# Build the dry-run record returned by --dry-run. Shape:
+#   {dry_run: true, method, url, query: <record>, headers, body, content_type, timeout,
+#    auth: {scheme, location}}
+# `meta` carries logical-form data (the query record by spec name, the pre-serialization
+# body) that do-request itself cannot reconstruct from its wire-format args.
+def build-dry-run-record [method: string, url: string, auth: record, content_type: string, timeout: duration, meta?: record]: nothing -> record {
+  let m = ($meta | default {})
+  {
+    dry_run: true
+    method: $method
+    url: $url
+    query: ($m | get -o query | default {})
+    headers: $auth.headers
+    body: ($m | get -o body)
+    content_type: $content_type
+    timeout: $timeout
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+}
+
 # Execute HTTP request with method dispatch
-def do-request [method: string, url: string, auth: record, insecure: bool, raw: bool, dry_run: bool, max_time?: duration, allow_errors?: bool, full?: bool, content_type?: string, body?: any]: nothing -> any {
+def do-request [method: string, url: string, auth: record, insecure: bool, raw: bool, dry_run: bool, max_time?: duration, allow_errors?: bool, full?: bool, content_type?: string, body?: any, dry_run_meta?: record]: nothing -> any {
   let req_url = if ($auth.query | is-not-empty) { if ($url | str contains "?") { $"($url)&($auth.query)" } else { $"($url)?($auth.query)" } } else { $url }
   let timeout = ($max_time | default 30min)
   let ct = ($content_type | default "application/json")
-  if $dry_run { return {method: $method, url: $req_url, headers: $auth.headers, query_string: $auth.query, content_type: $ct, timeout: $timeout, body: $body} }
+  if $dry_run { return (build-dry-run-record $method $req_url $auth $ct $timeout $dry_run_meta) }
   let resp = match $method {
     "get" => { http get --headers $auth.headers --full --allow-errors --max-time $timeout --insecure=$insecure --raw=$raw $req_url }
-    "head" => { http head --headers $auth.headers --max-time $timeout --insecure=$insecure $req_url }
-    "options" => { http options --headers $auth.headers --max-time $timeout --insecure=$insecure $req_url }
+    "head" => { http head --headers $auth.headers --full --allow-errors --max-time $timeout --insecure=$insecure $req_url }
+    "options" => { http options --headers $auth.headers --full --allow-errors --max-time $timeout --insecure=$insecure $req_url }
     "post" => { if ($body | is-empty) { http post --headers $auth.headers --full --allow-errors --max-time $timeout --insecure=$insecure --raw=$raw $req_url "" } else { http post --headers $auth.headers --content-type $ct --full --allow-errors --max-time $timeout --insecure=$insecure --raw=$raw $req_url $body } }
     "put" => { if ($body | is-empty) { http put --headers $auth.headers --full --allow-errors --max-time $timeout --insecure=$insecure --raw=$raw $req_url "" } else { http put --headers $auth.headers --content-type $ct --full --allow-errors --max-time $timeout --insecure=$insecure --raw=$raw $req_url $body } }
     "patch" => { if ($body | is-empty) { http patch --headers $auth.headers --full --allow-errors --max-time $timeout --insecure=$insecure --raw=$raw $req_url "" } else { http patch --headers $auth.headers --content-type $ct --full --allow-errors --max-time $timeout --insecure=$insecure --raw=$raw $req_url $body } }
     "delete" => { if ($body | is-empty) { http delete --headers $auth.headers --full --allow-errors --max-time $timeout --insecure=$insecure --raw=$raw $req_url } else { http delete --headers $auth.headers --content-type $ct --data $body --full --allow-errors --max-time $timeout --insecure=$insecure --raw=$raw $req_url } }
   }
-  if ($method in ["head" "options"]) { return $resp }
+  if ($method == "head") and (not $full) and (not $allow_errors) and $resp.status < 400 { return $resp.headers }
   if $allow_errors { $resp } else if $resp.status >= 400 { error make --unspanned { msg: $"HTTP ($resp.status): ($resp.body)" } } else if $full { {status: $resp.status, headers: $resp.headers, body: $resp.body} } else if $resp.status == 204 { null } else { $resp.body }
 }
 
@@ -136,7 +158,7 @@ export def "workspaces list" [
   let full_url = (build-url $base "/v1/Workspaces" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"FriendlyName": $friendly_name, "PageSize": $page_size, "Page": $page, "PageToken": $page_token} | compact), body: null}
 }
 
 # POST /v1/Workspaces
@@ -167,8 +189,8 @@ export def "workspaces create" [
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  let req_body = ($req_body | transpose k v | where v != null | reduce -f {} {|p, acc| $acc | upsert $p.k $p.v } | url build-query)
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/x-www-form-urlencoded" $req_body
+  let req_body_wire = ($req_body | transpose k v | where v != null | reduce -f {} {|p, acc| $acc | upsert $p.k $p.v } | url build-query)
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/x-www-form-urlencoded" $req_body_wire {query: {}, body: $req_body}
 }
 
 # DELETE /v1/Workspaces/{Sid}
@@ -188,10 +210,11 @@ export def "workspaces delete" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default "https://taskrouter.twilio.com")
+  if ($sid | is-empty) { error make --unspanned { msg: "path parameter 'Sid' must be non-empty" } }
   let full_url = (build-url $base ({sid: (encode-path-segment $sid)} | format pattern "/v1/Workspaces/{sid}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
 }
 
 # GET /v1/Workspaces/{Sid}
@@ -211,10 +234,11 @@ export def "workspaces get" [
 ]: nothing -> record<account_sid: string, date_created: string, date_updated: string, default_activity_name: string, default_activity_sid: string, event_callback_url: string, events_filter: string, friendly_name: string, links: record, multi_task_enabled: bool, prioritize_queue_order: string, sid: string, timeout_activity_name: string, timeout_activity_sid: string, url: string> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default "https://taskrouter.twilio.com")
+  if ($sid | is-empty) { error make --unspanned { msg: "path parameter 'Sid' must be non-empty" } }
   let full_url = (build-url $base ({sid: (encode-path-segment $sid)} | format pattern "/v1/Workspaces/{sid}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
 }
 
 # POST /v1/Workspaces/{Sid}
@@ -242,13 +266,14 @@ export def "workspaces update" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default "https://taskrouter.twilio.com")
+  if ($sid | is-empty) { error make --unspanned { msg: "path parameter 'Sid' must be non-empty" } }
   let full_url = (build-url $base ({sid: (encode-path-segment $sid)} | format pattern "/v1/Workspaces/{sid}"))
   let req_body = {"DefaultActivitySid": $default_activity_sid, "EventCallbackUrl": $event_callback_url, "EventsFilter": $events_filter, "FriendlyName": $friendly_name, "MultiTaskEnabled": $multi_task_enabled, "PrioritizeQueueOrder": $prioritize_queue_order, "TimeoutActivitySid": $timeout_activity_sid} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  let req_body = ($req_body | transpose k v | where v != null | reduce -f {} {|p, acc| $acc | upsert $p.k $p.v } | url build-query)
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/x-www-form-urlencoded" $req_body
+  let req_body_wire = ($req_body | transpose k v | where v != null | reduce -f {} {|p, acc| $acc | upsert $p.k $p.v } | url build-query)
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/x-www-form-urlencoded" $req_body_wire {query: {}, body: $req_body}
 }
 
 # GET /v1/Workspaces/{WorkspaceSid}/Activities
@@ -273,11 +298,12 @@ export def "workspaces-activities list-activity" [
 ]: nothing -> record<activities: table<account_sid: string, available: bool, date_created: string, date_updated: string, friendly_name: string, links: record, sid: string, url: string, workspace_sid: string>, meta: record<first_page_url: string, key: string, next_page_url: string, page: int, page_size: int, previous_page_url: string, url: string>> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default "https://taskrouter.twilio.com")
+  if ($workspace_sid | is-empty) { error make --unspanned { msg: "path parameter 'WorkspaceSid' must be non-empty" } }
   let qp = [(serialize-qp "FriendlyName" $friendly_name "scalar") (serialize-qp "Available" $available "scalar") (serialize-qp "PageSize" $page_size "scalar") (serialize-qp "Page" $page "scalar") (serialize-qp "PageToken" $page_token "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({workspace_sid: (encode-path-segment $workspace_sid)} | format pattern "/v1/Workspaces/{workspace_sid}/Activities") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"FriendlyName": $friendly_name, "Available": $available, "PageSize": $page_size, "Page": $page, "PageToken": $page_token} | compact), body: null}
 }
 
 # POST /v1/Workspaces/{WorkspaceSid}/Activities
@@ -300,13 +326,14 @@ export def "workspaces-activities create-activity" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default "https://taskrouter.twilio.com")
+  if ($workspace_sid | is-empty) { error make --unspanned { msg: "path parameter 'WorkspaceSid' must be non-empty" } }
   let full_url = (build-url $base ({workspace_sid: (encode-path-segment $workspace_sid)} | format pattern "/v1/Workspaces/{workspace_sid}/Activities"))
   let req_body = {"Available": $available, "FriendlyName": $friendly_name} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  let req_body = ($req_body | transpose k v | where v != null | reduce -f {} {|p, acc| $acc | upsert $p.k $p.v } | url build-query)
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/x-www-form-urlencoded" $req_body
+  let req_body_wire = ($req_body | transpose k v | where v != null | reduce -f {} {|p, acc| $acc | upsert $p.k $p.v } | url build-query)
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/x-www-form-urlencoded" $req_body_wire {query: {}, body: $req_body}
 }
 
 # DELETE /v1/Workspaces/{WorkspaceSid}/Activities/{Sid}
@@ -327,10 +354,12 @@ export def "workspaces-activities delete-activity" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default "https://taskrouter.twilio.com")
+  if ($workspace_sid | is-empty) { error make --unspanned { msg: "path parameter 'WorkspaceSid' must be non-empty" } }
+  if ($sid | is-empty) { error make --unspanned { msg: "path parameter 'Sid' must be non-empty" } }
   let full_url = (build-url $base ({workspace_sid: (encode-path-segment $workspace_sid), sid: (encode-path-segment $sid)} | format pattern "/v1/Workspaces/{workspace_sid}/Activities/{sid}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
 }
 
 # GET /v1/Workspaces/{WorkspaceSid}/Activities/{Sid}
@@ -351,10 +380,12 @@ export def "workspaces-activities get-activity" [
 ]: nothing -> record<account_sid: string, available: bool, date_created: string, date_updated: string, friendly_name: string, links: record, sid: string, url: string, workspace_sid: string> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default "https://taskrouter.twilio.com")
+  if ($workspace_sid | is-empty) { error make --unspanned { msg: "path parameter 'WorkspaceSid' must be non-empty" } }
+  if ($sid | is-empty) { error make --unspanned { msg: "path parameter 'Sid' must be non-empty" } }
   let full_url = (build-url $base ({workspace_sid: (encode-path-segment $workspace_sid), sid: (encode-path-segment $sid)} | format pattern "/v1/Workspaces/{workspace_sid}/Activities/{sid}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
 }
 
 # POST /v1/Workspaces/{WorkspaceSid}/Activities/{Sid}
@@ -377,13 +408,15 @@ export def "workspaces-activities update-activity" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default "https://taskrouter.twilio.com")
+  if ($workspace_sid | is-empty) { error make --unspanned { msg: "path parameter 'WorkspaceSid' must be non-empty" } }
+  if ($sid | is-empty) { error make --unspanned { msg: "path parameter 'Sid' must be non-empty" } }
   let full_url = (build-url $base ({workspace_sid: (encode-path-segment $workspace_sid), sid: (encode-path-segment $sid)} | format pattern "/v1/Workspaces/{workspace_sid}/Activities/{sid}"))
   let req_body = {"FriendlyName": $friendly_name} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  let req_body = ($req_body | transpose k v | where v != null | reduce -f {} {|p, acc| $acc | upsert $p.k $p.v } | url build-query)
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/x-www-form-urlencoded" $req_body
+  let req_body_wire = ($req_body | transpose k v | where v != null | reduce -f {} {|p, acc| $acc | upsert $p.k $p.v } | url build-query)
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/x-www-form-urlencoded" $req_body_wire {query: {}, body: $req_body}
 }
 
 # GET /v1/Workspaces/{WorkspaceSid}/CumulativeStatistics
@@ -408,11 +441,12 @@ export def "workspaces-cumulative-statistics get" [
 ]: nothing -> record<account_sid: string, avg_task_acceptance_time: int, end_time: string, reservations_accepted: int, reservations_canceled: int, reservations_created: int, reservations_rejected: int, reservations_rescinded: int, reservations_timed_out: int, split_by_wait_time: any, start_time: string, tasks_canceled: int, tasks_completed: int, tasks_created: int, tasks_deleted: int, tasks_moved: int, tasks_timed_out_in_workflow: int, url: string, wait_duration_until_accepted: any, wait_duration_until_canceled: any, workspace_sid: string> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default "https://taskrouter.twilio.com")
+  if ($workspace_sid | is-empty) { error make --unspanned { msg: "path parameter 'WorkspaceSid' must be non-empty" } }
   let qp = [(serialize-qp "EndDate" $end_date "scalar") (serialize-qp "Minutes" $minutes "scalar") (serialize-qp "StartDate" $start_date "scalar") (serialize-qp "TaskChannel" $task_channel "scalar") (serialize-qp "SplitByWaitTime" $split_by_wait_time "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({workspace_sid: (encode-path-segment $workspace_sid)} | format pattern "/v1/Workspaces/{workspace_sid}/CumulativeStatistics") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"EndDate": $end_date, "Minutes": $minutes, "StartDate": $start_date, "TaskChannel": $task_channel, "SplitByWaitTime": $split_by_wait_time} | compact), body: null}
 }
 
 # GET /v1/Workspaces/{WorkspaceSid}/Events
@@ -446,11 +480,12 @@ export def "workspaces-events list" [
 ]: nothing -> record<events: table<account_sid: string, actor_sid: string, actor_type: string, actor_url: string, description: string, event_data: any, event_date: string, event_date_ms: int, event_type: string, resource_sid: string, resource_type: string, resource_url: string, sid: string, source: string, source_ip_address: string, url: string, workspace_sid: string>, meta: record<first_page_url: string, key: string, next_page_url: string, page: int, page_size: int, previous_page_url: string, url: string>> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default "https://taskrouter.twilio.com")
+  if ($workspace_sid | is-empty) { error make --unspanned { msg: "path parameter 'WorkspaceSid' must be non-empty" } }
   let qp = [(serialize-qp "EndDate" $end_date "scalar") (serialize-qp "EventType" $event_type "scalar") (serialize-qp "Minutes" $minutes "scalar") (serialize-qp "ReservationSid" $reservation_sid "scalar") (serialize-qp "StartDate" $start_date "scalar") (serialize-qp "TaskQueueSid" $task_queue_sid "scalar") (serialize-qp "TaskSid" $task_sid "scalar") (serialize-qp "WorkerSid" $worker_sid "scalar") (serialize-qp "WorkflowSid" $workflow_sid "scalar") (serialize-qp "TaskChannel" $task_channel "scalar") (serialize-qp "Sid" $sid "scalar") (serialize-qp "PageSize" $page_size "scalar") (serialize-qp "Page" $page "scalar") (serialize-qp "PageToken" $page_token "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({workspace_sid: (encode-path-segment $workspace_sid)} | format pattern "/v1/Workspaces/{workspace_sid}/Events") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"EndDate": $end_date, "EventType": $event_type, "Minutes": $minutes, "ReservationSid": $reservation_sid, "StartDate": $start_date, "TaskQueueSid": $task_queue_sid, "TaskSid": $task_sid, "WorkerSid": $worker_sid, "WorkflowSid": $workflow_sid, "TaskChannel": $task_channel, "Sid": $sid, "PageSize": $page_size, "Page": $page, "PageToken": $page_token} | compact), body: null}
 }
 
 # GET /v1/Workspaces/{WorkspaceSid}/Events/{Sid}
@@ -471,10 +506,12 @@ export def "workspaces-events get" [
 ]: nothing -> record<account_sid: string, actor_sid: string, actor_type: string, actor_url: string, description: string, event_data: any, event_date: string, event_date_ms: int, event_type: string, resource_sid: string, resource_type: string, resource_url: string, sid: string, source: string, source_ip_address: string, url: string, workspace_sid: string> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default "https://taskrouter.twilio.com")
+  if ($workspace_sid | is-empty) { error make --unspanned { msg: "path parameter 'WorkspaceSid' must be non-empty" } }
+  if ($sid | is-empty) { error make --unspanned { msg: "path parameter 'Sid' must be non-empty" } }
   let full_url = (build-url $base ({workspace_sid: (encode-path-segment $workspace_sid), sid: (encode-path-segment $sid)} | format pattern "/v1/Workspaces/{workspace_sid}/Events/{sid}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
 }
 
 # GET /v1/Workspaces/{WorkspaceSid}/RealTimeStatistics
@@ -495,11 +532,12 @@ export def "workspaces-real-time-statistics get" [
 ]: nothing -> record<account_sid: string, activity_statistics: list<any>, longest_task_waiting_age: int, longest_task_waiting_sid: string, tasks_by_priority: any, tasks_by_status: any, total_tasks: int, total_workers: int, url: string, workspace_sid: string> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default "https://taskrouter.twilio.com")
+  if ($workspace_sid | is-empty) { error make --unspanned { msg: "path parameter 'WorkspaceSid' must be non-empty" } }
   let qp = [(serialize-qp "TaskChannel" $task_channel "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({workspace_sid: (encode-path-segment $workspace_sid)} | format pattern "/v1/Workspaces/{workspace_sid}/RealTimeStatistics") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"TaskChannel": $task_channel} | compact), body: null}
 }
 
 # GET /v1/Workspaces/{WorkspaceSid}/Statistics
@@ -524,11 +562,12 @@ export def "workspaces-statistics get" [
 ]: nothing -> record<account_sid: string, cumulative: any, realtime: any, url: string, workspace_sid: string> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default "https://taskrouter.twilio.com")
+  if ($workspace_sid | is-empty) { error make --unspanned { msg: "path parameter 'WorkspaceSid' must be non-empty" } }
   let qp = [(serialize-qp "Minutes" $minutes "scalar") (serialize-qp "StartDate" $start_date "scalar") (serialize-qp "EndDate" $end_date "scalar") (serialize-qp "TaskChannel" $task_channel "scalar") (serialize-qp "SplitByWaitTime" $split_by_wait_time "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({workspace_sid: (encode-path-segment $workspace_sid)} | format pattern "/v1/Workspaces/{workspace_sid}/Statistics") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"Minutes": $minutes, "StartDate": $start_date, "EndDate": $end_date, "TaskChannel": $task_channel, "SplitByWaitTime": $split_by_wait_time} | compact), body: null}
 }
 
 # GET /v1/Workspaces/{WorkspaceSid}/TaskChannels
@@ -551,11 +590,12 @@ export def "workspaces-task-channels list" [
 ]: nothing -> record<channels: table<account_sid: string, channel_optimized_routing: bool, date_created: string, date_updated: string, friendly_name: string, links: record, sid: string, unique_name: string, url: string, workspace_sid: string>, meta: record<first_page_url: string, key: string, next_page_url: string, page: int, page_size: int, previous_page_url: string, url: string>> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default "https://taskrouter.twilio.com")
+  if ($workspace_sid | is-empty) { error make --unspanned { msg: "path parameter 'WorkspaceSid' must be non-empty" } }
   let qp = [(serialize-qp "PageSize" $page_size "scalar") (serialize-qp "Page" $page "scalar") (serialize-qp "PageToken" $page_token "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({workspace_sid: (encode-path-segment $workspace_sid)} | format pattern "/v1/Workspaces/{workspace_sid}/TaskChannels") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"PageSize": $page_size, "Page": $page, "PageToken": $page_token} | compact), body: null}
 }
 
 # POST /v1/Workspaces/{WorkspaceSid}/TaskChannels
@@ -579,13 +619,14 @@ export def "workspaces-task-channels create" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default "https://taskrouter.twilio.com")
+  if ($workspace_sid | is-empty) { error make --unspanned { msg: "path parameter 'WorkspaceSid' must be non-empty" } }
   let full_url = (build-url $base ({workspace_sid: (encode-path-segment $workspace_sid)} | format pattern "/v1/Workspaces/{workspace_sid}/TaskChannels"))
   let req_body = {"ChannelOptimizedRouting": $channel_optimized_routing, "FriendlyName": $friendly_name, "UniqueName": $unique_name} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  let req_body = ($req_body | transpose k v | where v != null | reduce -f {} {|p, acc| $acc | upsert $p.k $p.v } | url build-query)
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/x-www-form-urlencoded" $req_body
+  let req_body_wire = ($req_body | transpose k v | where v != null | reduce -f {} {|p, acc| $acc | upsert $p.k $p.v } | url build-query)
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/x-www-form-urlencoded" $req_body_wire {query: {}, body: $req_body}
 }
 
 # DELETE /v1/Workspaces/{WorkspaceSid}/TaskChannels/{Sid}
@@ -606,10 +647,12 @@ export def "workspaces-task-channels delete" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default "https://taskrouter.twilio.com")
+  if ($workspace_sid | is-empty) { error make --unspanned { msg: "path parameter 'WorkspaceSid' must be non-empty" } }
+  if ($sid | is-empty) { error make --unspanned { msg: "path parameter 'Sid' must be non-empty" } }
   let full_url = (build-url $base ({workspace_sid: (encode-path-segment $workspace_sid), sid: (encode-path-segment $sid)} | format pattern "/v1/Workspaces/{workspace_sid}/TaskChannels/{sid}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
 }
 
 # GET /v1/Workspaces/{WorkspaceSid}/TaskChannels/{Sid}
@@ -630,10 +673,12 @@ export def "workspaces-task-channels get" [
 ]: nothing -> record<account_sid: string, channel_optimized_routing: bool, date_created: string, date_updated: string, friendly_name: string, links: record, sid: string, unique_name: string, url: string, workspace_sid: string> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default "https://taskrouter.twilio.com")
+  if ($workspace_sid | is-empty) { error make --unspanned { msg: "path parameter 'WorkspaceSid' must be non-empty" } }
+  if ($sid | is-empty) { error make --unspanned { msg: "path parameter 'Sid' must be non-empty" } }
   let full_url = (build-url $base ({workspace_sid: (encode-path-segment $workspace_sid), sid: (encode-path-segment $sid)} | format pattern "/v1/Workspaces/{workspace_sid}/TaskChannels/{sid}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
 }
 
 # POST /v1/Workspaces/{WorkspaceSid}/TaskChannels/{Sid}
@@ -657,13 +702,15 @@ export def "workspaces-task-channels update" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default "https://taskrouter.twilio.com")
+  if ($workspace_sid | is-empty) { error make --unspanned { msg: "path parameter 'WorkspaceSid' must be non-empty" } }
+  if ($sid | is-empty) { error make --unspanned { msg: "path parameter 'Sid' must be non-empty" } }
   let full_url = (build-url $base ({workspace_sid: (encode-path-segment $workspace_sid), sid: (encode-path-segment $sid)} | format pattern "/v1/Workspaces/{workspace_sid}/TaskChannels/{sid}"))
   let req_body = {"ChannelOptimizedRouting": $channel_optimized_routing, "FriendlyName": $friendly_name} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  let req_body = ($req_body | transpose k v | where v != null | reduce -f {} {|p, acc| $acc | upsert $p.k $p.v } | url build-query)
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/x-www-form-urlencoded" $req_body
+  let req_body_wire = ($req_body | transpose k v | where v != null | reduce -f {} {|p, acc| $acc | upsert $p.k $p.v } | url build-query)
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/x-www-form-urlencoded" $req_body_wire {query: {}, body: $req_body}
 }
 
 # GET /v1/Workspaces/{WorkspaceSid}/TaskQueues
@@ -690,11 +737,12 @@ export def "workspaces-task-queues list" [
 ]: nothing -> record<meta: record<first_page_url: string, key: string, next_page_url: string, page: int, page_size: int, previous_page_url: string, url: string>, task_queues: table<account_sid: string, assignment_activity_name: string, assignment_activity_sid: string, date_created: string, date_updated: string, friendly_name: string, links: record, max_reserved_workers: int, reservation_activity_name: string, reservation_activity_sid: string, sid: string, target_workers: string, task_order: string, url: string, workspace_sid: string>> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default "https://taskrouter.twilio.com")
+  if ($workspace_sid | is-empty) { error make --unspanned { msg: "path parameter 'WorkspaceSid' must be non-empty" } }
   let qp = [(serialize-qp "FriendlyName" $friendly_name "scalar") (serialize-qp "EvaluateWorkerAttributes" $evaluate_worker_attributes "scalar") (serialize-qp "WorkerSid" $worker_sid "scalar") (serialize-qp "Ordering" $ordering "scalar") (serialize-qp "PageSize" $page_size "scalar") (serialize-qp "Page" $page "scalar") (serialize-qp "PageToken" $page_token "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({workspace_sid: (encode-path-segment $workspace_sid)} | format pattern "/v1/Workspaces/{workspace_sid}/TaskQueues") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"FriendlyName": $friendly_name, "EvaluateWorkerAttributes": $evaluate_worker_attributes, "WorkerSid": $worker_sid, "Ordering": $ordering, "PageSize": $page_size, "Page": $page, "PageToken": $page_token} | compact), body: null}
 }
 
 # POST /v1/Workspaces/{WorkspaceSid}/TaskQueues
@@ -721,13 +769,14 @@ export def "workspaces-task-queues create" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default "https://taskrouter.twilio.com")
+  if ($workspace_sid | is-empty) { error make --unspanned { msg: "path parameter 'WorkspaceSid' must be non-empty" } }
   let full_url = (build-url $base ({workspace_sid: (encode-path-segment $workspace_sid)} | format pattern "/v1/Workspaces/{workspace_sid}/TaskQueues"))
   let req_body = {"AssignmentActivitySid": $assignment_activity_sid, "FriendlyName": $friendly_name, "MaxReservedWorkers": $max_reserved_workers, "ReservationActivitySid": $reservation_activity_sid, "TargetWorkers": $target_workers, "TaskOrder": $task_order} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  let req_body = ($req_body | transpose k v | where v != null | reduce -f {} {|p, acc| $acc | upsert $p.k $p.v } | url build-query)
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/x-www-form-urlencoded" $req_body
+  let req_body_wire = ($req_body | transpose k v | where v != null | reduce -f {} {|p, acc| $acc | upsert $p.k $p.v } | url build-query)
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/x-www-form-urlencoded" $req_body_wire {query: {}, body: $req_body}
 }
 
 # GET /v1/Workspaces/{WorkspaceSid}/TaskQueues/Statistics
@@ -756,11 +805,12 @@ export def "workspaces-task-queues-statistics list" [
 ]: nothing -> record<meta: record<first_page_url: string, key: string, next_page_url: string, page: int, page_size: int, previous_page_url: string, url: string>, task_queues_statistics: table<account_sid: string, cumulative: any, realtime: any, task_queue_sid: string, workspace_sid: string>> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default "https://taskrouter.twilio.com")
+  if ($workspace_sid | is-empty) { error make --unspanned { msg: "path parameter 'WorkspaceSid' must be non-empty" } }
   let qp = [(serialize-qp "EndDate" $end_date "scalar") (serialize-qp "FriendlyName" $friendly_name "scalar") (serialize-qp "Minutes" $minutes "scalar") (serialize-qp "StartDate" $start_date "scalar") (serialize-qp "TaskChannel" $task_channel "scalar") (serialize-qp "SplitByWaitTime" $split_by_wait_time "scalar") (serialize-qp "PageSize" $page_size "scalar") (serialize-qp "Page" $page "scalar") (serialize-qp "PageToken" $page_token "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({workspace_sid: (encode-path-segment $workspace_sid)} | format pattern "/v1/Workspaces/{workspace_sid}/TaskQueues/Statistics") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"EndDate": $end_date, "FriendlyName": $friendly_name, "Minutes": $minutes, "StartDate": $start_date, "TaskChannel": $task_channel, "SplitByWaitTime": $split_by_wait_time, "PageSize": $page_size, "Page": $page, "PageToken": $page_token} | compact), body: null}
 }
 
 # DELETE /v1/Workspaces/{WorkspaceSid}/TaskQueues/{Sid}
@@ -781,10 +831,12 @@ export def "workspaces-task-queues delete" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default "https://taskrouter.twilio.com")
+  if ($workspace_sid | is-empty) { error make --unspanned { msg: "path parameter 'WorkspaceSid' must be non-empty" } }
+  if ($sid | is-empty) { error make --unspanned { msg: "path parameter 'Sid' must be non-empty" } }
   let full_url = (build-url $base ({workspace_sid: (encode-path-segment $workspace_sid), sid: (encode-path-segment $sid)} | format pattern "/v1/Workspaces/{workspace_sid}/TaskQueues/{sid}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
 }
 
 # GET /v1/Workspaces/{WorkspaceSid}/TaskQueues/{Sid}
@@ -805,10 +857,12 @@ export def "workspaces-task-queues get" [
 ]: nothing -> record<account_sid: string, assignment_activity_name: string, assignment_activity_sid: string, date_created: string, date_updated: string, friendly_name: string, links: record, max_reserved_workers: int, reservation_activity_name: string, reservation_activity_sid: string, sid: string, target_workers: string, task_order: string, url: string, workspace_sid: string> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default "https://taskrouter.twilio.com")
+  if ($workspace_sid | is-empty) { error make --unspanned { msg: "path parameter 'WorkspaceSid' must be non-empty" } }
+  if ($sid | is-empty) { error make --unspanned { msg: "path parameter 'Sid' must be non-empty" } }
   let full_url = (build-url $base ({workspace_sid: (encode-path-segment $workspace_sid), sid: (encode-path-segment $sid)} | format pattern "/v1/Workspaces/{workspace_sid}/TaskQueues/{sid}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
 }
 
 # POST /v1/Workspaces/{WorkspaceSid}/TaskQueues/{Sid}
@@ -836,13 +890,15 @@ export def "workspaces-task-queues update" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default "https://taskrouter.twilio.com")
+  if ($workspace_sid | is-empty) { error make --unspanned { msg: "path parameter 'WorkspaceSid' must be non-empty" } }
+  if ($sid | is-empty) { error make --unspanned { msg: "path parameter 'Sid' must be non-empty" } }
   let full_url = (build-url $base ({workspace_sid: (encode-path-segment $workspace_sid), sid: (encode-path-segment $sid)} | format pattern "/v1/Workspaces/{workspace_sid}/TaskQueues/{sid}"))
   let req_body = {"AssignmentActivitySid": $assignment_activity_sid, "FriendlyName": $friendly_name, "MaxReservedWorkers": $max_reserved_workers, "ReservationActivitySid": $reservation_activity_sid, "TargetWorkers": $target_workers, "TaskOrder": $task_order} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  let req_body = ($req_body | transpose k v | where v != null | reduce -f {} {|p, acc| $acc | upsert $p.k $p.v } | url build-query)
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/x-www-form-urlencoded" $req_body
+  let req_body_wire = ($req_body | transpose k v | where v != null | reduce -f {} {|p, acc| $acc | upsert $p.k $p.v } | url build-query)
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/x-www-form-urlencoded" $req_body_wire {query: {}, body: $req_body}
 }
 
 # GET /v1/Workspaces/{WorkspaceSid}/TaskQueues/{TaskQueueSid}/CumulativeStatistics
@@ -868,11 +924,13 @@ export def "workspaces-task-queues-cumulative-statistics get" [
 ]: nothing -> record<account_sid: string, avg_task_acceptance_time: int, end_time: string, reservations_accepted: int, reservations_canceled: int, reservations_created: int, reservations_rejected: int, reservations_rescinded: int, reservations_timed_out: int, split_by_wait_time: any, start_time: string, task_queue_sid: string, tasks_canceled: int, tasks_completed: int, tasks_deleted: int, tasks_entered: int, tasks_moved: int, url: string, wait_duration_in_queue_until_accepted: any, wait_duration_until_accepted: any, wait_duration_until_canceled: any, workspace_sid: string> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default "https://taskrouter.twilio.com")
+  if ($workspace_sid | is-empty) { error make --unspanned { msg: "path parameter 'WorkspaceSid' must be non-empty" } }
+  if ($task_queue_sid | is-empty) { error make --unspanned { msg: "path parameter 'TaskQueueSid' must be non-empty" } }
   let qp = [(serialize-qp "EndDate" $end_date "scalar") (serialize-qp "Minutes" $minutes "scalar") (serialize-qp "StartDate" $start_date "scalar") (serialize-qp "TaskChannel" $task_channel "scalar") (serialize-qp "SplitByWaitTime" $split_by_wait_time "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({workspace_sid: (encode-path-segment $workspace_sid), task_queue_sid: (encode-path-segment $task_queue_sid)} | format pattern "/v1/Workspaces/{workspace_sid}/TaskQueues/{task_queue_sid}/CumulativeStatistics") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"EndDate": $end_date, "Minutes": $minutes, "StartDate": $start_date, "TaskChannel": $task_channel, "SplitByWaitTime": $split_by_wait_time} | compact), body: null}
 }
 
 # GET /v1/Workspaces/{WorkspaceSid}/TaskQueues/{TaskQueueSid}/RealTimeStatistics
@@ -894,11 +952,13 @@ export def "workspaces-task-queues-real-time-statistics get" [
 ]: nothing -> record<account_sid: string, activity_statistics: list<any>, longest_relative_task_age_in_queue: int, longest_relative_task_sid_in_queue: string, longest_task_waiting_age: int, longest_task_waiting_sid: string, task_queue_sid: string, tasks_by_priority: any, tasks_by_status: any, total_available_workers: int, total_eligible_workers: int, total_tasks: int, url: string, workspace_sid: string> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default "https://taskrouter.twilio.com")
+  if ($workspace_sid | is-empty) { error make --unspanned { msg: "path parameter 'WorkspaceSid' must be non-empty" } }
+  if ($task_queue_sid | is-empty) { error make --unspanned { msg: "path parameter 'TaskQueueSid' must be non-empty" } }
   let qp = [(serialize-qp "TaskChannel" $task_channel "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({workspace_sid: (encode-path-segment $workspace_sid), task_queue_sid: (encode-path-segment $task_queue_sid)} | format pattern "/v1/Workspaces/{workspace_sid}/TaskQueues/{task_queue_sid}/RealTimeStatistics") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"TaskChannel": $task_channel} | compact), body: null}
 }
 
 # GET /v1/Workspaces/{WorkspaceSid}/TaskQueues/{TaskQueueSid}/Statistics
@@ -924,11 +984,13 @@ export def "workspaces-task-queues-statistics get" [
 ]: nothing -> record<account_sid: string, cumulative: any, realtime: any, task_queue_sid: string, url: string, workspace_sid: string> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default "https://taskrouter.twilio.com")
+  if ($workspace_sid | is-empty) { error make --unspanned { msg: "path parameter 'WorkspaceSid' must be non-empty" } }
+  if ($task_queue_sid | is-empty) { error make --unspanned { msg: "path parameter 'TaskQueueSid' must be non-empty" } }
   let qp = [(serialize-qp "EndDate" $end_date "scalar") (serialize-qp "Minutes" $minutes "scalar") (serialize-qp "StartDate" $start_date "scalar") (serialize-qp "TaskChannel" $task_channel "scalar") (serialize-qp "SplitByWaitTime" $split_by_wait_time "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({workspace_sid: (encode-path-segment $workspace_sid), task_queue_sid: (encode-path-segment $task_queue_sid)} | format pattern "/v1/Workspaces/{workspace_sid}/TaskQueues/{task_queue_sid}/Statistics") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"EndDate": $end_date, "Minutes": $minutes, "StartDate": $start_date, "TaskChannel": $task_channel, "SplitByWaitTime": $split_by_wait_time} | compact), body: null}
 }
 
 # GET /v1/Workspaces/{WorkspaceSid}/Tasks
@@ -960,11 +1022,12 @@ export def "workspaces-tasks list" [
 ]: nothing -> record<meta: record<first_page_url: string, key: string, next_page_url: string, page: int, page_size: int, previous_page_url: string, url: string>, tasks: table<account_sid: string, addons: string, age: int, assignment_status: string, attributes: string, date_created: string, date_updated: string, links: record, priority: int, reason: string, sid: string, task_channel_sid: string, task_channel_unique_name: string, task_queue_entered_date: string, task_queue_friendly_name: string, task_queue_sid: string, timeout: int, url: string, workflow_friendly_name: string, workflow_sid: string, workspace_sid: string>> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default "https://taskrouter.twilio.com")
+  if ($workspace_sid | is-empty) { error make --unspanned { msg: "path parameter 'WorkspaceSid' must be non-empty" } }
   let qp = [(serialize-qp "Priority" $priority "scalar") (serialize-qp "AssignmentStatus" $assignment_status "multi") (serialize-qp "WorkflowSid" $workflow_sid "scalar") (serialize-qp "WorkflowName" $workflow_name "scalar") (serialize-qp "TaskQueueSid" $task_queue_sid "scalar") (serialize-qp "TaskQueueName" $task_queue_name "scalar") (serialize-qp "EvaluateTaskAttributes" $evaluate_task_attributes "scalar") (serialize-qp "Ordering" $ordering "scalar") (serialize-qp "HasAddons" $has_addons "scalar") (serialize-qp "PageSize" $page_size "scalar") (serialize-qp "Page" $page "scalar") (serialize-qp "PageToken" $page_token "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({workspace_sid: (encode-path-segment $workspace_sid)} | format pattern "/v1/Workspaces/{workspace_sid}/Tasks") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"Priority": $priority, "AssignmentStatus": $assignment_status, "WorkflowSid": $workflow_sid, "WorkflowName": $workflow_name, "TaskQueueSid": $task_queue_sid, "TaskQueueName": $task_queue_name, "EvaluateTaskAttributes": $evaluate_task_attributes, "Ordering": $ordering, "HasAddons": $has_addons, "PageSize": $page_size, "Page": $page, "PageToken": $page_token} | compact), body: null}
 }
 
 # POST /v1/Workspaces/{WorkspaceSid}/Tasks
@@ -990,13 +1053,14 @@ export def "workspaces-tasks create" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default "https://taskrouter.twilio.com")
+  if ($workspace_sid | is-empty) { error make --unspanned { msg: "path parameter 'WorkspaceSid' must be non-empty" } }
   let full_url = (build-url $base ({workspace_sid: (encode-path-segment $workspace_sid)} | format pattern "/v1/Workspaces/{workspace_sid}/Tasks"))
   let req_body = {"Attributes": $attributes, "Priority": $priority, "TaskChannel": $task_channel, "Timeout": $timeout, "WorkflowSid": $workflow_sid} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  let req_body = ($req_body | transpose k v | where v != null | reduce -f {} {|p, acc| $acc | upsert $p.k $p.v } | url build-query)
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/x-www-form-urlencoded" $req_body
+  let req_body_wire = ($req_body | transpose k v | where v != null | reduce -f {} {|p, acc| $acc | upsert $p.k $p.v } | url build-query)
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/x-www-form-urlencoded" $req_body_wire {query: {}, body: $req_body}
 }
 
 # DELETE /v1/Workspaces/{WorkspaceSid}/Tasks/{Sid}
@@ -1018,12 +1082,14 @@ export def "workspaces-tasks delete" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default "https://taskrouter.twilio.com")
+  if ($workspace_sid | is-empty) { error make --unspanned { msg: "path parameter 'WorkspaceSid' must be non-empty" } }
+  if ($sid | is-empty) { error make --unspanned { msg: "path parameter 'Sid' must be non-empty" } }
   let full_url = (build-url $base ({workspace_sid: (encode-path-segment $workspace_sid), sid: (encode-path-segment $sid)} | format pattern "/v1/Workspaces/{workspace_sid}/Tasks/{sid}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"If-Match": $if_match} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
 }
 
 # GET /v1/Workspaces/{WorkspaceSid}/Tasks/{Sid}
@@ -1044,10 +1110,12 @@ export def "workspaces-tasks get" [
 ]: nothing -> record<account_sid: string, addons: string, age: int, assignment_status: string, attributes: string, date_created: string, date_updated: string, links: record, priority: int, reason: string, sid: string, task_channel_sid: string, task_channel_unique_name: string, task_queue_entered_date: string, task_queue_friendly_name: string, task_queue_sid: string, timeout: int, url: string, workflow_friendly_name: string, workflow_sid: string, workspace_sid: string> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default "https://taskrouter.twilio.com")
+  if ($workspace_sid | is-empty) { error make --unspanned { msg: "path parameter 'WorkspaceSid' must be non-empty" } }
+  if ($sid | is-empty) { error make --unspanned { msg: "path parameter 'Sid' must be non-empty" } }
   let full_url = (build-url $base ({workspace_sid: (encode-path-segment $workspace_sid), sid: (encode-path-segment $sid)} | format pattern "/v1/Workspaces/{workspace_sid}/Tasks/{sid}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
 }
 
 # POST /v1/Workspaces/{WorkspaceSid}/Tasks/{Sid}
@@ -1075,6 +1143,8 @@ export def "workspaces-tasks update" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default "https://taskrouter.twilio.com")
+  if ($workspace_sid | is-empty) { error make --unspanned { msg: "path parameter 'WorkspaceSid' must be non-empty" } }
+  if ($sid | is-empty) { error make --unspanned { msg: "path parameter 'Sid' must be non-empty" } }
   let full_url = (build-url $base ({workspace_sid: (encode-path-segment $workspace_sid), sid: (encode-path-segment $sid)} | format pattern "/v1/Workspaces/{workspace_sid}/Tasks/{sid}"))
   let req_body = {"AssignmentStatus": $assignment_status, "Attributes": $attributes, "Priority": $priority, "Reason": $reason, "TaskChannel": $task_channel} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
@@ -1082,8 +1152,8 @@ export def "workspaces-tasks update" [
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"If-Match": $if_match} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  let req_body = ($req_body | transpose k v | where v != null | reduce -f {} {|p, acc| $acc | upsert $p.k $p.v } | url build-query)
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/x-www-form-urlencoded" $req_body
+  let req_body_wire = ($req_body | transpose k v | where v != null | reduce -f {} {|p, acc| $acc | upsert $p.k $p.v } | url build-query)
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/x-www-form-urlencoded" $req_body_wire {query: {}, body: $req_body}
 }
 
 # GET /v1/Workspaces/{WorkspaceSid}/Tasks/{TaskSid}/Reservations
@@ -1109,11 +1179,13 @@ export def "workspaces-tasks-reservations list" [
 ]: nothing -> record<meta: record<first_page_url: string, key: string, next_page_url: string, page: int, page_size: int, previous_page_url: string, url: string>, reservations: table<account_sid: string, date_created: string, date_updated: string, links: record, reservation_status: string, sid: string, task_sid: string, url: string, worker_name: string, worker_sid: string, workspace_sid: string>> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default "https://taskrouter.twilio.com")
+  if ($workspace_sid | is-empty) { error make --unspanned { msg: "path parameter 'WorkspaceSid' must be non-empty" } }
+  if ($task_sid | is-empty) { error make --unspanned { msg: "path parameter 'TaskSid' must be non-empty" } }
   let qp = [(serialize-qp "ReservationStatus" $reservation_status "scalar") (serialize-qp "WorkerSid" $worker_sid "scalar") (serialize-qp "PageSize" $page_size "scalar") (serialize-qp "Page" $page "scalar") (serialize-qp "PageToken" $page_token "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({workspace_sid: (encode-path-segment $workspace_sid), task_sid: (encode-path-segment $task_sid)} | format pattern "/v1/Workspaces/{workspace_sid}/Tasks/{task_sid}/Reservations") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"ReservationStatus": $reservation_status, "WorkerSid": $worker_sid, "PageSize": $page_size, "Page": $page, "PageToken": $page_token} | compact), body: null}
 }
 
 # GET /v1/Workspaces/{WorkspaceSid}/Tasks/{TaskSid}/Reservations/{Sid}
@@ -1135,10 +1207,13 @@ export def "workspaces-tasks-reservations get" [
 ]: nothing -> record<account_sid: string, date_created: string, date_updated: string, links: record, reservation_status: string, sid: string, task_sid: string, url: string, worker_name: string, worker_sid: string, workspace_sid: string> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default "https://taskrouter.twilio.com")
+  if ($workspace_sid | is-empty) { error make --unspanned { msg: "path parameter 'WorkspaceSid' must be non-empty" } }
+  if ($task_sid | is-empty) { error make --unspanned { msg: "path parameter 'TaskSid' must be non-empty" } }
+  if ($sid | is-empty) { error make --unspanned { msg: "path parameter 'Sid' must be non-empty" } }
   let full_url = (build-url $base ({workspace_sid: (encode-path-segment $workspace_sid), task_sid: (encode-path-segment $task_sid), sid: (encode-path-segment $sid)} | format pattern "/v1/Workspaces/{workspace_sid}/Tasks/{task_sid}/Reservations/{sid}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
 }
 
 # POST /v1/Workspaces/{WorkspaceSid}/Tasks/{TaskSid}/Reservations/{Sid}
@@ -1215,6 +1290,9 @@ export def "workspaces-tasks-reservations update" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default "https://taskrouter.twilio.com")
+  if ($workspace_sid | is-empty) { error make --unspanned { msg: "path parameter 'WorkspaceSid' must be non-empty" } }
+  if ($task_sid | is-empty) { error make --unspanned { msg: "path parameter 'TaskSid' must be non-empty" } }
+  if ($sid | is-empty) { error make --unspanned { msg: "path parameter 'Sid' must be non-empty" } }
   let full_url = (build-url $base ({workspace_sid: (encode-path-segment $workspace_sid), task_sid: (encode-path-segment $task_sid), sid: (encode-path-segment $sid)} | format pattern "/v1/Workspaces/{workspace_sid}/Tasks/{task_sid}/Reservations/{sid}"))
   let req_body = {"Beep": $beep, "BeepOnCustomerEntrance": $beep_on_customer_entrance, "CallAccept": $call_accept, "CallFrom": $call_from, "CallRecord": $call_record, "CallStatusCallbackUrl": $call_status_callback_url, "CallTimeout": $call_timeout, "CallTo": $call_to, "CallUrl": $call_url, "ConferenceRecord": $conference_record, "ConferenceRecordingStatusCallback": $conference_recording_status_callback, "ConferenceRecordingStatusCallbackMethod": $conference_recording_status_callback_method, "ConferenceStatusCallback": $conference_status_callback, "ConferenceStatusCallbackEvent": $conference_status_callback_event, "ConferenceStatusCallbackMethod": $conference_status_callback_method, "ConferenceTrim": $conference_trim, "DequeueFrom": $dequeue_from, "DequeuePostWorkActivitySid": $dequeue_post_work_activity_sid, "DequeueRecord": $dequeue_record, "DequeueStatusCallbackEvent": $dequeue_status_callback_event, "DequeueStatusCallbackUrl": $dequeue_status_callback_url, "DequeueTimeout": $dequeue_timeout, "DequeueTo": $dequeue_to, "EarlyMedia": $early_media, "EndConferenceOnCustomerExit": $end_conference_on_customer_exit, "EndConferenceOnExit": $end_conference_on_exit, "From": $body_from, "Instruction": $instruction, "MaxParticipants": $max_participants, "Muted": $muted, "PostWorkActivitySid": $post_work_activity_sid, "Record": $record, "RecordingChannels": $recording_channels, "RecordingStatusCallback": $recording_status_callback, "RecordingStatusCallbackMethod": $recording_status_callback_method, "RedirectAccept": $redirect_accept, "RedirectCallSid": $redirect_call_sid, "RedirectUrl": $redirect_url, "Region": $region, "ReservationStatus": $reservation_status, "SipAuthPassword": $sip_auth_password, "SipAuthUsername": $sip_auth_username, "StartConferenceOnEnter": $start_conference_on_enter, "StatusCallback": $status_callback, "StatusCallbackEvent": $status_callback_event, "StatusCallbackMethod": $status_callback_method, "Supervisor": $supervisor, "SupervisorMode": $supervisor_mode, "Timeout": $timeout, "To": $body_to, "WaitMethod": $wait_method, "WaitUrl": $wait_url, "WorkerActivitySid": $worker_activity_sid} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
@@ -1222,8 +1300,8 @@ export def "workspaces-tasks-reservations update" [
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"If-Match": $if_match} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  let req_body = ($req_body | transpose k v | where v != null | reduce -f {} {|p, acc| $acc | upsert $p.k $p.v } | url build-query)
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/x-www-form-urlencoded" $req_body
+  let req_body_wire = ($req_body | transpose k v | where v != null | reduce -f {} {|p, acc| $acc | upsert $p.k $p.v } | url build-query)
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/x-www-form-urlencoded" $req_body_wire {query: {}, body: $req_body}
 }
 
 # GET /v1/Workspaces/{WorkspaceSid}/Workers
@@ -1254,11 +1332,12 @@ export def "workspaces-workers list" [
 ]: nothing -> record<meta: record<first_page_url: string, key: string, next_page_url: string, page: int, page_size: int, previous_page_url: string, url: string>, workers: table<account_sid: string, activity_name: string, activity_sid: string, attributes: string, available: bool, date_created: string, date_status_changed: string, date_updated: string, friendly_name: string, links: record, sid: string, url: string, workspace_sid: string>> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default "https://taskrouter.twilio.com")
+  if ($workspace_sid | is-empty) { error make --unspanned { msg: "path parameter 'WorkspaceSid' must be non-empty" } }
   let qp = [(serialize-qp "ActivityName" $activity_name "scalar") (serialize-qp "ActivitySid" $activity_sid "scalar") (serialize-qp "Available" $available "scalar") (serialize-qp "FriendlyName" $friendly_name "scalar") (serialize-qp "TargetWorkersExpression" $target_workers_expression "scalar") (serialize-qp "TaskQueueName" $task_queue_name "scalar") (serialize-qp "TaskQueueSid" $task_queue_sid "scalar") (serialize-qp "Ordering" $ordering "scalar") (serialize-qp "PageSize" $page_size "scalar") (serialize-qp "Page" $page "scalar") (serialize-qp "PageToken" $page_token "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({workspace_sid: (encode-path-segment $workspace_sid)} | format pattern "/v1/Workspaces/{workspace_sid}/Workers") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"ActivityName": $activity_name, "ActivitySid": $activity_sid, "Available": $available, "FriendlyName": $friendly_name, "TargetWorkersExpression": $target_workers_expression, "TaskQueueName": $task_queue_name, "TaskQueueSid": $task_queue_sid, "Ordering": $ordering, "PageSize": $page_size, "Page": $page, "PageToken": $page_token} | compact), body: null}
 }
 
 # POST /v1/Workspaces/{WorkspaceSid}/Workers
@@ -1282,13 +1361,14 @@ export def "workspaces-workers create" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default "https://taskrouter.twilio.com")
+  if ($workspace_sid | is-empty) { error make --unspanned { msg: "path parameter 'WorkspaceSid' must be non-empty" } }
   let full_url = (build-url $base ({workspace_sid: (encode-path-segment $workspace_sid)} | format pattern "/v1/Workspaces/{workspace_sid}/Workers"))
   let req_body = {"ActivitySid": $activity_sid, "Attributes": $attributes, "FriendlyName": $friendly_name} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  let req_body = ($req_body | transpose k v | where v != null | reduce -f {} {|p, acc| $acc | upsert $p.k $p.v } | url build-query)
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/x-www-form-urlencoded" $req_body
+  let req_body_wire = ($req_body | transpose k v | where v != null | reduce -f {} {|p, acc| $acc | upsert $p.k $p.v } | url build-query)
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/x-www-form-urlencoded" $req_body_wire {query: {}, body: $req_body}
 }
 
 # GET /v1/Workspaces/{WorkspaceSid}/Workers/CumulativeStatistics
@@ -1312,11 +1392,12 @@ export def "workspaces-workers-cumulative-statistics get" [
 ]: nothing -> record<account_sid: string, activity_durations: list<any>, end_time: string, reservations_accepted: int, reservations_canceled: int, reservations_created: int, reservations_rejected: int, reservations_rescinded: int, reservations_timed_out: int, start_time: string, url: string, workspace_sid: string> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default "https://taskrouter.twilio.com")
+  if ($workspace_sid | is-empty) { error make --unspanned { msg: "path parameter 'WorkspaceSid' must be non-empty" } }
   let qp = [(serialize-qp "EndDate" $end_date "scalar") (serialize-qp "Minutes" $minutes "scalar") (serialize-qp "StartDate" $start_date "scalar") (serialize-qp "TaskChannel" $task_channel "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({workspace_sid: (encode-path-segment $workspace_sid)} | format pattern "/v1/Workspaces/{workspace_sid}/Workers/CumulativeStatistics") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"EndDate": $end_date, "Minutes": $minutes, "StartDate": $start_date, "TaskChannel": $task_channel} | compact), body: null}
 }
 
 # GET /v1/Workspaces/{WorkspaceSid}/Workers/RealTimeStatistics
@@ -1337,11 +1418,12 @@ export def "workspaces-workers-real-time-statistics get" [
 ]: nothing -> record<account_sid: string, activity_statistics: list<any>, total_workers: int, url: string, workspace_sid: string> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default "https://taskrouter.twilio.com")
+  if ($workspace_sid | is-empty) { error make --unspanned { msg: "path parameter 'WorkspaceSid' must be non-empty" } }
   let qp = [(serialize-qp "TaskChannel" $task_channel "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({workspace_sid: (encode-path-segment $workspace_sid)} | format pattern "/v1/Workspaces/{workspace_sid}/Workers/RealTimeStatistics") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"TaskChannel": $task_channel} | compact), body: null}
 }
 
 # GET /v1/Workspaces/{WorkspaceSid}/Workers/Statistics
@@ -1368,11 +1450,12 @@ export def "workspaces-workers-statistics get" [
 ]: nothing -> record<account_sid: string, cumulative: any, realtime: any, url: string, workspace_sid: string> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default "https://taskrouter.twilio.com")
+  if ($workspace_sid | is-empty) { error make --unspanned { msg: "path parameter 'WorkspaceSid' must be non-empty" } }
   let qp = [(serialize-qp "Minutes" $minutes "scalar") (serialize-qp "StartDate" $start_date "scalar") (serialize-qp "EndDate" $end_date "scalar") (serialize-qp "TaskQueueSid" $task_queue_sid "scalar") (serialize-qp "TaskQueueName" $task_queue_name "scalar") (serialize-qp "FriendlyName" $friendly_name "scalar") (serialize-qp "TaskChannel" $task_channel "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({workspace_sid: (encode-path-segment $workspace_sid)} | format pattern "/v1/Workspaces/{workspace_sid}/Workers/Statistics") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"Minutes": $minutes, "StartDate": $start_date, "EndDate": $end_date, "TaskQueueSid": $task_queue_sid, "TaskQueueName": $task_queue_name, "FriendlyName": $friendly_name, "TaskChannel": $task_channel} | compact), body: null}
 }
 
 # DELETE /v1/Workspaces/{WorkspaceSid}/Workers/{Sid}
@@ -1394,12 +1477,14 @@ export def "workspaces-workers delete" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default "https://taskrouter.twilio.com")
+  if ($workspace_sid | is-empty) { error make --unspanned { msg: "path parameter 'WorkspaceSid' must be non-empty" } }
+  if ($sid | is-empty) { error make --unspanned { msg: "path parameter 'Sid' must be non-empty" } }
   let full_url = (build-url $base ({workspace_sid: (encode-path-segment $workspace_sid), sid: (encode-path-segment $sid)} | format pattern "/v1/Workspaces/{workspace_sid}/Workers/{sid}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"If-Match": $if_match} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
 }
 
 # GET /v1/Workspaces/{WorkspaceSid}/Workers/{Sid}
@@ -1420,10 +1505,12 @@ export def "workspaces-workers get" [
 ]: nothing -> record<account_sid: string, activity_name: string, activity_sid: string, attributes: string, available: bool, date_created: string, date_status_changed: string, date_updated: string, friendly_name: string, links: record, sid: string, url: string, workspace_sid: string> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default "https://taskrouter.twilio.com")
+  if ($workspace_sid | is-empty) { error make --unspanned { msg: "path parameter 'WorkspaceSid' must be non-empty" } }
+  if ($sid | is-empty) { error make --unspanned { msg: "path parameter 'Sid' must be non-empty" } }
   let full_url = (build-url $base ({workspace_sid: (encode-path-segment $workspace_sid), sid: (encode-path-segment $sid)} | format pattern "/v1/Workspaces/{workspace_sid}/Workers/{sid}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
 }
 
 # POST /v1/Workspaces/{WorkspaceSid}/Workers/{Sid}
@@ -1450,6 +1537,8 @@ export def "workspaces-workers update" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default "https://taskrouter.twilio.com")
+  if ($workspace_sid | is-empty) { error make --unspanned { msg: "path parameter 'WorkspaceSid' must be non-empty" } }
+  if ($sid | is-empty) { error make --unspanned { msg: "path parameter 'Sid' must be non-empty" } }
   let full_url = (build-url $base ({workspace_sid: (encode-path-segment $workspace_sid), sid: (encode-path-segment $sid)} | format pattern "/v1/Workspaces/{workspace_sid}/Workers/{sid}"))
   let req_body = {"ActivitySid": $activity_sid, "Attributes": $attributes, "FriendlyName": $friendly_name, "RejectPendingReservations": $reject_pending_reservations} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
@@ -1457,8 +1546,8 @@ export def "workspaces-workers update" [
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"If-Match": $if_match} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  let req_body = ($req_body | transpose k v | where v != null | reduce -f {} {|p, acc| $acc | upsert $p.k $p.v } | url build-query)
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/x-www-form-urlencoded" $req_body
+  let req_body_wire = ($req_body | transpose k v | where v != null | reduce -f {} {|p, acc| $acc | upsert $p.k $p.v } | url build-query)
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/x-www-form-urlencoded" $req_body_wire {query: {}, body: $req_body}
 }
 
 # GET /v1/Workspaces/{WorkspaceSid}/Workers/{WorkerSid}/Channels
@@ -1482,11 +1571,13 @@ export def "workspaces-workers-channels list" [
 ]: nothing -> record<channels: table<account_sid: string, assigned_tasks: int, available: bool, available_capacity_percentage: int, configured_capacity: int, date_created: string, date_updated: string, sid: string, task_channel_sid: string, task_channel_unique_name: string, url: string, worker_sid: string, workspace_sid: string>, meta: record<first_page_url: string, key: string, next_page_url: string, page: int, page_size: int, previous_page_url: string, url: string>> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default "https://taskrouter.twilio.com")
+  if ($workspace_sid | is-empty) { error make --unspanned { msg: "path parameter 'WorkspaceSid' must be non-empty" } }
+  if ($worker_sid | is-empty) { error make --unspanned { msg: "path parameter 'WorkerSid' must be non-empty" } }
   let qp = [(serialize-qp "PageSize" $page_size "scalar") (serialize-qp "Page" $page "scalar") (serialize-qp "PageToken" $page_token "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({workspace_sid: (encode-path-segment $workspace_sid), worker_sid: (encode-path-segment $worker_sid)} | format pattern "/v1/Workspaces/{workspace_sid}/Workers/{worker_sid}/Channels") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"PageSize": $page_size, "Page": $page, "PageToken": $page_token} | compact), body: null}
 }
 
 # GET /v1/Workspaces/{WorkspaceSid}/Workers/{WorkerSid}/Channels/{Sid}
@@ -1508,10 +1599,13 @@ export def "workspaces-workers-channels get" [
 ]: nothing -> record<account_sid: string, assigned_tasks: int, available: bool, available_capacity_percentage: int, configured_capacity: int, date_created: string, date_updated: string, sid: string, task_channel_sid: string, task_channel_unique_name: string, url: string, worker_sid: string, workspace_sid: string> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default "https://taskrouter.twilio.com")
+  if ($workspace_sid | is-empty) { error make --unspanned { msg: "path parameter 'WorkspaceSid' must be non-empty" } }
+  if ($worker_sid | is-empty) { error make --unspanned { msg: "path parameter 'WorkerSid' must be non-empty" } }
+  if ($sid | is-empty) { error make --unspanned { msg: "path parameter 'Sid' must be non-empty" } }
   let full_url = (build-url $base ({workspace_sid: (encode-path-segment $workspace_sid), worker_sid: (encode-path-segment $worker_sid), sid: (encode-path-segment $sid)} | format pattern "/v1/Workspaces/{workspace_sid}/Workers/{worker_sid}/Channels/{sid}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
 }
 
 # POST /v1/Workspaces/{WorkspaceSid}/Workers/{WorkerSid}/Channels/{Sid}
@@ -1536,13 +1630,16 @@ export def "workspaces-workers-channels update" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default "https://taskrouter.twilio.com")
+  if ($workspace_sid | is-empty) { error make --unspanned { msg: "path parameter 'WorkspaceSid' must be non-empty" } }
+  if ($worker_sid | is-empty) { error make --unspanned { msg: "path parameter 'WorkerSid' must be non-empty" } }
+  if ($sid | is-empty) { error make --unspanned { msg: "path parameter 'Sid' must be non-empty" } }
   let full_url = (build-url $base ({workspace_sid: (encode-path-segment $workspace_sid), worker_sid: (encode-path-segment $worker_sid), sid: (encode-path-segment $sid)} | format pattern "/v1/Workspaces/{workspace_sid}/Workers/{worker_sid}/Channels/{sid}"))
   let req_body = {"Available": $available, "Capacity": $capacity} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  let req_body = ($req_body | transpose k v | where v != null | reduce -f {} {|p, acc| $acc | upsert $p.k $p.v } | url build-query)
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/x-www-form-urlencoded" $req_body
+  let req_body_wire = ($req_body | transpose k v | where v != null | reduce -f {} {|p, acc| $acc | upsert $p.k $p.v } | url build-query)
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/x-www-form-urlencoded" $req_body_wire {query: {}, body: $req_body}
 }
 
 # GET /v1/Workspaces/{WorkspaceSid}/Workers/{WorkerSid}/Reservations
@@ -1567,11 +1664,13 @@ export def "workspaces-workers-reservations list" [
 ]: nothing -> record<meta: record<first_page_url: string, key: string, next_page_url: string, page: int, page_size: int, previous_page_url: string, url: string>, reservations: table<account_sid: string, date_created: string, date_updated: string, links: record, reservation_status: string, sid: string, task_sid: string, url: string, worker_name: string, worker_sid: string, workspace_sid: string>> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default "https://taskrouter.twilio.com")
+  if ($workspace_sid | is-empty) { error make --unspanned { msg: "path parameter 'WorkspaceSid' must be non-empty" } }
+  if ($worker_sid | is-empty) { error make --unspanned { msg: "path parameter 'WorkerSid' must be non-empty" } }
   let qp = [(serialize-qp "ReservationStatus" $reservation_status "scalar") (serialize-qp "PageSize" $page_size "scalar") (serialize-qp "Page" $page "scalar") (serialize-qp "PageToken" $page_token "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({workspace_sid: (encode-path-segment $workspace_sid), worker_sid: (encode-path-segment $worker_sid)} | format pattern "/v1/Workspaces/{workspace_sid}/Workers/{worker_sid}/Reservations") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"ReservationStatus": $reservation_status, "PageSize": $page_size, "Page": $page, "PageToken": $page_token} | compact), body: null}
 }
 
 # GET /v1/Workspaces/{WorkspaceSid}/Workers/{WorkerSid}/Reservations/{Sid}
@@ -1593,10 +1692,13 @@ export def "workspaces-workers-reservations get" [
 ]: nothing -> record<account_sid: string, date_created: string, date_updated: string, links: record, reservation_status: string, sid: string, task_sid: string, url: string, worker_name: string, worker_sid: string, workspace_sid: string> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default "https://taskrouter.twilio.com")
+  if ($workspace_sid | is-empty) { error make --unspanned { msg: "path parameter 'WorkspaceSid' must be non-empty" } }
+  if ($worker_sid | is-empty) { error make --unspanned { msg: "path parameter 'WorkerSid' must be non-empty" } }
+  if ($sid | is-empty) { error make --unspanned { msg: "path parameter 'Sid' must be non-empty" } }
   let full_url = (build-url $base ({workspace_sid: (encode-path-segment $workspace_sid), worker_sid: (encode-path-segment $worker_sid), sid: (encode-path-segment $sid)} | format pattern "/v1/Workspaces/{workspace_sid}/Workers/{worker_sid}/Reservations/{sid}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
 }
 
 # POST /v1/Workspaces/{WorkspaceSid}/Workers/{WorkerSid}/Reservations/{Sid}
@@ -1671,6 +1773,9 @@ export def "workspaces-workers-reservations update" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default "https://taskrouter.twilio.com")
+  if ($workspace_sid | is-empty) { error make --unspanned { msg: "path parameter 'WorkspaceSid' must be non-empty" } }
+  if ($worker_sid | is-empty) { error make --unspanned { msg: "path parameter 'WorkerSid' must be non-empty" } }
+  if ($sid | is-empty) { error make --unspanned { msg: "path parameter 'Sid' must be non-empty" } }
   let full_url = (build-url $base ({workspace_sid: (encode-path-segment $workspace_sid), worker_sid: (encode-path-segment $worker_sid), sid: (encode-path-segment $sid)} | format pattern "/v1/Workspaces/{workspace_sid}/Workers/{worker_sid}/Reservations/{sid}"))
   let req_body = {"Beep": $beep, "BeepOnCustomerEntrance": $beep_on_customer_entrance, "CallAccept": $call_accept, "CallFrom": $call_from, "CallRecord": $call_record, "CallStatusCallbackUrl": $call_status_callback_url, "CallTimeout": $call_timeout, "CallTo": $call_to, "CallUrl": $call_url, "ConferenceRecord": $conference_record, "ConferenceRecordingStatusCallback": $conference_recording_status_callback, "ConferenceRecordingStatusCallbackMethod": $conference_recording_status_callback_method, "ConferenceStatusCallback": $conference_status_callback, "ConferenceStatusCallbackEvent": $conference_status_callback_event, "ConferenceStatusCallbackMethod": $conference_status_callback_method, "ConferenceTrim": $conference_trim, "DequeueFrom": $dequeue_from, "DequeuePostWorkActivitySid": $dequeue_post_work_activity_sid, "DequeueRecord": $dequeue_record, "DequeueStatusCallbackEvent": $dequeue_status_callback_event, "DequeueStatusCallbackUrl": $dequeue_status_callback_url, "DequeueTimeout": $dequeue_timeout, "DequeueTo": $dequeue_to, "EarlyMedia": $early_media, "EndConferenceOnCustomerExit": $end_conference_on_customer_exit, "EndConferenceOnExit": $end_conference_on_exit, "From": $body_from, "Instruction": $instruction, "MaxParticipants": $max_participants, "Muted": $muted, "PostWorkActivitySid": $post_work_activity_sid, "Record": $record, "RecordingChannels": $recording_channels, "RecordingStatusCallback": $recording_status_callback, "RecordingStatusCallbackMethod": $recording_status_callback_method, "RedirectAccept": $redirect_accept, "RedirectCallSid": $redirect_call_sid, "RedirectUrl": $redirect_url, "Region": $region, "ReservationStatus": $reservation_status, "SipAuthPassword": $sip_auth_password, "SipAuthUsername": $sip_auth_username, "StartConferenceOnEnter": $start_conference_on_enter, "StatusCallback": $status_callback, "StatusCallbackEvent": $status_callback_event, "StatusCallbackMethod": $status_callback_method, "Timeout": $timeout, "To": $body_to, "WaitMethod": $wait_method, "WaitUrl": $wait_url, "WorkerActivitySid": $worker_activity_sid} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
@@ -1678,8 +1783,8 @@ export def "workspaces-workers-reservations update" [
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"If-Match": $if_match} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  let req_body = ($req_body | transpose k v | where v != null | reduce -f {} {|p, acc| $acc | upsert $p.k $p.v } | url build-query)
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/x-www-form-urlencoded" $req_body
+  let req_body_wire = ($req_body | transpose k v | where v != null | reduce -f {} {|p, acc| $acc | upsert $p.k $p.v } | url build-query)
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/x-www-form-urlencoded" $req_body_wire {query: {}, body: $req_body}
 }
 
 # GET /v1/Workspaces/{WorkspaceSid}/Workers/{WorkerSid}/Statistics
@@ -1704,11 +1809,13 @@ export def "workspaces-workers-statistics get-instance" [
 ]: nothing -> record<account_sid: string, cumulative: any, url: string, worker_sid: string, workspace_sid: string> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default "https://taskrouter.twilio.com")
+  if ($workspace_sid | is-empty) { error make --unspanned { msg: "path parameter 'WorkspaceSid' must be non-empty" } }
+  if ($worker_sid | is-empty) { error make --unspanned { msg: "path parameter 'WorkerSid' must be non-empty" } }
   let qp = [(serialize-qp "Minutes" $minutes "scalar") (serialize-qp "StartDate" $start_date "scalar") (serialize-qp "EndDate" $end_date "scalar") (serialize-qp "TaskChannel" $task_channel "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({workspace_sid: (encode-path-segment $workspace_sid), worker_sid: (encode-path-segment $worker_sid)} | format pattern "/v1/Workspaces/{workspace_sid}/Workers/{worker_sid}/Statistics") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"Minutes": $minutes, "StartDate": $start_date, "EndDate": $end_date, "TaskChannel": $task_channel} | compact), body: null}
 }
 
 # GET /v1/Workspaces/{WorkspaceSid}/Workflows
@@ -1732,11 +1839,12 @@ export def "workspaces-workflows list" [
 ]: nothing -> record<meta: record<first_page_url: string, key: string, next_page_url: string, page: int, page_size: int, previous_page_url: string, url: string>, workflows: table<account_sid: string, assignment_callback_url: string, configuration: string, date_created: string, date_updated: string, document_content_type: string, fallback_assignment_callback_url: string, friendly_name: string, links: record, sid: string, task_reservation_timeout: int, url: string, workspace_sid: string>> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default "https://taskrouter.twilio.com")
+  if ($workspace_sid | is-empty) { error make --unspanned { msg: "path parameter 'WorkspaceSid' must be non-empty" } }
   let qp = [(serialize-qp "FriendlyName" $friendly_name "scalar") (serialize-qp "PageSize" $page_size "scalar") (serialize-qp "Page" $page "scalar") (serialize-qp "PageToken" $page_token "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({workspace_sid: (encode-path-segment $workspace_sid)} | format pattern "/v1/Workspaces/{workspace_sid}/Workflows") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"FriendlyName": $friendly_name, "PageSize": $page_size, "Page": $page, "PageToken": $page_token} | compact), body: null}
 }
 
 # POST /v1/Workspaces/{WorkspaceSid}/Workflows
@@ -1762,13 +1870,14 @@ export def "workspaces-workflows create" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default "https://taskrouter.twilio.com")
+  if ($workspace_sid | is-empty) { error make --unspanned { msg: "path parameter 'WorkspaceSid' must be non-empty" } }
   let full_url = (build-url $base ({workspace_sid: (encode-path-segment $workspace_sid)} | format pattern "/v1/Workspaces/{workspace_sid}/Workflows"))
   let req_body = {"AssignmentCallbackUrl": $assignment_callback_url, "Configuration": $configuration, "FallbackAssignmentCallbackUrl": $fallback_assignment_callback_url, "FriendlyName": $friendly_name, "TaskReservationTimeout": $task_reservation_timeout} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  let req_body = ($req_body | transpose k v | where v != null | reduce -f {} {|p, acc| $acc | upsert $p.k $p.v } | url build-query)
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/x-www-form-urlencoded" $req_body
+  let req_body_wire = ($req_body | transpose k v | where v != null | reduce -f {} {|p, acc| $acc | upsert $p.k $p.v } | url build-query)
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/x-www-form-urlencoded" $req_body_wire {query: {}, body: $req_body}
 }
 
 # DELETE /v1/Workspaces/{WorkspaceSid}/Workflows/{Sid}
@@ -1789,10 +1898,12 @@ export def "workspaces-workflows delete" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default "https://taskrouter.twilio.com")
+  if ($workspace_sid | is-empty) { error make --unspanned { msg: "path parameter 'WorkspaceSid' must be non-empty" } }
+  if ($sid | is-empty) { error make --unspanned { msg: "path parameter 'Sid' must be non-empty" } }
   let full_url = (build-url $base ({workspace_sid: (encode-path-segment $workspace_sid), sid: (encode-path-segment $sid)} | format pattern "/v1/Workspaces/{workspace_sid}/Workflows/{sid}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
 }
 
 # GET /v1/Workspaces/{WorkspaceSid}/Workflows/{Sid}
@@ -1813,10 +1924,12 @@ export def "workspaces-workflows get" [
 ]: nothing -> record<account_sid: string, assignment_callback_url: string, configuration: string, date_created: string, date_updated: string, document_content_type: string, fallback_assignment_callback_url: string, friendly_name: string, links: record, sid: string, task_reservation_timeout: int, url: string, workspace_sid: string> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default "https://taskrouter.twilio.com")
+  if ($workspace_sid | is-empty) { error make --unspanned { msg: "path parameter 'WorkspaceSid' must be non-empty" } }
+  if ($sid | is-empty) { error make --unspanned { msg: "path parameter 'Sid' must be non-empty" } }
   let full_url = (build-url $base ({workspace_sid: (encode-path-segment $workspace_sid), sid: (encode-path-segment $sid)} | format pattern "/v1/Workspaces/{workspace_sid}/Workflows/{sid}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
 }
 
 # POST /v1/Workspaces/{WorkspaceSid}/Workflows/{Sid}
@@ -1844,13 +1957,15 @@ export def "workspaces-workflows update" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default "https://taskrouter.twilio.com")
+  if ($workspace_sid | is-empty) { error make --unspanned { msg: "path parameter 'WorkspaceSid' must be non-empty" } }
+  if ($sid | is-empty) { error make --unspanned { msg: "path parameter 'Sid' must be non-empty" } }
   let full_url = (build-url $base ({workspace_sid: (encode-path-segment $workspace_sid), sid: (encode-path-segment $sid)} | format pattern "/v1/Workspaces/{workspace_sid}/Workflows/{sid}"))
   let req_body = {"AssignmentCallbackUrl": $assignment_callback_url, "Configuration": $configuration, "FallbackAssignmentCallbackUrl": $fallback_assignment_callback_url, "FriendlyName": $friendly_name, "ReEvaluateTasks": $re_evaluate_tasks, "TaskReservationTimeout": $task_reservation_timeout} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  let req_body = ($req_body | transpose k v | where v != null | reduce -f {} {|p, acc| $acc | upsert $p.k $p.v } | url build-query)
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/x-www-form-urlencoded" $req_body
+  let req_body_wire = ($req_body | transpose k v | where v != null | reduce -f {} {|p, acc| $acc | upsert $p.k $p.v } | url build-query)
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/x-www-form-urlencoded" $req_body_wire {query: {}, body: $req_body}
 }
 
 # GET /v1/Workspaces/{WorkspaceSid}/Workflows/{WorkflowSid}/CumulativeStatistics
@@ -1876,11 +1991,13 @@ export def "workspaces-workflows-cumulative-statistics get" [
 ]: nothing -> record<account_sid: string, avg_task_acceptance_time: int, end_time: string, reservations_accepted: int, reservations_canceled: int, reservations_created: int, reservations_rejected: int, reservations_rescinded: int, reservations_timed_out: int, split_by_wait_time: any, start_time: string, tasks_canceled: int, tasks_completed: int, tasks_deleted: int, tasks_entered: int, tasks_moved: int, tasks_timed_out_in_workflow: int, url: string, wait_duration_until_accepted: any, wait_duration_until_canceled: any, workflow_sid: string, workspace_sid: string> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default "https://taskrouter.twilio.com")
+  if ($workspace_sid | is-empty) { error make --unspanned { msg: "path parameter 'WorkspaceSid' must be non-empty" } }
+  if ($workflow_sid | is-empty) { error make --unspanned { msg: "path parameter 'WorkflowSid' must be non-empty" } }
   let qp = [(serialize-qp "EndDate" $end_date "scalar") (serialize-qp "Minutes" $minutes "scalar") (serialize-qp "StartDate" $start_date "scalar") (serialize-qp "TaskChannel" $task_channel "scalar") (serialize-qp "SplitByWaitTime" $split_by_wait_time "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({workspace_sid: (encode-path-segment $workspace_sid), workflow_sid: (encode-path-segment $workflow_sid)} | format pattern "/v1/Workspaces/{workspace_sid}/Workflows/{workflow_sid}/CumulativeStatistics") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"EndDate": $end_date, "Minutes": $minutes, "StartDate": $start_date, "TaskChannel": $task_channel, "SplitByWaitTime": $split_by_wait_time} | compact), body: null}
 }
 
 # GET /v1/Workspaces/{WorkspaceSid}/Workflows/{WorkflowSid}/RealTimeStatistics
@@ -1902,11 +2019,13 @@ export def "workspaces-workflows-real-time-statistics get" [
 ]: nothing -> record<account_sid: string, longest_task_waiting_age: int, longest_task_waiting_sid: string, tasks_by_priority: any, tasks_by_status: any, total_tasks: int, url: string, workflow_sid: string, workspace_sid: string> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default "https://taskrouter.twilio.com")
+  if ($workspace_sid | is-empty) { error make --unspanned { msg: "path parameter 'WorkspaceSid' must be non-empty" } }
+  if ($workflow_sid | is-empty) { error make --unspanned { msg: "path parameter 'WorkflowSid' must be non-empty" } }
   let qp = [(serialize-qp "TaskChannel" $task_channel "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({workspace_sid: (encode-path-segment $workspace_sid), workflow_sid: (encode-path-segment $workflow_sid)} | format pattern "/v1/Workspaces/{workspace_sid}/Workflows/{workflow_sid}/RealTimeStatistics") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"TaskChannel": $task_channel} | compact), body: null}
 }
 
 # GET /v1/Workspaces/{WorkspaceSid}/Workflows/{WorkflowSid}/Statistics
@@ -1932,9 +2051,11 @@ export def "workspaces-workflows-statistics get" [
 ]: nothing -> record<account_sid: string, cumulative: any, realtime: any, url: string, workflow_sid: string, workspace_sid: string> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default "https://taskrouter.twilio.com")
+  if ($workspace_sid | is-empty) { error make --unspanned { msg: "path parameter 'WorkspaceSid' must be non-empty" } }
+  if ($workflow_sid | is-empty) { error make --unspanned { msg: "path parameter 'WorkflowSid' must be non-empty" } }
   let qp = [(serialize-qp "Minutes" $minutes "scalar") (serialize-qp "StartDate" $start_date "scalar") (serialize-qp "EndDate" $end_date "scalar") (serialize-qp "TaskChannel" $task_channel "scalar") (serialize-qp "SplitByWaitTime" $split_by_wait_time "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({workspace_sid: (encode-path-segment $workspace_sid), workflow_sid: (encode-path-segment $workflow_sid)} | format pattern "/v1/Workspaces/{workspace_sid}/Workflows/{workflow_sid}/Statistics") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"Minutes": $minutes, "StartDate": $start_date, "EndDate": $end_date, "TaskChannel": $task_channel, "SplitByWaitTime": $split_by_wait_time} | compact), body: null}
 }

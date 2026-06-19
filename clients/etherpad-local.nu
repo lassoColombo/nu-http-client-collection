@@ -3,17 +3,18 @@
 # Auth: --token flag or $env.ETHERPAD_API_TOKEN
 
 const BASE_URL = "http://etherpad.local"
-const DEFAULT_AUTH = "query-apikey"
 
-# Build auth: returns {headers: record, query: string}
+# Build auth: returns {scheme: string, headers: record, query: string, location: string}.
+# `location` is "header" | "query" | "cookie" | "none" and tells dry-run callers
+# where the token went without inspecting headers/query themselves.
 def build-auth [token?: string, auth_scheme?: string]: nothing -> record {
   let token_val = if ($token != null) and ($token | is-not-empty) { $token } else { $env | get -o ETHERPAD_API_TOKEN | default "" }
   let scheme = ($auth_scheme | default "bearer")
-  if ($scheme == "none") or ($token_val | is-empty) { return {headers: {}, query: ""} }
+  if ($scheme == "none") or ($token_val | is-empty) { return {scheme: $scheme, headers: {}, query: "", location: "none"} }
   match $scheme {
-    "query-apikey" => { {headers: {}, query: $"(encode-path-segment "apikey")=(encode-path-segment $token_val)"} }
-    "none" => { {headers: {}, query: ""} }
-    _ => { {headers: {Authorization: $"Bearer ($token_val)"}, query: ""} }
+    "query-apikey" => { {scheme: $scheme, headers: {}, query: $"(encode-path-segment "apikey")=(encode-path-segment $token_val)", location: "query"} }
+    "none" => { {scheme: $scheme, headers: {}, query: "", location: "none"} }
+    _ => { {scheme: $scheme, headers: {Authorization: $"Bearer ($token_val)"}, query: "", location: "header"} }
   }
 }
 
@@ -22,8 +23,9 @@ def build-auth [token?: string, auth_scheme?: string]: nothing -> record {
 # ([A-Za-z0-9-._~]) stay literal; everything else gets %XX.
 def serialize-qp [name: string, value: any, style: string]: nothing -> list<string> {
   if ($value == null) { return [] }
-  let n = (encode-path-segment $name)
   let is_list = ($value | describe | str starts-with "list")
+  if $is_list and ($value | is-empty) { return [] }
+  let n = (encode-path-segment $name)
   if ($value | describe | str starts-with "record") { return ($value | transpose k v | each { $"($n)[(encode-path-segment $in.k)]=(encode-path-segment $in.v)" }) }
   if not $is_list { return [$"($n)=(encode-path-segment $value)"] }
   match $style {
@@ -54,22 +56,42 @@ def build-url [base: string, path: string, query?: string]: nothing -> string {
   if ($query != null) and ($query | is-not-empty) { $result | upsert query $query | url join } else { $result | url join }
 }
 
+# Build the dry-run record returned by --dry-run. Shape:
+#   {dry_run: true, method, url, query: <record>, headers, body, content_type, timeout,
+#    auth: {scheme, location}}
+# `meta` carries logical-form data (the query record by spec name, the pre-serialization
+# body) that do-request itself cannot reconstruct from its wire-format args.
+def build-dry-run-record [method: string, url: string, auth: record, content_type: string, timeout: duration, meta?: record]: nothing -> record {
+  let m = ($meta | default {})
+  {
+    dry_run: true
+    method: $method
+    url: $url
+    query: ($m | get -o query | default {})
+    headers: $auth.headers
+    body: ($m | get -o body)
+    content_type: $content_type
+    timeout: $timeout
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+}
+
 # Execute HTTP request with method dispatch
-def do-request [method: string, url: string, auth: record, insecure: bool, raw: bool, dry_run: bool, max_time?: duration, allow_errors?: bool, full?: bool, content_type?: string, body?: any]: nothing -> any {
+def do-request [method: string, url: string, auth: record, insecure: bool, raw: bool, dry_run: bool, max_time?: duration, allow_errors?: bool, full?: bool, content_type?: string, body?: any, dry_run_meta?: record]: nothing -> any {
   let req_url = if ($auth.query | is-not-empty) { if ($url | str contains "?") { $"($url)&($auth.query)" } else { $"($url)?($auth.query)" } } else { $url }
   let timeout = ($max_time | default 30min)
   let ct = ($content_type | default "application/json")
-  if $dry_run { return {method: $method, url: $req_url, headers: $auth.headers, query_string: $auth.query, content_type: $ct, timeout: $timeout, body: $body} }
+  if $dry_run { return (build-dry-run-record $method $req_url $auth $ct $timeout $dry_run_meta) }
   let resp = match $method {
     "get" => { http get --headers $auth.headers --full --allow-errors --max-time $timeout --insecure=$insecure --raw=$raw $req_url }
-    "head" => { http head --headers $auth.headers --max-time $timeout --insecure=$insecure $req_url }
-    "options" => { http options --headers $auth.headers --max-time $timeout --insecure=$insecure $req_url }
+    "head" => { http head --headers $auth.headers --full --allow-errors --max-time $timeout --insecure=$insecure $req_url }
+    "options" => { http options --headers $auth.headers --full --allow-errors --max-time $timeout --insecure=$insecure $req_url }
     "post" => { if ($body | is-empty) { http post --headers $auth.headers --full --allow-errors --max-time $timeout --insecure=$insecure --raw=$raw $req_url "" } else { http post --headers $auth.headers --content-type $ct --full --allow-errors --max-time $timeout --insecure=$insecure --raw=$raw $req_url $body } }
     "put" => { if ($body | is-empty) { http put --headers $auth.headers --full --allow-errors --max-time $timeout --insecure=$insecure --raw=$raw $req_url "" } else { http put --headers $auth.headers --content-type $ct --full --allow-errors --max-time $timeout --insecure=$insecure --raw=$raw $req_url $body } }
     "patch" => { if ($body | is-empty) { http patch --headers $auth.headers --full --allow-errors --max-time $timeout --insecure=$insecure --raw=$raw $req_url "" } else { http patch --headers $auth.headers --content-type $ct --full --allow-errors --max-time $timeout --insecure=$insecure --raw=$raw $req_url $body } }
     "delete" => { if ($body | is-empty) { http delete --headers $auth.headers --full --allow-errors --max-time $timeout --insecure=$insecure --raw=$raw $req_url } else { http delete --headers $auth.headers --content-type $ct --data $body --full --allow-errors --max-time $timeout --insecure=$insecure --raw=$raw $req_url } }
   }
-  if ($method in ["head" "options"]) { return $resp }
+  if ($method == "head") and (not $full) and (not $allow_errors) and $resp.status < 400 { return $resp.headers }
   if $allow_errors { $resp } else if $resp.status >= 400 { error make --unspanned { msg: $"HTTP ($resp.status): ($resp.body)" } } else if $full { {status: $resp.status, headers: $resp.headers, body: $resp.body} } else if $resp.status == 204 { null } else { $resp.body }
 }
 
@@ -125,7 +147,7 @@ export def "append-chat-message get-using" [
   let full_url = (build-url $base "/appendChatMessage" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"padID": $pad_id, "text": $text, "authorID": $author_id, "time": $time} | compact), body: null}
 }
 
 # appends a chat message
@@ -153,7 +175,7 @@ export def "append-chat-message create-using" [
   let full_url = (build-url $base "/appendChatMessage" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"padID": $pad_id, "text": $text, "authorID": $author_id, "time": $time} | compact), body: null}
 }
 
 # GET /appendText
@@ -178,7 +200,7 @@ export def "append-text get-using" [
   let full_url = (build-url $base "/appendText" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"padID": $pad_id, "text": $text} | compact), body: null}
 }
 
 # POST /appendText
@@ -203,7 +225,7 @@ export def "append-text create-using" [
   let full_url = (build-url $base "/appendText" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"padID": $pad_id, "text": $text} | compact), body: null}
 }
 
 # returns ok when the current api token is valid
@@ -226,7 +248,7 @@ export def "check-token get-using" [
   let full_url = (build-url $base "/checkToken")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
 }
 
 # returns ok when the current api token is valid
@@ -249,7 +271,7 @@ export def "check-token create-using" [
   let full_url = (build-url $base "/checkToken")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
 }
 
 # GET /copyPad
@@ -275,7 +297,7 @@ export def "copy-pad get-using" [
   let full_url = (build-url $base "/copyPad" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"sourceID": $source_id, "destinationID": $destination_id, "force": $force} | compact), body: null}
 }
 
 # POST /copyPad
@@ -301,7 +323,7 @@ export def "copy-pad create-using" [
   let full_url = (build-url $base "/copyPad" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"sourceID": $source_id, "destinationID": $destination_id, "force": $force} | compact), body: null}
 }
 
 # GET /copyPadWithoutHistory
@@ -327,7 +349,7 @@ export def "copy-pad-without-history get-using" [
   let full_url = (build-url $base "/copyPadWithoutHistory" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"sourceID": $source_id, "destinationID": $destination_id, "force": $force} | compact), body: null}
 }
 
 # POST /copyPadWithoutHistory
@@ -353,7 +375,7 @@ export def "copy-pad-without-history create-using" [
   let full_url = (build-url $base "/copyPadWithoutHistory" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"sourceID": $source_id, "destinationID": $destination_id, "force": $force} | compact), body: null}
 }
 
 # creates a new author
@@ -378,7 +400,7 @@ export def "create-author get-using" [
   let full_url = (build-url $base "/createAuthor" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"name": $name} | compact), body: null}
 }
 
 # creates a new author
@@ -403,7 +425,7 @@ export def "create-author create-using" [
   let full_url = (build-url $base "/createAuthor" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"name": $name} | compact), body: null}
 }
 
 # this functions helps you to map your application author ids to Etherpad author ids
@@ -429,7 +451,7 @@ export def "create-author-if-not-exists-for get-using" [
   let full_url = (build-url $base "/createAuthorIfNotExistsFor" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"authorMapper": $author_mapper, "name": $name} | compact), body: null}
 }
 
 # this functions helps you to map your application author ids to Etherpad author ids
@@ -455,7 +477,7 @@ export def "create-author-if-not-exists-for create-using" [
   let full_url = (build-url $base "/createAuthorIfNotExistsFor" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"authorMapper": $author_mapper, "name": $name} | compact), body: null}
 }
 
 # GET /createDiffHTML
@@ -481,7 +503,7 @@ export def "create-diff-html get-using" [
   let full_url = (build-url $base "/createDiffHTML" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"padID": $pad_id, "startRev": $start_rev, "endRev": $end_rev} | compact), body: null}
 }
 
 # POST /createDiffHTML
@@ -507,7 +529,7 @@ export def "create-diff-html create-using" [
   let full_url = (build-url $base "/createDiffHTML" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"padID": $pad_id, "startRev": $start_rev, "endRev": $end_rev} | compact), body: null}
 }
 
 # creates a new group
@@ -530,7 +552,7 @@ export def "create-group get-using" [
   let full_url = (build-url $base "/createGroup")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
 }
 
 # creates a new group
@@ -553,7 +575,7 @@ export def "create-group create-using" [
   let full_url = (build-url $base "/createGroup")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
 }
 
 # this functions helps you to map your application group ids to Etherpad group ids
@@ -578,7 +600,7 @@ export def "create-group-if-not-exists-for get-using" [
   let full_url = (build-url $base "/createGroupIfNotExistsFor" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"groupMapper": $group_mapper} | compact), body: null}
 }
 
 # this functions helps you to map your application group ids to Etherpad group ids
@@ -603,7 +625,7 @@ export def "create-group-if-not-exists-for create-using" [
   let full_url = (build-url $base "/createGroupIfNotExistsFor" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"groupMapper": $group_mapper} | compact), body: null}
 }
 
 # creates a new pad in this group
@@ -630,7 +652,7 @@ export def "create-group-pad get-using" [
   let full_url = (build-url $base "/createGroupPad" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"groupID": $group_id, "padName": $pad_name, "text": $text} | compact), body: null}
 }
 
 # creates a new pad in this group
@@ -657,7 +679,7 @@ export def "create-group-pad create-using" [
   let full_url = (build-url $base "/createGroupPad" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"groupID": $group_id, "padName": $pad_name, "text": $text} | compact), body: null}
 }
 
 # creates a new (non-group) pad. Note that if you need to create a group Pad, you should call createGroupPad
@@ -683,7 +705,7 @@ export def "create-pad get-using" [
   let full_url = (build-url $base "/createPad" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"padID": $pad_id, "text": $text} | compact), body: null}
 }
 
 # creates a new (non-group) pad. Note that if you need to create a group Pad, you should call createGroupPad
@@ -709,7 +731,7 @@ export def "create-pad create-using" [
   let full_url = (build-url $base "/createPad" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"padID": $pad_id, "text": $text} | compact), body: null}
 }
 
 # creates a new session. validUntil is an unix timestamp in seconds
@@ -736,7 +758,7 @@ export def "create-session get-using" [
   let full_url = (build-url $base "/createSession" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"groupID": $group_id, "authorID": $author_id, "validUntil": $valid_until} | compact), body: null}
 }
 
 # creates a new session. validUntil is an unix timestamp in seconds
@@ -763,7 +785,7 @@ export def "create-session create-using" [
   let full_url = (build-url $base "/createSession" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"groupID": $group_id, "authorID": $author_id, "validUntil": $valid_until} | compact), body: null}
 }
 
 # deletes a group
@@ -788,7 +810,7 @@ export def "delete-group get-using" [
   let full_url = (build-url $base "/deleteGroup" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"groupID": $group_id} | compact), body: null}
 }
 
 # deletes a group
@@ -813,7 +835,7 @@ export def "delete-group create-using" [
   let full_url = (build-url $base "/deleteGroup" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"groupID": $group_id} | compact), body: null}
 }
 
 # deletes a pad
@@ -838,7 +860,7 @@ export def "delete-pad get-using" [
   let full_url = (build-url $base "/deletePad" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"padID": $pad_id} | compact), body: null}
 }
 
 # deletes a pad
@@ -863,7 +885,7 @@ export def "delete-pad create-using" [
   let full_url = (build-url $base "/deletePad" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"padID": $pad_id} | compact), body: null}
 }
 
 # deletes a session
@@ -888,7 +910,7 @@ export def "delete-session get-using" [
   let full_url = (build-url $base "/deleteSession" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"sessionID": $session_id} | compact), body: null}
 }
 
 # deletes a session
@@ -913,7 +935,7 @@ export def "delete-session create-using" [
   let full_url = (build-url $base "/deleteSession" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"sessionID": $session_id} | compact), body: null}
 }
 
 # GET /getAttributePool
@@ -937,7 +959,7 @@ export def "get-attribute-pool get" [
   let full_url = (build-url $base "/getAttributePool" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"padID": $pad_id} | compact), body: null}
 }
 
 # POST /getAttributePool
@@ -961,7 +983,7 @@ export def "get-attribute-pool create-using" [
   let full_url = (build-url $base "/getAttributePool" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"padID": $pad_id} | compact), body: null}
 }
 
 # Returns the Author Name of the author
@@ -986,7 +1008,7 @@ export def "get-author-name get" [
   let full_url = (build-url $base "/getAuthorName" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"authorID": $author_id} | compact), body: null}
 }
 
 # Returns the Author Name of the author
@@ -1011,7 +1033,7 @@ export def "get-author-name create-using" [
   let full_url = (build-url $base "/getAuthorName" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"authorID": $author_id} | compact), body: null}
 }
 
 # returns the chatHead (chat-message) of the pad
@@ -1036,7 +1058,7 @@ export def "get-chat-head get" [
   let full_url = (build-url $base "/getChatHead" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"padID": $pad_id} | compact), body: null}
 }
 
 # returns the chatHead (chat-message) of the pad
@@ -1061,7 +1083,7 @@ export def "get-chat-head create-using" [
   let full_url = (build-url $base "/getChatHead" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"padID": $pad_id} | compact), body: null}
 }
 
 # returns the chat history
@@ -1088,7 +1110,7 @@ export def "get-chat-history get" [
   let full_url = (build-url $base "/getChatHistory" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"padID": $pad_id, "start": $start, "end": $end} | compact), body: null}
 }
 
 # returns the chat history
@@ -1115,7 +1137,7 @@ export def "get-chat-history create-using" [
   let full_url = (build-url $base "/getChatHistory" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"padID": $pad_id, "start": $start, "end": $end} | compact), body: null}
 }
 
 # returns the text of a pad formatted as HTML
@@ -1141,7 +1163,7 @@ export def "get-html get" [
   let full_url = (build-url $base "/getHTML" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"padID": $pad_id, "rev": $rev} | compact), body: null}
 }
 
 # returns the text of a pad formatted as HTML
@@ -1167,7 +1189,7 @@ export def "get-html create-using" [
   let full_url = (build-url $base "/getHTML" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"padID": $pad_id, "rev": $rev} | compact), body: null}
 }
 
 # returns the timestamp of the last revision of the pad
@@ -1192,7 +1214,7 @@ export def "get-last-edited get" [
   let full_url = (build-url $base "/getLastEdited" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"padID": $pad_id} | compact), body: null}
 }
 
 # returns the timestamp of the last revision of the pad
@@ -1217,7 +1239,7 @@ export def "get-last-edited create-using" [
   let full_url = (build-url $base "/getLastEdited" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"padID": $pad_id} | compact), body: null}
 }
 
 # GET /getPadID
@@ -1241,7 +1263,7 @@ export def "get-pad-id get" [
   let full_url = (build-url $base "/getPadID" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"roID": $ro_id} | compact), body: null}
 }
 
 # POST /getPadID
@@ -1265,7 +1287,7 @@ export def "get-pad-id create-using" [
   let full_url = (build-url $base "/getPadID" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"roID": $ro_id} | compact), body: null}
 }
 
 # return true of false
@@ -1290,7 +1312,7 @@ export def "get-public-status get" [
   let full_url = (build-url $base "/getPublicStatus" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"padID": $pad_id} | compact), body: null}
 }
 
 # return true of false
@@ -1315,7 +1337,7 @@ export def "get-public-status create-using" [
   let full_url = (build-url $base "/getPublicStatus" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"padID": $pad_id} | compact), body: null}
 }
 
 # returns the read only link of a pad
@@ -1340,7 +1362,7 @@ export def "get-read-only-id get" [
   let full_url = (build-url $base "/getReadOnlyID" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"padID": $pad_id} | compact), body: null}
 }
 
 # returns the read only link of a pad
@@ -1365,7 +1387,7 @@ export def "get-read-only-id create-using" [
   let full_url = (build-url $base "/getReadOnlyID" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"padID": $pad_id} | compact), body: null}
 }
 
 # GET /getRevisionChangeset
@@ -1390,7 +1412,7 @@ export def "get-revision-changeset get" [
   let full_url = (build-url $base "/getRevisionChangeset" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"padID": $pad_id, "rev": $rev} | compact), body: null}
 }
 
 # POST /getRevisionChangeset
@@ -1415,7 +1437,7 @@ export def "get-revision-changeset create-using" [
   let full_url = (build-url $base "/getRevisionChangeset" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"padID": $pad_id, "rev": $rev} | compact), body: null}
 }
 
 # returns the number of revisions of this pad
@@ -1440,7 +1462,7 @@ export def "get-revisions-count get" [
   let full_url = (build-url $base "/getRevisionsCount" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"padID": $pad_id} | compact), body: null}
 }
 
 # returns the number of revisions of this pad
@@ -1465,7 +1487,7 @@ export def "get-revisions-count create-using" [
   let full_url = (build-url $base "/getRevisionsCount" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"padID": $pad_id} | compact), body: null}
 }
 
 # GET /getSavedRevisionsCount
@@ -1489,7 +1511,7 @@ export def "get-saved-revisions-count get" [
   let full_url = (build-url $base "/getSavedRevisionsCount" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"padID": $pad_id} | compact), body: null}
 }
 
 # POST /getSavedRevisionsCount
@@ -1513,7 +1535,7 @@ export def "get-saved-revisions-count create-using" [
   let full_url = (build-url $base "/getSavedRevisionsCount" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"padID": $pad_id} | compact), body: null}
 }
 
 # returns informations about a session
@@ -1538,7 +1560,7 @@ export def "get-session-info get" [
   let full_url = (build-url $base "/getSessionInfo" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"sessionID": $session_id} | compact), body: null}
 }
 
 # returns informations about a session
@@ -1563,7 +1585,7 @@ export def "get-session-info create-using" [
   let full_url = (build-url $base "/getSessionInfo" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"sessionID": $session_id} | compact), body: null}
 }
 
 # GET /getStats
@@ -1585,7 +1607,7 @@ export def "get-stats get" [
   let full_url = (build-url $base "/getStats")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
 }
 
 # POST /getStats
@@ -1607,7 +1629,7 @@ export def "get-stats create-using" [
   let full_url = (build-url $base "/getStats")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
 }
 
 # returns the text of a pad
@@ -1633,7 +1655,7 @@ export def "get-text get" [
   let full_url = (build-url $base "/getText" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"padID": $pad_id, "rev": $rev} | compact), body: null}
 }
 
 # returns the text of a pad
@@ -1659,7 +1681,7 @@ export def "get-text create-using" [
   let full_url = (build-url $base "/getText" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"padID": $pad_id, "rev": $rev} | compact), body: null}
 }
 
 # GET /listAllGroups
@@ -1681,7 +1703,7 @@ export def "list-all-groups get-using" [
   let full_url = (build-url $base "/listAllGroups")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
 }
 
 # POST /listAllGroups
@@ -1703,7 +1725,7 @@ export def "list-all-groups create-using" [
   let full_url = (build-url $base "/listAllGroups")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
 }
 
 # list all the pads
@@ -1726,7 +1748,7 @@ export def "list-all-pads get-using" [
   let full_url = (build-url $base "/listAllPads")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
 }
 
 # list all the pads
@@ -1749,7 +1771,7 @@ export def "list-all-pads create-using" [
   let full_url = (build-url $base "/listAllPads")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
 }
 
 # returns an array of authors who contributed to this pad
@@ -1774,7 +1796,7 @@ export def "list-authors-of-pad get-using" [
   let full_url = (build-url $base "/listAuthorsOfPad" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"padID": $pad_id} | compact), body: null}
 }
 
 # returns an array of authors who contributed to this pad
@@ -1799,7 +1821,7 @@ export def "list-authors-of-pad create-using" [
   let full_url = (build-url $base "/listAuthorsOfPad" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"padID": $pad_id} | compact), body: null}
 }
 
 # returns all pads of this group
@@ -1824,7 +1846,7 @@ export def "list-pads get-using" [
   let full_url = (build-url $base "/listPads" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"groupID": $group_id} | compact), body: null}
 }
 
 # returns all pads of this group
@@ -1849,7 +1871,7 @@ export def "list-pads create-using" [
   let full_url = (build-url $base "/listPads" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"groupID": $group_id} | compact), body: null}
 }
 
 # returns an array of all pads this author contributed to
@@ -1874,7 +1896,7 @@ export def "list-pads-of-author get-using" [
   let full_url = (build-url $base "/listPadsOfAuthor" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"authorID": $author_id} | compact), body: null}
 }
 
 # returns an array of all pads this author contributed to
@@ -1899,7 +1921,7 @@ export def "list-pads-of-author create-using" [
   let full_url = (build-url $base "/listPadsOfAuthor" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"authorID": $author_id} | compact), body: null}
 }
 
 # GET /listSavedRevisions
@@ -1923,7 +1945,7 @@ export def "list-saved-revisions get-using" [
   let full_url = (build-url $base "/listSavedRevisions" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"padID": $pad_id} | compact), body: null}
 }
 
 # POST /listSavedRevisions
@@ -1947,7 +1969,7 @@ export def "list-saved-revisions create-using" [
   let full_url = (build-url $base "/listSavedRevisions" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"padID": $pad_id} | compact), body: null}
 }
 
 # returns all sessions of an author
@@ -1972,7 +1994,7 @@ export def "list-sessions-of-author get-using" [
   let full_url = (build-url $base "/listSessionsOfAuthor" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"authorID": $author_id} | compact), body: null}
 }
 
 # returns all sessions of an author
@@ -1997,7 +2019,7 @@ export def "list-sessions-of-author create-using" [
   let full_url = (build-url $base "/listSessionsOfAuthor" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"authorID": $author_id} | compact), body: null}
 }
 
 # GET /listSessionsOfGroup
@@ -2021,7 +2043,7 @@ export def "list-sessions-of-group get-using" [
   let full_url = (build-url $base "/listSessionsOfGroup" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"groupID": $group_id} | compact), body: null}
 }
 
 # POST /listSessionsOfGroup
@@ -2045,7 +2067,7 @@ export def "list-sessions-of-group create-using" [
   let full_url = (build-url $base "/listSessionsOfGroup" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"groupID": $group_id} | compact), body: null}
 }
 
 # GET /movePad
@@ -2071,7 +2093,7 @@ export def "move-pad get-using" [
   let full_url = (build-url $base "/movePad" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"sourceID": $source_id, "destinationID": $destination_id, "force": $force} | compact), body: null}
 }
 
 # POST /movePad
@@ -2097,7 +2119,7 @@ export def "move-pad create-using" [
   let full_url = (build-url $base "/movePad" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"sourceID": $source_id, "destinationID": $destination_id, "force": $force} | compact), body: null}
 }
 
 # returns the list of users that are currently editing this pad
@@ -2122,7 +2144,7 @@ export def "pad-users get-using" [
   let full_url = (build-url $base "/padUsers" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"padID": $pad_id} | compact), body: null}
 }
 
 # returns the list of users that are currently editing this pad
@@ -2147,7 +2169,7 @@ export def "pad-users create-using" [
   let full_url = (build-url $base "/padUsers" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"padID": $pad_id} | compact), body: null}
 }
 
 # returns the number of user that are currently editing this pad
@@ -2172,7 +2194,7 @@ export def "pad-users-count get-using" [
   let full_url = (build-url $base "/padUsersCount" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"padID": $pad_id} | compact), body: null}
 }
 
 # returns the number of user that are currently editing this pad
@@ -2197,7 +2219,7 @@ export def "pad-users-count create-using" [
   let full_url = (build-url $base "/padUsersCount" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"padID": $pad_id} | compact), body: null}
 }
 
 # GET /restoreRevision
@@ -2222,7 +2244,7 @@ export def "restore-revision get-using" [
   let full_url = (build-url $base "/restoreRevision" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"padID": $pad_id, "rev": $rev} | compact), body: null}
 }
 
 # POST /restoreRevision
@@ -2247,7 +2269,7 @@ export def "restore-revision create-using" [
   let full_url = (build-url $base "/restoreRevision" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"padID": $pad_id, "rev": $rev} | compact), body: null}
 }
 
 # GET /saveRevision
@@ -2272,7 +2294,7 @@ export def "save-revision get-using" [
   let full_url = (build-url $base "/saveRevision" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"padID": $pad_id, "rev": $rev} | compact), body: null}
 }
 
 # POST /saveRevision
@@ -2297,7 +2319,7 @@ export def "save-revision create-using" [
   let full_url = (build-url $base "/saveRevision" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"padID": $pad_id, "rev": $rev} | compact), body: null}
 }
 
 # sends a custom message of type msg to the pad
@@ -2323,7 +2345,7 @@ export def "send-clients-message get-using" [
   let full_url = (build-url $base "/sendClientsMessage" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"padID": $pad_id, "msg": $msg} | compact), body: null}
 }
 
 # sends a custom message of type msg to the pad
@@ -2349,7 +2371,7 @@ export def "send-clients-message create-using" [
   let full_url = (build-url $base "/sendClientsMessage" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"padID": $pad_id, "msg": $msg} | compact), body: null}
 }
 
 # sets the text of a pad with HTML
@@ -2375,7 +2397,7 @@ export def "set-html get-using" [
   let full_url = (build-url $base "/setHTML" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"padID": $pad_id, "html": $html} | compact), body: null}
 }
 
 # sets the text of a pad with HTML
@@ -2401,7 +2423,7 @@ export def "set-html create-using" [
   let full_url = (build-url $base "/setHTML" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"padID": $pad_id, "html": $html} | compact), body: null}
 }
 
 # sets a boolean for the public status of a pad
@@ -2427,7 +2449,7 @@ export def "set-public-status get-using" [
   let full_url = (build-url $base "/setPublicStatus" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"padID": $pad_id, "publicStatus": $public_status} | compact), body: null}
 }
 
 # sets a boolean for the public status of a pad
@@ -2453,7 +2475,7 @@ export def "set-public-status create-using" [
   let full_url = (build-url $base "/setPublicStatus" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"padID": $pad_id, "publicStatus": $public_status} | compact), body: null}
 }
 
 # sets the text of a pad
@@ -2479,7 +2501,7 @@ export def "set-text get-using" [
   let full_url = (build-url $base "/setText" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"padID": $pad_id, "text": $text} | compact), body: null}
 }
 
 # sets the text of a pad
@@ -2505,5 +2527,5 @@ export def "set-text create-using" [
   let full_url = (build-url $base "/setText" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"padID": $pad_id, "text": $text} | compact), body: null}
 }

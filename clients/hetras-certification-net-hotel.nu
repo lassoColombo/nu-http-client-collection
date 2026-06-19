@@ -3,16 +3,17 @@
 # Auth: --token flag or $env.HETRAS_HOTEL_API_VERSION_0_TOKEN
 
 const BASE_URL = "https://api.hetras-certification.net"
-const DEFAULT_AUTH = "bearer"
 
-# Build auth: returns {headers: record, query: string}
+# Build auth: returns {scheme: string, headers: record, query: string, location: string}.
+# `location` is "header" | "query" | "cookie" | "none" and tells dry-run callers
+# where the token went without inspecting headers/query themselves.
 def build-auth [token?: string, auth_scheme?: string]: nothing -> record {
   let token_val = if ($token != null) and ($token | is-not-empty) { $token } else { $env | get -o HETRAS_HOTEL_API_VERSION_0_TOKEN | default "" }
   let scheme = ($auth_scheme | default "bearer")
-  if ($scheme == "none") or ($token_val | is-empty) { return {headers: {}, query: ""} }
+  if ($scheme == "none") or ($token_val | is-empty) { return {scheme: $scheme, headers: {}, query: "", location: "none"} }
   match $scheme {
-    "none" => { {headers: {}, query: ""} }
-    _ => { {headers: {Authorization: $"Bearer ($token_val)"}, query: ""} }
+    "none" => { {scheme: $scheme, headers: {}, query: "", location: "none"} }
+    _ => { {scheme: $scheme, headers: {Authorization: $"Bearer ($token_val)"}, query: "", location: "header"} }
   }
 }
 
@@ -21,8 +22,9 @@ def build-auth [token?: string, auth_scheme?: string]: nothing -> record {
 # ([A-Za-z0-9-._~]) stay literal; everything else gets %XX.
 def serialize-qp [name: string, value: any, style: string]: nothing -> list<string> {
   if ($value == null) { return [] }
-  let n = (encode-path-segment $name)
   let is_list = ($value | describe | str starts-with "list")
+  if $is_list and ($value | is-empty) { return [] }
+  let n = (encode-path-segment $name)
   if ($value | describe | str starts-with "record") { return ($value | transpose k v | each { $"($n)[(encode-path-segment $in.k)]=(encode-path-segment $in.v)" }) }
   if not $is_list { return [$"($n)=(encode-path-segment $value)"] }
   match $style {
@@ -53,22 +55,42 @@ def build-url [base: string, path: string, query?: string]: nothing -> string {
   if ($query != null) and ($query | is-not-empty) { $result | upsert query $query | url join } else { $result | url join }
 }
 
+# Build the dry-run record returned by --dry-run. Shape:
+#   {dry_run: true, method, url, query: <record>, headers, body, content_type, timeout,
+#    auth: {scheme, location}}
+# `meta` carries logical-form data (the query record by spec name, the pre-serialization
+# body) that do-request itself cannot reconstruct from its wire-format args.
+def build-dry-run-record [method: string, url: string, auth: record, content_type: string, timeout: duration, meta?: record]: nothing -> record {
+  let m = ($meta | default {})
+  {
+    dry_run: true
+    method: $method
+    url: $url
+    query: ($m | get -o query | default {})
+    headers: $auth.headers
+    body: ($m | get -o body)
+    content_type: $content_type
+    timeout: $timeout
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+}
+
 # Execute HTTP request with method dispatch
-def do-request [method: string, url: string, auth: record, insecure: bool, raw: bool, dry_run: bool, max_time?: duration, allow_errors?: bool, full?: bool, content_type?: string, body?: any]: nothing -> any {
+def do-request [method: string, url: string, auth: record, insecure: bool, raw: bool, dry_run: bool, max_time?: duration, allow_errors?: bool, full?: bool, content_type?: string, body?: any, dry_run_meta?: record]: nothing -> any {
   let req_url = if ($auth.query | is-not-empty) { if ($url | str contains "?") { $"($url)&($auth.query)" } else { $"($url)?($auth.query)" } } else { $url }
   let timeout = ($max_time | default 30min)
   let ct = ($content_type | default "application/json")
-  if $dry_run { return {method: $method, url: $req_url, headers: $auth.headers, query_string: $auth.query, content_type: $ct, timeout: $timeout, body: $body} }
+  if $dry_run { return (build-dry-run-record $method $req_url $auth $ct $timeout $dry_run_meta) }
   let resp = match $method {
     "get" => { http get --headers $auth.headers --full --allow-errors --max-time $timeout --insecure=$insecure --raw=$raw $req_url }
-    "head" => { http head --headers $auth.headers --max-time $timeout --insecure=$insecure $req_url }
-    "options" => { http options --headers $auth.headers --max-time $timeout --insecure=$insecure $req_url }
+    "head" => { http head --headers $auth.headers --full --allow-errors --max-time $timeout --insecure=$insecure $req_url }
+    "options" => { http options --headers $auth.headers --full --allow-errors --max-time $timeout --insecure=$insecure $req_url }
     "post" => { if ($body | is-empty) { http post --headers $auth.headers --full --allow-errors --max-time $timeout --insecure=$insecure --raw=$raw $req_url "" } else { http post --headers $auth.headers --content-type $ct --full --allow-errors --max-time $timeout --insecure=$insecure --raw=$raw $req_url $body } }
     "put" => { if ($body | is-empty) { http put --headers $auth.headers --full --allow-errors --max-time $timeout --insecure=$insecure --raw=$raw $req_url "" } else { http put --headers $auth.headers --content-type $ct --full --allow-errors --max-time $timeout --insecure=$insecure --raw=$raw $req_url $body } }
     "patch" => { if ($body | is-empty) { http patch --headers $auth.headers --full --allow-errors --max-time $timeout --insecure=$insecure --raw=$raw $req_url "" } else { http patch --headers $auth.headers --content-type $ct --full --allow-errors --max-time $timeout --insecure=$insecure --raw=$raw $req_url $body } }
     "delete" => { if ($body | is-empty) { http delete --headers $auth.headers --full --allow-errors --max-time $timeout --insecure=$insecure --raw=$raw $req_url } else { http delete --headers $auth.headers --content-type $ct --data $body --full --allow-errors --max-time $timeout --insecure=$insecure --raw=$raw $req_url } }
   }
-  if ($method in ["head" "options"]) { return $resp }
+  if ($method == "head") and (not $full) and (not $allow_errors) and $resp.status < 400 { return $resp.headers }
   if $allow_errors { $resp } else if $resp.status >= 400 { error make --unspanned { msg: $"HTTP ($resp.status): ($resp.body)" } } else if $full { {status: $resp.status, headers: $resp.headers, body: $resp.body} } else if $resp.status == 204 { null } else { $resp.body }
 }
 
@@ -131,7 +153,7 @@ export def "hotel-hotels list" [
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"App-Id": $app_id, "App-Key": $app_key} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
 }
 
 # Get the details of the hotel with the speccified hotel id.
@@ -155,12 +177,13 @@ export def "hotel-hotels get" [
 ]: nothing -> record<city: string, code: string, country: string, created: string, current_business_day: string, desc: string, email: string, fax: string, hotel_id: int, latitude: float, longitude: float, name: string, phone: string, postal_code: string, state: string, street: string, updated: string, url: string, utc_offset: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($hotel_id | is-empty) { error make --unspanned { msg: "path parameter 'hotelId' must be non-empty" } }
   let full_url = (build-url $base ({hotel_id: (encode-path-segment $hotel_id)} | format pattern "/api/hotel/v0/hotels/{hotel_id}"))
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"App-Id": $app_id, "App-Key": $app_key} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
 }
 
 # Get a list of codes for the specified hotel either filtered by type or code.
@@ -186,13 +209,14 @@ export def "hotel-hotels-codes list" [
 ]: nothing -> record<codes: table<_links: record, code: string, default: bool, id: string, name: string, type: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($hotel_id | is-empty) { error make --unspanned { msg: "path parameter 'hotelId' must be non-empty" } }
   let qp = [(serialize-qp "code" $code "scalar") (serialize-qp "type" $type "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({hotel_id: (encode-path-segment $hotel_id)} | format pattern "/api/hotel/v0/hotels/{hotel_id}/codes") $qp)
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"App-Id": $app_id, "App-Key": $app_key} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"code": $code, "type": $type} | compact), body: null}
 }
 
 # Get all the details for a specific code available for the hotel.
@@ -217,12 +241,14 @@ export def "hotel-hotels-codes get" [
 ]: nothing -> record<_links: record, code: string, comment: string, default: bool, id: string, name: string, parent: record<_links: record, code: string, default: bool, id: string, name: string, type: string>, type: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($hotel_id | is-empty) { error make --unspanned { msg: "path parameter 'hotelId' must be non-empty" } }
+  if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
   let full_url = (build-url $base ({hotel_id: (encode-path-segment $hotel_id), id: (encode-path-segment $id)} | format pattern "/api/hotel/v0/hotels/{hotel_id}/codes/{id}"))
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"App-Id": $app_id, "App-Key": $app_key} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
 }
 
 # Get a list of rateplans for the specified hotel id matching the filter criteria.
@@ -258,13 +284,14 @@ export def "hotel-hotels-rateplans list" [
 ]: nothing -> record<_count: int, _links: record, rateplans: table<_links: record, access_control: list, active: bool, active_periods: list, base_rateplan: string, booking_periods: list, code: string, commissionable: bool, created: string, day_use: bool, derived_rateplans: list, description: string, group: string, included_services: list, is_yieldable: bool, market_code: string, name: string, room_types: list, suspended: bool, updated: string, visibility: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($hotel_id | is-empty) { error make --unspanned { msg: "path parameter 'hotelId' must be non-empty" } }
   let qp = [(serialize-qp "sellingStatus" $selling_status "scalar") (serialize-qp "commissionable" $commissionable "scalar") (serialize-qp "group" $group "scalar") (serialize-qp "baseRateplan" $base_rateplan "scalar") (serialize-qp "channelGroup" $channel_group "scalar") (serialize-qp "channelCode" $channel_code "scalar") (serialize-qp "marketCodes" $market_codes "csv") (serialize-qp "roomTypes" $room_types "csv") (serialize-qp "includedServices" $included_services "csv") (serialize-qp "skip" $skip "scalar") (serialize-qp "top" $top "scalar") (serialize-qp "inlinecount" $inlinecount "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({hotel_id: (encode-path-segment $hotel_id)} | format pattern "/api/hotel/v0/hotels/{hotel_id}/rateplans") $qp)
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"App-Id": $app_id, "App-Key": $app_key} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"sellingStatus": $selling_status, "commissionable": $commissionable, "group": $group, "baseRateplan": $base_rateplan, "channelGroup": $channel_group, "channelCode": $channel_code, "marketCodes": $market_codes, "roomTypes": $room_types, "includedServices": $included_services, "skip": $skip, "top": $top, "inlinecount": $inlinecount} | compact), body: null}
 }
 
 # Get the count of all rateplans in the hotel matching the given filter criteria.
@@ -297,13 +324,14 @@ export def "hotel-hotels-rateplans-count get-rate-plans-count" [
 ]: nothing -> record<_count: int> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($hotel_id | is-empty) { error make --unspanned { msg: "path parameter 'hotelId' must be non-empty" } }
   let qp = [(serialize-qp "sellingStatus" $selling_status "scalar") (serialize-qp "commissionable" $commissionable "scalar") (serialize-qp "group" $group "scalar") (serialize-qp "baseRateplan" $base_rateplan "scalar") (serialize-qp "channelGroup" $channel_group "scalar") (serialize-qp "channelCode" $channel_code "scalar") (serialize-qp "marketCodes" $market_codes "csv") (serialize-qp "roomTypes" $room_types "csv") (serialize-qp "includedServices" $included_services "csv")] | flatten | str join "&"
   let full_url = (build-url $base ({hotel_id: (encode-path-segment $hotel_id)} | format pattern "/api/hotel/v0/hotels/{hotel_id}/rateplans/$count") $qp)
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"App-Id": $app_id, "App-Key": $app_key} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"sellingStatus": $selling_status, "commissionable": $commissionable, "group": $group, "baseRateplan": $base_rateplan, "channelGroup": $channel_group, "channelCode": $channel_code, "marketCodes": $market_codes, "roomTypes": $room_types, "includedServices": $included_services} | compact), body: null}
 }
 
 # Update a list of base rateplans for a given period and a given base price for single occupancy.
@@ -329,6 +357,7 @@ export def "hotel-hotels-rateplans-batch-rates update-rate-plans-rates" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($hotel_id | is-empty) { error make --unspanned { msg: "path parameter 'hotelId' must be non-empty" } }
   let full_url = (build-url $base ({hotel_id: (encode-path-segment $hotel_id)} | format pattern "/api/hotel/v0/hotels/{hotel_id}/rateplans/batch/$rates"))
   let req_body = $body
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else if (($input | is-not-empty) and ($req_body | is-empty)) { $input } else { $req_body }
@@ -336,7 +365,7 @@ export def "hotel-hotels-rateplans-batch-rates update-rate-plans-rates" [
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"App-Id": $app_id, "App-Key": $app_key} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: {}, body: $req_body}
 }
 
 # Get all the details for a specific rateplan in the hotel.
@@ -361,12 +390,14 @@ export def "hotel-hotels-rateplans get-rate-plans" [
 ]: nothing -> record<_links: record, access_control: table<channel_codes: list, channel_group: string>, active: bool, active_periods: table<from: string, to: string>, booking_periods: table<from: string, to: string>, code: string, commissionable: bool, created: string, day_use: bool, derivation: record<adjustment: string, base_rateplan: record<_links: record, code: string, name: string>>, derived_rateplans: table<_links: record, code: string, name: string>, description: string, folio_name: string, group: record<code: string, name: string>, included_services: list<string>, is_yieldable: bool, market_code: string, name: string, noshow_policy: string, restrictions: record<leadtime_to_book: int, max_advance_booking: int>, room_types: table<_links: record, code: string, description: string, name: string>, suspended: bool, taxes_included: bool, updated: string, visibility: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($hotel_id | is-empty) { error make --unspanned { msg: "path parameter 'hotelId' must be non-empty" } }
+  if ($rateplan_code | is-empty) { error make --unspanned { msg: "path parameter 'rateplanCode' must be non-empty" } }
   let full_url = (build-url $base ({hotel_id: (encode-path-segment $hotel_id), rateplan_code: (encode-path-segment $rateplan_code)} | format pattern "/api/hotel/v0/hotels/{hotel_id}/rateplans/{rateplan_code}"))
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"App-Id": $app_id, "App-Key": $app_key} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
 }
 
 # Get the setup of the daily rates for a specific rateplan and a defined timeperiod.
@@ -397,20 +428,22 @@ export def "hotel-hotels-rateplans-rates list" [
 ]: nothing -> record<_count: int, _links: record, rates: table<_links: record, base_price: float, business_day: string, cancellation_policy: record, derivation: record, minimum_guarantee_type: string, per_person_surcharge: float, room_type_supplements: list>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($hotel_id | is-empty) { error make --unspanned { msg: "path parameter 'hotelId' must be non-empty" } }
+  if ($rateplan_code | is-empty) { error make --unspanned { msg: "path parameter 'rateplanCode' must be non-empty" } }
   let qp = [(serialize-qp "expand" $expand "scalar") (serialize-qp "from" $qp_from "scalar") (serialize-qp "to" $qp_to "scalar") (serialize-qp "skip" $skip "scalar") (serialize-qp "top" $top "scalar") (serialize-qp "inlinecount" $inlinecount "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({hotel_id: (encode-path-segment $hotel_id), rateplan_code: (encode-path-segment $rateplan_code)} | format pattern "/api/hotel/v0/hotels/{hotel_id}/rateplans/{rateplan_code}/rates") $qp)
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"App-Id": $app_id, "App-Key": $app_key} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"expand": $expand, "from": $qp_from, "to": $qp_to, "skip": $skip, "top": $top, "inlinecount": $inlinecount} | compact), body: null}
 }
 
 # Partially update a rate of the specified rateplan for the defined time period.
 #
 # PATCH /api/hotel/v0/hotels/{hotelId}/rateplans/{rateplanCode}/rates
 # operationId: RatePlans_PatchRates
-export def "hotel-hotels-rateplans-rates update-plans-by-hotelId-rateplanCode" [
+export def "hotel-hotels-rateplans-rates update-plans-by-hotel-id-rateplan-code" [
   hotel_id: int
   rateplan_code: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -432,6 +465,8 @@ export def "hotel-hotels-rateplans-rates update-plans-by-hotelId-rateplanCode" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($hotel_id | is-empty) { error make --unspanned { msg: "path parameter 'hotelId' must be non-empty" } }
+  if ($rateplan_code | is-empty) { error make --unspanned { msg: "path parameter 'rateplanCode' must be non-empty" } }
   let qp = [(serialize-qp "from" $qp_from "scalar") (serialize-qp "to" $qp_to "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({hotel_id: (encode-path-segment $hotel_id), rateplan_code: (encode-path-segment $rateplan_code)} | format pattern "/api/hotel/v0/hotels/{hotel_id}/rateplans/{rateplan_code}/rates") $qp)
   let req_body = $body
@@ -440,7 +475,7 @@ export def "hotel-hotels-rateplans-rates update-plans-by-hotelId-rateplanCode" [
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"App-Id": $app_id, "App-Key": $app_key} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "patch" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body
+  do-request "patch" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: ({"from": $qp_from, "to": $qp_to} | compact), body: $req_body}
 }
 
 # Get the count of all active and loaded daily rates for the defined rateplan in a specified time period.
@@ -467,13 +502,15 @@ export def "hotel-hotels-rateplans-rates-count get-plans-count" [
 ]: nothing -> record<_count: int> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($hotel_id | is-empty) { error make --unspanned { msg: "path parameter 'hotelId' must be non-empty" } }
+  if ($rateplan_code | is-empty) { error make --unspanned { msg: "path parameter 'rateplanCode' must be non-empty" } }
   let qp = [(serialize-qp "from" $qp_from "scalar") (serialize-qp "to" $qp_to "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({hotel_id: (encode-path-segment $hotel_id), rateplan_code: (encode-path-segment $rateplan_code)} | format pattern "/api/hotel/v0/hotels/{hotel_id}/rateplans/{rateplan_code}/rates/$count") $qp)
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"App-Id": $app_id, "App-Key": $app_key} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"from": $qp_from, "to": $qp_to} | compact), body: null}
 }
 
 # Get the setup of a daily rate for a specific business day and rateplan.
@@ -499,19 +536,22 @@ export def "hotel-hotels-rateplans-rates get-plans" [
 ]: nothing -> record<_links: record, base_price: float, business_day: string, cancellation_policy: record<description: string, name: string>, derivation: record<adjustment: string, value: float>, minimum_guarantee_type: string, per_person_surcharge: float, room_type_supplements: table<_links: record, code: string, default: bool, supplements: list>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($hotel_id | is-empty) { error make --unspanned { msg: "path parameter 'hotelId' must be non-empty" } }
+  if ($rateplan_code | is-empty) { error make --unspanned { msg: "path parameter 'rateplanCode' must be non-empty" } }
+  if ($business_day | is-empty) { error make --unspanned { msg: "path parameter 'businessDay' must be non-empty" } }
   let full_url = (build-url $base ({hotel_id: (encode-path-segment $hotel_id), rateplan_code: (encode-path-segment $rateplan_code), business_day: (encode-path-segment $business_day)} | format pattern "/api/hotel/v0/hotels/{hotel_id}/rateplans/{rateplan_code}/rates/{business_day}"))
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"App-Id": $app_id, "App-Key": $app_key} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
 }
 
 # Partially update a rate of the specified rateplan for a defined business day.
 #
 # PATCH /api/hotel/v0/hotels/{hotelId}/rateplans/{rateplanCode}/rates/{businessDay}
 # operationId: RatePlans_PatchRate
-export def "hotel-hotels-rateplans-rates update-plans-by-hotelId-rateplanCode-businessDay" [
+export def "hotel-hotels-rateplans-rates update-plans-by-hotel-id-rateplan-code-business-day" [
   hotel_id: int
   rateplan_code: string
   business_day: string
@@ -532,6 +572,9 @@ export def "hotel-hotels-rateplans-rates update-plans-by-hotelId-rateplanCode-bu
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($hotel_id | is-empty) { error make --unspanned { msg: "path parameter 'hotelId' must be non-empty" } }
+  if ($rateplan_code | is-empty) { error make --unspanned { msg: "path parameter 'rateplanCode' must be non-empty" } }
+  if ($business_day | is-empty) { error make --unspanned { msg: "path parameter 'businessDay' must be non-empty" } }
   let full_url = (build-url $base ({hotel_id: (encode-path-segment $hotel_id), rateplan_code: (encode-path-segment $rateplan_code), business_day: (encode-path-segment $business_day)} | format pattern "/api/hotel/v0/hotels/{hotel_id}/rateplans/{rateplan_code}/rates/{business_day}"))
   let req_body = $body
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else if (($input | is-not-empty) and ($req_body | is-empty)) { $input } else { $req_body }
@@ -539,7 +582,7 @@ export def "hotel-hotels-rateplans-rates update-plans-by-hotelId-rateplanCode-bu
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"App-Id": $app_id, "App-Key": $app_key} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "patch" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body
+  do-request "patch" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: {}, body: $req_body}
 }
 
 # Get a list with the details of all room types for for the specified hotel id.
@@ -563,12 +606,13 @@ export def "hotel-hotels-room-types list" [
 ]: nothing -> table<amenities: list<record>, bedding_type: string, code: string, created: string, default: bool, description: string, expected_occupancy: int, facilities: list<record>, max_persons: int, min_persons: int, name: string, updated: string, views: list<record>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($hotel_id | is-empty) { error make --unspanned { msg: "path parameter 'hotelId' must be non-empty" } }
   let full_url = (build-url $base ({hotel_id: (encode-path-segment $hotel_id)} | format pattern "/api/hotel/v0/hotels/{hotel_id}/room_types"))
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"App-Id": $app_id, "App-Key": $app_key} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
 }
 
 # Get all the details for a specific room type in the hotel.
@@ -593,12 +637,14 @@ export def "hotel-hotels-room-types get" [
 ]: nothing -> record<amenities: table<code: string, name: string>, bedding_type: string, code: string, created: string, default: bool, description: string, expected_occupancy: int, facilities: table<code: string, name: string>, max_persons: int, min_persons: int, name: string, updated: string, views: table<code: string, name: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($hotel_id | is-empty) { error make --unspanned { msg: "path parameter 'hotelId' must be non-empty" } }
+  if ($code | is-empty) { error make --unspanned { msg: "path parameter 'code' must be non-empty" } }
   let full_url = (build-url $base ({hotel_id: (encode-path-segment $hotel_id), code: (encode-path-segment $code)} | format pattern "/api/hotel/v0/hotels/{hotel_id}/room_types/{code}"))
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"App-Id": $app_id, "App-Key": $app_key} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
 }
 
 # Get a list of rooms using the provided filtering and pagination criteria.
@@ -632,13 +678,14 @@ export def "hotel-hotels-rooms list" [
 ]: nothing -> record<_count: int, _links: record, rooms: table<_links: record, created: string, description: string, name: string, number: string, room_type: record, status: record, updated: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($hotel_id | is-empty) { error make --unspanned { msg: "path parameter 'hotelId' must be non-empty" } }
   let qp = [(serialize-qp "occupancy" $occupancy "scalar") (serialize-qp "conditions" $conditions "csv") (serialize-qp "maintenances" $maintenances "csv") (serialize-qp "roomTypes" $room_types "csv") (serialize-qp "amenities" $amenities "csv") (serialize-qp "views" $views "csv") (serialize-qp "locations" $locations "csv") (serialize-qp "skip" $skip "scalar") (serialize-qp "top" $top "scalar") (serialize-qp "inlinecount" $inlinecount "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({hotel_id: (encode-path-segment $hotel_id)} | format pattern "/api/hotel/v0/hotels/{hotel_id}/rooms") $qp)
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"App-Id": $app_id, "App-Key": $app_key} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"occupancy": $occupancy, "conditions": $conditions, "maintenances": $maintenances, "roomTypes": $room_types, "amenities": $amenities, "views": $views, "locations": $locations, "skip": $skip, "top": $top, "inlinecount": $inlinecount} | compact), body: null}
 }
 
 # Get the count of all rooms in the hotel matching the given filter criteria.
@@ -669,13 +716,14 @@ export def "hotel-hotels-rooms-count get-count" [
 ]: nothing -> record<_count: int> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($hotel_id | is-empty) { error make --unspanned { msg: "path parameter 'hotelId' must be non-empty" } }
   let qp = [(serialize-qp "occupancy" $occupancy "scalar") (serialize-qp "conditions" $conditions "csv") (serialize-qp "maintenances" $maintenances "csv") (serialize-qp "roomTypes" $room_types "csv") (serialize-qp "amenities" $amenities "csv") (serialize-qp "views" $views "csv") (serialize-qp "locations" $locations "csv")] | flatten | str join "&"
   let full_url = (build-url $base ({hotel_id: (encode-path-segment $hotel_id)} | format pattern "/api/hotel/v0/hotels/{hotel_id}/rooms/$count") $qp)
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"App-Id": $app_id, "App-Key": $app_key} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"occupancy": $occupancy, "conditions": $conditions, "maintenances": $maintenances, "roomTypes": $room_types, "amenities": $amenities, "views": $views, "locations": $locations} | compact), body: null}
 }
 
 # Request available rooms using a given criteria.
@@ -710,13 +758,14 @@ export def "hotel-hotels-rooms-available get" [
 ]: nothing -> record<_count: int, _links: record, rooms: table<_links: record, created: string, description: string, name: string, number: string, room_type: record, status: record, updated: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($hotel_id | is-empty) { error make --unspanned { msg: "path parameter 'hotelId' must be non-empty" } }
   let qp = [(serialize-qp "from" $qp_from "scalar") (serialize-qp "to" $qp_to "scalar") (serialize-qp "adults" $adults "scalar") (serialize-qp "includeOutOfService" $include_out_of_service "scalar") (serialize-qp "roomTypes" $room_types "csv") (serialize-qp "amenities" $amenities "csv") (serialize-qp "views" $views "csv") (serialize-qp "locations" $locations "csv") (serialize-qp "skip" $skip "scalar") (serialize-qp "top" $top "scalar") (serialize-qp "inlinecount" $inlinecount "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({hotel_id: (encode-path-segment $hotel_id)} | format pattern "/api/hotel/v0/hotels/{hotel_id}/rooms/available") $qp)
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"App-Id": $app_id, "App-Key": $app_key} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"from": $qp_from, "to": $qp_to, "adults": $adults, "includeOutOfService": $include_out_of_service, "roomTypes": $room_types, "amenities": $amenities, "views": $views, "locations": $locations, "skip": $skip, "top": $top, "inlinecount": $inlinecount} | compact), body: null}
 }
 
 # Get all the details for a specific room in the hotel.
@@ -741,12 +790,14 @@ export def "hotel-hotels-rooms get" [
 ]: nothing -> record<amenities: table<code: string, name: string>, beddings: table<count: int, type: string>, created: string, description: string, expected_occupancy: int, extra_bed_allowed: bool, floor: int, locations: table<code: string, name: string>, max_persons: int, min_persons: int, name: string, number: string, reservations: table<_links: record, arrival_date: string, confirmation_id: string, departure_date: string, reservation_number: int, reservation_status: string>, room_type: record<_links: record, code: string, description: string, name: string>, status: record<condition: string, frontdesk_occupancy: string, housekeeping_occupancy: string, maintenance: record<from: string, reason: string, to: string, value: string>>, updated: string, views: table<code: string, name: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($hotel_id | is-empty) { error make --unspanned { msg: "path parameter 'hotelId' must be non-empty" } }
+  if ($room_number | is-empty) { error make --unspanned { msg: "path parameter 'roomNumber' must be non-empty" } }
   let full_url = (build-url $base ({hotel_id: (encode-path-segment $hotel_id), room_number: (encode-path-segment $room_number)} | format pattern "/api/hotel/v0/hotels/{hotel_id}/rooms/{room_number}"))
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"App-Id": $app_id, "App-Key": $app_key} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
 }
 
 # Partially updates a room.
@@ -773,6 +824,8 @@ export def "hotel-hotels-rooms update" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($hotel_id | is-empty) { error make --unspanned { msg: "path parameter 'hotelId' must be non-empty" } }
+  if ($room_number | is-empty) { error make --unspanned { msg: "path parameter 'roomNumber' must be non-empty" } }
   let full_url = (build-url $base ({hotel_id: (encode-path-segment $hotel_id), room_number: (encode-path-segment $room_number)} | format pattern "/api/hotel/v0/hotels/{hotel_id}/rooms/{room_number}"))
   let req_body = $body
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else if (($input | is-not-empty) and ($req_body | is-empty)) { $input } else { $req_body }
@@ -780,7 +833,7 @@ export def "hotel-hotels-rooms update" [
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"App-Id": $app_id, "App-Key": $app_key} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "patch" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body
+  do-request "patch" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: {}, body: $req_body}
 }
 
 # Saves Yieldable Rate Prices for existing Yieldable Rateplan.
@@ -807,6 +860,8 @@ export def "hotel-hotels-yieldable-rateplans-rates update-rates-save-prices" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($hotel_id | is-empty) { error make --unspanned { msg: "path parameter 'hotelId' must be non-empty" } }
+  if ($rateplan_code | is-empty) { error make --unspanned { msg: "path parameter 'rateplanCode' must be non-empty" } }
   let full_url = (build-url $base ({hotel_id: (encode-path-segment $hotel_id), rateplan_code: (encode-path-segment $rateplan_code)} | format pattern "/api/hotel/v0/hotels/{hotel_id}/yieldable_rateplans/{rateplan_code}/$rates"))
   let req_body = $body
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else if (($input | is-not-empty) and ($req_body | is-empty)) { $input } else { $req_body }
@@ -814,5 +869,5 @@ export def "hotel-hotels-yieldable-rateplans-rates update-rates-save-prices" [
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"App-Id": $app_id, "App-Key": $app_key} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: {}, body: $req_body}
 }

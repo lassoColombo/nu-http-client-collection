@@ -3,18 +3,19 @@
 # Auth: --token flag or $env.GEODESYSTEMS_COM_443_TOKEN
 
 const BASE_URL = "https://geodesystems.com:443"
-const DEFAULT_AUTH = "basic"
 
-# Build auth: returns {headers: record, query: string}
+# Build auth: returns {scheme: string, headers: record, query: string, location: string}.
+# `location` is "header" | "query" | "cookie" | "none" and tells dry-run callers
+# where the token went without inspecting headers/query themselves.
 def build-auth [token?: string, auth_scheme?: string]: nothing -> record {
   let token_val = if ($token != null) and ($token | is-not-empty) { $token } else { $env | get -o GEODESYSTEMS_COM_443_TOKEN | default "" }
   let scheme = ($auth_scheme | default "bearer")
-  if ($scheme == "none") or ($token_val | is-empty) { return {headers: {}, query: ""} }
+  if ($scheme == "none") or ($token_val | is-empty) { return {scheme: $scheme, headers: {}, query: "", location: "none"} }
   match $scheme {
-    "basic" => { {headers: {Authorization: $"Basic ($token_val)"}, query: ""} }
-    "basic-credentials" => { {headers: {Authorization: $"Basic ($token_val | encode base64)"}, query: ""} }
-    "none" => { {headers: {}, query: ""} }
-    _ => { {headers: {Authorization: $"Bearer ($token_val)"}, query: ""} }
+    "basic" => { {scheme: $scheme, headers: {Authorization: $"Basic ($token_val)"}, query: "", location: "header"} }
+    "basic-credentials" => { {scheme: $scheme, headers: {Authorization: $"Basic ($token_val | encode base64)"}, query: "", location: "header"} }
+    "none" => { {scheme: $scheme, headers: {}, query: "", location: "none"} }
+    _ => { {scheme: $scheme, headers: {Authorization: $"Bearer ($token_val)"}, query: "", location: "header"} }
   }
 }
 
@@ -23,8 +24,9 @@ def build-auth [token?: string, auth_scheme?: string]: nothing -> record {
 # ([A-Za-z0-9-._~]) stay literal; everything else gets %XX.
 def serialize-qp [name: string, value: any, style: string]: nothing -> list<string> {
   if ($value == null) { return [] }
-  let n = (encode-path-segment $name)
   let is_list = ($value | describe | str starts-with "list")
+  if $is_list and ($value | is-empty) { return [] }
+  let n = (encode-path-segment $name)
   if ($value | describe | str starts-with "record") { return ($value | transpose k v | each { $"($n)[(encode-path-segment $in.k)]=(encode-path-segment $in.v)" }) }
   if not $is_list { return [$"($n)=(encode-path-segment $value)"] }
   match $style {
@@ -55,22 +57,42 @@ def build-url [base: string, path: string, query?: string]: nothing -> string {
   if ($query != null) and ($query | is-not-empty) { $result | upsert query $query | url join } else { $result | url join }
 }
 
+# Build the dry-run record returned by --dry-run. Shape:
+#   {dry_run: true, method, url, query: <record>, headers, body, content_type, timeout,
+#    auth: {scheme, location}}
+# `meta` carries logical-form data (the query record by spec name, the pre-serialization
+# body) that do-request itself cannot reconstruct from its wire-format args.
+def build-dry-run-record [method: string, url: string, auth: record, content_type: string, timeout: duration, meta?: record]: nothing -> record {
+  let m = ($meta | default {})
+  {
+    dry_run: true
+    method: $method
+    url: $url
+    query: ($m | get -o query | default {})
+    headers: $auth.headers
+    body: ($m | get -o body)
+    content_type: $content_type
+    timeout: $timeout
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+}
+
 # Execute HTTP request with method dispatch
-def do-request [method: string, url: string, auth: record, insecure: bool, raw: bool, dry_run: bool, max_time?: duration, allow_errors?: bool, full?: bool, content_type?: string, body?: any]: nothing -> any {
+def do-request [method: string, url: string, auth: record, insecure: bool, raw: bool, dry_run: bool, max_time?: duration, allow_errors?: bool, full?: bool, content_type?: string, body?: any, dry_run_meta?: record]: nothing -> any {
   let req_url = if ($auth.query | is-not-empty) { if ($url | str contains "?") { $"($url)&($auth.query)" } else { $"($url)?($auth.query)" } } else { $url }
   let timeout = ($max_time | default 30min)
   let ct = ($content_type | default "application/json")
-  if $dry_run { return {method: $method, url: $req_url, headers: $auth.headers, query_string: $auth.query, content_type: $ct, timeout: $timeout, body: $body} }
+  if $dry_run { return (build-dry-run-record $method $req_url $auth $ct $timeout $dry_run_meta) }
   let resp = match $method {
     "get" => { http get --headers $auth.headers --full --allow-errors --max-time $timeout --insecure=$insecure --raw=$raw $req_url }
-    "head" => { http head --headers $auth.headers --max-time $timeout --insecure=$insecure $req_url }
-    "options" => { http options --headers $auth.headers --max-time $timeout --insecure=$insecure $req_url }
+    "head" => { http head --headers $auth.headers --full --allow-errors --max-time $timeout --insecure=$insecure $req_url }
+    "options" => { http options --headers $auth.headers --full --allow-errors --max-time $timeout --insecure=$insecure $req_url }
     "post" => { if ($body | is-empty) { http post --headers $auth.headers --full --allow-errors --max-time $timeout --insecure=$insecure --raw=$raw $req_url "" } else { http post --headers $auth.headers --content-type $ct --full --allow-errors --max-time $timeout --insecure=$insecure --raw=$raw $req_url $body } }
     "put" => { if ($body | is-empty) { http put --headers $auth.headers --full --allow-errors --max-time $timeout --insecure=$insecure --raw=$raw $req_url "" } else { http put --headers $auth.headers --content-type $ct --full --allow-errors --max-time $timeout --insecure=$insecure --raw=$raw $req_url $body } }
     "patch" => { if ($body | is-empty) { http patch --headers $auth.headers --full --allow-errors --max-time $timeout --insecure=$insecure --raw=$raw $req_url "" } else { http patch --headers $auth.headers --content-type $ct --full --allow-errors --max-time $timeout --insecure=$insecure --raw=$raw $req_url $body } }
     "delete" => { if ($body | is-empty) { http delete --headers $auth.headers --full --allow-errors --max-time $timeout --insecure=$insecure --raw=$raw $req_url } else { http delete --headers $auth.headers --content-type $ct --data $body --full --allow-errors --max-time $timeout --insecure=$insecure --raw=$raw $req_url } }
   }
-  if ($method in ["head" "options"]) { return $resp }
+  if ($method == "head") and (not $full) and (not $allow_errors) and $resp.status < 400 { return $resp.headers }
   if $allow_errors { $resp } else if $resp.status >= 400 { error make --unspanned { msg: $"HTTP ($resp.status): ($resp.body)" } } else if $full { {status: $resp.status, headers: $resp.headers, body: $resp.body} } else if $resp.status == 204 { null } else { $resp.body }
 }
 
@@ -125,7 +147,7 @@ export def "repository-entry-show get-media-tabular-extractsheet" [
   let full_url = (build-url $base "/repository/entry/show" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"output": $output, "entryid": $entryid, "arg1": $arg1} | compact), body: null}
 }
 
 # Search API for '2017 Boulder Election Expenditures' entry type
@@ -175,7 +197,7 @@ export def "repository-search-type-2017-boulder-election-expenditures list" [
   let full_url = (build-url $base "/repository/search/type/2017_boulder_election_expenditures" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"text": $text, "name": $name, "description": $description, "fromdate": $fromdate, "todate": $todate, "createdate.from": $createdate_from, "createdate.to": $createdate_to, "changedate.from": $changedate_from, "changedate.to": $changedate_to, "group": $group, "filesuffix": $filesuffix, "maxlatitude": $maxlatitude, "minlongitude": $minlongitude, "minlatitude": $minlatitude, "maxlongitude": $maxlongitude, "max": $max, "skip": $skip, "search.db_2017_boulder_election_expenditures.committee": $search_db_2017_boulder_election_expenditures_committee, "search.db_2017_boulder_election_expenditures.transaction_date": $search_db_2017_boulder_election_expenditures_transaction_date, "search.db_2017_boulder_election_expenditures.name": $search_db_2017_boulder_election_expenditures_name, "search.db_2017_boulder_election_expenditures.street": $search_db_2017_boulder_election_expenditures_street, "search.db_2017_boulder_election_expenditures.city": $search_db_2017_boulder_election_expenditures_city, "search.db_2017_boulder_election_expenditures.state": $search_db_2017_boulder_election_expenditures_state, "search.db_2017_boulder_election_expenditures.zip": $search_db_2017_boulder_election_expenditures_zip, "search.db_2017_boulder_election_expenditures.expenditure": $search_db_2017_boulder_election_expenditures_expenditure, "search.db_2017_boulder_election_expenditures.purpose": $search_db_2017_boulder_election_expenditures_purpose} | compact), body: null}
 }
 
 # Search API for 'Any file type' entry type
@@ -216,7 +238,7 @@ export def "repository-search-type-any list" [
   let full_url = (build-url $base "/repository/search/type/any" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"text": $text, "name": $name, "description": $description, "fromdate": $fromdate, "todate": $todate, "createdate.from": $createdate_from, "createdate.to": $createdate_to, "changedate.from": $changedate_from, "changedate.to": $changedate_to, "group": $group, "filesuffix": $filesuffix, "maxlatitude": $maxlatitude, "minlongitude": $minlongitude, "minlatitude": $minlatitude, "maxlongitude": $maxlongitude, "max": $max, "skip": $skip} | compact), body: null}
 }
 
 # Search API for 'Before and After Images' entry type
@@ -257,7 +279,7 @@ export def "repository-search-type-beforeafter list" [
   let full_url = (build-url $base "/repository/search/type/beforeafter" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"text": $text, "name": $name, "description": $description, "fromdate": $fromdate, "todate": $todate, "createdate.from": $createdate_from, "createdate.to": $createdate_to, "changedate.from": $changedate_from, "changedate.to": $changedate_to, "group": $group, "filesuffix": $filesuffix, "maxlatitude": $maxlatitude, "minlongitude": $minlongitude, "minlatitude": $minlatitude, "maxlongitude": $maxlongitude, "max": $max, "skip": $skip} | compact), body: null}
 }
 
 # Search API for 'Bibliographic Entry' entry type
@@ -303,7 +325,7 @@ export def "repository-search-type-biblio list" [
   let full_url = (build-url $base "/repository/search/type/biblio" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"text": $text, "name": $name, "description": $description, "fromdate": $fromdate, "todate": $todate, "createdate.from": $createdate_from, "createdate.to": $createdate_to, "changedate.from": $changedate_from, "changedate.to": $changedate_to, "group": $group, "filesuffix": $filesuffix, "maxlatitude": $maxlatitude, "minlongitude": $minlongitude, "minlatitude": $minlatitude, "maxlongitude": $maxlongitude, "max": $max, "skip": $skip, "search.biblio.primary_author": $search_biblio_primary_author, "search.biblio.type": $search_biblio_type, "search.biblio.institution": $search_biblio_institution, "search.biblio.other_authors": $search_biblio_other_authors, "search.biblio.publication": $search_biblio_publication} | compact), body: null}
 }
 
 # Search API for 'DICOM File' entry type
@@ -344,7 +366,7 @@ export def "repository-search-type-bio-dicom list" [
   let full_url = (build-url $base "/repository/search/type/bio_dicom" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"text": $text, "name": $name, "description": $description, "fromdate": $fromdate, "todate": $todate, "createdate.from": $createdate_from, "createdate.to": $createdate_to, "changedate.from": $changedate_from, "changedate.to": $changedate_to, "group": $group, "filesuffix": $filesuffix, "maxlatitude": $maxlatitude, "minlongitude": $minlongitude, "minlatitude": $minlatitude, "maxlongitude": $maxlongitude, "max": $max, "skip": $skip} | compact), body: null}
 }
 
 # Search API for 'DICOM Test File' entry type
@@ -387,7 +409,7 @@ export def "repository-search-type-bio-dicom-test list" [
   let full_url = (build-url $base "/repository/search/type/bio_dicom_test" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"text": $text, "name": $name, "description": $description, "fromdate": $fromdate, "todate": $todate, "createdate.from": $createdate_from, "createdate.to": $createdate_to, "changedate.from": $changedate_from, "changedate.to": $changedate_to, "group": $group, "filesuffix": $filesuffix, "maxlatitude": $maxlatitude, "minlongitude": $minlongitude, "minlatitude": $minlatitude, "maxlongitude": $maxlongitude, "max": $max, "skip": $skip, "search.bio_dicom_test.PatientName": $search_bio_dicom_test_patient_name, "search.bio_dicom_test.PatientID": $search_bio_dicom_test_patient_id} | compact), body: null}
 }
 
 # Search API for 'FASTA File' entry type
@@ -428,7 +450,7 @@ export def "repository-search-type-bio-fasta list" [
   let full_url = (build-url $base "/repository/search/type/bio_fasta" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"text": $text, "name": $name, "description": $description, "fromdate": $fromdate, "todate": $todate, "createdate.from": $createdate_from, "createdate.to": $createdate_to, "changedate.from": $changedate_from, "changedate.to": $changedate_to, "group": $group, "filesuffix": $filesuffix, "maxlatitude": $maxlatitude, "minlongitude": $minlongitude, "minlatitude": $minlatitude, "maxlongitude": $maxlongitude, "max": $max, "skip": $skip} | compact), body: null}
 }
 
 # Search API for 'FASTQ File' entry type
@@ -469,7 +491,7 @@ export def "repository-search-type-bio-fastq list" [
   let full_url = (build-url $base "/repository/search/type/bio_fastq" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"text": $text, "name": $name, "description": $description, "fromdate": $fromdate, "todate": $todate, "createdate.from": $createdate_from, "createdate.to": $createdate_to, "changedate.from": $changedate_from, "changedate.to": $changedate_to, "group": $group, "filesuffix": $filesuffix, "maxlatitude": $maxlatitude, "minlongitude": $minlongitude, "minlatitude": $minlatitude, "maxlongitude": $maxlongitude, "max": $max, "skip": $skip} | compact), body: null}
 }
 
 # Search API for 'HMMER Index File' entry type
@@ -510,7 +532,7 @@ export def "repository-search-type-bio-hmmer-index list" [
   let full_url = (build-url $base "/repository/search/type/bio_hmmer_index" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"text": $text, "name": $name, "description": $description, "fromdate": $fromdate, "todate": $todate, "createdate.from": $createdate_from, "createdate.to": $createdate_to, "changedate.from": $changedate_from, "changedate.to": $changedate_to, "group": $group, "filesuffix": $filesuffix, "maxlatitude": $maxlatitude, "minlongitude": $minlongitude, "minlatitude": $minlatitude, "maxlongitude": $maxlongitude, "max": $max, "skip": $skip} | compact), body: null}
 }
 
 # Search API for 'OME TIFF File' entry type
@@ -551,7 +573,7 @@ export def "repository-search-type-bio-ome-tiff list" [
   let full_url = (build-url $base "/repository/search/type/bio_ome_tiff" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"text": $text, "name": $name, "description": $description, "fromdate": $fromdate, "todate": $todate, "createdate.from": $createdate_from, "createdate.to": $createdate_to, "changedate.from": $changedate_from, "changedate.to": $changedate_to, "group": $group, "filesuffix": $filesuffix, "maxlatitude": $maxlatitude, "minlongitude": $minlongitude, "minlatitude": $minlatitude, "maxlongitude": $maxlongitude, "max": $max, "skip": $skip} | compact), body: null}
 }
 
 # Search API for 'Assay' entry type
@@ -592,7 +614,7 @@ export def "repository-search-type-bio-ontology-assay list" [
   let full_url = (build-url $base "/repository/search/type/bio_ontology_assay" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"text": $text, "name": $name, "description": $description, "fromdate": $fromdate, "todate": $todate, "createdate.from": $createdate_from, "createdate.to": $createdate_to, "changedate.from": $changedate_from, "changedate.to": $changedate_to, "group": $group, "filesuffix": $filesuffix, "maxlatitude": $maxlatitude, "minlongitude": $minlongitude, "minlatitude": $minlatitude, "maxlongitude": $maxlongitude, "max": $max, "skip": $skip} | compact), body: null}
 }
 
 # Search API for 'Cohort' entry type
@@ -633,7 +655,7 @@ export def "repository-search-type-bio-ontology-cohort list" [
   let full_url = (build-url $base "/repository/search/type/bio_ontology_cohort" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"text": $text, "name": $name, "description": $description, "fromdate": $fromdate, "todate": $todate, "createdate.from": $createdate_from, "createdate.to": $createdate_to, "changedate.from": $changedate_from, "changedate.to": $changedate_to, "group": $group, "filesuffix": $filesuffix, "maxlatitude": $maxlatitude, "minlongitude": $minlongitude, "minlatitude": $minlatitude, "maxlongitude": $maxlongitude, "max": $max, "skip": $skip} | compact), body: null}
 }
 
 # Search API for 'Person' entry type
@@ -675,7 +697,7 @@ export def "repository-search-type-bio-ontology-person list" [
   let full_url = (build-url $base "/repository/search/type/bio_ontology_person" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"text": $text, "name": $name, "description": $description, "fromdate": $fromdate, "todate": $todate, "createdate.from": $createdate_from, "createdate.to": $createdate_to, "changedate.from": $changedate_from, "changedate.to": $changedate_to, "group": $group, "filesuffix": $filesuffix, "maxlatitude": $maxlatitude, "minlongitude": $minlongitude, "minlatitude": $minlatitude, "maxlongitude": $maxlongitude, "max": $max, "skip": $skip, "search.bio_ontology_person.gender": $search_bio_ontology_person_gender} | compact), body: null}
 }
 
 # Search API for 'Sample' entry type
@@ -716,7 +738,7 @@ export def "repository-search-type-bio-ontology-sample list" [
   let full_url = (build-url $base "/repository/search/type/bio_ontology_sample" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"text": $text, "name": $name, "description": $description, "fromdate": $fromdate, "todate": $todate, "createdate.from": $createdate_from, "createdate.to": $createdate_to, "changedate.from": $changedate_from, "changedate.to": $changedate_to, "group": $group, "filesuffix": $filesuffix, "maxlatitude": $maxlatitude, "minlongitude": $minlongitude, "minlatitude": $minlatitude, "maxlongitude": $maxlongitude, "max": $max, "skip": $skip} | compact), body: null}
 }
 
 # Search API for 'Series' entry type
@@ -757,7 +779,7 @@ export def "repository-search-type-bio-ontology-series list" [
   let full_url = (build-url $base "/repository/search/type/bio_ontology_series" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"text": $text, "name": $name, "description": $description, "fromdate": $fromdate, "todate": $todate, "createdate.from": $createdate_from, "createdate.to": $createdate_to, "changedate.from": $changedate_from, "changedate.to": $changedate_to, "group": $group, "filesuffix": $filesuffix, "maxlatitude": $maxlatitude, "minlongitude": $minlongitude, "minlatitude": $minlatitude, "maxlongitude": $maxlongitude, "max": $max, "skip": $skip} | compact), body: null}
 }
 
 # Search API for 'Study' entry type
@@ -798,7 +820,7 @@ export def "repository-search-type-bio-ontology-study list" [
   let full_url = (build-url $base "/repository/search/type/bio_ontology_study" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"text": $text, "name": $name, "description": $description, "fromdate": $fromdate, "todate": $todate, "createdate.from": $createdate_from, "createdate.to": $createdate_to, "changedate.from": $changedate_from, "changedate.to": $changedate_to, "group": $group, "filesuffix": $filesuffix, "maxlatitude": $maxlatitude, "minlongitude": $minlongitude, "minlatitude": $minlatitude, "maxlongitude": $maxlongitude, "max": $max, "skip": $skip} | compact), body: null}
 }
 
 # Search API for 'SAM Data' entry type
@@ -839,7 +861,7 @@ export def "repository-search-type-bio-sam list" [
   let full_url = (build-url $base "/repository/search/type/bio_sam" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"text": $text, "name": $name, "description": $description, "fromdate": $fromdate, "todate": $todate, "createdate.from": $createdate_from, "createdate.to": $createdate_to, "changedate.from": $changedate_from, "changedate.to": $changedate_to, "group": $group, "filesuffix": $filesuffix, "maxlatitude": $maxlatitude, "minlongitude": $minlongitude, "minlatitude": $minlatitude, "maxlongitude": $maxlongitude, "max": $max, "skip": $skip} | compact), body: null}
 }
 
 # Search API for 'PDB Protein File' entry type
@@ -880,7 +902,7 @@ export def "repository-search-type-bio-sf-pdb list" [
   let full_url = (build-url $base "/repository/search/type/bio_sf_pdb" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"text": $text, "name": $name, "description": $description, "fromdate": $fromdate, "todate": $todate, "createdate.from": $createdate_from, "createdate.to": $createdate_to, "changedate.from": $changedate_from, "changedate.to": $changedate_to, "group": $group, "filesuffix": $filesuffix, "maxlatitude": $maxlatitude, "minlongitude": $minlongitude, "minlatitude": $minlatitude, "maxlongitude": $maxlongitude, "max": $max, "skip": $skip} | compact), body: null}
 }
 
 # Search API for 'Sequence Read Archive' entry type
@@ -921,7 +943,7 @@ export def "repository-search-type-bio-sra list" [
   let full_url = (build-url $base "/repository/search/type/bio_sra" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"text": $text, "name": $name, "description": $description, "fromdate": $fromdate, "todate": $todate, "createdate.from": $createdate_from, "createdate.to": $createdate_to, "changedate.from": $changedate_from, "changedate.to": $changedate_to, "group": $group, "filesuffix": $filesuffix, "maxlatitude": $maxlatitude, "minlongitude": $minlongitude, "minlatitude": $minlatitude, "maxlongitude": $maxlongitude, "max": $max, "skip": $skip} | compact), body: null}
 }
 
 # Search API for 'Stockholm File' entry type
@@ -962,7 +984,7 @@ export def "repository-search-type-bio-stockholm list" [
   let full_url = (build-url $base "/repository/search/type/bio_stockholm" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"text": $text, "name": $name, "description": $description, "fromdate": $fromdate, "todate": $todate, "createdate.from": $createdate_from, "createdate.to": $createdate_to, "changedate.from": $changedate_from, "changedate.to": $changedate_to, "group": $group, "filesuffix": $filesuffix, "maxlatitude": $maxlatitude, "minlongitude": $minlongitude, "minlatitude": $minlatitude, "maxlongitude": $maxlongitude, "max": $max, "skip": $skip} | compact), body: null}
 }
 
 # Search API for 'Taxonomic Entry' entry type
@@ -1008,7 +1030,7 @@ export def "repository-search-type-bio-taxonomy list" [
   let full_url = (build-url $base "/repository/search/type/bio_taxonomy" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"text": $text, "name": $name, "description": $description, "fromdate": $fromdate, "todate": $todate, "createdate.from": $createdate_from, "createdate.to": $createdate_to, "changedate.from": $changedate_from, "changedate.to": $changedate_to, "group": $group, "filesuffix": $filesuffix, "maxlatitude": $maxlatitude, "minlongitude": $minlongitude, "minlatitude": $minlatitude, "maxlongitude": $maxlongitude, "max": $max, "skip": $skip, "search.bio_taxonomy.rank": $search_bio_taxonomy_rank, "search.bio_taxonomy.embl_code": $search_bio_taxonomy_embl_code, "search.bio_taxonomy.division": $search_bio_taxonomy_division, "search.bio_taxonomy.inherited_div": $search_bio_taxonomy_inherited_div, "search.bio_taxonomy.aliases": $search_bio_taxonomy_aliases} | compact), body: null}
 }
 
 # Search API for 'Weblog Entry' entry type
@@ -1050,7 +1072,7 @@ export def "repository-search-type-blogentry list" [
   let full_url = (build-url $base "/repository/search/type/blogentry" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"text": $text, "name": $name, "description": $description, "fromdate": $fromdate, "todate": $todate, "createdate.from": $createdate_from, "createdate.to": $createdate_to, "changedate.from": $changedate_from, "changedate.to": $changedate_to, "group": $group, "filesuffix": $filesuffix, "maxlatitude": $maxlatitude, "minlongitude": $minlongitude, "minlatitude": $minlatitude, "maxlongitude": $maxlongitude, "max": $max, "skip": $skip, "search.blogentry.blogtext": $search_blogentry_blogtext} | compact), body: null}
 }
 
 # Search API for 'Boulder Rental Housing' entry type
@@ -1111,7 +1133,7 @@ export def "repository-search-type-bolder-rental-housing list" [
   let full_url = (build-url $base "/repository/search/type/bolder_rental_housing" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"text": $text, "name": $name, "description": $description, "fromdate": $fromdate, "todate": $todate, "createdate.from": $createdate_from, "createdate.to": $createdate_to, "changedate.from": $changedate_from, "changedate.to": $changedate_to, "group": $group, "filesuffix": $filesuffix, "maxlatitude": $maxlatitude, "minlongitude": $minlongitude, "minlatitude": $minlatitude, "maxlongitude": $maxlongitude, "max": $max, "skip": $skip, "search.db_bolder_rental_housing.propaddr1": $search_db_bolder_rental_housing_propaddr1, "search.db_bolder_rental_housing.rentaltype": $search_db_bolder_rental_housing_rentaltype, "search.db_bolder_rental_housing.bldgtype": $search_db_bolder_rental_housing_bldgtype, "search.db_bolder_rental_housing.dwellunits": $search_db_bolder_rental_housing_dwellunits, "search.db_bolder_rental_housing.roomunits": $search_db_bolder_rental_housing_roomunits, "search.db_bolder_rental_housing.neighbrhd": $search_db_bolder_rental_housing_neighbrhd, "search.db_bolder_rental_housing.complexnm": $search_db_bolder_rental_housing_complexnm, "search.db_bolder_rental_housing.name": $search_db_bolder_rental_housing_name, "search.db_bolder_rental_housing.persontype": $search_db_bolder_rental_housing_persontype, "search.db_bolder_rental_housing.company": $search_db_bolder_rental_housing_company, "search.db_bolder_rental_housing.engcompl": $search_db_bolder_rental_housing_engcompl, "search.db_bolder_rental_housing.licenseexp": $search_db_bolder_rental_housing_licenseexp, "search.db_bolder_rental_housing.licensenum": $search_db_bolder_rental_housing_licensenum, "search.db_bolder_rental_housing.ppl1_coname": $search_db_bolder_rental_housing_ppl1_coname, "search.db_bolder_rental_housing.person_1": $search_db_bolder_rental_housing_person_1, "search.db_bolder_rental_housing.ppl1_role": $search_db_bolder_rental_housing_ppl1_role, "search.db_bolder_rental_housing.ppl2_coname": $search_db_bolder_rental_housing_ppl2_coname, "search.db_bolder_rental_housing.person_2": $search_db_bolder_rental_housing_person_2, "search.db_bolder_rental_housing.ppl2_role": $search_db_bolder_rental_housing_ppl2_role, "search.db_bolder_rental_housing.location": $search_db_bolder_rental_housing_location} | compact), body: null}
 }
 
 # Search API for 'Bookmarks' entry type
@@ -1156,7 +1178,7 @@ export def "repository-search-type-bookmarks list" [
   let full_url = (build-url $base "/repository/search/type/bookmarks" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"text": $text, "name": $name, "description": $description, "fromdate": $fromdate, "todate": $todate, "createdate.from": $createdate_from, "createdate.to": $createdate_to, "changedate.from": $changedate_from, "changedate.to": $changedate_to, "group": $group, "filesuffix": $filesuffix, "maxlatitude": $maxlatitude, "minlongitude": $minlongitude, "minlatitude": $minlatitude, "maxlongitude": $maxlongitude, "max": $max, "skip": $skip, "search.db_bookmarks.title": $search_db_bookmarks_title, "search.db_bookmarks.url": $search_db_bookmarks_url, "search.db_bookmarks.category": $search_db_bookmarks_category, "search.db_bookmarks.date": $search_db_bookmarks_date} | compact), body: null}
 }
 
 # Search API for 'Boston Crime' entry type
@@ -1209,7 +1231,7 @@ export def "repository-search-type-boston-crime list" [
   let full_url = (build-url $base "/repository/search/type/boston_crime" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"text": $text, "name": $name, "description": $description, "fromdate": $fromdate, "todate": $todate, "createdate.from": $createdate_from, "createdate.to": $createdate_to, "changedate.from": $changedate_from, "changedate.to": $changedate_to, "group": $group, "filesuffix": $filesuffix, "maxlatitude": $maxlatitude, "minlongitude": $minlongitude, "minlatitude": $minlatitude, "maxlongitude": $maxlongitude, "max": $max, "skip": $skip, "search.db_boston_crime.offense": $search_db_boston_crime_offense, "search.db_boston_crime.offense_code_group": $search_db_boston_crime_offense_code_group, "search.db_boston_crime.offense_description": $search_db_boston_crime_offense_description, "search.db_boston_crime.district": $search_db_boston_crime_district, "search.db_boston_crime.reporting_area": $search_db_boston_crime_reporting_area, "search.db_boston_crime.shooting": $search_db_boston_crime_shooting, "search.db_boston_crime.year": $search_db_boston_crime_year, "search.db_boston_crime.month": $search_db_boston_crime_month, "search.db_boston_crime.day_of_week": $search_db_boston_crime_day_of_week, "search.db_boston_crime.hour": $search_db_boston_crime_hour, "search.db_boston_crime.street": $search_db_boston_crime_street, "search.db_boston_crime.location": $search_db_boston_crime_location} | compact), body: null}
 }
 
 # Search API for 'Boulder 2017 Election Contributions' entry type
@@ -1264,7 +1286,7 @@ export def "repository-search-type-boulder-2017-election-contributions list" [
   let full_url = (build-url $base "/repository/search/type/boulder_2017_election_contributions" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"text": $text, "name": $name, "description": $description, "fromdate": $fromdate, "todate": $todate, "createdate.from": $createdate_from, "createdate.to": $createdate_to, "changedate.from": $changedate_from, "changedate.to": $changedate_to, "group": $group, "filesuffix": $filesuffix, "maxlatitude": $maxlatitude, "minlongitude": $minlongitude, "minlatitude": $minlatitude, "maxlongitude": $maxlongitude, "max": $max, "skip": $skip, "search.db_boulder_2017_election_contributions.committee": $search_db_boulder_2017_election_contributions_committee, "search.db_boulder_2017_election_contributions.last_name": $search_db_boulder_2017_election_contributions_last_name, "search.db_boulder_2017_election_contributions.first_name": $search_db_boulder_2017_election_contributions_first_name, "search.db_boulder_2017_election_contributions.street": $search_db_boulder_2017_election_contributions_street, "search.db_boulder_2017_election_contributions.city": $search_db_boulder_2017_election_contributions_city, "search.db_boulder_2017_election_contributions.state": $search_db_boulder_2017_election_contributions_state, "search.db_boulder_2017_election_contributions.zip": $search_db_boulder_2017_election_contributions_zip, "search.db_boulder_2017_election_contributions.contribution_type": $search_db_boulder_2017_election_contributions_contribution_type, "search.db_boulder_2017_election_contributions.from_candidate": $search_db_boulder_2017_election_contributions_from_candidate, "search.db_boulder_2017_election_contributions.date": $search_db_boulder_2017_election_contributions_date, "search.db_boulder_2017_election_contributions.amount": $search_db_boulder_2017_election_contributions_amount, "search.db_boulder_2017_election_contributions.match_amount": $search_db_boulder_2017_election_contributions_match_amount, "search.db_boulder_2017_election_contributions.ytd_amount": $search_db_boulder_2017_election_contributions_ytd_amount, "search.db_boulder_2017_election_contributions.location": $search_db_boulder_2017_election_contributions_location} | compact), body: null}
 }
 
 # Search API for 'Boulder Campaign Contributions' entry type
@@ -1324,7 +1346,7 @@ export def "repository-search-type-boulder-campaign-contributions list" [
   let full_url = (build-url $base "/repository/search/type/boulder_campaign_contributions" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"text": $text, "name": $name, "description": $description, "fromdate": $fromdate, "todate": $todate, "createdate.from": $createdate_from, "createdate.to": $createdate_to, "changedate.from": $changedate_from, "changedate.to": $changedate_to, "group": $group, "filesuffix": $filesuffix, "maxlatitude": $maxlatitude, "minlongitude": $minlongitude, "minlatitude": $minlatitude, "maxlongitude": $maxlongitude, "max": $max, "skip": $skip, "search.db_boulder_campaign_contributions.committee": $search_db_boulder_campaign_contributions_committee, "search.db_boulder_campaign_contributions.type": $search_db_boulder_campaign_contributions_type, "search.db_boulder_campaign_contributions.committee_num": $search_db_boulder_campaign_contributions_committee_num, "search.db_boulder_campaign_contributions.candidate": $search_db_boulder_campaign_contributions_candidate, "search.db_boulder_campaign_contributions.filing_date": $search_db_boulder_campaign_contributions_filing_date, "search.db_boulder_campaign_contributions.amended_date": $search_db_boulder_campaign_contributions_amended_date, "search.db_boulder_campaign_contributions.official_filing": $search_db_boulder_campaign_contributions_official_filing, "search.db_boulder_campaign_contributions.transaction_date": $search_db_boulder_campaign_contributions_transaction_date, "search.db_boulder_campaign_contributions.last_name": $search_db_boulder_campaign_contributions_last_name, "search.db_boulder_campaign_contributions.first_name": $search_db_boulder_campaign_contributions_first_name, "search.db_boulder_campaign_contributions.street": $search_db_boulder_campaign_contributions_street, "search.db_boulder_campaign_contributions.city": $search_db_boulder_campaign_contributions_city, "search.db_boulder_campaign_contributions.state": $search_db_boulder_campaign_contributions_state, "search.db_boulder_campaign_contributions.zip": $search_db_boulder_campaign_contributions_zip, "search.db_boulder_campaign_contributions.contribution": $search_db_boulder_campaign_contributions_contribution, "search.db_boulder_campaign_contributions.contribution_type": $search_db_boulder_campaign_contributions_contribution_type, "search.db_boulder_campaign_contributions.anonymous": $search_db_boulder_campaign_contributions_anonymous, "search.db_boulder_campaign_contributions.from_candidate": $search_db_boulder_campaign_contributions_from_candidate, "search.db_boulder_campaign_contributions.match": $search_db_boulder_campaign_contributions_match} | compact), body: null}
 }
 
 # Search API for 'Boulder Consulting Services Database' entry type
@@ -1376,7 +1398,7 @@ export def "repository-search-type-boulder-consulting-services list" [
   let full_url = (build-url $base "/repository/search/type/boulder_consulting_services" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"text": $text, "name": $name, "description": $description, "fromdate": $fromdate, "todate": $todate, "createdate.from": $createdate_from, "createdate.to": $createdate_to, "changedate.from": $changedate_from, "changedate.to": $changedate_to, "group": $group, "filesuffix": $filesuffix, "maxlatitude": $maxlatitude, "minlongitude": $minlongitude, "minlatitude": $minlatitude, "maxlongitude": $maxlongitude, "max": $max, "skip": $skip, "search.db_boulder_consulting_services.fund": $search_db_boulder_consulting_services_fund, "search.db_boulder_consulting_services.department": $search_db_boulder_consulting_services_department, "search.db_boulder_consulting_services.organization": $search_db_boulder_consulting_services_organization, "search.db_boulder_consulting_services.object": $search_db_boulder_consulting_services_object, "search.db_boulder_consulting_services.project": $search_db_boulder_consulting_services_project, "search.db_boulder_consulting_services.account_description": $search_db_boulder_consulting_services_account_description, "search.db_boulder_consulting_services.date": $search_db_boulder_consulting_services_date, "search.db_boulder_consulting_services.amount": $search_db_boulder_consulting_services_amount, "search.db_boulder_consulting_services.purchase_order": $search_db_boulder_consulting_services_purchase_order, "search.db_boulder_consulting_services.vendor_name": $search_db_boulder_consulting_services_vendor_name, "search.db_boulder_consulting_services.comment": $search_db_boulder_consulting_services_comment} | compact), body: null}
 }
 
 # Search API for 'Boulder County Voter Details' entry type
@@ -1436,7 +1458,7 @@ export def "repository-search-type-boulder-county-voter-details list" [
   let full_url = (build-url $base "/repository/search/type/boulder_county_voter_details" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"text": $text, "name": $name, "description": $description, "fromdate": $fromdate, "todate": $todate, "createdate.from": $createdate_from, "createdate.to": $createdate_to, "changedate.from": $changedate_from, "changedate.to": $changedate_to, "group": $group, "filesuffix": $filesuffix, "maxlatitude": $maxlatitude, "minlongitude": $minlongitude, "minlatitude": $minlatitude, "maxlongitude": $maxlongitude, "max": $max, "skip": $skip, "search.db_boulder_county_voter_details.first_name": $search_db_boulder_county_voter_details_first_name, "search.db_boulder_county_voter_details.last_name": $search_db_boulder_county_voter_details_last_name, "search.db_boulder_county_voter_details.registration_date": $search_db_boulder_county_voter_details_registration_date, "search.db_boulder_county_voter_details.last_updated_date": $search_db_boulder_county_voter_details_last_updated_date, "search.db_boulder_county_voter_details.residential_address": $search_db_boulder_county_voter_details_residential_address, "search.db_boulder_county_voter_details.residential_city": $search_db_boulder_county_voter_details_residential_city, "search.db_boulder_county_voter_details.mailing_zip_code": $search_db_boulder_county_voter_details_mailing_zip_code, "search.db_boulder_county_voter_details.voter_status": $search_db_boulder_county_voter_details_voter_status, "search.db_boulder_county_voter_details.party": $search_db_boulder_county_voter_details_party, "search.db_boulder_county_voter_details.gender": $search_db_boulder_county_voter_details_gender, "search.db_boulder_county_voter_details.birth_year": $search_db_boulder_county_voter_details_birth_year, "search.db_boulder_county_voter_details.precinct_code": $search_db_boulder_county_voter_details_precinct_code, "search.db_boulder_county_voter_details.congressional": $search_db_boulder_county_voter_details_congressional, "search.db_boulder_county_voter_details.state_senate": $search_db_boulder_county_voter_details_state_senate, "search.db_boulder_county_voter_details.state_house": $search_db_boulder_county_voter_details_state_house, "search.db_boulder_county_voter_details.municipality": $search_db_boulder_county_voter_details_municipality, "search.db_boulder_county_voter_details.city_ward_district": $search_db_boulder_county_voter_details_city_ward_district, "search.db_boulder_county_voter_details.school_district": $search_db_boulder_county_voter_details_school_district, "search.db_boulder_county_voter_details.location": $search_db_boulder_county_voter_details_location} | compact), body: null}
 }
 
 # Search API for 'Boulder Crime Reports' entry type
@@ -1481,7 +1503,7 @@ export def "repository-search-type-boulder-crimes list" [
   let full_url = (build-url $base "/repository/search/type/boulder_crimes" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"text": $text, "name": $name, "description": $description, "fromdate": $fromdate, "todate": $todate, "createdate.from": $createdate_from, "createdate.to": $createdate_to, "changedate.from": $changedate_from, "changedate.to": $changedate_to, "group": $group, "filesuffix": $filesuffix, "maxlatitude": $maxlatitude, "minlongitude": $minlongitude, "minlatitude": $minlatitude, "maxlongitude": $maxlongitude, "max": $max, "skip": $skip, "search.db_boulder_crimes.offense": $search_db_boulder_crimes_offense, "search.db_boulder_crimes.reportdate": $search_db_boulder_crimes_reportdate, "search.db_boulder_crimes.blockadd": $search_db_boulder_crimes_blockadd, "search.db_boulder_crimes.location": $search_db_boulder_crimes_location} | compact), body: null}
 }
 
 # Search API for 'Boulder Council Emails' entry type
@@ -1528,7 +1550,7 @@ export def "repository-search-type-boulder-emails list" [
   let full_url = (build-url $base "/repository/search/type/boulder_emails" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"text": $text, "name": $name, "description": $description, "fromdate": $fromdate, "todate": $todate, "createdate.from": $createdate_from, "createdate.to": $createdate_to, "changedate.from": $changedate_from, "changedate.to": $changedate_to, "group": $group, "filesuffix": $filesuffix, "maxlatitude": $maxlatitude, "minlongitude": $minlongitude, "minlatitude": $minlatitude, "maxlongitude": $maxlongitude, "max": $max, "skip": $skip, "search.db_boulder_emails.sent_from": $search_db_boulder_emails_sent_from, "search.db_boulder_emails.sent_to": $search_db_boulder_emails_sent_to, "search.db_boulder_emails.sent_cc": $search_db_boulder_emails_sent_cc, "search.db_boulder_emails.received_date": $search_db_boulder_emails_received_date, "search.db_boulder_emails.email_subject": $search_db_boulder_emails_email_subject, "search.db_boulder_emails.plain_text_body": $search_db_boulder_emails_plain_text_body} | compact), body: null}
 }
 
 # Search API for 'Boulder Employee Salaries' entry type
@@ -1577,7 +1599,7 @@ export def "repository-search-type-boulder-employee-salaries list" [
   let full_url = (build-url $base "/repository/search/type/boulder_employee_salaries" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"text": $text, "name": $name, "description": $description, "fromdate": $fromdate, "todate": $todate, "createdate.from": $createdate_from, "createdate.to": $createdate_to, "changedate.from": $changedate_from, "changedate.to": $changedate_to, "group": $group, "filesuffix": $filesuffix, "maxlatitude": $maxlatitude, "minlongitude": $minlongitude, "minlatitude": $minlatitude, "maxlongitude": $maxlongitude, "max": $max, "skip": $skip, "search.db_boulder_employee_salaries.position_description": $search_db_boulder_employee_salaries_position_description, "search.db_boulder_employee_salaries.department": $search_db_boulder_employee_salaries_department, "search.db_boulder_employee_salaries.employee_flsa_exempt_y_n": $search_db_boulder_employee_salaries_employee_flsa_exempt_y_n, "search.db_boulder_employee_salaries.pay_range_min": $search_db_boulder_employee_salaries_pay_range_min, "search.db_boulder_employee_salaries.pay_range_max": $search_db_boulder_employee_salaries_pay_range_max, "search.db_boulder_employee_salaries.employee_hourly_pay_rate": $search_db_boulder_employee_salaries_employee_hourly_pay_rate, "search.db_boulder_employee_salaries.employee_fte_in_this_position": $search_db_boulder_employee_salaries_employee_fte_in_this_position, "search.db_boulder_employee_salaries.employee_annual_base_salary": $search_db_boulder_employee_salaries_employee_annual_base_salary} | compact), body: null}
 }
 
 # Search API for 'Calendar' entry type
@@ -1618,7 +1640,7 @@ export def "repository-search-type-calendar list" [
   let full_url = (build-url $base "/repository/search/type/calendar" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"text": $text, "name": $name, "description": $description, "fromdate": $fromdate, "todate": $todate, "createdate.from": $createdate_from, "createdate.to": $createdate_to, "changedate.from": $changedate_from, "changedate.to": $changedate_to, "group": $group, "filesuffix": $filesuffix, "maxlatitude": $maxlatitude, "minlongitude": $minlongitude, "minlatitude": $minlatitude, "maxlongitude": $maxlongitude, "max": $max, "skip": $skip} | compact), body: null}
 }
 
 # Search API for 'Campaign Donors' entry type
@@ -1671,7 +1693,7 @@ export def "repository-search-type-campaign-donors list" [
   let full_url = (build-url $base "/repository/search/type/campaign_donors" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"text": $text, "name": $name, "description": $description, "fromdate": $fromdate, "todate": $todate, "createdate.from": $createdate_from, "createdate.to": $createdate_to, "changedate.from": $changedate_from, "changedate.to": $changedate_to, "group": $group, "filesuffix": $filesuffix, "maxlatitude": $maxlatitude, "minlongitude": $minlongitude, "minlatitude": $minlatitude, "maxlongitude": $maxlongitude, "max": $max, "skip": $skip, "search.db_campaign_donors.committee": $search_db_campaign_donors_committee, "search.db_campaign_donors.amount": $search_db_campaign_donors_amount, "search.db_campaign_donors.party": $search_db_campaign_donors_party, "search.db_campaign_donors.donor": $search_db_campaign_donors_donor, "search.db_campaign_donors.gender": $search_db_campaign_donors_gender, "search.db_campaign_donors.city": $search_db_campaign_donors_city, "search.db_campaign_donors.state": $search_db_campaign_donors_state, "search.db_campaign_donors.zip_code": $search_db_campaign_donors_zip_code, "search.db_campaign_donors.employer": $search_db_campaign_donors_employer, "search.db_campaign_donors.occupation": $search_db_campaign_donors_occupation, "search.db_campaign_donors.date": $search_db_campaign_donors_date, "search.db_campaign_donors.location": $search_db_campaign_donors_location} | compact), body: null}
 }
 
 # Search API for 'Campaign Expenditures' entry type
@@ -1723,7 +1745,7 @@ export def "repository-search-type-campaign-expenditures list" [
   let full_url = (build-url $base "/repository/search/type/campaign_expenditures" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"text": $text, "name": $name, "description": $description, "fromdate": $fromdate, "todate": $todate, "createdate.from": $createdate_from, "createdate.to": $createdate_to, "changedate.from": $changedate_from, "changedate.to": $changedate_to, "group": $group, "filesuffix": $filesuffix, "maxlatitude": $maxlatitude, "minlongitude": $minlongitude, "minlatitude": $minlatitude, "maxlongitude": $maxlongitude, "max": $max, "skip": $skip, "search.db_campaign_expenditures.committee": $search_db_campaign_expenditures_committee, "search.db_campaign_expenditures.amount": $search_db_campaign_expenditures_amount, "search.db_campaign_expenditures.party": $search_db_campaign_expenditures_party, "search.db_campaign_expenditures.recipient": $search_db_campaign_expenditures_recipient, "search.db_campaign_expenditures.city": $search_db_campaign_expenditures_city, "search.db_campaign_expenditures.state": $search_db_campaign_expenditures_state, "search.db_campaign_expenditures.zip_code": $search_db_campaign_expenditures_zip_code, "search.db_campaign_expenditures.transaction_date": $search_db_campaign_expenditures_transaction_date, "search.db_campaign_expenditures.purpose": $search_db_campaign_expenditures_purpose, "search.db_campaign_expenditures.memo_text": $search_db_campaign_expenditures_memo_text, "search.db_campaign_expenditures.location": $search_db_campaign_expenditures_location} | compact), body: null}
 }
 
 # Search API for 'Catalog Link' entry type
@@ -1764,7 +1786,7 @@ export def "repository-search-type-cataloglink list" [
   let full_url = (build-url $base "/repository/search/type/cataloglink" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"text": $text, "name": $name, "description": $description, "fromdate": $fromdate, "todate": $todate, "createdate.from": $createdate_from, "createdate.to": $createdate_to, "changedate.from": $changedate_from, "changedate.to": $changedate_to, "group": $group, "filesuffix": $filesuffix, "maxlatitude": $maxlatitude, "minlongitude": $minlongitude, "minlatitude": $minlatitude, "maxlongitude": $maxlongitude, "max": $max, "skip": $skip} | compact), body: null}
 }
 
 # Search API for 'Gridded Data File' entry type
@@ -1805,7 +1827,7 @@ export def "repository-search-type-cdm-grid list" [
   let full_url = (build-url $base "/repository/search/type/cdm_grid" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"text": $text, "name": $name, "description": $description, "fromdate": $fromdate, "todate": $todate, "createdate.from": $createdate_from, "createdate.to": $createdate_to, "changedate.from": $changedate_from, "changedate.to": $changedate_to, "group": $group, "filesuffix": $filesuffix, "maxlatitude": $maxlatitude, "minlongitude": $minlongitude, "minlatitude": $minlatitude, "maxlongitude": $maxlongitude, "max": $max, "skip": $skip} | compact), body: null}
 }
 
 # Search API for 'Chat Room' entry type
@@ -1846,7 +1868,7 @@ export def "repository-search-type-chatroom list" [
   let full_url = (build-url $base "/repository/search/type/chatroom" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"text": $text, "name": $name, "description": $description, "fromdate": $fromdate, "todate": $todate, "createdate.from": $createdate_from, "createdate.to": $createdate_to, "changedate.from": $changedate_from, "changedate.to": $changedate_to, "group": $group, "filesuffix": $filesuffix, "maxlatitude": $maxlatitude, "minlongitude": $minlongitude, "minlatitude": $minlatitude, "maxlongitude": $maxlongitude, "max": $max, "skip": $skip} | compact), body: null}
 }
 
 # Search API for 'Colorado Water Rights' entry type
@@ -1904,7 +1926,7 @@ export def "repository-search-type-colorado-water-rights list" [
   let full_url = (build-url $base "/repository/search/type/colorado_water_rights" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"text": $text, "name": $name, "description": $description, "fromdate": $fromdate, "todate": $todate, "createdate.from": $createdate_from, "createdate.to": $createdate_to, "changedate.from": $changedate_from, "changedate.to": $changedate_to, "group": $group, "filesuffix": $filesuffix, "maxlatitude": $maxlatitude, "minlongitude": $minlongitude, "minlatitude": $minlatitude, "maxlongitude": $maxlongitude, "max": $max, "skip": $skip, "search.db_colorado_water_rights.structure_name": $search_db_colorado_water_rights_structure_name, "search.db_colorado_water_rights.structure_type": $search_db_colorado_water_rights_structure_type, "search.db_colorado_water_rights.water_source": $search_db_colorado_water_rights_water_source, "search.db_colorado_water_rights.county": $search_db_colorado_water_rights_county, "search.db_colorado_water_rights.adjudication_date": $search_db_colorado_water_rights_adjudication_date, "search.db_colorado_water_rights.appropriation_date": $search_db_colorado_water_rights_appropriation_date, "search.db_colorado_water_rights.priority_no": $search_db_colorado_water_rights_priority_no, "search.db_colorado_water_rights.decreed_uses": $search_db_colorado_water_rights_decreed_uses, "search.db_colorado_water_rights.net_absolute": $search_db_colorado_water_rights_net_absolute, "search.db_colorado_water_rights.net_conditional": $search_db_colorado_water_rights_net_conditional, "search.db_colorado_water_rights.net_apex_absolute": $search_db_colorado_water_rights_net_apex_absolute, "search.db_colorado_water_rights.net_apex_conditional": $search_db_colorado_water_rights_net_apex_conditional, "search.db_colorado_water_rights.decreed_units": $search_db_colorado_water_rights_decreed_units, "search.db_colorado_water_rights.seasonal_limits": $search_db_colorado_water_rights_seasonal_limits, "search.db_colorado_water_rights.comments": $search_db_colorado_water_rights_comments, "search.db_colorado_water_rights.more_information": $search_db_colorado_water_rights_more_information, "search.db_colorado_water_rights.location": $search_db_colorado_water_rights_location} | compact), body: null}
 }
 
 # Search API for 'Committee Donations' entry type
@@ -1955,7 +1977,7 @@ export def "repository-search-type-committee-donations list" [
   let full_url = (build-url $base "/repository/search/type/committee_donations" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"text": $text, "name": $name, "description": $description, "fromdate": $fromdate, "todate": $todate, "createdate.from": $createdate_from, "createdate.to": $createdate_to, "changedate.from": $changedate_from, "changedate.to": $changedate_to, "group": $group, "filesuffix": $filesuffix, "maxlatitude": $maxlatitude, "minlongitude": $minlongitude, "minlatitude": $minlatitude, "maxlongitude": $maxlongitude, "max": $max, "skip": $skip, "search.db_committee_donations.committee": $search_db_committee_donations_committee, "search.db_committee_donations.amount": $search_db_committee_donations_amount, "search.db_committee_donations.recipient": $search_db_committee_donations_recipient, "search.db_committee_donations.date": $search_db_committee_donations_date, "search.db_committee_donations.city": $search_db_committee_donations_city, "search.db_committee_donations.state": $search_db_committee_donations_state, "search.db_committee_donations.zip_code": $search_db_committee_donations_zip_code, "search.db_committee_donations.employer": $search_db_committee_donations_employer, "search.db_committee_donations.occupation": $search_db_committee_donations_occupation, "search.db_committee_donations.location": $search_db_committee_donations_location} | compact), body: null}
 }
 
 # Search API for 'Data Hub' entry type
@@ -1996,7 +2018,7 @@ export def "repository-search-type-community-datahub list" [
   let full_url = (build-url $base "/repository/search/type/community_datahub" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"text": $text, "name": $name, "description": $description, "fromdate": $fromdate, "todate": $todate, "createdate.from": $createdate_from, "createdate.to": $createdate_to, "changedate.from": $changedate_from, "changedate.to": $changedate_to, "group": $group, "filesuffix": $filesuffix, "maxlatitude": $maxlatitude, "minlongitude": $minlongitude, "minlatitude": $minlatitude, "maxlongitude": $maxlongitude, "max": $max, "skip": $skip} | compact), body: null}
 }
 
 # Search API for 'Facility' entry type
@@ -2042,7 +2064,7 @@ export def "repository-search-type-community-resource list" [
   let full_url = (build-url $base "/repository/search/type/community_resource" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"text": $text, "name": $name, "description": $description, "fromdate": $fromdate, "todate": $todate, "createdate.from": $createdate_from, "createdate.to": $createdate_to, "changedate.from": $changedate_from, "changedate.to": $changedate_to, "group": $group, "filesuffix": $filesuffix, "maxlatitude": $maxlatitude, "minlongitude": $minlongitude, "minlatitude": $minlatitude, "maxlongitude": $maxlongitude, "max": $max, "skip": $skip, "search.community_resource.resource_type": $search_community_resource_resource_type, "search.community_resource.address": $search_community_resource_address, "search.community_resource.city": $search_community_resource_city, "search.community_resource.state": $search_community_resource_state, "search.community_resource.zipcode": $search_community_resource_zipcode} | compact), body: null}
 }
 
 # Search API for 'Construction Permits' entry type
@@ -2113,7 +2135,7 @@ export def "repository-search-type-construction-permits list" [
   let full_url = (build-url $base "/repository/search/type/construction_permits" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"text": $text, "name": $name, "description": $description, "fromdate": $fromdate, "todate": $todate, "createdate.from": $createdate_from, "createdate.to": $createdate_to, "changedate.from": $changedate_from, "changedate.to": $changedate_to, "group": $group, "filesuffix": $filesuffix, "maxlatitude": $maxlatitude, "minlongitude": $minlongitude, "minlatitude": $minlatitude, "maxlongitude": $maxlongitude, "max": $max, "skip": $skip, "search.db_construction_permits.address": $search_db_construction_permits_address, "search.db_construction_permits.case_status": $search_db_construction_permits_case_status, "search.db_construction_permits.category": $search_db_construction_permits_category, "search.db_construction_permits.building_uses_and_work_scopes": $search_db_construction_permits_building_uses_and_work_scopes, "search.db_construction_permits.permit_types": $search_db_construction_permits_permit_types, "search.db_construction_permits.total_project_value": $search_db_construction_permits_total_project_value, "search.db_construction_permits.total_subpermit_value": $search_db_construction_permits_total_subpermit_value, "search.db_construction_permits.applied": $search_db_construction_permits_applied, "search.db_construction_permits.approved": $search_db_construction_permits_approved, "search.db_construction_permits.issued": $search_db_construction_permits_issued, "search.db_construction_permits.co_date": $search_db_construction_permits_co_date, "search.db_construction_permits.completion_date": $search_db_construction_permits_completion_date, "search.db_construction_permits.new_res_unit": $search_db_construction_permits_new_res_unit, "search.db_construction_permits.existing_res_unit": $search_db_construction_permits_existing_res_unit, "search.db_construction_permits.affordable_hsg_unit": $search_db_construction_permits_affordable_hsg_unit, "search.db_construction_permits.new_sf": $search_db_construction_permits_new_sf, "search.db_construction_permits.remodel_sf": $search_db_construction_permits_remodel_sf, "search.db_construction_permits.narrative_description": $search_db_construction_permits_narrative_description, "search.db_construction_permits.primary_first_name": $search_db_construction_permits_primary_first_name, "search.db_construction_permits.primary_last_name": $search_db_construction_permits_primary_last_name, "search.db_construction_permits.primary_company": $search_db_construction_permits_primary_company, "search.db_construction_permits.contractor_first_name": $search_db_construction_permits_contractor_first_name, "search.db_construction_permits.contractor_last_name": $search_db_construction_permits_contractor_last_name, "search.db_construction_permits.contractor_company": $search_db_construction_permits_contractor_company, "search.db_construction_permits.owner1_first_name": $search_db_construction_permits_owner1_first_name, "search.db_construction_permits.owner1_last_name": $search_db_construction_permits_owner1_last_name, "search.db_construction_permits.owner1_company": $search_db_construction_permits_owner1_company, "search.db_construction_permits.owner2_first_name": $search_db_construction_permits_owner2_first_name, "search.db_construction_permits.owner2_last_name": $search_db_construction_permits_owner2_last_name, "search.db_construction_permits.owner2_company": $search_db_construction_permits_owner2_company} | compact), body: null}
 }
 
 # Search API for 'Contact List' entry type
@@ -2157,7 +2179,7 @@ export def "repository-search-type-contact list" [
   let full_url = (build-url $base "/repository/search/type/contact" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"text": $text, "name": $name, "description": $description, "fromdate": $fromdate, "todate": $todate, "createdate.from": $createdate_from, "createdate.to": $createdate_to, "changedate.from": $changedate_from, "changedate.to": $changedate_to, "group": $group, "filesuffix": $filesuffix, "maxlatitude": $maxlatitude, "minlongitude": $minlongitude, "minlatitude": $minlatitude, "maxlongitude": $maxlongitude, "max": $max, "skip": $skip, "search.db_contact.name": $search_db_contact_name, "search.db_contact.institution": $search_db_contact_institution, "search.db_contact.email": $search_db_contact_email} | compact), body: null}
 }
 
 # Search API for 'Colorado Health Indicators' entry type
@@ -2205,7 +2227,7 @@ export def "repository-search-type-db-co-indicators list" [
   let full_url = (build-url $base "/repository/search/type/db_co_indicators" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"text": $text, "name": $name, "description": $description, "fromdate": $fromdate, "todate": $todate, "createdate.from": $createdate_from, "createdate.to": $createdate_to, "changedate.from": $changedate_from, "changedate.to": $changedate_to, "group": $group, "filesuffix": $filesuffix, "maxlatitude": $maxlatitude, "minlongitude": $minlongitude, "minlatitude": $minlatitude, "maxlongitude": $maxlongitude, "max": $max, "skip": $skip, "search.db_db_co_indicators.geo_name": $search_db_db_co_indicators_geo_name, "search.db_db_co_indicators.domain": $search_db_db_co_indicators_domain, "search.db_db_co_indicators.subdomain": $search_db_db_co_indicators_subdomain, "search.db_db_co_indicators.indicatorName": $search_db_db_co_indicators_indicator_name, "search.db_db_co_indicators.description": $search_db_db_co_indicators_description, "search.db_db_co_indicators.measure": $search_db_db_co_indicators_measure, "search.db_db_co_indicators.location": $search_db_db_co_indicators_location} | compact), body: null}
 }
 
 # Search API for 'Landsat Satellite Data' entry type
@@ -2252,7 +2274,7 @@ export def "repository-search-type-earth-satellite-landsat list" [
   let full_url = (build-url $base "/repository/search/type/earth_satellite_landsat" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"text": $text, "name": $name, "description": $description, "fromdate": $fromdate, "todate": $todate, "createdate.from": $createdate_from, "createdate.to": $createdate_to, "changedate.from": $changedate_from, "changedate.to": $changedate_to, "group": $group, "filesuffix": $filesuffix, "maxlatitude": $maxlatitude, "minlongitude": $minlongitude, "minlatitude": $minlatitude, "maxlongitude": $maxlongitude, "max": $max, "skip": $skip, "search.earth_satellite_landsat.sensor": $search_earth_satellite_landsat_sensor, "search.earth_satellite_landsat.satellite": $search_earth_satellite_landsat_satellite, "search.earth_satellite_landsat.wrs_path_number": $search_earth_satellite_landsat_wrs_path_number, "search.earth_satellite_landsat.wrs_row_number": $search_earth_satellite_landsat_wrs_row_number, "search.earth_satellite_landsat.ground_station": $search_earth_satellite_landsat_ground_station, "search.earth_satellite_landsat.archive_version_number": $search_earth_satellite_landsat_archive_version_number} | compact), body: null}
 }
 
 # Search API for 'FAQ' entry type
@@ -2293,7 +2315,7 @@ export def "repository-search-type-faq list" [
   let full_url = (build-url $base "/repository/search/type/faq" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"text": $text, "name": $name, "description": $description, "fromdate": $fromdate, "todate": $todate, "createdate.from": $createdate_from, "createdate.to": $createdate_to, "changedate.from": $changedate_from, "changedate.to": $changedate_to, "group": $group, "filesuffix": $filesuffix, "maxlatitude": $maxlatitude, "minlongitude": $minlongitude, "minlatitude": $minlatitude, "maxlongitude": $maxlongitude, "max": $max, "skip": $skip} | compact), body: null}
 }
 
 # Search API for 'FEC PACs' entry type
@@ -2351,7 +2373,7 @@ export def "repository-search-type-fec-pacs list" [
   let full_url = (build-url $base "/repository/search/type/fec_pacs" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"text": $text, "name": $name, "description": $description, "fromdate": $fromdate, "todate": $todate, "createdate.from": $createdate_from, "createdate.to": $createdate_to, "changedate.from": $changedate_from, "changedate.to": $changedate_to, "group": $group, "filesuffix": $filesuffix, "maxlatitude": $maxlatitude, "minlongitude": $minlongitude, "minlatitude": $minlatitude, "maxlongitude": $maxlongitude, "max": $max, "skip": $skip, "search.db_fec_pacs.committee": $search_db_fec_pacs_committee, "search.db_fec_pacs.total_receipts": $search_db_fec_pacs_total_receipts, "search.db_fec_pacs.beginning_cash": $search_db_fec_pacs_beginning_cash, "search.db_fec_pacs.ending_cash": $search_db_fec_pacs_ending_cash, "search.db_fec_pacs.contributions_from_individuals": $search_db_fec_pacs_contributions_from_individuals, "search.db_fec_pacs.contributions_from_other_committees": $search_db_fec_pacs_contributions_from_other_committees, "search.db_fec_pacs.trans_from_affiliates": $search_db_fec_pacs_trans_from_affiliates, "search.db_fec_pacs.contributions_to_other_committee": $search_db_fec_pacs_contributions_to_other_committee, "search.db_fec_pacs.contributions_from_candidate": $search_db_fec_pacs_contributions_from_candidate, "search.db_fec_pacs.loans_from_candidate": $search_db_fec_pacs_loans_from_candidate, "search.db_fec_pacs.total_loans_received": $search_db_fec_pacs_total_loans_received, "search.db_fec_pacs.total_distributions": $search_db_fec_pacs_total_distributions, "search.db_fec_pacs.transfers_to_affiliates": $search_db_fec_pacs_transfers_to_affiliates, "search.db_fec_pacs.refunds_to_individuals": $search_db_fec_pacs_refunds_to_individuals, "search.db_fec_pacs.refends_to_othercommittees": $search_db_fec_pacs_refends_to_othercommittees, "search.db_fec_pacs.candidate_loan_repayments": $search_db_fec_pacs_candidate_loan_repayments, "search.db_fec_pacs.loan_repayments": $search_db_fec_pacs_loan_repayments} | compact), body: null}
 }
 
 # Search API for 'Candidates' entry type
@@ -2415,7 +2437,7 @@ export def "repository-search-type-feccandidates list" [
   let full_url = (build-url $base "/repository/search/type/feccandidates" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"text": $text, "name": $name, "description": $description, "fromdate": $fromdate, "todate": $todate, "createdate.from": $createdate_from, "createdate.to": $createdate_to, "changedate.from": $changedate_from, "changedate.to": $changedate_to, "group": $group, "filesuffix": $filesuffix, "maxlatitude": $maxlatitude, "minlongitude": $minlongitude, "minlatitude": $minlatitude, "maxlongitude": $maxlongitude, "max": $max, "skip": $skip, "search.db_feccandidates.name": $search_db_feccandidates_name, "search.db_feccandidates.party": $search_db_feccandidates_party, "search.db_feccandidates.state": $search_db_feccandidates_state, "search.db_feccandidates.district": $search_db_feccandidates_district, "search.db_feccandidates.gender": $search_db_feccandidates_gender, "search.db_feccandidates.beginning_cash": $search_db_feccandidates_beginning_cash, "search.db_feccandidates.ending_cash": $search_db_feccandidates_ending_cash, "search.db_feccandidates.total_receipts": $search_db_feccandidates_total_receipts, "search.db_feccandidates.total_indivual_contributions": $search_db_feccandidates_total_indivual_contributions, "search.db_feccandidates.transfers_from_committees": $search_db_feccandidates_transfers_from_committees, "search.db_feccandidates.transfers_to_committees": $search_db_feccandidates_transfers_to_committees, "search.db_feccandidates.total_disbursements": $search_db_feccandidates_total_disbursements, "search.db_feccandidates.contributions_from_candidate": $search_db_feccandidates_contributions_from_candidate, "search.db_feccandidates.loans_from_candidates": $search_db_feccandidates_loans_from_candidates, "search.db_feccandidates.other_loans": $search_db_feccandidates_other_loans, "search.db_feccandidates.candidate_loan_repayments": $search_db_feccandidates_candidate_loan_repayments, "search.db_feccandidates.other_loan_repayments": $search_db_feccandidates_other_loan_repayments, "search.db_feccandidates.debts_owed_by": $search_db_feccandidates_debts_owed_by, "search.db_feccandidates.contributions_from_other_committees": $search_db_feccandidates_contributions_from_other_committees, "search.db_feccandidates.contributions_from_party_committees": $search_db_feccandidates_contributions_from_party_committees, "search.db_feccandidates.coverage_end_date": $search_db_feccandidates_coverage_end_date, "search.db_feccandidates.individual_refunds": $search_db_feccandidates_individual_refunds, "search.db_feccandidates.committee_refunds": $search_db_feccandidates_committee_refunds} | compact), body: null}
 }
 
 # Search API for 'RSS/ATOM Feed' entry type
@@ -2456,7 +2478,7 @@ export def "repository-search-type-feed list" [
   let full_url = (build-url $base "/repository/search/type/feed" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"text": $text, "name": $name, "description": $description, "fromdate": $fromdate, "todate": $todate, "createdate.from": $createdate_from, "createdate.to": $createdate_to, "changedate.from": $changedate_from, "changedate.to": $changedate_to, "group": $group, "filesuffix": $filesuffix, "maxlatitude": $maxlatitude, "minlongitude": $minlongitude, "minlatitude": $minlatitude, "maxlongitude": $maxlongitude, "max": $max, "skip": $skip} | compact), body: null}
 }
 
 # Search API for 'File' entry type
@@ -2497,7 +2519,7 @@ export def "repository-search-type-file list" [
   let full_url = (build-url $base "/repository/search/type/file" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"text": $text, "name": $name, "description": $description, "fromdate": $fromdate, "todate": $todate, "createdate.from": $createdate_from, "createdate.to": $createdate_to, "changedate.from": $changedate_from, "changedate.to": $changedate_to, "group": $group, "filesuffix": $filesuffix, "maxlatitude": $maxlatitude, "minlongitude": $minlongitude, "minlatitude": $minlatitude, "maxlongitude": $maxlongitude, "max": $max, "skip": $skip} | compact), body: null}
 }
 
 # Search API for 'FITS Data File' entry type
@@ -2541,7 +2563,7 @@ export def "repository-search-type-fits-data list" [
   let full_url = (build-url $base "/repository/search/type/fits_data" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"text": $text, "name": $name, "description": $description, "fromdate": $fromdate, "todate": $todate, "createdate.from": $createdate_from, "createdate.to": $createdate_to, "changedate.from": $changedate_from, "changedate.to": $changedate_to, "group": $group, "filesuffix": $filesuffix, "maxlatitude": $maxlatitude, "minlongitude": $minlongitude, "minlatitude": $minlatitude, "maxlongitude": $maxlongitude, "max": $max, "skip": $skip, "search.fits_data.origin": $search_fits_data_origin, "search.fits_data.telescope": $search_fits_data_telescope, "search.fits_data.instrument": $search_fits_data_instrument} | compact), body: null}
 }
 
 # Search API for 'Remote FTP File View' entry type
@@ -2582,7 +2604,7 @@ export def "repository-search-type-ftp list" [
   let full_url = (build-url $base "/repository/search/type/ftp" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"text": $text, "name": $name, "description": $description, "fromdate": $fromdate, "todate": $todate, "createdate.from": $createdate_from, "createdate.to": $createdate_to, "changedate.from": $changedate_from, "changedate.to": $changedate_to, "group": $group, "filesuffix": $filesuffix, "maxlatitude": $maxlatitude, "minlongitude": $minlongitude, "minlatitude": $minlatitude, "maxlongitude": $maxlongitude, "max": $max, "skip": $skip} | compact), body: null}
 }
 
 # Search API for 'Countdown' entry type
@@ -2623,7 +2645,7 @@ export def "repository-search-type-gadgets-countdown list" [
   let full_url = (build-url $base "/repository/search/type/gadgets_countdown" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"text": $text, "name": $name, "description": $description, "fromdate": $fromdate, "todate": $todate, "createdate.from": $createdate_from, "createdate.to": $createdate_to, "changedate.from": $changedate_from, "changedate.to": $changedate_to, "group": $group, "filesuffix": $filesuffix, "maxlatitude": $maxlatitude, "minlongitude": $minlongitude, "minlatitude": $minlatitude, "maxlongitude": $maxlongitude, "max": $max, "skip": $skip} | compact), body: null}
 }
 
 # Search API for 'Stock Ticker' entry type
@@ -2664,7 +2686,7 @@ export def "repository-search-type-gadgets-stock list" [
   let full_url = (build-url $base "/repository/search/type/gadgets_stock" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"text": $text, "name": $name, "description": $description, "fromdate": $fromdate, "todate": $todate, "createdate.from": $createdate_from, "createdate.to": $createdate_to, "changedate.from": $changedate_from, "changedate.to": $changedate_to, "group": $group, "filesuffix": $filesuffix, "maxlatitude": $maxlatitude, "minlongitude": $minlongitude, "minlatitude": $minlatitude, "maxlongitude": $maxlongitude, "max": $max, "skip": $skip} | compact), body: null}
 }
 
 # Search API for 'Weather' entry type
@@ -2705,7 +2727,7 @@ export def "repository-search-type-gadgets-weather list" [
   let full_url = (build-url $base "/repository/search/type/gadgets_weather" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"text": $text, "name": $name, "description": $description, "fromdate": $fromdate, "todate": $todate, "createdate.from": $createdate_from, "createdate.to": $createdate_to, "changedate.from": $changedate_from, "changedate.to": $changedate_to, "group": $group, "filesuffix": $filesuffix, "maxlatitude": $maxlatitude, "minlongitude": $minlongitude, "minlatitude": $minlatitude, "maxlongitude": $maxlongitude, "max": $max, "skip": $skip} | compact), body: null}
 }
 
 # Search API for 'Census Tracts' entry type
@@ -2755,7 +2777,7 @@ export def "repository-search-type-gazeteer-census-tracts list" [
   let full_url = (build-url $base "/repository/search/type/gazeteer_census_tracts" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"text": $text, "name": $name, "description": $description, "fromdate": $fromdate, "todate": $todate, "createdate.from": $createdate_from, "createdate.to": $createdate_to, "changedate.from": $changedate_from, "changedate.to": $changedate_to, "group": $group, "filesuffix": $filesuffix, "maxlatitude": $maxlatitude, "minlongitude": $minlongitude, "minlatitude": $minlatitude, "maxlongitude": $maxlongitude, "max": $max, "skip": $skip, "search.db_gazeteer_census_tracts.state": $search_db_gazeteer_census_tracts_state, "search.db_gazeteer_census_tracts.state_fips": $search_db_gazeteer_census_tracts_state_fips, "search.db_gazeteer_census_tracts.county_name": $search_db_gazeteer_census_tracts_county_name, "search.db_gazeteer_census_tracts.county_fips": $search_db_gazeteer_census_tracts_county_fips, "search.db_gazeteer_census_tracts.census_tract_id": $search_db_gazeteer_census_tracts_census_tract_id, "search.db_gazeteer_census_tracts.full_census_tract_id": $search_db_gazeteer_census_tracts_full_census_tract_id, "search.db_gazeteer_census_tracts.land_area": $search_db_gazeteer_census_tracts_land_area, "search.db_gazeteer_census_tracts.water_area": $search_db_gazeteer_census_tracts_water_area, "search.db_gazeteer_census_tracts.location": $search_db_gazeteer_census_tracts_location} | compact), body: null}
 }
 
 # Search API for 'Census Gazeteer Counties' entry type
@@ -2804,7 +2826,7 @@ export def "repository-search-type-gazeteer-counties list" [
   let full_url = (build-url $base "/repository/search/type/gazeteer_counties" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"text": $text, "name": $name, "description": $description, "fromdate": $fromdate, "todate": $todate, "createdate.from": $createdate_from, "createdate.to": $createdate_to, "changedate.from": $changedate_from, "changedate.to": $changedate_to, "group": $group, "filesuffix": $filesuffix, "maxlatitude": $maxlatitude, "minlongitude": $minlongitude, "minlatitude": $minlatitude, "maxlongitude": $maxlongitude, "max": $max, "skip": $skip, "search.db_gazeteer_counties.state_abbreviation": $search_db_gazeteer_counties_state_abbreviation, "search.db_gazeteer_counties.state_fips": $search_db_gazeteer_counties_state_fips, "search.db_gazeteer_counties.county_fips": $search_db_gazeteer_counties_county_fips, "search.db_gazeteer_counties.full_county_fips": $search_db_gazeteer_counties_full_county_fips, "search.db_gazeteer_counties.county_name": $search_db_gazeteer_counties_county_name, "search.db_gazeteer_counties.area_land": $search_db_gazeteer_counties_area_land, "search.db_gazeteer_counties.area_water": $search_db_gazeteer_counties_area_water, "search.db_gazeteer_counties.location": $search_db_gazeteer_counties_location} | compact), body: null}
 }
 
 # Search API for 'GeoJson File' entry type
@@ -2845,7 +2867,7 @@ export def "repository-search-type-geo-geojson list" [
   let full_url = (build-url $base "/repository/search/type/geo_geojson" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"text": $text, "name": $name, "description": $description, "fromdate": $fromdate, "todate": $todate, "createdate.from": $createdate_from, "createdate.to": $createdate_to, "changedate.from": $changedate_from, "changedate.to": $changedate_to, "group": $group, "filesuffix": $filesuffix, "maxlatitude": $maxlatitude, "minlongitude": $minlongitude, "minlatitude": $minlatitude, "maxlongitude": $maxlongitude, "max": $max, "skip": $skip} | compact), body: null}
 }
 
 # Search API for 'GeoTIFF' entry type
@@ -2886,7 +2908,7 @@ export def "repository-search-type-geo-geotiff list" [
   let full_url = (build-url $base "/repository/search/type/geo_geotiff" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"text": $text, "name": $name, "description": $description, "fromdate": $fromdate, "todate": $todate, "createdate.from": $createdate_from, "createdate.to": $createdate_to, "changedate.from": $changedate_from, "changedate.to": $changedate_to, "group": $group, "filesuffix": $filesuffix, "maxlatitude": $maxlatitude, "minlongitude": $minlongitude, "minlatitude": $minlatitude, "maxlongitude": $maxlongitude, "max": $max, "skip": $skip} | compact), body: null}
 }
 
 # Search API for 'GPX GPS File' entry type
@@ -2933,7 +2955,7 @@ export def "repository-search-type-geo-gpx list" [
   let full_url = (build-url $base "/repository/search/type/geo_gpx" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"text": $text, "name": $name, "description": $description, "fromdate": $fromdate, "todate": $todate, "createdate.from": $createdate_from, "createdate.to": $createdate_to, "changedate.from": $changedate_from, "changedate.to": $changedate_to, "group": $group, "filesuffix": $filesuffix, "maxlatitude": $maxlatitude, "minlongitude": $minlongitude, "minlatitude": $minlatitude, "maxlongitude": $maxlongitude, "max": $max, "skip": $skip, "search.geo_gpx.distance": $search_geo_gpx_distance, "search.geo_gpx.total_time": $search_geo_gpx_total_time, "search.geo_gpx.moving_time": $search_geo_gpx_moving_time, "search.geo_gpx.speed": $search_geo_gpx_speed, "search.geo_gpx.elevation_gain": $search_geo_gpx_elevation_gain, "search.geo_gpx.elevation_loss": $search_geo_gpx_elevation_loss} | compact), body: null}
 }
 
 # Search API for 'HDF5 File' entry type
@@ -2974,7 +2996,7 @@ export def "repository-search-type-geo-hdf5 list" [
   let full_url = (build-url $base "/repository/search/type/geo_hdf5" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"text": $text, "name": $name, "description": $description, "fromdate": $fromdate, "todate": $todate, "createdate.from": $createdate_from, "createdate.to": $createdate_to, "changedate.from": $changedate_from, "changedate.to": $changedate_to, "group": $group, "filesuffix": $filesuffix, "maxlatitude": $maxlatitude, "minlongitude": $minlongitude, "minlatitude": $minlatitude, "maxlongitude": $maxlongitude, "max": $max, "skip": $skip} | compact), body: null}
 }
 
 # Search API for 'KML/KMZ File' entry type
@@ -3015,7 +3037,7 @@ export def "repository-search-type-geo-kml list" [
   let full_url = (build-url $base "/repository/search/type/geo_kml" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"text": $text, "name": $name, "description": $description, "fromdate": $fromdate, "todate": $todate, "createdate.from": $createdate_from, "createdate.to": $createdate_to, "changedate.from": $changedate_from, "changedate.to": $changedate_to, "group": $group, "filesuffix": $filesuffix, "maxlatitude": $maxlatitude, "minlongitude": $minlongitude, "minlatitude": $minlatitude, "maxlongitude": $maxlongitude, "max": $max, "skip": $skip} | compact), body: null}
 }
 
 # Search API for 'Shapefile' entry type
@@ -3056,7 +3078,7 @@ export def "repository-search-type-geo-shapefile list" [
   let full_url = (build-url $base "/repository/search/type/geo_shapefile" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"text": $text, "name": $name, "description": $description, "fromdate": $fromdate, "todate": $todate, "createdate.from": $createdate_from, "createdate.to": $createdate_to, "changedate.from": $changedate_from, "changedate.to": $changedate_to, "group": $group, "filesuffix": $filesuffix, "maxlatitude": $maxlatitude, "minlongitude": $minlongitude, "minlatitude": $minlatitude, "maxlongitude": $maxlongitude, "max": $max, "skip": $skip} | compact), body: null}
 }
 
 # Search API for 'Shapefile with FIPS Code' entry type
@@ -3097,7 +3119,7 @@ export def "repository-search-type-geo-shapefile-fips list" [
   let full_url = (build-url $base "/repository/search/type/geo_shapefile_fips" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"text": $text, "name": $name, "description": $description, "fromdate": $fromdate, "todate": $todate, "createdate.from": $createdate_from, "createdate.to": $createdate_to, "changedate.from": $changedate_from, "changedate.to": $changedate_to, "group": $group, "filesuffix": $filesuffix, "maxlatitude": $maxlatitude, "minlongitude": $minlongitude, "minlatitude": $minlatitude, "maxlongitude": $maxlongitude, "max": $max, "skip": $skip} | compact), body: null}
 }
 
 # Search API for 'Glossary' entry type
@@ -3138,7 +3160,7 @@ export def "repository-search-type-glossary list" [
   let full_url = (build-url $base "/repository/search/type/glossary" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"text": $text, "name": $name, "description": $description, "fromdate": $fromdate, "todate": $todate, "createdate.from": $createdate_from, "createdate.to": $createdate_to, "changedate.from": $changedate_from, "changedate.to": $changedate_to, "group": $group, "filesuffix": $filesuffix, "maxlatitude": $maxlatitude, "minlongitude": $minlongitude, "minlatitude": $minlatitude, "maxlongitude": $maxlongitude, "max": $max, "skip": $skip} | compact), body: null}
 }
 
 # Search API for 'Grid Aggregation' entry type
@@ -3179,7 +3201,7 @@ export def "repository-search-type-gridaggregation list" [
   let full_url = (build-url $base "/repository/search/type/gridaggregation" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"text": $text, "name": $name, "description": $description, "fromdate": $fromdate, "todate": $todate, "createdate.from": $createdate_from, "createdate.to": $createdate_to, "changedate.from": $changedate_from, "changedate.to": $changedate_to, "group": $group, "filesuffix": $filesuffix, "maxlatitude": $maxlatitude, "minlongitude": $minlongitude, "minlatitude": $minlatitude, "maxlongitude": $maxlongitude, "max": $max, "skip": $skip} | compact), body: null}
 }
 
 # Search API for 'Folder' entry type
@@ -3220,7 +3242,7 @@ export def "repository-search-type-group list" [
   let full_url = (build-url $base "/repository/search/type/group" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"text": $text, "name": $name, "description": $description, "fromdate": $fromdate, "todate": $todate, "createdate.from": $createdate_from, "createdate.to": $createdate_to, "changedate.from": $changedate_from, "changedate.to": $changedate_to, "group": $group, "filesuffix": $filesuffix, "maxlatitude": $maxlatitude, "minlongitude": $minlongitude, "minlatitude": $minlatitude, "maxlongitude": $maxlongitude, "max": $max, "skip": $skip} | compact), body: null}
 }
 
 # Search API for 'HipChat Group' entry type
@@ -3261,7 +3283,7 @@ export def "repository-search-type-hipchat-group list" [
   let full_url = (build-url $base "/repository/search/type/hipchat_group" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"text": $text, "name": $name, "description": $description, "fromdate": $fromdate, "todate": $todate, "createdate.from": $createdate_from, "createdate.to": $createdate_to, "changedate.from": $changedate_from, "changedate.to": $changedate_to, "group": $group, "filesuffix": $filesuffix, "maxlatitude": $maxlatitude, "minlongitude": $minlongitude, "minlatitude": $minlatitude, "maxlongitude": $maxlongitude, "max": $max, "skip": $skip} | compact), body: null}
 }
 
 # Search API for 'Home Page' entry type
@@ -3302,7 +3324,7 @@ export def "repository-search-type-homepage list" [
   let full_url = (build-url $base "/repository/search/type/homepage" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"text": $text, "name": $name, "description": $description, "fromdate": $fromdate, "todate": $todate, "createdate.from": $createdate_from, "createdate.to": $createdate_to, "changedate.from": $changedate_from, "changedate.to": $changedate_to, "group": $group, "filesuffix": $filesuffix, "maxlatitude": $maxlatitude, "minlongitude": $minlongitude, "minlatitude": $minlatitude, "maxlongitude": $maxlongitude, "max": $max, "skip": $skip} | compact), body: null}
 }
 
 # Search API for 'Incident' entry type
@@ -3346,7 +3368,7 @@ export def "repository-search-type-incident list" [
   let full_url = (build-url $base "/repository/search/type/incident" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"text": $text, "name": $name, "description": $description, "fromdate": $fromdate, "todate": $todate, "createdate.from": $createdate_from, "createdate.to": $createdate_to, "changedate.from": $changedate_from, "changedate.to": $changedate_to, "group": $group, "filesuffix": $filesuffix, "maxlatitude": $maxlatitude, "minlongitude": $minlongitude, "minlatitude": $minlatitude, "maxlongitude": $maxlongitude, "max": $max, "skip": $skip, "search.incident.incidenttype": $search_incident_incidenttype, "search.incident.cause": $search_incident_cause, "search.incident.state": $search_incident_state} | compact), body: null}
 }
 
 # Search API for 'Jeopardy' entry type
@@ -3392,7 +3414,7 @@ export def "repository-search-type-jeopardy list" [
   let full_url = (build-url $base "/repository/search/type/jeopardy" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"text": $text, "name": $name, "description": $description, "fromdate": $fromdate, "todate": $todate, "createdate.from": $createdate_from, "createdate.to": $createdate_to, "changedate.from": $changedate_from, "changedate.to": $changedate_to, "group": $group, "filesuffix": $filesuffix, "maxlatitude": $maxlatitude, "minlongitude": $minlongitude, "minlatitude": $minlatitude, "maxlongitude": $maxlongitude, "max": $max, "skip": $skip, "search.db_jeopardy.question": $search_db_jeopardy_question, "search.db_jeopardy.answer": $search_db_jeopardy_answer, "search.db_jeopardy.round": $search_db_jeopardy_round, "search.db_jeopardy.category": $search_db_jeopardy_category, "search.db_jeopardy.air_date": $search_db_jeopardy_air_date} | compact), body: null}
 }
 
 # Search API for 'Lat-Lon Image' entry type
@@ -3433,7 +3455,7 @@ export def "repository-search-type-latlonimage list" [
   let full_url = (build-url $base "/repository/search/type/latlonimage" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"text": $text, "name": $name, "description": $description, "fromdate": $fromdate, "todate": $todate, "createdate.from": $createdate_from, "createdate.to": $createdate_to, "changedate.from": $changedate_from, "changedate.to": $changedate_to, "group": $group, "filesuffix": $filesuffix, "maxlatitude": $maxlatitude, "minlongitude": $minlongitude, "minlatitude": $minlatitude, "maxlongitude": $maxlongitude, "max": $max, "skip": $skip} | compact), body: null}
 }
 
 # Search API for 'LiDAR Collection' entry type
@@ -3474,7 +3496,7 @@ export def "repository-search-type-lidar-collection list" [
   let full_url = (build-url $base "/repository/search/type/lidar_collection" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"text": $text, "name": $name, "description": $description, "fromdate": $fromdate, "todate": $todate, "createdate.from": $createdate_from, "createdate.to": $createdate_to, "changedate.from": $changedate_from, "changedate.to": $changedate_to, "group": $group, "filesuffix": $filesuffix, "maxlatitude": $maxlatitude, "minlongitude": $minlongitude, "minlatitude": $minlatitude, "maxlongitude": $maxlongitude, "max": $max, "skip": $skip} | compact), body: null}
 }
 
 # Search API for 'LAS Lidar Data' entry type
@@ -3515,7 +3537,7 @@ export def "repository-search-type-lidar-las list" [
   let full_url = (build-url $base "/repository/search/type/lidar_las" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"text": $text, "name": $name, "description": $description, "fromdate": $fromdate, "todate": $todate, "createdate.from": $createdate_from, "createdate.to": $createdate_to, "changedate.from": $changedate_from, "changedate.to": $changedate_to, "group": $group, "filesuffix": $filesuffix, "maxlatitude": $maxlatitude, "minlongitude": $minlongitude, "minlatitude": $minlatitude, "maxlongitude": $maxlongitude, "max": $max, "skip": $skip} | compact), body: null}
 }
 
 # Search API for 'LVIS Lidar Data' entry type
@@ -3556,7 +3578,7 @@ export def "repository-search-type-lidar-lvis list" [
   let full_url = (build-url $base "/repository/search/type/lidar_lvis" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"text": $text, "name": $name, "description": $description, "fromdate": $fromdate, "todate": $todate, "createdate.from": $createdate_from, "createdate.to": $createdate_to, "changedate.from": $changedate_from, "changedate.to": $changedate_to, "group": $group, "filesuffix": $filesuffix, "maxlatitude": $maxlatitude, "minlongitude": $minlongitude, "minlatitude": $minlatitude, "maxlongitude": $maxlongitude, "max": $max, "skip": $skip} | compact), body: null}
 }
 
 # Search API for 'Link' entry type
@@ -3597,7 +3619,7 @@ export def "repository-search-type-link list" [
   let full_url = (build-url $base "/repository/search/type/link" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"text": $text, "name": $name, "description": $description, "fromdate": $fromdate, "todate": $todate, "createdate.from": $createdate_from, "createdate.to": $createdate_to, "changedate.from": $changedate_from, "changedate.to": $changedate_to, "group": $group, "filesuffix": $filesuffix, "maxlatitude": $maxlatitude, "minlongitude": $minlongitude, "minlatitude": $minlatitude, "maxlongitude": $maxlongitude, "max": $max, "skip": $skip} | compact), body: null}
 }
 
 # Search API for 'Server Side Files' entry type
@@ -3638,7 +3660,7 @@ export def "repository-search-type-localfiles list" [
   let full_url = (build-url $base "/repository/search/type/localfiles" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"text": $text, "name": $name, "description": $description, "fromdate": $fromdate, "todate": $todate, "createdate.from": $createdate_from, "createdate.to": $createdate_to, "changedate.from": $changedate_from, "changedate.to": $changedate_to, "group": $group, "filesuffix": $filesuffix, "maxlatitude": $maxlatitude, "minlongitude": $minlongitude, "minlatitude": $minlatitude, "maxlongitude": $maxlongitude, "max": $max, "skip": $skip} | compact), body: null}
 }
 
 # Search API for 'Locations' entry type
@@ -3682,7 +3704,7 @@ export def "repository-search-type-locations list" [
   let full_url = (build-url $base "/repository/search/type/locations" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"text": $text, "name": $name, "description": $description, "fromdate": $fromdate, "todate": $todate, "createdate.from": $createdate_from, "createdate.to": $createdate_to, "changedate.from": $changedate_from, "changedate.to": $changedate_to, "group": $group, "filesuffix": $filesuffix, "maxlatitude": $maxlatitude, "minlongitude": $minlongitude, "minlatitude": $minlatitude, "maxlongitude": $maxlongitude, "max": $max, "skip": $skip, "search.db_locations.name": $search_db_locations_name, "search.db_locations.type": $search_db_locations_type, "search.db_locations.location": $search_db_locations_location} | compact), body: null}
 }
 
 # Search API for 'Google Map URL' entry type
@@ -3723,7 +3745,7 @@ export def "repository-search-type-map-googlemap list" [
   let full_url = (build-url $base "/repository/search/type/map_googlemap" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"text": $text, "name": $name, "description": $description, "fromdate": $fromdate, "todate": $todate, "createdate.from": $createdate_from, "createdate.to": $createdate_to, "changedate.from": $changedate_from, "changedate.to": $changedate_to, "group": $group, "filesuffix": $filesuffix, "maxlatitude": $maxlatitude, "minlongitude": $minlongitude, "minlatitude": $minlatitude, "maxlongitude": $maxlongitude, "max": $max, "skip": $skip} | compact), body: null}
 }
 
 # Search API for 'Audio File' entry type
@@ -3764,7 +3786,7 @@ export def "repository-search-type-media-audiofile list" [
   let full_url = (build-url $base "/repository/search/type/media_audiofile" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"text": $text, "name": $name, "description": $description, "fromdate": $fromdate, "todate": $todate, "createdate.from": $createdate_from, "createdate.to": $createdate_to, "changedate.from": $changedate_from, "changedate.to": $changedate_to, "group": $group, "filesuffix": $filesuffix, "maxlatitude": $maxlatitude, "minlongitude": $minlongitude, "minlatitude": $minlatitude, "maxlongitude": $maxlongitude, "max": $max, "skip": $skip} | compact), body: null}
 }
 
 # Search API for 'Image Loop' entry type
@@ -3805,7 +3827,7 @@ export def "repository-search-type-media-imageloop list" [
   let full_url = (build-url $base "/repository/search/type/media_imageloop" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"text": $text, "name": $name, "description": $description, "fromdate": $fromdate, "todate": $todate, "createdate.from": $createdate_from, "createdate.to": $createdate_to, "changedate.from": $changedate_from, "changedate.to": $changedate_to, "group": $group, "filesuffix": $filesuffix, "maxlatitude": $maxlatitude, "minlongitude": $minlongitude, "minlatitude": $minlatitude, "maxlongitude": $maxlongitude, "max": $max, "skip": $skip} | compact), body: null}
 }
 
 # Search API for 'Photo Album' entry type
@@ -3846,7 +3868,7 @@ export def "repository-search-type-media-photoalbum list" [
   let full_url = (build-url $base "/repository/search/type/media_photoalbum" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"text": $text, "name": $name, "description": $description, "fromdate": $fromdate, "todate": $todate, "createdate.from": $createdate_from, "createdate.to": $createdate_to, "changedate.from": $changedate_from, "changedate.to": $changedate_to, "group": $group, "filesuffix": $filesuffix, "maxlatitude": $maxlatitude, "minlongitude": $minlongitude, "minlatitude": $minlatitude, "maxlongitude": $maxlongitude, "max": $max, "skip": $skip} | compact), body: null}
 }
 
 # Search API for 'Video Channel' entry type
@@ -3887,7 +3909,7 @@ export def "repository-search-type-media-video-channel list" [
   let full_url = (build-url $base "/repository/search/type/media_video_channel" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"text": $text, "name": $name, "description": $description, "fromdate": $fromdate, "todate": $todate, "createdate.from": $createdate_from, "createdate.to": $createdate_to, "changedate.from": $changedate_from, "changedate.to": $changedate_to, "group": $group, "filesuffix": $filesuffix, "maxlatitude": $maxlatitude, "minlongitude": $minlongitude, "minlatitude": $minlatitude, "maxlongitude": $maxlongitude, "max": $max, "skip": $skip} | compact), body: null}
 }
 
 # Search API for 'Quicktime Video' entry type
@@ -3928,7 +3950,7 @@ export def "repository-search-type-media-video-quicktime list" [
   let full_url = (build-url $base "/repository/search/type/media_video_quicktime" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"text": $text, "name": $name, "description": $description, "fromdate": $fromdate, "todate": $todate, "createdate.from": $createdate_from, "createdate.to": $createdate_to, "changedate.from": $changedate_from, "changedate.to": $changedate_to, "group": $group, "filesuffix": $filesuffix, "maxlatitude": $maxlatitude, "minlongitude": $minlongitude, "minlatitude": $minlatitude, "maxlongitude": $maxlongitude, "max": $max, "skip": $skip} | compact), body: null}
 }
 
 # Search API for 'YouTube Video' entry type
@@ -3969,7 +3991,7 @@ export def "repository-search-type-media-youtubevideo list" [
   let full_url = (build-url $base "/repository/search/type/media_youtubevideo" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"text": $text, "name": $name, "description": $description, "fromdate": $fromdate, "todate": $todate, "createdate.from": $createdate_from, "createdate.to": $createdate_to, "changedate.from": $changedate_from, "changedate.to": $changedate_to, "group": $group, "filesuffix": $filesuffix, "maxlatitude": $maxlatitude, "minlongitude": $minlongitude, "minlatitude": $minlatitude, "maxlongitude": $maxlongitude, "max": $max, "skip": $skip} | compact), body: null}
 }
 
 # Search API for 'Notes' entry type
@@ -4011,7 +4033,7 @@ export def "repository-search-type-notes list" [
   let full_url = (build-url $base "/repository/search/type/notes" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"text": $text, "name": $name, "description": $description, "fromdate": $fromdate, "todate": $todate, "createdate.from": $createdate_from, "createdate.to": $createdate_to, "changedate.from": $changedate_from, "changedate.to": $changedate_to, "group": $group, "filesuffix": $filesuffix, "maxlatitude": $maxlatitude, "minlongitude": $minlongitude, "minlatitude": $minlatitude, "maxlongitude": $maxlongitude, "max": $max, "skip": $skip, "search.db_notes.note": $search_db_notes_note} | compact), body: null}
 }
 
 # Search API for 'Json File' entry type
@@ -4052,7 +4074,7 @@ export def "repository-search-type-notes-jsonfile list" [
   let full_url = (build-url $base "/repository/search/type/notes_jsonfile" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"text": $text, "name": $name, "description": $description, "fromdate": $fromdate, "todate": $todate, "createdate.from": $createdate_from, "createdate.to": $createdate_to, "changedate.from": $changedate_from, "changedate.to": $changedate_to, "group": $group, "filesuffix": $filesuffix, "maxlatitude": $maxlatitude, "minlongitude": $minlongitude, "minlatitude": $minlatitude, "maxlongitude": $maxlongitude, "max": $max, "skip": $skip} | compact), body: null}
 }
 
 # Search API for 'Note' entry type
@@ -4093,7 +4115,7 @@ export def "repository-search-type-notes-note list" [
   let full_url = (build-url $base "/repository/search/type/notes_note" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"text": $text, "name": $name, "description": $description, "fromdate": $fromdate, "todate": $todate, "createdate.from": $createdate_from, "createdate.to": $createdate_to, "changedate.from": $changedate_from, "changedate.to": $changedate_to, "group": $group, "filesuffix": $filesuffix, "maxlatitude": $maxlatitude, "minlongitude": $minlongitude, "minlatitude": $minlatitude, "maxlongitude": $maxlongitude, "max": $max, "skip": $skip} | compact), body: null}
 }
 
 # Search API for 'Notebook' entry type
@@ -4134,7 +4156,7 @@ export def "repository-search-type-notes-notebook list" [
   let full_url = (build-url $base "/repository/search/type/notes_notebook" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"text": $text, "name": $name, "description": $description, "fromdate": $fromdate, "todate": $todate, "createdate.from": $createdate_from, "createdate.to": $createdate_to, "changedate.from": $changedate_from, "changedate.to": $changedate_to, "group": $group, "filesuffix": $filesuffix, "maxlatitude": $maxlatitude, "minlongitude": $minlongitude, "minlatitude": $minlatitude, "maxlongitude": $maxlongitude, "max": $max, "skip": $skip} | compact), body: null}
 }
 
 # Search API for 'NWS Forecast Feed' entry type
@@ -4175,7 +4197,7 @@ export def "repository-search-type-nwsfeed list" [
   let full_url = (build-url $base "/repository/search/type/nwsfeed" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"text": $text, "name": $name, "description": $description, "fromdate": $fromdate, "todate": $todate, "createdate.from": $createdate_from, "createdate.to": $createdate_to, "changedate.from": $changedate_from, "changedate.to": $changedate_to, "group": $group, "filesuffix": $filesuffix, "maxlatitude": $maxlatitude, "minlongitude": $minlongitude, "minlatitude": $minlatitude, "maxlongitude": $maxlongitude, "max": $max, "skip": $skip} | compact), body: null}
 }
 
 # Search API for 'OPeNDAP Link' entry type
@@ -4216,7 +4238,7 @@ export def "repository-search-type-opendaplink list" [
   let full_url = (build-url $base "/repository/search/type/opendaplink" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"text": $text, "name": $name, "description": $description, "fromdate": $fromdate, "todate": $todate, "createdate.from": $createdate_from, "createdate.to": $createdate_to, "changedate.from": $changedate_from, "changedate.to": $changedate_to, "group": $group, "filesuffix": $filesuffix, "maxlatitude": $maxlatitude, "minlongitude": $minlongitude, "minlatitude": $minlatitude, "maxlongitude": $maxlongitude, "max": $max, "skip": $skip} | compact), body: null}
 }
 
 # Search API for 'OWL Class' entry type
@@ -4257,7 +4279,7 @@ export def "repository-search-type-owl-class get" [
   let full_url = (build-url $base "/repository/search/type/owl.class" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"text": $text, "name": $name, "description": $description, "fromdate": $fromdate, "todate": $todate, "createdate.from": $createdate_from, "createdate.to": $createdate_to, "changedate.from": $changedate_from, "changedate.to": $changedate_to, "group": $group, "filesuffix": $filesuffix, "maxlatitude": $maxlatitude, "minlongitude": $minlongitude, "minlatitude": $minlatitude, "maxlongitude": $maxlongitude, "max": $max, "skip": $skip} | compact), body: null}
 }
 
 # Search API for 'OWL Ontology' entry type
@@ -4298,7 +4320,7 @@ export def "repository-search-type-owl-ontology get" [
   let full_url = (build-url $base "/repository/search/type/owl.ontology" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"text": $text, "name": $name, "description": $description, "fromdate": $fromdate, "todate": $todate, "createdate.from": $createdate_from, "createdate.to": $createdate_to, "changedate.from": $changedate_from, "changedate.to": $changedate_to, "group": $group, "filesuffix": $filesuffix, "maxlatitude": $maxlatitude, "minlongitude": $minlongitude, "minlatitude": $minlatitude, "maxlongitude": $maxlongitude, "max": $max, "skip": $skip} | compact), body: null}
 }
 
 # Search API for 'Paste Text Entry' entry type
@@ -4339,7 +4361,7 @@ export def "repository-search-type-pasteitentry list" [
   let full_url = (build-url $base "/repository/search/type/pasteitentry" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"text": $text, "name": $name, "description": $description, "fromdate": $fromdate, "todate": $todate, "createdate.from": $createdate_from, "createdate.to": $createdate_to, "changedate.from": $changedate_from, "changedate.to": $changedate_to, "group": $group, "filesuffix": $filesuffix, "maxlatitude": $maxlatitude, "minlongitude": $minlongitude, "minlatitude": $minlatitude, "maxlongitude": $maxlongitude, "max": $max, "skip": $skip} | compact), body: null}
 }
 
 # Search API for 'Text Point Data' entry type
@@ -4380,7 +4402,7 @@ export def "repository-search-type-point-text list" [
   let full_url = (build-url $base "/repository/search/type/point_text" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"text": $text, "name": $name, "description": $description, "fromdate": $fromdate, "todate": $todate, "createdate.from": $createdate_from, "createdate.to": $createdate_to, "changedate.from": $changedate_from, "changedate.to": $changedate_to, "group": $group, "filesuffix": $filesuffix, "maxlatitude": $maxlatitude, "minlongitude": $minlongitude, "minlatitude": $minlatitude, "maxlongitude": $maxlongitude, "max": $max, "skip": $skip} | compact), body: null}
 }
 
 # Search API for 'Police Stop Data' entry type
@@ -4428,7 +4450,7 @@ export def "repository-search-type-police-stop-data list" [
   let full_url = (build-url $base "/repository/search/type/police_stop_data" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"text": $text, "name": $name, "description": $description, "fromdate": $fromdate, "todate": $todate, "createdate.from": $createdate_from, "createdate.to": $createdate_to, "changedate.from": $changedate_from, "changedate.to": $changedate_to, "group": $group, "filesuffix": $filesuffix, "maxlatitude": $maxlatitude, "minlongitude": $minlongitude, "minlatitude": $minlatitude, "maxlongitude": $maxlongitude, "max": $max, "skip": $skip, "search.db_police_stop_data.race": $search_db_police_stop_data_race, "search.db_police_stop_data.ethnicity": $search_db_police_stop_data_ethnicity, "search.db_police_stop_data.sex": $search_db_police_stop_data_sex, "search.db_police_stop_data.minutes": $search_db_police_stop_data_minutes, "search.db_police_stop_data.date": $search_db_police_stop_data_date, "search.db_police_stop_data.address": $search_db_police_stop_data_address, "search.db_police_stop_data.resident": $search_db_police_stop_data_resident} | compact), body: null}
 }
 
 # Search API for 'Poll' entry type
@@ -4469,7 +4491,7 @@ export def "repository-search-type-poll list" [
   let full_url = (build-url $base "/repository/search/type/poll" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"text": $text, "name": $name, "description": $description, "fromdate": $fromdate, "todate": $todate, "createdate.from": $createdate_from, "createdate.to": $createdate_to, "changedate.from": $changedate_from, "changedate.to": $changedate_to, "group": $group, "filesuffix": $filesuffix, "maxlatitude": $maxlatitude, "minlongitude": $minlongitude, "minlatitude": $minlatitude, "maxlongitude": $maxlongitude, "max": $max, "skip": $skip} | compact), body: null}
 }
 
 # Search API for 'Campaign' entry type
@@ -4510,7 +4532,7 @@ export def "repository-search-type-project-campaign list" [
   let full_url = (build-url $base "/repository/search/type/project_campaign" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"text": $text, "name": $name, "description": $description, "fromdate": $fromdate, "todate": $todate, "createdate.from": $createdate_from, "createdate.to": $createdate_to, "changedate.from": $changedate_from, "changedate.to": $changedate_to, "group": $group, "filesuffix": $filesuffix, "maxlatitude": $maxlatitude, "minlongitude": $minlongitude, "minlatitude": $minlatitude, "maxlongitude": $maxlongitude, "max": $max, "skip": $skip} | compact), body: null}
 }
 
 # Search API for 'Case Study' entry type
@@ -4553,7 +4575,7 @@ export def "repository-search-type-project-casestudy list" [
   let full_url = (build-url $base "/repository/search/type/project_casestudy" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"text": $text, "name": $name, "description": $description, "fromdate": $fromdate, "todate": $todate, "createdate.from": $createdate_from, "createdate.to": $createdate_to, "changedate.from": $changedate_from, "changedate.to": $changedate_to, "group": $group, "filesuffix": $filesuffix, "maxlatitude": $maxlatitude, "minlongitude": $minlongitude, "minlatitude": $minlatitude, "maxlongitude": $maxlongitude, "max": $max, "skip": $skip, "search.project_casestudy.intended_use": $search_project_casestudy_intended_use, "search.project_casestudy.location": $search_project_casestudy_location} | compact), body: null}
 }
 
 # Search API for 'Research Contribution' entry type
@@ -4594,7 +4616,7 @@ export def "repository-search-type-project-contribution list" [
   let full_url = (build-url $base "/repository/search/type/project_contribution" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"text": $text, "name": $name, "description": $description, "fromdate": $fromdate, "todate": $todate, "createdate.from": $createdate_from, "createdate.to": $createdate_to, "changedate.from": $changedate_from, "changedate.to": $changedate_to, "group": $group, "filesuffix": $filesuffix, "maxlatitude": $maxlatitude, "minlongitude": $minlongitude, "minlatitude": $minlatitude, "maxlongitude": $maxlongitude, "max": $max, "skip": $skip} | compact), body: null}
 }
 
 # Search API for 'Data Format' entry type
@@ -4637,7 +4659,7 @@ export def "repository-search-type-project-dataformat list" [
   let full_url = (build-url $base "/repository/search/type/project_dataformat" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"text": $text, "name": $name, "description": $description, "fromdate": $fromdate, "todate": $todate, "createdate.from": $createdate_from, "createdate.to": $createdate_to, "changedate.from": $changedate_from, "changedate.to": $changedate_to, "group": $group, "filesuffix": $filesuffix, "maxlatitude": $maxlatitude, "minlongitude": $minlongitude, "minlatitude": $minlatitude, "maxlongitude": $maxlongitude, "max": $max, "skip": $skip, "search.project_dataformat.data_type": $search_project_dataformat_data_type, "search.project_dataformat.field": $search_project_dataformat_field} | compact), body: null}
 }
 
 # Search API for 'Dataset' entry type
@@ -4681,7 +4703,7 @@ export def "repository-search-type-project-dataset list" [
   let full_url = (build-url $base "/repository/search/type/project_dataset" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"text": $text, "name": $name, "description": $description, "fromdate": $fromdate, "todate": $todate, "createdate.from": $createdate_from, "createdate.to": $createdate_to, "changedate.from": $changedate_from, "changedate.to": $changedate_to, "group": $group, "filesuffix": $filesuffix, "maxlatitude": $maxlatitude, "minlongitude": $minlongitude, "minlatitude": $minlatitude, "maxlongitude": $maxlongitude, "max": $max, "skip": $skip, "search.project_dataset.dataset_id": $search_project_dataset_dataset_id, "search.project_dataset.data_type": $search_project_dataset_data_type, "search.project_dataset.data_level": $search_project_dataset_data_level} | compact), body: null}
 }
 
 # Search API for 'Deployment' entry type
@@ -4722,7 +4744,7 @@ export def "repository-search-type-project-deployment list" [
   let full_url = (build-url $base "/repository/search/type/project_deployment" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"text": $text, "name": $name, "description": $description, "fromdate": $fromdate, "todate": $todate, "createdate.from": $createdate_from, "createdate.to": $createdate_to, "changedate.from": $changedate_from, "changedate.to": $changedate_to, "group": $group, "filesuffix": $filesuffix, "maxlatitude": $maxlatitude, "minlongitude": $minlongitude, "minlatitude": $minlatitude, "maxlongitude": $maxlongitude, "max": $max, "skip": $skip} | compact), body: null}
 }
 
 # Search API for 'Experiment' entry type
@@ -4763,7 +4785,7 @@ export def "repository-search-type-project-experiment list" [
   let full_url = (build-url $base "/repository/search/type/project_experiment" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"text": $text, "name": $name, "description": $description, "fromdate": $fromdate, "todate": $todate, "createdate.from": $createdate_from, "createdate.to": $createdate_to, "changedate.from": $changedate_from, "changedate.to": $changedate_to, "group": $group, "filesuffix": $filesuffix, "maxlatitude": $maxlatitude, "minlongitude": $minlongitude, "minlatitude": $minlatitude, "maxlongitude": $maxlongitude, "max": $max, "skip": $skip} | compact), body: null}
 }
 
 # Search API for 'Field Note' entry type
@@ -4804,7 +4826,7 @@ export def "repository-search-type-project-fieldnote list" [
   let full_url = (build-url $base "/repository/search/type/project_fieldnote" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"text": $text, "name": $name, "description": $description, "fromdate": $fromdate, "todate": $todate, "createdate.from": $createdate_from, "createdate.to": $createdate_to, "changedate.from": $changedate_from, "changedate.to": $changedate_to, "group": $group, "filesuffix": $filesuffix, "maxlatitude": $maxlatitude, "minlongitude": $minlongitude, "minlatitude": $minlatitude, "maxlongitude": $maxlongitude, "max": $max, "skip": $skip} | compact), body: null}
 }
 
 # Search API for 'Control Points File' entry type
@@ -4845,7 +4867,7 @@ export def "repository-search-type-project-gps-controlpoints list" [
   let full_url = (build-url $base "/repository/search/type/project_gps_controlpoints" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"text": $text, "name": $name, "description": $description, "fromdate": $fromdate, "todate": $todate, "createdate.from": $createdate_from, "createdate.to": $createdate_to, "changedate.from": $changedate_from, "changedate.to": $changedate_to, "group": $group, "filesuffix": $filesuffix, "maxlatitude": $maxlatitude, "minlongitude": $minlongitude, "minlatitude": $minlatitude, "maxlongitude": $maxlongitude, "max": $max, "skip": $skip} | compact), body: null}
 }
 
 # Search API for 'Raw GPS File' entry type
@@ -4886,7 +4908,7 @@ export def "repository-search-type-project-gps-raw list" [
   let full_url = (build-url $base "/repository/search/type/project_gps_raw" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"text": $text, "name": $name, "description": $description, "fromdate": $fromdate, "todate": $todate, "createdate.from": $createdate_from, "createdate.to": $createdate_to, "changedate.from": $changedate_from, "changedate.to": $changedate_to, "group": $group, "filesuffix": $filesuffix, "maxlatitude": $maxlatitude, "minlongitude": $minlongitude, "minlatitude": $minlatitude, "maxlongitude": $maxlongitude, "max": $max, "skip": $skip} | compact), body: null}
 }
 
 # Search API for 'RINEX File' entry type
@@ -4927,7 +4949,7 @@ export def "repository-search-type-project-gps-rinex list" [
   let full_url = (build-url $base "/repository/search/type/project_gps_rinex" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"text": $text, "name": $name, "description": $description, "fromdate": $fromdate, "todate": $todate, "createdate.from": $createdate_from, "createdate.to": $createdate_to, "changedate.from": $changedate_from, "changedate.to": $changedate_to, "group": $group, "filesuffix": $filesuffix, "maxlatitude": $maxlatitude, "minlongitude": $minlongitude, "minlatitude": $minlatitude, "maxlongitude": $maxlongitude, "max": $max, "skip": $skip} | compact), body: null}
 }
 
 # Search API for 'Instrument Data Collection' entry type
@@ -4968,7 +4990,7 @@ export def "repository-search-type-project-instrument list" [
   let full_url = (build-url $base "/repository/search/type/project_instrument" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"text": $text, "name": $name, "description": $description, "fromdate": $fromdate, "todate": $todate, "createdate.from": $createdate_from, "createdate.to": $createdate_to, "changedate.from": $changedate_from, "changedate.to": $changedate_to, "group": $group, "filesuffix": $filesuffix, "maxlatitude": $maxlatitude, "minlongitude": $minlongitude, "minlatitude": $minlatitude, "maxlongitude": $maxlongitude, "max": $max, "skip": $skip} | compact), body: null}
 }
 
 # Search API for 'Teaching Resource' entry type
@@ -5011,7 +5033,7 @@ export def "repository-search-type-project-learning-resource list" [
   let full_url = (build-url $base "/repository/search/type/project_learning_resource" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"text": $text, "name": $name, "description": $description, "fromdate": $fromdate, "todate": $todate, "createdate.from": $createdate_from, "createdate.to": $createdate_to, "changedate.from": $changedate_from, "changedate.to": $changedate_to, "group": $group, "filesuffix": $filesuffix, "maxlatitude": $maxlatitude, "minlongitude": $minlongitude, "minlatitude": $minlatitude, "maxlongitude": $maxlongitude, "max": $max, "skip": $skip, "search.project_learning_resource.topic": $search_project_learning_resource_topic, "search.project_learning_resource.grade_level": $search_project_learning_resource_grade_level} | compact), body: null}
 }
 
 # Search API for 'Meeting' entry type
@@ -5055,7 +5077,7 @@ export def "repository-search-type-project-meeting list" [
   let full_url = (build-url $base "/repository/search/type/project_meeting" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"text": $text, "name": $name, "description": $description, "fromdate": $fromdate, "todate": $todate, "createdate.from": $createdate_from, "createdate.to": $createdate_to, "changedate.from": $changedate_from, "changedate.to": $changedate_to, "group": $group, "filesuffix": $filesuffix, "maxlatitude": $maxlatitude, "minlongitude": $minlongitude, "minlatitude": $minlatitude, "maxlongitude": $maxlongitude, "max": $max, "skip": $skip, "search.project_meeting.topic": $search_project_meeting_topic, "search.project_meeting.location": $search_project_meeting_location, "search.project_meeting.participants": $search_project_meeting_participants} | compact), body: null}
 }
 
 # Search API for 'Organization' entry type
@@ -5098,7 +5120,7 @@ export def "repository-search-type-project-organization list" [
   let full_url = (build-url $base "/repository/search/type/project_organization" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"text": $text, "name": $name, "description": $description, "fromdate": $fromdate, "todate": $todate, "createdate.from": $createdate_from, "createdate.to": $createdate_to, "changedate.from": $changedate_from, "changedate.to": $changedate_to, "group": $group, "filesuffix": $filesuffix, "maxlatitude": $maxlatitude, "minlongitude": $minlongitude, "minlatitude": $minlatitude, "maxlongitude": $maxlongitude, "max": $max, "skip": $skip, "search.project_organization.organization_type": $search_project_organization_organization_type, "search.project_organization.status": $search_project_organization_status} | compact), body: null}
 }
 
 # Search API for 'Program' entry type
@@ -5139,7 +5161,7 @@ export def "repository-search-type-project-program list" [
   let full_url = (build-url $base "/repository/search/type/project_program" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"text": $text, "name": $name, "description": $description, "fromdate": $fromdate, "todate": $todate, "createdate.from": $createdate_from, "createdate.to": $createdate_to, "changedate.from": $changedate_from, "changedate.to": $changedate_to, "group": $group, "filesuffix": $filesuffix, "maxlatitude": $maxlatitude, "minlongitude": $minlongitude, "minlatitude": $minlatitude, "maxlongitude": $maxlongitude, "max": $max, "skip": $skip} | compact), body: null}
 }
 
 # Search API for 'Project' entry type
@@ -5180,7 +5202,7 @@ export def "repository-search-type-project-project list" [
   let full_url = (build-url $base "/repository/search/type/project_project" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"text": $text, "name": $name, "description": $description, "fromdate": $fromdate, "todate": $todate, "createdate.from": $createdate_from, "createdate.to": $createdate_to, "changedate.from": $changedate_from, "changedate.to": $changedate_to, "group": $group, "filesuffix": $filesuffix, "maxlatitude": $maxlatitude, "minlongitude": $minlongitude, "minlatitude": $minlatitude, "maxlongitude": $maxlongitude, "max": $max, "skip": $skip} | compact), body: null}
 }
 
 # Search API for 'Data Access Service' entry type
@@ -5223,7 +5245,7 @@ export def "repository-search-type-project-service list" [
   let full_url = (build-url $base "/repository/search/type/project_service" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"text": $text, "name": $name, "description": $description, "fromdate": $fromdate, "todate": $todate, "createdate.from": $createdate_from, "createdate.to": $createdate_to, "changedate.from": $changedate_from, "changedate.to": $changedate_to, "group": $group, "filesuffix": $filesuffix, "maxlatitude": $maxlatitude, "minlongitude": $minlongitude, "minlatitude": $minlatitude, "maxlongitude": $maxlongitude, "max": $max, "skip": $skip, "search.project_service.service_type": $search_project_service_service_type, "search.project_service.provider": $search_project_service_provider} | compact), body: null}
 }
 
 # Search API for 'Site' entry type
@@ -5271,7 +5293,7 @@ export def "repository-search-type-project-site list" [
   let full_url = (build-url $base "/repository/search/type/project_site" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"text": $text, "name": $name, "description": $description, "fromdate": $fromdate, "todate": $todate, "createdate.from": $createdate_from, "createdate.to": $createdate_to, "changedate.from": $changedate_from, "changedate.to": $changedate_to, "group": $group, "filesuffix": $filesuffix, "maxlatitude": $maxlatitude, "minlongitude": $minlongitude, "minlatitude": $minlatitude, "maxlongitude": $maxlongitude, "max": $max, "skip": $skip, "search.project_site.short_name": $search_project_site_short_name, "search.project_site.site_type": $search_project_site_site_type, "search.project_site.status": $search_project_site_status, "search.project_site.network": $search_project_site_network, "search.project_site.country": $search_project_site_country, "search.project_site.state": $search_project_site_state, "search.project_site.county": $search_project_site_county} | compact), body: null}
 }
 
 # Search API for 'Software Tool' entry type
@@ -5319,7 +5341,7 @@ export def "repository-search-type-project-softwarepackage list" [
   let full_url = (build-url $base "/repository/search/type/project_softwarepackage" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"text": $text, "name": $name, "description": $description, "fromdate": $fromdate, "todate": $todate, "createdate.from": $createdate_from, "createdate.to": $createdate_to, "changedate.from": $changedate_from, "changedate.to": $changedate_to, "group": $group, "filesuffix": $filesuffix, "maxlatitude": $maxlatitude, "minlongitude": $minlongitude, "minlatitude": $minlatitude, "maxlongitude": $maxlongitude, "max": $max, "skip": $skip, "search.project_softwarepackage.software_use": $search_project_softwarepackage_software_use, "search.project_softwarepackage.software_type": $search_project_softwarepackage_software_type, "search.project_softwarepackage.domain": $search_project_softwarepackage_domain, "search.project_softwarepackage.platform": $search_project_softwarepackage_platform, "search.project_softwarepackage.license": $search_project_softwarepackage_license, "search.project_softwarepackage.status": $search_project_softwarepackage_status, "search.project_softwarepackage.capabilities": $search_project_softwarepackage_capabilities} | compact), body: null}
 }
 
 # Search API for 'Standard Parameter Name' entry type
@@ -5362,7 +5384,7 @@ export def "repository-search-type-project-standard-name list" [
   let full_url = (build-url $base "/repository/search/type/project_standard_name" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"text": $text, "name": $name, "description": $description, "fromdate": $fromdate, "todate": $todate, "createdate.from": $createdate_from, "createdate.to": $createdate_to, "changedate.from": $changedate_from, "changedate.to": $changedate_to, "group": $group, "filesuffix": $filesuffix, "maxlatitude": $maxlatitude, "minlongitude": $minlongitude, "minlatitude": $minlatitude, "maxlongitude": $maxlongitude, "max": $max, "skip": $skip, "search.project_standard_name.unit": $search_project_standard_name_unit, "search.project_standard_name.aliases": $search_project_standard_name_aliases} | compact), body: null}
 }
 
 # Search API for 'Survey Location' entry type
@@ -5403,7 +5425,7 @@ export def "repository-search-type-project-surveylocation list" [
   let full_url = (build-url $base "/repository/search/type/project_surveylocation" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"text": $text, "name": $name, "description": $description, "fromdate": $fromdate, "todate": $todate, "createdate.from": $createdate_from, "createdate.to": $createdate_to, "changedate.from": $changedate_from, "changedate.to": $changedate_to, "group": $group, "filesuffix": $filesuffix, "maxlatitude": $maxlatitude, "minlongitude": $minlongitude, "minlatitude": $minlatitude, "maxlongitude": $maxlongitude, "max": $max, "skip": $skip} | compact), body: null}
 }
 
 # Search API for 'Vocabulary Term' entry type
@@ -5445,7 +5467,7 @@ export def "repository-search-type-project-term list" [
   let full_url = (build-url $base "/repository/search/type/project_term" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"text": $text, "name": $name, "description": $description, "fromdate": $fromdate, "todate": $todate, "createdate.from": $createdate_from, "createdate.to": $createdate_to, "changedate.from": $changedate_from, "changedate.to": $changedate_to, "group": $group, "filesuffix": $filesuffix, "maxlatitude": $maxlatitude, "minlongitude": $minlongitude, "minlatitude": $minlatitude, "maxlongitude": $maxlongitude, "max": $max, "skip": $skip, "search.project_term.value": $search_project_term_value} | compact), body: null}
 }
 
 # Search API for 'Site Visit' entry type
@@ -5486,7 +5508,7 @@ export def "repository-search-type-project-visit list" [
   let full_url = (build-url $base "/repository/search/type/project_visit" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"text": $text, "name": $name, "description": $description, "fromdate": $fromdate, "todate": $todate, "createdate.from": $createdate_from, "createdate.to": $createdate_to, "changedate.from": $changedate_from, "changedate.to": $changedate_to, "group": $group, "filesuffix": $filesuffix, "maxlatitude": $maxlatitude, "minlongitude": $minlongitude, "minlatitude": $minlatitude, "maxlongitude": $maxlongitude, "max": $max, "skip": $skip} | compact), body: null}
 }
 
 # Search API for 'Vocabulary' entry type
@@ -5527,7 +5549,7 @@ export def "repository-search-type-project-vocabulary list" [
   let full_url = (build-url $base "/repository/search/type/project_vocabulary" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"text": $text, "name": $name, "description": $description, "fromdate": $fromdate, "todate": $todate, "createdate.from": $createdate_from, "createdate.to": $createdate_to, "changedate.from": $changedate_from, "changedate.to": $changedate_to, "group": $group, "filesuffix": $filesuffix, "maxlatitude": $maxlatitude, "minlongitude": $minlongitude, "minlatitude": $minlatitude, "maxlongitude": $maxlongitude, "max": $max, "skip": $skip} | compact), body: null}
 }
 
 # Search API for 'Property Sales' entry type
@@ -5580,7 +5602,7 @@ export def "repository-search-type-property-sales list" [
   let full_url = (build-url $base "/repository/search/type/property_sales" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"text": $text, "name": $name, "description": $description, "fromdate": $fromdate, "todate": $todate, "createdate.from": $createdate_from, "createdate.to": $createdate_to, "changedate.from": $changedate_from, "changedate.to": $changedate_to, "group": $group, "filesuffix": $filesuffix, "maxlatitude": $maxlatitude, "minlongitude": $minlongitude, "minlatitude": $minlatitude, "maxlongitude": $maxlongitude, "max": $max, "skip": $skip, "search.db_property_sales.property_address": $search_db_property_sales_property_address, "search.db_property_sales.city": $search_db_property_sales_city, "search.db_property_sales.zipcode": $search_db_property_sales_zipcode, "search.db_property_sales.sale_price": $search_db_property_sales_sale_price, "search.db_property_sales.sale_date": $search_db_property_sales_sale_date, "search.db_property_sales.seller": $search_db_property_sales_seller, "search.db_property_sales.buyer": $search_db_property_sales_buyer, "search.db_property_sales.type": $search_db_property_sales_type, "search.db_property_sales.building_description": $search_db_property_sales_building_description, "search.db_property_sales.building_design": $search_db_property_sales_building_design, "search.db_property_sales.subdivision": $search_db_property_sales_subdivision, "search.db_property_sales.location": $search_db_property_sales_location} | compact), body: null}
 }
 
 # Search API for 'Property Database' entry type
@@ -5633,7 +5655,7 @@ export def "repository-search-type-propertydb list" [
   let full_url = (build-url $base "/repository/search/type/propertydb" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"text": $text, "name": $name, "description": $description, "fromdate": $fromdate, "todate": $todate, "createdate.from": $createdate_from, "createdate.to": $createdate_to, "changedate.from": $changedate_from, "changedate.to": $changedate_to, "group": $group, "filesuffix": $filesuffix, "maxlatitude": $maxlatitude, "minlongitude": $minlongitude, "minlatitude": $minlatitude, "maxlongitude": $maxlongitude, "max": $max, "skip": $skip, "search.db_propertydb.property_id": $search_db_propertydb_property_id, "search.db_propertydb.owner": $search_db_propertydb_owner, "search.db_propertydb.address": $search_db_propertydb_address, "search.db_propertydb.city": $search_db_propertydb_city, "search.db_propertydb.state": $search_db_propertydb_state, "search.db_propertydb.value": $search_db_propertydb_value, "search.db_propertydb.building_type": $search_db_propertydb_building_type, "search.db_propertydb.house_size": $search_db_propertydb_house_size, "search.db_propertydb.lot_sqft": $search_db_propertydb_lot_sqft, "search.db_propertydb.lot_acres": $search_db_propertydb_lot_acres, "search.db_propertydb.price_sqft": $search_db_propertydb_price_sqft, "search.db_propertydb.location": $search_db_propertydb_location} | compact), body: null}
 }
 
 # Search API for 'IPython Notebook file' entry type
@@ -5674,7 +5696,7 @@ export def "repository-search-type-python-notebook list" [
   let full_url = (build-url $base "/repository/search/type/python_notebook" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"text": $text, "name": $name, "description": $description, "fromdate": $fromdate, "todate": $todate, "createdate.from": $createdate_from, "createdate.to": $createdate_to, "changedate.from": $changedate_from, "changedate.to": $changedate_to, "group": $group, "filesuffix": $filesuffix, "maxlatitude": $maxlatitude, "minlongitude": $minlongitude, "minlatitude": $minlatitude, "maxlongitude": $maxlongitude, "max": $max, "skip": $skip} | compact), body: null}
 }
 
 # Search API for 'Slack Team' entry type
@@ -5715,7 +5737,7 @@ export def "repository-search-type-slack-team list" [
   let full_url = (build-url $base "/repository/search/type/slack_team" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"text": $text, "name": $name, "description": $description, "fromdate": $fromdate, "todate": $todate, "createdate.from": $createdate_from, "createdate.to": $createdate_to, "changedate.from": $changedate_from, "changedate.to": $changedate_to, "group": $group, "filesuffix": $filesuffix, "maxlatitude": $maxlatitude, "minlongitude": $minlongitude, "minlatitude": $minlatitude, "maxlongitude": $maxlongitude, "max": $max, "skip": $skip} | compact), body: null}
 }
 
 # Search API for 'Status Board' entry type
@@ -5758,7 +5780,7 @@ export def "repository-search-type-statusboard list" [
   let full_url = (build-url $base "/repository/search/type/statusboard" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"text": $text, "name": $name, "description": $description, "fromdate": $fromdate, "todate": $todate, "createdate.from": $createdate_from, "createdate.to": $createdate_to, "changedate.from": $changedate_from, "changedate.to": $changedate_to, "group": $group, "filesuffix": $filesuffix, "maxlatitude": $maxlatitude, "minlongitude": $minlongitude, "minlatitude": $minlatitude, "maxlongitude": $maxlongitude, "max": $max, "skip": $skip, "search.db_statusboard.what": $search_db_statusboard_what, "search.db_statusboard.status": $search_db_statusboard_status} | compact), body: null}
 }
 
 # Search API for 'Sunrise/Sunset Display' entry type
@@ -5799,7 +5821,7 @@ export def "repository-search-type-sunrisesunset list" [
   let full_url = (build-url $base "/repository/search/type/sunrisesunset" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"text": $text, "name": $name, "description": $description, "fromdate": $fromdate, "todate": $todate, "createdate.from": $createdate_from, "createdate.to": $createdate_to, "changedate.from": $changedate_from, "changedate.to": $changedate_to, "group": $group, "filesuffix": $filesuffix, "maxlatitude": $maxlatitude, "minlongitude": $minlongitude, "minlatitude": $minlatitude, "maxlongitude": $maxlongitude, "max": $max, "skip": $skip} | compact), body: null}
 }
 
 # Search API for 'Tasks' entry type
@@ -5847,7 +5869,7 @@ export def "repository-search-type-tasks list" [
   let full_url = (build-url $base "/repository/search/type/tasks" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"text": $text, "name": $name, "description": $description, "fromdate": $fromdate, "todate": $todate, "createdate.from": $createdate_from, "createdate.to": $createdate_to, "changedate.from": $changedate_from, "changedate.to": $changedate_to, "group": $group, "filesuffix": $filesuffix, "maxlatitude": $maxlatitude, "minlongitude": $minlongitude, "minlatitude": $minlatitude, "maxlongitude": $maxlongitude, "max": $max, "skip": $skip, "search.db_tasks.title": $search_db_tasks_title, "search.db_tasks.priority": $search_db_tasks_priority, "search.db_tasks.status": $search_db_tasks_status, "search.db_tasks.complete": $search_db_tasks_complete, "search.db_tasks.assignedto": $search_db_tasks_assignedto, "search.db_tasks.startdate": $search_db_tasks_startdate, "search.db_tasks.enddate": $search_db_tasks_enddate} | compact), body: null}
 }
 
 # Search API for 'Tmdb Movies' entry type
@@ -5908,7 +5930,7 @@ export def "repository-search-type-tmdbmovies list" [
   let full_url = (build-url $base "/repository/search/type/tmdbmovies" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"text": $text, "name": $name, "description": $description, "fromdate": $fromdate, "todate": $todate, "createdate.from": $createdate_from, "createdate.to": $createdate_to, "changedate.from": $changedate_from, "changedate.to": $changedate_to, "group": $group, "filesuffix": $filesuffix, "maxlatitude": $maxlatitude, "minlongitude": $minlongitude, "minlatitude": $minlatitude, "maxlongitude": $maxlongitude, "max": $max, "skip": $skip, "search.db_tmdbmovies.original_title": $search_db_tmdbmovies_original_title, "search.db_tmdbmovies.overview": $search_db_tmdbmovies_overview, "search.db_tmdbmovies.budget": $search_db_tmdbmovies_budget, "search.db_tmdbmovies.genres": $search_db_tmdbmovies_genres, "search.db_tmdbmovies.homepage": $search_db_tmdbmovies_homepage, "search.db_tmdbmovies.movie_id": $search_db_tmdbmovies_movie_id, "search.db_tmdbmovies.keywords": $search_db_tmdbmovies_keywords, "search.db_tmdbmovies.original_language": $search_db_tmdbmovies_original_language, "search.db_tmdbmovies.popularity": $search_db_tmdbmovies_popularity, "search.db_tmdbmovies.production_companies": $search_db_tmdbmovies_production_companies, "search.db_tmdbmovies.production_countries": $search_db_tmdbmovies_production_countries, "search.db_tmdbmovies.release_date": $search_db_tmdbmovies_release_date, "search.db_tmdbmovies.revenue": $search_db_tmdbmovies_revenue, "search.db_tmdbmovies.runtime": $search_db_tmdbmovies_runtime, "search.db_tmdbmovies.spoken_languages": $search_db_tmdbmovies_spoken_languages, "search.db_tmdbmovies.status": $search_db_tmdbmovies_status, "search.db_tmdbmovies.tagline": $search_db_tmdbmovies_tagline, "search.db_tmdbmovies.title": $search_db_tmdbmovies_title, "search.db_tmdbmovies.vote_average": $search_db_tmdbmovies_vote_average, "search.db_tmdbmovies.vote_count": $search_db_tmdbmovies_vote_count} | compact), body: null}
 }
 
 # Search API for 'Todo' entry type
@@ -5952,7 +5974,7 @@ export def "repository-search-type-todo list" [
   let full_url = (build-url $base "/repository/search/type/todo" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"text": $text, "name": $name, "description": $description, "fromdate": $fromdate, "todate": $todate, "createdate.from": $createdate_from, "createdate.to": $createdate_to, "changedate.from": $changedate_from, "changedate.to": $changedate_to, "group": $group, "filesuffix": $filesuffix, "maxlatitude": $maxlatitude, "minlongitude": $minlongitude, "minlatitude": $minlatitude, "maxlongitude": $maxlongitude, "max": $max, "skip": $skip, "search.db_todo.checked": $search_db_todo_checked, "search.db_todo.title": $search_db_todo_title, "search.db_todo.category": $search_db_todo_category} | compact), body: null}
 }
 
 # Search API for 'Event' entry type
@@ -5993,7 +6015,7 @@ export def "repository-search-type-trip-event list" [
   let full_url = (build-url $base "/repository/search/type/trip_event" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"text": $text, "name": $name, "description": $description, "fromdate": $fromdate, "todate": $todate, "createdate.from": $createdate_from, "createdate.to": $createdate_to, "changedate.from": $changedate_from, "changedate.to": $changedate_to, "group": $group, "filesuffix": $filesuffix, "maxlatitude": $maxlatitude, "minlongitude": $minlongitude, "minlatitude": $minlatitude, "maxlongitude": $maxlongitude, "max": $max, "skip": $skip} | compact), body: null}
 }
 
 # Search API for 'Flight Leg' entry type
@@ -6034,7 +6056,7 @@ export def "repository-search-type-trip-flight list" [
   let full_url = (build-url $base "/repository/search/type/trip_flight" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"text": $text, "name": $name, "description": $description, "fromdate": $fromdate, "todate": $todate, "createdate.from": $createdate_from, "createdate.to": $createdate_to, "changedate.from": $changedate_from, "changedate.to": $changedate_to, "group": $group, "filesuffix": $filesuffix, "maxlatitude": $maxlatitude, "minlongitude": $minlongitude, "minlatitude": $minlatitude, "maxlongitude": $maxlongitude, "max": $max, "skip": $skip} | compact), body: null}
 }
 
 # Search API for 'Lodging' entry type
@@ -6075,7 +6097,7 @@ export def "repository-search-type-trip-hotel list" [
   let full_url = (build-url $base "/repository/search/type/trip_hotel" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"text": $text, "name": $name, "description": $description, "fromdate": $fromdate, "todate": $todate, "createdate.from": $createdate_from, "createdate.to": $createdate_to, "changedate.from": $changedate_from, "changedate.to": $changedate_to, "group": $group, "filesuffix": $filesuffix, "maxlatitude": $maxlatitude, "minlongitude": $minlongitude, "minlatitude": $minlatitude, "maxlongitude": $maxlongitude, "max": $max, "skip": $skip} | compact), body: null}
 }
 
 # Search API for 'Trip Report' entry type
@@ -6116,7 +6138,7 @@ export def "repository-search-type-trip-report list" [
   let full_url = (build-url $base "/repository/search/type/trip_report" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"text": $text, "name": $name, "description": $description, "fromdate": $fromdate, "todate": $todate, "createdate.from": $createdate_from, "createdate.to": $createdate_to, "changedate.from": $changedate_from, "changedate.to": $changedate_to, "group": $group, "filesuffix": $filesuffix, "maxlatitude": $maxlatitude, "minlongitude": $minlongitude, "minlatitude": $minlatitude, "maxlongitude": $maxlongitude, "max": $max, "skip": $skip} | compact), body: null}
 }
 
 # Search API for 'Trip' entry type
@@ -6157,7 +6179,7 @@ export def "repository-search-type-trip-trip list" [
   let full_url = (build-url $base "/repository/search/type/trip_trip" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"text": $text, "name": $name, "description": $description, "fromdate": $fromdate, "todate": $todate, "createdate.from": $createdate_from, "createdate.to": $createdate_to, "changedate.from": $changedate_from, "changedate.to": $changedate_to, "group": $group, "filesuffix": $filesuffix, "maxlatitude": $maxlatitude, "minlongitude": $minlongitude, "minlatitude": $minlatitude, "maxlongitude": $maxlongitude, "max": $max, "skip": $skip} | compact), body: null}
 }
 
 # Search API for 'AWC Weather Observations' entry type
@@ -6199,7 +6221,7 @@ export def "repository-search-type-type-awc-metar list" [
   let full_url = (build-url $base "/repository/search/type/type_awc_metar" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"text": $text, "name": $name, "description": $description, "fromdate": $fromdate, "todate": $todate, "createdate.from": $createdate_from, "createdate.to": $createdate_to, "changedate.from": $changedate_from, "changedate.to": $changedate_to, "group": $group, "filesuffix": $filesuffix, "maxlatitude": $maxlatitude, "minlongitude": $minlongitude, "minlatitude": $minlatitude, "maxlongitude": $maxlongitude, "max": $max, "skip": $skip, "search.type_awc_metar.site_id": $search_type_awc_metar_site_id} | compact), body: null}
 }
 
 # Search API for 'Stock Ticker Data' entry type
@@ -6240,7 +6262,7 @@ export def "repository-search-type-type-biz-stockseries list" [
   let full_url = (build-url $base "/repository/search/type/type_biz_stockseries" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"text": $text, "name": $name, "description": $description, "fromdate": $fromdate, "todate": $todate, "createdate.from": $createdate_from, "createdate.to": $createdate_to, "changedate.from": $changedate_from, "changedate.to": $changedate_to, "group": $group, "filesuffix": $filesuffix, "maxlatitude": $maxlatitude, "minlongitude": $minlongitude, "minlatitude": $minlatitude, "maxlongitude": $maxlongitude, "max": $max, "skip": $skip} | compact), body: null}
 }
 
 # Search API for 'BLS Series' entry type
@@ -6288,7 +6310,7 @@ export def "repository-search-type-type-bls-series list" [
   let full_url = (build-url $base "/repository/search/type/type_bls_series" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"text": $text, "name": $name, "description": $description, "fromdate": $fromdate, "todate": $todate, "createdate.from": $createdate_from, "createdate.to": $createdate_to, "changedate.from": $changedate_from, "changedate.to": $changedate_to, "group": $group, "filesuffix": $filesuffix, "maxlatitude": $maxlatitude, "minlongitude": $minlongitude, "minlatitude": $minlatitude, "maxlongitude": $maxlongitude, "max": $max, "skip": $skip, "search.type_bls_series.survey_name": $search_type_bls_series_survey_name, "search.type_bls_series.measure_data_type": $search_type_bls_series_measure_data_type, "search.type_bls_series.industry": $search_type_bls_series_industry, "search.type_bls_series.sector": $search_type_bls_series_sector, "search.type_bls_series.area": $search_type_bls_series_area, "search.type_bls_series.item": $search_type_bls_series_item, "search.type_bls_series.seasonality": $search_type_bls_series_seasonality} | compact), body: null}
 }
 
 # Search API for 'BLS Survey' entry type
@@ -6329,7 +6351,7 @@ export def "repository-search-type-type-bls-survey list" [
   let full_url = (build-url $base "/repository/search/type/type_bls_survey" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"text": $text, "name": $name, "description": $description, "fromdate": $fromdate, "todate": $todate, "createdate.from": $createdate_from, "createdate.to": $createdate_to, "changedate.from": $changedate_from, "changedate.to": $changedate_to, "group": $group, "filesuffix": $filesuffix, "maxlatitude": $maxlatitude, "minlongitude": $minlongitude, "minlatitude": $minlatitude, "maxlongitude": $maxlongitude, "max": $max, "skip": $skip} | compact), body: null}
 }
 
 # Search API for 'US Census ACS Data' entry type
@@ -6374,7 +6396,7 @@ export def "repository-search-type-type-census-acs list" [
   let full_url = (build-url $base "/repository/search/type/type_census_acs" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"text": $text, "name": $name, "description": $description, "fromdate": $fromdate, "todate": $todate, "createdate.from": $createdate_from, "createdate.to": $createdate_to, "changedate.from": $changedate_from, "changedate.to": $changedate_to, "group": $group, "filesuffix": $filesuffix, "maxlatitude": $maxlatitude, "minlongitude": $minlongitude, "minlatitude": $minlatitude, "maxlongitude": $maxlongitude, "max": $max, "skip": $skip, "search.type_census_acs.fields": $search_type_census_acs_fields, "search.type_census_acs.for_type": $search_type_census_acs_for_type, "search.type_census_acs.in_type1": $search_type_census_acs_in_type1, "search.type_census_acs.in_type2": $search_type_census_acs_in_type2} | compact), body: null}
 }
 
 # Search API for 'Daymet Daily Weather' entry type
@@ -6415,7 +6437,7 @@ export def "repository-search-type-type-daymet list" [
   let full_url = (build-url $base "/repository/search/type/type_daymet" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"text": $text, "name": $name, "description": $description, "fromdate": $fromdate, "todate": $todate, "createdate.from": $createdate_from, "createdate.to": $createdate_to, "changedate.from": $changedate_from, "changedate.to": $changedate_to, "group": $group, "filesuffix": $filesuffix, "maxlatitude": $maxlatitude, "minlongitude": $minlongitude, "minlatitude": $minlatitude, "maxlongitude": $maxlongitude, "max": $max, "skip": $skip} | compact), body: null}
 }
 
 # Search API for 'Database Table' entry type
@@ -6456,7 +6478,7 @@ export def "repository-search-type-type-db-table list" [
   let full_url = (build-url $base "/repository/search/type/type_db_table" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"text": $text, "name": $name, "description": $description, "fromdate": $fromdate, "todate": $todate, "createdate.from": $createdate_from, "createdate.to": $createdate_to, "changedate.from": $changedate_from, "changedate.to": $changedate_to, "group": $group, "filesuffix": $filesuffix, "maxlatitude": $maxlatitude, "minlongitude": $minlongitude, "minlatitude": $minlatitude, "maxlongitude": $maxlongitude, "max": $max, "skip": $skip} | compact), body: null}
 }
 
 # Search API for 'CSV File' entry type
@@ -6497,7 +6519,7 @@ export def "repository-search-type-type-document-csv list" [
   let full_url = (build-url $base "/repository/search/type/type_document_csv" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"text": $text, "name": $name, "description": $description, "fromdate": $fromdate, "todate": $todate, "createdate.from": $createdate_from, "createdate.to": $createdate_to, "changedate.from": $changedate_from, "changedate.to": $changedate_to, "group": $group, "filesuffix": $filesuffix, "maxlatitude": $maxlatitude, "minlongitude": $minlongitude, "minlatitude": $minlatitude, "maxlongitude": $maxlongitude, "max": $max, "skip": $skip} | compact), body: null}
 }
 
 # Search API for 'Word File' entry type
@@ -6538,7 +6560,7 @@ export def "repository-search-type-type-document-doc list" [
   let full_url = (build-url $base "/repository/search/type/type_document_doc" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"text": $text, "name": $name, "description": $description, "fromdate": $fromdate, "todate": $todate, "createdate.from": $createdate_from, "createdate.to": $createdate_to, "changedate.from": $changedate_from, "changedate.to": $changedate_to, "group": $group, "filesuffix": $filesuffix, "maxlatitude": $maxlatitude, "minlongitude": $minlongitude, "minlatitude": $minlatitude, "maxlongitude": $maxlongitude, "max": $max, "skip": $skip} | compact), body: null}
 }
 
 # Search API for 'HTML File' entry type
@@ -6579,7 +6601,7 @@ export def "repository-search-type-type-document-html list" [
   let full_url = (build-url $base "/repository/search/type/type_document_html" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"text": $text, "name": $name, "description": $description, "fromdate": $fromdate, "todate": $todate, "createdate.from": $createdate_from, "createdate.to": $createdate_to, "changedate.from": $changedate_from, "changedate.to": $changedate_to, "group": $group, "filesuffix": $filesuffix, "maxlatitude": $maxlatitude, "minlongitude": $minlongitude, "minlatitude": $minlatitude, "maxlongitude": $maxlongitude, "max": $max, "skip": $skip} | compact), body: null}
 }
 
 # Search API for 'PDF File' entry type
@@ -6620,7 +6642,7 @@ export def "repository-search-type-type-document-pdf list" [
   let full_url = (build-url $base "/repository/search/type/type_document_pdf" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"text": $text, "name": $name, "description": $description, "fromdate": $fromdate, "todate": $todate, "createdate.from": $createdate_from, "createdate.to": $createdate_to, "changedate.from": $changedate_from, "changedate.to": $changedate_to, "group": $group, "filesuffix": $filesuffix, "maxlatitude": $maxlatitude, "minlongitude": $minlongitude, "minlatitude": $minlatitude, "maxlongitude": $maxlongitude, "max": $max, "skip": $skip} | compact), body: null}
 }
 
 # Search API for 'Powerpoint File' entry type
@@ -6661,7 +6683,7 @@ export def "repository-search-type-type-document-ppt list" [
   let full_url = (build-url $base "/repository/search/type/type_document_ppt" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"text": $text, "name": $name, "description": $description, "fromdate": $fromdate, "todate": $todate, "createdate.from": $createdate_from, "createdate.to": $createdate_to, "changedate.from": $changedate_from, "changedate.to": $changedate_to, "group": $group, "filesuffix": $filesuffix, "maxlatitude": $maxlatitude, "minlongitude": $minlongitude, "minlatitude": $minlatitude, "maxlongitude": $maxlongitude, "max": $max, "skip": $skip} | compact), body: null}
 }
 
 # Search API for 'Excel File' entry type
@@ -6702,7 +6724,7 @@ export def "repository-search-type-type-document-xls list" [
   let full_url = (build-url $base "/repository/search/type/type_document_xls" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"text": $text, "name": $name, "description": $description, "fromdate": $fromdate, "todate": $todate, "createdate.from": $createdate_from, "createdate.to": $createdate_to, "changedate.from": $changedate_from, "changedate.to": $changedate_to, "group": $group, "filesuffix": $filesuffix, "maxlatitude": $maxlatitude, "minlongitude": $minlongitude, "minlatitude": $minlatitude, "maxlongitude": $maxlongitude, "max": $max, "skip": $skip} | compact), body: null}
 }
 
 # Search API for 'Drilsdown Case Study' entry type
@@ -6743,7 +6765,7 @@ export def "repository-search-type-type-drilsdown-casestudy list" [
   let full_url = (build-url $base "/repository/search/type/type_drilsdown_casestudy" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"text": $text, "name": $name, "description": $description, "fromdate": $fromdate, "todate": $todate, "createdate.from": $createdate_from, "createdate.to": $createdate_to, "changedate.from": $changedate_from, "changedate.to": $changedate_to, "group": $group, "filesuffix": $filesuffix, "maxlatitude": $maxlatitude, "minlongitude": $minlongitude, "minlatitude": $minlatitude, "maxlongitude": $maxlongitude, "max": $max, "skip": $skip} | compact), body: null}
 }
 
 # Search API for 'SEC EDGAR Filing' entry type
@@ -6790,7 +6812,7 @@ export def "repository-search-type-type-edgar-filing list" [
   let full_url = (build-url $base "/repository/search/type/type_edgar_filing" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"text": $text, "name": $name, "description": $description, "fromdate": $fromdate, "todate": $todate, "createdate.from": $createdate_from, "createdate.to": $createdate_to, "changedate.from": $changedate_from, "changedate.to": $changedate_to, "group": $group, "filesuffix": $filesuffix, "maxlatitude": $maxlatitude, "minlongitude": $minlongitude, "minlatitude": $minlatitude, "maxlongitude": $maxlongitude, "max": $max, "skip": $skip, "search.type_edgar_filing.form_type": $search_type_edgar_filing_form_type, "search.type_edgar_filing.company_name": $search_type_edgar_filing_company_name, "search.type_edgar_filing.cik_number": $search_type_edgar_filing_cik_number, "search.type_edgar_filing.standard_industrial_classification": $search_type_edgar_filing_standard_industrial_classification, "search.type_edgar_filing.irs_number": $search_type_edgar_filing_irs_number, "search.type_edgar_filing.state": $search_type_edgar_filing_state} | compact), body: null}
 }
 
 # Search API for 'EIA Category' entry type
@@ -6831,7 +6853,7 @@ export def "repository-search-type-type-eia-category list" [
   let full_url = (build-url $base "/repository/search/type/type_eia_category" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"text": $text, "name": $name, "description": $description, "fromdate": $fromdate, "todate": $todate, "createdate.from": $createdate_from, "createdate.to": $createdate_to, "changedate.from": $changedate_from, "changedate.to": $changedate_to, "group": $group, "filesuffix": $filesuffix, "maxlatitude": $maxlatitude, "minlongitude": $minlongitude, "minlatitude": $minlatitude, "maxlongitude": $maxlongitude, "max": $max, "skip": $skip} | compact), body: null}
 }
 
 # Search API for 'EIA Series' entry type
@@ -6872,7 +6894,7 @@ export def "repository-search-type-type-eia-series list" [
   let full_url = (build-url $base "/repository/search/type/type_eia_series" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"text": $text, "name": $name, "description": $description, "fromdate": $fromdate, "todate": $todate, "createdate.from": $createdate_from, "createdate.to": $createdate_to, "changedate.from": $changedate_from, "changedate.to": $changedate_to, "group": $group, "filesuffix": $filesuffix, "maxlatitude": $maxlatitude, "minlongitude": $minlongitude, "minlatitude": $minlatitude, "maxlongitude": $maxlongitude, "max": $max, "skip": $skip} | compact), body: null}
 }
 
 # Search API for 'ESRI Feature Server' entry type
@@ -6913,7 +6935,7 @@ export def "repository-search-type-type-esri-featureserver list" [
   let full_url = (build-url $base "/repository/search/type/type_esri_featureserver" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"text": $text, "name": $name, "description": $description, "fromdate": $fromdate, "todate": $todate, "createdate.from": $createdate_from, "createdate.to": $createdate_to, "changedate.from": $changedate_from, "changedate.to": $changedate_to, "group": $group, "filesuffix": $filesuffix, "maxlatitude": $maxlatitude, "minlongitude": $minlongitude, "minlatitude": $minlatitude, "maxlongitude": $maxlongitude, "max": $max, "skip": $skip} | compact), body: null}
 }
 
 # Search API for 'ESRI Geometry Server' entry type
@@ -6954,7 +6976,7 @@ export def "repository-search-type-type-esri-geometryserver list" [
   let full_url = (build-url $base "/repository/search/type/type_esri_geometryserver" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"text": $text, "name": $name, "description": $description, "fromdate": $fromdate, "todate": $todate, "createdate.from": $createdate_from, "createdate.to": $createdate_to, "changedate.from": $changedate_from, "changedate.to": $changedate_to, "group": $group, "filesuffix": $filesuffix, "maxlatitude": $maxlatitude, "minlongitude": $minlongitude, "minlatitude": $minlatitude, "maxlongitude": $maxlongitude, "max": $max, "skip": $skip} | compact), body: null}
 }
 
 # Search API for 'ESRI GP Server' entry type
@@ -6995,7 +7017,7 @@ export def "repository-search-type-type-esri-gpserver list" [
   let full_url = (build-url $base "/repository/search/type/type_esri_gpserver" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"text": $text, "name": $name, "description": $description, "fromdate": $fromdate, "todate": $todate, "createdate.from": $createdate_from, "createdate.to": $createdate_to, "changedate.from": $changedate_from, "changedate.to": $changedate_to, "group": $group, "filesuffix": $filesuffix, "maxlatitude": $maxlatitude, "minlongitude": $minlongitude, "minlatitude": $minlatitude, "maxlongitude": $maxlongitude, "max": $max, "skip": $skip} | compact), body: null}
 }
 
 # Search API for 'ESRI Image Server' entry type
@@ -7036,7 +7058,7 @@ export def "repository-search-type-type-esri-imageserver list" [
   let full_url = (build-url $base "/repository/search/type/type_esri_imageserver" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"text": $text, "name": $name, "description": $description, "fromdate": $fromdate, "todate": $todate, "createdate.from": $createdate_from, "createdate.to": $createdate_to, "changedate.from": $changedate_from, "changedate.to": $changedate_to, "group": $group, "filesuffix": $filesuffix, "maxlatitude": $maxlatitude, "minlongitude": $minlongitude, "minlatitude": $minlatitude, "maxlongitude": $maxlongitude, "max": $max, "skip": $skip} | compact), body: null}
 }
 
 # Search API for 'ESRI Layer' entry type
@@ -7078,7 +7100,7 @@ export def "repository-search-type-type-esri-layer list" [
   let full_url = (build-url $base "/repository/search/type/type_esri_layer" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"text": $text, "name": $name, "description": $description, "fromdate": $fromdate, "todate": $todate, "createdate.from": $createdate_from, "createdate.to": $createdate_to, "changedate.from": $changedate_from, "changedate.to": $changedate_to, "group": $group, "filesuffix": $filesuffix, "maxlatitude": $maxlatitude, "minlongitude": $minlongitude, "minlatitude": $minlatitude, "maxlongitude": $maxlongitude, "max": $max, "skip": $skip, "search.type_esri_layer.layer_type": $search_type_esri_layer_layer_type} | compact), body: null}
 }
 
 # Search API for 'ESRI Map Server' entry type
@@ -7119,7 +7141,7 @@ export def "repository-search-type-type-esri-mapserver list" [
   let full_url = (build-url $base "/repository/search/type/type_esri_mapserver" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"text": $text, "name": $name, "description": $description, "fromdate": $fromdate, "todate": $todate, "createdate.from": $createdate_from, "createdate.to": $createdate_to, "changedate.from": $changedate_from, "changedate.to": $changedate_to, "group": $group, "filesuffix": $filesuffix, "maxlatitude": $maxlatitude, "minlongitude": $minlongitude, "minlatitude": $minlatitude, "maxlongitude": $maxlongitude, "max": $max, "skip": $skip} | compact), body: null}
 }
 
 # Search API for 'ESRI Services Folder' entry type
@@ -7160,7 +7182,7 @@ export def "repository-search-type-type-esri-restfolder list" [
   let full_url = (build-url $base "/repository/search/type/type_esri_restfolder" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"text": $text, "name": $name, "description": $description, "fromdate": $fromdate, "todate": $todate, "createdate.from": $createdate_from, "createdate.to": $createdate_to, "changedate.from": $changedate_from, "changedate.to": $changedate_to, "group": $group, "filesuffix": $filesuffix, "maxlatitude": $maxlatitude, "minlongitude": $minlongitude, "minlatitude": $minlatitude, "maxlongitude": $maxlongitude, "max": $max, "skip": $skip} | compact), body: null}
 }
 
 # Search API for 'ESRI Web Server' entry type
@@ -7201,7 +7223,7 @@ export def "repository-search-type-type-esri-restserver list" [
   let full_url = (build-url $base "/repository/search/type/type_esri_restserver" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"text": $text, "name": $name, "description": $description, "fromdate": $fromdate, "todate": $todate, "createdate.from": $createdate_from, "createdate.to": $createdate_to, "changedate.from": $changedate_from, "changedate.to": $changedate_to, "group": $group, "filesuffix": $filesuffix, "maxlatitude": $maxlatitude, "minlongitude": $minlongitude, "minlatitude": $minlatitude, "maxlongitude": $maxlongitude, "max": $max, "skip": $skip} | compact), body: null}
 }
 
 # Search API for 'ESRI Rest Service' entry type
@@ -7242,7 +7264,7 @@ export def "repository-search-type-type-esri-restservice list" [
   let full_url = (build-url $base "/repository/search/type/type_esri_restservice" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"text": $text, "name": $name, "description": $description, "fromdate": $fromdate, "todate": $todate, "createdate.from": $createdate_from, "createdate.to": $createdate_to, "changedate.from": $changedate_from, "changedate.to": $changedate_to, "group": $group, "filesuffix": $filesuffix, "maxlatitude": $maxlatitude, "minlongitude": $minlongitude, "minlatitude": $minlatitude, "maxlongitude": $maxlongitude, "max": $max, "skip": $skip} | compact), body: null}
 }
 
 # Search API for 'NOAA Extremes Data' entry type
@@ -7285,7 +7307,7 @@ export def "repository-search-type-type-extremes list" [
   let full_url = (build-url $base "/repository/search/type/type_extremes" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"text": $text, "name": $name, "description": $description, "fromdate": $fromdate, "todate": $todate, "createdate.from": $createdate_from, "createdate.to": $createdate_to, "changedate.from": $changedate_from, "changedate.to": $changedate_to, "group": $group, "filesuffix": $filesuffix, "maxlatitude": $maxlatitude, "minlongitude": $minlongitude, "minlatitude": $minlatitude, "maxlongitude": $maxlongitude, "max": $max, "skip": $skip, "search.type_extremes.region": $search_type_extremes_region, "search.type_extremes.variable": $search_type_extremes_variable} | compact), body: null}
 }
 
 # Search API for 'FRED Category' entry type
@@ -7326,7 +7348,7 @@ export def "repository-search-type-type-fred-category list" [
   let full_url = (build-url $base "/repository/search/type/type_fred_category" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"text": $text, "name": $name, "description": $description, "fromdate": $fromdate, "todate": $todate, "createdate.from": $createdate_from, "createdate.to": $createdate_to, "changedate.from": $changedate_from, "changedate.to": $changedate_to, "group": $group, "filesuffix": $filesuffix, "maxlatitude": $maxlatitude, "minlongitude": $minlongitude, "minlatitude": $minlatitude, "maxlongitude": $maxlongitude, "max": $max, "skip": $skip} | compact), body: null}
 }
 
 # Search API for 'FRED Series' entry type
@@ -7367,7 +7389,7 @@ export def "repository-search-type-type-fred-series list" [
   let full_url = (build-url $base "/repository/search/type/type_fred_series" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"text": $text, "name": $name, "description": $description, "fromdate": $fromdate, "todate": $todate, "createdate.from": $createdate_from, "createdate.to": $createdate_to, "changedate.from": $changedate_from, "changedate.to": $changedate_to, "group": $group, "filesuffix": $filesuffix, "maxlatitude": $maxlatitude, "minlongitude": $minlongitude, "minlatitude": $minlatitude, "maxlongitude": $maxlongitude, "max": $max, "skip": $skip} | compact), body: null}
 }
 
 # Search API for 'Transit Agency' entry type
@@ -7408,7 +7430,7 @@ export def "repository-search-type-type-gtfs-agency list" [
   let full_url = (build-url $base "/repository/search/type/type_gtfs_agency" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"text": $text, "name": $name, "description": $description, "fromdate": $fromdate, "todate": $todate, "createdate.from": $createdate_from, "createdate.to": $createdate_to, "changedate.from": $changedate_from, "changedate.to": $changedate_to, "group": $group, "filesuffix": $filesuffix, "maxlatitude": $maxlatitude, "minlongitude": $minlongitude, "minlatitude": $minlatitude, "maxlongitude": $maxlongitude, "max": $max, "skip": $skip} | compact), body: null}
 }
 
 # Search API for 'Transit Route' entry type
@@ -7451,7 +7473,7 @@ export def "repository-search-type-type-gtfs-route list" [
   let full_url = (build-url $base "/repository/search/type/type_gtfs_route" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"text": $text, "name": $name, "description": $description, "fromdate": $fromdate, "todate": $todate, "createdate.from": $createdate_from, "createdate.to": $createdate_to, "changedate.from": $changedate_from, "changedate.to": $changedate_to, "group": $group, "filesuffix": $filesuffix, "maxlatitude": $maxlatitude, "minlongitude": $minlongitude, "minlatitude": $minlatitude, "maxlongitude": $maxlongitude, "max": $max, "skip": $skip, "search.type_gtfs_route.route_id": $search_type_gtfs_route_route_id, "search.type_gtfs_route.stop_names": $search_type_gtfs_route_stop_names} | compact), body: null}
 }
 
 # Search API for 'Transit Route Collection' entry type
@@ -7492,7 +7514,7 @@ export def "repository-search-type-type-gtfs-routes list" [
   let full_url = (build-url $base "/repository/search/type/type_gtfs_routes" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"text": $text, "name": $name, "description": $description, "fromdate": $fromdate, "todate": $todate, "createdate.from": $createdate_from, "createdate.to": $createdate_to, "changedate.from": $changedate_from, "changedate.to": $changedate_to, "group": $group, "filesuffix": $filesuffix, "maxlatitude": $maxlatitude, "minlongitude": $minlongitude, "minlatitude": $minlatitude, "maxlongitude": $maxlongitude, "max": $max, "skip": $skip} | compact), body: null}
 }
 
 # Search API for 'Transit Stop' entry type
@@ -7538,7 +7560,7 @@ export def "repository-search-type-type-gtfs-stop list" [
   let full_url = (build-url $base "/repository/search/type/type_gtfs_stop" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"text": $text, "name": $name, "description": $description, "fromdate": $fromdate, "todate": $todate, "createdate.from": $createdate_from, "createdate.to": $createdate_to, "changedate.from": $changedate_from, "changedate.to": $changedate_to, "group": $group, "filesuffix": $filesuffix, "maxlatitude": $maxlatitude, "minlongitude": $minlongitude, "minlatitude": $minlatitude, "maxlongitude": $maxlongitude, "max": $max, "skip": $skip, "search.type_gtfs_stop.stop_id": $search_type_gtfs_stop_stop_id, "search.type_gtfs_stop.stop_code": $search_type_gtfs_stop_stop_code, "search.type_gtfs_stop.zone_id": $search_type_gtfs_stop_zone_id, "search.type_gtfs_stop.location_type": $search_type_gtfs_stop_location_type, "search.type_gtfs_stop.wheelchair_boarding": $search_type_gtfs_stop_wheelchair_boarding} | compact), body: null}
 }
 
 # Search API for 'Transit Stop Collection' entry type
@@ -7579,7 +7601,7 @@ export def "repository-search-type-type-gtfs-stops list" [
   let full_url = (build-url $base "/repository/search/type/type_gtfs_stops" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"text": $text, "name": $name, "description": $description, "fromdate": $fromdate, "todate": $todate, "createdate.from": $createdate_from, "createdate.to": $createdate_to, "changedate.from": $changedate_from, "changedate.to": $changedate_to, "group": $group, "filesuffix": $filesuffix, "maxlatitude": $maxlatitude, "minlongitude": $minlongitude, "minlatitude": $minlatitude, "maxlongitude": $maxlongitude, "max": $max, "skip": $skip} | compact), body: null}
 }
 
 # Search API for 'Transit Trip' entry type
@@ -7624,7 +7646,7 @@ export def "repository-search-type-type-gtfs-trip list" [
   let full_url = (build-url $base "/repository/search/type/type_gtfs_trip" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"text": $text, "name": $name, "description": $description, "fromdate": $fromdate, "todate": $todate, "createdate.from": $createdate_from, "createdate.to": $createdate_to, "changedate.from": $changedate_from, "changedate.to": $changedate_to, "group": $group, "filesuffix": $filesuffix, "maxlatitude": $maxlatitude, "minlongitude": $minlongitude, "minlatitude": $minlatitude, "maxlongitude": $maxlongitude, "max": $max, "skip": $skip, "search.type_gtfs_trip.trip_id": $search_type_gtfs_trip_trip_id, "search.type_gtfs_trip.stop_ids": $search_type_gtfs_trip_stop_ids, "search.type_gtfs_trip.wheelchair_accessible": $search_type_gtfs_trip_wheelchair_accessible, "search.type_gtfs_trip.bikes_allowed": $search_type_gtfs_trip_bikes_allowed} | compact), body: null}
 }
 
 # Search API for 'Hazard Data' entry type
@@ -7666,7 +7688,7 @@ export def "repository-search-type-type-hazarddata list" [
   let full_url = (build-url $base "/repository/search/type/type_hazarddata" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"text": $text, "name": $name, "description": $description, "fromdate": $fromdate, "todate": $todate, "createdate.from": $createdate_from, "createdate.to": $createdate_to, "changedate.from": $changedate_from, "changedate.to": $changedate_to, "group": $group, "filesuffix": $filesuffix, "maxlatitude": $maxlatitude, "minlongitude": $minlongitude, "minlatitude": $minlatitude, "maxlongitude": $maxlongitude, "max": $max, "skip": $skip, "search.type_hazarddata.source": $search_type_hazarddata_source} | compact), body: null}
 }
 
 # Search API for 'Colorado DNR Stream Gage' entry type
@@ -7708,7 +7730,7 @@ export def "repository-search-type-type-hydro-colorado list" [
   let full_url = (build-url $base "/repository/search/type/type_hydro_colorado" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"text": $text, "name": $name, "description": $description, "fromdate": $fromdate, "todate": $todate, "createdate.from": $createdate_from, "createdate.to": $createdate_to, "changedate.from": $changedate_from, "changedate.to": $changedate_to, "group": $group, "filesuffix": $filesuffix, "maxlatitude": $maxlatitude, "minlongitude": $minlongitude, "minlatitude": $minlatitude, "maxlongitude": $maxlongitude, "max": $max, "skip": $skip, "search.type_hydro_colorado.site_id": $search_type_hydro_colorado_site_id} | compact), body: null}
 }
 
 # Search API for 'IDV Bundle' entry type
@@ -7749,7 +7771,7 @@ export def "repository-search-type-type-idv-bundle list" [
   let full_url = (build-url $base "/repository/search/type/type_idv_bundle" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"text": $text, "name": $name, "description": $description, "fromdate": $fromdate, "todate": $todate, "createdate.from": $createdate_from, "createdate.to": $createdate_to, "changedate.from": $changedate_from, "changedate.to": $changedate_to, "group": $group, "filesuffix": $filesuffix, "maxlatitude": $maxlatitude, "minlongitude": $minlongitude, "minlatitude": $minlatitude, "maxlongitude": $maxlongitude, "max": $max, "skip": $skip} | compact), body: null}
 }
 
 # Search API for 'Image' entry type
@@ -7790,7 +7812,7 @@ export def "repository-search-type-type-image list" [
   let full_url = (build-url $base "/repository/search/type/type_image" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"text": $text, "name": $name, "description": $description, "fromdate": $fromdate, "todate": $todate, "createdate.from": $createdate_from, "createdate.to": $createdate_to, "changedate.from": $changedate_from, "changedate.to": $changedate_to, "group": $group, "filesuffix": $filesuffix, "maxlatitude": $maxlatitude, "minlongitude": $minlongitude, "minlatitude": $minlatitude, "maxlongitude": $maxlongitude, "max": $max, "skip": $skip} | compact), body: null}
 }
 
 # Search API for 'Airport Image' entry type
@@ -7831,7 +7853,7 @@ export def "repository-search-type-type-image-airport list" [
   let full_url = (build-url $base "/repository/search/type/type_image_airport" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"text": $text, "name": $name, "description": $description, "fromdate": $fromdate, "todate": $todate, "createdate.from": $createdate_from, "createdate.to": $createdate_to, "changedate.from": $changedate_from, "changedate.to": $changedate_to, "group": $group, "filesuffix": $filesuffix, "maxlatitude": $maxlatitude, "minlongitude": $minlongitude, "minlatitude": $minlatitude, "maxlongitude": $maxlongitude, "max": $max, "skip": $skip} | compact), body: null}
 }
 
 # Search API for 'Webcam' entry type
@@ -7872,7 +7894,7 @@ export def "repository-search-type-type-image-webcam list" [
   let full_url = (build-url $base "/repository/search/type/type_image_webcam" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"text": $text, "name": $name, "description": $description, "fromdate": $fromdate, "todate": $todate, "createdate.from": $createdate_from, "createdate.to": $createdate_to, "changedate.from": $changedate_from, "changedate.to": $changedate_to, "group": $group, "filesuffix": $filesuffix, "maxlatitude": $maxlatitude, "minlongitude": $minlongitude, "minlatitude": $minlatitude, "maxlongitude": $maxlongitude, "max": $max, "skip": $skip} | compact), body: null}
 }
 
 # Search API for 'MB Bathymetry' entry type
@@ -7913,7 +7935,7 @@ export def "repository-search-type-type-mb list" [
   let full_url = (build-url $base "/repository/search/type/type_mb" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"text": $text, "name": $name, "description": $description, "fromdate": $fromdate, "todate": $todate, "createdate.from": $createdate_from, "createdate.to": $createdate_to, "changedate.from": $changedate_from, "changedate.to": $changedate_to, "group": $group, "filesuffix": $filesuffix, "maxlatitude": $maxlatitude, "minlongitude": $minlongitude, "minlatitude": $minlatitude, "maxlongitude": $maxlongitude, "max": $max, "skip": $skip} | compact), body: null}
 }
 
 # Search API for 'Bathymetry Collection' entry type
@@ -7954,7 +7976,7 @@ export def "repository-search-type-type-mb-collection list" [
   let full_url = (build-url $base "/repository/search/type/type_mb_collection" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"text": $text, "name": $name, "description": $description, "fromdate": $fromdate, "todate": $todate, "createdate.from": $createdate_from, "createdate.to": $createdate_to, "changedate.from": $changedate_from, "changedate.to": $changedate_to, "group": $group, "filesuffix": $filesuffix, "maxlatitude": $maxlatitude, "minlongitude": $minlongitude, "minlatitude": $minlatitude, "maxlongitude": $maxlongitude, "max": $max, "skip": $skip} | compact), body: null}
 }
 
 # Search API for 'Basic MB point file' entry type
@@ -7995,7 +8017,7 @@ export def "repository-search-type-type-mb-point-basic list" [
   let full_url = (build-url $base "/repository/search/type/type_mb_point_basic" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"text": $text, "name": $name, "description": $description, "fromdate": $fromdate, "todate": $todate, "createdate.from": $createdate_from, "createdate.to": $createdate_to, "changedate.from": $changedate_from, "changedate.to": $changedate_to, "group": $group, "filesuffix": $filesuffix, "maxlatitude": $maxlatitude, "minlongitude": $minlongitude, "minlatitude": $minlatitude, "maxlongitude": $maxlongitude, "max": $max, "skip": $skip} | compact), body: null}
 }
 
 # Search API for 'Metadata Dictionary' entry type
@@ -8044,7 +8066,7 @@ export def "repository-search-type-type-metameta-dictionary list" [
   let full_url = (build-url $base "/repository/search/type/type_metameta_dictionary" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"text": $text, "name": $name, "description": $description, "fromdate": $fromdate, "todate": $todate, "createdate.from": $createdate_from, "createdate.to": $createdate_to, "changedate.from": $changedate_from, "changedate.to": $changedate_to, "group": $group, "filesuffix": $filesuffix, "maxlatitude": $maxlatitude, "minlongitude": $minlongitude, "minlatitude": $minlatitude, "maxlongitude": $maxlongitude, "max": $max, "skip": $skip, "search.type_metameta_dictionary.field_index": $search_type_metameta_dictionary_field_index, "search.type_metameta_dictionary.dictionary_type": $search_type_metameta_dictionary_dictionary_type, "search.type_metameta_dictionary.short_name": $search_type_metameta_dictionary_short_name, "search.type_metameta_dictionary.super_type": $search_type_metameta_dictionary_super_type, "search.type_metameta_dictionary.isgroup": $search_type_metameta_dictionary_isgroup, "search.type_metameta_dictionary.handler_class": $search_type_metameta_dictionary_handler_class, "search.type_metameta_dictionary.properties": $search_type_metameta_dictionary_properties, "search.type_metameta_dictionary.wiki_text": $search_type_metameta_dictionary_wiki_text} | compact), body: null}
 }
 
 # Search API for 'Metadata Field' entry type
@@ -8093,7 +8115,7 @@ export def "repository-search-type-type-metameta-field list" [
   let full_url = (build-url $base "/repository/search/type/type_metameta_field" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"text": $text, "name": $name, "description": $description, "fromdate": $fromdate, "todate": $todate, "createdate.from": $createdate_from, "createdate.to": $createdate_to, "changedate.from": $changedate_from, "changedate.to": $changedate_to, "group": $group, "filesuffix": $filesuffix, "maxlatitude": $maxlatitude, "minlongitude": $minlongitude, "minlatitude": $minlatitude, "maxlongitude": $maxlongitude, "max": $max, "skip": $skip, "search.type_metameta_field.field_index": $search_type_metameta_field_field_index, "search.type_metameta_field.field_id": $search_type_metameta_field_field_id, "search.type_metameta_field.datatype": $search_type_metameta_field_datatype, "search.type_metameta_field.enumeration_values": $search_type_metameta_field_enumeration_values, "search.type_metameta_field.properties": $search_type_metameta_field_properties, "search.type_metameta_field.database_column_size": $search_type_metameta_field_database_column_size, "search.type_metameta_field.missing": $search_type_metameta_field_missing, "search.type_metameta_field.unit": $search_type_metameta_field_unit} | compact), body: null}
 }
 
 # Search API for 'NASA AMES File' entry type
@@ -8134,7 +8156,7 @@ export def "repository-search-type-type-nasaames list" [
   let full_url = (build-url $base "/repository/search/type/type_nasaames" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"text": $text, "name": $name, "description": $description, "fromdate": $fromdate, "todate": $todate, "createdate.from": $createdate_from, "createdate.to": $createdate_to, "changedate.from": $changedate_from, "changedate.to": $changedate_to, "group": $group, "filesuffix": $filesuffix, "maxlatitude": $maxlatitude, "minlongitude": $minlongitude, "minlatitude": $minlatitude, "maxlongitude": $maxlongitude, "max": $max, "skip": $skip} | compact), body: null}
 }
 
 # Search API for 'NetCDF Point Subset' entry type
@@ -8175,7 +8197,7 @@ export def "repository-search-type-type-ncss list" [
   let full_url = (build-url $base "/repository/search/type/type_ncss" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"text": $text, "name": $name, "description": $description, "fromdate": $fromdate, "todate": $todate, "createdate.from": $createdate_from, "createdate.to": $createdate_to, "changedate.from": $changedate_from, "changedate.to": $changedate_to, "group": $group, "filesuffix": $filesuffix, "maxlatitude": $maxlatitude, "minlongitude": $minlongitude, "minlatitude": $minlatitude, "maxlongitude": $maxlongitude, "max": $max, "skip": $skip} | compact), body: null}
 }
 
 # Search API for 'NITF File' entry type
@@ -8216,7 +8238,7 @@ export def "repository-search-type-type-nitf list" [
   let full_url = (build-url $base "/repository/search/type/type_nitf" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"text": $text, "name": $name, "description": $description, "fromdate": $fromdate, "todate": $todate, "createdate.from": $createdate_from, "createdate.to": $createdate_to, "changedate.from": $changedate_from, "changedate.to": $changedate_to, "group": $group, "filesuffix": $filesuffix, "maxlatitude": $maxlatitude, "minlongitude": $minlongitude, "minlatitude": $minlatitude, "maxlongitude": $maxlongitude, "max": $max, "skip": $skip} | compact), body: null}
 }
 
 # Search API for 'Ameriflux Level 2 CSV File' entry type
@@ -8260,7 +8282,7 @@ export def "repository-search-type-type-point-ameriflux-level2 list" [
   let full_url = (build-url $base "/repository/search/type/type_point_ameriflux_level2" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"text": $text, "name": $name, "description": $description, "fromdate": $fromdate, "todate": $todate, "createdate.from": $createdate_from, "createdate.to": $createdate_to, "changedate.from": $changedate_from, "changedate.to": $changedate_to, "group": $group, "filesuffix": $filesuffix, "maxlatitude": $maxlatitude, "minlongitude": $minlongitude, "minlatitude": $minlatitude, "maxlongitude": $maxlongitude, "max": $max, "skip": $skip, "search.type_point_ameriflux_level2.site_id": $search_type_point_ameriflux_level2_site_id, "search.type_point_ameriflux_level2.contact": $search_type_point_ameriflux_level2_contact, "search.type_point_ameriflux_level2.ecosystem_type": $search_type_point_ameriflux_level2_ecosystem_type} | compact), body: null}
 }
 
 # Search API for 'AMRC Final QC Data' entry type
@@ -8304,7 +8326,7 @@ export def "repository-search-type-type-point-amrc-final list" [
   let full_url = (build-url $base "/repository/search/type/type_point_amrc_final" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"text": $text, "name": $name, "description": $description, "fromdate": $fromdate, "todate": $todate, "createdate.from": $createdate_from, "createdate.to": $createdate_to, "changedate.from": $changedate_from, "changedate.to": $changedate_to, "group": $group, "filesuffix": $filesuffix, "maxlatitude": $maxlatitude, "minlongitude": $minlongitude, "minlatitude": $minlatitude, "maxlongitude": $maxlongitude, "max": $max, "skip": $skip, "search.type_point_amrc_final.site_id": $search_type_point_amrc_final_site_id, "search.type_point_amrc_final.site_name": $search_type_point_amrc_final_site_name, "search.type_point_amrc_final.argos_id": $search_type_point_amrc_final_argos_id} | compact), body: null}
 }
 
 # Search API for 'AMRC Freewave Data' entry type
@@ -8349,7 +8371,7 @@ export def "repository-search-type-type-point-amrc-freewave list" [
   let full_url = (build-url $base "/repository/search/type/type_point_amrc_freewave" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"text": $text, "name": $name, "description": $description, "fromdate": $fromdate, "todate": $todate, "createdate.from": $createdate_from, "createdate.to": $createdate_to, "changedate.from": $changedate_from, "changedate.to": $changedate_to, "group": $group, "filesuffix": $filesuffix, "maxlatitude": $maxlatitude, "minlongitude": $minlongitude, "minlatitude": $minlatitude, "maxlongitude": $maxlongitude, "max": $max, "skip": $skip, "search.type_point_amrc_freewave.station_name": $search_type_point_amrc_freewave_station_name, "search.type_point_amrc_freewave.format": $search_type_point_amrc_freewave_format, "search.type_point_amrc_freewave.datalogger_model": $search_type_point_amrc_freewave_datalogger_model, "search.type_point_amrc_freewave.datalogger_serial": $search_type_point_amrc_freewave_datalogger_serial} | compact), body: null}
 }
 
 # Search API for 'CZO Display File Format' entry type
@@ -8390,7 +8412,7 @@ export def "repository-search-type-type-point-czo list" [
   let full_url = (build-url $base "/repository/search/type/type_point_czo" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"text": $text, "name": $name, "description": $description, "fromdate": $fromdate, "todate": $todate, "createdate.from": $createdate_from, "createdate.to": $createdate_to, "changedate.from": $changedate_from, "changedate.to": $changedate_to, "group": $group, "filesuffix": $filesuffix, "maxlatitude": $maxlatitude, "minlongitude": $minlongitude, "minlatitude": $minlatitude, "maxlongitude": $maxlongitude, "max": $max, "skip": $skip} | compact), body: null}
 }
 
 # Search API for 'GC-Net Point Data' entry type
@@ -8431,7 +8453,7 @@ export def "repository-search-type-type-point-gcnet list" [
   let full_url = (build-url $base "/repository/search/type/type_point_gcnet" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"text": $text, "name": $name, "description": $description, "fromdate": $fromdate, "todate": $todate, "createdate.from": $createdate_from, "createdate.to": $createdate_to, "changedate.from": $changedate_from, "changedate.to": $changedate_to, "group": $group, "filesuffix": $filesuffix, "maxlatitude": $maxlatitude, "minlongitude": $minlongitude, "minlatitude": $minlatitude, "maxlongitude": $maxlongitude, "max": $max, "skip": $skip} | compact), body: null}
 }
 
 # Search API for 'IAGA 2002 Geomagnetism Data' entry type
@@ -8478,7 +8500,7 @@ export def "repository-search-type-type-point-geomag-iaga2002 list" [
   let full_url = (build-url $base "/repository/search/type/type_point_geomag_iaga2002" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"text": $text, "name": $name, "description": $description, "fromdate": $fromdate, "todate": $todate, "createdate.from": $createdate_from, "createdate.to": $createdate_to, "changedate.from": $changedate_from, "changedate.to": $changedate_to, "group": $group, "filesuffix": $filesuffix, "maxlatitude": $maxlatitude, "minlongitude": $minlongitude, "minlatitude": $minlatitude, "maxlongitude": $maxlongitude, "max": $max, "skip": $skip, "search.type_point_geomag_iaga2002.iaga_code": $search_type_point_geomag_iaga2002_iaga_code, "search.type_point_geomag_iaga2002.station_name": $search_type_point_geomag_iaga2002_station_name, "search.type_point_geomag_iaga2002.source_of_data": $search_type_point_geomag_iaga2002_source_of_data, "search.type_point_geomag_iaga2002.digital_sampling": $search_type_point_geomag_iaga2002_digital_sampling, "search.type_point_geomag_iaga2002.data_interval": $search_type_point_geomag_iaga2002_data_interval, "search.type_point_geomag_iaga2002.data_type": $search_type_point_geomag_iaga2002_data_type} | compact), body: null}
 }
 
 # Search API for 'WaterML' entry type
@@ -8521,7 +8543,7 @@ export def "repository-search-type-type-point-hydro-waterml list" [
   let full_url = (build-url $base "/repository/search/type/type_point_hydro_waterml" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"text": $text, "name": $name, "description": $description, "fromdate": $fromdate, "todate": $todate, "createdate.from": $createdate_from, "createdate.to": $createdate_to, "changedate.from": $changedate_from, "changedate.to": $changedate_to, "group": $group, "filesuffix": $filesuffix, "maxlatitude": $maxlatitude, "minlongitude": $minlongitude, "minlatitude": $minlatitude, "maxlongitude": $maxlongitude, "max": $max, "skip": $skip, "search.type_point_hydro_waterml.site_code": $search_type_point_hydro_waterml_site_code, "search.type_point_hydro_waterml.site_name": $search_type_point_hydro_waterml_site_name} | compact), body: null}
 }
 
 # Search API for 'ATM Ice SSN Data' entry type
@@ -8562,7 +8584,7 @@ export def "repository-search-type-type-point-icebridge-atm-icessn list" [
   let full_url = (build-url $base "/repository/search/type/type_point_icebridge_atm_icessn" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"text": $text, "name": $name, "description": $description, "fromdate": $fromdate, "todate": $todate, "createdate.from": $createdate_from, "createdate.to": $createdate_to, "changedate.from": $changedate_from, "changedate.to": $changedate_to, "group": $group, "filesuffix": $filesuffix, "maxlatitude": $maxlatitude, "minlongitude": $minlongitude, "minlatitude": $minlatitude, "maxlongitude": $maxlongitude, "max": $max, "skip": $skip} | compact), body: null}
 }
 
 # Search API for 'ATM QFIT Data' entry type
@@ -8603,7 +8625,7 @@ export def "repository-search-type-type-point-icebridge-atm-qfit list" [
   let full_url = (build-url $base "/repository/search/type/type_point_icebridge_atm_qfit" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"text": $text, "name": $name, "description": $description, "fromdate": $fromdate, "todate": $todate, "createdate.from": $createdate_from, "createdate.to": $createdate_to, "changedate.from": $changedate_from, "changedate.to": $changedate_to, "group": $group, "filesuffix": $filesuffix, "maxlatitude": $maxlatitude, "minlongitude": $minlongitude, "minlatitude": $minlatitude, "maxlongitude": $maxlongitude, "max": $max, "skip": $skip} | compact), body: null}
 }
 
 # Search API for 'McCords Irmcr2 Data' entry type
@@ -8644,7 +8666,7 @@ export def "repository-search-type-type-point-icebridge-mccords-irmcr2 list" [
   let full_url = (build-url $base "/repository/search/type/type_point_icebridge_mccords_irmcr2" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"text": $text, "name": $name, "description": $description, "fromdate": $fromdate, "todate": $todate, "createdate.from": $createdate_from, "createdate.to": $createdate_to, "changedate.from": $changedate_from, "changedate.to": $changedate_to, "group": $group, "filesuffix": $filesuffix, "maxlatitude": $maxlatitude, "minlongitude": $minlongitude, "minlatitude": $minlatitude, "maxlongitude": $maxlongitude, "max": $max, "skip": $skip} | compact), body: null}
 }
 
 # Search API for 'McCords Irmcr3 Data' entry type
@@ -8685,7 +8707,7 @@ export def "repository-search-type-type-point-icebridge-mccords-irmcr3 list" [
   let full_url = (build-url $base "/repository/search/type/type_point_icebridge_mccords_irmcr3" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"text": $text, "name": $name, "description": $description, "fromdate": $fromdate, "todate": $todate, "createdate.from": $createdate_from, "createdate.to": $createdate_to, "changedate.from": $changedate_from, "changedate.to": $changedate_to, "group": $group, "filesuffix": $filesuffix, "maxlatitude": $maxlatitude, "minlongitude": $minlongitude, "minlatitude": $minlatitude, "maxlongitude": $maxlongitude, "max": $max, "skip": $skip} | compact), body: null}
 }
 
 # Search API for 'Paris Data' entry type
@@ -8726,7 +8748,7 @@ export def "repository-search-type-type-point-icebridge-paris list" [
   let full_url = (build-url $base "/repository/search/type/type_point_icebridge_paris" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"text": $text, "name": $name, "description": $description, "fromdate": $fromdate, "todate": $todate, "createdate.from": $createdate_from, "createdate.to": $createdate_to, "changedate.from": $changedate_from, "changedate.to": $changedate_to, "group": $group, "filesuffix": $filesuffix, "maxlatitude": $maxlatitude, "minlongitude": $minlongitude, "minlatitude": $minlatitude, "maxlongitude": $maxlongitude, "max": $max, "skip": $skip} | compact), body: null}
 }
 
 # Search API for 'IDV Point File' entry type
@@ -8767,7 +8789,7 @@ export def "repository-search-type-type-point-idv list" [
   let full_url = (build-url $base "/repository/search/type/type_point_idv" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"text": $text, "name": $name, "description": $description, "fromdate": $fromdate, "todate": $todate, "createdate.from": $createdate_from, "createdate.to": $createdate_to, "changedate.from": $changedate_from, "changedate.to": $changedate_to, "group": $group, "filesuffix": $filesuffix, "maxlatitude": $maxlatitude, "minlongitude": $minlongitude, "minlatitude": $minlatitude, "maxlongitude": $maxlongitude, "max": $max, "skip": $skip} | compact), body: null}
 }
 
 # Search API for 'Inline Point File' entry type
@@ -8808,7 +8830,7 @@ export def "repository-search-type-type-point-inline list" [
   let full_url = (build-url $base "/repository/search/type/type_point_inline" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"text": $text, "name": $name, "description": $description, "fromdate": $fromdate, "todate": $todate, "createdate.from": $createdate_from, "createdate.to": $createdate_to, "changedate.from": $changedate_from, "changedate.to": $changedate_to, "group": $group, "filesuffix": $filesuffix, "maxlatitude": $maxlatitude, "minlongitude": $minlongitude, "minlatitude": $minlatitude, "maxlongitude": $maxlongitude, "max": $max, "skip": $skip} | compact), body: null}
 }
 
 # Search API for 'NC DC Climate Data' entry type
@@ -8849,7 +8871,7 @@ export def "repository-search-type-type-point-ncdc-climate list" [
   let full_url = (build-url $base "/repository/search/type/type_point_ncdc_climate" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"text": $text, "name": $name, "description": $description, "fromdate": $fromdate, "todate": $todate, "createdate.from": $createdate_from, "createdate.to": $createdate_to, "changedate.from": $changedate_from, "changedate.to": $changedate_to, "group": $group, "filesuffix": $filesuffix, "maxlatitude": $maxlatitude, "minlongitude": $minlongitude, "minlatitude": $minlatitude, "maxlongitude": $maxlongitude, "max": $max, "skip": $skip} | compact), body: null}
 }
 
 # Search API for 'NetCDF Point File' entry type
@@ -8890,7 +8912,7 @@ export def "repository-search-type-type-point-netcdf list" [
   let full_url = (build-url $base "/repository/search/type/type_point_netcdf" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"text": $text, "name": $name, "description": $description, "fromdate": $fromdate, "todate": $todate, "createdate.from": $createdate_from, "createdate.to": $createdate_to, "changedate.from": $changedate_from, "changedate.to": $changedate_to, "group": $group, "filesuffix": $filesuffix, "maxlatitude": $maxlatitude, "minlongitude": $minlongitude, "minlatitude": $minlatitude, "maxlongitude": $maxlongitude, "max": $max, "skip": $skip} | compact), body: null}
 }
 
 # Search API for 'NOAA Carbon Measurements' entry type
@@ -8936,7 +8958,7 @@ export def "repository-search-type-type-point-noaa-carbon list" [
   let full_url = (build-url $base "/repository/search/type/type_point_noaa_carbon" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"text": $text, "name": $name, "description": $description, "fromdate": $fromdate, "todate": $todate, "createdate.from": $createdate_from, "createdate.to": $createdate_to, "changedate.from": $changedate_from, "changedate.to": $changedate_to, "group": $group, "filesuffix": $filesuffix, "maxlatitude": $maxlatitude, "minlongitude": $minlongitude, "minlatitude": $minlatitude, "maxlongitude": $maxlongitude, "max": $max, "skip": $skip, "search.type_point_noaa_carbon.site_id": $search_type_point_noaa_carbon_site_id, "search.type_point_noaa_carbon.parameter": $search_type_point_noaa_carbon_parameter, "search.type_point_noaa_carbon.project": $search_type_point_noaa_carbon_project, "search.type_point_noaa_carbon.lab_id_number": $search_type_point_noaa_carbon_lab_id_number, "search.type_point_noaa_carbon.measurement_group": $search_type_point_noaa_carbon_measurement_group} | compact), body: null}
 }
 
 # Search API for 'NOAA Flask Event Measurements' entry type
@@ -8982,7 +9004,7 @@ export def "repository-search-type-type-point-noaa-flask-event list" [
   let full_url = (build-url $base "/repository/search/type/type_point_noaa_flask_event" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"text": $text, "name": $name, "description": $description, "fromdate": $fromdate, "todate": $todate, "createdate.from": $createdate_from, "createdate.to": $createdate_to, "changedate.from": $changedate_from, "changedate.to": $changedate_to, "group": $group, "filesuffix": $filesuffix, "maxlatitude": $maxlatitude, "minlongitude": $minlongitude, "minlatitude": $minlatitude, "maxlongitude": $maxlongitude, "max": $max, "skip": $skip, "search.type_point_noaa_flask_event.site_id": $search_type_point_noaa_flask_event_site_id, "search.type_point_noaa_flask_event.parameter": $search_type_point_noaa_flask_event_parameter, "search.type_point_noaa_flask_event.project": $search_type_point_noaa_flask_event_project, "search.type_point_noaa_flask_event.lab_id_number": $search_type_point_noaa_flask_event_lab_id_number, "search.type_point_noaa_flask_event.measurement_group": $search_type_point_noaa_flask_event_measurement_group} | compact), body: null}
 }
 
 # Search API for 'NOAA Flask Month Measurements' entry type
@@ -9028,7 +9050,7 @@ export def "repository-search-type-type-point-noaa-flask-month list" [
   let full_url = (build-url $base "/repository/search/type/type_point_noaa_flask_month" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"text": $text, "name": $name, "description": $description, "fromdate": $fromdate, "todate": $todate, "createdate.from": $createdate_from, "createdate.to": $createdate_to, "changedate.from": $changedate_from, "changedate.to": $changedate_to, "group": $group, "filesuffix": $filesuffix, "maxlatitude": $maxlatitude, "minlongitude": $minlongitude, "minlatitude": $minlatitude, "maxlongitude": $maxlongitude, "max": $max, "skip": $skip, "search.type_point_noaa_flask_month.site_id": $search_type_point_noaa_flask_month_site_id, "search.type_point_noaa_flask_month.parameter": $search_type_point_noaa_flask_month_parameter, "search.type_point_noaa_flask_month.project": $search_type_point_noaa_flask_month_project, "search.type_point_noaa_flask_month.lab_id_number": $search_type_point_noaa_flask_month_lab_id_number, "search.type_point_noaa_flask_month.measurement_group": $search_type_point_noaa_flask_month_measurement_group} | compact), body: null}
 }
 
 # Search API for 'NOAA MADIS Point Data' entry type
@@ -9069,7 +9091,7 @@ export def "repository-search-type-type-point-noaa-madis list" [
   let full_url = (build-url $base "/repository/search/type/type_point_noaa_madis" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"text": $text, "name": $name, "description": $description, "fromdate": $fromdate, "todate": $todate, "createdate.from": $createdate_from, "createdate.to": $createdate_to, "changedate.from": $changedate_from, "changedate.to": $changedate_to, "group": $group, "filesuffix": $filesuffix, "maxlatitude": $maxlatitude, "minlongitude": $minlongitude, "minlatitude": $minlatitude, "maxlongitude": $maxlongitude, "max": $max, "skip": $skip} | compact), body: null}
 }
 
 # Search API for 'NOAA Tower Network' entry type
@@ -9111,7 +9133,7 @@ export def "repository-search-type-type-point-noaa-tower list" [
   let full_url = (build-url $base "/repository/search/type/type_point_noaa_tower" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"text": $text, "name": $name, "description": $description, "fromdate": $fromdate, "todate": $todate, "createdate.from": $createdate_from, "createdate.to": $createdate_to, "changedate.from": $changedate_from, "changedate.to": $changedate_to, "group": $group, "filesuffix": $filesuffix, "maxlatitude": $maxlatitude, "minlongitude": $minlongitude, "minlatitude": $minlatitude, "maxlongitude": $maxlongitude, "max": $max, "skip": $skip, "search.type_point_noaa_tower.site_id": $search_type_point_noaa_tower_site_id} | compact), body: null}
 }
 
 # Search API for 'SeaBird CNV Data' entry type
@@ -9152,7 +9174,7 @@ export def "repository-search-type-type-point-ocean-cnv list" [
   let full_url = (build-url $base "/repository/search/type/type_point_ocean_cnv" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"text": $text, "name": $name, "description": $description, "fromdate": $fromdate, "todate": $todate, "createdate.from": $createdate_from, "createdate.to": $createdate_to, "changedate.from": $changedate_from, "changedate.to": $changedate_to, "group": $group, "filesuffix": $filesuffix, "maxlatitude": $maxlatitude, "minlongitude": $minlongitude, "minlatitude": $minlatitude, "maxlongitude": $maxlongitude, "max": $max, "skip": $skip} | compact), body: null}
 }
 
 # Search API for 'SADO TTS Data' entry type
@@ -9193,7 +9215,7 @@ export def "repository-search-type-type-point-ocean-csv-sado-tts list" [
   let full_url = (build-url $base "/repository/search/type/type_point_ocean_csv_sado_TTS" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"text": $text, "name": $name, "description": $description, "fromdate": $fromdate, "todate": $todate, "createdate.from": $createdate_from, "createdate.to": $createdate_to, "changedate.from": $changedate_from, "changedate.to": $changedate_to, "group": $group, "filesuffix": $filesuffix, "maxlatitude": $maxlatitude, "minlongitude": $minlongitude, "minlatitude": $minlatitude, "maxlongitude": $maxlongitude, "max": $max, "skip": $skip} | compact), body: null}
 }
 
 # Search API for 'SADO Meteo Data' entry type
@@ -9234,7 +9256,7 @@ export def "repository-search-type-type-point-ocean-csv-sado-meteo list" [
   let full_url = (build-url $base "/repository/search/type/type_point_ocean_csv_sado_meteo" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"text": $text, "name": $name, "description": $description, "fromdate": $fromdate, "todate": $todate, "createdate.from": $createdate_from, "createdate.to": $createdate_to, "changedate.from": $changedate_from, "changedate.to": $changedate_to, "group": $group, "filesuffix": $filesuffix, "maxlatitude": $maxlatitude, "minlongitude": $minlongitude, "minlatitude": $minlatitude, "maxlongitude": $maxlongitude, "max": $max, "skip": $skip} | compact), body: null}
 }
 
 # Search API for 'SADO Position Data' entry type
@@ -9275,7 +9297,7 @@ export def "repository-search-type-type-point-ocean-csv-sado-position list" [
   let full_url = (build-url $base "/repository/search/type/type_point_ocean_csv_sado_position" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"text": $text, "name": $name, "description": $description, "fromdate": $fromdate, "todate": $todate, "createdate.from": $createdate_from, "createdate.to": $createdate_to, "changedate.from": $changedate_from, "changedate.to": $changedate_to, "group": $group, "filesuffix": $filesuffix, "maxlatitude": $maxlatitude, "minlongitude": $minlongitude, "minlatitude": $minlatitude, "maxlongitude": $maxlongitude, "max": $max, "skip": $skip} | compact), body: null}
 }
 
 # Search API for 'NetCDF Glider Data' entry type
@@ -9317,7 +9339,7 @@ export def "repository-search-type-type-point-ocean-netcdf-glider list" [
   let full_url = (build-url $base "/repository/search/type/type_point_ocean_netcdf_glider" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"text": $text, "name": $name, "description": $description, "fromdate": $fromdate, "todate": $todate, "createdate.from": $createdate_from, "createdate.to": $createdate_to, "changedate.from": $changedate_from, "changedate.to": $changedate_to, "group": $group, "filesuffix": $filesuffix, "maxlatitude": $maxlatitude, "minlongitude": $minlongitude, "minlatitude": $minlatitude, "maxlongitude": $maxlongitude, "max": $max, "skip": $skip, "search.type_point_ocean_netcdf_track.platform": $search_type_point_ocean_netcdf_track_platform} | compact), body: null}
 }
 
 # Search API for 'NetCDF Track Data' entry type
@@ -9359,7 +9381,7 @@ export def "repository-search-type-type-point-ocean-netcdf-track list" [
   let full_url = (build-url $base "/repository/search/type/type_point_ocean_netcdf_track" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"text": $text, "name": $name, "description": $description, "fromdate": $fromdate, "todate": $todate, "createdate.from": $createdate_from, "createdate.to": $createdate_to, "changedate.from": $changedate_from, "changedate.to": $changedate_to, "group": $group, "filesuffix": $filesuffix, "maxlatitude": $maxlatitude, "minlongitude": $minlongitude, "minlatitude": $minlatitude, "maxlongitude": $maxlongitude, "max": $max, "skip": $skip, "search.type_point_ocean_netcdf_track.platform": $search_type_point_ocean_netcdf_track_platform} | compact), body: null}
 }
 
 # Search API for 'OOI Data' entry type
@@ -9400,7 +9422,7 @@ export def "repository-search-type-type-point-ocean-ooi-dmgx list" [
   let full_url = (build-url $base "/repository/search/type/type_point_ocean_ooi_dmgx" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"text": $text, "name": $name, "description": $description, "fromdate": $fromdate, "todate": $todate, "createdate.from": $createdate_from, "createdate.to": $createdate_to, "changedate.from": $changedate_from, "changedate.to": $changedate_to, "group": $group, "filesuffix": $filesuffix, "maxlatitude": $maxlatitude, "minlongitude": $minlongitude, "minlatitude": $minlatitude, "maxlongitude": $maxlongitude, "max": $max, "skip": $skip} | compact), body: null}
 }
 
 # Search API for 'Open AQ Air Quality' entry type
@@ -9445,7 +9467,7 @@ export def "repository-search-type-type-point-openaq list" [
   let full_url = (build-url $base "/repository/search/type/type_point_openaq" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"text": $text, "name": $name, "description": $description, "fromdate": $fromdate, "todate": $todate, "createdate.from": $createdate_from, "createdate.to": $createdate_to, "changedate.from": $changedate_from, "changedate.to": $changedate_to, "group": $group, "filesuffix": $filesuffix, "maxlatitude": $maxlatitude, "minlongitude": $minlongitude, "minlatitude": $minlatitude, "maxlongitude": $maxlongitude, "max": $max, "skip": $skip, "search.type_point_openaq.location": $search_type_point_openaq_location, "search.type_point_openaq.country": $search_type_point_openaq_country, "search.type_point_openaq.city": $search_type_point_openaq_city, "search.type_point_openaq.hours_offset": $search_type_point_openaq_hours_offset} | compact), body: null}
 }
 
 # Search API for 'PBO Position Time Series' entry type
@@ -9491,7 +9513,7 @@ export def "repository-search-type-type-point-pbo-position-time-series list" [
   let full_url = (build-url $base "/repository/search/type/type_point_pbo_position_time_series" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"text": $text, "name": $name, "description": $description, "fromdate": $fromdate, "todate": $todate, "createdate.from": $createdate_from, "createdate.to": $createdate_to, "changedate.from": $changedate_from, "changedate.to": $changedate_to, "group": $group, "filesuffix": $filesuffix, "maxlatitude": $maxlatitude, "minlongitude": $minlongitude, "minlatitude": $minlatitude, "maxlongitude": $maxlongitude, "max": $max, "skip": $skip, "search.type_point_pbo_position_time_series.four_char_id": $search_type_point_pbo_position_time_series_four_char_id, "search.type_point_pbo_position_time_series.station_name": $search_type_point_pbo_position_time_series_station_name, "search.type_point_pbo_position_time_series.reference_frame": $search_type_point_pbo_position_time_series_reference_frame, "search.type_point_pbo_position_time_series.format_version": $search_type_point_pbo_position_time_series_format_version, "search.type_point_pbo_position_time_series.processing_center": $search_type_point_pbo_position_time_series_processing_center} | compact), body: null}
 }
 
 # Search API for 'Simple Records' entry type
@@ -9532,7 +9554,7 @@ export def "repository-search-type-type-point-simple-records list" [
   let full_url = (build-url $base "/repository/search/type/type_point_simple_records" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"text": $text, "name": $name, "description": $description, "fromdate": $fromdate, "todate": $todate, "createdate.from": $createdate_from, "createdate.to": $createdate_to, "changedate.from": $changedate_from, "changedate.to": $changedate_to, "group": $group, "filesuffix": $filesuffix, "maxlatitude": $maxlatitude, "minlongitude": $minlongitude, "minlatitude": $minlatitude, "maxlongitude": $maxlongitude, "max": $max, "skip": $skip} | compact), body: null}
 }
 
 # Search API for 'SNOTEL Snow Data' entry type
@@ -9579,7 +9601,7 @@ export def "repository-search-type-type-point-snotel list" [
   let full_url = (build-url $base "/repository/search/type/type_point_snotel" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"text": $text, "name": $name, "description": $description, "fromdate": $fromdate, "todate": $todate, "createdate.from": $createdate_from, "createdate.to": $createdate_to, "changedate.from": $changedate_from, "changedate.to": $changedate_to, "group": $group, "filesuffix": $filesuffix, "maxlatitude": $maxlatitude, "minlongitude": $minlongitude, "minlatitude": $minlatitude, "maxlongitude": $maxlongitude, "max": $max, "skip": $skip, "search.type_point_snotel.site_id": $search_type_point_snotel_site_id, "search.type_point_snotel.site_number": $search_type_point_snotel_site_number, "search.type_point_snotel.state": $search_type_point_snotel_state, "search.type_point_snotel.network": $search_type_point_snotel_network, "search.type_point_snotel.huc_name": $search_type_point_snotel_huc_name, "search.type_point_snotel.huc_id": $search_type_point_snotel_huc_id} | compact), body: null}
 }
 
 # Search API for 'Record Text File' entry type
@@ -9620,7 +9642,7 @@ export def "repository-search-type-type-point-text list" [
   let full_url = (build-url $base "/repository/search/type/type_point_text" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"text": $text, "name": $name, "description": $description, "fromdate": $fromdate, "todate": $todate, "createdate.from": $createdate_from, "createdate.to": $createdate_to, "changedate.from": $changedate_from, "changedate.to": $changedate_to, "group": $group, "filesuffix": $filesuffix, "maxlatitude": $maxlatitude, "minlongitude": $minlongitude, "minlatitude": $minlatitude, "maxlongitude": $maxlongitude, "max": $max, "skip": $skip} | compact), body: null}
 }
 
 # Search API for 'Global Geodynamics GGP Format' entry type
@@ -9664,7 +9686,7 @@ export def "repository-search-type-type-point-wsbb-ggp list" [
   let full_url = (build-url $base "/repository/search/type/type_point_wsbb_ggp" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"text": $text, "name": $name, "description": $description, "fromdate": $fromdate, "todate": $todate, "createdate.from": $createdate_from, "createdate.to": $createdate_to, "changedate.from": $changedate_from, "changedate.to": $changedate_to, "group": $group, "filesuffix": $filesuffix, "maxlatitude": $maxlatitude, "minlongitude": $minlongitude, "minlatitude": $minlatitude, "maxlongitude": $maxlongitude, "max": $max, "skip": $skip, "search.type_point_wsbb_ggp.station": $search_type_point_wsbb_ggp_station, "search.type_point_wsbb_ggp.instrument": $search_type_point_wsbb_ggp_instrument, "search.type_point_wsbb_ggp.author": $search_type_point_wsbb_ggp_author} | compact), body: null}
 }
 
 # Search API for 'NOAA-ESRL-PSD Monthly Climate Index' entry type
@@ -9706,7 +9728,7 @@ export def "repository-search-type-type-psd-monthly-climate-index list" [
   let full_url = (build-url $base "/repository/search/type/type_psd_monthly_climate_index" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"text": $text, "name": $name, "description": $description, "fromdate": $fromdate, "todate": $todate, "createdate.from": $createdate_from, "createdate.to": $createdate_to, "changedate.from": $changedate_from, "changedate.to": $changedate_to, "group": $group, "filesuffix": $filesuffix, "maxlatitude": $maxlatitude, "minlongitude": $minlongitude, "minlatitude": $minlatitude, "maxlongitude": $maxlongitude, "max": $max, "skip": $skip, "search.type_psd_monthly_climate_index.units": $search_type_psd_monthly_climate_index_units} | compact), body: null}
 }
 
 # Search API for 'QUANDL Series' entry type
@@ -9747,7 +9769,7 @@ export def "repository-search-type-type-quandl-series list" [
   let full_url = (build-url $base "/repository/search/type/type_quandl_series" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"text": $text, "name": $name, "description": $description, "fromdate": $fromdate, "todate": $todate, "createdate.from": $createdate_from, "createdate.to": $createdate_to, "changedate.from": $changedate_from, "changedate.to": $changedate_to, "group": $group, "filesuffix": $filesuffix, "maxlatitude": $maxlatitude, "minlongitude": $minlongitude, "minlatitude": $minlatitude, "maxlongitude": $maxlongitude, "max": $max, "skip": $skip} | compact), body: null}
 }
 
 # Search API for 'Service Group' entry type
@@ -9788,7 +9810,7 @@ export def "repository-search-type-type-service-group list" [
   let full_url = (build-url $base "/repository/search/type/type_service_group" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"text": $text, "name": $name, "description": $description, "fromdate": $fromdate, "todate": $todate, "createdate.from": $createdate_from, "createdate.to": $createdate_to, "changedate.from": $changedate_from, "changedate.to": $changedate_to, "group": $group, "filesuffix": $filesuffix, "maxlatitude": $maxlatitude, "minlongitude": $minlongitude, "minlatitude": $minlatitude, "maxlongitude": $maxlongitude, "max": $max, "skip": $skip} | compact), body: null}
 }
 
 # Search API for 'Service Link' entry type
@@ -9829,7 +9851,7 @@ export def "repository-search-type-type-service-link list" [
   let full_url = (build-url $base "/repository/search/type/type_service_link" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"text": $text, "name": $name, "description": $description, "fromdate": $fromdate, "todate": $todate, "createdate.from": $createdate_from, "createdate.to": $createdate_to, "changedate.from": $changedate_from, "changedate.to": $changedate_to, "group": $group, "filesuffix": $filesuffix, "maxlatitude": $maxlatitude, "minlongitude": $minlongitude, "minlatitude": $minlatitude, "maxlongitude": $maxlongitude, "max": $max, "skip": $skip} | compact), body: null}
 }
 
 # Search API for 'SOCRATA Series' entry type
@@ -9870,7 +9892,7 @@ export def "repository-search-type-type-socrata-series list" [
   let full_url = (build-url $base "/repository/search/type/type_socrata_series" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"text": $text, "name": $name, "description": $description, "fromdate": $fromdate, "todate": $todate, "createdate.from": $createdate_from, "createdate.to": $createdate_to, "changedate.from": $changedate_from, "changedate.to": $changedate_to, "group": $group, "filesuffix": $filesuffix, "maxlatitude": $maxlatitude, "minlongitude": $minlongitude, "minlatitude": $minlatitude, "maxlongitude": $maxlongitude, "max": $max, "skip": $skip} | compact), body: null}
 }
 
 # Search API for 'COD Sounding' entry type
@@ -9911,7 +9933,7 @@ export def "repository-search-type-type-sounding-cod list" [
   let full_url = (build-url $base "/repository/search/type/type_sounding_cod" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"text": $text, "name": $name, "description": $description, "fromdate": $fromdate, "todate": $todate, "createdate.from": $createdate_from, "createdate.to": $createdate_to, "changedate.from": $changedate_from, "changedate.to": $changedate_to, "group": $group, "filesuffix": $filesuffix, "maxlatitude": $maxlatitude, "minlongitude": $minlongitude, "minlatitude": $minlatitude, "maxlongitude": $maxlongitude, "max": $max, "skip": $skip} | compact), body: null}
 }
 
 # Search API for 'FRD Sounding' entry type
@@ -9952,7 +9974,7 @@ export def "repository-search-type-type-sounding-frd list" [
   let full_url = (build-url $base "/repository/search/type/type_sounding_frd" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"text": $text, "name": $name, "description": $description, "fromdate": $fromdate, "todate": $todate, "createdate.from": $createdate_from, "createdate.to": $createdate_to, "changedate.from": $changedate_from, "changedate.to": $changedate_to, "group": $group, "filesuffix": $filesuffix, "maxlatitude": $maxlatitude, "minlongitude": $minlongitude, "minlatitude": $minlatitude, "maxlongitude": $maxlongitude, "max": $max, "skip": $skip} | compact), body: null}
 }
 
 # Search API for 'GSD Sounding' entry type
@@ -9993,7 +10015,7 @@ export def "repository-search-type-type-sounding-gsd list" [
   let full_url = (build-url $base "/repository/search/type/type_sounding_gsd" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"text": $text, "name": $name, "description": $description, "fromdate": $fromdate, "todate": $todate, "createdate.from": $createdate_from, "createdate.to": $createdate_to, "changedate.from": $changedate_from, "changedate.to": $changedate_to, "group": $group, "filesuffix": $filesuffix, "maxlatitude": $maxlatitude, "minlongitude": $minlongitude, "minlatitude": $minlatitude, "maxlongitude": $maxlongitude, "max": $max, "skip": $skip} | compact), body: null}
 }
 
 # Search API for 'UW Sounding' entry type
@@ -10034,7 +10056,7 @@ export def "repository-search-type-type-sounding-wyoming list" [
   let full_url = (build-url $base "/repository/search/type/type_sounding_wyoming" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"text": $text, "name": $name, "description": $description, "fromdate": $fromdate, "todate": $todate, "createdate.from": $createdate_from, "createdate.to": $createdate_to, "changedate.from": $changedate_from, "changedate.to": $changedate_to, "group": $group, "filesuffix": $filesuffix, "maxlatitude": $maxlatitude, "minlongitude": $minlongitude, "minlatitude": $minlatitude, "maxlongitude": $maxlongitude, "max": $max, "skip": $skip} | compact), body: null}
 }
 
 # Search API for 'NREL TMY Data' entry type
@@ -10075,7 +10097,7 @@ export def "repository-search-type-type-tmy list" [
   let full_url = (build-url $base "/repository/search/type/type_tmy" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"text": $text, "name": $name, "description": $description, "fromdate": $fromdate, "todate": $todate, "createdate.from": $createdate_from, "createdate.to": $createdate_to, "changedate.from": $changedate_from, "changedate.to": $changedate_to, "group": $group, "filesuffix": $filesuffix, "maxlatitude": $maxlatitude, "minlongitude": $minlongitude, "minlatitude": $minlatitude, "maxlongitude": $maxlongitude, "max": $max, "skip": $skip} | compact), body: null}
 }
 
 # Search API for 'Tweet' entry type
@@ -10116,7 +10138,7 @@ export def "repository-search-type-type-tweet list" [
   let full_url = (build-url $base "/repository/search/type/type_tweet" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"text": $text, "name": $name, "description": $description, "fromdate": $fromdate, "todate": $todate, "createdate.from": $createdate_from, "createdate.to": $createdate_to, "changedate.from": $changedate_from, "changedate.to": $changedate_to, "group": $group, "filesuffix": $filesuffix, "maxlatitude": $maxlatitude, "minlongitude": $minlongitude, "minlatitude": $minlatitude, "maxlongitude": $maxlongitude, "max": $max, "skip": $skip} | compact), body: null}
 }
 
 # Search API for 'USGS Stream Gauge' entry type
@@ -10157,7 +10179,7 @@ export def "repository-search-type-type-usgs-gauge list" [
   let full_url = (build-url $base "/repository/search/type/type_usgs_gauge" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"text": $text, "name": $name, "description": $description, "fromdate": $fromdate, "todate": $todate, "createdate.from": $createdate_from, "createdate.to": $createdate_to, "changedate.from": $changedate_from, "changedate.to": $changedate_to, "group": $group, "filesuffix": $filesuffix, "maxlatitude": $maxlatitude, "minlongitude": $minlongitude, "minlatitude": $minlatitude, "maxlongitude": $maxlongitude, "max": $max, "skip": $skip} | compact), body: null}
 }
 
 # Search API for 'Virtual Group' entry type
@@ -10198,7 +10220,7 @@ export def "repository-search-type-type-virtual list" [
   let full_url = (build-url $base "/repository/search/type/type_virtual" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"text": $text, "name": $name, "description": $description, "fromdate": $fromdate, "todate": $todate, "createdate.from": $createdate_from, "createdate.to": $createdate_to, "changedate.from": $changedate_from, "changedate.to": $changedate_to, "group": $group, "filesuffix": $filesuffix, "maxlatitude": $maxlatitude, "minlongitude": $minlongitude, "minlatitude": $minlatitude, "maxlongitude": $maxlongitude, "max": $max, "skip": $skip} | compact), body: null}
 }
 
 # Search API for 'WMS Capabilities' entry type
@@ -10239,7 +10261,7 @@ export def "repository-search-type-type-wms-capabilities list" [
   let full_url = (build-url $base "/repository/search/type/type_wms_capabilities" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"text": $text, "name": $name, "description": $description, "fromdate": $fromdate, "todate": $todate, "createdate.from": $createdate_from, "createdate.to": $createdate_to, "changedate.from": $changedate_from, "changedate.to": $changedate_to, "group": $group, "filesuffix": $filesuffix, "maxlatitude": $maxlatitude, "minlongitude": $minlongitude, "minlatitude": $minlatitude, "maxlongitude": $maxlongitude, "max": $max, "skip": $skip} | compact), body: null}
 }
 
 # Search API for 'WMS Layer' entry type
@@ -10280,7 +10302,7 @@ export def "repository-search-type-type-wms-layer list" [
   let full_url = (build-url $base "/repository/search/type/type_wms_layer" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"text": $text, "name": $name, "description": $description, "fromdate": $fromdate, "todate": $todate, "createdate.from": $createdate_from, "createdate.to": $createdate_to, "changedate.from": $changedate_from, "changedate.to": $changedate_to, "group": $group, "filesuffix": $filesuffix, "maxlatitude": $maxlatitude, "minlongitude": $minlongitude, "minlatitude": $minlatitude, "maxlongitude": $maxlongitude, "max": $max, "skip": $skip} | compact), body: null}
 }
 
 # Search API for 'Ufo Sightings' entry type
@@ -10332,7 +10354,7 @@ export def "repository-search-type-ufo-sightings list" [
   let full_url = (build-url $base "/repository/search/type/ufo_sightings" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"text": $text, "name": $name, "description": $description, "fromdate": $fromdate, "todate": $todate, "createdate.from": $createdate_from, "createdate.to": $createdate_to, "changedate.from": $changedate_from, "changedate.to": $changedate_to, "group": $group, "filesuffix": $filesuffix, "maxlatitude": $maxlatitude, "minlongitude": $minlongitude, "minlatitude": $minlatitude, "maxlongitude": $maxlongitude, "max": $max, "skip": $skip, "search.db_ufo_sightings.datetime": $search_db_ufo_sightings_datetime, "search.db_ufo_sightings.city": $search_db_ufo_sightings_city, "search.db_ufo_sightings.state": $search_db_ufo_sightings_state, "search.db_ufo_sightings.country": $search_db_ufo_sightings_country, "search.db_ufo_sightings.shape": $search_db_ufo_sightings_shape, "search.db_ufo_sightings.duration_seconds": $search_db_ufo_sightings_duration_seconds, "search.db_ufo_sightings.duration_hours_min": $search_db_ufo_sightings_duration_hours_min, "search.db_ufo_sightings.comments": $search_db_ufo_sightings_comments, "search.db_ufo_sightings.date_posted": $search_db_ufo_sightings_date_posted, "search.db_ufo_sightings.latitude": $search_db_ufo_sightings_latitude, "search.db_ufo_sightings.longitude": $search_db_ufo_sightings_longitude} | compact), body: null}
 }
 
 # Search API for 'US Places' entry type
@@ -10379,7 +10401,7 @@ export def "repository-search-type-us-places list" [
   let full_url = (build-url $base "/repository/search/type/us_places" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"text": $text, "name": $name, "description": $description, "fromdate": $fromdate, "todate": $todate, "createdate.from": $createdate_from, "createdate.to": $createdate_to, "changedate.from": $changedate_from, "changedate.to": $changedate_to, "group": $group, "filesuffix": $filesuffix, "maxlatitude": $maxlatitude, "minlongitude": $minlongitude, "minlatitude": $minlatitude, "maxlongitude": $maxlongitude, "max": $max, "skip": $skip, "search.db_us_places.feature_name": $search_db_us_places_feature_name, "search.db_us_places.feature_class": $search_db_us_places_feature_class, "search.db_us_places.state_alpha": $search_db_us_places_state_alpha, "search.db_us_places.county_name": $search_db_us_places_county_name, "search.db_us_places.location": $search_db_us_places_location, "search.db_us_places.elev_in_ft": $search_db_us_places_elev_in_ft} | compact), body: null}
 }
 
 # Search API for 'Simple Yes-No Vote' entry type
@@ -10421,7 +10443,7 @@ export def "repository-search-type-vote-yesno list" [
   let full_url = (build-url $base "/repository/search/type/vote_yesno" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"text": $text, "name": $name, "description": $description, "fromdate": $fromdate, "todate": $todate, "createdate.from": $createdate_from, "createdate.to": $createdate_to, "changedate.from": $changedate_from, "changedate.to": $changedate_to, "group": $group, "filesuffix": $filesuffix, "maxlatitude": $maxlatitude, "minlongitude": $minlongitude, "minlatitude": $minlatitude, "maxlongitude": $maxlongitude, "max": $max, "skip": $skip, "search.db_vote_yesno.vote": $search_db_vote_yesno_vote} | compact), body: null}
 }
 
 # Search API for 'Weblog' entry type
@@ -10462,7 +10484,7 @@ export def "repository-search-type-weblog list" [
   let full_url = (build-url $base "/repository/search/type/weblog" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"text": $text, "name": $name, "description": $description, "fromdate": $fromdate, "todate": $todate, "createdate.from": $createdate_from, "createdate.to": $createdate_to, "changedate.from": $changedate_from, "changedate.to": $changedate_to, "group": $group, "filesuffix": $filesuffix, "maxlatitude": $maxlatitude, "minlongitude": $minlongitude, "minlatitude": $minlatitude, "maxlongitude": $maxlongitude, "max": $max, "skip": $skip} | compact), body: null}
 }
 
 # Search API for 'Wiki Page' entry type
@@ -10505,5 +10527,5 @@ export def "repository-search-type-wikipage list" [
   let full_url = (build-url $base "/repository/search/type/wikipage" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"text": $text, "name": $name, "description": $description, "fromdate": $fromdate, "todate": $todate, "createdate.from": $createdate_from, "createdate.to": $createdate_to, "changedate.from": $changedate_from, "changedate.to": $changedate_to, "group": $group, "filesuffix": $filesuffix, "maxlatitude": $maxlatitude, "minlongitude": $minlongitude, "minlatitude": $minlatitude, "maxlongitude": $maxlongitude, "max": $max, "skip": $skip, "search.wikipage.wikitext": $search_wikipage_wikitext, "search.wikipage.category": $search_wikipage_category} | compact), body: null}
 }

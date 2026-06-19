@@ -3,16 +3,17 @@
 # Auth: --token flag or $env.BC_GEOGRAPHICAL_NAMES_WEB_SERVICE_REST_API_TOKEN
 
 const BASE_URL = "https://apps.gov.bc.ca/pub/bcgnws"
-const DEFAULT_AUTH = "bearer"
 
-# Build auth: returns {headers: record, query: string}
+# Build auth: returns {scheme: string, headers: record, query: string, location: string}.
+# `location` is "header" | "query" | "cookie" | "none" and tells dry-run callers
+# where the token went without inspecting headers/query themselves.
 def build-auth [token?: string, auth_scheme?: string]: nothing -> record {
   let token_val = if ($token != null) and ($token | is-not-empty) { $token } else { $env | get -o BC_GEOGRAPHICAL_NAMES_WEB_SERVICE_REST_API_TOKEN | default "" }
   let scheme = ($auth_scheme | default "bearer")
-  if ($scheme == "none") or ($token_val | is-empty) { return {headers: {}, query: ""} }
+  if ($scheme == "none") or ($token_val | is-empty) { return {scheme: $scheme, headers: {}, query: "", location: "none"} }
   match $scheme {
-    "none" => { {headers: {}, query: ""} }
-    _ => { {headers: {Authorization: $"Bearer ($token_val)"}, query: ""} }
+    "none" => { {scheme: $scheme, headers: {}, query: "", location: "none"} }
+    _ => { {scheme: $scheme, headers: {Authorization: $"Bearer ($token_val)"}, query: "", location: "header"} }
   }
 }
 
@@ -21,8 +22,9 @@ def build-auth [token?: string, auth_scheme?: string]: nothing -> record {
 # ([A-Za-z0-9-._~]) stay literal; everything else gets %XX.
 def serialize-qp [name: string, value: any, style: string]: nothing -> list<string> {
   if ($value == null) { return [] }
-  let n = (encode-path-segment $name)
   let is_list = ($value | describe | str starts-with "list")
+  if $is_list and ($value | is-empty) { return [] }
+  let n = (encode-path-segment $name)
   if ($value | describe | str starts-with "record") { return ($value | transpose k v | each { $"($n)[(encode-path-segment $in.k)]=(encode-path-segment $in.v)" }) }
   if not $is_list { return [$"($n)=(encode-path-segment $value)"] }
   match $style {
@@ -53,22 +55,42 @@ def build-url [base: string, path: string, query?: string]: nothing -> string {
   if ($query != null) and ($query | is-not-empty) { $result | upsert query $query | url join } else { $result | url join }
 }
 
+# Build the dry-run record returned by --dry-run. Shape:
+#   {dry_run: true, method, url, query: <record>, headers, body, content_type, timeout,
+#    auth: {scheme, location}}
+# `meta` carries logical-form data (the query record by spec name, the pre-serialization
+# body) that do-request itself cannot reconstruct from its wire-format args.
+def build-dry-run-record [method: string, url: string, auth: record, content_type: string, timeout: duration, meta?: record]: nothing -> record {
+  let m = ($meta | default {})
+  {
+    dry_run: true
+    method: $method
+    url: $url
+    query: ($m | get -o query | default {})
+    headers: $auth.headers
+    body: ($m | get -o body)
+    content_type: $content_type
+    timeout: $timeout
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+}
+
 # Execute HTTP request with method dispatch
-def do-request [method: string, url: string, auth: record, insecure: bool, raw: bool, dry_run: bool, max_time?: duration, allow_errors?: bool, full?: bool, content_type?: string, body?: any]: nothing -> any {
+def do-request [method: string, url: string, auth: record, insecure: bool, raw: bool, dry_run: bool, max_time?: duration, allow_errors?: bool, full?: bool, content_type?: string, body?: any, dry_run_meta?: record]: nothing -> any {
   let req_url = if ($auth.query | is-not-empty) { if ($url | str contains "?") { $"($url)&($auth.query)" } else { $"($url)?($auth.query)" } } else { $url }
   let timeout = ($max_time | default 30min)
   let ct = ($content_type | default "application/json")
-  if $dry_run { return {method: $method, url: $req_url, headers: $auth.headers, query_string: $auth.query, content_type: $ct, timeout: $timeout, body: $body} }
+  if $dry_run { return (build-dry-run-record $method $req_url $auth $ct $timeout $dry_run_meta) }
   let resp = match $method {
     "get" => { http get --headers $auth.headers --full --allow-errors --max-time $timeout --insecure=$insecure --raw=$raw $req_url }
-    "head" => { http head --headers $auth.headers --max-time $timeout --insecure=$insecure $req_url }
-    "options" => { http options --headers $auth.headers --max-time $timeout --insecure=$insecure $req_url }
+    "head" => { http head --headers $auth.headers --full --allow-errors --max-time $timeout --insecure=$insecure $req_url }
+    "options" => { http options --headers $auth.headers --full --allow-errors --max-time $timeout --insecure=$insecure $req_url }
     "post" => { if ($body | is-empty) { http post --headers $auth.headers --full --allow-errors --max-time $timeout --insecure=$insecure --raw=$raw $req_url "" } else { http post --headers $auth.headers --content-type $ct --full --allow-errors --max-time $timeout --insecure=$insecure --raw=$raw $req_url $body } }
     "put" => { if ($body | is-empty) { http put --headers $auth.headers --full --allow-errors --max-time $timeout --insecure=$insecure --raw=$raw $req_url "" } else { http put --headers $auth.headers --content-type $ct --full --allow-errors --max-time $timeout --insecure=$insecure --raw=$raw $req_url $body } }
     "patch" => { if ($body | is-empty) { http patch --headers $auth.headers --full --allow-errors --max-time $timeout --insecure=$insecure --raw=$raw $req_url "" } else { http patch --headers $auth.headers --content-type $ct --full --allow-errors --max-time $timeout --insecure=$insecure --raw=$raw $req_url $body } }
     "delete" => { if ($body | is-empty) { http delete --headers $auth.headers --full --allow-errors --max-time $timeout --insecure=$insecure --raw=$raw $req_url } else { http delete --headers $auth.headers --content-type $ct --data $body --full --allow-errors --max-time $timeout --insecure=$insecure --raw=$raw $req_url } }
   }
-  if ($method in ["head" "options"]) { return $resp }
+  if ($method == "head") and (not $full) and (not $allow_errors) and $resp.status < 400 { return $resp.headers }
   if $allow_errors { $resp } else if $resp.status >= 400 { error make --unspanned { msg: $"HTTP ($resp.status): ($resp.body)" } } else if $full { {status: $resp.status, headers: $resp.headers, body: $resp.body} } else if $resp.status == 204 { null } else { $resp.body }
 }
 
@@ -129,7 +151,7 @@ export def "feature-categories get" [
   let full_url = (build-url $base "/featureCategories" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"outputFormat": $output_format} | compact), body: null}
 }
 
 # Get all feature classes
@@ -153,7 +175,7 @@ export def "feature-classes get" [
   let full_url = (build-url $base "/featureClasses" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"outputFormat": $output_format} | compact), body: null}
 }
 
 # Get all feature types
@@ -177,7 +199,7 @@ export def "feature-types get" [
   let full_url = (build-url $base "/featureTypes" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"outputFormat": $output_format} | compact), body: null}
 }
 
 # Get a feature by its featureId
@@ -197,10 +219,11 @@ export def "features get" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($feature_id | is-empty) { error make --unspanned { msg: "path parameter 'featureId' must be non-empty" } }
   let full_url = (build-url $base ({feature_id: (encode-path-segment $feature_id)} | format pattern "/features/{feature_id}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
 }
 
 # Get all name authorities
@@ -224,7 +247,7 @@ export def "name-authorities get" [
   let full_url = (build-url $base "/nameAuthorities" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"outputFormat": $output_format} | compact), body: null}
 }
 
 # Search for names with metadata changes in a given period
@@ -259,7 +282,7 @@ export def "names-changes get" [
   let full_url = (build-url $base "/names/changes" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"outputFormat": $output_format, "fromDate": $from_date, "toDate": $to_date, "featureClass": $feature_class, "featureCategory": $feature_category, "featureType": $feature_type, "sortBy": $sort_by, "outputSRS": $output_srs, "embed": $embed, "outputStyle": $output_style, "itemsPerPage": $items_per_page, "startIndex": $start_index} | compact), body: null}
 }
 
 # Search for names affected by recent naming decision
@@ -293,7 +316,7 @@ export def "names-decisions-recent get" [
   let full_url = (build-url $base "/names/decisions/recent" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"outputFormat": $output_format, "days": $days, "featureClass": $feature_class, "featureCategory": $feature_category, "featureType": $feature_type, "sortBy": $sort_by, "outputSRS": $output_srs, "embed": $embed, "outputStyle": $output_style, "itemsPerPage": $items_per_page, "startIndex": $start_index} | compact), body: null}
 }
 
 # Search for names affected by naming decisions in a given year
@@ -327,7 +350,7 @@ export def "names-decisions-year get" [
   let full_url = (build-url $base "/names/decisions/year" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"outputFormat": $output_format, "year": $year, "featureClass": $feature_class, "featureCategory": $feature_category, "featureType": $feature_type, "sortBy": $sort_by, "outputSRS": $output_srs, "embed": $embed, "outputStyle": $output_style, "itemsPerPage": $items_per_page, "startIndex": $start_index} | compact), body: null}
 }
 
 # Search in a geographic area
@@ -361,7 +384,7 @@ export def "names-inside get" [
   let full_url = (build-url $base "/names/inside" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"outputFormat": $output_format, "bbox": $bbox, "featureClass": $feature_class, "featureCategory": $feature_category, "featureType": $feature_type, "sortBy": $sort_by, "outputSRS": $output_srs, "embed": $embed, "outputStyle": $output_style, "itemsPerPage": $items_per_page, "startIndex": $start_index} | compact), body: null}
 }
 
 # Search near to a geographic point
@@ -396,7 +419,7 @@ export def "names-near get" [
   let full_url = (build-url $base "/names/near" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"outputFormat": $output_format, "featurePoint": $feature_point, "distance": $distance, "featureClass": $feature_class, "featureCategory": $feature_category, "featureType": $feature_type, "sortBy": $sort_by, "outputSRS": $output_srs, "embed": $embed, "outputStyle": $output_style, "itemsPerPage": $items_per_page, "startIndex": $start_index} | compact), body: null}
 }
 
 # Search by name, limit to unofficial names only
@@ -431,7 +454,7 @@ export def "names-not-official-search get" [
   let full_url = (build-url $base "/names/notOfficial/search" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"outputFormat": $output_format, "name": $name, "exactSpelling": $exact_spelling, "featureClass": $feature_class, "featureCategory": $feature_category, "featureType": $feature_type, "sortBy": $sort_by, "outputSRS": $output_srs, "embed": $embed, "outputStyle": $output_style, "itemsPerPage": $items_per_page, "startIndex": $start_index} | compact), body: null}
 }
 
 # Search by name, limit to official names only
@@ -466,7 +489,7 @@ export def "names-official-search get" [
   let full_url = (build-url $base "/names/official/search" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"outputFormat": $output_format, "name": $name, "exactSpelling": $exact_spelling, "featureClass": $feature_class, "featureCategory": $feature_category, "featureType": $feature_type, "sortBy": $sort_by, "outputSRS": $output_srs, "embed": $embed, "outputStyle": $output_style, "itemsPerPage": $items_per_page, "startIndex": $start_index} | compact), body: null}
 }
 
 # Search by name
@@ -501,7 +524,7 @@ export def "names-search get" [
   let full_url = (build-url $base "/names/search" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"outputFormat": $output_format, "name": $name, "exactSpelling": $exact_spelling, "featureClass": $feature_class, "featureCategory": $feature_category, "featureType": $feature_type, "sortBy": $sort_by, "outputSRS": $output_srs, "embed": $embed, "outputStyle": $output_style, "itemsPerPage": $items_per_page, "startIndex": $start_index} | compact), body: null}
 }
 
 # Get a name by its nameId
@@ -522,8 +545,10 @@ export def "names get" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($name_id | is-empty) { error make --unspanned { msg: "path parameter 'nameId' must be non-empty" } }
+  if ($output_format | is-empty) { error make --unspanned { msg: "path parameter 'outputFormat' must be non-empty" } }
   let full_url = (build-url $base ({name_id: (encode-path-segment $name_id), output_format: (encode-path-segment $output_format)} | format pattern "/names/{name_id}.{output_format}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
 }

@@ -3,16 +3,17 @@
 # Auth: --token flag or $env.REGISTRY_API_TOKEN
 
 const BASE_URL = "http://apigee.local"
-const DEFAULT_AUTH = "bearer"
 
-# Build auth: returns {headers: record, query: string}
+# Build auth: returns {scheme: string, headers: record, query: string, location: string}.
+# `location` is "header" | "query" | "cookie" | "none" and tells dry-run callers
+# where the token went without inspecting headers/query themselves.
 def build-auth [token?: string, auth_scheme?: string]: nothing -> record {
   let token_val = if ($token != null) and ($token | is-not-empty) { $token } else { $env | get -o REGISTRY_API_TOKEN | default "" }
   let scheme = ($auth_scheme | default "bearer")
-  if ($scheme == "none") or ($token_val | is-empty) { return {headers: {}, query: ""} }
+  if ($scheme == "none") or ($token_val | is-empty) { return {scheme: $scheme, headers: {}, query: "", location: "none"} }
   match $scheme {
-    "none" => { {headers: {}, query: ""} }
-    _ => { {headers: {Authorization: $"Bearer ($token_val)"}, query: ""} }
+    "none" => { {scheme: $scheme, headers: {}, query: "", location: "none"} }
+    _ => { {scheme: $scheme, headers: {Authorization: $"Bearer ($token_val)"}, query: "", location: "header"} }
   }
 }
 
@@ -21,8 +22,9 @@ def build-auth [token?: string, auth_scheme?: string]: nothing -> record {
 # ([A-Za-z0-9-._~]) stay literal; everything else gets %XX.
 def serialize-qp [name: string, value: any, style: string]: nothing -> list<string> {
   if ($value == null) { return [] }
-  let n = (encode-path-segment $name)
   let is_list = ($value | describe | str starts-with "list")
+  if $is_list and ($value | is-empty) { return [] }
+  let n = (encode-path-segment $name)
   if ($value | describe | str starts-with "record") { return ($value | transpose k v | each { $"($n)[(encode-path-segment $in.k)]=(encode-path-segment $in.v)" }) }
   if not $is_list { return [$"($n)=(encode-path-segment $value)"] }
   match $style {
@@ -53,22 +55,42 @@ def build-url [base: string, path: string, query?: string]: nothing -> string {
   if ($query != null) and ($query | is-not-empty) { $result | upsert query $query | url join } else { $result | url join }
 }
 
+# Build the dry-run record returned by --dry-run. Shape:
+#   {dry_run: true, method, url, query: <record>, headers, body, content_type, timeout,
+#    auth: {scheme, location}}
+# `meta` carries logical-form data (the query record by spec name, the pre-serialization
+# body) that do-request itself cannot reconstruct from its wire-format args.
+def build-dry-run-record [method: string, url: string, auth: record, content_type: string, timeout: duration, meta?: record]: nothing -> record {
+  let m = ($meta | default {})
+  {
+    dry_run: true
+    method: $method
+    url: $url
+    query: ($m | get -o query | default {})
+    headers: $auth.headers
+    body: ($m | get -o body)
+    content_type: $content_type
+    timeout: $timeout
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+}
+
 # Execute HTTP request with method dispatch
-def do-request [method: string, url: string, auth: record, insecure: bool, raw: bool, dry_run: bool, max_time?: duration, allow_errors?: bool, full?: bool, content_type?: string, body?: any]: nothing -> any {
+def do-request [method: string, url: string, auth: record, insecure: bool, raw: bool, dry_run: bool, max_time?: duration, allow_errors?: bool, full?: bool, content_type?: string, body?: any, dry_run_meta?: record]: nothing -> any {
   let req_url = if ($auth.query | is-not-empty) { if ($url | str contains "?") { $"($url)&($auth.query)" } else { $"($url)?($auth.query)" } } else { $url }
   let timeout = ($max_time | default 30min)
   let ct = ($content_type | default "application/json")
-  if $dry_run { return {method: $method, url: $req_url, headers: $auth.headers, query_string: $auth.query, content_type: $ct, timeout: $timeout, body: $body} }
+  if $dry_run { return (build-dry-run-record $method $req_url $auth $ct $timeout $dry_run_meta) }
   let resp = match $method {
     "get" => { http get --headers $auth.headers --full --allow-errors --max-time $timeout --insecure=$insecure --raw=$raw $req_url }
-    "head" => { http head --headers $auth.headers --max-time $timeout --insecure=$insecure $req_url }
-    "options" => { http options --headers $auth.headers --max-time $timeout --insecure=$insecure $req_url }
+    "head" => { http head --headers $auth.headers --full --allow-errors --max-time $timeout --insecure=$insecure $req_url }
+    "options" => { http options --headers $auth.headers --full --allow-errors --max-time $timeout --insecure=$insecure $req_url }
     "post" => { if ($body | is-empty) { http post --headers $auth.headers --full --allow-errors --max-time $timeout --insecure=$insecure --raw=$raw $req_url "" } else { http post --headers $auth.headers --content-type $ct --full --allow-errors --max-time $timeout --insecure=$insecure --raw=$raw $req_url $body } }
     "put" => { if ($body | is-empty) { http put --headers $auth.headers --full --allow-errors --max-time $timeout --insecure=$insecure --raw=$raw $req_url "" } else { http put --headers $auth.headers --content-type $ct --full --allow-errors --max-time $timeout --insecure=$insecure --raw=$raw $req_url $body } }
     "patch" => { if ($body | is-empty) { http patch --headers $auth.headers --full --allow-errors --max-time $timeout --insecure=$insecure --raw=$raw $req_url "" } else { http patch --headers $auth.headers --content-type $ct --full --allow-errors --max-time $timeout --insecure=$insecure --raw=$raw $req_url $body } }
     "delete" => { if ($body | is-empty) { http delete --headers $auth.headers --full --allow-errors --max-time $timeout --insecure=$insecure --raw=$raw $req_url } else { http delete --headers $auth.headers --content-type $ct --data $body --full --allow-errors --max-time $timeout --insecure=$insecure --raw=$raw $req_url } }
   }
-  if ($method in ["head" "options"]) { return $resp }
+  if ($method == "head") and (not $full) and (not $allow_errors) and $resp.status < 400 { return $resp.headers }
   if $allow_errors { $resp } else if $resp.status >= 400 { error make --unspanned { msg: $"HTTP ($resp.status): ($resp.body)" } } else if $full { {status: $resp.status, headers: $resp.headers, body: $resp.body} } else if $resp.status == 204 { null } else { $resp.body }
 }
 
@@ -123,11 +145,13 @@ export def "projects-locations-apis list-registry" [
 ]: nothing -> record<apis: table<annotations: record, availability: string, createTime: string, description: string, displayName: string, labels: record, name: string, recommendedDeployment: string, recommendedVersion: string, updateTime: string>, nextPageToken: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($project | is-empty) { error make --unspanned { msg: "path parameter 'project' must be non-empty" } }
+  if ($location | is-empty) { error make --unspanned { msg: "path parameter 'location' must be non-empty" } }
   let qp = [(serialize-qp "pageSize" $page_size "scalar") (serialize-qp "pageToken" $page_token "scalar") (serialize-qp "filter" $filter "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({project: (encode-path-segment $project), location: (encode-path-segment $location)} | format pattern "/v1/projects/{project}/locations/{location}/apis") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"pageSize": $page_size, "pageToken": $page_token, "filter": $filter} | compact), body: null}
 }
 
 # CreateApi creates a specified API.
@@ -159,13 +183,15 @@ export def "projects-locations-apis create-registry" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($project | is-empty) { error make --unspanned { msg: "path parameter 'project' must be non-empty" } }
+  if ($location | is-empty) { error make --unspanned { msg: "path parameter 'location' must be non-empty" } }
   let qp = [(serialize-qp "apiId" $api_id "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({project: (encode-path-segment $project), location: (encode-path-segment $location)} | format pattern "/v1/projects/{project}/locations/{location}/apis") $qp)
   let req_body = {"annotations": $annotations, "availability": $availability, "description": $description, "displayName": $display_name, "labels": $labels, "name": $name, "recommendedDeployment": $recommended_deployment, "recommendedVersion": $recommended_version} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: ({"apiId": $api_id} | compact), body: $req_body}
 }
 
 # DeleteApi removes a specified API and all of the resources that it owns.
@@ -189,11 +215,14 @@ export def "projects-locations-apis delete-registry" [
 ]: nothing -> record<code: int, details: table<_type: string>, message: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($project | is-empty) { error make --unspanned { msg: "path parameter 'project' must be non-empty" } }
+  if ($location | is-empty) { error make --unspanned { msg: "path parameter 'location' must be non-empty" } }
+  if ($api | is-empty) { error make --unspanned { msg: "path parameter 'api' must be non-empty" } }
   let qp = [(serialize-qp "force" $force "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({project: (encode-path-segment $project), location: (encode-path-segment $location), api: (encode-path-segment $api)} | format pattern "/v1/projects/{project}/locations/{location}/apis/{api}") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"force": $force} | compact), body: null}
 }
 
 # GetApi returns a specified API.
@@ -216,10 +245,13 @@ export def "projects-locations-apis get-registry" [
 ]: nothing -> record<annotations: record, availability: string, createTime: string, description: string, displayName: string, labels: record, name: string, recommendedDeployment: string, recommendedVersion: string, updateTime: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($project | is-empty) { error make --unspanned { msg: "path parameter 'project' must be non-empty" } }
+  if ($location | is-empty) { error make --unspanned { msg: "path parameter 'location' must be non-empty" } }
+  if ($api | is-empty) { error make --unspanned { msg: "path parameter 'api' must be non-empty" } }
   let full_url = (build-url $base ({project: (encode-path-segment $project), location: (encode-path-segment $location), api: (encode-path-segment $api)} | format pattern "/v1/projects/{project}/locations/{location}/apis/{api}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
 }
 
 # UpdateApi can be used to modify a specified API.
@@ -253,13 +285,16 @@ export def "projects-locations-apis update-registry" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($project | is-empty) { error make --unspanned { msg: "path parameter 'project' must be non-empty" } }
+  if ($location | is-empty) { error make --unspanned { msg: "path parameter 'location' must be non-empty" } }
+  if ($api | is-empty) { error make --unspanned { msg: "path parameter 'api' must be non-empty" } }
   let qp = [(serialize-qp "updateMask" $update_mask "scalar") (serialize-qp "allowMissing" $allow_missing "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({project: (encode-path-segment $project), location: (encode-path-segment $location), api: (encode-path-segment $api)} | format pattern "/v1/projects/{project}/locations/{location}/apis/{api}") $qp)
   let req_body = {"annotations": $annotations, "availability": $availability, "description": $description, "displayName": $display_name, "labels": $labels, "name": $name, "recommendedDeployment": $recommended_deployment, "recommendedVersion": $recommended_version} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "patch" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body
+  do-request "patch" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: ({"updateMask": $update_mask, "allowMissing": $allow_missing} | compact), body: $req_body}
 }
 
 # ListApiDeployments returns matching deployments.
@@ -285,11 +320,14 @@ export def "projects-locations-apis-deployments list-registry" [
 ]: nothing -> record<apiDeployments: table<accessGuidance: string, annotations: record, apiSpecRevision: string, createTime: string, description: string, displayName: string, endpointUri: string, externalChannelUri: string, intendedAudience: string, labels: record, name: string, revisionCreateTime: string, revisionId: string, revisionUpdateTime: string>, nextPageToken: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($project | is-empty) { error make --unspanned { msg: "path parameter 'project' must be non-empty" } }
+  if ($location | is-empty) { error make --unspanned { msg: "path parameter 'location' must be non-empty" } }
+  if ($api | is-empty) { error make --unspanned { msg: "path parameter 'api' must be non-empty" } }
   let qp = [(serialize-qp "pageSize" $page_size "scalar") (serialize-qp "pageToken" $page_token "scalar") (serialize-qp "filter" $filter "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({project: (encode-path-segment $project), location: (encode-path-segment $location), api: (encode-path-segment $api)} | format pattern "/v1/projects/{project}/locations/{location}/apis/{api}/deployments") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"pageSize": $page_size, "pageToken": $page_token, "filter": $filter} | compact), body: null}
 }
 
 # CreateApiDeployment creates a specified deployment.
@@ -324,13 +362,16 @@ export def "projects-locations-apis-deployments create-registry" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($project | is-empty) { error make --unspanned { msg: "path parameter 'project' must be non-empty" } }
+  if ($location | is-empty) { error make --unspanned { msg: "path parameter 'location' must be non-empty" } }
+  if ($api | is-empty) { error make --unspanned { msg: "path parameter 'api' must be non-empty" } }
   let qp = [(serialize-qp "apiDeploymentId" $api_deployment_id "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({project: (encode-path-segment $project), location: (encode-path-segment $location), api: (encode-path-segment $api)} | format pattern "/v1/projects/{project}/locations/{location}/apis/{api}/deployments") $qp)
   let req_body = {"accessGuidance": $access_guidance, "annotations": $annotations, "apiSpecRevision": $api_spec_revision, "description": $description, "displayName": $display_name, "endpointUri": $endpoint_uri, "externalChannelUri": $external_channel_uri, "intendedAudience": $intended_audience, "labels": $labels, "name": $name} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: ({"apiDeploymentId": $api_deployment_id} | compact), body: $req_body}
 }
 
 # DeleteApiDeployment removes a specified deployment, all revisions, and all child resources (e.g. artifacts).
@@ -355,11 +396,15 @@ export def "projects-locations-apis-deployments delete-registry" [
 ]: nothing -> record<code: int, details: table<_type: string>, message: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($project | is-empty) { error make --unspanned { msg: "path parameter 'project' must be non-empty" } }
+  if ($location | is-empty) { error make --unspanned { msg: "path parameter 'location' must be non-empty" } }
+  if ($api | is-empty) { error make --unspanned { msg: "path parameter 'api' must be non-empty" } }
+  if ($deployment | is-empty) { error make --unspanned { msg: "path parameter 'deployment' must be non-empty" } }
   let qp = [(serialize-qp "force" $force "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({project: (encode-path-segment $project), location: (encode-path-segment $location), api: (encode-path-segment $api), deployment: (encode-path-segment $deployment)} | format pattern "/v1/projects/{project}/locations/{location}/apis/{api}/deployments/{deployment}") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"force": $force} | compact), body: null}
 }
 
 # GetApiDeployment returns a specified deployment.
@@ -383,10 +428,14 @@ export def "projects-locations-apis-deployments get-registry" [
 ]: nothing -> record<accessGuidance: string, annotations: record, apiSpecRevision: string, createTime: string, description: string, displayName: string, endpointUri: string, externalChannelUri: string, intendedAudience: string, labels: record, name: string, revisionCreateTime: string, revisionId: string, revisionUpdateTime: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($project | is-empty) { error make --unspanned { msg: "path parameter 'project' must be non-empty" } }
+  if ($location | is-empty) { error make --unspanned { msg: "path parameter 'location' must be non-empty" } }
+  if ($api | is-empty) { error make --unspanned { msg: "path parameter 'api' must be non-empty" } }
+  if ($deployment | is-empty) { error make --unspanned { msg: "path parameter 'deployment' must be non-empty" } }
   let full_url = (build-url $base ({project: (encode-path-segment $project), location: (encode-path-segment $location), api: (encode-path-segment $api), deployment: (encode-path-segment $deployment)} | format pattern "/v1/projects/{project}/locations/{location}/apis/{api}/deployments/{deployment}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
 }
 
 # UpdateApiDeployment can be used to modify a specified deployment.
@@ -423,13 +472,17 @@ export def "projects-locations-apis-deployments update-registry" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($project | is-empty) { error make --unspanned { msg: "path parameter 'project' must be non-empty" } }
+  if ($location | is-empty) { error make --unspanned { msg: "path parameter 'location' must be non-empty" } }
+  if ($api | is-empty) { error make --unspanned { msg: "path parameter 'api' must be non-empty" } }
+  if ($deployment | is-empty) { error make --unspanned { msg: "path parameter 'deployment' must be non-empty" } }
   let qp = [(serialize-qp "updateMask" $update_mask "scalar") (serialize-qp "allowMissing" $allow_missing "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({project: (encode-path-segment $project), location: (encode-path-segment $location), api: (encode-path-segment $api), deployment: (encode-path-segment $deployment)} | format pattern "/v1/projects/{project}/locations/{location}/apis/{api}/deployments/{deployment}") $qp)
   let req_body = {"accessGuidance": $access_guidance, "annotations": $annotations, "apiSpecRevision": $api_spec_revision, "description": $description, "displayName": $display_name, "endpointUri": $endpoint_uri, "externalChannelUri": $external_channel_uri, "intendedAudience": $intended_audience, "labels": $labels, "name": $name} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "patch" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body
+  do-request "patch" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: ({"updateMask": $update_mask, "allowMissing": $allow_missing} | compact), body: $req_body}
 }
 
 # DeleteApiDeploymentRevision deletes a revision of a deployment.
@@ -453,10 +506,14 @@ export def "projects-locations-apis-deployments delete-registry-revision" [
 ]: nothing -> record<accessGuidance: string, annotations: record, apiSpecRevision: string, createTime: string, description: string, displayName: string, endpointUri: string, externalChannelUri: string, intendedAudience: string, labels: record, name: string, revisionCreateTime: string, revisionId: string, revisionUpdateTime: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($project | is-empty) { error make --unspanned { msg: "path parameter 'project' must be non-empty" } }
+  if ($location | is-empty) { error make --unspanned { msg: "path parameter 'location' must be non-empty" } }
+  if ($api | is-empty) { error make --unspanned { msg: "path parameter 'api' must be non-empty" } }
+  if ($deployment | is-empty) { error make --unspanned { msg: "path parameter 'deployment' must be non-empty" } }
   let full_url = (build-url $base ({project: (encode-path-segment $project), location: (encode-path-segment $location), api: (encode-path-segment $api), deployment: (encode-path-segment $deployment)} | format pattern "/v1/projects/{project}/locations/{location}/apis/{api}/deployments/{deployment}:deleteRevision"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
 }
 
 # ListApiDeploymentRevisions lists all revisions of a deployment. Revisions are returned in descending order of revision creation time.
@@ -482,11 +539,15 @@ export def "projects-locations-apis-deployments list-registry-revisions" [
 ]: nothing -> record<apiDeployments: table<accessGuidance: string, annotations: record, apiSpecRevision: string, createTime: string, description: string, displayName: string, endpointUri: string, externalChannelUri: string, intendedAudience: string, labels: record, name: string, revisionCreateTime: string, revisionId: string, revisionUpdateTime: string>, nextPageToken: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($project | is-empty) { error make --unspanned { msg: "path parameter 'project' must be non-empty" } }
+  if ($location | is-empty) { error make --unspanned { msg: "path parameter 'location' must be non-empty" } }
+  if ($api | is-empty) { error make --unspanned { msg: "path parameter 'api' must be non-empty" } }
+  if ($deployment | is-empty) { error make --unspanned { msg: "path parameter 'deployment' must be non-empty" } }
   let qp = [(serialize-qp "pageSize" $page_size "scalar") (serialize-qp "pageToken" $page_token "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({project: (encode-path-segment $project), location: (encode-path-segment $location), api: (encode-path-segment $api), deployment: (encode-path-segment $deployment)} | format pattern "/v1/projects/{project}/locations/{location}/apis/{api}/deployments/{deployment}:listRevisions") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"pageSize": $page_size, "pageToken": $page_token} | compact), body: null}
 }
 
 # RollbackApiDeployment sets the current revision to a specified prior revision. Note that this creates a new revision with a new revision ID.
@@ -513,12 +574,16 @@ export def "projects-locations-apis-deployments create-registry-rollback" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($project | is-empty) { error make --unspanned { msg: "path parameter 'project' must be non-empty" } }
+  if ($location | is-empty) { error make --unspanned { msg: "path parameter 'location' must be non-empty" } }
+  if ($api | is-empty) { error make --unspanned { msg: "path parameter 'api' must be non-empty" } }
+  if ($deployment | is-empty) { error make --unspanned { msg: "path parameter 'deployment' must be non-empty" } }
   let full_url = (build-url $base ({project: (encode-path-segment $project), location: (encode-path-segment $location), api: (encode-path-segment $api), deployment: (encode-path-segment $deployment)} | format pattern "/v1/projects/{project}/locations/{location}/apis/{api}/deployments/{deployment}:rollback"))
   let req_body = {"name": $name, "revisionId": $revision_id} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: {}, body: $req_body}
 }
 
 # TagApiDeploymentRevision adds a tag to a specified revision of a deployment.
@@ -545,12 +610,16 @@ export def "projects-locations-apis-deployments tag-registry-revision" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($project | is-empty) { error make --unspanned { msg: "path parameter 'project' must be non-empty" } }
+  if ($location | is-empty) { error make --unspanned { msg: "path parameter 'location' must be non-empty" } }
+  if ($api | is-empty) { error make --unspanned { msg: "path parameter 'api' must be non-empty" } }
+  if ($deployment | is-empty) { error make --unspanned { msg: "path parameter 'deployment' must be non-empty" } }
   let full_url = (build-url $base ({project: (encode-path-segment $project), location: (encode-path-segment $location), api: (encode-path-segment $api), deployment: (encode-path-segment $deployment)} | format pattern "/v1/projects/{project}/locations/{location}/apis/{api}/deployments/{deployment}:tagRevision"))
   let req_body = {"name": $name, "tag": $tag} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: {}, body: $req_body}
 }
 
 # ListApiVersions returns matching versions.
@@ -576,11 +645,14 @@ export def "projects-locations-apis-versions list-registry" [
 ]: nothing -> record<apiVersions: table<annotations: record, createTime: string, description: string, displayName: string, labels: record, name: string, state: string, updateTime: string>, nextPageToken: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($project | is-empty) { error make --unspanned { msg: "path parameter 'project' must be non-empty" } }
+  if ($location | is-empty) { error make --unspanned { msg: "path parameter 'location' must be non-empty" } }
+  if ($api | is-empty) { error make --unspanned { msg: "path parameter 'api' must be non-empty" } }
   let qp = [(serialize-qp "pageSize" $page_size "scalar") (serialize-qp "pageToken" $page_token "scalar") (serialize-qp "filter" $filter "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({project: (encode-path-segment $project), location: (encode-path-segment $location), api: (encode-path-segment $api)} | format pattern "/v1/projects/{project}/locations/{location}/apis/{api}/versions") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"pageSize": $page_size, "pageToken": $page_token, "filter": $filter} | compact), body: null}
 }
 
 # CreateApiVersion creates a specified version.
@@ -611,13 +683,16 @@ export def "projects-locations-apis-versions create-registry" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($project | is-empty) { error make --unspanned { msg: "path parameter 'project' must be non-empty" } }
+  if ($location | is-empty) { error make --unspanned { msg: "path parameter 'location' must be non-empty" } }
+  if ($api | is-empty) { error make --unspanned { msg: "path parameter 'api' must be non-empty" } }
   let qp = [(serialize-qp "apiVersionId" $api_version_id "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({project: (encode-path-segment $project), location: (encode-path-segment $location), api: (encode-path-segment $api)} | format pattern "/v1/projects/{project}/locations/{location}/apis/{api}/versions") $qp)
   let req_body = {"annotations": $annotations, "description": $description, "displayName": $display_name, "labels": $labels, "name": $name, "state": $state} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: ({"apiVersionId": $api_version_id} | compact), body: $req_body}
 }
 
 # DeleteApiVersion removes a specified version and all of the resources that it owns.
@@ -642,11 +717,15 @@ export def "projects-locations-apis-versions delete-registry" [
 ]: nothing -> record<code: int, details: table<_type: string>, message: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($project | is-empty) { error make --unspanned { msg: "path parameter 'project' must be non-empty" } }
+  if ($location | is-empty) { error make --unspanned { msg: "path parameter 'location' must be non-empty" } }
+  if ($api | is-empty) { error make --unspanned { msg: "path parameter 'api' must be non-empty" } }
+  if ($version | is-empty) { error make --unspanned { msg: "path parameter 'version' must be non-empty" } }
   let qp = [(serialize-qp "force" $force "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({project: (encode-path-segment $project), location: (encode-path-segment $location), api: (encode-path-segment $api), version: (encode-path-segment $version)} | format pattern "/v1/projects/{project}/locations/{location}/apis/{api}/versions/{version}") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"force": $force} | compact), body: null}
 }
 
 # GetApiVersion returns a specified version.
@@ -670,10 +749,14 @@ export def "projects-locations-apis-versions get-registry" [
 ]: nothing -> record<annotations: record, createTime: string, description: string, displayName: string, labels: record, name: string, state: string, updateTime: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($project | is-empty) { error make --unspanned { msg: "path parameter 'project' must be non-empty" } }
+  if ($location | is-empty) { error make --unspanned { msg: "path parameter 'location' must be non-empty" } }
+  if ($api | is-empty) { error make --unspanned { msg: "path parameter 'api' must be non-empty" } }
+  if ($version | is-empty) { error make --unspanned { msg: "path parameter 'version' must be non-empty" } }
   let full_url = (build-url $base ({project: (encode-path-segment $project), location: (encode-path-segment $location), api: (encode-path-segment $api), version: (encode-path-segment $version)} | format pattern "/v1/projects/{project}/locations/{location}/apis/{api}/versions/{version}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
 }
 
 # UpdateApiVersion can be used to modify a specified version.
@@ -706,13 +789,17 @@ export def "projects-locations-apis-versions update-registry" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($project | is-empty) { error make --unspanned { msg: "path parameter 'project' must be non-empty" } }
+  if ($location | is-empty) { error make --unspanned { msg: "path parameter 'location' must be non-empty" } }
+  if ($api | is-empty) { error make --unspanned { msg: "path parameter 'api' must be non-empty" } }
+  if ($version | is-empty) { error make --unspanned { msg: "path parameter 'version' must be non-empty" } }
   let qp = [(serialize-qp "updateMask" $update_mask "scalar") (serialize-qp "allowMissing" $allow_missing "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({project: (encode-path-segment $project), location: (encode-path-segment $location), api: (encode-path-segment $api), version: (encode-path-segment $version)} | format pattern "/v1/projects/{project}/locations/{location}/apis/{api}/versions/{version}") $qp)
   let req_body = {"annotations": $annotations, "description": $description, "displayName": $display_name, "labels": $labels, "name": $name, "state": $state} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "patch" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body
+  do-request "patch" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: ({"updateMask": $update_mask, "allowMissing": $allow_missing} | compact), body: $req_body}
 }
 
 # ListApiSpecs returns matching specs.
@@ -739,11 +826,15 @@ export def "projects-locations-apis-versions-specs list-registry" [
 ]: nothing -> record<apiSpecs: table<annotations: record, contents: string, createTime: string, description: string, filename: string, hash: string, labels: record, mimeType: string, name: string, revisionCreateTime: string, revisionId: string, revisionUpdateTime: string, sizeBytes: int, sourceUri: string>, nextPageToken: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($project | is-empty) { error make --unspanned { msg: "path parameter 'project' must be non-empty" } }
+  if ($location | is-empty) { error make --unspanned { msg: "path parameter 'location' must be non-empty" } }
+  if ($api | is-empty) { error make --unspanned { msg: "path parameter 'api' must be non-empty" } }
+  if ($version | is-empty) { error make --unspanned { msg: "path parameter 'version' must be non-empty" } }
   let qp = [(serialize-qp "pageSize" $page_size "scalar") (serialize-qp "pageToken" $page_token "scalar") (serialize-qp "filter" $filter "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({project: (encode-path-segment $project), location: (encode-path-segment $location), api: (encode-path-segment $api), version: (encode-path-segment $version)} | format pattern "/v1/projects/{project}/locations/{location}/apis/{api}/versions/{version}/specs") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"pageSize": $page_size, "pageToken": $page_token, "filter": $filter} | compact), body: null}
 }
 
 # CreateApiSpec creates a specified spec.
@@ -777,13 +868,17 @@ export def "projects-locations-apis-versions-specs create-registry" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($project | is-empty) { error make --unspanned { msg: "path parameter 'project' must be non-empty" } }
+  if ($location | is-empty) { error make --unspanned { msg: "path parameter 'location' must be non-empty" } }
+  if ($api | is-empty) { error make --unspanned { msg: "path parameter 'api' must be non-empty" } }
+  if ($version | is-empty) { error make --unspanned { msg: "path parameter 'version' must be non-empty" } }
   let qp = [(serialize-qp "apiSpecId" $api_spec_id "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({project: (encode-path-segment $project), location: (encode-path-segment $location), api: (encode-path-segment $api), version: (encode-path-segment $version)} | format pattern "/v1/projects/{project}/locations/{location}/apis/{api}/versions/{version}/specs") $qp)
   let req_body = {"annotations": $annotations, "contents": $contents, "description": $description, "filename": $filename, "labels": $labels, "mimeType": $mime_type, "name": $name, "sourceUri": $source_uri} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: ({"apiSpecId": $api_spec_id} | compact), body: $req_body}
 }
 
 # DeleteApiSpec removes a specified spec, all revisions, and all child resources (e.g. artifacts).
@@ -809,11 +904,16 @@ export def "projects-locations-apis-versions-specs delete-registry" [
 ]: nothing -> record<code: int, details: table<_type: string>, message: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($project | is-empty) { error make --unspanned { msg: "path parameter 'project' must be non-empty" } }
+  if ($location | is-empty) { error make --unspanned { msg: "path parameter 'location' must be non-empty" } }
+  if ($api | is-empty) { error make --unspanned { msg: "path parameter 'api' must be non-empty" } }
+  if ($version | is-empty) { error make --unspanned { msg: "path parameter 'version' must be non-empty" } }
+  if ($spec | is-empty) { error make --unspanned { msg: "path parameter 'spec' must be non-empty" } }
   let qp = [(serialize-qp "force" $force "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({project: (encode-path-segment $project), location: (encode-path-segment $location), api: (encode-path-segment $api), version: (encode-path-segment $version), spec: (encode-path-segment $spec)} | format pattern "/v1/projects/{project}/locations/{location}/apis/{api}/versions/{version}/specs/{spec}") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"force": $force} | compact), body: null}
 }
 
 # GetApiSpec returns a specified spec.
@@ -838,10 +938,15 @@ export def "projects-locations-apis-versions-specs get-registry" [
 ]: nothing -> record<annotations: record, contents: string, createTime: string, description: string, filename: string, hash: string, labels: record, mimeType: string, name: string, revisionCreateTime: string, revisionId: string, revisionUpdateTime: string, sizeBytes: int, sourceUri: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($project | is-empty) { error make --unspanned { msg: "path parameter 'project' must be non-empty" } }
+  if ($location | is-empty) { error make --unspanned { msg: "path parameter 'location' must be non-empty" } }
+  if ($api | is-empty) { error make --unspanned { msg: "path parameter 'api' must be non-empty" } }
+  if ($version | is-empty) { error make --unspanned { msg: "path parameter 'version' must be non-empty" } }
+  if ($spec | is-empty) { error make --unspanned { msg: "path parameter 'spec' must be non-empty" } }
   let full_url = (build-url $base ({project: (encode-path-segment $project), location: (encode-path-segment $location), api: (encode-path-segment $api), version: (encode-path-segment $version), spec: (encode-path-segment $spec)} | format pattern "/v1/projects/{project}/locations/{location}/apis/{api}/versions/{version}/specs/{spec}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
 }
 
 # UpdateApiSpec can be used to modify a specified spec.
@@ -877,13 +982,18 @@ export def "projects-locations-apis-versions-specs update-registry" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($project | is-empty) { error make --unspanned { msg: "path parameter 'project' must be non-empty" } }
+  if ($location | is-empty) { error make --unspanned { msg: "path parameter 'location' must be non-empty" } }
+  if ($api | is-empty) { error make --unspanned { msg: "path parameter 'api' must be non-empty" } }
+  if ($version | is-empty) { error make --unspanned { msg: "path parameter 'version' must be non-empty" } }
+  if ($spec | is-empty) { error make --unspanned { msg: "path parameter 'spec' must be non-empty" } }
   let qp = [(serialize-qp "updateMask" $update_mask "scalar") (serialize-qp "allowMissing" $allow_missing "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({project: (encode-path-segment $project), location: (encode-path-segment $location), api: (encode-path-segment $api), version: (encode-path-segment $version), spec: (encode-path-segment $spec)} | format pattern "/v1/projects/{project}/locations/{location}/apis/{api}/versions/{version}/specs/{spec}") $qp)
   let req_body = {"annotations": $annotations, "contents": $contents, "description": $description, "filename": $filename, "labels": $labels, "mimeType": $mime_type, "name": $name, "sourceUri": $source_uri} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "patch" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body
+  do-request "patch" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: ({"updateMask": $update_mask, "allowMissing": $allow_missing} | compact), body: $req_body}
 }
 
 # DeleteApiSpecRevision deletes a revision of a spec.
@@ -908,10 +1018,15 @@ export def "projects-locations-apis-versions-specs delete-registry-revision" [
 ]: nothing -> record<annotations: record, contents: string, createTime: string, description: string, filename: string, hash: string, labels: record, mimeType: string, name: string, revisionCreateTime: string, revisionId: string, revisionUpdateTime: string, sizeBytes: int, sourceUri: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($project | is-empty) { error make --unspanned { msg: "path parameter 'project' must be non-empty" } }
+  if ($location | is-empty) { error make --unspanned { msg: "path parameter 'location' must be non-empty" } }
+  if ($api | is-empty) { error make --unspanned { msg: "path parameter 'api' must be non-empty" } }
+  if ($version | is-empty) { error make --unspanned { msg: "path parameter 'version' must be non-empty" } }
+  if ($spec | is-empty) { error make --unspanned { msg: "path parameter 'spec' must be non-empty" } }
   let full_url = (build-url $base ({project: (encode-path-segment $project), location: (encode-path-segment $location), api: (encode-path-segment $api), version: (encode-path-segment $version), spec: (encode-path-segment $spec)} | format pattern "/v1/projects/{project}/locations/{location}/apis/{api}/versions/{version}/specs/{spec}:deleteRevision"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
 }
 
 # GetApiSpecContents returns the contents of a specified spec. If specs are stored with GZip compression, the default behavior is to return the spec uncompressed (the mime_type response field indicates the exact format returned).
@@ -937,10 +1052,15 @@ export def "projects-locations-apis-versions-specs get-registry-contents" [
 ]: nothing -> record<code: int, details: table<_type: string>, message: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($project | is-empty) { error make --unspanned { msg: "path parameter 'project' must be non-empty" } }
+  if ($location | is-empty) { error make --unspanned { msg: "path parameter 'location' must be non-empty" } }
+  if ($api | is-empty) { error make --unspanned { msg: "path parameter 'api' must be non-empty" } }
+  if ($version | is-empty) { error make --unspanned { msg: "path parameter 'version' must be non-empty" } }
+  if ($spec | is-empty) { error make --unspanned { msg: "path parameter 'spec' must be non-empty" } }
   let full_url = (build-url $base ({project: (encode-path-segment $project), location: (encode-path-segment $location), api: (encode-path-segment $api), version: (encode-path-segment $version), spec: (encode-path-segment $spec)} | format pattern "/v1/projects/{project}/locations/{location}/apis/{api}/versions/{version}/specs/{spec}:getContents"))
   let accept_val = ($accept | default "*/*")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
 }
 
 # ListApiSpecRevisions lists all revisions of a spec. Revisions are returned in descending order of revision creation time.
@@ -967,11 +1087,16 @@ export def "projects-locations-apis-versions-specs list-registry-revisions" [
 ]: nothing -> record<apiSpecs: table<annotations: record, contents: string, createTime: string, description: string, filename: string, hash: string, labels: record, mimeType: string, name: string, revisionCreateTime: string, revisionId: string, revisionUpdateTime: string, sizeBytes: int, sourceUri: string>, nextPageToken: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($project | is-empty) { error make --unspanned { msg: "path parameter 'project' must be non-empty" } }
+  if ($location | is-empty) { error make --unspanned { msg: "path parameter 'location' must be non-empty" } }
+  if ($api | is-empty) { error make --unspanned { msg: "path parameter 'api' must be non-empty" } }
+  if ($version | is-empty) { error make --unspanned { msg: "path parameter 'version' must be non-empty" } }
+  if ($spec | is-empty) { error make --unspanned { msg: "path parameter 'spec' must be non-empty" } }
   let qp = [(serialize-qp "pageSize" $page_size "scalar") (serialize-qp "pageToken" $page_token "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({project: (encode-path-segment $project), location: (encode-path-segment $location), api: (encode-path-segment $api), version: (encode-path-segment $version), spec: (encode-path-segment $spec)} | format pattern "/v1/projects/{project}/locations/{location}/apis/{api}/versions/{version}/specs/{spec}:listRevisions") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"pageSize": $page_size, "pageToken": $page_token} | compact), body: null}
 }
 
 # RollbackApiSpec sets the current revision to a specified prior revision. Note that this creates a new revision with a new revision ID.
@@ -999,12 +1124,17 @@ export def "projects-locations-apis-versions-specs create-registry-rollback" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($project | is-empty) { error make --unspanned { msg: "path parameter 'project' must be non-empty" } }
+  if ($location | is-empty) { error make --unspanned { msg: "path parameter 'location' must be non-empty" } }
+  if ($api | is-empty) { error make --unspanned { msg: "path parameter 'api' must be non-empty" } }
+  if ($version | is-empty) { error make --unspanned { msg: "path parameter 'version' must be non-empty" } }
+  if ($spec | is-empty) { error make --unspanned { msg: "path parameter 'spec' must be non-empty" } }
   let full_url = (build-url $base ({project: (encode-path-segment $project), location: (encode-path-segment $location), api: (encode-path-segment $api), version: (encode-path-segment $version), spec: (encode-path-segment $spec)} | format pattern "/v1/projects/{project}/locations/{location}/apis/{api}/versions/{version}/specs/{spec}:rollback"))
   let req_body = {"name": $name, "revisionId": $revision_id} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: {}, body: $req_body}
 }
 
 # TagApiSpecRevision adds a tag to a specified revision of a spec.
@@ -1032,12 +1162,17 @@ export def "projects-locations-apis-versions-specs tag-registry-revision" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($project | is-empty) { error make --unspanned { msg: "path parameter 'project' must be non-empty" } }
+  if ($location | is-empty) { error make --unspanned { msg: "path parameter 'location' must be non-empty" } }
+  if ($api | is-empty) { error make --unspanned { msg: "path parameter 'api' must be non-empty" } }
+  if ($version | is-empty) { error make --unspanned { msg: "path parameter 'version' must be non-empty" } }
+  if ($spec | is-empty) { error make --unspanned { msg: "path parameter 'spec' must be non-empty" } }
   let full_url = (build-url $base ({project: (encode-path-segment $project), location: (encode-path-segment $location), api: (encode-path-segment $api), version: (encode-path-segment $version), spec: (encode-path-segment $spec)} | format pattern "/v1/projects/{project}/locations/{location}/apis/{api}/versions/{version}/specs/{spec}:tagRevision"))
   let req_body = {"name": $name, "tag": $tag} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: {}, body: $req_body}
 }
 
 # ListArtifacts returns matching artifacts.
@@ -1062,11 +1197,13 @@ export def "projects-locations-artifacts list-registry" [
 ]: nothing -> record<artifacts: table<contents: string, createTime: string, hash: string, mimeType: string, name: string, sizeBytes: int, updateTime: string>, nextPageToken: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($project | is-empty) { error make --unspanned { msg: "path parameter 'project' must be non-empty" } }
+  if ($location | is-empty) { error make --unspanned { msg: "path parameter 'location' must be non-empty" } }
   let qp = [(serialize-qp "pageSize" $page_size "scalar") (serialize-qp "pageToken" $page_token "scalar") (serialize-qp "filter" $filter "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({project: (encode-path-segment $project), location: (encode-path-segment $location)} | format pattern "/v1/projects/{project}/locations/{location}/artifacts") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"pageSize": $page_size, "pageToken": $page_token, "filter": $filter} | compact), body: null}
 }
 
 # CreateArtifact creates a specified artifact.
@@ -1093,13 +1230,15 @@ export def "projects-locations-artifacts create-registry" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($project | is-empty) { error make --unspanned { msg: "path parameter 'project' must be non-empty" } }
+  if ($location | is-empty) { error make --unspanned { msg: "path parameter 'location' must be non-empty" } }
   let qp = [(serialize-qp "artifactId" $artifact_id "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({project: (encode-path-segment $project), location: (encode-path-segment $location)} | format pattern "/v1/projects/{project}/locations/{location}/artifacts") $qp)
   let req_body = {"contents": $contents, "mimeType": $mime_type, "name": $name} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: ({"artifactId": $artifact_id} | compact), body: $req_body}
 }
 
 # DeleteArtifact removes a specified artifact.
@@ -1122,10 +1261,13 @@ export def "projects-locations-artifacts delete-registry" [
 ]: nothing -> record<code: int, details: table<_type: string>, message: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($project | is-empty) { error make --unspanned { msg: "path parameter 'project' must be non-empty" } }
+  if ($location | is-empty) { error make --unspanned { msg: "path parameter 'location' must be non-empty" } }
+  if ($artifact | is-empty) { error make --unspanned { msg: "path parameter 'artifact' must be non-empty" } }
   let full_url = (build-url $base ({project: (encode-path-segment $project), location: (encode-path-segment $location), artifact: (encode-path-segment $artifact)} | format pattern "/v1/projects/{project}/locations/{location}/artifacts/{artifact}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
 }
 
 # GetArtifact returns a specified artifact.
@@ -1148,10 +1290,13 @@ export def "projects-locations-artifacts get-registry" [
 ]: nothing -> record<contents: string, createTime: string, hash: string, mimeType: string, name: string, sizeBytes: int, updateTime: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($project | is-empty) { error make --unspanned { msg: "path parameter 'project' must be non-empty" } }
+  if ($location | is-empty) { error make --unspanned { msg: "path parameter 'location' must be non-empty" } }
+  if ($artifact | is-empty) { error make --unspanned { msg: "path parameter 'artifact' must be non-empty" } }
   let full_url = (build-url $base ({project: (encode-path-segment $project), location: (encode-path-segment $location), artifact: (encode-path-segment $artifact)} | format pattern "/v1/projects/{project}/locations/{location}/artifacts/{artifact}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
 }
 
 # ReplaceArtifact can be used to replace a specified artifact.
@@ -1178,12 +1323,15 @@ export def "projects-locations-artifacts update-registry" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($project | is-empty) { error make --unspanned { msg: "path parameter 'project' must be non-empty" } }
+  if ($location | is-empty) { error make --unspanned { msg: "path parameter 'location' must be non-empty" } }
+  if ($artifact | is-empty) { error make --unspanned { msg: "path parameter 'artifact' must be non-empty" } }
   let full_url = (build-url $base ({project: (encode-path-segment $project), location: (encode-path-segment $location), artifact: (encode-path-segment $artifact)} | format pattern "/v1/projects/{project}/locations/{location}/artifacts/{artifact}"))
   let req_body = {"contents": $contents, "mimeType": $mime_type, "name": $name} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: {}, body: $req_body}
 }
 
 # GetArtifactContents returns the contents of a specified artifact. If artifacts are stored with GZip compression, the default behavior is to return the artifact uncompressed (the mime_type response field indicates the exact format returned).
@@ -1207,8 +1355,11 @@ export def "projects-locations-artifacts get-registry-contents" [
 ]: nothing -> record<code: int, details: table<_type: string>, message: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($project | is-empty) { error make --unspanned { msg: "path parameter 'project' must be non-empty" } }
+  if ($location | is-empty) { error make --unspanned { msg: "path parameter 'location' must be non-empty" } }
+  if ($artifact | is-empty) { error make --unspanned { msg: "path parameter 'artifact' must be non-empty" } }
   let full_url = (build-url $base ({project: (encode-path-segment $project), location: (encode-path-segment $location), artifact: (encode-path-segment $artifact)} | format pattern "/v1/projects/{project}/locations/{location}/artifacts/{artifact}:getContents"))
   let accept_val = ($accept | default "*/*")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
 }

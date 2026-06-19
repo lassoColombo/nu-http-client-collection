@@ -3,16 +3,17 @@
 # Auth: --token flag or $env.VISAGECLOUD_TOKEN
 
 const BASE_URL = "https://visagecloud.com"
-const DEFAULT_AUTH = "bearer"
 
-# Build auth: returns {headers: record, query: string}
+# Build auth: returns {scheme: string, headers: record, query: string, location: string}.
+# `location` is "header" | "query" | "cookie" | "none" and tells dry-run callers
+# where the token went without inspecting headers/query themselves.
 def build-auth [token?: string, auth_scheme?: string]: nothing -> record {
   let token_val = if ($token != null) and ($token | is-not-empty) { $token } else { $env | get -o VISAGECLOUD_TOKEN | default "" }
   let scheme = ($auth_scheme | default "bearer")
-  if ($scheme == "none") or ($token_val | is-empty) { return {headers: {}, query: ""} }
+  if ($scheme == "none") or ($token_val | is-empty) { return {scheme: $scheme, headers: {}, query: "", location: "none"} }
   match $scheme {
-    "none" => { {headers: {}, query: ""} }
-    _ => { {headers: {Authorization: $"Bearer ($token_val)"}, query: ""} }
+    "none" => { {scheme: $scheme, headers: {}, query: "", location: "none"} }
+    _ => { {scheme: $scheme, headers: {Authorization: $"Bearer ($token_val)"}, query: "", location: "header"} }
   }
 }
 
@@ -21,8 +22,9 @@ def build-auth [token?: string, auth_scheme?: string]: nothing -> record {
 # ([A-Za-z0-9-._~]) stay literal; everything else gets %XX.
 def serialize-qp [name: string, value: any, style: string]: nothing -> list<string> {
   if ($value == null) { return [] }
-  let n = (encode-path-segment $name)
   let is_list = ($value | describe | str starts-with "list")
+  if $is_list and ($value | is-empty) { return [] }
+  let n = (encode-path-segment $name)
   if ($value | describe | str starts-with "record") { return ($value | transpose k v | each { $"($n)[(encode-path-segment $in.k)]=(encode-path-segment $in.v)" }) }
   if not $is_list { return [$"($n)=(encode-path-segment $value)"] }
   match $style {
@@ -53,22 +55,42 @@ def build-url [base: string, path: string, query?: string]: nothing -> string {
   if ($query != null) and ($query | is-not-empty) { $result | upsert query $query | url join } else { $result | url join }
 }
 
+# Build the dry-run record returned by --dry-run. Shape:
+#   {dry_run: true, method, url, query: <record>, headers, body, content_type, timeout,
+#    auth: {scheme, location}}
+# `meta` carries logical-form data (the query record by spec name, the pre-serialization
+# body) that do-request itself cannot reconstruct from its wire-format args.
+def build-dry-run-record [method: string, url: string, auth: record, content_type: string, timeout: duration, meta?: record]: nothing -> record {
+  let m = ($meta | default {})
+  {
+    dry_run: true
+    method: $method
+    url: $url
+    query: ($m | get -o query | default {})
+    headers: $auth.headers
+    body: ($m | get -o body)
+    content_type: $content_type
+    timeout: $timeout
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+}
+
 # Execute HTTP request with method dispatch
-def do-request [method: string, url: string, auth: record, insecure: bool, raw: bool, dry_run: bool, max_time?: duration, allow_errors?: bool, full?: bool, content_type?: string, body?: any]: nothing -> any {
+def do-request [method: string, url: string, auth: record, insecure: bool, raw: bool, dry_run: bool, max_time?: duration, allow_errors?: bool, full?: bool, content_type?: string, body?: any, dry_run_meta?: record]: nothing -> any {
   let req_url = if ($auth.query | is-not-empty) { if ($url | str contains "?") { $"($url)&($auth.query)" } else { $"($url)?($auth.query)" } } else { $url }
   let timeout = ($max_time | default 30min)
   let ct = ($content_type | default "application/json")
-  if $dry_run { return {method: $method, url: $req_url, headers: $auth.headers, query_string: $auth.query, content_type: $ct, timeout: $timeout, body: $body} }
+  if $dry_run { return (build-dry-run-record $method $req_url $auth $ct $timeout $dry_run_meta) }
   let resp = match $method {
     "get" => { http get --headers $auth.headers --full --allow-errors --max-time $timeout --insecure=$insecure --raw=$raw $req_url }
-    "head" => { http head --headers $auth.headers --max-time $timeout --insecure=$insecure $req_url }
-    "options" => { http options --headers $auth.headers --max-time $timeout --insecure=$insecure $req_url }
+    "head" => { http head --headers $auth.headers --full --allow-errors --max-time $timeout --insecure=$insecure $req_url }
+    "options" => { http options --headers $auth.headers --full --allow-errors --max-time $timeout --insecure=$insecure $req_url }
     "post" => { if ($body | is-empty) { http post --headers $auth.headers --full --allow-errors --max-time $timeout --insecure=$insecure --raw=$raw $req_url "" } else { http post --headers $auth.headers --content-type $ct --full --allow-errors --max-time $timeout --insecure=$insecure --raw=$raw $req_url $body } }
     "put" => { if ($body | is-empty) { http put --headers $auth.headers --full --allow-errors --max-time $timeout --insecure=$insecure --raw=$raw $req_url "" } else { http put --headers $auth.headers --content-type $ct --full --allow-errors --max-time $timeout --insecure=$insecure --raw=$raw $req_url $body } }
     "patch" => { if ($body | is-empty) { http patch --headers $auth.headers --full --allow-errors --max-time $timeout --insecure=$insecure --raw=$raw $req_url "" } else { http patch --headers $auth.headers --content-type $ct --full --allow-errors --max-time $timeout --insecure=$insecure --raw=$raw $req_url $body } }
     "delete" => { if ($body | is-empty) { http delete --headers $auth.headers --full --allow-errors --max-time $timeout --insecure=$insecure --raw=$raw $req_url } else { http delete --headers $auth.headers --content-type $ct --data $body --full --allow-errors --max-time $timeout --insecure=$insecure --raw=$raw $req_url } }
   }
-  if ($method in ["head" "options"]) { return $resp }
+  if ($method == "head") and (not $full) and (not $allow_errors) and $resp.status < 400 { return $resp.headers }
   if $allow_errors { $resp } else if $resp.status >= 400 { error make --unspanned { msg: $"HTTP ($resp.status): ($resp.body)" } } else if $full { {status: $resp.status, headers: $resp.headers, body: $resp.body} } else if $resp.status == 204 { null } else { $resp.body }
 }
 
@@ -84,7 +106,7 @@ def method-completer [] { ["INGESTION_ENDPOINT" "WEBRTC_PULL" "WEBRTC_PUSH"] }
 # List all available API commands with their parameters
 export def commands []: nothing -> table {
   let builtin_flags = ["base-url" "token" "auth-scheme" "insecure" "max-time" "raw" "allow-errors" "full" "dry-run" "accept" "help"]
-  let mod_name = (scope modules | where { $in.commands | any { $in.name == "rest-v1-1-account-account get-by-access-key-using-get" } } | get name | first)
+  let mod_name = (scope modules | where { $in.commands | any { $in.name == "rest-v1-1-account-account get-by-access-key-using" } } | get name | first)
   let mod_cmds = (scope modules | where name == $mod_name | get commands | first)
   let cmd_ids = ($mod_cmds | where name not-in [$mod_name "commands"] | get decl_id)
   scope commands | where decl_id in $cmd_ids | each {|cmd|
@@ -108,7 +130,7 @@ export def commands []: nothing -> table {
 #
 # GET /rest/v1.1/account/account
 # operationId: getAccountByAccessKeyUsingGET
-export def "rest-v1-1-account-account get-by-access-key-using-get" [
+export def "rest-v1-1-account-account get-by-access-key-using" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -127,14 +149,14 @@ export def "rest-v1-1-account-account get-by-access-key-using-get" [
   let full_url = (build-url $base "/rest/v1.1/account/account" $qp)
   let accept_val = "*/*"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"accessKey": $access_key, "secretKey": $secret_key} | compact), body: null}
 }
 
 # Get billing information by accessKey and secretKey
 #
 # GET /rest/v1.1/account/billing
 # operationId: getBillingPerAccountUsingGET
-export def "rest-v1-1-account-billing get-per-using-get" [
+export def "rest-v1-1-account-billing get-per-using" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -156,7 +178,7 @@ export def "rest-v1-1-account-billing get-per-using-get" [
   let full_url = (build-url $base "/rest/v1.1/account/billing" $qp)
   let accept_val = "*/*"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"accessKey": $access_key, "secretKey": $secret_key, "startDateTime": $start_date_time, "endDateTime": $end_date_time, "dateTemplate": $date_template} | compact), body: null}
 }
 
 # Change password for an account using old password
@@ -183,7 +205,7 @@ export def "rest-v1-1-account-change-password create-using" [
   let full_url = (build-url $base "/rest/v1.1/account/changePassword" $qp)
   let accept_val = "*/*"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"email": $email, "oldPassword": $old_password, "newPassword": $new_password} | compact), body: null}
 }
 
 # Get account information including accessKey and secretKey by email and password
@@ -209,7 +231,7 @@ export def "rest-v1-1-account-login create-with-email-using" [
   let full_url = (build-url $base "/rest/v1.1/account/login" $qp)
   let accept_val = "*/*"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"email": $email, "password": $password} | compact), body: null}
 }
 
 # Compare several faces identified by faceHash, without depending on mapping faces to profiles
@@ -237,7 +259,7 @@ export def "rest-v1-1-analysis-compare get-faces-using" [
   let full_url = (build-url $base "/rest/v1.1/analysis/compare" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"accessKey": $access_key, "secretKey": $secret_key, "faceHashes": $face_hashes, "showDetails": $show_details} | compact), body: null}
 }
 
 # Perform detection on a given picture or picture URL
@@ -278,8 +300,8 @@ export def "rest-v1-1-analysis-detection create-perform-using" [
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  let req_body = ($req_body | transpose k v | where v != null | reduce -f {} {|p, acc| $acc | upsert $p.k $p.v } | url build-query)
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/x-www-form-urlencoded" $req_body
+  let req_body_wire = ($req_body | transpose k v | where v != null | reduce -f {} {|p, acc| $acc | upsert $p.k $p.v } | url build-query)
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/x-www-form-urlencoded" $req_body_wire {query: ({"accessKey": $access_key, "secretKey": $secret_key, "storeAnalysisPicture": $store_analysis_picture, "storeFacePictures": $store_face_pictures, "storeResult": $store_result, "retentionTime": $retention_time, "pictureURL": $picture_url, "algorithmVersion": $algorithm_version, "autoRotate": $auto_rotate, "skipEXIF": $skip_exif, "waitForPictureUpload": $wait_for_picture_upload, "filters": $filters, "options": $options} | compact), body: $req_body}
 }
 
 # Retrieve the last *count* operations per current account
@@ -306,7 +328,7 @@ export def "rest-v1-1-analysis-list-latest get-retrive-using" [
   let full_url = (build-url $base "/rest/v1.1/analysis/listLatest" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"accessKey": $access_key, "secretKey": $secret_key, "count": $count} | compact), body: null}
 }
 
 # Perform labeled recognition on a given picture or picture URL
@@ -350,8 +372,8 @@ export def "rest-v1-1-analysis-recognition create-perform-using" [
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  let req_body = ($req_body | transpose k v | where v != null | reduce -f {} {|p, acc| $acc | upsert $p.k $p.v } | url build-query)
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/x-www-form-urlencoded" $req_body
+  let req_body_wire = ($req_body | transpose k v | where v != null | reduce -f {} {|p, acc| $acc | upsert $p.k $p.v } | url build-query)
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/x-www-form-urlencoded" $req_body_wire {query: ({"accessKey": $access_key, "secretKey": $secret_key, "storeAnalysisPicture": $store_analysis_picture, "storeFacePictures": $store_face_pictures, "storeResult": $store_result, "retentionTime": $retention_time, "collectionId": $collection_id, "labels": $labels, "attributeFilters": $attribute_filters, "pictureURL": $picture_url, "algorithmVersion": $algorithm_version, "autoRotate": $auto_rotate, "skipEXIF rotation processing": $skip_exif_rotation_processing, "waitForPictureUpload": $wait_for_picture_upload, "filters": $filters, "options": $options} | compact), body: $req_body}
 }
 
 # Retrieve a complete analysis object including both detection and recognition information
@@ -378,7 +400,7 @@ export def "rest-v1-1-analysis-retrieve get-using" [
   let full_url = (build-url $base "/rest/v1.1/analysis/retrieve" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"accessKey": $access_key, "secretKey": $secret_key, "analysisId": $analysis_id} | compact), body: null}
 }
 
 # Count individuals in streams or collections
@@ -414,7 +436,7 @@ export def "rest-v1-1-analytics-counting create-counter-using" [
   let full_url = (build-url $base "/rest/v1.1/analytics/counting" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"accessKey": $access_key, "secretKey": $secret_key, "collectionIds": $collection_ids, "streamIds": $stream_ids, "startDateTime": $start_date_time, "endDateTime": $end_date_time, "visitDuration": $visit_duration, "maxIterations": $max_iterations, "maxBatchIterations": $max_batch_iterations, "minNeighborsMergedPerIteration": $min_neighbors_merged_per_iteration, "mergingStep": $merging_step, "shuffling": $shuffling} | compact), body: null}
 }
 
 # Show audience (based on number of occurrences of each person) breakdown per declared attribute (age, gender).
@@ -445,7 +467,7 @@ export def "rest-v1-1-analytics-presence-timeseries create-using" [
   let full_url = (build-url $base "/rest/v1.1/analytics/presence/timeseries" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"accessKey": $access_key, "secretKey": $secret_key, "streamIds": $stream_ids, "startDateTime": $start_date_time, "endDateTime": $end_date_time, "step": $step, "attributes": $attributes} | compact), body: null}
 }
 
 # Show presence (based on number of occurences of each face) breakdown per declared attribute (age, gender)
@@ -475,14 +497,14 @@ export def "rest-v1-1-analytics-presence-total create-using" [
   let full_url = (build-url $base "/rest/v1.1/analytics/presence/total" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"accessKey": $access_key, "secretKey": $secret_key, "streamIds": $stream_ids, "startDateTime": $start_date_time, "endDateTime": $end_date_time, "attributes": $attributes} | compact), body: null}
 }
 
 # Delete existing classifier
 #
 # DELETE /rest/v1.1/classifier/svm
 # operationId: removeClassiferUsingDELETE
-export def "rest-v1-1-classifier-svm delete-classifer-using-delete" [
+export def "rest-v1-1-classifier-svm delete-classifer-using" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -502,14 +524,14 @@ export def "rest-v1-1-classifier-svm delete-classifer-using-delete" [
   let full_url = (build-url $base "/rest/v1.1/classifier/svm" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"accessKey": $access_key, "secretKey": $secret_key, "id": $id} | compact), body: null}
 }
 
 # Get classifier full
 #
 # GET /rest/v1.1/classifier/svm
 # operationId: getClassiferFullUsingGET
-export def "rest-v1-1-classifier-svm get-classifer-full-using-get" [
+export def "rest-v1-1-classifier-svm get-classifer-full-using" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -529,14 +551,14 @@ export def "rest-v1-1-classifier-svm get-classifer-full-using-get" [
   let full_url = (build-url $base "/rest/v1.1/classifier/svm" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"accessKey": $access_key, "secretKey": $secret_key, "id": $id} | compact), body: null}
 }
 
 # Create new SVM classifier with given name
 #
 # POST /rest/v1.1/classifier/svm
 # operationId: addSVMClassifierUsingPOST
-export def "rest-v1-1-classifier-svm create-using-create" [
+export def "rest-v1-1-classifier-svm create-using" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -570,14 +592,14 @@ export def "rest-v1-1-classifier-svm create-using-create" [
   let full_url = (build-url $base "/rest/v1.1/classifier/svm" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"accessKey": $access_key, "secretKey": $secret_key, "name": $name, "collectionIds": $collection_ids, "preprocessor": $preprocessor, "classificationAttributeName": $classification_attribute_name, "considerViewPoints": $consider_view_points, "seed": $seed, "trainingRatio": $training_ratio, "probabilityParameter": $probability_parameter, "gammaParameter": $gamma_parameter, "nuParameter": $nu_parameter, "cParameter": $c_parameter, "svmTypeParameter": $svm_type_parameter, "kernelTypeParameter": $kernel_type_parameter, "cacheSizeParameter": $cache_size_parameter, "epsParameter": $eps_parameter} | compact), body: null}
 }
 
 # Get classifer status
 #
 # GET /rest/v1.1/classifier/svm/status
 # operationId: getClassiferStatusUsingGET
-export def "rest-v1-1-classifier-svm-status get-classifer-using-get" [
+export def "rest-v1-1-classifier-svm-status get-classifer-using" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -597,14 +619,14 @@ export def "rest-v1-1-classifier-svm-status get-classifer-using-get" [
   let full_url = (build-url $base "/rest/v1.1/classifier/svm/status" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"accessKey": $access_key, "secretKey": $secret_key, "id": $id} | compact), body: null}
 }
 
 # Retrieve all collections
 #
 # GET /rest/v1.1/collection/
 # operationId: getAllCollectionsUsingGET
-export def "rest-v1-1-collection get-list-using-get" [
+export def "rest-v1-1-collection get-list-using" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -623,14 +645,14 @@ export def "rest-v1-1-collection get-list-using-get" [
   let full_url = (build-url $base "/rest/v1.1/collection/" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"accessKey": $access_key, "secretKey": $secret_key} | compact), body: null}
 }
 
 # Create new empty collection with given name
 #
 # POST /rest/v1.1/collection/
 # operationId: addCollectionUsingPOST
-export def "rest-v1-1-collection create-using-create" [
+export def "rest-v1-1-collection create-using" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -655,8 +677,8 @@ export def "rest-v1-1-collection create-using-create" [
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  let req_body = ($req_body | transpose k v | where v != null | reduce -f {} {|p, acc| $acc | upsert $p.k $p.v } | url build-query)
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/x-www-form-urlencoded" $req_body
+  let req_body_wire = ($req_body | transpose k v | where v != null | reduce -f {} {|p, acc| $acc | upsert $p.k $p.v } | url build-query)
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/x-www-form-urlencoded" $req_body_wire {query: {}, body: $req_body}
 }
 
 # Retrieve all collections
@@ -665,7 +687,7 @@ export def "rest-v1-1-collection create-using-create" [
 # DEPRECATED
 # operationId: getAllCollections2UsingGET
 @deprecated
-export def "rest-v1-1-collection-all get-collections2-using-get" [
+export def "rest-v1-1-collection-all get-collections2-using" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -684,7 +706,7 @@ export def "rest-v1-1-collection-all get-collections2-using-get" [
   let full_url = (build-url $base "/rest/v1.1/collection/all" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"accessKey": $access_key, "secretKey": $secret_key} | compact), body: null}
 }
 
 # Delete existing collection with associated profiles and faces.
@@ -693,7 +715,7 @@ export def "rest-v1-1-collection-all get-collections2-using-get" [
 # DEPRECATED
 # operationId: deleteCollection2UsingDELETE
 @deprecated
-export def "rest-v1-1-collection-collection delete-collection2-using-delete" [
+export def "rest-v1-1-collection-collection delete-collection2-using" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -713,7 +735,7 @@ export def "rest-v1-1-collection-collection delete-collection2-using-delete" [
   let full_url = (build-url $base "/rest/v1.1/collection/collection" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"accessKey": $access_key, "secretKey": $secret_key, "collectionId": $collection_id} | compact), body: null}
 }
 
 # Retrieve existing collection content
@@ -722,7 +744,7 @@ export def "rest-v1-1-collection-collection delete-collection2-using-delete" [
 # DEPRECATED
 # operationId: getCollection2UsingGET
 @deprecated
-export def "rest-v1-1-collection-collection get-collection2-using-get" [
+export def "rest-v1-1-collection-collection get-collection2-using" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -742,7 +764,7 @@ export def "rest-v1-1-collection-collection get-collection2-using-get" [
   let full_url = (build-url $base "/rest/v1.1/collection/collection" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"accessKey": $access_key, "secretKey": $secret_key, "collectionId": $collection_id} | compact), body: null}
 }
 
 # Create new empty collection with given name
@@ -751,7 +773,7 @@ export def "rest-v1-1-collection-collection get-collection2-using-get" [
 # DEPRECATED
 # operationId: addCollection2UsingPOST
 @deprecated
-export def "rest-v1-1-collection-collection create-collection2-using-create" [
+export def "rest-v1-1-collection-collection create-collection2-using" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -774,7 +796,7 @@ export def "rest-v1-1-collection-collection create-collection2-using-create" [
   let full_url = (build-url $base "/rest/v1.1/collection/collection" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"accessKey": $access_key, "secretKey": $secret_key, "collectionName": $collection_name, "preload": $preload, "evictable": $evictable, "purposes": $purposes} | compact), body: null}
 }
 
 # Retrieve collection content for data analysis.
@@ -801,7 +823,7 @@ export def "rest-v1-1-collection-export-csv get-using" [
   let full_url = (build-url $base "/rest/v1.1/collection/export/csv" $qp)
   let accept_val = "text/plain"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"accessKey": $access_key, "secretKey": $secret_key, "collectionId": $collection_id} | compact), body: null}
 }
 
 # Change purpose of existing collection
@@ -831,14 +853,14 @@ export def "rest-v1-1-collection-purpose update-repurpose-using" [
   let full_url = (build-url $base "/rest/v1.1/collection/purpose" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"accessKey": $access_key, "secretKey": $secret_key, "collectionId": $collection_id, "purposes": $purposes} | compact), body: null}
 }
 
 # Delete existing collection with associated profiles and faces.
 #
 # DELETE /rest/v1.1/collection/{id}
 # operationId: deleteCollectionUsingDELETE
-export def "rest-v1-1-collection delete-using-delete" [
+export def "rest-v1-1-collection delete-using" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -854,18 +876,19 @@ export def "rest-v1-1-collection delete-using-delete" [
 ]: nothing -> record<message: string, payload: record, status: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
   let qp = [(serialize-qp "accessKey" $access_key "scalar") (serialize-qp "secretKey" $secret_key "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/rest/v1.1/collection/{id}") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"accessKey": $access_key, "secretKey": $secret_key} | compact), body: null}
 }
 
 # Retrieve existing collection content
 #
 # GET /rest/v1.1/collection/{id}
 # operationId: getCollectionUsingGET
-export def "rest-v1-1-collection get-using-get" [
+export def "rest-v1-1-collection get-using" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -881,18 +904,19 @@ export def "rest-v1-1-collection get-using-get" [
 ]: nothing -> record<message: string, payload: record, status: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
   let qp = [(serialize-qp "accessKey" $access_key "scalar") (serialize-qp "secretKey" $secret_key "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/rest/v1.1/collection/{id}") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"accessKey": $access_key, "secretKey": $secret_key} | compact), body: null}
 }
 
 # Update an existing collection with a given id
 #
 # PATCH /rest/v1.1/collection/{id}
 # operationId: updateCollectionUsingPATCH
-export def "rest-v1-1-collection update-using-update" [
+export def "rest-v1-1-collection update-using" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -910,11 +934,12 @@ export def "rest-v1-1-collection update-using-update" [
 ]: nothing -> record<message: string, payload: record, status: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
   let qp = [(serialize-qp "accessKey" $access_key "scalar") (serialize-qp "secretKey" $secret_key "scalar") (serialize-qp "name" $name "scalar") (serialize-qp "purposes" $purposes "multi")] | flatten | str join "&"
   let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/rest/v1.1/collection/{id}") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "patch" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "patch" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"accessKey": $access_key, "secretKey": $secret_key, "name": $name, "purposes": $purposes} | compact), body: null}
 }
 
 # Update an existing collection with a given id
@@ -941,18 +966,19 @@ export def "rest-v1-1-collection update-collection2-using-create" [
 ]: nothing -> record<message: string, payload: record, status: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
   let qp = [(serialize-qp "accessKey" $access_key "scalar") (serialize-qp "secretKey" $secret_key "scalar") (serialize-qp "name" $name "scalar") (serialize-qp "purposes" $purposes "multi")] | flatten | str join "&"
   let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/rest/v1.1/collection/{id}") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"accessKey": $access_key, "secretKey": $secret_key, "name": $name, "purposes": $purposes} | compact), body: null}
 }
 
 # Gets all the profiles associated to a collection
 #
 # GET /rest/v1.1/collection/{id}/profile
 # operationId: getAllCollectionProfilesUsingGET
-export def "rest-v1-1-collection-profile get-list-using-get" [
+export def "rest-v1-1-collection-profile get-list-using" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -968,11 +994,12 @@ export def "rest-v1-1-collection-profile get-list-using-get" [
 ]: nothing -> record<message: string, payload: record, status: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
   let qp = [(serialize-qp "accessKey" $access_key "scalar") (serialize-qp "secretKey" $secret_key "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/rest/v1.1/collection/{id}/profile") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"accessKey": $access_key, "secretKey": $secret_key} | compact), body: null}
 }
 
 # Removes classification attributes from a profile
@@ -981,7 +1008,7 @@ export def "rest-v1-1-collection-profile get-list-using-get" [
 # DEPRECATED
 # operationId: removeClassificationAttributesFromProfileUsingDELETE
 @deprecated
-export def "rest-v1-1-profile-classification-attributes delete-from-using-delete" [
+export def "rest-v1-1-profile-classification-attributes delete-from-using" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1002,7 +1029,7 @@ export def "rest-v1-1-profile-classification-attributes delete-from-using-delete
   let full_url = (build-url $base "/rest/v1.1/profile/classificationAttributes" $qp)
   let accept_val = "*/*"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"accessKey": $access_key, "secretKey": $secret_key, "profileId": $profile_id, "collectionId": $collection_id} | compact), body: null}
 }
 
 # Gets classification attributes from a profile
@@ -1011,7 +1038,7 @@ export def "rest-v1-1-profile-classification-attributes delete-from-using-delete
 # DEPRECATED
 # operationId: getClassificationAttributesFromProfileUsingGET
 @deprecated
-export def "rest-v1-1-profile-classification-attributes get-from-using-get" [
+export def "rest-v1-1-profile-classification-attributes get-from-using" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1032,7 +1059,7 @@ export def "rest-v1-1-profile-classification-attributes get-from-using-get" [
   let full_url = (build-url $base "/rest/v1.1/profile/classificationAttributes" $qp)
   let accept_val = "*/*"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"accessKey": $access_key, "secretKey": $secret_key, "profileId": $profile_id, "collectionId": $collection_id} | compact), body: null}
 }
 
 # Maps classification attributes to a profile
@@ -1063,14 +1090,14 @@ export def "rest-v1-1-profile-classification-attributes update-map-to-using" [
   let full_url = (build-url $base "/rest/v1.1/profile/classificationAttributes" $qp)
   let accept_val = "*/*"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"accessKey": $access_key, "secretKey": $secret_key, "profileId": $profile_id, "collectionId": $collection_id, "classificationAttributes": $classification_attributes} | compact), body: null}
 }
 
 # Gets the enrollment status of a profile: information on whether it is suitable for authentication.
 #
 # GET /rest/v1.1/profile/enrollmentStatus
 # operationId: getProfileEnrollmentStatusUsingGET
-export def "rest-v1-1-profile-enrollment-status get-using-get" [
+export def "rest-v1-1-profile-enrollment-status get-using" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1091,14 +1118,14 @@ export def "rest-v1-1-profile-enrollment-status get-using-get" [
   let full_url = (build-url $base "/rest/v1.1/profile/enrollmentStatus" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"accessKey": $access_key, "secretKey": $secret_key, "profileId": $profile_id, "collectionId": $collection_id} | compact), body: null}
 }
 
 # Removes (unmaps) a list of faces, identified by faceHashes, from a profile, identified by profileId
 #
 # DELETE /rest/v1.1/profile/map
 # operationId: removeFacesFromProfileUsingDELETE
-export def "rest-v1-1-profile-map delete-faces-from-using-delete" [
+export def "rest-v1-1-profile-map delete-faces-from-using" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1120,14 +1147,14 @@ export def "rest-v1-1-profile-map delete-faces-from-using-delete" [
   let full_url = (build-url $base "/rest/v1.1/profile/map" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"accessKey": $access_key, "secretKey": $secret_key, "faceHashes": $face_hashes, "profileId": $profile_id, "collectionId": $collection_id} | compact), body: null}
 }
 
 # Gets all the faceHashes associated to a profile
 #
 # GET /rest/v1.1/profile/map
 # operationId: getFacesFromProfileUsingGET
-export def "rest-v1-1-profile-map get-faces-from-using-get" [
+export def "rest-v1-1-profile-map get-faces-from-using" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1148,7 +1175,7 @@ export def "rest-v1-1-profile-map get-faces-from-using-get" [
   let full_url = (build-url $base "/rest/v1.1/profile/map" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"accessKey": $access_key, "secretKey": $secret_key, "profileId": $profile_id, "collectionId": $collection_id} | compact), body: null}
 }
 
 # Adds (maps) a list of faces, identified by faceHashes, to a profile, identified by profileId
@@ -1177,7 +1204,7 @@ export def "rest-v1-1-profile-map create-faces-to-using" [
   let full_url = (build-url $base "/rest/v1.1/profile/map" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"accessKey": $access_key, "secretKey": $secret_key, "faceHashes": $face_hashes, "profileId": $profile_id, "collectionId": $collection_id} | compact), body: null}
 }
 
 # Deletes a profile and unmaps all its faces
@@ -1186,7 +1213,7 @@ export def "rest-v1-1-profile-map create-faces-to-using" [
 # DEPRECATED
 # operationId: deleteProfile2UsingDELETE
 @deprecated
-export def "rest-v1-1-profile-profile delete-profile2-using-delete" [
+export def "rest-v1-1-profile-profile delete-profile2-using" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1207,14 +1234,14 @@ export def "rest-v1-1-profile-profile delete-profile2-using-delete" [
   let full_url = (build-url $base "/rest/v1.1/profile/profile" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"accessKey": $access_key, "secretKey": $secret_key, "collectionId": $collection_id, "profileId": $profile_id} | compact), body: null}
 }
 
 # Creates a new profile with no faces associated to it (empty profile)
 #
 # POST /rest/v1.1/profile/profile
 # operationId: addProfileUsingPOST
-export def "rest-v1-1-profile-profile create-using-create" [
+export def "rest-v1-1-profile-profile create-using" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1239,14 +1266,14 @@ export def "rest-v1-1-profile-profile create-using-create" [
   let full_url = (build-url $base "/rest/v1.1/profile/profile" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"accessKey": $access_key, "secretKey": $secret_key, "collectionId": $collection_id, "externalId": $external_id, "screenName": $screen_name, "labels": $labels, "classificationAttributes": $classification_attributes, "details": $details} | compact), body: null}
 }
 
 # Deletes a profile and unmaps all its faces
 #
 # DELETE /rest/v1.1/profile/{id}
 # operationId: deleteProfileUsingDELETE
-export def "rest-v1-1-profile delete-using-delete" [
+export def "rest-v1-1-profile delete-using" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1263,18 +1290,19 @@ export def "rest-v1-1-profile delete-using-delete" [
 ]: nothing -> record<message: string, payload: record, status: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
   let qp = [(serialize-qp "accessKey" $access_key "scalar") (serialize-qp "secretKey" $secret_key "scalar") (serialize-qp "collectionId" $collection_id "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/rest/v1.1/profile/{id}") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"accessKey": $access_key, "secretKey": $secret_key, "collectionId": $collection_id} | compact), body: null}
 }
 
 # Retrieves a profile
 #
 # GET /rest/v1.1/profile/{id}
 # operationId: getProfileUsingGET
-export def "rest-v1-1-profile get-using-get" [
+export def "rest-v1-1-profile get-using" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1292,18 +1320,19 @@ export def "rest-v1-1-profile get-using-get" [
 ]: nothing -> record<message: string, payload: record, status: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
   let qp = [(serialize-qp "accessKey" $access_key "scalar") (serialize-qp "secretKey" $secret_key "scalar") (serialize-qp "collectionId" $collection_id "scalar") (serialize-qp "withFaces" $with_faces "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/rest/v1.1/profile/{id}") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"accessKey": $access_key, "secretKey": $secret_key, "collectionId": $collection_id, "withFaces": $with_faces} | compact), body: null}
 }
 
 # Update an existing profile with a given id
 #
 # PATCH /rest/v1.1/profile/{id}
 # operationId: updateProfileUsingPATCH
-export def "rest-v1-1-profile update-using-update" [
+export def "rest-v1-1-profile update-using" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1325,11 +1354,12 @@ export def "rest-v1-1-profile update-using-update" [
 ]: nothing -> record<message: string, payload: record, status: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
   let qp = [(serialize-qp "accessKey" $access_key "scalar") (serialize-qp "secretKey" $secret_key "scalar") (serialize-qp "collectionId" $collection_id "scalar") (serialize-qp "externalId" $external_id "scalar") (serialize-qp "screenName" $screen_name "scalar") (serialize-qp "labels" $labels "multi") (serialize-qp "classificationAttributes" $classification_attributes "scalar") (serialize-qp "details" $details "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/rest/v1.1/profile/{id}") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "patch" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "patch" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"accessKey": $access_key, "secretKey": $secret_key, "collectionId": $collection_id, "externalId": $external_id, "screenName": $screen_name, "labels": $labels, "classificationAttributes": $classification_attributes, "details": $details} | compact), body: null}
 }
 
 # Show status of all streams from account
@@ -1355,14 +1385,14 @@ export def "rest-v1-1-stream-all get-by-account-using" [
   let full_url = (build-url $base "/rest/v1.1/stream/all" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"accessKey": $access_key, "secretKey": $secret_key} | compact), body: null}
 }
 
 # Get last N recognized individuals from stream
 #
 # GET /rest/v1.1/stream/attendance
 # operationId: getLastNAttedanceUsingGET
-export def "rest-v1-1-stream-attendance get-last-n-attedance-using-get" [
+export def "rest-v1-1-stream-attendance get-last-n-attedance-using" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1383,7 +1413,7 @@ export def "rest-v1-1-stream-attendance get-last-n-attedance-using-get" [
   let full_url = (build-url $base "/rest/v1.1/stream/attendance" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"accessKey": $access_key, "secretKey": $secret_key, "streamIds": $stream_ids, "count": $count} | compact), body: null}
 }
 
 # Cleanup frames older than specified timeframe
@@ -1411,14 +1441,14 @@ export def "rest-v1-1-stream-cleanup update-using" [
   let full_url = (build-url $base "/rest/v1.1/stream/cleanup" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "patch" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "patch" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"accessKey": $access_key, "secretKey": $secret_key, "streamId": $stream_id, "interval": $interval} | compact), body: null}
 }
 
 # Get individual frame image
 #
 # GET /rest/v1.1/stream/frameImage
 # operationId: getFrameImageUsingGET
-export def "rest-v1-1-stream-frame-image get-using-get" [
+export def "rest-v1-1-stream-frame-image get-using" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1439,14 +1469,14 @@ export def "rest-v1-1-stream-frame-image get-using-get" [
   let full_url = (build-url $base "/rest/v1.1/stream/frameImage" $qp)
   let accept_val = "image/jpeg"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"accessKey": $access_key, "secretKey": $secret_key, "streamId": $stream_id, "timestamp": $timestamp} | compact), body: null}
 }
 
 # Get last processed N frames from stream
 #
 # GET /rest/v1.1/stream/frames
 # operationId: getLastNFramesUsingGET
-export def "rest-v1-1-stream-frames get-last-n-using-get" [
+export def "rest-v1-1-stream-frames get-last-n-using" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1470,7 +1500,7 @@ export def "rest-v1-1-stream-frames get-last-n-using-get" [
   let full_url = (build-url $base "/rest/v1.1/stream/frames" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"accessKey": $access_key, "secretKey": $secret_key, "streamId": $stream_id, "count": $count, "collectionId": $collection_id, "labels": $labels, "attributeFilters": $attribute_filters} | compact), body: null}
 }
 
 # Start existing stream
@@ -1497,7 +1527,7 @@ export def "rest-v1-1-stream-start update-using" [
   let full_url = (build-url $base "/rest/v1.1/stream/start" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "patch" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "patch" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"accessKey": $access_key, "secretKey": $secret_key, "streamId": $stream_id} | compact), body: null}
 }
 
 # Stop existing stream
@@ -1524,14 +1554,14 @@ export def "rest-v1-1-stream-stop update-using" [
   let full_url = (build-url $base "/rest/v1.1/stream/stop" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "patch" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "patch" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"accessKey": $access_key, "secretKey": $secret_key, "streamId": $stream_id} | compact), body: null}
 }
 
 # Create new stream with given name
 #
 # POST /rest/v1.1/stream/stream
 # operationId: addStreamUsingPOST
-export def "rest-v1-1-stream-stream create-using-create" [
+export def "rest-v1-1-stream-stream create-using" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1563,14 +1593,14 @@ export def "rest-v1-1-stream-stream create-using-create" [
   let full_url = (build-url $base "/rest/v1.1/stream/stream" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"accessKey": $access_key, "secretKey": $secret_key, "name": $name, "url": $url, "method": $method, "username": $username, "password": $password, "skipFramesWithNoFaces": $skip_frames_with_no_faces, "retentionTime": $retention_time, "storeOriginalFrames": $store_original_frames, "storeAttendanceFaces": $store_attendance_faces, "storeAttendanceFrames": $store_attendance_frames, "isActive": $is_active, "associatedCollections": $associated_collections, "attributes": $attributes} | compact), body: null}
 }
 
 # Delete existing stream
 #
 # DELETE /rest/v1.1/stream/{id}
 # operationId: removeStreamUsingDELETE
-export def "rest-v1-1-stream delete-using-delete" [
+export def "rest-v1-1-stream delete-using" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1586,18 +1616,19 @@ export def "rest-v1-1-stream delete-using-delete" [
 ]: nothing -> record<message: string, payload: record, status: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
   let qp = [(serialize-qp "accessKey" $access_key "scalar") (serialize-qp "secretKey" $secret_key "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/rest/v1.1/stream/{id}") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"accessKey": $access_key, "secretKey": $secret_key} | compact), body: null}
 }
 
 # Get an existing stream with a given ID
 #
 # GET /rest/v1.1/stream/{streamId}
 # operationId: getStreamUsingGET
-export def "rest-v1-1-stream get-using-get" [
+export def "rest-v1-1-stream get-using" [
   stream_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1613,18 +1644,19 @@ export def "rest-v1-1-stream get-using-get" [
 ]: nothing -> record<message: string, payload: record, status: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($stream_id | is-empty) { error make --unspanned { msg: "path parameter 'streamId' must be non-empty" } }
   let qp = [(serialize-qp "accessKey" $access_key "scalar") (serialize-qp "secretKey" $secret_key "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({stream_id: (encode-path-segment $stream_id)} | format pattern "/rest/v1.1/stream/{stream_id}") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"accessKey": $access_key, "secretKey": $secret_key} | compact), body: null}
 }
 
 # Update an existing stream with a given ID
 #
 # PATCH /rest/v1.1/stream/{streamId}
 # operationId: updateStreamUsingPATCH
-export def "rest-v1-1-stream update-using-update" [
+export def "rest-v1-1-stream update-using" [
   stream_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1653,9 +1685,10 @@ export def "rest-v1-1-stream update-using-update" [
 ]: nothing -> record<message: string, payload: record, status: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($stream_id | is-empty) { error make --unspanned { msg: "path parameter 'streamId' must be non-empty" } }
   let qp = [(serialize-qp "accessKey" $access_key "scalar") (serialize-qp "secretKey" $secret_key "scalar") (serialize-qp "name" $name "scalar") (serialize-qp "url" $url "scalar") (serialize-qp "method" $method "scalar") (serialize-qp "username" $username "scalar") (serialize-qp "password" $password "scalar") (serialize-qp "skipFramesWithNoFaces" $skip_frames_with_no_faces "scalar") (serialize-qp "retentionTime" $retention_time "scalar") (serialize-qp "storeOriginalFrames" $store_original_frames "scalar") (serialize-qp "storeAttendanceFaces" $store_attendance_faces "scalar") (serialize-qp "storeAttendanceFrames" $store_attendance_frames "scalar") (serialize-qp "isActive" $is_active "scalar") (serialize-qp "associatedCollections" $associated_collections "multi") (serialize-qp "attributes" $attributes "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({stream_id: (encode-path-segment $stream_id)} | format pattern "/rest/v1.1/stream/{stream_id}") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "patch" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "patch" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"accessKey": $access_key, "secretKey": $secret_key, "name": $name, "url": $url, "method": $method, "username": $username, "password": $password, "skipFramesWithNoFaces": $skip_frames_with_no_faces, "retentionTime": $retention_time, "storeOriginalFrames": $store_original_frames, "storeAttendanceFaces": $store_attendance_faces, "storeAttendanceFrames": $store_attendance_frames, "isActive": $is_active, "associatedCollections": $associated_collections, "attributes": $attributes} | compact), body: null}
 }

@@ -3,16 +3,17 @@
 # Auth: --token flag or $env.BRAZE_ENDPOINTS_TOKEN
 
 const BASE_URL = "https://rest.iad-01.braze.com"
-const DEFAULT_AUTH = "bearer"
 
-# Build auth: returns {headers: record, query: string}
+# Build auth: returns {scheme: string, headers: record, query: string, location: string}.
+# `location` is "header" | "query" | "cookie" | "none" and tells dry-run callers
+# where the token went without inspecting headers/query themselves.
 def build-auth [token?: string, auth_scheme?: string]: nothing -> record {
   let token_val = if ($token != null) and ($token | is-not-empty) { $token } else { $env | get -o BRAZE_ENDPOINTS_TOKEN | default "" }
   let scheme = ($auth_scheme | default "bearer")
-  if ($scheme == "none") or ($token_val | is-empty) { return {headers: {}, query: ""} }
+  if ($scheme == "none") or ($token_val | is-empty) { return {scheme: $scheme, headers: {}, query: "", location: "none"} }
   match $scheme {
-    "none" => { {headers: {}, query: ""} }
-    _ => { {headers: {Authorization: $"Bearer ($token_val)"}, query: ""} }
+    "none" => { {scheme: $scheme, headers: {}, query: "", location: "none"} }
+    _ => { {scheme: $scheme, headers: {Authorization: $"Bearer ($token_val)"}, query: "", location: "header"} }
   }
 }
 
@@ -21,8 +22,9 @@ def build-auth [token?: string, auth_scheme?: string]: nothing -> record {
 # ([A-Za-z0-9-._~]) stay literal; everything else gets %XX.
 def serialize-qp [name: string, value: any, style: string]: nothing -> list<string> {
   if ($value == null) { return [] }
-  let n = (encode-path-segment $name)
   let is_list = ($value | describe | str starts-with "list")
+  if $is_list and ($value | is-empty) { return [] }
+  let n = (encode-path-segment $name)
   if ($value | describe | str starts-with "record") { return ($value | transpose k v | each { $"($n)[(encode-path-segment $in.k)]=(encode-path-segment $in.v)" }) }
   if not $is_list { return [$"($n)=(encode-path-segment $value)"] }
   match $style {
@@ -53,22 +55,42 @@ def build-url [base: string, path: string, query?: string]: nothing -> string {
   if ($query != null) and ($query | is-not-empty) { $result | upsert query $query | url join } else { $result | url join }
 }
 
+# Build the dry-run record returned by --dry-run. Shape:
+#   {dry_run: true, method, url, query: <record>, headers, body, content_type, timeout,
+#    auth: {scheme, location}}
+# `meta` carries logical-form data (the query record by spec name, the pre-serialization
+# body) that do-request itself cannot reconstruct from its wire-format args.
+def build-dry-run-record [method: string, url: string, auth: record, content_type: string, timeout: duration, meta?: record]: nothing -> record {
+  let m = ($meta | default {})
+  {
+    dry_run: true
+    method: $method
+    url: $url
+    query: ($m | get -o query | default {})
+    headers: $auth.headers
+    body: ($m | get -o body)
+    content_type: $content_type
+    timeout: $timeout
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+}
+
 # Execute HTTP request with method dispatch
-def do-request [method: string, url: string, auth: record, insecure: bool, raw: bool, dry_run: bool, max_time?: duration, allow_errors?: bool, full?: bool, content_type?: string, body?: any]: nothing -> any {
+def do-request [method: string, url: string, auth: record, insecure: bool, raw: bool, dry_run: bool, max_time?: duration, allow_errors?: bool, full?: bool, content_type?: string, body?: any, dry_run_meta?: record]: nothing -> any {
   let req_url = if ($auth.query | is-not-empty) { if ($url | str contains "?") { $"($url)&($auth.query)" } else { $"($url)?($auth.query)" } } else { $url }
   let timeout = ($max_time | default 30min)
   let ct = ($content_type | default "application/json")
-  if $dry_run { return {method: $method, url: $req_url, headers: $auth.headers, query_string: $auth.query, content_type: $ct, timeout: $timeout, body: $body} }
+  if $dry_run { return (build-dry-run-record $method $req_url $auth $ct $timeout $dry_run_meta) }
   let resp = match $method {
     "get" => { http get --headers $auth.headers --full --allow-errors --max-time $timeout --insecure=$insecure --raw=$raw $req_url }
-    "head" => { http head --headers $auth.headers --max-time $timeout --insecure=$insecure $req_url }
-    "options" => { http options --headers $auth.headers --max-time $timeout --insecure=$insecure $req_url }
+    "head" => { http head --headers $auth.headers --full --allow-errors --max-time $timeout --insecure=$insecure $req_url }
+    "options" => { http options --headers $auth.headers --full --allow-errors --max-time $timeout --insecure=$insecure $req_url }
     "post" => { if ($body | is-empty) { http post --headers $auth.headers --full --allow-errors --max-time $timeout --insecure=$insecure --raw=$raw $req_url "" } else { http post --headers $auth.headers --content-type $ct --full --allow-errors --max-time $timeout --insecure=$insecure --raw=$raw $req_url $body } }
     "put" => { if ($body | is-empty) { http put --headers $auth.headers --full --allow-errors --max-time $timeout --insecure=$insecure --raw=$raw $req_url "" } else { http put --headers $auth.headers --content-type $ct --full --allow-errors --max-time $timeout --insecure=$insecure --raw=$raw $req_url $body } }
     "patch" => { if ($body | is-empty) { http patch --headers $auth.headers --full --allow-errors --max-time $timeout --insecure=$insecure --raw=$raw $req_url "" } else { http patch --headers $auth.headers --content-type $ct --full --allow-errors --max-time $timeout --insecure=$insecure --raw=$raw $req_url $body } }
     "delete" => { if ($body | is-empty) { http delete --headers $auth.headers --full --allow-errors --max-time $timeout --insecure=$insecure --raw=$raw $req_url } else { http delete --headers $auth.headers --content-type $ct --data $body --full --allow-errors --max-time $timeout --insecure=$insecure --raw=$raw $req_url } }
   }
-  if ($method in ["head" "options"]) { return $resp }
+  if ($method == "head") and (not $full) and (not $allow_errors) and $resp.status < 400 { return $resp.headers }
   if $allow_errors { $resp } else if $resp.status >= 400 { error make --unspanned { msg: $"HTTP ($resp.status): ($resp.body)" } } else if $full { {status: $resp.status, headers: $resp.headers, body: $resp.body} } else if $resp.status == 204 { null } else { $resp.body }
 }
 
@@ -123,7 +145,7 @@ export def "campaigns-data-series get-analytics" [
   let full_url = (build-url $base "/campaigns/data_series" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"campaign_id": $campaign_id, "length": $length, "ending_at": $ending_at} | compact), body: null}
 }
 
 # Campaign Details
@@ -148,7 +170,7 @@ export def "campaigns-details get" [
   let full_url = (build-url $base "/campaigns/details" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"campaign_id": $campaign_id} | compact), body: null}
 }
 
 # Campaign List
@@ -176,7 +198,7 @@ export def "campaigns-list list" [
   let full_url = (build-url $base "/campaigns/list" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"page": $page, "include_archived": $include_archived, "sort_direction": $sort_direction, "last_edit.time[gt]": $last_edit_time_gt} | compact), body: null}
 }
 
 # Canvas Data Series Analytics
@@ -207,7 +229,7 @@ export def "canvas-data-series get-analytics" [
   let full_url = (build-url $base "/canvas/data_series" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"canvas_id": $canvas_id, "ending_at": $ending_at, "starting_at": $starting_at, "length": $length, "include_variant_breakdown": $include_variant_breakdown, "include_step_breakdown": $include_step_breakdown, "include_deleted_step_data": $include_deleted_step_data} | compact), body: null}
 }
 
 # Canvas Data Analytics Summary
@@ -238,7 +260,7 @@ export def "canvas-data-summary get-analytics" [
   let full_url = (build-url $base "/canvas/data_summary" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"canvas_id": $canvas_id, "ending_at": $ending_at, "starting_at": $starting_at, "length": $length, "include_variant_breakdown": $include_variant_breakdown, "include_step_breakdown": $include_step_breakdown, "include_deleted_step_data": $include_deleted_step_data} | compact), body: null}
 }
 
 # Canvas Details
@@ -263,7 +285,7 @@ export def "canvas-details get" [
   let full_url = (build-url $base "/canvas/details" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"canvas_id": $canvas_id} | compact), body: null}
 }
 
 # Canvas List
@@ -291,7 +313,7 @@ export def "canvas-list list" [
   let full_url = (build-url $base "/canvas/list" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"page": $page, "include_archived": $include_archived, "sort_direction": $sort_direction, "last_edit.time[gt]": $last_edit_time_gt} | compact), body: null}
 }
 
 # Schedule API Triggered Canvases
@@ -326,7 +348,7 @@ export def "canvas-trigger-schedule-create create-triggered-canvases" [
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: {}, body: $req_body}
 }
 
 # See Content Block Information
@@ -352,7 +374,7 @@ export def "content-blocks-info get-see-information" [
   let full_url = (build-url $base "/content_blocks/info" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"content_block_id": $content_block_id, "include_inclusion_data": $include_inclusion_data} | compact), body: null}
 }
 
 # List Available Content Blocks
@@ -380,7 +402,7 @@ export def "content-blocks-list list-available" [
   let full_url = (build-url $base "/content_blocks/list" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"modified_after": $modified_after, "modified_before": $modified_before, "limit": $limit, "offset": $offset} | compact), body: null}
 }
 
 # Query Hard Bounced Emails
@@ -409,14 +431,14 @@ export def "email-hard-bounces list-bounced" [
   let full_url = (build-url $base "/email/hard_bounces" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"start_date": $start_date, "end_date": $end_date, "limit": $limit, "offset": $offset, "email": $email} | compact), body: null}
 }
 
 # Query List of Unsubscribed Email Addresses
 #
 # GET /email/unsubscribes
 # operationId: queryListOfUnsubscribedEmailAddresses
-export def "email-unsubscribes list-list-of-unsubscribed-addresses" [
+export def "email-unsubscribes list-of-unsubscribed-addresses" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -439,7 +461,7 @@ export def "email-unsubscribes list-list-of-unsubscribed-addresses" [
   let full_url = (build-url $base "/email/unsubscribes" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"start_date": $start_date, "end_date": $end_date, "limit": $limit, "offset": $offset, "sort_direction": $sort_direction, "email": $email} | compact), body: null}
 }
 
 # Custom Events Analytics
@@ -469,7 +491,7 @@ export def "events-data-series get-custom-analytics" [
   let full_url = (build-url $base "/events/data_series" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"event": $event, "length": $length, "unit": $unit, "ending_at": $ending_at, "app_id": $app_id, "segment_id": $segment_id} | compact), body: null}
 }
 
 # Custom Events List
@@ -494,7 +516,7 @@ export def "events-list list-custom" [
   let full_url = (build-url $base "/events/list" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"page": $page} | compact), body: null}
 }
 
 # News Feed Card Analytics
@@ -522,7 +544,7 @@ export def "feed-data-series get-news-card-analytics" [
   let full_url = (build-url $base "/feed/data_series" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"card_id": $card_id, "length": $length, "unit": $unit, "ending_at": $ending_at} | compact), body: null}
 }
 
 # News Feed Cards Details
@@ -547,7 +569,7 @@ export def "feed-details get-news-cards" [
   let full_url = (build-url $base "/feed/details" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"card_id": $card_id} | compact), body: null}
 }
 
 # News Feed Cards List
@@ -574,7 +596,7 @@ export def "feed-list list-news-cards" [
   let full_url = (build-url $base "/feed/list" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"page": $page, "include_archived": $include_archived, "sort_direction": $sort_direction} | compact), body: null}
 }
 
 # Daily Active Users by Date
@@ -601,7 +623,7 @@ export def "kpi-dau-data-series get-daily-active-users-by-date" [
   let full_url = (build-url $base "/kpi/dau/data_series" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"length": $length, "ending_at": $ending_at, "app_id": $app_id} | compact), body: null}
 }
 
 # Monthly Active Users for Last 30 Days
@@ -628,7 +650,7 @@ export def "kpi-mau-data-series get-monthly-active-users-for-last30-days" [
   let full_url = (build-url $base "/kpi/mau/data_series" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"length": $length, "ending_at": $ending_at, "app_id": $app_id} | compact), body: null}
 }
 
 # Daily New Users by Date
@@ -655,7 +677,7 @@ export def "kpi-new-users-data-series get-daily-by-date" [
   let full_url = (build-url $base "/kpi/new_users/data_series" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"length": $length, "ending_at": $ending_at, "app_id": $app_id} | compact), body: null}
 }
 
 # KPIs for Daily App Uninstalls by Date
@@ -682,7 +704,7 @@ export def "kpi-uninstalls-data-series get-kp-is-for-daily-app-by-date" [
   let full_url = (build-url $base "/kpi/uninstalls/data_series" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"length": $length, "ending_at": $ending_at, "app_id": $app_id} | compact), body: null}
 }
 
 # Get Upcoming Scheduled Campaigns and Canvases
@@ -707,7 +729,7 @@ export def "messages-scheduled-broadcasts get-upcoming-campaigns-and-canvases" [
   let full_url = (build-url $base "/messages/scheduled_broadcasts" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"end_time": $end_time} | compact), body: null}
 }
 
 # Segment Analytics
@@ -734,7 +756,7 @@ export def "segments-data-series get-analytics" [
   let full_url = (build-url $base "/segments/data_series" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"segment_id": $segment_id, "length": $length, "ending_at": $ending_at} | compact), body: null}
 }
 
 # Segment Details
@@ -759,7 +781,7 @@ export def "segments-details get" [
   let full_url = (build-url $base "/segments/details" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"segment_id": $segment_id} | compact), body: null}
 }
 
 # Segment List
@@ -785,7 +807,7 @@ export def "segments-list list" [
   let full_url = (build-url $base "/segments/list" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"page": $page, "sort_direction": $sort_direction} | compact), body: null}
 }
 
 # Send Analytics
@@ -813,7 +835,7 @@ export def "sends-data-series send-analytics" [
   let full_url = (build-url $base "/sends/data_series" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"campaign_id": $campaign_id, "send_id": $send_id, "length": $length, "ending_at": $ending_at} | compact), body: null}
 }
 
 # App Sessions by Time
@@ -842,7 +864,7 @@ export def "sessions-data-series get-app-by-time" [
   let full_url = (build-url $base "/sessions/data_series" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"length": $length, "unit": $unit, "ending_at": $ending_at, "app_id": $app_id, "segment_id": $segment_id} | compact), body: null}
 }
 
 # List User's Subscription Group Status - SMS
@@ -869,7 +891,7 @@ export def "subscription-status-get list-users-group-sms" [
   let full_url = (build-url $base "/subscription/status/get" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"subscription_group_id": $subscription_group_id, "external_id": $external_id, "phone": $phone} | compact), body: null}
 }
 
 # List User's Subscription Group - SMS
@@ -897,7 +919,7 @@ export def "subscription-user-status list-users-group-sms" [
   let full_url = (build-url $base "/subscription/user/status" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"external_id": $external_id, "limit": $limit, "offset": $offset, "phone": $phone} | compact), body: null}
 }
 
 # See Email Template Information
@@ -922,7 +944,7 @@ export def "templates-email-info get-see-information" [
   let full_url = (build-url $base "/templates/email/info" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"email_template_id": $email_template_id} | compact), body: null}
 }
 
 # List Available Email Templates
@@ -950,5 +972,5 @@ export def "templates-email-list list-available" [
   let full_url = (build-url $base "/templates/email/list" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"modified_after": $modified_after, "modified_before": $modified_before, "limit": $limit, "offset": $offset} | compact), body: null}
 }

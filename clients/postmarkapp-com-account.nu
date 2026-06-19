@@ -3,16 +3,17 @@
 # Auth: --token flag or $env.POSTMARK_ACCOUNT_LEVEL_API_TOKEN
 
 const BASE_URL = "https://api.postmarkapp.com"
-const DEFAULT_AUTH = "bearer"
 
-# Build auth: returns {headers: record, query: string}
+# Build auth: returns {scheme: string, headers: record, query: string, location: string}.
+# `location` is "header" | "query" | "cookie" | "none" and tells dry-run callers
+# where the token went without inspecting headers/query themselves.
 def build-auth [token?: string, auth_scheme?: string]: nothing -> record {
   let token_val = if ($token != null) and ($token | is-not-empty) { $token } else { $env | get -o POSTMARK_ACCOUNT_LEVEL_API_TOKEN | default "" }
   let scheme = ($auth_scheme | default "bearer")
-  if ($scheme == "none") or ($token_val | is-empty) { return {headers: {}, query: ""} }
+  if ($scheme == "none") or ($token_val | is-empty) { return {scheme: $scheme, headers: {}, query: "", location: "none"} }
   match $scheme {
-    "none" => { {headers: {}, query: ""} }
-    _ => { {headers: {Authorization: $"Bearer ($token_val)"}, query: ""} }
+    "none" => { {scheme: $scheme, headers: {}, query: "", location: "none"} }
+    _ => { {scheme: $scheme, headers: {Authorization: $"Bearer ($token_val)"}, query: "", location: "header"} }
   }
 }
 
@@ -21,8 +22,9 @@ def build-auth [token?: string, auth_scheme?: string]: nothing -> record {
 # ([A-Za-z0-9-._~]) stay literal; everything else gets %XX.
 def serialize-qp [name: string, value: any, style: string]: nothing -> list<string> {
   if ($value == null) { return [] }
-  let n = (encode-path-segment $name)
   let is_list = ($value | describe | str starts-with "list")
+  if $is_list and ($value | is-empty) { return [] }
+  let n = (encode-path-segment $name)
   if ($value | describe | str starts-with "record") { return ($value | transpose k v | each { $"($n)[(encode-path-segment $in.k)]=(encode-path-segment $in.v)" }) }
   if not $is_list { return [$"($n)=(encode-path-segment $value)"] }
   match $style {
@@ -53,22 +55,42 @@ def build-url [base: string, path: string, query?: string]: nothing -> string {
   if ($query != null) and ($query | is-not-empty) { $result | upsert query $query | url join } else { $result | url join }
 }
 
+# Build the dry-run record returned by --dry-run. Shape:
+#   {dry_run: true, method, url, query: <record>, headers, body, content_type, timeout,
+#    auth: {scheme, location}}
+# `meta` carries logical-form data (the query record by spec name, the pre-serialization
+# body) that do-request itself cannot reconstruct from its wire-format args.
+def build-dry-run-record [method: string, url: string, auth: record, content_type: string, timeout: duration, meta?: record]: nothing -> record {
+  let m = ($meta | default {})
+  {
+    dry_run: true
+    method: $method
+    url: $url
+    query: ($m | get -o query | default {})
+    headers: $auth.headers
+    body: ($m | get -o body)
+    content_type: $content_type
+    timeout: $timeout
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+}
+
 # Execute HTTP request with method dispatch
-def do-request [method: string, url: string, auth: record, insecure: bool, raw: bool, dry_run: bool, max_time?: duration, allow_errors?: bool, full?: bool, content_type?: string, body?: any]: nothing -> any {
+def do-request [method: string, url: string, auth: record, insecure: bool, raw: bool, dry_run: bool, max_time?: duration, allow_errors?: bool, full?: bool, content_type?: string, body?: any, dry_run_meta?: record]: nothing -> any {
   let req_url = if ($auth.query | is-not-empty) { if ($url | str contains "?") { $"($url)&($auth.query)" } else { $"($url)?($auth.query)" } } else { $url }
   let timeout = ($max_time | default 30min)
   let ct = ($content_type | default "application/json")
-  if $dry_run { return {method: $method, url: $req_url, headers: $auth.headers, query_string: $auth.query, content_type: $ct, timeout: $timeout, body: $body} }
+  if $dry_run { return (build-dry-run-record $method $req_url $auth $ct $timeout $dry_run_meta) }
   let resp = match $method {
     "get" => { http get --headers $auth.headers --full --allow-errors --max-time $timeout --insecure=$insecure --raw=$raw $req_url }
-    "head" => { http head --headers $auth.headers --max-time $timeout --insecure=$insecure $req_url }
-    "options" => { http options --headers $auth.headers --max-time $timeout --insecure=$insecure $req_url }
+    "head" => { http head --headers $auth.headers --full --allow-errors --max-time $timeout --insecure=$insecure $req_url }
+    "options" => { http options --headers $auth.headers --full --allow-errors --max-time $timeout --insecure=$insecure $req_url }
     "post" => { if ($body | is-empty) { http post --headers $auth.headers --full --allow-errors --max-time $timeout --insecure=$insecure --raw=$raw $req_url "" } else { http post --headers $auth.headers --content-type $ct --full --allow-errors --max-time $timeout --insecure=$insecure --raw=$raw $req_url $body } }
     "put" => { if ($body | is-empty) { http put --headers $auth.headers --full --allow-errors --max-time $timeout --insecure=$insecure --raw=$raw $req_url "" } else { http put --headers $auth.headers --content-type $ct --full --allow-errors --max-time $timeout --insecure=$insecure --raw=$raw $req_url $body } }
     "patch" => { if ($body | is-empty) { http patch --headers $auth.headers --full --allow-errors --max-time $timeout --insecure=$insecure --raw=$raw $req_url "" } else { http patch --headers $auth.headers --content-type $ct --full --allow-errors --max-time $timeout --insecure=$insecure --raw=$raw $req_url $body } }
     "delete" => { if ($body | is-empty) { http delete --headers $auth.headers --full --allow-errors --max-time $timeout --insecure=$insecure --raw=$raw $req_url } else { http delete --headers $auth.headers --content-type $ct --data $body --full --allow-errors --max-time $timeout --insecure=$insecure --raw=$raw $req_url } }
   }
-  if ($method in ["head" "options"]) { return $resp }
+  if ($method == "head") and (not $full) and (not $allow_errors) and $resp.status < 400 { return $resp.headers }
   if $allow_errors { $resp } else if $resp.status >= 400 { error make --unspanned { msg: $"HTTP ($resp.status): ($resp.body)" } } else if $full { {status: $resp.status, headers: $resp.headers, body: $resp.body} } else if $resp.status == 204 { null } else { $resp.body }
 }
 
@@ -127,7 +149,7 @@ export def "domains list" [
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"X-Postmark-Account-Token": $x_postmark_account_token} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"count": $count, "offset": $offset} | compact), body: null}
 }
 
 # Create a Domain
@@ -158,7 +180,7 @@ export def "domains create" [
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"X-Postmark-Account-Token": $x_postmark_account_token} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: {}, body: $req_body}
 }
 
 # Delete a Domain
@@ -180,12 +202,13 @@ export def "domains delete" [
 ]: nothing -> record<ErrorCode: int, Message: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($domainid | is-empty) { error make --unspanned { msg: "path parameter 'domainid' must be non-empty" } }
   let full_url = (build-url $base ({domainid: (encode-path-segment $domainid)} | format pattern "/domains/{domainid}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"X-Postmark-Account-Token": $x_postmark_account_token} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
 }
 
 # Get a Domain
@@ -207,12 +230,13 @@ export def "domains get" [
 ]: nothing -> record<DKIMHost: string, DKIMPendingHost: string, DKIMPendingTextValue: string, DKIMRevokedHost: string, DKIMRevokedTextValue: string, DKIMTestValue: string, DKIMUpdateStatus: string, DKIMVerified: bool, ID: int, Name: string, ReturnPathDomain: string, ReturnPathDomainCNAMEValue: string, ReturnPathDomainVerified: bool, SPFHost: string, SPFTextValue: string, SPFVerified: bool, SafeToRemoveRevokedKeyFromDNS: bool, WeakDKIM: bool> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($domainid | is-empty) { error make --unspanned { msg: "path parameter 'domainid' must be non-empty" } }
   let full_url = (build-url $base ({domainid: (encode-path-segment $domainid)} | format pattern "/domains/{domainid}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"X-Postmark-Account-Token": $x_postmark_account_token} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
 }
 
 # Update a Domain
@@ -236,6 +260,7 @@ export def "domains update-edit" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($domainid | is-empty) { error make --unspanned { msg: "path parameter 'domainid' must be non-empty" } }
   let full_url = (build-url $base ({domainid: (encode-path-segment $domainid)} | format pattern "/domains/{domainid}"))
   let req_body = {"ReturnPathDomain": $return_path_domain} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
@@ -243,7 +268,7 @@ export def "domains update-edit" [
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"X-Postmark-Account-Token": $x_postmark_account_token} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: {}, body: $req_body}
 }
 
 # Rotate DKIM Key
@@ -265,12 +290,13 @@ export def "domains-rotatedkim create-rotate-dkim-key" [
 ]: nothing -> record<DKIMHost: string, DKIMPendingHost: string, DKIMPendingTextValue: string, DKIMRevokedHost: string, DKIMRevokedTextValue: string, DKIMTestValue: string, DKIMUpdateStatus: string, DKIMVerified: bool, ID: int, Name: string, SafeToRemoveRevokedKeyFromDNS: bool, WeakDKIM: bool> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($domainid | is-empty) { error make --unspanned { msg: "path parameter 'domainid' must be non-empty" } }
   let full_url = (build-url $base ({domainid: (encode-path-segment $domainid)} | format pattern "/domains/{domainid}/rotatedkim"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"X-Postmark-Account-Token": $x_postmark_account_token} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
 }
 
 # Request DNS Verification for DKIM
@@ -292,12 +318,13 @@ export def "domains-verifydkim request-dkim-verification" [
 ]: nothing -> record<DKIMHost: string, DKIMPendingHost: string, DKIMPendingTextValue: string, DKIMRevokedHost: string, DKIMRevokedTextValue: string, DKIMTestValue: string, DKIMUpdateStatus: string, DKIMVerified: bool, ID: int, Name: string, ReturnPathDomain: string, ReturnPathDomainCNAMEValue: string, ReturnPathDomainVerified: bool, SPFHost: string, SPFTextValue: string, SPFVerified: bool, SafeToRemoveRevokedKeyFromDNS: bool, WeakDKIM: bool> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($domainid | is-empty) { error make --unspanned { msg: "path parameter 'domainid' must be non-empty" } }
   let full_url = (build-url $base ({domainid: (encode-path-segment $domainid)} | format pattern "/domains/{domainid}/verifydkim"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"X-Postmark-Account-Token": $x_postmark_account_token} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
 }
 
 # Request DNS Verification for Return-Path
@@ -319,12 +346,13 @@ export def "domains-verifyreturnpath request-return-path-verification" [
 ]: nothing -> record<DKIMHost: string, DKIMPendingHost: string, DKIMPendingTextValue: string, DKIMRevokedHost: string, DKIMRevokedTextValue: string, DKIMTestValue: string, DKIMUpdateStatus: string, DKIMVerified: bool, ID: int, Name: string, ReturnPathDomain: string, ReturnPathDomainCNAMEValue: string, ReturnPathDomainVerified: bool, SPFHost: string, SPFTextValue: string, SPFVerified: bool, SafeToRemoveRevokedKeyFromDNS: bool, WeakDKIM: bool> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($domainid | is-empty) { error make --unspanned { msg: "path parameter 'domainid' must be non-empty" } }
   let full_url = (build-url $base ({domainid: (encode-path-segment $domainid)} | format pattern "/domains/{domainid}/verifyreturnpath"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"X-Postmark-Account-Token": $x_postmark_account_token} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
 }
 
 # Request DNS Verification for SPF
@@ -346,12 +374,13 @@ export def "domains-verifyspf request-spf-verification" [
 ]: nothing -> record<SPFHost: string, SPFTextValue: string, SPFVerified: bool> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($domainid | is-empty) { error make --unspanned { msg: "path parameter 'domainid' must be non-empty" } }
   let full_url = (build-url $base ({domainid: (encode-path-segment $domainid)} | format pattern "/domains/{domainid}/verifyspf"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"X-Postmark-Account-Token": $x_postmark_account_token} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
 }
 
 # List Sender Signatures
@@ -380,7 +409,7 @@ export def "senders list-signatures" [
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"X-Postmark-Account-Token": $x_postmark_account_token} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"count": $count, "offset": $offset} | compact), body: null}
 }
 
 # Create a Sender Signature
@@ -413,7 +442,7 @@ export def "senders create-signature" [
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"X-Postmark-Account-Token": $x_postmark_account_token} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: {}, body: $req_body}
 }
 
 # Delete a Sender Signature
@@ -435,12 +464,13 @@ export def "senders delete-signature" [
 ]: nothing -> record<ErrorCode: int, Message: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($signatureid | is-empty) { error make --unspanned { msg: "path parameter 'signatureid' must be non-empty" } }
   let full_url = (build-url $base ({signatureid: (encode-path-segment $signatureid)} | format pattern "/senders/{signatureid}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"X-Postmark-Account-Token": $x_postmark_account_token} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
 }
 
 # Get a Sender Signature
@@ -462,12 +492,13 @@ export def "senders get-signature" [
 ]: nothing -> record<Confirmed: bool, DKIMHost: string, DKIMPendingHost: string, DKIMPendingTextValue: string, DKIMRevokedHost: string, DKIMRevokedTextValue: string, DKIMTestValue: string, DKIMUpdateStatus: string, DKIMVerified: bool, Domain: string, EmailAddress: string, ID: int, Name: string, ReplyToEmailAddress: string, ReturnPathDomain: string, ReturnPathDomainCNAMEValue: string, ReturnPathDomainVerified: bool, SPFHost: string, SPFTextValue: string, SPFVerified: bool, SafeToRemoveRevokedKeyFromDNS: bool, WeakDKIM: bool> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($signatureid | is-empty) { error make --unspanned { msg: "path parameter 'signatureid' must be non-empty" } }
   let full_url = (build-url $base ({signatureid: (encode-path-segment $signatureid)} | format pattern "/senders/{signatureid}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"X-Postmark-Account-Token": $x_postmark_account_token} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
 }
 
 # Update a Sender Signature
@@ -493,6 +524,7 @@ export def "senders update-edit-signature" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($signatureid | is-empty) { error make --unspanned { msg: "path parameter 'signatureid' must be non-empty" } }
   let full_url = (build-url $base ({signatureid: (encode-path-segment $signatureid)} | format pattern "/senders/{signatureid}"))
   let req_body = {"Name": $name, "ReplyToEmail": $reply_to_email, "ReturnPathDomain": $return_path_domain} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
@@ -500,7 +532,7 @@ export def "senders update-edit-signature" [
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"X-Postmark-Account-Token": $x_postmark_account_token} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: {}, body: $req_body}
 }
 
 # Request a new DKIM Key
@@ -522,12 +554,13 @@ export def "senders-requestnewdkim request-new-dkim-key-for-signature" [
 ]: nothing -> record<ErrorCode: int, Message: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($signatureid | is-empty) { error make --unspanned { msg: "path parameter 'signatureid' must be non-empty" } }
   let full_url = (build-url $base ({signatureid: (encode-path-segment $signatureid)} | format pattern "/senders/{signatureid}/requestnewdkim"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"X-Postmark-Account-Token": $x_postmark_account_token} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
 }
 
 # Resend Signature Confirmation Email
@@ -549,12 +582,13 @@ export def "senders-resend resend-signature-confirmation-email" [
 ]: nothing -> record<ErrorCode: int, Message: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($signatureid | is-empty) { error make --unspanned { msg: "path parameter 'signatureid' must be non-empty" } }
   let full_url = (build-url $base ({signatureid: (encode-path-segment $signatureid)} | format pattern "/senders/{signatureid}/resend"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"X-Postmark-Account-Token": $x_postmark_account_token} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
 }
 
 # Request DNS Verification for SPF
@@ -576,12 +610,13 @@ export def "senders-verifyspf request-spf-verification-for-signature" [
 ]: nothing -> record<Confirmed: bool, DKIMHost: string, DKIMPendingHost: string, DKIMPendingTextValue: string, DKIMRevokedHost: string, DKIMRevokedTextValue: string, DKIMTestValue: string, DKIMUpdateStatus: string, DKIMVerified: bool, Domain: string, EmailAddress: string, ID: int, Name: string, ReplyToEmailAddress: string, ReturnPathDomain: string, ReturnPathDomainCNAMEValue: string, ReturnPathDomainVerified: bool, SPFHost: string, SPFTextValue: string, SPFVerified: bool, SafeToRemoveRevokedKeyFromDNS: bool, WeakDKIM: bool> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($signatureid | is-empty) { error make --unspanned { msg: "path parameter 'signatureid' must be non-empty" } }
   let full_url = (build-url $base ({signatureid: (encode-path-segment $signatureid)} | format pattern "/senders/{signatureid}/verifyspf"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"X-Postmark-Account-Token": $x_postmark_account_token} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
 }
 
 # List servers
@@ -611,7 +646,7 @@ export def "servers list" [
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"X-Postmark-Account-Token": $x_postmark_account_token} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"count": $count, "offset": $offset, "name": $name} | compact), body: null}
 }
 
 # Create a Server
@@ -654,7 +689,7 @@ export def "servers create" [
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"X-Postmark-Account-Token": $x_postmark_account_token} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: {}, body: $req_body}
 }
 
 # Delete a Server
@@ -676,12 +711,13 @@ export def "servers delete" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($serverid | is-empty) { error make --unspanned { msg: "path parameter 'serverid' must be non-empty" } }
   let full_url = (build-url $base ({serverid: (encode-path-segment $serverid)} | format pattern "/servers/{serverid}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"X-Postmark-Account-Token": $x_postmark_account_token} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
 }
 
 # Get a Server
@@ -703,12 +739,13 @@ export def "servers get-information" [
 ]: nothing -> record<ApiTokens: list<string>, BounceHookUrl: string, ClickHookUrl: string, Color: string, DeliveryHookUrl: string, ID: int, InboundAddress: string, InboundDomain: string, InboundHash: string, InboundHookUrl: string, InboundSpamThreshold: int, Name: string, OpenHookUrl: string, PostFirstOpenOnly: bool, RawEmailEnabled: bool, ServerLink: string, SmtpApiActivated: bool, TrackLinks: string, TrackOpens: bool> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($serverid | is-empty) { error make --unspanned { msg: "path parameter 'serverid' must be non-empty" } }
   let full_url = (build-url $base ({serverid: (encode-path-segment $serverid)} | format pattern "/servers/{serverid}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"X-Postmark-Account-Token": $x_postmark_account_token} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
 }
 
 # Edit a Server
@@ -745,6 +782,7 @@ export def "servers update-edit-information" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($serverid | is-empty) { error make --unspanned { msg: "path parameter 'serverid' must be non-empty" } }
   let full_url = (build-url $base ({serverid: (encode-path-segment $serverid)} | format pattern "/servers/{serverid}"))
   let req_body = {"BounceHookUrl": $bounce_hook_url, "ClickHookUrl": $click_hook_url, "Color": $color, "DeliveryHookUrl": $delivery_hook_url, "InboundDomain": $inbound_domain, "InboundHookUrl": $inbound_hook_url, "InboundSpamThreshold": $inbound_spam_threshold, "Name": $name, "OpenHookUrl": $open_hook_url, "PostFirstOpenOnly": $post_first_open_only, "RawEmailEnabled": $raw_email_enabled, "SmtpApiActivated": $smtp_api_activated, "TrackLinks": $track_links, "TrackOpens": $track_opens} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
@@ -752,7 +790,7 @@ export def "servers update-edit-information" [
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"X-Postmark-Account-Token": $x_postmark_account_token} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: {}, body: $req_body}
 }
 
 # Push templates from one server to another
@@ -784,5 +822,5 @@ export def "templates-push push" [
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"X-Postmark-Account-Token": $x_postmark_account_token} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: {}, body: $req_body}
 }

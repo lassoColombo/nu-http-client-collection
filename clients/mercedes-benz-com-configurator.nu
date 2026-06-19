@@ -3,16 +3,17 @@
 # Auth: --token flag or $env.CAR_CONFIGURATOR_TOKEN
 
 const BASE_URL = "https://api.mercedes-benz.com/configurator_tryout/v1"
-const DEFAULT_AUTH = "bearer"
 
-# Build auth: returns {headers: record, query: string}
+# Build auth: returns {scheme: string, headers: record, query: string, location: string}.
+# `location` is "header" | "query" | "cookie" | "none" and tells dry-run callers
+# where the token went without inspecting headers/query themselves.
 def build-auth [token?: string, auth_scheme?: string]: nothing -> record {
   let token_val = if ($token != null) and ($token | is-not-empty) { $token } else { $env | get -o CAR_CONFIGURATOR_TOKEN | default "" }
   let scheme = ($auth_scheme | default "bearer")
-  if ($scheme == "none") or ($token_val | is-empty) { return {headers: {}, query: ""} }
+  if ($scheme == "none") or ($token_val | is-empty) { return {scheme: $scheme, headers: {}, query: "", location: "none"} }
   match $scheme {
-    "none" => { {headers: {}, query: ""} }
-    _ => { {headers: {Authorization: $"Bearer ($token_val)"}, query: ""} }
+    "none" => { {scheme: $scheme, headers: {}, query: "", location: "none"} }
+    _ => { {scheme: $scheme, headers: {Authorization: $"Bearer ($token_val)"}, query: "", location: "header"} }
   }
 }
 
@@ -21,8 +22,9 @@ def build-auth [token?: string, auth_scheme?: string]: nothing -> record {
 # ([A-Za-z0-9-._~]) stay literal; everything else gets %XX.
 def serialize-qp [name: string, value: any, style: string]: nothing -> list<string> {
   if ($value == null) { return [] }
-  let n = (encode-path-segment $name)
   let is_list = ($value | describe | str starts-with "list")
+  if $is_list and ($value | is-empty) { return [] }
+  let n = (encode-path-segment $name)
   if ($value | describe | str starts-with "record") { return ($value | transpose k v | each { $"($n)[(encode-path-segment $in.k)]=(encode-path-segment $in.v)" }) }
   if not $is_list { return [$"($n)=(encode-path-segment $value)"] }
   match $style {
@@ -53,22 +55,42 @@ def build-url [base: string, path: string, query?: string]: nothing -> string {
   if ($query != null) and ($query | is-not-empty) { $result | upsert query $query | url join } else { $result | url join }
 }
 
+# Build the dry-run record returned by --dry-run. Shape:
+#   {dry_run: true, method, url, query: <record>, headers, body, content_type, timeout,
+#    auth: {scheme, location}}
+# `meta` carries logical-form data (the query record by spec name, the pre-serialization
+# body) that do-request itself cannot reconstruct from its wire-format args.
+def build-dry-run-record [method: string, url: string, auth: record, content_type: string, timeout: duration, meta?: record]: nothing -> record {
+  let m = ($meta | default {})
+  {
+    dry_run: true
+    method: $method
+    url: $url
+    query: ($m | get -o query | default {})
+    headers: $auth.headers
+    body: ($m | get -o body)
+    content_type: $content_type
+    timeout: $timeout
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+}
+
 # Execute HTTP request with method dispatch
-def do-request [method: string, url: string, auth: record, insecure: bool, raw: bool, dry_run: bool, max_time?: duration, allow_errors?: bool, full?: bool, content_type?: string, body?: any]: nothing -> any {
+def do-request [method: string, url: string, auth: record, insecure: bool, raw: bool, dry_run: bool, max_time?: duration, allow_errors?: bool, full?: bool, content_type?: string, body?: any, dry_run_meta?: record]: nothing -> any {
   let req_url = if ($auth.query | is-not-empty) { if ($url | str contains "?") { $"($url)&($auth.query)" } else { $"($url)?($auth.query)" } } else { $url }
   let timeout = ($max_time | default 30min)
   let ct = ($content_type | default "application/json")
-  if $dry_run { return {method: $method, url: $req_url, headers: $auth.headers, query_string: $auth.query, content_type: $ct, timeout: $timeout, body: $body} }
+  if $dry_run { return (build-dry-run-record $method $req_url $auth $ct $timeout $dry_run_meta) }
   let resp = match $method {
     "get" => { http get --headers $auth.headers --full --allow-errors --max-time $timeout --insecure=$insecure --raw=$raw $req_url }
-    "head" => { http head --headers $auth.headers --max-time $timeout --insecure=$insecure $req_url }
-    "options" => { http options --headers $auth.headers --max-time $timeout --insecure=$insecure $req_url }
+    "head" => { http head --headers $auth.headers --full --allow-errors --max-time $timeout --insecure=$insecure $req_url }
+    "options" => { http options --headers $auth.headers --full --allow-errors --max-time $timeout --insecure=$insecure $req_url }
     "post" => { if ($body | is-empty) { http post --headers $auth.headers --full --allow-errors --max-time $timeout --insecure=$insecure --raw=$raw $req_url "" } else { http post --headers $auth.headers --content-type $ct --full --allow-errors --max-time $timeout --insecure=$insecure --raw=$raw $req_url $body } }
     "put" => { if ($body | is-empty) { http put --headers $auth.headers --full --allow-errors --max-time $timeout --insecure=$insecure --raw=$raw $req_url "" } else { http put --headers $auth.headers --content-type $ct --full --allow-errors --max-time $timeout --insecure=$insecure --raw=$raw $req_url $body } }
     "patch" => { if ($body | is-empty) { http patch --headers $auth.headers --full --allow-errors --max-time $timeout --insecure=$insecure --raw=$raw $req_url "" } else { http patch --headers $auth.headers --content-type $ct --full --allow-errors --max-time $timeout --insecure=$insecure --raw=$raw $req_url $body } }
     "delete" => { if ($body | is-empty) { http delete --headers $auth.headers --full --allow-errors --max-time $timeout --insecure=$insecure --raw=$raw $req_url } else { http delete --headers $auth.headers --content-type $ct --data $body --full --allow-errors --max-time $timeout --insecure=$insecure --raw=$raw $req_url } }
   }
-  if ($method in ["head" "options"]) { return $resp }
+  if ($method == "head") and (not $full) and (not $allow_errors) and $resp.status < 400 { return $resp.headers }
   if $allow_errors { $resp } else if $resp.status >= 400 { error make --unspanned { msg: $"HTTP ($resp.status): ($resp.body)" } } else if $full { {status: $resp.status, headers: $resp.headers, body: $resp.body} } else if $resp.status == 204 { null } else { $resp.body }
 }
 
@@ -123,7 +145,7 @@ export def "markets list" [
   let full_url = (build-url $base "/markets" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"language": $language, "country": $country, "fieldsFilter": $fields_filter} | compact), body: null}
 }
 
 # Get the market with the given marketId.
@@ -145,11 +167,12 @@ export def "markets get" [
 ]: nothing -> record<_links: record<bodies: record<href: string>, classes: record<href: string>, models: record<href: string>, productgroups: record<href: string>, self: record<href: string>>, country: string, language: string, marketId: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($market_id | is-empty) { error make --unspanned { msg: "path parameter 'marketId' must be non-empty" } }
   let qp = [(serialize-qp "fieldsFilter" $fields_filter "csv")] | flatten | str join "&"
   let full_url = (build-url $base ({market_id: (encode-path-segment $market_id)} | format pattern "/markets/{market_id}") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"fieldsFilter": $fields_filter} | compact), body: null}
 }
 
 # Get all available bodies for the given marketId.
@@ -174,11 +197,12 @@ export def "markets-bodies get" [
 ]: nothing -> table<_links: record<models: record, self: record>, bodyId: string, bodyName: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($market_id | is-empty) { error make --unspanned { msg: "path parameter 'marketId' must be non-empty" } }
   let qp = [(serialize-qp "classId" $class_id "scalar") (serialize-qp "bodyId" $body_id "scalar") (serialize-qp "productGroups" $product_groups "csv") (serialize-qp "fieldsFilter" $fields_filter "csv")] | flatten | str join "&"
   let full_url = (build-url $base ({market_id: (encode-path-segment $market_id)} | format pattern "/markets/{market_id}/bodies") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"classId": $class_id, "bodyId": $body_id, "productGroups": $product_groups, "fieldsFilter": $fields_filter} | compact), body: null}
 }
 
 # Get the body for the given marketId and bodyId.
@@ -201,11 +225,13 @@ export def "markets-bodies get-body" [
 ]: nothing -> record<_links: record<models: record<href: string>, self: record<href: string>>, bodyId: string, bodyName: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($market_id | is-empty) { error make --unspanned { msg: "path parameter 'marketId' must be non-empty" } }
+  if ($body_id | is-empty) { error make --unspanned { msg: "path parameter 'bodyId' must be non-empty" } }
   let qp = [(serialize-qp "fieldsFilter" $fields_filter "csv")] | flatten | str join "&"
   let full_url = (build-url $base ({market_id: (encode-path-segment $market_id), body_id: (encode-path-segment $body_id)} | format pattern "/markets/{market_id}/bodies/{body_id}") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"fieldsFilter": $fields_filter} | compact), body: null}
 }
 
 # Get all available classes for the given marketId.
@@ -230,11 +256,12 @@ export def "markets-classes get" [
 ]: nothing -> table<_links: record<models: record, self: record>, classId: string, className: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($market_id | is-empty) { error make --unspanned { msg: "path parameter 'marketId' must be non-empty" } }
   let qp = [(serialize-qp "classId" $class_id "scalar") (serialize-qp "bodyId" $body_id "scalar") (serialize-qp "productGroups" $product_groups "csv") (serialize-qp "fieldsFilter" $fields_filter "csv")] | flatten | str join "&"
   let full_url = (build-url $base ({market_id: (encode-path-segment $market_id)} | format pattern "/markets/{market_id}/classes") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"classId": $class_id, "bodyId": $body_id, "productGroups": $product_groups, "fieldsFilter": $fields_filter} | compact), body: null}
 }
 
 # Get the class for the given marketId and classId.
@@ -257,11 +284,13 @@ export def "markets-classes get-class" [
 ]: nothing -> record<_links: record<models: record<href: string>, self: record<href: string>>, classId: string, className: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($market_id | is-empty) { error make --unspanned { msg: "path parameter 'marketId' must be non-empty" } }
+  if ($class_id | is-empty) { error make --unspanned { msg: "path parameter 'classId' must be non-empty" } }
   let qp = [(serialize-qp "fieldsFilter" $fields_filter "csv")] | flatten | str join "&"
   let full_url = (build-url $base ({market_id: (encode-path-segment $market_id), class_id: (encode-path-segment $class_id)} | format pattern "/markets/{market_id}/classes/{class_id}") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"fieldsFilter": $fields_filter} | compact), body: null}
 }
 
 # Get all available models for the given marketId.
@@ -289,11 +318,12 @@ export def "markets-models list" [
 ]: nothing -> table<_links: record<configuration: record, self: record>, baumuster: string, modelId: string, name: string, nationalSalesType: string, priceInformation: record<currency: string, instalmentPrice: float, netPrice: float, price: float, taxes: list>, productGroup: record<name: string>, shortName: string, vehicleBody: record<_links: record, bodyId: string, bodyName: string>, vehicleClass: record<_links: record, classId: string, className: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($market_id | is-empty) { error make --unspanned { msg: "path parameter 'marketId' must be non-empty" } }
   let qp = [(serialize-qp "classId" $class_id "scalar") (serialize-qp "bodyId" $body_id "scalar") (serialize-qp "baumuster4prefix" $baumuster4prefix "scalar") (serialize-qp "baumuster" $baumuster "scalar") (serialize-qp "nationalSalesType" $national_sales_type "scalar") (serialize-qp "productGroups" $product_groups "csv") (serialize-qp "fieldsFilter" $fields_filter "csv")] | flatten | str join "&"
   let full_url = (build-url $base ({market_id: (encode-path-segment $market_id)} | format pattern "/markets/{market_id}/models") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"classId": $class_id, "bodyId": $body_id, "baumuster4prefix": $baumuster4prefix, "baumuster": $baumuster, "nationalSalesType": $national_sales_type, "productGroups": $product_groups, "fieldsFilter": $fields_filter} | compact), body: null}
 }
 
 # Get the model for the given marketId and modelId.
@@ -316,11 +346,13 @@ export def "markets-models get" [
 ]: nothing -> record<_links: record<configuration: record<href: string>, self: record<href: string>>, baumuster: string, modelId: string, name: string, nationalSalesType: string, priceInformation: record<currency: string, instalmentPrice: float, netPrice: float, price: float, taxes: list<record>>, productGroup: record<name: string>, shortName: string, vehicleBody: record<_links: record<models: record, self: record>, bodyId: string, bodyName: string>, vehicleClass: record<_links: record<models: record, self: record>, classId: string, className: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($market_id | is-empty) { error make --unspanned { msg: "path parameter 'marketId' must be non-empty" } }
+  if ($model_id | is-empty) { error make --unspanned { msg: "path parameter 'modelId' must be non-empty" } }
   let qp = [(serialize-qp "fieldsFilter" $fields_filter "csv")] | flatten | str join "&"
   let full_url = (build-url $base ({market_id: (encode-path-segment $market_id), model_id: (encode-path-segment $model_id)} | format pattern "/markets/{market_id}/models/{model_id}") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"fieldsFilter": $fields_filter} | compact), body: null}
 }
 
 # Get the initial configuration for the given marketId and modelId.
@@ -343,11 +375,13 @@ export def "markets-models-configurations-initial get" [
 ]: nothing -> record<_links: record<imageapi_vehicle: record<href: string>, selectables: record<href: string>, self: record<href: string>>, changeYear: string, configurationId: string, configurationPrice: record<currency: string, instalmentPrice: float, netPrice: float, price: float, taxes: list<record>>, initialPrice: record<currency: string, instalmentPrice: float, netPrice: float, price: float, taxes: list<record>>, marketId: string, modelId: string, modelYear: string, technicalInformation: record<acceleration: record<unit: string, value: float>, doors: float, energyEfficiencyClass: string, engine: record<alternativeFuelType: string, capacity: record, cylinder: string, driveConcept: string, emissionStandard: string, engineConcept: string, fuelEconomy: record, fuelType: string, powerHp: record, powerHybridExtensionHp: record, powerHybridExtensionKw: record, powerKw: record>, nedc: record<consumption: record, electricRange: record, emission: record, weight: record>, seats: float, topSpeed: record<unit: string, value: float>, transmission: record<code: string, codeType: string, name: string>, wltp: record<consumption: record, emission: record>>, vehicleComponents: table<_links: record, code: string, codeType: string, componentSortId: float, componentType: string, description: string, fixed: bool, hidden: bool, id: string, name: string, priceInformation: record, pseudoCode: bool, selected: bool, standard: bool>, wltpConfiguration: bool> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($market_id | is-empty) { error make --unspanned { msg: "path parameter 'marketId' must be non-empty" } }
+  if ($model_id | is-empty) { error make --unspanned { msg: "path parameter 'modelId' must be non-empty" } }
   let qp = [(serialize-qp "fieldsFilter" $fields_filter "csv")] | flatten | str join "&"
   let full_url = (build-url $base ({market_id: (encode-path-segment $market_id), model_id: (encode-path-segment $model_id)} | format pattern "/markets/{market_id}/models/{model_id}/configurations/initial") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"fieldsFilter": $fields_filter} | compact), body: null}
 }
 
 # Get the configuration for the given marketId, modelId and configurationId.
@@ -371,11 +405,14 @@ export def "markets-models-configurations get" [
 ]: nothing -> record<_links: record<imageapi_vehicle: record<href: string>, selectables: record<href: string>, self: record<href: string>>, changeYear: string, configurationId: string, configurationPrice: record<currency: string, instalmentPrice: float, netPrice: float, price: float, taxes: list<record>>, initialPrice: record<currency: string, instalmentPrice: float, netPrice: float, price: float, taxes: list<record>>, marketId: string, modelId: string, modelYear: string, technicalInformation: record<acceleration: record<unit: string, value: float>, doors: float, energyEfficiencyClass: string, engine: record<alternativeFuelType: string, capacity: record, cylinder: string, driveConcept: string, emissionStandard: string, engineConcept: string, fuelEconomy: record, fuelType: string, powerHp: record, powerHybridExtensionHp: record, powerHybridExtensionKw: record, powerKw: record>, nedc: record<consumption: record, electricRange: record, emission: record, weight: record>, seats: float, topSpeed: record<unit: string, value: float>, transmission: record<code: string, codeType: string, name: string>, wltp: record<consumption: record, emission: record>>, vehicleComponents: table<_links: record, code: string, codeType: string, componentSortId: float, componentType: string, description: string, fixed: bool, hidden: bool, id: string, name: string, priceInformation: record, pseudoCode: bool, selected: bool, standard: bool>, wltpConfiguration: bool> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($market_id | is-empty) { error make --unspanned { msg: "path parameter 'marketId' must be non-empty" } }
+  if ($model_id | is-empty) { error make --unspanned { msg: "path parameter 'modelId' must be non-empty" } }
+  if ($configuration_id | is-empty) { error make --unspanned { msg: "path parameter 'configurationId' must be non-empty" } }
   let qp = [(serialize-qp "fieldsFilter" $fields_filter "csv")] | flatten | str join "&"
   let full_url = (build-url $base ({market_id: (encode-path-segment $market_id), model_id: (encode-path-segment $model_id), configuration_id: (encode-path-segment $configuration_id)} | format pattern "/markets/{market_id}/models/{model_id}/configurations/{configuration_id}") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"fieldsFilter": $fields_filter} | compact), body: null}
 }
 
 # Get the alternatives for the given marketId, modelId, configurationId and componentList.
@@ -400,11 +437,15 @@ export def "markets-models-configurations-alternatives get" [
 ]: nothing -> table<_links: record<imageapi_vehicle: record, selectables: record, self: record>, addedComponents: list<record>, configurationId: string, marketId: string, modelId: string, priceInformation: record, removedComponents: list<record>, updatedComponents: list<record>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($market_id | is-empty) { error make --unspanned { msg: "path parameter 'marketId' must be non-empty" } }
+  if ($model_id | is-empty) { error make --unspanned { msg: "path parameter 'modelId' must be non-empty" } }
+  if ($configuration_id | is-empty) { error make --unspanned { msg: "path parameter 'configurationId' must be non-empty" } }
+  if ($component_list | is-empty) { error make --unspanned { msg: "path parameter 'componentList' must be non-empty" } }
   let qp = [(serialize-qp "fieldsFilter" $fields_filter "csv")] | flatten | str join "&"
   let full_url = (build-url $base ({market_id: (encode-path-segment $market_id), model_id: (encode-path-segment $model_id), configuration_id: (encode-path-segment $configuration_id), component_list: (encode-path-segment $component_list)} | format pattern "/markets/{market_id}/models/{model_id}/configurations/{configuration_id}/alternatives/{component_list}") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"fieldsFilter": $fields_filter} | compact), body: null}
 }
 
 # Returns URLs pointing to images in JPG format in the highest available resolution (depending on the component) of the vehicle's: * engine (1024x576 px), * rim (710x710 px), * trim (800x600 px), * paints (800x600 px), * upholstery (800x600 px) and * equipments (740x416 px).
@@ -427,10 +468,13 @@ export def "markets-models-configurations-images-components get" [
 ]: nothing -> record<components: record<engine: record<url: string>, equipments: record, paint: record<paint1: record, paint2: record>, rim: record<code: string, url: string>, trim: record<code: string, url: string>, upholstery: record<code: string, url: string>>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($market_id | is-empty) { error make --unspanned { msg: "path parameter 'marketId' must be non-empty" } }
+  if ($model_id | is-empty) { error make --unspanned { msg: "path parameter 'modelId' must be non-empty" } }
+  if ($configuration_id | is-empty) { error make --unspanned { msg: "path parameter 'configurationId' must be non-empty" } }
   let full_url = (build-url $base ({market_id: (encode-path-segment $market_id), model_id: (encode-path-segment $model_id), configuration_id: (encode-path-segment $configuration_id)} | format pattern "/markets/{market_id}/models/{model_id}/configurations/{configuration_id}/images/components"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
 }
 
 # Returns a URL pointing to an image of the vehicles engine. These images are available in the resolution 1024x576 px.
@@ -453,10 +497,13 @@ export def "markets-models-configurations-images-components-engine get" [
 ]: nothing -> record<engine: record<url: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($market_id | is-empty) { error make --unspanned { msg: "path parameter 'marketId' must be non-empty" } }
+  if ($model_id | is-empty) { error make --unspanned { msg: "path parameter 'modelId' must be non-empty" } }
+  if ($configuration_id | is-empty) { error make --unspanned { msg: "path parameter 'configurationId' must be non-empty" } }
   let full_url = (build-url $base ({market_id: (encode-path-segment $market_id), model_id: (encode-path-segment $model_id), configuration_id: (encode-path-segment $configuration_id)} | format pattern "/markets/{market_id}/models/{model_id}/configurations/{configuration_id}/images/components/engine"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
 }
 
 # Returns URLs pointing to images of this vehicle's equipments. The images are available in the highest possible resolution (usually 740x416 px).
@@ -479,10 +526,13 @@ export def "markets-models-configurations-images-components-equipments get" [
 ]: nothing -> record<equipments: record> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($market_id | is-empty) { error make --unspanned { msg: "path parameter 'marketId' must be non-empty" } }
+  if ($model_id | is-empty) { error make --unspanned { msg: "path parameter 'modelId' must be non-empty" } }
+  if ($configuration_id | is-empty) { error make --unspanned { msg: "path parameter 'configurationId' must be non-empty" } }
   let full_url = (build-url $base ({market_id: (encode-path-segment $market_id), model_id: (encode-path-segment $model_id), configuration_id: (encode-path-segment $configuration_id)} | format pattern "/markets/{market_id}/models/{model_id}/configurations/{configuration_id}/images/components/equipments"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
 }
 
 # Returns URLs pointing to images of this vehicle's equipments. The images are available in the highest possible resolution (usually 740x416 px).
@@ -506,10 +556,14 @@ export def "markets-models-configurations-images-components-equipments get-by-co
 ]: nothing -> record<equipment: record<url: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($market_id | is-empty) { error make --unspanned { msg: "path parameter 'marketId' must be non-empty" } }
+  if ($model_id | is-empty) { error make --unspanned { msg: "path parameter 'modelId' must be non-empty" } }
+  if ($configuration_id | is-empty) { error make --unspanned { msg: "path parameter 'configurationId' must be non-empty" } }
+  if ($component_code | is-empty) { error make --unspanned { msg: "path parameter 'componentCode' must be non-empty" } }
   let full_url = (build-url $base ({market_id: (encode-path-segment $market_id), model_id: (encode-path-segment $model_id), configuration_id: (encode-path-segment $configuration_id), component_code: (encode-path-segment $component_code)} | format pattern "/markets/{market_id}/models/{model_id}/configurations/{configuration_id}/images/components/equipments/{component_code}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
 }
 
 # Returns URLs pointing to images of this vehicles paint. These images are available in resolution 800x600 px. Note there might be two paints (e.g. Smart, 'paint' for body panel and 'paint2' for the tridion cell)
@@ -532,10 +586,13 @@ export def "markets-models-configurations-images-components-paint get" [
 ]: nothing -> record<paint: record<paint1: record<code: string, url: string>, paint2: record<code: string, url: string>>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($market_id | is-empty) { error make --unspanned { msg: "path parameter 'marketId' must be non-empty" } }
+  if ($model_id | is-empty) { error make --unspanned { msg: "path parameter 'modelId' must be non-empty" } }
+  if ($configuration_id | is-empty) { error make --unspanned { msg: "path parameter 'configurationId' must be non-empty" } }
   let full_url = (build-url $base ({market_id: (encode-path-segment $market_id), model_id: (encode-path-segment $model_id), configuration_id: (encode-path-segment $configuration_id)} | format pattern "/markets/{market_id}/models/{model_id}/configurations/{configuration_id}/images/components/paint"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
 }
 
 # Returns a URL pointing to an image of the vehicles rim. These images are available in the resolution 710x710 px.
@@ -558,10 +615,13 @@ export def "markets-models-configurations-images-components-rim get" [
 ]: nothing -> record<rim: record<code: string, url: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($market_id | is-empty) { error make --unspanned { msg: "path parameter 'marketId' must be non-empty" } }
+  if ($model_id | is-empty) { error make --unspanned { msg: "path parameter 'modelId' must be non-empty" } }
+  if ($configuration_id | is-empty) { error make --unspanned { msg: "path parameter 'configurationId' must be non-empty" } }
   let full_url = (build-url $base ({market_id: (encode-path-segment $market_id), model_id: (encode-path-segment $model_id), configuration_id: (encode-path-segment $configuration_id)} | format pattern "/markets/{market_id}/models/{model_id}/configurations/{configuration_id}/images/components/rim"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
 }
 
 # Returns a URL pointing to an image of this vehicles trim. These images are available in resolution 800x600 px.
@@ -584,10 +644,13 @@ export def "markets-models-configurations-images-components-trim get" [
 ]: nothing -> record<trim: record<code: string, url: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($market_id | is-empty) { error make --unspanned { msg: "path parameter 'marketId' must be non-empty" } }
+  if ($model_id | is-empty) { error make --unspanned { msg: "path parameter 'modelId' must be non-empty" } }
+  if ($configuration_id | is-empty) { error make --unspanned { msg: "path parameter 'configurationId' must be non-empty" } }
   let full_url = (build-url $base ({market_id: (encode-path-segment $market_id), model_id: (encode-path-segment $model_id), configuration_id: (encode-path-segment $configuration_id)} | format pattern "/markets/{market_id}/models/{model_id}/configurations/{configuration_id}/images/components/trim"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
 }
 
 # Returns URLs pointing to images of the vehicle's upholsteries. Tge images are available in the highest possible resolution (usually 800x600 px).
@@ -610,10 +673,13 @@ export def "markets-models-configurations-images-components-upholstery get" [
 ]: nothing -> record<upholstery: record<code: string, url: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($market_id | is-empty) { error make --unspanned { msg: "path parameter 'marketId' must be non-empty" } }
+  if ($model_id | is-empty) { error make --unspanned { msg: "path parameter 'modelId' must be non-empty" } }
+  if ($configuration_id | is-empty) { error make --unspanned { msg: "path parameter 'configurationId' must be non-empty" } }
   let full_url = (build-url $base ({market_id: (encode-path-segment $market_id), model_id: (encode-path-segment $model_id), configuration_id: (encode-path-segment $configuration_id)} | format pattern "/markets/{market_id}/models/{model_id}/configurations/{configuration_id}/images/components/upholstery"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
 }
 
 # Returns URLs pointing to PNG images of a vehicle with a white background.
@@ -639,11 +705,14 @@ export def "markets-models-configurations-images-vehicle get" [
 ]: nothing -> record<vehicle: record> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($market_id | is-empty) { error make --unspanned { msg: "path parameter 'marketId' must be non-empty" } }
+  if ($model_id | is-empty) { error make --unspanned { msg: "path parameter 'modelId' must be non-empty" } }
+  if ($configuration_id | is-empty) { error make --unspanned { msg: "path parameter 'configurationId' must be non-empty" } }
   let qp = [(serialize-qp "perspectives" $perspectives "scalar") (serialize-qp "roofOpen" $roof_open "scalar") (serialize-qp "night" $night "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({market_id: (encode-path-segment $market_id), model_id: (encode-path-segment $model_id), configuration_id: (encode-path-segment $configuration_id)} | format pattern "/markets/{market_id}/models/{model_id}/configurations/{configuration_id}/images/vehicle") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"perspectives": $perspectives, "roofOpen": $roof_open, "night": $night} | compact), body: null}
 }
 
 # Get the selectable components for the given marketId, modelId and configurationId.
@@ -668,11 +737,14 @@ export def "markets-models-configurations-selectables get" [
 ]: nothing -> record<_links: record<self: record<href: string>>, componentCategories: table<cardinality: string, categoryId: string, categoryName: string, categorySortId: float, componentIds: list, subcategories: list>, vehicleComponents: record<componentId: record<_links: record, code: string, codeType: string, componentSortId: float, componentType: string, description: string, fixed: bool, hidden: bool, id: string, name: string, priceInformation: record, pseudoCode: bool, selected: bool, standard: bool>>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($market_id | is-empty) { error make --unspanned { msg: "path parameter 'marketId' must be non-empty" } }
+  if ($model_id | is-empty) { error make --unspanned { msg: "path parameter 'modelId' must be non-empty" } }
+  if ($configuration_id | is-empty) { error make --unspanned { msg: "path parameter 'configurationId' must be non-empty" } }
   let qp = [(serialize-qp "componentTypes" $component_types "csv") (serialize-qp "fieldsFilter" $fields_filter "csv")] | flatten | str join "&"
   let full_url = (build-url $base ({market_id: (encode-path-segment $market_id), model_id: (encode-path-segment $model_id), configuration_id: (encode-path-segment $configuration_id)} | format pattern "/markets/{market_id}/models/{model_id}/configurations/{configuration_id}/selectables") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"componentTypes": $component_types, "fieldsFilter": $fields_filter} | compact), body: null}
 }
 
 # Stores the configuration of the given configurationId and modelId
@@ -690,13 +762,19 @@ export def "markets-onlinecode create-online-code" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> record<onlineCode: string> {
+  configuration_id: string # String that identifies a configuration. e.g. E-D15-D18-D41-D46-D49-D52-D53-D54-D59-D60-D71-F32-F36-F88-F98-G03-G05-G36-G56-I61-J67-M23-M70-N18-N25-N62-N92-O76-Q29-Q56-Q79-Q92-S01-S05-S08-S63-S92-T05-T07-T62-T84-T88_I-953_L-696_P-001_S-152-160-161-171-258-290-292-294-411-442-470-472-475-485-516-533-538-560-570-573-580-584-58U-591-620-70B-807-888-B03-B16-B51-K11-L18-R43-U60
+  model_id: string # String that identifies a model. e.g. '176042_002'
+]: any -> record<onlineCode: string> {
+  let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($market_id | is-empty) { error make --unspanned { msg: "path parameter 'marketId' must be non-empty" } }
   let full_url = (build-url $base ({market_id: (encode-path-segment $market_id)} | format pattern "/markets/{market_id}/onlinecode"))
+  let req_body = {"configurationId": $configuration_id, "modelId": $model_id} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: {}, body: $req_body}
 }
 
 # Get the configuration of the given onlineCode and marketId.
@@ -719,11 +797,13 @@ export def "markets-onlinecode get-online-code" [
 ]: nothing -> record<_links: record<imageapi_vehicle: record<href: string>, selectables: record<href: string>, self: record<href: string>>, changeYear: string, configurationId: string, configurationPrice: record<currency: string, instalmentPrice: float, netPrice: float, price: float, taxes: list<record>>, initialPrice: record<currency: string, instalmentPrice: float, netPrice: float, price: float, taxes: list<record>>, marketId: string, modelId: string, modelYear: string, technicalInformation: record<acceleration: record<unit: string, value: float>, doors: float, energyEfficiencyClass: string, engine: record<alternativeFuelType: string, capacity: record, cylinder: string, driveConcept: string, emissionStandard: string, engineConcept: string, fuelEconomy: record, fuelType: string, powerHp: record, powerHybridExtensionHp: record, powerHybridExtensionKw: record, powerKw: record>, nedc: record<consumption: record, electricRange: record, emission: record, weight: record>, seats: float, topSpeed: record<unit: string, value: float>, transmission: record<code: string, codeType: string, name: string>, wltp: record<consumption: record, emission: record>>, vehicleComponents: table<_links: record, code: string, codeType: string, componentSortId: float, componentType: string, description: string, fixed: bool, hidden: bool, id: string, name: string, priceInformation: record, pseudoCode: bool, selected: bool, standard: bool>, wltpConfiguration: bool> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($market_id | is-empty) { error make --unspanned { msg: "path parameter 'marketId' must be non-empty" } }
+  if ($online_code | is-empty) { error make --unspanned { msg: "path parameter 'onlineCode' must be non-empty" } }
   let qp = [(serialize-qp "fieldsFilter" $fields_filter "csv")] | flatten | str join "&"
   let full_url = (build-url $base ({market_id: (encode-path-segment $market_id), online_code: (encode-path-segment $online_code)} | format pattern "/markets/{market_id}/onlinecode/{online_code}") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"fieldsFilter": $fields_filter} | compact), body: null}
 }
 
 # Get all configured active product groups for the given marketId.
@@ -745,9 +825,10 @@ export def "markets-productgroups get-product-groups" [
 ]: nothing -> record<_links: record<models: record<href: string>, self: record<href: string>>, market: record<_links: record<bodies: record, classes: record, models: record, productgroups: record, self: record>, country: string, language: string, marketId: string>, productGroups: table<name: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($market_id | is-empty) { error make --unspanned { msg: "path parameter 'marketId' must be non-empty" } }
   let qp = [(serialize-qp "fieldsFilter" $fields_filter "csv")] | flatten | str join "&"
   let full_url = (build-url $base ({market_id: (encode-path-segment $market_id)} | format pattern "/markets/{market_id}/productgroups") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"fieldsFilter": $fields_filter} | compact), body: null}
 }

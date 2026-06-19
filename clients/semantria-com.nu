@@ -3,16 +3,17 @@
 # Auth: --token flag or $env.SEMANTRIA_TOKEN
 
 const BASE_URL = "https://api.semantria.com"
-const DEFAULT_AUTH = "bearer"
 
-# Build auth: returns {headers: record, query: string}
+# Build auth: returns {scheme: string, headers: record, query: string, location: string}.
+# `location` is "header" | "query" | "cookie" | "none" and tells dry-run callers
+# where the token went without inspecting headers/query themselves.
 def build-auth [token?: string, auth_scheme?: string]: nothing -> record {
   let token_val = if ($token != null) and ($token | is-not-empty) { $token } else { $env | get -o SEMANTRIA_TOKEN | default "" }
   let scheme = ($auth_scheme | default "bearer")
-  if ($scheme == "none") or ($token_val | is-empty) { return {headers: {}, query: ""} }
+  if ($scheme == "none") or ($token_val | is-empty) { return {scheme: $scheme, headers: {}, query: "", location: "none"} }
   match $scheme {
-    "none" => { {headers: {}, query: ""} }
-    _ => { {headers: {Authorization: $"Bearer ($token_val)"}, query: ""} }
+    "none" => { {scheme: $scheme, headers: {}, query: "", location: "none"} }
+    _ => { {scheme: $scheme, headers: {Authorization: $"Bearer ($token_val)"}, query: "", location: "header"} }
   }
 }
 
@@ -21,8 +22,9 @@ def build-auth [token?: string, auth_scheme?: string]: nothing -> record {
 # ([A-Za-z0-9-._~]) stay literal; everything else gets %XX.
 def serialize-qp [name: string, value: any, style: string]: nothing -> list<string> {
   if ($value == null) { return [] }
-  let n = (encode-path-segment $name)
   let is_list = ($value | describe | str starts-with "list")
+  if $is_list and ($value | is-empty) { return [] }
+  let n = (encode-path-segment $name)
   if ($value | describe | str starts-with "record") { return ($value | transpose k v | each { $"($n)[(encode-path-segment $in.k)]=(encode-path-segment $in.v)" }) }
   if not $is_list { return [$"($n)=(encode-path-segment $value)"] }
   match $style {
@@ -53,22 +55,42 @@ def build-url [base: string, path: string, query?: string]: nothing -> string {
   if ($query != null) and ($query | is-not-empty) { $result | upsert query $query | url join } else { $result | url join }
 }
 
+# Build the dry-run record returned by --dry-run. Shape:
+#   {dry_run: true, method, url, query: <record>, headers, body, content_type, timeout,
+#    auth: {scheme, location}}
+# `meta` carries logical-form data (the query record by spec name, the pre-serialization
+# body) that do-request itself cannot reconstruct from its wire-format args.
+def build-dry-run-record [method: string, url: string, auth: record, content_type: string, timeout: duration, meta?: record]: nothing -> record {
+  let m = ($meta | default {})
+  {
+    dry_run: true
+    method: $method
+    url: $url
+    query: ($m | get -o query | default {})
+    headers: $auth.headers
+    body: ($m | get -o body)
+    content_type: $content_type
+    timeout: $timeout
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+}
+
 # Execute HTTP request with method dispatch
-def do-request [method: string, url: string, auth: record, insecure: bool, raw: bool, dry_run: bool, max_time?: duration, allow_errors?: bool, full?: bool, content_type?: string, body?: any]: nothing -> any {
+def do-request [method: string, url: string, auth: record, insecure: bool, raw: bool, dry_run: bool, max_time?: duration, allow_errors?: bool, full?: bool, content_type?: string, body?: any, dry_run_meta?: record]: nothing -> any {
   let req_url = if ($auth.query | is-not-empty) { if ($url | str contains "?") { $"($url)&($auth.query)" } else { $"($url)?($auth.query)" } } else { $url }
   let timeout = ($max_time | default 30min)
   let ct = ($content_type | default "application/json")
-  if $dry_run { return {method: $method, url: $req_url, headers: $auth.headers, query_string: $auth.query, content_type: $ct, timeout: $timeout, body: $body} }
+  if $dry_run { return (build-dry-run-record $method $req_url $auth $ct $timeout $dry_run_meta) }
   let resp = match $method {
     "get" => { http get --headers $auth.headers --full --allow-errors --max-time $timeout --insecure=$insecure --raw=$raw $req_url }
-    "head" => { http head --headers $auth.headers --max-time $timeout --insecure=$insecure $req_url }
-    "options" => { http options --headers $auth.headers --max-time $timeout --insecure=$insecure $req_url }
+    "head" => { http head --headers $auth.headers --full --allow-errors --max-time $timeout --insecure=$insecure $req_url }
+    "options" => { http options --headers $auth.headers --full --allow-errors --max-time $timeout --insecure=$insecure $req_url }
     "post" => { if ($body | is-empty) { http post --headers $auth.headers --full --allow-errors --max-time $timeout --insecure=$insecure --raw=$raw $req_url "" } else { http post --headers $auth.headers --content-type $ct --full --allow-errors --max-time $timeout --insecure=$insecure --raw=$raw $req_url $body } }
     "put" => { if ($body | is-empty) { http put --headers $auth.headers --full --allow-errors --max-time $timeout --insecure=$insecure --raw=$raw $req_url "" } else { http put --headers $auth.headers --content-type $ct --full --allow-errors --max-time $timeout --insecure=$insecure --raw=$raw $req_url $body } }
     "patch" => { if ($body | is-empty) { http patch --headers $auth.headers --full --allow-errors --max-time $timeout --insecure=$insecure --raw=$raw $req_url "" } else { http patch --headers $auth.headers --content-type $ct --full --allow-errors --max-time $timeout --insecure=$insecure --raw=$raw $req_url $body } }
     "delete" => { if ($body | is-empty) { http delete --headers $auth.headers --full --allow-errors --max-time $timeout --insecure=$insecure --raw=$raw $req_url } else { http delete --headers $auth.headers --content-type $ct --data $body --full --allow-errors --max-time $timeout --insecure=$insecure --raw=$raw $req_url } }
   }
-  if ($method in ["head" "options"]) { return $resp }
+  if ($method == "head") and (not $full) and (not $allow_errors) and $resp.status < 400 { return $resp.headers }
   if $allow_errors { $resp } else if $resp.status >= 400 { error make --unspanned { msg: $"HTTP ($resp.status): ($resp.body)" } } else if $full { {status: $resp.status, headers: $resp.headers, body: $resp.body} } else if $resp.status == 204 { null } else { $resp.body }
 }
 
@@ -123,13 +145,14 @@ export def "blacklist-content-type delete-items" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($content_type | is-empty) { error make --unspanned { msg: "path parameter 'content_type' must be non-empty" } }
   let qp = [(serialize-qp "config_id" $config_id "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({content_type: (encode-path-segment $content_type)} | format pattern "/blacklist.{content_type}") $qp)
   let req_body = $body
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else if (($input | is-not-empty) and ($req_body | is-empty)) { $input } else { $req_body }
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: ({"config_id": $config_id} | compact), body: $req_body}
 }
 
 # Retrieve blacklisted items
@@ -152,11 +175,12 @@ export def "blacklist-content-type get" [
 ]: nothing -> table<id: string, modified: string, name: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($content_type | is-empty) { error make --unspanned { msg: "path parameter 'content_type' must be non-empty" } }
   let qp = [(serialize-qp "config_id" $config_id "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({content_type: (encode-path-segment $content_type)} | format pattern "/blacklist.{content_type}") $qp)
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"config_id": $config_id} | compact), body: null}
 }
 
 # Add items to blacklist
@@ -181,13 +205,14 @@ export def "blacklist-content-type create" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($content_type | is-empty) { error make --unspanned { msg: "path parameter 'content_type' must be non-empty" } }
   let qp = [(serialize-qp "config_id" $config_id "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({content_type: (encode-path-segment $content_type)} | format pattern "/blacklist.{content_type}") $qp)
   let req_body = $body
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: ({"config_id": $config_id} | compact), body: $req_body}
 }
 
 # Update items in blacklist
@@ -212,13 +237,14 @@ export def "blacklist-content-type update" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($content_type | is-empty) { error make --unspanned { msg: "path parameter 'content_type' must be non-empty" } }
   let qp = [(serialize-qp "config_id" $config_id "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({content_type: (encode-path-segment $content_type)} | format pattern "/blacklist.{content_type}") $qp)
   let req_body = $body
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: ({"config_id": $config_id} | compact), body: $req_body}
 }
 
 # Remove user categories
@@ -243,13 +269,14 @@ export def "categories-content-type delete" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($content_type | is-empty) { error make --unspanned { msg: "path parameter 'content_type' must be non-empty" } }
   let qp = [(serialize-qp "config_id" $config_id "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({content_type: (encode-path-segment $content_type)} | format pattern "/categories.{content_type}") $qp)
   let req_body = $body
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else if (($input | is-not-empty) and ($req_body | is-empty)) { $input } else { $req_body }
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: ({"config_id": $config_id} | compact), body: $req_body}
 }
 
 # Retrieve user categories
@@ -272,11 +299,12 @@ export def "categories-content-type get" [
 ]: nothing -> table<id: string, modified: string, name: string, samples: list<string>, weight: float> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($content_type | is-empty) { error make --unspanned { msg: "path parameter 'content_type' must be non-empty" } }
   let qp = [(serialize-qp "config_id" $config_id "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({content_type: (encode-path-segment $content_type)} | format pattern "/categories.{content_type}") $qp)
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"config_id": $config_id} | compact), body: null}
 }
 
 # Add user categories
@@ -301,13 +329,14 @@ export def "categories-content-type create" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($content_type | is-empty) { error make --unspanned { msg: "path parameter 'content_type' must be non-empty" } }
   let qp = [(serialize-qp "config_id" $config_id "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({content_type: (encode-path-segment $content_type)} | format pattern "/categories.{content_type}") $qp)
   let req_body = $body
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: ({"config_id": $config_id} | compact), body: $req_body}
 }
 
 # Updates user categories
@@ -332,13 +361,14 @@ export def "categories-content-type update" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($content_type | is-empty) { error make --unspanned { msg: "path parameter 'content_type' must be non-empty" } }
   let qp = [(serialize-qp "config_id" $config_id "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({content_type: (encode-path-segment $content_type)} | format pattern "/categories.{content_type}") $qp)
   let req_body = $body
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: ({"config_id": $config_id} | compact), body: $req_body}
 }
 
 # Queue collection for analysis
@@ -363,13 +393,14 @@ export def "collection-content-type create-queue" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($content_type | is-empty) { error make --unspanned { msg: "path parameter 'content_type' must be non-empty" } }
   let qp = [(serialize-qp "config_id" $config_id "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({content_type: (encode-path-segment $content_type)} | format pattern "/collection.{content_type}") $qp)
   let req_body = $body
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: ({"config_id": $config_id} | compact), body: $req_body}
 }
 
 # Retrieve collections analysis
@@ -392,11 +423,12 @@ export def "collection-processed-content-type get" [
 ]: nothing -> record<config_id: string, entities: table<count: int, entity_type: string, label: string, mentions: list, negative_count: int, neutral_count: int, positive_count: int, title: string, type: string>, facets: table<attributes: list, count: int, label: string, mentions: list, negative_count: int, neutral_count: int, positive_count: int>, id: string, job_id: string, status: string, tag: string, taxonomy: table<hitcount: int, id: string, sentiment_polarity: string, sentiment_score: float, title: string, type: string>, themes: table<mentions: list, normalized: string, phrases_count: int, sentiment_polarity: string, sentiment_score: float, stemmed: string, themes_count: int, title: string>, topics: table<hitcount: int, id: string, sentiment_polarity: string, sentiment_score: float, title: string, type: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($content_type | is-empty) { error make --unspanned { msg: "path parameter 'content_type' must be non-empty" } }
   let qp = [(serialize-qp "config_id" $config_id "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({content_type: (encode-path-segment $content_type)} | format pattern "/collection/processed.{content_type}") $qp)
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"config_id": $config_id} | compact), body: null}
 }
 
 # Cancel collection analysis
@@ -420,11 +452,13 @@ export def "collection cancel" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($collection_id | is-empty) { error make --unspanned { msg: "path parameter 'collection_id' must be non-empty" } }
+  if ($content_type | is-empty) { error make --unspanned { msg: "path parameter 'content_type' must be non-empty" } }
   let qp = [(serialize-qp "config_id" $config_id "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({collection_id: (encode-path-segment $collection_id), content_type: (encode-path-segment $content_type)} | format pattern "/collection/{collection_id}.{content_type}") $qp)
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"config_id": $config_id} | compact), body: null}
 }
 
 # Retrieve collection analysis or its status in queue
@@ -448,11 +482,13 @@ export def "collection receive-analytic-data" [
 ]: nothing -> record<config_id: string, entities: table<count: int, entity_type: string, label: string, mentions: list, negative_count: int, neutral_count: int, positive_count: int, title: string, type: string>, facets: table<attributes: list, count: int, label: string, mentions: list, negative_count: int, neutral_count: int, positive_count: int>, id: string, job_id: string, status: string, tag: string, taxonomy: table<hitcount: int, id: string, sentiment_polarity: string, sentiment_score: float, title: string, type: string>, themes: table<mentions: list, normalized: string, phrases_count: int, sentiment_polarity: string, sentiment_score: float, stemmed: string, themes_count: int, title: string>, topics: table<hitcount: int, id: string, sentiment_polarity: string, sentiment_score: float, title: string, type: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($collection_id | is-empty) { error make --unspanned { msg: "path parameter 'collection_id' must be non-empty" } }
+  if ($content_type | is-empty) { error make --unspanned { msg: "path parameter 'content_type' must be non-empty" } }
   let qp = [(serialize-qp "config_id" $config_id "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({collection_id: (encode-path-segment $collection_id), content_type: (encode-path-segment $content_type)} | format pattern "/collection/{collection_id}.{content_type}") $qp)
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"config_id": $config_id} | compact), body: null}
 }
 
 # Remove user configurations
@@ -476,12 +512,13 @@ export def "configurations-content-type delete" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($content_type | is-empty) { error make --unspanned { msg: "path parameter 'content_type' must be non-empty" } }
   let full_url = (build-url $base ({content_type: (encode-path-segment $content_type)} | format pattern "/configurations.{content_type}"))
   let req_body = $body
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else if (($input | is-not-empty) and ($req_body | is-empty)) { $input } else { $req_body }
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: {}, body: $req_body}
 }
 
 # Retrieve user configurations
@@ -503,10 +540,11 @@ export def "configurations-content-type get" [
 ]: nothing -> table<auto_response: bool, callback: string, categories_threshold: float, chars_threshold: int, collection: record<attribute_mentions_limit: int, concept_topics_limit: int, facet_atts_limit: int, facet_mentions_limit: int, facets_limit: int, named_entities_limit: int, named_mentions_limit: int, query_topics_limit: int, theme_mentions_limit: int, themes_limit: int, user_entities_limit: int, user_mentions_limit: int>, config_id: string, document: record<auto_categories_limit: int, concept_topics_limit: int, detect_language: bool, entity_themes_limit: int, intentions: bool, model_sentiment: bool, named_entities_limit: int, named_mentions_limit: int, named_opinions_limit: int, named_relations_limit: int, phrases_limit: int, pos_types: string, possible_phrases_limit: int, query_topics_limit: int, summary_limit: int, theme_mentions_limit: int, themes_limit: int, user_entities_limit: int, user_mentions_limit: int, user_opinions_limit: int, user_relations_limit: int>, entities_threshold: int, from_template_config_id: string, is_primary: bool, language: string, modified: string, name: string, one_sentence: bool, process_html: bool, version: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($content_type | is-empty) { error make --unspanned { msg: "path parameter 'content_type' must be non-empty" } }
   let full_url = (build-url $base ({content_type: (encode-path-segment $content_type)} | format pattern "/configurations.{content_type}"))
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
 }
 
 # Create user configurations
@@ -530,12 +568,13 @@ export def "configurations-content-type create" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($content_type | is-empty) { error make --unspanned { msg: "path parameter 'content_type' must be non-empty" } }
   let full_url = (build-url $base ({content_type: (encode-path-segment $content_type)} | format pattern "/configurations.{content_type}"))
   let req_body = $body
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: {}, body: $req_body}
 }
 
 # Update user configurations
@@ -559,12 +598,13 @@ export def "configurations-content-type update" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($content_type | is-empty) { error make --unspanned { msg: "path parameter 'content_type' must be non-empty" } }
   let full_url = (build-url $base ({content_type: (encode-path-segment $content_type)} | format pattern "/configurations.{content_type}"))
   let req_body = $body
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: {}, body: $req_body}
 }
 
 # Queue document for analysis
@@ -589,13 +629,14 @@ export def "document-content-type create-queue" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($content_type | is-empty) { error make --unspanned { msg: "path parameter 'content_type' must be non-empty" } }
   let qp = [(serialize-qp "config_id" $config_id "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({content_type: (encode-path-segment $content_type)} | format pattern "/document.{content_type}") $qp)
   let req_body = $body
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: ({"config_id": $config_id} | compact), body: $req_body}
 }
 
 # Queue batch of documents for analysis
@@ -620,13 +661,14 @@ export def "document-batch-content-type create-queue" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($content_type | is-empty) { error make --unspanned { msg: "path parameter 'content_type' must be non-empty" } }
   let qp = [(serialize-qp "config_id" $config_id "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({content_type: (encode-path-segment $content_type)} | format pattern "/document/batch.{content_type}") $qp)
   let req_body = $body
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: ({"config_id": $config_id} | compact), body: $req_body}
 }
 
 # Retrieve documents analysis
@@ -649,11 +691,12 @@ export def "document-processed-content-type get" [
 ]: nothing -> record<auto_categories: table<categories: list, sentiment_polarity: string, sentiment_score: float, strength_score: float, title: string, type: string>, config_id: string, details: table<is_imperative: bool, is_polar: bool, words: list>, entities: table<count: int, entity_type: string, label: string, mentions: list, negative_count: int, neutral_count: int, positive_count: int, title: string, type: string>, id: string, intentions: table<evidence_phrase: string, type: string, what: string, who: string>, job_id: string, language: string, language_score: float, model_sentiment: record<mixed_score: float, model_name: string, negative_score: float, neutral_score: float, positive_score: float, sentiment_polarity: string>, opinions: table<quotation: string, sentiment_polarity: string, sentiment_score: float, speaker: float, topic: string, type: string>, phrases: table<intensifying_phrase: string, is_intensified: bool, is_negated: bool, negating_phrase: string, sentiment_polarity: string, sentiment_score: float, title: string, type: string>, relations: table<confidence_score: float, entities: list, extra: string, relation_type: string, type: string>, sentiment_polarity: string, sentiment_score: float, source_text: string, status: string, summary: string, taxonomy: table<hitcount: int, id: string, sentiment_polarity: string, sentiment_score: float, title: string, type: string>, themes: table<mentions: list, normalized: string, phrases_count: int, sentiment_polarity: string, sentiment_score: float, stemmed: string, themes_count: int, title: string>, topics: table<hitcount: int, id: string, sentiment_polarity: string, sentiment_score: float, title: string, type: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($content_type | is-empty) { error make --unspanned { msg: "path parameter 'content_type' must be non-empty" } }
   let qp = [(serialize-qp "config_id" $config_id "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({content_type: (encode-path-segment $content_type)} | format pattern "/document/processed.{content_type}") $qp)
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"config_id": $config_id} | compact), body: null}
 }
 
 # Cancel document analysis
@@ -677,11 +720,13 @@ export def "document cancel" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($document_id | is-empty) { error make --unspanned { msg: "path parameter 'document_id' must be non-empty" } }
+  if ($content_type | is-empty) { error make --unspanned { msg: "path parameter 'content_type' must be non-empty" } }
   let qp = [(serialize-qp "config_id" $config_id "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({document_id: (encode-path-segment $document_id), content_type: (encode-path-segment $content_type)} | format pattern "/document/{document_id}.{content_type}") $qp)
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"config_id": $config_id} | compact), body: null}
 }
 
 # Retrieve document analysis or its status in queue
@@ -705,11 +750,13 @@ export def "document receive-analytic-data" [
 ]: nothing -> record<auto_categories: table<categories: list, sentiment_polarity: string, sentiment_score: float, strength_score: float, title: string, type: string>, config_id: string, details: table<is_imperative: bool, is_polar: bool, words: list>, entities: table<count: int, entity_type: string, label: string, mentions: list, negative_count: int, neutral_count: int, positive_count: int, title: string, type: string>, id: string, intentions: table<evidence_phrase: string, type: string, what: string, who: string>, job_id: string, language: string, language_score: float, model_sentiment: record<mixed_score: float, model_name: string, negative_score: float, neutral_score: float, positive_score: float, sentiment_polarity: string>, opinions: table<quotation: string, sentiment_polarity: string, sentiment_score: float, speaker: float, topic: string, type: string>, phrases: table<intensifying_phrase: string, is_intensified: bool, is_negated: bool, negating_phrase: string, sentiment_polarity: string, sentiment_score: float, title: string, type: string>, relations: table<confidence_score: float, entities: list, extra: string, relation_type: string, type: string>, sentiment_polarity: string, sentiment_score: float, source_text: string, status: string, summary: string, taxonomy: table<hitcount: int, id: string, sentiment_polarity: string, sentiment_score: float, title: string, type: string>, themes: table<mentions: list, normalized: string, phrases_count: int, sentiment_polarity: string, sentiment_score: float, stemmed: string, themes_count: int, title: string>, topics: table<hitcount: int, id: string, sentiment_polarity: string, sentiment_score: float, title: string, type: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($document_id | is-empty) { error make --unspanned { msg: "path parameter 'document_id' must be non-empty" } }
+  if ($content_type | is-empty) { error make --unspanned { msg: "path parameter 'content_type' must be non-empty" } }
   let qp = [(serialize-qp "config_id" $config_id "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({document_id: (encode-path-segment $document_id), content_type: (encode-path-segment $content_type)} | format pattern "/document/{document_id}.{content_type}") $qp)
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"config_id": $config_id} | compact), body: null}
 }
 
 # Remove user entities
@@ -731,10 +778,11 @@ export def "entities-content-type delete" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($content_type | is-empty) { error make --unspanned { msg: "path parameter 'content_type' must be non-empty" } }
   let full_url = (build-url $base ({content_type: (encode-path-segment $content_type)} | format pattern "/entities.{content_type}"))
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
 }
 
 # Retrieve user entities
@@ -757,11 +805,12 @@ export def "entities-content-type get" [
 ]: nothing -> table<id: string, label: string, modified: string, name: string, normalized: string, type: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($content_type | is-empty) { error make --unspanned { msg: "path parameter 'content_type' must be non-empty" } }
   let qp = [(serialize-qp "config_id" $config_id "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({content_type: (encode-path-segment $content_type)} | format pattern "/entities.{content_type}") $qp)
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"config_id": $config_id} | compact), body: null}
 }
 
 # Add user entities
@@ -786,13 +835,14 @@ export def "entities-content-type create" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($content_type | is-empty) { error make --unspanned { msg: "path parameter 'content_type' must be non-empty" } }
   let qp = [(serialize-qp "config_id" $config_id "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({content_type: (encode-path-segment $content_type)} | format pattern "/entities.{content_type}") $qp)
   let req_body = $body
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: ({"config_id": $config_id} | compact), body: $req_body}
 }
 
 # Update user entities
@@ -817,13 +867,14 @@ export def "entities-content-type update" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($content_type | is-empty) { error make --unspanned { msg: "path parameter 'content_type' must be non-empty" } }
   let qp = [(serialize-qp "config_id" $config_id "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({content_type: (encode-path-segment $content_type)} | format pattern "/entities.{content_type}") $qp)
   let req_body = $body
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: ({"config_id": $config_id} | compact), body: $req_body}
 }
 
 # Retrieve supported features
@@ -846,11 +897,12 @@ export def "features-content-type get" [
 ]: nothing -> table<detailed_mode: record<auto_categories: bool, entity_mentions: bool, entity_opinions: bool, entity_relations: bool, entity_themes: bool, intentions: bool, language_detection: bool, model_sentiment: bool, named_entities: bool, pos_tagging: bool, queries: bool, sentiment: bool, sentiment_phrases: bool, summarization: bool, taxonomy: bool, theme_mentions: bool, themes: bool, user_categories: bool, user_entities: bool>, discovery_mode: record<entity_mentions: bool, facet_attributes: bool, facet_mentioins: bool, facets: bool, named_entities: bool, queries: bool, taxonomy: bool, theme_mentions: bool, themes: bool, user_categories: bool, user_entities: bool>, html_processing: bool, id: string, language: string, one_sentence_mode: bool, settings: record<blacklist: bool, queries: bool, sentiment_phrases: bool, taxonomy: bool, user_categories: bool, user_entities: bool>, templates: record<config_id: string, description: string, id: string, is_free: bool, language: string, name: string, type: string, version: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($content_type | is-empty) { error make --unspanned { msg: "path parameter 'content_type' must be non-empty" } }
   let qp = [(serialize-qp "language" $language "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({content_type: (encode-path-segment $content_type)} | format pattern "/features.{content_type}") $qp)
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"language": $language} | compact), body: null}
 }
 
 # Remove sentiment-bearing phrases
@@ -875,13 +927,14 @@ export def "phrases-content-type delete" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($content_type | is-empty) { error make --unspanned { msg: "path parameter 'content_type' must be non-empty" } }
   let qp = [(serialize-qp "config_id" $config_id "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({content_type: (encode-path-segment $content_type)} | format pattern "/phrases.{content_type}") $qp)
   let req_body = $body
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else if (($input | is-not-empty) and ($req_body | is-empty)) { $input } else { $req_body }
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: ({"config_id": $config_id} | compact), body: $req_body}
 }
 
 # Retrieve sentiment-bearing phrases
@@ -904,11 +957,12 @@ export def "phrases-content-type get" [
 ]: nothing -> table<id: string, modified: string, name: string, weight: float> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($content_type | is-empty) { error make --unspanned { msg: "path parameter 'content_type' must be non-empty" } }
   let qp = [(serialize-qp "config_id" $config_id "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({content_type: (encode-path-segment $content_type)} | format pattern "/phrases.{content_type}") $qp)
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"config_id": $config_id} | compact), body: null}
 }
 
 # Add sentiment-bearing phrases
@@ -933,13 +987,14 @@ export def "phrases-content-type create" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($content_type | is-empty) { error make --unspanned { msg: "path parameter 'content_type' must be non-empty" } }
   let qp = [(serialize-qp "config_id" $config_id "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({content_type: (encode-path-segment $content_type)} | format pattern "/phrases.{content_type}") $qp)
   let req_body = $body
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: ({"config_id": $config_id} | compact), body: $req_body}
 }
 
 # Updates sentiment-bearing phrases
@@ -964,13 +1019,14 @@ export def "phrases-content-type update" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($content_type | is-empty) { error make --unspanned { msg: "path parameter 'content_type' must be non-empty" } }
   let qp = [(serialize-qp "config_id" $config_id "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({content_type: (encode-path-segment $content_type)} | format pattern "/phrases.{content_type}") $qp)
   let req_body = $body
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: ({"config_id": $config_id} | compact), body: $req_body}
 }
 
 # Remove queries
@@ -995,13 +1051,14 @@ export def "queries-content-type delete" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($content_type | is-empty) { error make --unspanned { msg: "path parameter 'content_type' must be non-empty" } }
   let qp = [(serialize-qp "config_id" $config_id "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({content_type: (encode-path-segment $content_type)} | format pattern "/queries.{content_type}") $qp)
   let req_body = $body
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else if (($input | is-not-empty) and ($req_body | is-empty)) { $input } else { $req_body }
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: ({"config_id": $config_id} | compact), body: $req_body}
 }
 
 # Retrieve queries
@@ -1024,11 +1081,12 @@ export def "queries-content-type get" [
 ]: nothing -> table<id: string, modified: string, name: string, query: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($content_type | is-empty) { error make --unspanned { msg: "path parameter 'content_type' must be non-empty" } }
   let qp = [(serialize-qp "config_id" $config_id "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({content_type: (encode-path-segment $content_type)} | format pattern "/queries.{content_type}") $qp)
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"config_id": $config_id} | compact), body: null}
 }
 
 # Add or update queries
@@ -1053,13 +1111,14 @@ export def "queries-content-type create" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($content_type | is-empty) { error make --unspanned { msg: "path parameter 'content_type' must be non-empty" } }
   let qp = [(serialize-qp "config_id" $config_id "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({content_type: (encode-path-segment $content_type)} | format pattern "/queries.{content_type}") $qp)
   let req_body = $body
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: ({"config_id": $config_id} | compact), body: $req_body}
 }
 
 # Update queries
@@ -1084,13 +1143,14 @@ export def "queries-content-type update" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($content_type | is-empty) { error make --unspanned { msg: "path parameter 'content_type' must be non-empty" } }
   let qp = [(serialize-qp "config_id" $config_id "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({content_type: (encode-path-segment $content_type)} | format pattern "/queries.{content_type}") $qp)
   let req_body = $body
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: ({"config_id": $config_id} | compact), body: $req_body}
 }
 
 # Retrieve usage statistics
@@ -1114,11 +1174,12 @@ export def "statistics-content-type get" [
 ]: nothing -> record<calls_data: int, calls_polling: int, calls_settings: int, colls_documents: int, colls_failed: int, colls_processed: int, colls_responded: int, configurations: table<calls_data: int, calls_polling: int, calls_settings: int, colls_failed: int, colls_processed: int, colls_responded: int, config_id: string, docs_failed: int, docs_processed: int, docs_responded: int, latest_used_app: string, name: string, overall_batches: int, overall_calls: int, overall_docs: int, overall_exceeded: int, overall_texts: int, overcall_colls: int, used_apps: string>, docs_failed: int, docs_processed: int, docs_responded: int, latest_used_app: string, name: string, overall_batches: int, overall_calls: int, overall_docs: int, overall_exceeded: int, overall_texts: int, overcall_colls: int, status: string, used_apps: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($content_type | is-empty) { error make --unspanned { msg: "path parameter 'content_type' must be non-empty" } }
   let qp = [(serialize-qp "config_id" $config_id "scalar") (serialize-qp "interval" $interval "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({content_type: (encode-path-segment $content_type)} | format pattern "/statistics.{content_type}") $qp)
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"config_id": $config_id, "interval": $interval} | compact), body: null}
 }
 
 # Retrieve API status
@@ -1140,10 +1201,11 @@ export def "status-content-type get" [
 ]: nothing -> record<api_version: string, service_status: string, service_version: string, supported_compression: string, supported_encoding: string, supported_languages: list<string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($content_type | is-empty) { error make --unspanned { msg: "path parameter 'content_type' must be non-empty" } }
   let full_url = (build-url $base ({content_type: (encode-path-segment $content_type)} | format pattern "/status.{content_type}"))
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
 }
 
 # Retrieve subscription details
@@ -1165,10 +1227,11 @@ export def "subscription-content-type get" [
 ]: nothing -> record<basic_settings: record<auto_response_limit: int, batch_limit: int, blacklist_limit: int, callback_batch_limit: int, categories_limit: int, category_samples_limit: int, characters_limit: int, collection_limit: int, configurations_limit: int, entities_limit: int, output_data_limit: int, processed_batch_limit: int, queries_limit: int, return_source_text: bool, sentiment_limit: int>, billing_settings: record<app_seats_allocated: int, app_seats_permitted: int, data_calls_balance: int, data_calls_limit: int, data_calls_limit_interval: int, docs_balance: int, docs_limit: int, docs_limit_interval: int, docs_suggested: int, docs_suggested_interval: int, expiration_date: string, limit_type: string, polling_calls_balance: int, polling_calls_limit: int, polling_calls_limit_interval: int, priority: string, settings_calls_balance: int, settings_calls_limit: int, settings_calls_limit_interval: int>, feature_settings: record<collection: record<concept_topics: bool, facets: bool, mentions: bool, named_entities: bool, query_topics: bool, themes: bool, user_entities: bool>, document: record<auto_categories: bool, concept_topics: bool, entity_themes: bool, intentions: bool, language_detection: bool, mentions: bool, model_sentiment: bool, named_entities: bool, named_relations: bool, opinions: bool, phrases_detection: bool, pos_tagging: bool, query_topics: bool, sentiment_phrases: bool, summary: bool, themes: bool, user_entities: bool, user_relations: bool>, html_processing: bool, supported_languages: string, templates: record<config_id: string, description: string, id: string, is_free: bool, language: string, name: string, type: string, version: string>>, name: string, status: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($content_type | is-empty) { error make --unspanned { msg: "path parameter 'content_type' must be non-empty" } }
   let full_url = (build-url $base ({content_type: (encode-path-segment $content_type)} | format pattern "/subscription.{content_type}"))
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
 }
 
 # Remove taxonomy nodes
@@ -1193,13 +1256,14 @@ export def "taxonomy-content-type delete" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($content_type | is-empty) { error make --unspanned { msg: "path parameter 'content_type' must be non-empty" } }
   let qp = [(serialize-qp "config_id" $config_id "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({content_type: (encode-path-segment $content_type)} | format pattern "/taxonomy.{content_type}") $qp)
   let req_body = $body
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else if (($input | is-not-empty) and ($req_body | is-empty)) { $input } else { $req_body }
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: ({"config_id": $config_id} | compact), body: $req_body}
 }
 
 # Retrieve taxonomy
@@ -1222,11 +1286,12 @@ export def "taxonomy-content-type get" [
 ]: nothing -> table<enforce_parent_matching: bool, id: string, modified: string, name: string, nodes: list<any>, topics: list<record>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($content_type | is-empty) { error make --unspanned { msg: "path parameter 'content_type' must be non-empty" } }
   let qp = [(serialize-qp "config_id" $config_id "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({content_type: (encode-path-segment $content_type)} | format pattern "/taxonomy.{content_type}") $qp)
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"config_id": $config_id} | compact), body: null}
 }
 
 # Add taxonomy nodes
@@ -1251,13 +1316,14 @@ export def "taxonomy-content-type create" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($content_type | is-empty) { error make --unspanned { msg: "path parameter 'content_type' must be non-empty" } }
   let qp = [(serialize-qp "config_id" $config_id "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({content_type: (encode-path-segment $content_type)} | format pattern "/taxonomy.{content_type}") $qp)
   let req_body = $body
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: ({"config_id": $config_id} | compact), body: $req_body}
 }
 
 # Update taxonomy nodes
@@ -1282,11 +1348,12 @@ export def "taxonomy-content-type update" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($content_type | is-empty) { error make --unspanned { msg: "path parameter 'content_type' must be non-empty" } }
   let qp = [(serialize-qp "config_id" $config_id "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({content_type: (encode-path-segment $content_type)} | format pattern "/taxonomy.{content_type}") $qp)
   let req_body = $body
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: ({"config_id": $config_id} | compact), body: $req_body}
 }

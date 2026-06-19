@@ -3,16 +3,17 @@
 # Auth: --token flag or $env.SEND_PERSON_TO_MERCHANT_TOKEN
 
 const BASE_URL = "https://api.mastercard.com"
-const DEFAULT_AUTH = "bearer"
 
-# Build auth: returns {headers: record, query: string}
+# Build auth: returns {scheme: string, headers: record, query: string, location: string}.
+# `location` is "header" | "query" | "cookie" | "none" and tells dry-run callers
+# where the token went without inspecting headers/query themselves.
 def build-auth [token?: string, auth_scheme?: string]: nothing -> record {
   let token_val = if ($token != null) and ($token | is-not-empty) { $token } else { $env | get -o SEND_PERSON_TO_MERCHANT_TOKEN | default "" }
   let scheme = ($auth_scheme | default "bearer")
-  if ($scheme == "none") or ($token_val | is-empty) { return {headers: {}, query: ""} }
+  if ($scheme == "none") or ($token_val | is-empty) { return {scheme: $scheme, headers: {}, query: "", location: "none"} }
   match $scheme {
-    "none" => { {headers: {}, query: ""} }
-    _ => { {headers: {Authorization: $"Bearer ($token_val)"}, query: ""} }
+    "none" => { {scheme: $scheme, headers: {}, query: "", location: "none"} }
+    _ => { {scheme: $scheme, headers: {Authorization: $"Bearer ($token_val)"}, query: "", location: "header"} }
   }
 }
 
@@ -21,8 +22,9 @@ def build-auth [token?: string, auth_scheme?: string]: nothing -> record {
 # ([A-Za-z0-9-._~]) stay literal; everything else gets %XX.
 def serialize-qp [name: string, value: any, style: string]: nothing -> list<string> {
   if ($value == null) { return [] }
-  let n = (encode-path-segment $name)
   let is_list = ($value | describe | str starts-with "list")
+  if $is_list and ($value | is-empty) { return [] }
+  let n = (encode-path-segment $name)
   if ($value | describe | str starts-with "record") { return ($value | transpose k v | each { $"($n)[(encode-path-segment $in.k)]=(encode-path-segment $in.v)" }) }
   if not $is_list { return [$"($n)=(encode-path-segment $value)"] }
   match $style {
@@ -53,22 +55,42 @@ def build-url [base: string, path: string, query?: string]: nothing -> string {
   if ($query != null) and ($query | is-not-empty) { $result | upsert query $query | url join } else { $result | url join }
 }
 
+# Build the dry-run record returned by --dry-run. Shape:
+#   {dry_run: true, method, url, query: <record>, headers, body, content_type, timeout,
+#    auth: {scheme, location}}
+# `meta` carries logical-form data (the query record by spec name, the pre-serialization
+# body) that do-request itself cannot reconstruct from its wire-format args.
+def build-dry-run-record [method: string, url: string, auth: record, content_type: string, timeout: duration, meta?: record]: nothing -> record {
+  let m = ($meta | default {})
+  {
+    dry_run: true
+    method: $method
+    url: $url
+    query: ($m | get -o query | default {})
+    headers: $auth.headers
+    body: ($m | get -o body)
+    content_type: $content_type
+    timeout: $timeout
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+}
+
 # Execute HTTP request with method dispatch
-def do-request [method: string, url: string, auth: record, insecure: bool, raw: bool, dry_run: bool, max_time?: duration, allow_errors?: bool, full?: bool, content_type?: string, body?: any]: nothing -> any {
+def do-request [method: string, url: string, auth: record, insecure: bool, raw: bool, dry_run: bool, max_time?: duration, allow_errors?: bool, full?: bool, content_type?: string, body?: any, dry_run_meta?: record]: nothing -> any {
   let req_url = if ($auth.query | is-not-empty) { if ($url | str contains "?") { $"($url)&($auth.query)" } else { $"($url)?($auth.query)" } } else { $url }
   let timeout = ($max_time | default 30min)
   let ct = ($content_type | default "application/json")
-  if $dry_run { return {method: $method, url: $req_url, headers: $auth.headers, query_string: $auth.query, content_type: $ct, timeout: $timeout, body: $body} }
+  if $dry_run { return (build-dry-run-record $method $req_url $auth $ct $timeout $dry_run_meta) }
   let resp = match $method {
     "get" => { http get --headers $auth.headers --full --allow-errors --max-time $timeout --insecure=$insecure --raw=$raw $req_url }
-    "head" => { http head --headers $auth.headers --max-time $timeout --insecure=$insecure $req_url }
-    "options" => { http options --headers $auth.headers --max-time $timeout --insecure=$insecure $req_url }
+    "head" => { http head --headers $auth.headers --full --allow-errors --max-time $timeout --insecure=$insecure $req_url }
+    "options" => { http options --headers $auth.headers --full --allow-errors --max-time $timeout --insecure=$insecure $req_url }
     "post" => { if ($body | is-empty) { http post --headers $auth.headers --full --allow-errors --max-time $timeout --insecure=$insecure --raw=$raw $req_url "" } else { http post --headers $auth.headers --content-type $ct --full --allow-errors --max-time $timeout --insecure=$insecure --raw=$raw $req_url $body } }
     "put" => { if ($body | is-empty) { http put --headers $auth.headers --full --allow-errors --max-time $timeout --insecure=$insecure --raw=$raw $req_url "" } else { http put --headers $auth.headers --content-type $ct --full --allow-errors --max-time $timeout --insecure=$insecure --raw=$raw $req_url $body } }
     "patch" => { if ($body | is-empty) { http patch --headers $auth.headers --full --allow-errors --max-time $timeout --insecure=$insecure --raw=$raw $req_url "" } else { http patch --headers $auth.headers --content-type $ct --full --allow-errors --max-time $timeout --insecure=$insecure --raw=$raw $req_url $body } }
     "delete" => { if ($body | is-empty) { http delete --headers $auth.headers --full --allow-errors --max-time $timeout --insecure=$insecure --raw=$raw $req_url } else { http delete --headers $auth.headers --content-type $ct --data $body --full --allow-errors --max-time $timeout --insecure=$insecure --raw=$raw $req_url } }
   }
-  if ($method in ["head" "options"]) { return $resp }
+  if ($method == "head") and (not $full) and (not $allow_errors) and $resp.status < 400 { return $resp.headers }
   if $allow_errors { $resp } else if $resp.status >= 400 { error make --unspanned { msg: $"HTTP ($resp.status): ($resp.body)" } } else if $full { {status: $resp.status, headers: $resp.headers, body: $resp.body} } else if $resp.status == 204 { null } else { $resp.body }
 }
 
@@ -81,7 +103,7 @@ def accept-completer [] { ["application/json" "application/xml"] }
 # List all available API commands with their parameters
 export def commands []: nothing -> table {
   let builtin_flags = ["base-url" "token" "auth-scheme" "insecure" "max-time" "raw" "allow-errors" "full" "dry-run" "accept" "help"]
-  let mod_name = (scope modules | where { $in.commands | any { $in.name == "send-env-partners-merchant-transfer create" } } | get name | first)
+  let mod_name = (scope modules | where { $in.commands | any { $in.name == "send create-merchant-transfer" } } | get name | first)
   let mod_cmds = (scope modules | where name == $mod_name | get commands | first)
   let cmd_ids = ($mod_cmds | where name not-in [$mod_name "commands"] | get decl_id)
   scope commands | where decl_id in $cmd_ids | each {|cmd|
@@ -103,10 +125,10 @@ export def commands []: nothing -> table {
 
 # Initiates a Mastercard Merchant Presented QR purchase transaction by securing funds from a consumer’s account with a Funding Transaction and pushing funds to a merchant account with a Payment Transaction.
 #
-# POST /send/#env/v1/partners/{partnerId}/merchant/transfer
+# POST /send/
 # operationId: createMerchantTransfer
 # --merchant_transfer shape: {additional_message?: string, convenience_amount?: string, convenience_indicator?: string, digital_account_reference_number?: string, interchange_rate_designator?: string, mastercard_assigned_id?: string, participant: record, participation_id?: string, payment_origination_country?: string, payment_type: string, processor_id?: string, qr_data?: string, recipient: record, recipient_account_uri: string, reconciliation_data?: record, routing_transit_number?: string, sender: record, ... (5 more fields)}
-export def "send-env-partners-merchant-transfer create" [
+export def "send create-merchant-transfer" [
   partner_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -123,19 +145,20 @@ export def "send-env-partners-merchant-transfer create" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({partner_id: (encode-path-segment $partner_id)} | format pattern "/send/#env/v1/partners/{partner_id}/merchant/transfer"))
+  if ($partner_id | is-empty) { error make --unspanned { msg: "path parameter 'partnerId' must be non-empty" } }
+  let full_url = (build-url $base ({partner_id: (encode-path-segment $partner_id)} | format pattern "/send/"))
   let req_body = {"merchant_transfer": $merchant_transfer} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: {}, body: $req_body}
 }
 
 # Purpose of this service is to retrieve the Transfer resource associated with a specified transfer_reference value.
 #
-# GET /send/#env/v1/partners/{partnerId}/merchant/transfers
+# GET /send/
 # operationId: getMerchantTransferByRef
-export def "send-env-partners-merchant-transfers get-by-ref" [
+export def "send get-merchant-transfer-by-ref" [
   partner_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -151,19 +174,20 @@ export def "send-env-partners-merchant-transfers get-by-ref" [
 ]: nothing -> record<merchant_transfers: record<data: record<merchant_transfer: list>, item_count: int, resource_type: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($partner_id | is-empty) { error make --unspanned { msg: "path parameter 'partnerId' must be non-empty" } }
   let qp = [(serialize-qp "ref" $ref "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({partner_id: (encode-path-segment $partner_id)} | format pattern "/send/#env/v1/partners/{partner_id}/merchant/transfers") $qp)
+  let full_url = (build-url $base ({partner_id: (encode-path-segment $partner_id)} | format pattern "/send/") $qp)
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"ref": $ref} | compact), body: null}
 }
 
 # Initiates a Mastercard Merchant Presented QR purchase transaction by pushing funds to a merchant account.
 #
-# POST /send/#env/v1/partners/{partnerId}/merchant/transfers/payment
+# POST /send/
 # operationId: createMerchantPayment
 # --merchant_payment_transfer shape: {additional_message?: string, amount: string, authentication_value?: string, channel?: string, convenience_amount?: string, convenience_indicator?: string, currency: string, device_id?: string, digital_account_reference_number?: string, funding_source: string, funding_transaction_reference?: record, interchange_rate_designator?: string, location?: string, mastercard_assigned_id?: string, participant?: record, participation_id?: string, payment_origination_country?: string, payment_type: string, ... (11 more fields)}
-export def "send-env-partners-merchant-transfers-payment create" [
+export def "send create-merchant-payment" [
   partner_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -180,20 +204,21 @@ export def "send-env-partners-merchant-transfers-payment create" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({partner_id: (encode-path-segment $partner_id)} | format pattern "/send/#env/v1/partners/{partner_id}/merchant/transfers/payment"))
+  if ($partner_id | is-empty) { error make --unspanned { msg: "path parameter 'partnerId' must be non-empty" } }
+  let full_url = (build-url $base ({partner_id: (encode-path-segment $partner_id)} | format pattern "/send/"))
   let req_body = {"merchant_payment_transfer": $merchant_payment_transfer} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: {}, body: $req_body}
 }
 
 # Initiates a Mastercard Merchant Presented QR Refund transaction by pushing funds from a merchant account back to the customer's account.
 #
-# POST /send/#env/v1/partners/{partnerId}/merchant/transfers/refund
+# POST /send/
 # operationId: createMerchantRefund
 # --merchant_refund_transfer shape: {additional_message?: string, amount: string, authentication_value?: string, channel?: string, currency: string, device_id?: string, digital_account_reference_number?: string, funding_source: string, interchange_rate_designator?: string, location?: string, mastercard_assigned_id?: string, participant?: record, participation_id?: string, payment_origination_country?: string, payment_transaction_reference?: record, payment_type: string, processor_id?: string, recipient?: record, ... (7 more fields)}
-export def "send-env-partners-merchant-transfers-refund create" [
+export def "send create-merchant-refund" [
   partner_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -210,19 +235,20 @@ export def "send-env-partners-merchant-transfers-refund create" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({partner_id: (encode-path-segment $partner_id)} | format pattern "/send/#env/v1/partners/{partner_id}/merchant/transfers/refund"))
+  if ($partner_id | is-empty) { error make --unspanned { msg: "path parameter 'partnerId' must be non-empty" } }
+  let full_url = (build-url $base ({partner_id: (encode-path-segment $partner_id)} | format pattern "/send/"))
   let req_body = {"merchant_refund_transfer": $merchant_refund_transfer} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: {}, body: $req_body}
 }
 
 # Purpose of this service is to retrieve the Transfer resource associated with the specified transfer-id.
 #
-# GET /send/#env/v1/partners/{partnerId}/merchant/transfers/{transferId}
+# GET /send/
 # operationId: getMerchantTransferById
-export def "send-env-partners-merchant-transfers get" [
+export def "send get-merchant-transfer" [
   partner_id: string
   transfer_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -238,17 +264,18 @@ export def "send-env-partners-merchant-transfers get" [
 ]: nothing -> record<merchant_transfer: record<channel: string, created: string, device_id: string, digital_account_reference_number: string, funding_source: string, id: string, interchange_rate_designator: string, location: string, original_status: string, participant: record<card_acceptor_id: string, card_acceptor_name: string>, payment_origination_country: string, payment_type: string, processor_id: string, recipient: record<additional_merchant_data: record, address: record, email: string, first_name: string, last_name: string, merchant_category_code: string, middle_name: string, phone: string>, recipient_account_uri: string, reconciliation_data: record<custom_field: list>, resource_type: string, routing_transit_number: string, sender: record<additional_merchant_data: record, address: record, date_of_birth: string, email: string, first_name: string, last_name: string, middle_name: string, phone: string>, sender_account_uri: string, status: string, status_timestamp: string, transaction_history: record<data: record, item_count: int, resource_type: string>, transaction_local_date_time: string, transfer_amount: record<currency: string, value: string>, transfer_reference: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({partner_id: (encode-path-segment $partner_id), transfer_id: (encode-path-segment $transfer_id)} | format pattern "/send/#env/v1/partners/{partner_id}/merchant/transfers/{transfer_id}"))
+  if ($partner_id | is-empty) { error make --unspanned { msg: "path parameter 'partnerId' must be non-empty" } }
+  if ($transfer_id | is-empty) { error make --unspanned { msg: "path parameter 'transferId' must be non-empty" } }
+  let full_url = (build-url $base ({partner_id: (encode-path-segment $partner_id), transfer_id: (encode-path-segment $transfer_id)} | format pattern "/send/"))
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
 }
 
 # Funding Reversals must be submitted within 30 minutes of the funding transfer request, and should only be submitted for the following conditions: Funding Transaction must be reversed if payment transaction cannot complete successfully, i.e. the payment transaction is rejected or declined. Upon a successful reversal of a funding transaction, the refund must be credited to the sending consumer’s Funding Account.
 #
 # POST /send/v1/partners/{partner-id}/transfers/{transfer-id}/transactions/{transaction-id}/reversals
 # operationId: createFundingReversal
-# --funding_reversal shape: {reversal_reason: string}
 export def "send-partners-transfers-transactions-reversals create-funding" [
   partner_id: string
   transfer_id: string
@@ -262,24 +289,26 @@ export def "send-partners-transfers-transactions-reversals create-funding" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --funding-reversal: record # Contains the details of the request message. — shape: {reversal_reason: string}
+  --body: any
 ]: any -> record<transfer: record<channel: string, created: string, device_id: string, id: string, location: string, original_status: string, payment_type: string, recipient: record<address: record, date_of_birth: string, email: string, first_name: string, government_ids: record, last_name: string, middle_name: string, nationality: string, phone: string, sanction_score: string>, recipient_account_uri: string, reconciliation_data: record<custom_field: list>, resource_type: string, sanction_screening_override: bool, sender: record<address: record, date_of_birth: string, email: string, first_name: string, government_ids: record, last_name: string, middle_name: string, nationality: string, phone: string, sanction_score: string>, sender_account_uri: string, statement_descriptor: string, status: string, status_timestamp: string, transaction_history: record<data: record, item_count: int, resource_type: string>, transfer_amount: record<currency: string, value: string>, transfer_reference: string>> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($partner_id | is-empty) { error make --unspanned { msg: "path parameter 'partner-id' must be non-empty" } }
+  if ($transfer_id | is-empty) { error make --unspanned { msg: "path parameter 'transfer-id' must be non-empty" } }
+  if ($transaction_id | is-empty) { error make --unspanned { msg: "path parameter 'transaction-id' must be non-empty" } }
   let full_url = (build-url $base ({partner_id: (encode-path-segment $partner_id), transfer_id: (encode-path-segment $transfer_id), transaction_id: (encode-path-segment $transaction_id)} | format pattern "/send/v1/partners/{partner_id}/transfers/{transfer_id}/transactions/{transaction_id}/reversals"))
-  let req_body = {"funding_reversal": $funding_reversal} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = $body
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else if (($input | is-not-empty) and ($req_body | is-empty)) { $input } else { $req_body }
   let accept_val = "application/xml"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/xml" $req_body {query: {}, body: $req_body}
 }
 
 # Client can simulate a Mastercard Merchant Presented QR Payment notification to the registered URL endpoint.
 #
 # POST /send/v1/partners/{partnerId}/events/generate/payment
 # operationId: sendNotificationPaymentRetry
-# --notification_request shape: {additional_message?: string, mastercard_assigned_id?: string, merchant_category_code?: string, payment_facilitator_id?: string, payment_type: string, recipient?: record, recipient_account_uri: string, transaction_amount?: record, transfer_status: string}
 export def "send-partners-events-generate-payment send-notification-retry" [
   partner_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -291,24 +320,24 @@ export def "send-partners-events-generate-payment send-notification-retry" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --notification-request: record # Contains the details of the request message. — shape: {additional_message?: string, mastercard_assigned_id?: string, merchant_category_code?: string, payment_facilitator_id?: string, payment_type: string, recipient?: record, recipient_account_uri: string, transaction_amount?: record, transfer_status: string}
+  --body: any
 ]: any -> record<notification_response: record<status: string, transfer_reference: string>> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($partner_id | is-empty) { error make --unspanned { msg: "path parameter 'partnerId' must be non-empty" } }
   let full_url = (build-url $base ({partner_id: (encode-path-segment $partner_id)} | format pattern "/send/v1/partners/{partner_id}/events/generate/payment"))
-  let req_body = {"notification_request": $notification_request} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = $body
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else if (($input | is-not-empty) and ($req_body | is-empty)) { $input } else { $req_body }
   let accept_val = "N/A"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/xml" $req_body {query: {}, body: $req_body}
 }
 
 # Client can simulate a Mastercard Merchant Presented QR Refund notification to the registered URL endpoint.
 #
 # POST /send/v1/partners/{partnerId}/events/generate/refund
 # operationId: sendNotificationRefundRetry
-# --notification_request shape: {additional_message?: string, mastercard_assigned_id?: string, merchant_category_code?: string, payment_facilitator_id?: string, payment_type: string, recipient?: record, recipient_account_uri: string, transaction_amount?: record, transfer_status: string}
 export def "send-partners-events-generate-refund send-notification-retry" [
   partner_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -320,17 +349,18 @@ export def "send-partners-events-generate-refund send-notification-retry" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --notification-request: record # Contains the details of the request message. — shape: {additional_message?: string, mastercard_assigned_id?: string, merchant_category_code?: string, payment_facilitator_id?: string, payment_type: string, recipient?: record, recipient_account_uri: string, transaction_amount?: record, transfer_status: string}
+  --body: any
 ]: any -> record<notification_response: record<status: string, transfer_reference: string>> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($partner_id | is-empty) { error make --unspanned { msg: "path parameter 'partnerId' must be non-empty" } }
   let full_url = (build-url $base ({partner_id: (encode-path-segment $partner_id)} | format pattern "/send/v1/partners/{partner_id}/events/generate/refund"))
-  let req_body = {"notification_request": $notification_request} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = $body
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else if (($input | is-not-empty) and ($req_body | is-empty)) { $input } else { $req_body }
   let accept_val = "N/A"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/xml" $req_body {query: {}, body: $req_body}
 }
 
 # This service allows Mastercard Merchant QR originating and receiving partners to register a PAN and service provider to receive notifications on an inbound Merchant Refund or Merchant Payment Transaction.
@@ -355,12 +385,13 @@ export def "send-partners-notification-registries create-transfer-registration" 
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($partner_id | is-empty) { error make --unspanned { msg: "path parameter 'partnerId' must be non-empty" } }
   let full_url = (build-url $base ({partner_id: (encode-path-segment $partner_id)} | format pattern "/send/v1/partners/{partner_id}/notification-registries"))
   let req_body = {"accountregistration": $accountregistration} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: {}, body: $req_body}
 }
 
 # This service allows Mastercard Merchant QR originating and receiving partners to delete a registered PAN for notifications.
@@ -383,10 +414,12 @@ export def "send-partners-notification-registries delete-transfer-registration" 
 ]: nothing -> record<accountregistration: record<account_registration_reference: string, account_uri: string, notification_partner_id: string, notification_partner_name: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($partner_id | is-empty) { error make --unspanned { msg: "path parameter 'partnerId' must be non-empty" } }
+  if ($account_reg_ref | is-empty) { error make --unspanned { msg: "path parameter 'account-reg-ref' must be non-empty" } }
   let full_url = (build-url $base ({partner_id: (encode-path-segment $partner_id), account_reg_ref: (encode-path-segment $account_reg_ref)} | format pattern "/send/v1/partners/{partner_id}/notification-registries/{account_reg_ref}"))
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
 }
 
 # This service allows Mastercard Merchant QR originating and receiving partners to retrieve the service provider's information for a registered PAN for notifications.
@@ -409,10 +442,12 @@ export def "send-partners-notification-registries get-registration" [
 ]: nothing -> record<accountregistration: record<account_registration_reference: string, account_uri: string, notification_partner_id: string, notification_partner_name: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($partner_id | is-empty) { error make --unspanned { msg: "path parameter 'partnerId' must be non-empty" } }
+  if ($account_reg_ref | is-empty) { error make --unspanned { msg: "path parameter 'account-reg-ref' must be non-empty" } }
   let full_url = (build-url $base ({partner_id: (encode-path-segment $partner_id), account_reg_ref: (encode-path-segment $account_reg_ref)} | format pattern "/send/v1/partners/{partner_id}/notification-registries/{account_reg_ref}"))
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
 }
 
 # This service allows Mastercard Merchant QR originating and receiving partners to update the notitification service provider for a registered PAN.
@@ -438,19 +473,20 @@ export def "send-partners-notification-registries update-registration" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($partner_id | is-empty) { error make --unspanned { msg: "path parameter 'partnerId' must be non-empty" } }
+  if ($account_reg_ref | is-empty) { error make --unspanned { msg: "path parameter 'account-reg-ref' must be non-empty" } }
   let full_url = (build-url $base ({partner_id: (encode-path-segment $partner_id), account_reg_ref: (encode-path-segment $account_reg_ref)} | format pattern "/send/v1/partners/{partner_id}/notification-registries/{account_reg_ref}"))
   let req_body = {"accountregistration": $accountregistration} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: {}, body: $req_body}
 }
 
 # The Funding Transaction enables the 'pull' of money from the sender's card to the Transaction Originator who is providing the Person to Merchant service. The amount that is debited from the Funding Account (sending consumer's account) will be the amount 'pushed' to the recipient via a payment transfer request. Funds can be transferred from Mastercard® or Maestro® debit card accounts. To initiate the funding transaction, users can provide the sending consumer's Primary Account Number (PAN) or a unique identifier previously mapped to the sending consumer's account.
 #
 # POST /send/v1/partners/{partnerId}/transfers/funding
 # operationId: createFunding
-# --funding_transfer shape: {additional_message?: string, amount: string, authentication_value?: string, channel?: string, currency: string, device_id?: string, funding_hints?: string, interchange_rate_designator?: string, language_data?: string, language_identification?: string, location?: string, participation_id?: string, payment_type?: string, recipient?: record, recipient_account_uri: string, reconciliation_data?: record, sanction_screening_override?: bool, sender?: record, sender_account_uri?: string, ... (3 more fields)}
 export def "send-partners-transfers-funding create" [
   partner_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -462,17 +498,18 @@ export def "send-partners-transfers-funding create" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --funding-transfer: record # Contains the details of the request message. — shape: {additional_message?: string, amount: string, authentication_value?: string, channel?: string, currency: string, device_id?: string, funding_hints?: string, interchange_rate_designator?: string, language_data?: string, language_identification?: string, location?: string, participation_id?: string, payment_type?: string, recipient?: record, recipient_account_uri: string, reconciliation_data?: record, sanction_screening_override?: bool, sender?: record, sender_account_uri?: string, ... (3 more fields)}
+  --body: any
 ]: any -> record<transfer: record<channel: string, created: string, device_id: string, id: string, interchange_rate_designator: string, location: string, original_status: string, payment_type: string, recipient: record<address: record, date_of_birth: string, email: string, first_name: string, government_ids: record, last_name: string, merchant_category_code: string, middle_name: string, nationality: string, phone: string, sanction_score: string>, recipient_account_uri: string, reconciliation_data: record<custom_field: list>, resource_type: string, sanction_screening_override: bool, sender: record<additional_merchant_data: record, address: record, date_of_birth: string, email: string, first_name: string, government_ids: record, last_name: string, middle_name: string, nationality: string, phone: string, sanction_score: string>, sender_account_uri: string, statement_descriptor: string, status: string, status_timestamp: string, transaction_history: record<data: record, item_count: int, resource_type: string>, transfer_amount: record<currency: string, value: string>, transfer_reference: string>> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($partner_id | is-empty) { error make --unspanned { msg: "path parameter 'partnerId' must be non-empty" } }
   let full_url = (build-url $base ({partner_id: (encode-path-segment $partner_id)} | format pattern "/send/v1/partners/{partner_id}/transfers/funding"))
-  let req_body = {"funding_transfer": $funding_transfer} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = $body
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else if (($input | is-not-empty) and ($req_body | is-empty)) { $input } else { $req_body }
   let accept_val = "application/xml"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/xml" $req_body {query: {}, body: $req_body}
 }
 
 # Used to create a digital account reference number from Incontrol
@@ -497,12 +534,13 @@ export def "send-digital-account create-accnt-ref-num" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($partner_id | is-empty) { error make --unspanned { msg: "path parameter 'partnerId' must be non-empty" } }
   let full_url = (build-url $base ({partner_id: (encode-path-segment $partner_id)} | format pattern "/send/v1/{partner_id}/digital-account"))
   let req_body = {"digital_account": $digital_account} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: {}, body: $req_body}
 }
 
 # Used to retreive a digital account reference list from Incontrol
@@ -527,10 +565,11 @@ export def "send-digital-account-search get-accnt-ref-num-list" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($partner_id | is-empty) { error make --unspanned { msg: "path parameter 'partnerId' must be non-empty" } }
   let full_url = (build-url $base ({partner_id: (encode-path-segment $partner_id)} | format pattern "/send/v1/{partner_id}/digital-account/search"))
   let req_body = {"digital_account": $digital_account} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: {}, body: $req_body}
 }

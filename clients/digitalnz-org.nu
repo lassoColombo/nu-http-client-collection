@@ -3,17 +3,18 @@
 # Auth: --token flag or $env.DIGITALNZ_API_TOKEN
 
 const BASE_URL = "https://api.digitalnz.org"
-const DEFAULT_AUTH = "query-api_key"
 
-# Build auth: returns {headers: record, query: string}
+# Build auth: returns {scheme: string, headers: record, query: string, location: string}.
+# `location` is "header" | "query" | "cookie" | "none" and tells dry-run callers
+# where the token went without inspecting headers/query themselves.
 def build-auth [token?: string, auth_scheme?: string]: nothing -> record {
   let token_val = if ($token != null) and ($token | is-not-empty) { $token } else { $env | get -o DIGITALNZ_API_TOKEN | default "" }
   let scheme = ($auth_scheme | default "bearer")
-  if ($scheme == "none") or ($token_val | is-empty) { return {headers: {}, query: ""} }
+  if ($scheme == "none") or ($token_val | is-empty) { return {scheme: $scheme, headers: {}, query: "", location: "none"} }
   match $scheme {
-    "query-api_key" => { {headers: {}, query: $"(encode-path-segment "api_key")=(encode-path-segment $token_val)"} }
-    "none" => { {headers: {}, query: ""} }
-    _ => { {headers: {Authorization: $"Bearer ($token_val)"}, query: ""} }
+    "query-api_key" => { {scheme: $scheme, headers: {}, query: $"(encode-path-segment "api_key")=(encode-path-segment $token_val)", location: "query"} }
+    "none" => { {scheme: $scheme, headers: {}, query: "", location: "none"} }
+    _ => { {scheme: $scheme, headers: {Authorization: $"Bearer ($token_val)"}, query: "", location: "header"} }
   }
 }
 
@@ -22,8 +23,9 @@ def build-auth [token?: string, auth_scheme?: string]: nothing -> record {
 # ([A-Za-z0-9-._~]) stay literal; everything else gets %XX.
 def serialize-qp [name: string, value: any, style: string]: nothing -> list<string> {
   if ($value == null) { return [] }
-  let n = (encode-path-segment $name)
   let is_list = ($value | describe | str starts-with "list")
+  if $is_list and ($value | is-empty) { return [] }
+  let n = (encode-path-segment $name)
   if ($value | describe | str starts-with "record") { return ($value | transpose k v | each { $"($n)[(encode-path-segment $in.k)]=(encode-path-segment $in.v)" }) }
   if not $is_list { return [$"($n)=(encode-path-segment $value)"] }
   match $style {
@@ -54,22 +56,42 @@ def build-url [base: string, path: string, query?: string]: nothing -> string {
   if ($query != null) and ($query | is-not-empty) { $result | upsert query $query | url join } else { $result | url join }
 }
 
+# Build the dry-run record returned by --dry-run. Shape:
+#   {dry_run: true, method, url, query: <record>, headers, body, content_type, timeout,
+#    auth: {scheme, location}}
+# `meta` carries logical-form data (the query record by spec name, the pre-serialization
+# body) that do-request itself cannot reconstruct from its wire-format args.
+def build-dry-run-record [method: string, url: string, auth: record, content_type: string, timeout: duration, meta?: record]: nothing -> record {
+  let m = ($meta | default {})
+  {
+    dry_run: true
+    method: $method
+    url: $url
+    query: ($m | get -o query | default {})
+    headers: $auth.headers
+    body: ($m | get -o body)
+    content_type: $content_type
+    timeout: $timeout
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+}
+
 # Execute HTTP request with method dispatch
-def do-request [method: string, url: string, auth: record, insecure: bool, raw: bool, dry_run: bool, max_time?: duration, allow_errors?: bool, full?: bool, content_type?: string, body?: any]: nothing -> any {
+def do-request [method: string, url: string, auth: record, insecure: bool, raw: bool, dry_run: bool, max_time?: duration, allow_errors?: bool, full?: bool, content_type?: string, body?: any, dry_run_meta?: record]: nothing -> any {
   let req_url = if ($auth.query | is-not-empty) { if ($url | str contains "?") { $"($url)&($auth.query)" } else { $"($url)?($auth.query)" } } else { $url }
   let timeout = ($max_time | default 30min)
   let ct = ($content_type | default "application/json")
-  if $dry_run { return {method: $method, url: $req_url, headers: $auth.headers, query_string: $auth.query, content_type: $ct, timeout: $timeout, body: $body} }
+  if $dry_run { return (build-dry-run-record $method $req_url $auth $ct $timeout $dry_run_meta) }
   let resp = match $method {
     "get" => { http get --headers $auth.headers --full --allow-errors --max-time $timeout --insecure=$insecure --raw=$raw $req_url }
-    "head" => { http head --headers $auth.headers --max-time $timeout --insecure=$insecure $req_url }
-    "options" => { http options --headers $auth.headers --max-time $timeout --insecure=$insecure $req_url }
+    "head" => { http head --headers $auth.headers --full --allow-errors --max-time $timeout --insecure=$insecure $req_url }
+    "options" => { http options --headers $auth.headers --full --allow-errors --max-time $timeout --insecure=$insecure $req_url }
     "post" => { if ($body | is-empty) { http post --headers $auth.headers --full --allow-errors --max-time $timeout --insecure=$insecure --raw=$raw $req_url "" } else { http post --headers $auth.headers --content-type $ct --full --allow-errors --max-time $timeout --insecure=$insecure --raw=$raw $req_url $body } }
     "put" => { if ($body | is-empty) { http put --headers $auth.headers --full --allow-errors --max-time $timeout --insecure=$insecure --raw=$raw $req_url "" } else { http put --headers $auth.headers --content-type $ct --full --allow-errors --max-time $timeout --insecure=$insecure --raw=$raw $req_url $body } }
     "patch" => { if ($body | is-empty) { http patch --headers $auth.headers --full --allow-errors --max-time $timeout --insecure=$insecure --raw=$raw $req_url "" } else { http patch --headers $auth.headers --content-type $ct --full --allow-errors --max-time $timeout --insecure=$insecure --raw=$raw $req_url $body } }
     "delete" => { if ($body | is-empty) { http delete --headers $auth.headers --full --allow-errors --max-time $timeout --insecure=$insecure --raw=$raw $req_url } else { http delete --headers $auth.headers --content-type $ct --data $body --full --allow-errors --max-time $timeout --insecure=$insecure --raw=$raw $req_url } }
   }
-  if ($method in ["head" "options"]) { return $resp }
+  if ($method == "head") and (not $full) and (not $allow_errors) and $resp.status < 400 { return $resp.headers }
   if $allow_errors { $resp } else if $resp.status >= 400 { error make --unspanned { msg: $"HTTP ($resp.status): ($resp.body)" } } else if $full { {status: $resp.status, headers: $resp.headers, body: $resp.body} } else if $resp.status == 204 { null } else { $resp.body }
 }
 
@@ -156,13 +178,14 @@ export def "records-format get" [
 ]: nothing -> record<facets: record, page: int, per_page: int, records: table<category: list, collection: list, collection_title: list, content_partner: list, copyright: list, created_at: string, creator: list, date: list, dc_identifier: list, description: string, display_collection: string, display_content_partner: string, display_date: string, id: int, landing_url: string, large_thumbnail_url: string, locations: list, primary_collection: list, rights: string, rights_url: list, source_url: string, subject: list, thumbnail_url: string, title: string, updated_at: string, usage: list>, request_url: string, result_count: int> {
   let auth = (build-auth $token ($auth_scheme | default "query-api_key"))
   let base = ($base_url | default $BASE_URL)
+  if ($format | is-empty) { error make --unspanned { msg: "path parameter 'format' must be non-empty" } }
   let qp = [(serialize-qp "text" $text "scalar") (serialize-qp "and[category][]" $and_category "scalar") (serialize-qp "and[content_partner][]" $and_content_partner "scalar") (serialize-qp "and[primary_collection][]" $and_primary_collection "scalar") (serialize-qp "and[collection][]" $and_collection "scalar") (serialize-qp "and[usage][]" $and_usage "scalar") (serialize-qp "and[subject][]" $and_subject "scalar") (serialize-qp "and[dc_type][]" $and_dc_type "scalar") (serialize-qp "and[format][]" $and_format "scalar") (serialize-qp "and[placename][]" $and_placename "scalar") (serialize-qp "and[creator][]" $and_creator "scalar") (serialize-qp "and[title][]" $and_title "scalar") (serialize-qp "and[date]" $and_date "scalar") (serialize-qp "and[year]" $and_year "scalar") (serialize-qp "and[decade]" $and_decade "scalar") (serialize-qp "and[century]" $and_century "scalar") (serialize-qp "without[{filter_field}]" $without_filter_field "scalar") (serialize-qp "and[or][{filter_field}][]" $and_or_filter_field "scalar") (serialize-qp "and[is_commercial_use]" $and_is_commercial_use "scalar") (serialize-qp "and[has_large_thumbnail_url]" $and_has_large_thumbnail_url "scalar") (serialize-qp "and[has_lat_lng]" $and_has_lat_lng "scalar") (serialize-qp "geo_bbox" $geo_bbox "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "sort" $qp_sort "scalar") (serialize-qp "direction" $direction "scalar") (serialize-qp "page" $page "scalar") (serialize-qp "per_page" $per_page "scalar") (serialize-qp "facets" $facets "csv") (serialize-qp "facets_page" $facets_page "scalar") (serialize-qp "facets_per_page" $facets_per_page "scalar") (serialize-qp "exclude_filters_from_facets" $exclude_filters_from_facets "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({format: (encode-path-segment $format)} | format pattern "/records.{format}") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"Authentication-Token": $authentication_token} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"text": $text, "and[category][]": $and_category, "and[content_partner][]": $and_content_partner, "and[primary_collection][]": $and_primary_collection, "and[collection][]": $and_collection, "and[usage][]": $and_usage, "and[subject][]": $and_subject, "and[dc_type][]": $and_dc_type, "and[format][]": $and_format, "and[placename][]": $and_placename, "and[creator][]": $and_creator, "and[title][]": $and_title, "and[date]": $and_date, "and[year]": $and_year, "and[decade]": $and_decade, "and[century]": $and_century, "without[{filter_field}]": $without_filter_field, "and[or][{filter_field}][]": $and_or_filter_field, "and[is_commercial_use]": $and_is_commercial_use, "and[has_large_thumbnail_url]": $and_has_large_thumbnail_url, "and[has_lat_lng]": $and_has_lat_lng, "geo_bbox": $geo_bbox, "fields": $fields, "sort": $qp_sort, "direction": $direction, "page": $page, "per_page": $per_page, "facets": $facets, "facets_page": $facets_page, "facets_per_page": $facets_per_page, "exclude_filters_from_facets": $exclude_filters_from_facets} | compact), body: null}
 }
 
 # View metadata associated with a single record.
@@ -185,13 +208,15 @@ export def "records get" [
 ]: nothing -> record<category: list<string>, collection: list<string>, collection_title: list<string>, content_partner: list<string>, copyright: list<string>, created_at: string, creator: list<string>, date: list<string>, dc_identifier: list<string>, description: string, display_collection: string, display_content_partner: string, display_date: string, id: int, landing_url: string, large_thumbnail_url: string, locations: table<comment: string, lat: float, lng: float, placename: string>, primary_collection: list<string>, rights: string, rights_url: list<string>, source_url: string, subject: list<string>, thumbnail_url: string, title: string, updated_at: string, usage: list<string>> {
   let auth = (build-auth $token ($auth_scheme | default "query-api_key"))
   let base = ($base_url | default $BASE_URL)
+  if ($record_id | is-empty) { error make --unspanned { msg: "path parameter 'record_id' must be non-empty" } }
+  if ($format | is-empty) { error make --unspanned { msg: "path parameter 'format' must be non-empty" } }
   let qp = [(serialize-qp "fields" $fields "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({record_id: (encode-path-segment $record_id), format: (encode-path-segment $format)} | format pattern "/records/{record_id}.{format}") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"Authentication-Token": $authentication_token} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"fields": $fields} | compact), body: null}
 }
 
 # The "More Like This" call returns similar records to the specified ID.
@@ -216,11 +241,13 @@ export def "records-more-like-this-format get" [
 ]: nothing -> record<page: int, per_page: int, records: table<category: list, collection: list, collection_title: list, content_partner: list, copyright: list, created_at: string, creator: list, date: list, dc_identifier: list, description: string, display_collection: string, display_content_partner: string, display_date: string, id: int, landing_url: string, large_thumbnail_url: string, locations: list, primary_collection: list, rights: string, rights_url: list, source_url: string, subject: list, thumbnail_url: string, title: string, updated_at: string, usage: list>, request_url: string, result_count: int> {
   let auth = (build-auth $token ($auth_scheme | default "query-api_key"))
   let base = ($base_url | default $BASE_URL)
+  if ($record_id | is-empty) { error make --unspanned { msg: "path parameter 'record_id' must be non-empty" } }
+  if ($format | is-empty) { error make --unspanned { msg: "path parameter 'format' must be non-empty" } }
   let qp = [(serialize-qp "fields" $fields "scalar") (serialize-qp "mlt_fields" $mlt_fields "scalar") (serialize-qp "filtering" $filtering "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({record_id: (encode-path-segment $record_id), format: (encode-path-segment $format)} | format pattern "/records/{record_id}/more_like_this.{format}") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"Authentication-Token": $authentication_token} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"fields": $fields, "mlt_fields": $mlt_fields, "filtering": $filtering} | compact), body: null}
 }

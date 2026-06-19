@@ -3,16 +3,17 @@
 # Auth: --token flag or $env.FLICKR_API_SCHEMA_TOKEN
 
 const BASE_URL = "https://api.flickr.com/services"
-const DEFAULT_AUTH = "bearer"
 
-# Build auth: returns {headers: record, query: string}
+# Build auth: returns {scheme: string, headers: record, query: string, location: string}.
+# `location` is "header" | "query" | "cookie" | "none" and tells dry-run callers
+# where the token went without inspecting headers/query themselves.
 def build-auth [token?: string, auth_scheme?: string]: nothing -> record {
   let token_val = if ($token != null) and ($token | is-not-empty) { $token } else { $env | get -o FLICKR_API_SCHEMA_TOKEN | default "" }
   let scheme = ($auth_scheme | default "bearer")
-  if ($scheme == "none") or ($token_val | is-empty) { return {headers: {}, query: ""} }
+  if ($scheme == "none") or ($token_val | is-empty) { return {scheme: $scheme, headers: {}, query: "", location: "none"} }
   match $scheme {
-    "none" => { {headers: {}, query: ""} }
-    _ => { {headers: {Authorization: $"Bearer ($token_val)"}, query: ""} }
+    "none" => { {scheme: $scheme, headers: {}, query: "", location: "none"} }
+    _ => { {scheme: $scheme, headers: {Authorization: $"Bearer ($token_val)"}, query: "", location: "header"} }
   }
 }
 
@@ -21,8 +22,9 @@ def build-auth [token?: string, auth_scheme?: string]: nothing -> record {
 # ([A-Za-z0-9-._~]) stay literal; everything else gets %XX.
 def serialize-qp [name: string, value: any, style: string]: nothing -> list<string> {
   if ($value == null) { return [] }
-  let n = (encode-path-segment $name)
   let is_list = ($value | describe | str starts-with "list")
+  if $is_list and ($value | is-empty) { return [] }
+  let n = (encode-path-segment $name)
   if ($value | describe | str starts-with "record") { return ($value | transpose k v | each { $"($n)[(encode-path-segment $in.k)]=(encode-path-segment $in.v)" }) }
   if not $is_list { return [$"($n)=(encode-path-segment $value)"] }
   match $style {
@@ -53,22 +55,42 @@ def build-url [base: string, path: string, query?: string]: nothing -> string {
   if ($query != null) and ($query | is-not-empty) { $result | upsert query $query | url join } else { $result | url join }
 }
 
+# Build the dry-run record returned by --dry-run. Shape:
+#   {dry_run: true, method, url, query: <record>, headers, body, content_type, timeout,
+#    auth: {scheme, location}}
+# `meta` carries logical-form data (the query record by spec name, the pre-serialization
+# body) that do-request itself cannot reconstruct from its wire-format args.
+def build-dry-run-record [method: string, url: string, auth: record, content_type: string, timeout: duration, meta?: record]: nothing -> record {
+  let m = ($meta | default {})
+  {
+    dry_run: true
+    method: $method
+    url: $url
+    query: ($m | get -o query | default {})
+    headers: $auth.headers
+    body: ($m | get -o body)
+    content_type: $content_type
+    timeout: $timeout
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+}
+
 # Execute HTTP request with method dispatch
-def do-request [method: string, url: string, auth: record, insecure: bool, raw: bool, dry_run: bool, max_time?: duration, allow_errors?: bool, full?: bool, content_type?: string, body?: any]: nothing -> any {
+def do-request [method: string, url: string, auth: record, insecure: bool, raw: bool, dry_run: bool, max_time?: duration, allow_errors?: bool, full?: bool, content_type?: string, body?: any, dry_run_meta?: record]: nothing -> any {
   let req_url = if ($auth.query | is-not-empty) { if ($url | str contains "?") { $"($url)&($auth.query)" } else { $"($url)?($auth.query)" } } else { $url }
   let timeout = ($max_time | default 30min)
   let ct = ($content_type | default "application/json")
-  if $dry_run { return {method: $method, url: $req_url, headers: $auth.headers, query_string: $auth.query, content_type: $ct, timeout: $timeout, body: $body} }
+  if $dry_run { return (build-dry-run-record $method $req_url $auth $ct $timeout $dry_run_meta) }
   let resp = match $method {
     "get" => { http get --headers $auth.headers --full --allow-errors --max-time $timeout --insecure=$insecure --raw=$raw $req_url }
-    "head" => { http head --headers $auth.headers --max-time $timeout --insecure=$insecure $req_url }
-    "options" => { http options --headers $auth.headers --max-time $timeout --insecure=$insecure $req_url }
+    "head" => { http head --headers $auth.headers --full --allow-errors --max-time $timeout --insecure=$insecure $req_url }
+    "options" => { http options --headers $auth.headers --full --allow-errors --max-time $timeout --insecure=$insecure $req_url }
     "post" => { if ($body | is-empty) { http post --headers $auth.headers --full --allow-errors --max-time $timeout --insecure=$insecure --raw=$raw $req_url "" } else { http post --headers $auth.headers --content-type $ct --full --allow-errors --max-time $timeout --insecure=$insecure --raw=$raw $req_url $body } }
     "put" => { if ($body | is-empty) { http put --headers $auth.headers --full --allow-errors --max-time $timeout --insecure=$insecure --raw=$raw $req_url "" } else { http put --headers $auth.headers --content-type $ct --full --allow-errors --max-time $timeout --insecure=$insecure --raw=$raw $req_url $body } }
     "patch" => { if ($body | is-empty) { http patch --headers $auth.headers --full --allow-errors --max-time $timeout --insecure=$insecure --raw=$raw $req_url "" } else { http patch --headers $auth.headers --content-type $ct --full --allow-errors --max-time $timeout --insecure=$insecure --raw=$raw $req_url $body } }
     "delete" => { if ($body | is-empty) { http delete --headers $auth.headers --full --allow-errors --max-time $timeout --insecure=$insecure --raw=$raw $req_url } else { http delete --headers $auth.headers --content-type $ct --data $body --full --allow-errors --max-time $timeout --insecure=$insecure --raw=$raw $req_url } }
   }
-  if ($method in ["head" "options"]) { return $resp }
+  if ($method == "head") and (not $full) and (not $allow_errors) and $resp.status < 400 { return $resp.headers }
   if $allow_errors { $resp } else if $resp.status >= 400 { error make --unspanned { msg: $"HTTP ($resp.status): ($resp.body)" } } else if $full { {status: $resp.status, headers: $resp.headers, body: $resp.body} } else if $resp.status == 204 { null } else { $resp.body }
 }
 
@@ -163,7 +185,7 @@ export def "oauth-access-token get" [
   let full_url = (build-url $base "/oauth/access_token" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"oauth_consumer_key": $oauth_consumer_key, "oauth_nonce": $oauth_nonce, "oauth_timestamp": $oauth_timestamp, "oauth_signature_method": $oauth_signature_method, "oauth_version": $oauth_version, "oauth_signature": $oauth_signature, "oauth_verifier": $oauth_verifier, "oauth_token": $oauth_token} | compact), body: null}
 }
 
 # Returns an oauth token and oauth token secret
@@ -194,7 +216,7 @@ export def "oauth-request-token get" [
   let full_url = (build-url $base "/oauth/request_token" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"oauth_consumer_key": $oauth_consumer_key, "oauth_nonce": $oauth_nonce, "oauth_timestamp": $oauth_timestamp, "oauth_signature_method": $oauth_signature_method, "oauth_version": $oauth_version, "oauth_signature": $oauth_signature, "oauth_callback": $oauth_callback} | compact), body: null}
 }
 
 # Returns next and previous favorites for a photo in a user's favorites
@@ -221,7 +243,7 @@ export def "rest-methodflickr-favorites-get-context get" [
   let full_url = (build-url $base "/rest?method=flickr.favorites.getContext" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"api_key": $api_key, "photo_id": $photo_id, "user_id": $user_id} | compact), body: null}
 }
 
 # Returns a list of the user's favorite photos. Only photos which the calling user has permission to see are returned.
@@ -251,7 +273,7 @@ export def "rest-methodflickr-favorites-get-list get-by-person" [
   let full_url = (build-url $base "/rest?method=flickr.favorites.getList" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"api_key": $api_key, "user_id": $user_id, "min_fave_date": $min_fave_date, "max_fave_date": $max_fave_date, "page": $page, "per_page": $per_page} | compact), body: null}
 }
 
 # Returns a list of photos in a gallery.
@@ -277,7 +299,7 @@ export def "rest-methodflickr-galleries-get-photos get-gallery" [
   let full_url = (build-url $base "/rest?method=flickr.galleries.getPhotos" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"api_key": $api_key, "gallery_id": $gallery_id} | compact), body: null}
 }
 
 # Get information on a group topic reply
@@ -305,7 +327,7 @@ export def "rest-methodflickr-groups-discuss-replies-get-info get-topic" [
   let full_url = (build-url $base "/rest?method=flickr.groups.discuss.replies.getInfo" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"api_key": $api_key, "group_id": $group_id, "topic_id": $topic_id, "reply_id": $reply_id} | compact), body: null}
 }
 
 # Get information about a group discussion topic
@@ -332,7 +354,7 @@ export def "rest-methodflickr-groups-discuss-topics-get-info get" [
   let full_url = (build-url $base "/rest?method=flickr.groups.discuss.topics.getInfo" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"api_key": $api_key, "group_id": $group_id, "topic_id": $topic_id} | compact), body: null}
 }
 
 # Get a list of discussion topics in a group.
@@ -360,7 +382,7 @@ export def "rest-methodflickr-groups-discuss-topics-get-list get-discussions" [
   let full_url = (build-url $base "/rest?method=flickr.groups.discuss.topics.getList" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"api_key": $api_key, "group_id": $group_id, "page": $page, "per_page": $per_page} | compact), body: null}
 }
 
 # Get information about a group
@@ -388,7 +410,7 @@ export def "rest-methodflickr-groups-get-info get" [
   let full_url = (build-url $base "/rest?method=flickr.groups.getInfo" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"api_key": $api_key, "group_id": $group_id, "group_path_alias": $group_path_alias, "lang": $lang} | compact), body: null}
 }
 
 # Returns next and previous photos for a photo in a group pool
@@ -414,7 +436,7 @@ export def "rest-methodflickr-groups-pools-get-context get" [
   let full_url = (build-url $base "/rest?method=flickr.groups.pools.getContext" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"api_key": $api_key, "photo_id": $photo_id, "group_id": $group_id} | compact), body: null}
 }
 
 # Returns a list of pool photos for a given group
@@ -440,7 +462,7 @@ export def "rest-methodflickr-groups-pools-get-photos get" [
   let full_url = (build-url $base "/rest?method=flickr.groups.pools.getPhotos" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"api_key": $api_key, "group_id": $group_id} | compact), body: null}
 }
 
 # Returns a person
@@ -466,7 +488,7 @@ export def "rest-methodflickr-people-get-info get-person" [
   let full_url = (build-url $base "/rest?method=flickr.people.getInfo" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"api_key": $api_key, "user_id": $user_id} | compact), body: null}
 }
 
 # Return photos from the given user's photostream
@@ -501,7 +523,7 @@ export def "rest-methodflickr-people-get-photos get-media-by-person" [
   let full_url = (build-url $base "/rest?method=flickr.people.getPhotos" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"api_key": $api_key, "user_id": $user_id, "safe_search": $safe_search, "min_upload_date": $min_upload_date, "max_upload_date": $max_upload_date, "min_taken_date": $min_taken_date, "max_taken_date": $max_taken_date, "content_type": $content_type, "privacy_filter": $privacy_filter, "page": $page, "per_page": $per_page} | compact), body: null}
 }
 
 # Returns next and previous photos in a photo list
@@ -528,7 +550,7 @@ export def "rest-methodflickr-photolist-get-context get" [
   let full_url = (build-url $base "/rest?method=flickr.photolist.getContext" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"api_key": $api_key, "photo_id": $photo_id, "photolist_id": $photolist_id} | compact), body: null}
 }
 
 # Returns next and previous photos for a photo in a photostream
@@ -554,7 +576,7 @@ export def "rest-methodflickr-photos-get-context get-photostream" [
   let full_url = (build-url $base "/rest?method=flickr.photos.getContext" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"api_key": $api_key, "photo_id": $photo_id} | compact), body: null}
 }
 
 # Retrieves a list of EXIF/TIFF/GPS tags for a given photo. The calling user must have permission to view the photo.
@@ -581,7 +603,7 @@ export def "rest-methodflickr-photos-get-exif get" [
   let full_url = (build-url $base "/rest?method=flickr.photos.getExif" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"api_key": $api_key, "photo_id": $photo_id, "secret": $secret} | compact), body: null}
 }
 
 # Returns a photo
@@ -607,7 +629,7 @@ export def "rest-methodflickr-photos-get-info get" [
   let full_url = (build-url $base "/rest?method=flickr.photos.getInfo" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"api_key": $api_key, "photo_id": $photo_id} | compact), body: null}
 }
 
 # Returns photo sizes
@@ -633,7 +655,7 @@ export def "rest-methodflickr-photos-get-sizes get" [
   let full_url = (build-url $base "/rest?method=flickr.photos.getSizes" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"api_key": $api_key, "photo_id": $photo_id} | compact), body: null}
 }
 
 # Fetches a list of available photo licenses for Flickr
@@ -658,7 +680,7 @@ export def "rest-methodflickr-photos-licenses-get-info get" [
   let full_url = (build-url $base "/rest?method=flickr.photos.licenses.getInfo" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"api_key": $api_key} | compact), body: null}
 }
 
 # Return a list of photos matching some criteria.
@@ -715,7 +737,7 @@ export def "rest-methodflickr-photos-search get-media" [
   let full_url = (build-url $base "/rest?method=flickr.photos.search" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"api_key": $api_key, "text": $text, "tags": $tags, "user_id": $user_id, "min_upload_date": $min_upload_date, "max_upload_date": $max_upload_date, "min_taken_date": $min_taken_date, "max_taken_date": $max_taken_date, "license": $license, "sort": $qp_sort, "privacy_filter": $privacy_filter, "bbox": $bbox, "accuracy": $accuracy, "safe_search": $safe_search, "content_type": $content_type, "machine_tags": $machine_tags, "machine_tag_mode": $machine_tag_mode, "group_id": $group_id, "contacts": $contacts, "woe_id": $woe_id, "place_id": $place_id, "media": $media, "has_geo": $has_geo, "geo_context": $geo_context, "lat": $lat, "lon": $lon, "radius": $radius, "radius_units": $radius_units, "is_commons": $is_commons, "in_gallery": $in_gallery, "is_getty": $is_getty, "per_page": $per_page, "page": $page} | compact), body: null}
 }
 
 # Returns next and previous photos for a photo in a set
@@ -742,7 +764,7 @@ export def "rest-methodflickr-photosets-get-context get-album" [
   let full_url = (build-url $base "/rest?method=flickr.photosets.getContext" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"api_key": $api_key, "photo_id": $photo_id, "photoset_id": $photoset_id} | compact), body: null}
 }
 
 # Returns the albums belonging to the specified user
@@ -770,7 +792,7 @@ export def "rest-methodflickr-photosets-get-list get-albums-by-person" [
   let full_url = (build-url $base "/rest?method=flickr.photosets.getList" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"api_key": $api_key, "user_id": $user_id, "page": $page, "per_page": $per_page} | compact), body: null}
 }
 
 # Returns a list of photos in an album.
@@ -796,7 +818,7 @@ export def "rest-methodflickr-photosets-get-photos get-album" [
   let full_url = (build-url $base "/rest?method=flickr.photosets.getPhotos" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"api_key": $api_key, "photoset_id": $photoset_id} | compact), body: null}
 }
 
 # Echos the input parameters back in the response
@@ -822,7 +844,7 @@ export def "rest-methodflickr-test-echo get" [
   let full_url = (build-url $base "/rest?method=flickr.test.echo" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"api_key": $api_key, "echo": $echo} | compact), body: null}
 }
 
 # Uploads a new photo to Flickr
@@ -861,5 +883,5 @@ export def "upload upload-photo" [
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let req_body = if ($req_body | describe | str starts-with "record") { $req_body } else { {} }
   let mp = (build-multipart-body $req_body ["photo"] $dry_run)
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full $mp.content_type $mp.body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full $mp.content_type $mp.body {query: {}, body: $req_body}
 }

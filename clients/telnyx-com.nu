@@ -3,17 +3,18 @@
 # Auth: --token flag or $env.TELNYX_API_TOKEN
 
 const BASE_URL = "https://api.telnyx.com/v2"
-const DEFAULT_AUTH = "bearer"
 
-# Build auth: returns {headers: record, query: string}
+# Build auth: returns {scheme: string, headers: record, query: string, location: string}.
+# `location` is "header" | "query" | "cookie" | "none" and tells dry-run callers
+# where the token went without inspecting headers/query themselves.
 def build-auth [token?: string, auth_scheme?: string]: nothing -> record {
   let token_val = if ($token != null) and ($token | is-not-empty) { $token } else { $env | get -o TELNYX_API_TOKEN | default "" }
   let scheme = ($auth_scheme | default "bearer")
-  if ($scheme == "none") or ($token_val | is-empty) { return {headers: {}, query: ""} }
+  if ($scheme == "none") or ($token_val | is-empty) { return {scheme: $scheme, headers: {}, query: "", location: "none"} }
   match $scheme {
-    "bearer" => { {headers: {Authorization: $"Bearer ($token_val)"}, query: ""} }
-    "none" => { {headers: {}, query: ""} }
-    _ => { {headers: {Authorization: $"Bearer ($token_val)"}, query: ""} }
+    "bearer" => { {scheme: $scheme, headers: {Authorization: $"Bearer ($token_val)"}, query: "", location: "header"} }
+    "none" => { {scheme: $scheme, headers: {}, query: "", location: "none"} }
+    _ => { {scheme: $scheme, headers: {Authorization: $"Bearer ($token_val)"}, query: "", location: "header"} }
   }
 }
 
@@ -22,8 +23,9 @@ def build-auth [token?: string, auth_scheme?: string]: nothing -> record {
 # ([A-Za-z0-9-._~]) stay literal; everything else gets %XX.
 def serialize-qp [name: string, value: any, style: string]: nothing -> list<string> {
   if ($value == null) { return [] }
-  let n = (encode-path-segment $name)
   let is_list = ($value | describe | str starts-with "list")
+  if $is_list and ($value | is-empty) { return [] }
+  let n = (encode-path-segment $name)
   if ($value | describe | str starts-with "record") { return ($value | transpose k v | each { $"($n)[(encode-path-segment $in.k)]=(encode-path-segment $in.v)" }) }
   if not $is_list { return [$"($n)=(encode-path-segment $value)"] }
   match $style {
@@ -54,22 +56,42 @@ def build-url [base: string, path: string, query?: string]: nothing -> string {
   if ($query != null) and ($query | is-not-empty) { $result | upsert query $query | url join } else { $result | url join }
 }
 
+# Build the dry-run record returned by --dry-run. Shape:
+#   {dry_run: true, method, url, query: <record>, headers, body, content_type, timeout,
+#    auth: {scheme, location}}
+# `meta` carries logical-form data (the query record by spec name, the pre-serialization
+# body) that do-request itself cannot reconstruct from its wire-format args.
+def build-dry-run-record [method: string, url: string, auth: record, content_type: string, timeout: duration, meta?: record]: nothing -> record {
+  let m = ($meta | default {})
+  {
+    dry_run: true
+    method: $method
+    url: $url
+    query: ($m | get -o query | default {})
+    headers: $auth.headers
+    body: ($m | get -o body)
+    content_type: $content_type
+    timeout: $timeout
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+}
+
 # Execute HTTP request with method dispatch
-def do-request [method: string, url: string, auth: record, insecure: bool, raw: bool, dry_run: bool, max_time?: duration, allow_errors?: bool, full?: bool, content_type?: string, body?: any]: nothing -> any {
+def do-request [method: string, url: string, auth: record, insecure: bool, raw: bool, dry_run: bool, max_time?: duration, allow_errors?: bool, full?: bool, content_type?: string, body?: any, dry_run_meta?: record]: nothing -> any {
   let req_url = if ($auth.query | is-not-empty) { if ($url | str contains "?") { $"($url)&($auth.query)" } else { $"($url)?($auth.query)" } } else { $url }
   let timeout = ($max_time | default 30min)
   let ct = ($content_type | default "application/json")
-  if $dry_run { return {method: $method, url: $req_url, headers: $auth.headers, query_string: $auth.query, content_type: $ct, timeout: $timeout, body: $body} }
+  if $dry_run { return (build-dry-run-record $method $req_url $auth $ct $timeout $dry_run_meta) }
   let resp = match $method {
     "get" => { http get --headers $auth.headers --full --allow-errors --max-time $timeout --insecure=$insecure --raw=$raw $req_url }
-    "head" => { http head --headers $auth.headers --max-time $timeout --insecure=$insecure $req_url }
-    "options" => { http options --headers $auth.headers --max-time $timeout --insecure=$insecure $req_url }
+    "head" => { http head --headers $auth.headers --full --allow-errors --max-time $timeout --insecure=$insecure $req_url }
+    "options" => { http options --headers $auth.headers --full --allow-errors --max-time $timeout --insecure=$insecure $req_url }
     "post" => { if ($body | is-empty) { http post --headers $auth.headers --full --allow-errors --max-time $timeout --insecure=$insecure --raw=$raw $req_url "" } else { http post --headers $auth.headers --content-type $ct --full --allow-errors --max-time $timeout --insecure=$insecure --raw=$raw $req_url $body } }
     "put" => { if ($body | is-empty) { http put --headers $auth.headers --full --allow-errors --max-time $timeout --insecure=$insecure --raw=$raw $req_url "" } else { http put --headers $auth.headers --content-type $ct --full --allow-errors --max-time $timeout --insecure=$insecure --raw=$raw $req_url $body } }
     "patch" => { if ($body | is-empty) { http patch --headers $auth.headers --full --allow-errors --max-time $timeout --insecure=$insecure --raw=$raw $req_url "" } else { http patch --headers $auth.headers --content-type $ct --full --allow-errors --max-time $timeout --insecure=$insecure --raw=$raw $req_url $body } }
     "delete" => { if ($body | is-empty) { http delete --headers $auth.headers --full --allow-errors --max-time $timeout --insecure=$insecure --raw=$raw $req_url } else { http delete --headers $auth.headers --content-type $ct --data $body --full --allow-errors --max-time $timeout --insecure=$insecure --raw=$raw $req_url } }
   }
-  if ($method in ["head" "options"]) { return $resp }
+  if ($method == "head") and (not $full) and (not $allow_errors) and $resp.status < 400 { return $resp.headers }
   if $allow_errors { $resp } else if $resp.status >= 400 { error make --unspanned { msg: $"HTTP ($resp.status): ($resp.body)" } } else if $full { {status: $resp.status, headers: $resp.headers, body: $resp.body} } else if $resp.status == 204 { null } else { $resp.body }
 }
 
@@ -232,7 +254,7 @@ export def "actions-bulk-telephony-credentials delete" [
   let full_url = (build-url $base "/actions/bulk/telephony_credentials" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"filter[tag]": $filter_tag} | compact), body: null}
 }
 
 # Update several credentials
@@ -264,7 +286,7 @@ export def "actions-bulk-telephony-credentials update" [
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "patch" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body
+  do-request "patch" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: ({"filter[tag]": $filter_tag} | compact), body: $req_body}
 }
 
 # Creates several credentials
@@ -294,7 +316,7 @@ export def "actions-bulk-telephony-credentials create" [
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: {}, body: $req_body}
 }
 
 # Bulk Network Preferences for SIM cards
@@ -323,7 +345,7 @@ export def "actions-network-preferences-sim-cards update-bulk" [
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: {}, body: $req_body}
 }
 
 # Register SIM cards
@@ -353,7 +375,7 @@ export def "actions-register-sim-cards create" [
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: {}, body: $req_body}
 }
 
 # Perform activate or deactivate action on all credentials filtered by the provided tag.
@@ -375,11 +397,12 @@ export def "actions-telephony-credentials create-bulk" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($action | is-empty) { error make --unspanned { msg: "path parameter 'action' must be non-empty" } }
   let qp = [(serialize-qp "filter[tag]" $filter_tag "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({action: (encode-path-segment $action)} | format pattern "/actions/{action}/telephony_credentials") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"filter[tag]": $filter_tag} | compact), body: null}
 }
 
 # List all addresses
@@ -411,7 +434,7 @@ export def "addresses find-addresss" [
   let full_url = (build-url $base "/addresses" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"page[number]": $page_number, "page[size]": $page_size, "filter[customer_reference][eq]": $filter_customer_reference_eq, "filter[customer_reference][contains]": $filter_customer_reference_contains, "filter[used_as_emergency]": $filter_used_as_emergency, "filter[street_address][contains]": $filter_street_address_contains, "filter[address_book][eq]": $filter_address_book_eq, "sort": $qp_sort} | compact), body: null}
 }
 
 # Creates an address
@@ -452,7 +475,7 @@ export def "addresses create-address" [
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: {}, body: $req_body}
 }
 
 # Validate an address
@@ -484,7 +507,7 @@ export def "addresses-actions-validate validate-address" [
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: {}, body: $req_body}
 }
 
 # Deletes an address
@@ -505,10 +528,11 @@ export def "addresses delete-address" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
   let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/addresses/{id}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
 }
 
 # Retrieve an address
@@ -529,10 +553,11 @@ export def "addresses get-address" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
   let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/addresses/{id}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
 }
 
 # List all SSO authentication providers
@@ -559,7 +584,7 @@ export def "authentication-providers find" [
   let full_url = (build-url $base "/authentication_providers" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"page[number]": $page_number, "page[size]": $page_size, "sort": $qp_sort} | compact), body: null}
 }
 
 # Creates an authentication provider
@@ -591,7 +616,7 @@ export def "authentication-providers create" [
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: {}, body: $req_body}
 }
 
 # Deletes an authentication provider
@@ -612,10 +637,11 @@ export def "authentication-providers delete" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
   let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/authentication_providers/{id}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
 }
 
 # Retrieve an authentication provider
@@ -636,10 +662,11 @@ export def "authentication-providers get" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
   let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/authentication_providers/{id}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
 }
 
 # Update a authentication provider
@@ -667,12 +694,13 @@ export def "authentication-providers update" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
   let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/authentication_providers/{id}"))
   let req_body = {"active": $active, "name": $name, "settings": $settings, "settings_url": $settings_url, "short_name": $short_name} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "patch" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body
+  do-request "patch" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: {}, body: $req_body}
 }
 
 # List available phone number blocks
@@ -708,7 +736,7 @@ export def "available-phone-number-blocks list" [
   let full_url = (build-url $base "/available_phone_number_blocks" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"filter[phone_number][starts_with]": $filter_phone_number_starts_with, "filter[phone_number][ends_with]": $filter_phone_number_ends_with, "filter[phone_number][contains]": $filter_phone_number_contains, "filter[locality]": $filter_locality, "filter[administrative_area]": $filter_administrative_area, "filter[country_code]": $filter_country_code, "filter[national_destination_code]": $filter_national_destination_code, "filter[rate_center]": $filter_rate_center, "filter[number_type]": $filter_number_type, "filter[features]": $filter_features, "filter[minimum_block_size]": $filter_minimum_block_size, "filter[limit]": $filter_limit} | compact), body: null}
 }
 
 # List available phone numbers
@@ -747,7 +775,7 @@ export def "available-phone-numbers list" [
   let full_url = (build-url $base "/available_phone_numbers" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"filter[phone_number][starts_with]": $filter_phone_number_starts_with, "filter[phone_number][ends_with]": $filter_phone_number_ends_with, "filter[phone_number][contains]": $filter_phone_number_contains, "filter[locality]": $filter_locality, "filter[administrative_area]": $filter_administrative_area, "filter[country_code]": $filter_country_code, "filter[national_destination_code]": $filter_national_destination_code, "filter[rate_center]": $filter_rate_center, "filter[number_type]": $filter_number_type, "filter[features]": $filter_features, "filter[limit]": $filter_limit, "filter[best_effort]": $filter_best_effort, "filter[quickship]": $filter_quickship, "filter[reservable]": $filter_reservable, "filter[exclude_held_numbers]": $filter_exclude_held_numbers} | compact), body: null}
 }
 
 # Retrieve user balance details
@@ -770,7 +798,7 @@ export def "balance get-user" [
   let full_url = (build-url $base "/balance")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
 }
 
 # List all billing groups
@@ -796,7 +824,7 @@ export def "billing-groups list" [
   let full_url = (build-url $base "/billing_groups" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"page[number]": $page_number, "page[size]": $page_size} | compact), body: null}
 }
 
 # Create a billing group
@@ -823,7 +851,7 @@ export def "billing-groups create" [
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: {}, body: $req_body}
 }
 
 # Delete a billing group
@@ -844,10 +872,11 @@ export def "billing-groups delete" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
   let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/billing_groups/{id}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
 }
 
 # Retrieve a billing group
@@ -868,10 +897,11 @@ export def "billing-groups get" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
   let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/billing_groups/{id}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
 }
 
 # Update a billing group
@@ -894,12 +924,13 @@ export def "billing-groups update" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
   let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/billing_groups/{id}"))
   let req_body = {"name": $name} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "patch" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body
+  do-request "patch" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: {}, body: $req_body}
 }
 
 # List call control applications
@@ -928,7 +959,7 @@ export def "call-control-applications list" [
   let full_url = (build-url $base "/call_control_applications" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"page[number]": $page_number, "page[size]": $page_size, "filter[application_name][contains]": $filter_application_name_contains, "filter[outbound_voice_profile_id]": $filter_outbound_voice_profile_id, "sort": $qp_sort} | compact), body: null}
 }
 
 # Create a call control application
@@ -968,7 +999,7 @@ export def "call-control-applications create" [
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: {}, body: $req_body}
 }
 
 # Delete a call control application
@@ -989,10 +1020,11 @@ export def "call-control-applications delete" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
   let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/call_control_applications/{id}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
 }
 
 # Retrieve a call control application
@@ -1013,10 +1045,11 @@ export def "call-control-applications get" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
   let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/call_control_applications/{id}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
 }
 
 # Update a call control application
@@ -1052,12 +1085,13 @@ export def "call-control-applications update" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
   let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/call_control_applications/{id}"))
   let req_body = {"active": $active, "anchorsite_override": $anchorsite_override, "application_name": $application_name, "dtmf_type": $dtmf_type, "first_command_timeout": $first_command_timeout, "first_command_timeout_secs": $first_command_timeout_secs, "inbound": $inbound, "outbound": $outbound, "webhook_api_version": $webhook_api_version, "webhook_event_failover_url": $webhook_event_failover_url, "webhook_event_url": $webhook_event_url, "webhook_timeout_secs": $webhook_timeout_secs} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "patch" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body
+  do-request "patch" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: {}, body: $req_body}
 }
 
 # List call events
@@ -1092,7 +1126,7 @@ export def "call-events list" [
   let full_url = (build-url $base "/call_events" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"filter[call_leg_id]": $filter_call_leg_id, "filter[call_session_id]": $filter_call_session_id, "filter[status]": $filter_status, "filter[type]": $filter_type, "filter[event_timestamp][gt]": $filter_event_timestamp_gt, "filter[event_timestamp][gte]": $filter_event_timestamp_gte, "filter[event_timestamp][lt]": $filter_event_timestamp_lt, "filter[event_timestamp][lte]": $filter_event_timestamp_lte, "filter[event_timestamp][eq]": $filter_event_timestamp_eq, "page[number]": $page_number, "page[size]": $page_size} | compact), body: null}
 }
 
 # Dial
@@ -1139,7 +1173,7 @@ export def "calls create-dial" [
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: {}, body: $req_body}
 }
 
 # Retrieve a call status
@@ -1160,10 +1194,11 @@ export def "calls get-status" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($call_control_id | is-empty) { error make --unspanned { msg: "path parameter 'call_control_id' must be non-empty" } }
   let full_url = (build-url $base ({call_control_id: (encode-path-segment $call_control_id)} | format pattern "/calls/{call_control_id}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
 }
 
 # Answer call
@@ -1190,12 +1225,13 @@ export def "calls-actions-answer create" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($call_control_id | is-empty) { error make --unspanned { msg: "path parameter 'call_control_id' must be non-empty" } }
   let full_url = (build-url $base ({call_control_id: (encode-path-segment $call_control_id)} | format pattern "/calls/{call_control_id}/actions/answer"))
   let req_body = {"billing_group_id": $billing_group_id, "client_state": $client_state, "command_id": $command_id, "webhook_url": $webhook_url, "webhook_url_method": $webhook_url_method} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: {}, body: $req_body}
 }
 
 # Bridge calls
@@ -1222,12 +1258,13 @@ export def "calls-actions-bridge create" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($call_control_id | is-empty) { error make --unspanned { msg: "path parameter 'call_control_id' must be non-empty" } }
   let full_url = (build-url $base ({call_control_id: (encode-path-segment $call_control_id)} | format pattern "/calls/{call_control_id}/actions/bridge"))
   let req_body = {"call_control_id": $body_call_control_id, "client_state": $client_state, "command_id": $command_id, "park_after_unbridge": $park_after_unbridge, "queue": $queue} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: {}, body: $req_body}
 }
 
 # Enqueue call
@@ -1254,12 +1291,13 @@ export def "calls-actions-enqueue create" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($call_control_id | is-empty) { error make --unspanned { msg: "path parameter 'call_control_id' must be non-empty" } }
   let full_url = (build-url $base ({call_control_id: (encode-path-segment $call_control_id)} | format pattern "/calls/{call_control_id}/actions/enqueue"))
   let req_body = {"client_state": $client_state, "command_id": $command_id, "max_size": $max_size, "max_wait_time_secs": $max_wait_time_secs, "queue_name": $queue_name} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: {}, body: $req_body}
 }
 
 # Forking start
@@ -1287,12 +1325,13 @@ export def "calls-actions-fork-start start" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($call_control_id | is-empty) { error make --unspanned { msg: "path parameter 'call_control_id' must be non-empty" } }
   let full_url = (build-url $base ({call_control_id: (encode-path-segment $call_control_id)} | format pattern "/calls/{call_control_id}/actions/fork_start"))
   let req_body = {"client_state": $client_state, "command_id": $command_id, "rx": $rx, "stream_type": $stream_type, "target": $target, "tx": $tx} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: {}, body: $req_body}
 }
 
 # Forking stop
@@ -1316,12 +1355,13 @@ export def "calls-actions-fork-stop stop" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($call_control_id | is-empty) { error make --unspanned { msg: "path parameter 'call_control_id' must be non-empty" } }
   let full_url = (build-url $base ({call_control_id: (encode-path-segment $call_control_id)} | format pattern "/calls/{call_control_id}/actions/fork_stop"))
   let req_body = {"client_state": $client_state, "command_id": $command_id} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: {}, body: $req_body}
 }
 
 # Gather stop
@@ -1345,12 +1385,13 @@ export def "calls-actions-gather-stop stop" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($call_control_id | is-empty) { error make --unspanned { msg: "path parameter 'call_control_id' must be non-empty" } }
   let full_url = (build-url $base ({call_control_id: (encode-path-segment $call_control_id)} | format pattern "/calls/{call_control_id}/actions/gather_stop"))
   let req_body = {"client_state": $client_state, "command_id": $command_id} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: {}, body: $req_body}
 }
 
 # Gather using audio
@@ -1385,12 +1426,13 @@ export def "calls-actions-gather-using-audio create" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($call_control_id | is-empty) { error make --unspanned { msg: "path parameter 'call_control_id' must be non-empty" } }
   let full_url = (build-url $base ({call_control_id: (encode-path-segment $call_control_id)} | format pattern "/calls/{call_control_id}/actions/gather_using_audio"))
   let req_body = {"audio_url": $audio_url, "client_state": $client_state, "command_id": $command_id, "inter_digit_timeout_millis": $inter_digit_timeout_millis, "invalid_audio_url": $invalid_audio_url, "invalid_media_name": $invalid_media_name, "maximum_digits": $maximum_digits, "maximum_tries": $maximum_tries, "media_name": $media_name, "minimum_digits": $minimum_digits, "terminating_digit": $terminating_digit, "timeout_millis": $timeout_millis, "valid_digits": $valid_digits} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: {}, body: $req_body}
 }
 
 # Gather using speak
@@ -1427,12 +1469,13 @@ export def "calls-actions-gather-using-speak create" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($call_control_id | is-empty) { error make --unspanned { msg: "path parameter 'call_control_id' must be non-empty" } }
   let full_url = (build-url $base ({call_control_id: (encode-path-segment $call_control_id)} | format pattern "/calls/{call_control_id}/actions/gather_using_speak"))
   let req_body = {"client_state": $client_state, "command_id": $command_id, "inter_digit_timeout_millis": $inter_digit_timeout_millis, "invalid_payload": $invalid_payload, "language": $language, "maximum_digits": $maximum_digits, "maximum_tries": $maximum_tries, "minimum_digits": $minimum_digits, "payload": $payload, "payload_type": $payload_type, "service_level": $service_level, "terminating_digit": $terminating_digit, "timeout_millis": $timeout_millis, "valid_digits": $valid_digits, "voice": $voice} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: {}, body: $req_body}
 }
 
 # Hangup call
@@ -1456,12 +1499,13 @@ export def "calls-actions-hangup create" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($call_control_id | is-empty) { error make --unspanned { msg: "path parameter 'call_control_id' must be non-empty" } }
   let full_url = (build-url $base ({call_control_id: (encode-path-segment $call_control_id)} | format pattern "/calls/{call_control_id}/actions/hangup"))
   let req_body = {"client_state": $client_state, "command_id": $command_id} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: {}, body: $req_body}
 }
 
 # Remove call from a queue
@@ -1485,12 +1529,13 @@ export def "calls-actions-leave-queue create" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($call_control_id | is-empty) { error make --unspanned { msg: "path parameter 'call_control_id' must be non-empty" } }
   let full_url = (build-url $base ({call_control_id: (encode-path-segment $call_control_id)} | format pattern "/calls/{call_control_id}/actions/leave_queue"))
   let req_body = {"client_state": $client_state, "command_id": $command_id} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: {}, body: $req_body}
 }
 
 # Play audio URL
@@ -1520,12 +1565,13 @@ export def "calls-actions-playback-start start" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($call_control_id | is-empty) { error make --unspanned { msg: "path parameter 'call_control_id' must be non-empty" } }
   let full_url = (build-url $base ({call_control_id: (encode-path-segment $call_control_id)} | format pattern "/calls/{call_control_id}/actions/playback_start"))
   let req_body = {"audio_url": $audio_url, "client_state": $client_state, "command_id": $command_id, "loop": $body_loop, "media_name": $media_name, "overlay": $body_overlay, "stop": $stop, "target_legs": $target_legs} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: {}, body: $req_body}
 }
 
 # Stop audio playback
@@ -1550,12 +1596,13 @@ export def "calls-actions-playback-stop stop" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($call_control_id | is-empty) { error make --unspanned { msg: "path parameter 'call_control_id' must be non-empty" } }
   let full_url = (build-url $base ({call_control_id: (encode-path-segment $call_control_id)} | format pattern "/calls/{call_control_id}/actions/playback_stop"))
   let req_body = {"client_state": $client_state, "command_id": $command_id, "stop": $stop} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: {}, body: $req_body}
 }
 
 # Record pause
@@ -1579,12 +1626,13 @@ export def "calls-actions-record-pause pause" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($call_control_id | is-empty) { error make --unspanned { msg: "path parameter 'call_control_id' must be non-empty" } }
   let full_url = (build-url $base ({call_control_id: (encode-path-segment $call_control_id)} | format pattern "/calls/{call_control_id}/actions/record_pause"))
   let req_body = {"client_state": $client_state, "command_id": $command_id} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: {}, body: $req_body}
 }
 
 # Record resume
@@ -1608,12 +1656,13 @@ export def "calls-actions-record-resume create" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($call_control_id | is-empty) { error make --unspanned { msg: "path parameter 'call_control_id' must be non-empty" } }
   let full_url = (build-url $base ({call_control_id: (encode-path-segment $call_control_id)} | format pattern "/calls/{call_control_id}/actions/record_resume"))
   let req_body = {"client_state": $client_state, "command_id": $command_id} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: {}, body: $req_body}
 }
 
 # Recording start
@@ -1641,12 +1690,13 @@ export def "calls-actions-record-start start" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($call_control_id | is-empty) { error make --unspanned { msg: "path parameter 'call_control_id' must be non-empty" } }
   let full_url = (build-url $base ({call_control_id: (encode-path-segment $call_control_id)} | format pattern "/calls/{call_control_id}/actions/record_start"))
   let req_body = {"channels": $channels, "client_state": $client_state, "command_id": $command_id, "format": $format, "max_length": $max_length, "play_beep": $play_beep} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: {}, body: $req_body}
 }
 
 # Recording stop
@@ -1670,12 +1720,13 @@ export def "calls-actions-record-stop stop" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($call_control_id | is-empty) { error make --unspanned { msg: "path parameter 'call_control_id' must be non-empty" } }
   let full_url = (build-url $base ({call_control_id: (encode-path-segment $call_control_id)} | format pattern "/calls/{call_control_id}/actions/record_stop"))
   let req_body = {"client_state": $client_state, "command_id": $command_id} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: {}, body: $req_body}
 }
 
 # SIP Refer a call
@@ -1704,12 +1755,13 @@ export def "calls-actions-refer create" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($call_control_id | is-empty) { error make --unspanned { msg: "path parameter 'call_control_id' must be non-empty" } }
   let full_url = (build-url $base ({call_control_id: (encode-path-segment $call_control_id)} | format pattern "/calls/{call_control_id}/actions/refer"))
   let req_body = {"client_state": $client_state, "command_id": $command_id, "custom_headers": $custom_headers, "sip_address": $sip_address, "sip_auth_password": $sip_auth_password, "sip_auth_username": $sip_auth_username} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: {}, body: $req_body}
 }
 
 # Reject a call
@@ -1734,12 +1786,13 @@ export def "calls-actions-reject reject" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($call_control_id | is-empty) { error make --unspanned { msg: "path parameter 'call_control_id' must be non-empty" } }
   let full_url = (build-url $base ({call_control_id: (encode-path-segment $call_control_id)} | format pattern "/calls/{call_control_id}/actions/reject"))
   let req_body = {"cause": $cause, "client_state": $client_state, "command_id": $command_id} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: {}, body: $req_body}
 }
 
 # Send DTMF
@@ -1765,12 +1818,13 @@ export def "calls-actions-send-dtmf send" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($call_control_id | is-empty) { error make --unspanned { msg: "path parameter 'call_control_id' must be non-empty" } }
   let full_url = (build-url $base ({call_control_id: (encode-path-segment $call_control_id)} | format pattern "/calls/{call_control_id}/actions/send_dtmf"))
   let req_body = {"client_state": $client_state, "command_id": $command_id, "digits": $digits, "duration_millis": $duration_millis} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: {}, body: $req_body}
 }
 
 # Speak text
@@ -1800,12 +1854,13 @@ export def "calls-actions-speak create" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($call_control_id | is-empty) { error make --unspanned { msg: "path parameter 'call_control_id' must be non-empty" } }
   let full_url = (build-url $base ({call_control_id: (encode-path-segment $call_control_id)} | format pattern "/calls/{call_control_id}/actions/speak"))
   let req_body = {"client_state": $client_state, "command_id": $command_id, "language": $language, "payload": $payload, "payload_type": $payload_type, "service_level": $service_level, "stop": $stop, "voice": $voice} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: {}, body: $req_body}
 }
 
 # Transcription start
@@ -1830,12 +1885,13 @@ export def "calls-actions-transcription-start start" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($call_control_id | is-empty) { error make --unspanned { msg: "path parameter 'call_control_id' must be non-empty" } }
   let full_url = (build-url $base ({call_control_id: (encode-path-segment $call_control_id)} | format pattern "/calls/{call_control_id}/actions/transcription_start"))
   let req_body = {"client_state": $client_state, "command_id": $command_id, "language": $language} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: {}, body: $req_body}
 }
 
 # Transcription stop
@@ -1859,12 +1915,13 @@ export def "calls-actions-transcription-stop stop" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($call_control_id | is-empty) { error make --unspanned { msg: "path parameter 'call_control_id' must be non-empty" } }
   let full_url = (build-url $base ({call_control_id: (encode-path-segment $call_control_id)} | format pattern "/calls/{call_control_id}/actions/transcription_stop"))
   let req_body = {"client_state": $client_state, "command_id": $command_id} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: {}, body: $req_body}
 }
 
 # Transfer call
@@ -1905,12 +1962,13 @@ export def "calls-actions-transfer create" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($call_control_id | is-empty) { error make --unspanned { msg: "path parameter 'call_control_id' must be non-empty" } }
   let full_url = (build-url $base ({call_control_id: (encode-path-segment $call_control_id)} | format pattern "/calls/{call_control_id}/actions/transfer"))
   let req_body = {"answering_machine_detection": $answering_machine_detection, "answering_machine_detection_config": $answering_machine_detection_config, "audio_url": $audio_url, "client_state": $client_state, "command_id": $command_id, "custom_headers": $custom_headers, "from": $body_from, "from_display_name": $from_display_name, "media_name": $media_name, "sip_auth_password": $sip_auth_password, "sip_auth_username": $sip_auth_username, "target_leg_client_state": $target_leg_client_state, "time_limit_secs": $time_limit_secs, "timeout_secs": $timeout_secs, "to": $body_to, "webhook_url": $webhook_url, "webhook_url_method": $webhook_url_method} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: {}, body: $req_body}
 }
 
 # Retrieve all comments
@@ -1936,7 +1994,7 @@ export def "comments list" [
   let full_url = (build-url $base "/comments" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"filter[comment_record_type]": $filter_comment_record_type, "filter[comment_record_id]": $filter_comment_record_id} | compact), body: null}
 }
 
 # Create a comment
@@ -1965,7 +2023,7 @@ export def "comments create" [
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: {}, body: $req_body}
 }
 
 # Retrieve a comment
@@ -1986,10 +2044,11 @@ export def "comments get" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
   let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/comments/{id}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
 }
 
 # Mark a comment as read
@@ -2010,10 +2069,11 @@ export def "comments-read get-mark" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
   let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/comments/{id}/read"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "patch" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "patch" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
 }
 
 # List conferences
@@ -2040,7 +2100,7 @@ export def "conferences list" [
   let full_url = (build-url $base "/conferences" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"filter[name]": $filter_name, "page[number]": $page_number, "page[size]": $page_size} | compact), body: null}
 }
 
 # Create conference
@@ -2076,7 +2136,7 @@ export def "conferences create" [
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: {}, body: $req_body}
 }
 
 # List conference participants
@@ -2102,11 +2162,12 @@ export def "conferences-participants list" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($conference_id | is-empty) { error make --unspanned { msg: "path parameter 'conference_id' must be non-empty" } }
   let qp = [(serialize-qp "filter[muted]" $filter_muted "scalar") (serialize-qp "filter[on_hold]" $filter_on_hold "scalar") (serialize-qp "filter[whispering]" $filter_whispering "scalar") (serialize-qp "page[number]" $page_number "scalar") (serialize-qp "page[size]" $page_size "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({conference_id: (encode-path-segment $conference_id)} | format pattern "/conferences/{conference_id}/participants") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"filter[muted]": $filter_muted, "filter[on_hold]": $filter_on_hold, "filter[whispering]": $filter_whispering, "page[number]": $page_number, "page[size]": $page_size} | compact), body: null}
 }
 
 # Retrieve a conference
@@ -2127,10 +2188,11 @@ export def "conferences get" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
   let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/conferences/{id}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
 }
 
 # Dial a new participant into a conference
@@ -2164,12 +2226,13 @@ export def "conferences-actions-dial-participant create" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
   let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/conferences/{id}/actions/dial_participant"))
   let req_body = {"call_control_id": $call_control_id, "client_state": $client_state, "command_id": $command_id, "from": $body_from, "hold": $hold, "hold_audio_url": $hold_audio_url, "hold_media_name": $hold_media_name, "mute": $mute, "start_conference_on_enter": $start_conference_on_enter, "supervisor_role": $supervisor_role, "to": $body_to, "whisper_call_control_ids": $whisper_call_control_ids} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: {}, body: $req_body}
 }
 
 # Hold conference participants
@@ -2194,12 +2257,13 @@ export def "conferences-actions-hold create-participants" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
   let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/conferences/{id}/actions/hold"))
   let req_body = {"audio_url": $audio_url, "call_control_ids": $call_control_ids, "media_name": $media_name} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: {}, body: $req_body}
 }
 
 # Join a conference
@@ -2234,12 +2298,13 @@ export def "conferences-actions-join create" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
   let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/conferences/{id}/actions/join"))
   let req_body = {"beep_enabled": $beep_enabled, "call_control_id": $call_control_id, "client_state": $client_state, "command_id": $command_id, "end_conference_on_exit": $end_conference_on_exit, "hold": $hold, "hold_audio_url": $hold_audio_url, "hold_media_name": $hold_media_name, "mute": $mute, "soft_end_conference_on_exit": $soft_end_conference_on_exit, "start_conference_on_enter": $start_conference_on_enter, "supervisor_role": $supervisor_role, "whisper_call_control_ids": $whisper_call_control_ids} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: {}, body: $req_body}
 }
 
 # Leave a conference
@@ -2264,12 +2329,13 @@ export def "conferences-actions-leave create" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
   let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/conferences/{id}/actions/leave"))
   let req_body = {"beep_enabled": $beep_enabled, "call_control_id": $call_control_id, "command_id": $command_id} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: {}, body: $req_body}
 }
 
 # Mute conference participants
@@ -2292,12 +2358,13 @@ export def "conferences-actions-mute create-participants" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
   let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/conferences/{id}/actions/mute"))
   let req_body = {"call_control_ids": $call_control_ids} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: {}, body: $req_body}
 }
 
 # Play audio to conference participants
@@ -2323,12 +2390,13 @@ export def "conferences-actions-play create-audio" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
   let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/conferences/{id}/actions/play"))
   let req_body = {"audio_url": $audio_url, "call_control_ids": $call_control_ids, "loop": $body_loop, "media_name": $media_name} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: {}, body: $req_body}
 }
 
 # Conference recording start
@@ -2356,12 +2424,13 @@ export def "conferences-actions-record-start start-recording" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
   let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/conferences/{id}/actions/record_start"))
   let req_body = {"channels": $channels, "client_state": $client_state, "command_id": $command_id, "format": $format, "max_length": $max_length, "play_beep": $play_beep} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: {}, body: $req_body}
 }
 
 # Conference recording stop
@@ -2385,12 +2454,13 @@ export def "conferences-actions-record-stop stop-recording" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
   let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/conferences/{id}/actions/record_stop"))
   let req_body = {"client_state": $client_state, "command_id": $command_id} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: {}, body: $req_body}
 }
 
 # Speak text to conference participants
@@ -2418,12 +2488,13 @@ export def "conferences-actions-speak create-text" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
   let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/conferences/{id}/actions/speak"))
   let req_body = {"call_control_ids": $call_control_ids, "command_id": $command_id, "language": $language, "payload": $payload, "payload_type": $payload_type, "voice": $voice} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: {}, body: $req_body}
 }
 
 # Stop audio being played on the conference
@@ -2446,12 +2517,13 @@ export def "conferences-actions-stop stop-audio" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
   let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/conferences/{id}/actions/stop"))
   let req_body = {"call_control_ids": $call_control_ids} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: {}, body: $req_body}
 }
 
 # Unhold conference participants
@@ -2474,12 +2546,13 @@ export def "conferences-actions-unhold create-participants" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
   let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/conferences/{id}/actions/unhold"))
   let req_body = {"call_control_ids": $call_control_ids} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: {}, body: $req_body}
 }
 
 # Unmute conference participants
@@ -2502,12 +2575,13 @@ export def "conferences-actions-unmute create-participants" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
   let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/conferences/{id}/actions/unmute"))
   let req_body = {"call_control_ids": $call_control_ids} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: {}, body: $req_body}
 }
 
 # Update conference participant
@@ -2533,12 +2607,13 @@ export def "conferences-actions-update update" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
   let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/conferences/{id}/actions/update"))
   let req_body = {"call_control_id": $call_control_id, "command_id": $command_id, "supervisor_role": $supervisor_role, "whisper_call_control_ids": $whisper_call_control_ids} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: {}, body: $req_body}
 }
 
 # List connections
@@ -2567,7 +2642,7 @@ export def "connections list" [
   let full_url = (build-url $base "/connections" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"page[number]": $page_number, "page[size]": $page_size, "filter[connection_name][contains]": $filter_connection_name_contains, "filter[outbound_voice_profile_id]": $filter_outbound_voice_profile_id, "sort": $qp_sort} | compact), body: null}
 }
 
 # Retrieve a connection
@@ -2588,10 +2663,11 @@ export def "connections get" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
   let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/connections/{id}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
 }
 
 # List credential connections
@@ -2620,7 +2696,7 @@ export def "credential-connections list" [
   let full_url = (build-url $base "/credential_connections" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"page[number]": $page_number, "page[size]": $page_size, "filter[connection_name][contains]": $filter_connection_name_contains, "filter[outbound.outbound_voice_profile_id]": $filter_outbound_outbound_voice_profile_id, "sort": $qp_sort} | compact), body: null}
 }
 
 # Create a credential connection
@@ -2667,7 +2743,7 @@ export def "credential-connections create" [
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: {}, body: $req_body}
 }
 
 # Delete a credential connection
@@ -2688,10 +2764,11 @@ export def "credential-connections delete" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
   let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/credential_connections/{id}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
 }
 
 # Retrieve a credential connection
@@ -2712,10 +2789,11 @@ export def "credential-connections get" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
   let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/credential_connections/{id}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
 }
 
 # Update a credential connection
@@ -2758,12 +2836,13 @@ export def "credential-connections update" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
   let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/credential_connections/{id}"))
   let req_body = {"active": $active, "anchorsite_override": $anchorsite_override, "connection_name": $connection_name, "default_on_hold_comfort_noise_enabled": $default_on_hold_comfort_noise_enabled, "dtmf_type": $dtmf_type, "encode_contact_header_enabled": $encode_contact_header_enabled, "encrypted_media": $encrypted_media, "inbound": $inbound, "onnet_t38_passthrough_enabled": $onnet_t38_passthrough_enabled, "outbound": $outbound, "password": $password, "rtcp_settings": $rtcp_settings, "sip_uri_calling_preference": $sip_uri_calling_preference, "user_name": $user_name, "webhook_api_version": $webhook_api_version, "webhook_event_failover_url": $webhook_event_failover_url, "webhook_event_url": $webhook_event_url, "webhook_timeout_secs": $webhook_timeout_secs} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "patch" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body
+  do-request "patch" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: {}, body: $req_body}
 }
 
 # Search detail records
@@ -2793,7 +2872,7 @@ export def "detail-records list" [
   let full_url = (build-url $base "/detail_records" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"filter[record_type]": $filter_record_type, "filter[date_range]": $filter_date_range, "filter": $filter, "page[number]": $page_number, "page[size]": $page_size, "sort": $qp_sort} | compact), body: null}
 }
 
 # List all document links
@@ -2822,7 +2901,7 @@ export def "document-links list" [
   let full_url = (build-url $base "/document_links" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"page[number]": $page_number, "page[size]": $page_size, "filter[document_id]": $filter_document_id, "filter[linked_record_type]": $filter_linked_record_type, "filter[linked_resource_id]": $filter_linked_resource_id} | compact), body: null}
 }
 
 # List all documents
@@ -2848,7 +2927,7 @@ export def "documents list" [
   let full_url = (build-url $base "/documents" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"page[number]": $page_number, "page[size]": $page_size} | compact), body: null}
 }
 
 # Upload a document
@@ -2876,7 +2955,7 @@ export def "documents create" [
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: {}, body: $req_body}
 }
 
 # Delete a document
@@ -2897,10 +2976,11 @@ export def "documents delete" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
   let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/documents/{id}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
 }
 
 # Retrieve a document
@@ -2921,10 +3001,11 @@ export def "documents get" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
   let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/documents/{id}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
 }
 
 # Update a document
@@ -2947,12 +3028,13 @@ export def "documents update" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
   let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/documents/{id}"))
   let req_body = {"filename": $filename} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "patch" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body
+  do-request "patch" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: {}, body: $req_body}
 }
 
 # Download a document
@@ -2973,10 +3055,11 @@ export def "documents-download download-doc-service" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
   let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/documents/{id}/download"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
 }
 
 # List all Fax Applications
@@ -3005,7 +3088,7 @@ export def "fax-applications list" [
   let full_url = (build-url $base "/fax_applications" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"page[number]": $page_number, "page[size]": $page_size, "filter[application_name][contains]": $filter_application_name_contains, "filter[outbound_voice_profile_id]": $filter_outbound_voice_profile_id, "sort": $qp_sort} | compact), body: null}
 }
 
 # Creates a Fax Application
@@ -3041,7 +3124,7 @@ export def "fax-applications create" [
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: {}, body: $req_body}
 }
 
 # Deletes a Fax Application
@@ -3062,10 +3145,11 @@ export def "fax-applications delete" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
   let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/fax_applications/{id}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
 }
 
 # Retrieve a Fax Application
@@ -3086,10 +3170,11 @@ export def "fax-applications get" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
   let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/fax_applications/{id}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
 }
 
 # Update a Fax Application
@@ -3121,12 +3206,13 @@ export def "fax-applications update" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
   let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/fax_applications/{id}"))
   let req_body = {"active": $active, "anchorsite_override": $anchorsite_override, "application_name": $application_name, "inbound": $inbound, "outbound": $outbound, "webhook_event_failover_url": $webhook_event_failover_url, "webhook_event_url": $webhook_event_url, "webhook_timeout_secs": $webhook_timeout_secs} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "patch" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body
+  do-request "patch" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: {}, body: $req_body}
 }
 
 # View a list of faxes
@@ -3158,7 +3244,7 @@ export def "faxes list" [
   let full_url = (build-url $base "/faxes" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"filter[created_at][gte]": $filter_created_at_gte, "filter[created_at][gt]": $filter_created_at_gt, "filter[created_at][lte]": $filter_created_at_lte, "filter[created_at][lt]": $filter_created_at_lt, "filter[direction][eq]": $filter_direction_eq, "filter[from][eq]": $filter_from_eq, "page[size]": $page_size, "page[number]": $page_number} | compact), body: null}
 }
 
 # Send a fax
@@ -3191,7 +3277,7 @@ export def "faxes send-fax" [
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: {}, body: $req_body}
 }
 
 # Delete a fax
@@ -3212,10 +3298,11 @@ export def "faxes delete-fax" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
   let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/faxes/{id}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
 }
 
 # View a fax
@@ -3236,10 +3323,11 @@ export def "faxes get-view-fax" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
   let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/faxes/{id}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
 }
 
 # Refresh a fax
@@ -3260,10 +3348,11 @@ export def "faxes-actions-refresh refresh-fax" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
   let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/faxes/{id}/actions/refresh"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
 }
 
 # List FQDN connections
@@ -3291,7 +3380,7 @@ export def "fqdn-connections list" [
   let full_url = (build-url $base "/fqdn_connections" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"page[number]": $page_number, "page[size]": $page_size, "filter[connection_name][contains]": $filter_connection_name_contains, "sort": $qp_sort} | compact), body: null}
 }
 
 # Create an FQDN connection
@@ -3334,7 +3423,7 @@ export def "fqdn-connections create" [
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: {}, body: $req_body}
 }
 
 # Delete an FQDN connection
@@ -3355,10 +3444,11 @@ export def "fqdn-connections delete" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
   let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/fqdn_connections/{id}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
 }
 
 # Retrieve an FQDN connection
@@ -3379,10 +3469,11 @@ export def "fqdn-connections get" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
   let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/fqdn_connections/{id}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
 }
 
 # Update an FQDN connection
@@ -3421,12 +3512,13 @@ export def "fqdn-connections update" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
   let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/fqdn_connections/{id}"))
   let req_body = {"active": $active, "anchorsite_override": $anchorsite_override, "connection_name": $connection_name, "default_on_hold_comfort_noise_enabled": $default_on_hold_comfort_noise_enabled, "dtmf_type": $dtmf_type, "encode_contact_header_enabled": $encode_contact_header_enabled, "encrypted_media": $encrypted_media, "inbound": $inbound, "onnet_t38_passthrough_enabled": $onnet_t38_passthrough_enabled, "rtcp_settings": $rtcp_settings, "transport_protocol": $transport_protocol, "webhook_api_version": $webhook_api_version, "webhook_event_failover_url": $webhook_event_failover_url, "webhook_event_url": $webhook_event_url, "webhook_timeout_secs": $webhook_timeout_secs} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "patch" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body
+  do-request "patch" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: {}, body: $req_body}
 }
 
 # List FQDNs
@@ -3456,7 +3548,7 @@ export def "fqdns list" [
   let full_url = (build-url $base "/fqdns" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"page[number]": $page_number, "page[size]": $page_size, "filter[connection_id]": $filter_connection_id, "filter[fqdn]": $filter_fqdn, "filter[port]": $filter_port, "filter[dns_record_type]": $filter_dns_record_type} | compact), body: null}
 }
 
 # Create an FQDN
@@ -3486,7 +3578,7 @@ export def "fqdns create" [
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: {}, body: $req_body}
 }
 
 # Delete an FQDN
@@ -3507,10 +3599,11 @@ export def "fqdns delete" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
   let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/fqdns/{id}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
 }
 
 # Retrieve an FQDN
@@ -3531,10 +3624,11 @@ export def "fqdns get" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
   let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/fqdns/{id}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
 }
 
 # Update an FQDN
@@ -3560,12 +3654,13 @@ export def "fqdns update" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
   let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/fqdns/{id}"))
   let req_body = {"connection_id": $connection_id, "dns_record_type": $dns_record_type, "fqdn": $fqdn, "port": $port} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "patch" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body
+  do-request "patch" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: {}, body: $req_body}
 }
 
 # Create an inventory coverage request
@@ -3597,7 +3692,7 @@ export def "inventory-coverage create-request" [
   let full_url = (build-url $base "/inventory_coverage" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"filter[npa]": $filter_npa, "filter[nxx]": $filter_nxx, "filter[administrative_area]": $filter_administrative_area, "filter[number_type]": $filter_number_type, "filter[phone_number_type]": $filter_phone_number_type, "filter[country_code]": $filter_country_code, "filter[count]": $filter_count, "filter[groupBy]": $filter_group_by} | compact), body: null}
 }
 
 # List Ip connections
@@ -3626,7 +3721,7 @@ export def "ip-connections list" [
   let full_url = (build-url $base "/ip_connections" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"page[number]": $page_number, "page[size]": $page_size, "filter[connection_name][contains]": $filter_connection_name_contains, "filter[outbound.outbound_voice_profile_id]": $filter_outbound_outbound_voice_profile_id, "sort": $qp_sort} | compact), body: null}
 }
 
 # Create an Ip connection
@@ -3671,7 +3766,7 @@ export def "ip-connections create" [
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: {}, body: $req_body}
 }
 
 # Delete an Ip connection
@@ -3692,10 +3787,11 @@ export def "ip-connections delete" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
   let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/ip_connections/{id}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
 }
 
 # Retrieve an Ip connection
@@ -3716,10 +3812,11 @@ export def "ip-connections get" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
   let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/ip_connections/{id}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
 }
 
 # Update an Ip connection
@@ -3760,12 +3857,13 @@ export def "ip-connections update" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
   let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/ip_connections/{id}"))
   let req_body = {"active": $active, "anchorsite_override": $anchorsite_override, "connection_name": $connection_name, "default_on_hold_comfort_noise_enabled": $default_on_hold_comfort_noise_enabled, "dtmf_type": $dtmf_type, "encode_contact_header_enabled": $encode_contact_header_enabled, "encrypted_media": $encrypted_media, "inbound": $inbound, "onnet_t38_passthrough_enabled": $onnet_t38_passthrough_enabled, "outbound": $outbound, "rtcp_settings": $rtcp_settings, "transport_protocol": $transport_protocol, "webhook_api_version": $webhook_api_version, "webhook_event_failover_url": $webhook_event_failover_url, "webhook_event_url": $webhook_event_url, "webhook_timeout_secs": $webhook_timeout_secs} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "patch" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body
+  do-request "patch" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: {}, body: $req_body}
 }
 
 # List Ips
@@ -3794,7 +3892,7 @@ export def "ips list" [
   let full_url = (build-url $base "/ips" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"page[number]": $page_number, "page[size]": $page_size, "filter[connection_id]": $filter_connection_id, "filter[ip_address]": $filter_ip_address, "filter[port]": $filter_port} | compact), body: null}
 }
 
 # Create an Ip
@@ -3823,7 +3921,7 @@ export def "ips create" [
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: {}, body: $req_body}
 }
 
 # Delete an Ip
@@ -3844,10 +3942,11 @@ export def "ips delete" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
   let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/ips/{id}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
 }
 
 # Retrieve an Ip
@@ -3868,10 +3967,11 @@ export def "ips get" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
   let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/ips/{id}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
 }
 
 # Update an Ip
@@ -3896,12 +3996,13 @@ export def "ips update" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
   let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/ips/{id}"))
   let req_body = {"connection_id": $connection_id, "ip_address": $ip_address, "port": $port} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "patch" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body
+  do-request "patch" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: {}, body: $req_body}
 }
 
 # Create a ledger billing group report
@@ -3929,7 +4030,7 @@ export def "ledger-billing-group-reports create" [
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: {}, body: $req_body}
 }
 
 # Retrieve a ledger billing group report
@@ -3950,10 +4051,11 @@ export def "ledger-billing-group-reports get" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
   let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/ledger_billing_group_reports/{id}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
 }
 
 # Lists accounts managed by the current user.
@@ -3982,7 +4084,7 @@ export def "managed-accounts list" [
   let full_url = (build-url $base "/managed_accounts" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"page[number]": $page_number, "page[size]": $page_size, "filter[email][contains]": $filter_email_contains, "filter[email][eq]": $filter_email_eq, "sort": $qp_sort} | compact), body: null}
 }
 
 # Create a new managed account.
@@ -4011,7 +4113,7 @@ export def "managed-accounts create" [
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: {}, body: $req_body}
 }
 
 # Retrieve a managed account
@@ -4032,10 +4134,11 @@ export def "managed-accounts get" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
   let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/managed_accounts/{id}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
 }
 
 # Disables a managed account
@@ -4056,10 +4159,11 @@ export def "managed-accounts-actions-disable disable" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
   let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/managed_accounts/{id}/actions/disable"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
 }
 
 # Enables a managed account
@@ -4080,10 +4184,11 @@ export def "managed-accounts-actions-enable enable" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
   let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/managed_accounts/{id}/actions/enable"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
 }
 
 # List uploaded media
@@ -4106,7 +4211,7 @@ export def "media list" [
   let full_url = (build-url $base "/media")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
 }
 
 # Upload media
@@ -4135,7 +4240,7 @@ export def "media create" [
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: {}, body: $req_body}
 }
 
 # Deletes stored media
@@ -4156,10 +4261,11 @@ export def "media delete" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($media_name | is-empty) { error make --unspanned { msg: "path parameter 'media_name' must be non-empty" } }
   let full_url = (build-url $base ({media_name: (encode-path-segment $media_name)} | format pattern "/media/{media_name}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
 }
 
 # Retrieve stored media
@@ -4180,10 +4286,11 @@ export def "media get" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($media_name | is-empty) { error make --unspanned { msg: "path parameter 'media_name' must be non-empty" } }
   let full_url = (build-url $base ({media_name: (encode-path-segment $media_name)} | format pattern "/media/{media_name}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
 }
 
 # Update stored media
@@ -4207,12 +4314,13 @@ export def "media update" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($media_name | is-empty) { error make --unspanned { msg: "path parameter 'media_name' must be non-empty" } }
   let full_url = (build-url $base ({media_name: (encode-path-segment $media_name)} | format pattern "/media/{media_name}"))
   let req_body = {"media_url": $media_url, "ttl_secs": $ttl_secs} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: {}, body: $req_body}
 }
 
 # Download stored media
@@ -4233,10 +4341,11 @@ export def "media-download download" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($media_name | is-empty) { error make --unspanned { msg: "path parameter 'media_name' must be non-empty" } }
   let full_url = (build-url $base ({media_name: (encode-path-segment $media_name)} | format pattern "/media/{media_name}/download"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
 }
 
 # Fetch messaging detail records.
@@ -4279,7 +4388,7 @@ export def "message-detail-records get-paginated-mdrs" [
   let full_url = (build-url $base "/message_detail_records" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"start_date": $start_date, "end_date": $end_date, "id": $id, "direction": $direction, "outbound_profile_id": $outbound_profile_id, "cld": $cld, "cli": $cli, "status": $status, "message_type": $message_type, "country_iso": $country_iso, "error": $qp_error, "normalized_carrier": $normalized_carrier, "tag": $tag, "mcc": $mcc, "mnc": $mnc, "product": $product, "page[number]": $page_number, "page[size]": $page_size, "sort": $qp_sort} | compact), body: null}
 }
 
 # Fetch message body by id.
@@ -4300,10 +4409,11 @@ export def "message-detail-records-message-body get-mdr" [
 ]: nothing -> record<data: record<message_body: string, record_type: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
   let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/message_detail_records/{id}/message_body"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
 }
 
 # Send a message
@@ -4340,7 +4450,7 @@ export def "messages create" [
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: {}, body: $req_body}
 }
 
 # Send a long code message
@@ -4376,7 +4486,7 @@ export def "messages-long-code create" [
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: {}, body: $req_body}
 }
 
 # Send a message using number pool
@@ -4412,7 +4522,7 @@ export def "messages-number-pool create" [
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: {}, body: $req_body}
 }
 
 # Send a short code message
@@ -4448,7 +4558,7 @@ export def "messages-short-code create" [
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: {}, body: $req_body}
 }
 
 # Retrieve a message
@@ -4469,10 +4579,11 @@ export def "messages get" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
   let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/messages/{id}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
 }
 
 # List messaging hosted number orders
@@ -4498,7 +4609,7 @@ export def "messaging-hosted-number-orders list" [
   let full_url = (build-url $base "/messaging_hosted_number_orders" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"page[number]": $page_number, "page[size]": $page_size} | compact), body: null}
 }
 
 # Create a messaging hosted number order
@@ -4526,7 +4637,7 @@ export def "messaging-hosted-number-orders create" [
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: {}, body: $req_body}
 }
 
 # Retrieve a messaging hosted number order
@@ -4547,10 +4658,11 @@ export def "messaging-hosted-number-orders get" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
   let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/messaging_hosted_number_orders/{id}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
 }
 
 # Upload file required for a messaging hosted number order
@@ -4574,6 +4686,7 @@ export def "messaging-hosted-number-orders-actions-file-upload upload" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
   let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/messaging_hosted_number_orders/{id}/actions/file_upload"))
   let req_body = {"bill": $bill, "loa": $loa} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
@@ -4581,7 +4694,7 @@ export def "messaging-hosted-number-orders-actions-file-upload upload" [
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let req_body = if ($req_body | describe | str starts-with "record") { $req_body } else { {} }
   let mp = (build-multipart-body $req_body ["bill" "loa"] $dry_run)
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full $mp.content_type $mp.body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full $mp.content_type $mp.body {query: {}, body: $req_body}
 }
 
 # Delete a messaging hosted number
@@ -4602,10 +4715,11 @@ export def "messaging-hosted-numbers delete" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
   let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/messaging_hosted_numbers/{id}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
 }
 
 # List messaging profile metrics
@@ -4633,7 +4747,7 @@ export def "messaging-profile-metrics list" [
   let full_url = (build-url $base "/messaging_profile_metrics" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"page[number]": $page_number, "page[size]": $page_size, "id": $id, "time_frame": $time_frame} | compact), body: null}
 }
 
 # List messaging profiles
@@ -4659,7 +4773,7 @@ export def "messaging-profiles list" [
   let full_url = (build-url $base "/messaging_profiles" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"page[number]": $page_number, "page[size]": $page_size} | compact), body: null}
 }
 
 # Create a messaging profile
@@ -4694,7 +4808,7 @@ export def "messaging-profiles create" [
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: {}, body: $req_body}
 }
 
 # Delete a messaging profile
@@ -4715,10 +4829,11 @@ export def "messaging-profiles delete" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
   let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/messaging_profiles/{id}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
 }
 
 # Retrieve a messaging profile
@@ -4739,10 +4854,11 @@ export def "messaging-profiles get" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
   let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/messaging_profiles/{id}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
 }
 
 # Update a messaging profile
@@ -4775,12 +4891,13 @@ export def "messaging-profiles update" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
   let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/messaging_profiles/{id}"))
   let req_body = {"enabled": $enabled, "name": $name, "number_pool_settings": $number_pool_settings, "url_shortener_settings": $url_shortener_settings, "v1_secret": $v1_secret, "webhook_api_version": $webhook_api_version, "webhook_failover_url": $webhook_failover_url, "webhook_url": $webhook_url, "whitelisted_destinations": $whitelisted_destinations} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "patch" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body
+  do-request "patch" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: {}, body: $req_body}
 }
 
 # Retrieve messaging profile metrics
@@ -4802,11 +4919,12 @@ export def "messaging-profiles-metrics get-detailed" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
   let qp = [(serialize-qp "time_frame" $time_frame "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/messaging_profiles/{id}/metrics") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"time_frame": $time_frame} | compact), body: null}
 }
 
 # List phone numbers associated with a messaging profile
@@ -4829,11 +4947,12 @@ export def "messaging-profiles-phone-numbers list" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
   let qp = [(serialize-qp "page[number]" $page_number "scalar") (serialize-qp "page[size]" $page_size "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/messaging_profiles/{id}/phone_numbers") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"page[number]": $page_number, "page[size]": $page_size} | compact), body: null}
 }
 
 # List short codes associated with a messaging profile
@@ -4856,11 +4975,12 @@ export def "messaging-profiles-short-codes list" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
   let qp = [(serialize-qp "page[number]" $page_number "scalar") (serialize-qp "page[size]" $page_size "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/messaging_profiles/{id}/short_codes") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"page[number]": $page_number, "page[size]": $page_size} | compact), body: null}
 }
 
 # List messaging URL domains
@@ -4886,7 +5006,7 @@ export def "messaging-url-domains list" [
   let full_url = (build-url $base "/messaging_url_domains" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"page[number]": $page_number, "page[size]": $page_size} | compact), body: null}
 }
 
 # List mobile operator networks
@@ -4919,7 +5039,7 @@ export def "mobile-operator-networks get" [
   let full_url = (build-url $base "/mobile_operator_networks" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"page[number]": $page_number, "page[size]": $page_size, "filter[name][starts_with]": $filter_name_starts_with, "filter[name][contains]": $filter_name_contains, "filter[name][ends_with]": $filter_name_ends_with, "filter[country_code]": $filter_country_code, "filter[mcc]": $filter_mcc, "filter[mnc]": $filter_mnc, "filter[tadig]": $filter_tadig} | compact), body: null}
 }
 
 # List notification channels
@@ -4946,7 +5066,7 @@ export def "notification-channels list" [
   let full_url = (build-url $base "/notification_channels" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"page[number]": $page_number, "page[size]": $page_size, "filter[channel_type_id][eq]": $filter_channel_type_id_eq} | compact), body: null}
 }
 
 # Create a notification channel
@@ -4975,7 +5095,7 @@ export def "notification-channels create" [
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: {}, body: $req_body}
 }
 
 # Delete a notification channel
@@ -4996,10 +5116,11 @@ export def "notification-channels delete" [
 ]: nothing -> record<data: record<channel_destination: string, channel_type_id: string, created_at: string, id: string, notification_profile_id: string, updated_at: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
   let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/notification_channels/{id}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
 }
 
 # Retrieve a notification channel
@@ -5020,10 +5141,11 @@ export def "notification-channels get" [
 ]: nothing -> record<data: record<channel_destination: string, channel_type_id: string, created_at: string, id: string, notification_profile_id: string, updated_at: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
   let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/notification_channels/{id}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
 }
 
 # Update a notification channel
@@ -5048,12 +5170,13 @@ export def "notification-channels update" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
   let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/notification_channels/{id}"))
   let req_body = {"channel_destination": $channel_destination, "channel_type_id": $channel_type_id, "notification_profile_id": $notification_profile_id} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "patch" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body
+  do-request "patch" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: {}, body: $req_body}
 }
 
 # List all Notifications Events Conditions
@@ -5080,7 +5203,7 @@ export def "notification-event-conditions find" [
   let full_url = (build-url $base "/notification_event_conditions" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"page[number]": $page_number, "page[size]": $page_size, "filter[associated_record_type][eq]": $filter_associated_record_type_eq} | compact), body: null}
 }
 
 # List all Notifications Events
@@ -5106,7 +5229,7 @@ export def "notification-events find" [
   let full_url = (build-url $base "/notification_events" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"page[number]": $page_number, "page[size]": $page_size} | compact), body: null}
 }
 
 # List all Notifications Profiles
@@ -5132,7 +5255,7 @@ export def "notification-profiles find" [
   let full_url = (build-url $base "/notification_profiles" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"page[number]": $page_number, "page[size]": $page_size} | compact), body: null}
 }
 
 # Create a notification profile
@@ -5159,7 +5282,7 @@ export def "notification-profiles create" [
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: {}, body: $req_body}
 }
 
 # Delete a notification profile
@@ -5180,10 +5303,11 @@ export def "notification-profiles delete" [
 ]: nothing -> record<data: record<created_at: string, id: string, name: string, updated_at: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
   let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/notification_profiles/{id}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
 }
 
 # Retrieve a notification profile
@@ -5204,10 +5328,11 @@ export def "notification-profiles get" [
 ]: nothing -> record<data: record<created_at: string, id: string, name: string, updated_at: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
   let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/notification_profiles/{id}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
 }
 
 # Update a notification profile
@@ -5230,12 +5355,13 @@ export def "notification-profiles update" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
   let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/notification_profiles/{id}"))
   let req_body = {"name": $name} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "patch" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body
+  do-request "patch" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: {}, body: $req_body}
 }
 
 # List notification settings
@@ -5266,7 +5392,7 @@ export def "notification-settings list" [
   let full_url = (build-url $base "/notification_settings" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"page[number]": $page_number, "page[size]": $page_size, "filter[notification_profile_id][eq]": $filter_notification_profile_id_eq, "filter[notification_channel][eq]": $filter_notification_channel_eq, "filter[notification_event_condition_id][eq]": $filter_notification_event_condition_id_eq, "filter[associated_record_type][eq]": $filter_associated_record_type_eq, "filter[status][eq]": $filter_status_eq} | compact), body: null}
 }
 
 # Add a Notification Setting
@@ -5297,7 +5423,7 @@ export def "notification-settings create" [
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: {}, body: $req_body}
 }
 
 # Delete a notification setting
@@ -5318,10 +5444,11 @@ export def "notification-settings delete" [
 ]: nothing -> record<data: record<associated_record_type: string, associated_record_type_value: string, created_at: string, id: string, notification_channel_id: string, notification_event_condition_id: string, notification_profile_id: string, parameters: list<record>, status: string, updated_at: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
   let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/notification_settings/{id}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
 }
 
 # Retrieve a notification setting
@@ -5342,10 +5469,11 @@ export def "notification-settings get" [
 ]: nothing -> record<data: record<associated_record_type: string, associated_record_type_value: string, created_at: string, id: string, notification_channel_id: string, notification_event_condition_id: string, notification_profile_id: string, parameters: list<record>, status: string, updated_at: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
   let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/notification_settings/{id}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
 }
 
 # List number block orders
@@ -5375,7 +5503,7 @@ export def "number-block-orders list" [
   let full_url = (build-url $base "/number_block_orders" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"filter[status]": $filter_status, "filter[created_at][gt]": $filter_created_at_gt, "filter[created_at][lt]": $filter_created_at_lt, "filter[phone_numbers.starting_number]": $filter_phone_numbers_starting_number, "page[number]": $page_number, "page[size]": $page_size} | compact), body: null}
 }
 
 # Create a number block order
@@ -5406,7 +5534,7 @@ export def "number-block-orders create" [
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: {}, body: $req_body}
 }
 
 # Retrieve a number block order
@@ -5427,10 +5555,11 @@ export def "number-block-orders get" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($number_block_order_id | is-empty) { error make --unspanned { msg: "path parameter 'number_block_order_id' must be non-empty" } }
   let full_url = (build-url $base ({number_block_order_id: (encode-path-segment $number_block_order_id)} | format pattern "/number_block_orders/{number_block_order_id}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
 }
 
 # Lookup phone number data
@@ -5452,11 +5581,12 @@ export def "number-lookup get" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($phone_number | is-empty) { error make --unspanned { msg: "path parameter 'phone_number' must be non-empty" } }
   let qp = [(serialize-qp "type" $type "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({phone_number: (encode-path-segment $phone_number)} | format pattern "/number_lookup/{phone_number}") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"type": $type} | compact), body: null}
 }
 
 # List number order documents
@@ -5485,7 +5615,7 @@ export def "number-order-documents list" [
   let full_url = (build-url $base "/number_order_documents" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"filter[requirement_id]": $filter_requirement_id, "filter[created_at][gt]": $filter_created_at_gt, "filter[created_at][lt]": $filter_created_at_lt, "page[number]": $page_number, "page[size]": $page_size} | compact), body: null}
 }
 
 # Create a number order document
@@ -5514,7 +5644,7 @@ export def "number-order-documents create" [
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: {}, body: $req_body}
 }
 
 # Retrieve a number order document
@@ -5535,10 +5665,11 @@ export def "number-order-documents get" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($number_order_document_id | is-empty) { error make --unspanned { msg: "path parameter 'number_order_document_id' must be non-empty" } }
   let full_url = (build-url $base ({number_order_document_id: (encode-path-segment $number_order_document_id)} | format pattern "/number_order_documents/{number_order_document_id}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
 }
 
 # Update a number order document
@@ -5563,12 +5694,13 @@ export def "number-order-documents update" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($number_order_document_id | is-empty) { error make --unspanned { msg: "path parameter 'number_order_document_id' must be non-empty" } }
   let full_url = (build-url $base ({number_order_document_id: (encode-path-segment $number_order_document_id)} | format pattern "/number_order_documents/{number_order_document_id}"))
   let req_body = {"customer_reference": $customer_reference, "file_id": $file_id, "requirements_id": $requirements_id} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "patch" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body
+  do-request "patch" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: {}, body: $req_body}
 }
 
 # Retrieve a list of phone numbers associated to orders
@@ -5591,7 +5723,7 @@ export def "number-order-phone-numbers list" [
   let full_url = (build-url $base "/number_order_phone_numbers")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
 }
 
 # Retrieve a number order phone number.
@@ -5612,10 +5744,11 @@ export def "number-order-phone-numbers get" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($number_order_phone_number_id | is-empty) { error make --unspanned { msg: "path parameter 'number_order_phone_number_id' must be non-empty" } }
   let full_url = (build-url $base ({number_order_phone_number_id: (encode-path-segment $number_order_phone_number_id)} | format pattern "/number_order_phone_numbers/{number_order_phone_number_id}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
 }
 
 # Update a number order phone number.
@@ -5639,12 +5772,13 @@ export def "number-order-phone-numbers update" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($number_order_phone_number_id | is-empty) { error make --unspanned { msg: "path parameter 'number_order_phone_number_id' must be non-empty" } }
   let full_url = (build-url $base ({number_order_phone_number_id: (encode-path-segment $number_order_phone_number_id)} | format pattern "/number_order_phone_numbers/{number_order_phone_number_id}"))
   let req_body = {"regulatory_requirements": $regulatory_requirements} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "patch" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body
+  do-request "patch" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: {}, body: $req_body}
 }
 
 # List number orders
@@ -5676,7 +5810,7 @@ export def "number-orders list" [
   let full_url = (build-url $base "/number_orders" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"filter[status]": $filter_status, "filter[created_at][gt]": $filter_created_at_gt, "filter[created_at][lt]": $filter_created_at_lt, "filter[phone_numbers_count]": $filter_phone_numbers_count, "filter[customer_reference]": $filter_customer_reference, "filter[requirements_met]": $filter_requirements_met, "page[number]": $page_number, "page[size]": $page_size} | compact), body: null}
 }
 
 # Create a number order
@@ -5708,7 +5842,7 @@ export def "number-orders create" [
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: {}, body: $req_body}
 }
 
 # Retrieve a number order
@@ -5729,10 +5863,11 @@ export def "number-orders get" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($number_order_id | is-empty) { error make --unspanned { msg: "path parameter 'number_order_id' must be non-empty" } }
   let full_url = (build-url $base ({number_order_id: (encode-path-segment $number_order_id)} | format pattern "/number_orders/{number_order_id}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
 }
 
 # Update a number order
@@ -5757,12 +5892,13 @@ export def "number-orders update" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($number_order_id | is-empty) { error make --unspanned { msg: "path parameter 'number_order_id' must be non-empty" } }
   let full_url = (build-url $base ({number_order_id: (encode-path-segment $number_order_id)} | format pattern "/number_orders/{number_order_id}"))
   let req_body = {"customer_reference": $customer_reference, "phone_numbers": $phone_numbers} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "patch" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body
+  do-request "patch" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: {}, body: $req_body}
 }
 
 # List number reservations
@@ -5793,7 +5929,7 @@ export def "number-reservations list" [
   let full_url = (build-url $base "/number_reservations" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"filter[status]": $filter_status, "filter[created_at][gt]": $filter_created_at_gt, "filter[created_at][lt]": $filter_created_at_lt, "filter[phone_numbers.phone_number]": $filter_phone_numbers_phone_number, "filter[customer_reference]": $filter_customer_reference, "page[number]": $page_number, "page[size]": $page_size} | compact), body: null}
 }
 
 # Create a number reservation
@@ -5822,7 +5958,7 @@ export def "number-reservations create" [
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: {}, body: $req_body}
 }
 
 # Retrieve a number reservation
@@ -5843,10 +5979,11 @@ export def "number-reservations get" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($number_reservation_id | is-empty) { error make --unspanned { msg: "path parameter 'number_reservation_id' must be non-empty" } }
   let full_url = (build-url $base ({number_reservation_id: (encode-path-segment $number_reservation_id)} | format pattern "/number_reservations/{number_reservation_id}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
 }
 
 # Extend a number reservation
@@ -5867,10 +6004,11 @@ export def "number-reservations-actions-extend create-expiry-time" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($number_reservation_id | is-empty) { error make --unspanned { msg: "path parameter 'number_reservation_id' must be non-empty" } }
   let full_url = (build-url $base ({number_reservation_id: (encode-path-segment $number_reservation_id)} | format pattern "/number_reservations/{number_reservation_id}/actions/extend"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
 }
 
 # List OTA updates
@@ -5899,7 +6037,7 @@ export def "ota-updates list" [
   let full_url = (build-url $base "/ota_updates" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"page[number]": $page_number, "page[size]": $page_size, "filter[status]": $filter_status, "filter[sim_card_id]": $filter_sim_card_id, "filter[type]": $filter_type} | compact), body: null}
 }
 
 # Get OTA update
@@ -5920,10 +6058,11 @@ export def "ota-updates get" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
   let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/ota_updates/{id}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
 }
 
 # Get all outbound voice profiles
@@ -5951,7 +6090,7 @@ export def "outbound-voice-profiles list" [
   let full_url = (build-url $base "/outbound_voice_profiles" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"page[number]": $page_number, "page[size]": $page_size, "filter[name][contains]": $filter_name_contains, "sort": $qp_sort} | compact), body: null}
 }
 
 # Create an outbound voice profile
@@ -5991,7 +6130,7 @@ export def "outbound-voice-profiles create" [
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: {}, body: $req_body}
 }
 
 # Delete an outbound voice profile
@@ -6012,10 +6151,11 @@ export def "outbound-voice-profiles delete" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
   let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/outbound_voice_profiles/{id}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
 }
 
 # Retrieve an outbound voice profile
@@ -6036,10 +6176,11 @@ export def "outbound-voice-profiles get" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
   let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/outbound_voice_profiles/{id}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
 }
 
 # Updates an existing outbound voice profile.
@@ -6075,12 +6216,13 @@ export def "outbound-voice-profiles update" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
   let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/outbound_voice_profiles/{id}"))
   let req_body = {"billing_group_id": $billing_group_id, "call_recording": $call_recording, "concurrent_call_limit": $concurrent_call_limit, "daily_spend_limit": $daily_spend_limit, "daily_spend_limit_enabled": $daily_spend_limit_enabled, "enabled": $enabled, "max_destination_rate": $max_destination_rate, "name": $name, "service_plan": $service_plan, "tags": $tags, "traffic_type": $traffic_type, "usage_payment_method": $usage_payment_method, "whitelisted_destinations": $whitelisted_destinations} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "patch" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body
+  do-request "patch" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: {}, body: $req_body}
 }
 
 # Lists the phone number blocks jobs
@@ -6109,7 +6251,7 @@ export def "phone-number-blocks-jobs list" [
   let full_url = (build-url $base "/phone_number_blocks/jobs" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"filter[type]": $filter_type, "filter[status]": $filter_status, "page[number]": $page_number, "page[size]": $page_size, "sort": $qp_sort} | compact), body: null}
 }
 
 # Deletes all numbers associated with a phone number block
@@ -6136,7 +6278,7 @@ export def "phone-number-blocks-jobs-delete-phone-number-block create" [
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: {}, body: $req_body}
 }
 
 # Retrieves a phone number blocks job
@@ -6157,10 +6299,11 @@ export def "phone-number-blocks-jobs get" [
 ]: nothing -> record<data: record<created_at: string, etc: string, failed_operations: list<record>, id: string, record_type: string, status: string, successful_operations: list<record>, type: string, updated_at: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
   let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/phone_number_blocks/jobs/{id}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
 }
 
 # List phone numbers
@@ -6198,7 +6341,7 @@ export def "phone-numbers list" [
   let full_url = (build-url $base "/phone_numbers" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"page[number]": $page_number, "page[size]": $page_size, "filter[tag]": $filter_tag, "filter[phone_number]": $filter_phone_number, "filter[status]": $filter_status, "filter[voice.connection_name][contains]": $filter_voice_connection_name_contains, "filter[voice.connection_name][starts_with]": $filter_voice_connection_name_starts_with, "filter[voice.connection_name][ends_with]": $filter_voice_connection_name_ends_with, "filter[voice.connection_name][eq]": $filter_voice_connection_name_eq, "filter[usage_payment_method]": $filter_usage_payment_method, "filter[billing_group_id]": $filter_billing_group_id, "filter[emergency_address_id]": $filter_emergency_address_id, "filter[customer_reference]": $filter_customer_reference, "sort": $qp_sort} | compact), body: null}
 }
 
 # List CSV downloads
@@ -6224,7 +6367,7 @@ export def "phone-numbers-csv-downloads list" [
   let full_url = (build-url $base "/phone_numbers/csv_downloads" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"page[number]": $page_number, "page[size]": $page_size} | compact), body: null}
 }
 
 # Create a CSV download
@@ -6247,7 +6390,7 @@ export def "phone-numbers-csv-downloads create" [
   let full_url = (build-url $base "/phone_numbers/csv_downloads")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
 }
 
 # Retrieve a CSV download
@@ -6268,10 +6411,11 @@ export def "phone-numbers-csv-downloads get" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
   let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/phone_numbers/csv_downloads/{id}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
 }
 
 # Retrieve your inbound channels
@@ -6294,7 +6438,7 @@ export def "phone-numbers-inbound-channels list-outbound" [
   let full_url = (build-url $base "/phone_numbers/inbound_channels")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
 }
 
 # Update inbound channels
@@ -6321,7 +6465,7 @@ export def "phone-numbers-inbound-channels update-outbound" [
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "patch" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body
+  do-request "patch" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: {}, body: $req_body}
 }
 
 # Lists the phone numbers jobs
@@ -6349,7 +6493,7 @@ export def "phone-numbers-jobs list" [
   let full_url = (build-url $base "/phone_numbers/jobs" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"filter[type]": $filter_type, "page[number]": $page_number, "page[size]": $page_size, "sort": $qp_sort} | compact), body: null}
 }
 
 # Delete a batch of numbers
@@ -6376,7 +6520,7 @@ export def "phone-numbers-jobs-delete-phone-numbers create" [
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: {}, body: $req_body}
 }
 
 # Update the emergency settings from a batch of numbers
@@ -6405,7 +6549,7 @@ export def "phone-numbers-jobs-update-emergency-settings create" [
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: {}, body: $req_body}
 }
 
 # Update a batch of numbers
@@ -6437,7 +6581,7 @@ export def "phone-numbers-jobs-update-phone-numbers create" [
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: {}, body: $req_body}
 }
 
 # Retrieve a phone numbers job
@@ -6458,10 +6602,11 @@ export def "phone-numbers-jobs get" [
 ]: nothing -> record<data: record<created_at: string, etc: string, failed_operations: list<record>, id: string, pending_operations: list<record>, record_type: string, status: string, successful_operations: list<record>, type: string, updated_at: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
   let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/phone_numbers/jobs/{id}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
 }
 
 # List phone numbers with messaging settings
@@ -6487,7 +6632,7 @@ export def "phone-numbers-messaging list-with-settings" [
   let full_url = (build-url $base "/phone_numbers/messaging" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"page[number]": $page_number, "page[size]": $page_size} | compact), body: null}
 }
 
 # List phone numbers with voice settings
@@ -6518,7 +6663,7 @@ export def "phone-numbers-voice list-with-settings" [
   let full_url = (build-url $base "/phone_numbers/voice" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"page[number]": $page_number, "page[size]": $page_size, "filter[phone_number]": $filter_phone_number, "filter[connection_name][contains]": $filter_connection_name_contains, "filter[customer_reference]": $filter_customer_reference, "filter[usage_payment_method]": $filter_usage_payment_method, "sort": $qp_sort} | compact), body: null}
 }
 
 # Delete a phone number
@@ -6539,10 +6684,11 @@ export def "phone-numbers delete" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
   let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/phone_numbers/{id}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
 }
 
 # Retrieve a phone number
@@ -6563,10 +6709,11 @@ export def "phone-numbers get" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
   let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/phone_numbers/{id}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
 }
 
 # Update a phone number
@@ -6594,12 +6741,13 @@ export def "phone-numbers update" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
   let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/phone_numbers/{id}"))
   let req_body = {"billing_group_id": $billing_group_id, "connection_id": $connection_id, "customer_reference": $customer_reference, "external_pin": $external_pin, "number_level_routing": $number_level_routing, "tags": $tags} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "patch" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body
+  do-request "patch" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: {}, body: $req_body}
 }
 
 # Enable emergency for a phone number
@@ -6623,12 +6771,13 @@ export def "phone-numbers-actions-enable-emergency enable" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
   let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/phone_numbers/{id}/actions/enable_emergency"))
   let req_body = {"emergency_address_id": $emergency_address_id, "emergency_enabled": $emergency_enabled} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: {}, body: $req_body}
 }
 
 # Retrieve a phone number with messaging settings
@@ -6649,10 +6798,11 @@ export def "phone-numbers-messaging get-with-settings" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
   let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/phone_numbers/{id}/messaging"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
 }
 
 # Update a phone number with messaging settings
@@ -6676,12 +6826,13 @@ export def "phone-numbers-messaging update-with-settings" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
   let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/phone_numbers/{id}/messaging"))
   let req_body = {"messaging_product": $messaging_product, "messaging_profile_id": $messaging_profile_id} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "patch" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body
+  do-request "patch" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: {}, body: $req_body}
 }
 
 # Retrieve a phone number with voice settings
@@ -6702,10 +6853,11 @@ export def "phone-numbers-voice get-with-settings" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
   let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/phone_numbers/{id}/voice"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
 }
 
 # Update a phone number with voice settings
@@ -6738,12 +6890,13 @@ export def "phone-numbers-voice update-with-settings" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
   let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/phone_numbers/{id}/voice"))
   let req_body = {"call_forwarding": $call_forwarding, "call_recording": $call_recording, "cnam_listing": $cnam_listing, "media_features": $media_features, "tech_prefix_enabled": $tech_prefix_enabled, "translated_number": $translated_number, "usage_payment_method": $usage_payment_method} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "patch" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body
+  do-request "patch" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: {}, body: $req_body}
 }
 
 # Run a portability check
@@ -6770,7 +6923,7 @@ export def "portability-checks create" [
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: {}, body: $req_body}
 }
 
 # List all porting orders
@@ -6808,7 +6961,7 @@ export def "porting-orders list" [
   let full_url = (build-url $base "/porting_orders" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"page[number]": $page_number, "page[size]": $page_size, "include_phone_numbers": $include_phone_numbers, "filter[status]": $filter_status, "filter[customer_reference]": $filter_customer_reference, "filter[phone_numbers][country_code]": $filter_phone_numbers_country_code, "filter[phone_numbers][carrier_name]": $filter_phone_numbers_carrier_name, "filter[misc][type]": $filter_misc_type, "filter[end_user][admin][entity_name]": $filter_end_user_admin_entity_name, "filter[end_user][admin][auth_person_name]": $filter_end_user_admin_auth_person_name, "filter[activation_settings][fast_port_eligible]": $filter_activation_settings_fast_port_eligible, "filter[activation_settings][foc_datetime_requested][gt]": $filter_activation_settings_foc_datetime_requested_gt, "filter[activation_settings][foc_datetime_requested][lt]": $filter_activation_settings_foc_datetime_requested_lt, "sort": $qp_sort} | compact), body: null}
 }
 
 # Create a porting order
@@ -6835,7 +6988,7 @@ export def "porting-orders create" [
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: {}, body: $req_body}
 }
 
 # List all exception types
@@ -6858,7 +7011,7 @@ export def "porting-orders-exception-types list" [
   let full_url = (build-url $base "/porting_orders/exception_types")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
 }
 
 # Request cancellation
@@ -6879,10 +7032,11 @@ export def "porting-orders delete" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
   let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/porting_orders/{id}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
 }
 
 # Retrieve a porting order
@@ -6904,11 +7058,12 @@ export def "porting-orders get" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
   let qp = [(serialize-qp "include_phone_numbers" $include_phone_numbers "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/porting_orders/{id}") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"include_phone_numbers": $include_phone_numbers} | compact), body: null}
 }
 
 # Edit a porting order
@@ -6944,12 +7099,13 @@ export def "porting-orders update" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
   let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/porting_orders/{id}"))
   let req_body = {"activation_settings": $activation_settings, "customer_reference": $customer_reference, "end_user": $end_user, "misc": $misc, "phone_number_configuration": $phone_number_configuration, "requirements": $requirements, "user_feedback": $user_feedback, "webhook_url": $webhook_url} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "patch" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body
+  do-request "patch" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: {}, body: $req_body}
 }
 
 # Activates every number on a porting order.
@@ -6970,10 +7126,11 @@ export def "porting-orders-actions-activate create" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
   let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/porting_orders/{id}/actions/activate"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
 }
 
 # Cancel this porting order
@@ -6994,10 +7151,11 @@ export def "porting-orders-actions-cancel cancel" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
   let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/porting_orders/{id}/actions/cancel"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
 }
 
 # Confirms the porting order is ready to be actioned.
@@ -7018,10 +7176,11 @@ export def "porting-orders-actions-confirm confirm" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
   let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/porting_orders/{id}/actions/confirm"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
 }
 
 # List all porting activation jobs
@@ -7044,11 +7203,12 @@ export def "porting-orders-activation-jobs list" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
   let qp = [(serialize-qp "page[number]" $page_number "scalar") (serialize-qp "page[size]" $page_size "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/porting_orders/{id}/activation_jobs") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"page[number]": $page_number, "page[size]": $page_size} | compact), body: null}
 }
 
 # Retrieve a porting activation job
@@ -7070,10 +7230,12 @@ export def "porting-orders-activation-jobs get" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
+  if ($activation_job_id | is-empty) { error make --unspanned { msg: "path parameter 'activationJobId' must be non-empty" } }
   let full_url = (build-url $base ({id: (encode-path-segment $id), activation_job_id: (encode-path-segment $activation_job_id)} | format pattern "/porting_orders/{id}/activation_jobs/{activation_job_id}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
 }
 
 # List all comments of a porting order
@@ -7096,11 +7258,12 @@ export def "porting-orders-comments list" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
   let qp = [(serialize-qp "page[number]" $page_number "scalar") (serialize-qp "page[size]" $page_size "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/porting_orders/{id}/comments") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"page[number]": $page_number, "page[size]": $page_size} | compact), body: null}
 }
 
 # Create a comment for a porting order
@@ -7123,12 +7286,13 @@ export def "porting-orders-comments create" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
   let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/porting_orders/{id}/comments"))
   let req_body = {"body": $body} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: {}, body: $req_body}
 }
 
 # Download a porting order loa template
@@ -7149,10 +7313,11 @@ export def "porting-orders-loa-template get" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
   let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/porting_orders/{id}/loa_template"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
 }
 
 # List all porting phone numbers
@@ -7181,7 +7346,7 @@ export def "porting-phone-numbers get" [
   let full_url = (build-url $base "/porting_phone_numbers" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"page[number]": $page_number, "page[size]": $page_size, "filter[porting_order_id]": $filter_porting_order_id, "filter[phone_number]": $filter_phone_number, "filter[activation_status]": $filter_activation_status, "filter[portability_status]": $filter_portability_status} | compact), body: null}
 }
 
 # Retrieve a list of portout requests
@@ -7210,7 +7375,7 @@ export def "portouts list-request" [
   let full_url = (build-url $base "/portouts" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"filter[carrier_name]": $filter_carrier_name, "filter[spid]": $filter_spid, "filter[status]": $filter_status, "page[number]": $page_number, "page[size]": $page_size} | compact), body: null}
 }
 
 # Retrieve a portout request
@@ -7231,10 +7396,11 @@ export def "portouts find-request" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
   let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/portouts/{id}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
 }
 
 # List all comments for a portout request
@@ -7255,10 +7421,11 @@ export def "portouts-comments find" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
   let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/portouts/{id}/comments"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
 }
 
 # Create a comment on a portout request
@@ -7281,12 +7448,13 @@ export def "portouts-comments create-port-request" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
   let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/portouts/{id}/comments"))
   let req_body = {"body": $body} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: {}, body: $req_body}
 }
 
 # Update Status
@@ -7308,10 +7476,12 @@ export def "portouts update-request" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
+  if ($status | is-empty) { error make --unspanned { msg: "path parameter 'status' must be non-empty" } }
   let full_url = (build-url $base ({id: (encode-path-segment $id), status: (encode-path-segment $status)} | format pattern "/portouts/{id}/{status}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "patch" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "patch" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
 }
 
 # Get all Private Wireless Gateways
@@ -7342,7 +7512,7 @@ export def "private-wireless-gateways list" [
   let full_url = (build-url $base "/private_wireless_gateways" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"page[number]": $page_number, "page[size]": $page_size, "filter[name]": $filter_name, "filter[ip_range]": $filter_ip_range, "filter[region_code]": $filter_region_code, "filter[created_at]": $filter_created_at, "filter[updated_at]": $filter_updated_at} | compact), body: null}
 }
 
 # Create a Private Wireless Gateway
@@ -7370,7 +7540,7 @@ export def "private-wireless-gateways create" [
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: {}, body: $req_body}
 }
 
 # Delete a Private Wireless Gateway
@@ -7391,10 +7561,11 @@ export def "private-wireless-gateways delete" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
   let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/private_wireless_gateways/{id}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
 }
 
 # Get a Private Wireless Gateway
@@ -7415,10 +7586,11 @@ export def "private-wireless-gateways get" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
   let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/private_wireless_gateways/{id}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
 }
 
 # Retrieve a call queue
@@ -7439,10 +7611,11 @@ export def "queues get-call" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($queue_name | is-empty) { error make --unspanned { msg: "path parameter 'queue_name' must be non-empty" } }
   let full_url = (build-url $base ({queue_name: (encode-path-segment $queue_name)} | format pattern "/queues/{queue_name}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
 }
 
 # Retrieve calls from a queue
@@ -7465,11 +7638,12 @@ export def "queues-calls list" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($queue_name | is-empty) { error make --unspanned { msg: "path parameter 'queue_name' must be non-empty" } }
   let qp = [(serialize-qp "page[number]" $page_number "scalar") (serialize-qp "page[size]" $page_size "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({queue_name: (encode-path-segment $queue_name)} | format pattern "/queues/{queue_name}/calls") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"page[number]": $page_number, "page[size]": $page_size} | compact), body: null}
 }
 
 # Retrieve a call from a queue
@@ -7491,10 +7665,12 @@ export def "queues-calls get" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($queue_name | is-empty) { error make --unspanned { msg: "path parameter 'queue_name' must be non-empty" } }
+  if ($call_control_id | is-empty) { error make --unspanned { msg: "path parameter 'call_control_id' must be non-empty" } }
   let full_url = (build-url $base ({queue_name: (encode-path-segment $queue_name), call_control_id: (encode-path-segment $call_control_id)} | format pattern "/queues/{queue_name}/calls/{call_control_id}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
 }
 
 # List recordings
@@ -7523,7 +7699,7 @@ export def "recordings list" [
   let full_url = (build-url $base "/recordings" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"filter[conference_id]": $filter_conference_id, "filter[created_at][gte]": $filter_created_at_gte, "filter[created_at][lte]": $filter_created_at_lte, "page[number]": $page_number, "page[size]": $page_size} | compact), body: null}
 }
 
 # Retrieve a recording
@@ -7544,10 +7720,11 @@ export def "recordings get" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
   let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/recordings/{id}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
 }
 
 # Fetch all previous requests for messaging detail reports. Messaging detail reports are reports for pulling all messaging records.
@@ -7573,7 +7750,7 @@ export def "reports-batch-mdr-reports get-cdr-requests" [
   let full_url = (build-url $base "/reports/batch_mdr_reports" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"page[number]": $page_number, "page[size]": $page_size} | compact), body: null}
 }
 
 # Submit a request for new messaging detail report. Messaging detail report pulls all raw messaging data according to defined filters.
@@ -7609,7 +7786,7 @@ export def "reports-batch-mdr-reports submit-request" [
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: {}, body: $req_body}
 }
 
 # Delete generated messaging detail report by id
@@ -7630,10 +7807,11 @@ export def "reports-batch-mdr-reports delete-request" [
 ]: nothing -> record<data: record<connections: list<int>, created_at: string, directions: list<string>, end_date: string, filters: list<record>, id: string, profiles: string, record_type: string, record_types: list<string>, report_name: string, report_url: string, start_date: string, status: string, updated_at: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
   let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/reports/batch_mdr_reports/{id}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
 }
 
 # Fetch single messaging detail report by id.
@@ -7654,10 +7832,11 @@ export def "reports-batch-mdr-reports get-request" [
 ]: nothing -> record<data: record<connections: list<int>, created_at: string, directions: list<string>, end_date: string, filters: list<record>, id: string, profiles: string, record_type: string, record_types: list<string>, report_name: string, report_url: string, start_date: string, status: string, updated_at: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
   let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/reports/batch_mdr_reports/{id}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
 }
 
 # Generate and fetch voice usage report synchronously. This endpoint will both generate and fetch the voice report over a specified time period. No polling is necessary but the response may take up to a couple of minutes.
@@ -7686,7 +7865,7 @@ export def "reports-cdr-usage-reports-sync get" [
   let full_url = (build-url $base "/reports/cdr_usage_reports/sync" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"start_date": $start_date, "end_date": $end_date, "aggregation_type": $aggregation_type, "product_breakdown": $product_breakdown, "connections": $connections} | compact), body: null}
 }
 
 # Fetch all messaging usage reports. Usage reports are aggregated messaging data for specified time period and breakdown
@@ -7712,7 +7891,7 @@ export def "reports-mdr-usage-reports list" [
   let full_url = (build-url $base "/reports/mdr_usage_reports" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"page[number]": $page_number, "page[size]": $page_size} | compact), body: null}
 }
 
 # Submit request for new new messaging usage report. This endpoint will pull and aggregate messaging data in specified time period.
@@ -7739,14 +7918,14 @@ export def "reports-mdr-usage-reports submit" [
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else if (($input | is-not-empty) and ($req_body | is-empty)) { $input } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "*/*" $req_body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "*/*" $req_body {query: {}, body: $req_body}
 }
 
 # Generate and fetch messaging usage report synchronously. This endpoint will both generate and fetch the messaging report over a specified time period. No polling is necessary but the response may take up to a couple of minutes.
 #
 # GET /reports/mdr_usage_reports/sync
 # operationId: getUsageReportSync_1
-export def "reports-mdr-usage-reports-sync get-by-" [
+export def "reports-mdr-usage-reports-sync get" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -7767,7 +7946,7 @@ export def "reports-mdr-usage-reports-sync get-by-" [
   let full_url = (build-url $base "/reports/mdr_usage_reports/sync" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"start_date": $start_date, "end_date": $end_date, "aggregation_type": $aggregation_type, "profiles": $profiles} | compact), body: null}
 }
 
 # Delete messaging usage report by id
@@ -7788,10 +7967,11 @@ export def "reports-mdr-usage-reports delete" [
 ]: nothing -> record<data: record<aggregation_type: string, connections: list<int>, created_at: string, end_date: string, id: string, profiles: string, record_type: string, report_url: string, result: list<record>, start_date: string, status: string, updated_at: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
   let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/reports/mdr_usage_reports/{id}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
 }
 
 # Fetch a single messaging usage report by id
@@ -7812,10 +7992,11 @@ export def "reports-mdr-usage-reports get" [
 ]: nothing -> record<data: record<aggregation_type: string, connections: list<int>, created_at: string, end_date: string, id: string, profiles: string, record_type: string, report_url: string, result: list<record>, start_date: string, status: string, updated_at: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
   let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/reports/mdr_usage_reports/{id}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
 }
 
 # Fetch all Mdr records
@@ -7847,7 +8028,7 @@ export def "reports-mdrs get" [
   let full_url = (build-url $base "/reports/mdrs" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"start_date": $start_date, "end_date": $end_date, "id": $id, "direction": $direction, "profile": $profile, "cld": $cld, "cli": $cli, "status": $status, "message_type": $message_type} | compact), body: null}
 }
 
 # Fetch all Wdr records
@@ -7884,7 +8065,7 @@ export def "reports-wdrs get-paginated" [
   let full_url = (build-url $base "/reports/wdrs" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"start_date": $start_date, "end_date": $end_date, "id": $id, "mcc": $mcc, "mnc": $mnc, "imsi": $imsi, "sim_group_name": $sim_group_name, "sim_group_id": $sim_group_id, "sim_card_id": $sim_card_id, "phone_number": $phone_number, "page[number]": $page_number, "page[size]": $page_size, "sort": $qp_sort} | compact), body: null}
 }
 
 # List all requirement types
@@ -7910,7 +8091,7 @@ export def "requirement-types list-doc-reqs" [
   let full_url = (build-url $base "/requirement_types" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"filter[name][contains]": $filter_name_contains, "sort[]": $qp_sort} | compact), body: null}
 }
 
 # Retrieve a requirement types
@@ -7931,10 +8112,11 @@ export def "requirement-types get-doc-reqs" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
   let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/requirement_types/{id}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
 }
 
 # List all requirements
@@ -7964,7 +8146,7 @@ export def "requirements list" [
   let full_url = (build-url $base "/requirements" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"filter[country_code]": $filter_country_code, "filter[phone_number_type]": $filter_phone_number_type, "filter[action]": $filter_action, "sort[]": $qp_sort, "page[number]": $page_number, "page[size]": $page_size} | compact), body: null}
 }
 
 # Retrieve a document requirement
@@ -7985,10 +8167,11 @@ export def "requirements get-doc-reqs-document" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
   let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/requirements/{id}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
 }
 
 # View a list of room participants.
@@ -8025,7 +8208,7 @@ export def "room-participants list" [
   let full_url = (build-url $base "/room_participants" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"filter[date_joined_at][eq]": $filter_date_joined_at_eq, "filter[date_joined_at][gte]": $filter_date_joined_at_gte, "filter[date_joined_at][lte]": $filter_date_joined_at_lte, "filter[date_updated_at][eq]": $filter_date_updated_at_eq, "filter[date_updated_at][gte]": $filter_date_updated_at_gte, "filter[date_updated_at][lte]": $filter_date_updated_at_lte, "filter[date_left_at][eq]": $filter_date_left_at_eq, "filter[date_left_at][gte]": $filter_date_left_at_gte, "filter[date_left_at][lte]": $filter_date_left_at_lte, "filter[context]": $filter_context, "filter[session_id]": $filter_session_id, "page[size]": $page_size, "page[number]": $page_number} | compact), body: null}
 }
 
 # View a room participant.
@@ -8046,10 +8229,11 @@ export def "room-participants get-view" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($room_participant_id | is-empty) { error make --unspanned { msg: "path parameter 'room_participant_id' must be non-empty" } }
   let full_url = (build-url $base ({room_participant_id: (encode-path-segment $room_participant_id)} | format pattern "/room_participants/{room_participant_id}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
 }
 
 # View a list of room sessions.
@@ -8087,7 +8271,7 @@ export def "room-sessions list" [
   let full_url = (build-url $base "/room_sessions" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"filter[date_created_at][eq]": $filter_date_created_at_eq, "filter[date_created_at][gte]": $filter_date_created_at_gte, "filter[date_created_at][lte]": $filter_date_created_at_lte, "filter[date_updated_at][eq]": $filter_date_updated_at_eq, "filter[date_updated_at][gte]": $filter_date_updated_at_gte, "filter[date_updated_at][lte]": $filter_date_updated_at_lte, "filter[date_ended_at][eq]": $filter_date_ended_at_eq, "filter[date_ended_at][gte]": $filter_date_ended_at_gte, "filter[date_ended_at][lte]": $filter_date_ended_at_lte, "filter[room_id]": $filter_room_id, "filter[active]": $filter_active, "include_participants": $include_participants, "page[size]": $page_size, "page[number]": $page_number} | compact), body: null}
 }
 
 # View a room session.
@@ -8109,11 +8293,12 @@ export def "room-sessions get-view" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($room_session_id | is-empty) { error make --unspanned { msg: "path parameter 'room_session_id' must be non-empty" } }
   let qp = [(serialize-qp "include_participants" $include_participants "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({room_session_id: (encode-path-segment $room_session_id)} | format pattern "/room_sessions/{room_session_id}") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"include_participants": $include_participants} | compact), body: null}
 }
 
 # View a list of room participants.
@@ -8146,11 +8331,12 @@ export def "room-sessions-participants list-nested" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($room_session_id | is-empty) { error make --unspanned { msg: "path parameter 'room_session_id' must be non-empty" } }
   let qp = [(serialize-qp "filter[date_joined_at][eq]" $filter_date_joined_at_eq "scalar") (serialize-qp "filter[date_joined_at][gte]" $filter_date_joined_at_gte "scalar") (serialize-qp "filter[date_joined_at][lte]" $filter_date_joined_at_lte "scalar") (serialize-qp "filter[date_updated_at][eq]" $filter_date_updated_at_eq "scalar") (serialize-qp "filter[date_updated_at][gte]" $filter_date_updated_at_gte "scalar") (serialize-qp "filter[date_updated_at][lte]" $filter_date_updated_at_lte "scalar") (serialize-qp "filter[date_left_at][eq]" $filter_date_left_at_eq "scalar") (serialize-qp "filter[date_left_at][gte]" $filter_date_left_at_gte "scalar") (serialize-qp "filter[date_left_at][lte]" $filter_date_left_at_lte "scalar") (serialize-qp "filter[context]" $filter_context "scalar") (serialize-qp "page[size]" $page_size "scalar") (serialize-qp "page[number]" $page_number "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({room_session_id: (encode-path-segment $room_session_id)} | format pattern "/room_sessions/{room_session_id}/participants") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"filter[date_joined_at][eq]": $filter_date_joined_at_eq, "filter[date_joined_at][gte]": $filter_date_joined_at_gte, "filter[date_joined_at][lte]": $filter_date_joined_at_lte, "filter[date_updated_at][eq]": $filter_date_updated_at_eq, "filter[date_updated_at][gte]": $filter_date_updated_at_gte, "filter[date_updated_at][lte]": $filter_date_updated_at_lte, "filter[date_left_at][eq]": $filter_date_left_at_eq, "filter[date_left_at][gte]": $filter_date_left_at_gte, "filter[date_left_at][lte]": $filter_date_left_at_lte, "filter[context]": $filter_context, "page[size]": $page_size, "page[number]": $page_number} | compact), body: null}
 }
 
 # View a list of rooms.
@@ -8184,7 +8370,7 @@ export def "rooms list" [
   let full_url = (build-url $base "/rooms" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"filter[date_created_at][eq]": $filter_date_created_at_eq, "filter[date_created_at][gte]": $filter_date_created_at_gte, "filter[date_created_at][lte]": $filter_date_created_at_lte, "filter[date_updated_at][eq]": $filter_date_updated_at_eq, "filter[date_updated_at][gte]": $filter_date_updated_at_gte, "filter[date_updated_at][lte]": $filter_date_updated_at_lte, "filter[unique_name]": $filter_unique_name, "include_sessions": $include_sessions, "page[size]": $page_size, "page[number]": $page_number} | compact), body: null}
 }
 
 # Create a room.
@@ -8212,7 +8398,7 @@ export def "rooms create" [
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: {}, body: $req_body}
 }
 
 # Delete a room.
@@ -8233,10 +8419,11 @@ export def "rooms delete" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($room_id | is-empty) { error make --unspanned { msg: "path parameter 'room_id' must be non-empty" } }
   let full_url = (build-url $base ({room_id: (encode-path-segment $room_id)} | format pattern "/rooms/{room_id}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
 }
 
 # View a room.
@@ -8258,11 +8445,12 @@ export def "rooms get-view" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($room_id | is-empty) { error make --unspanned { msg: "path parameter 'room_id' must be non-empty" } }
   let qp = [(serialize-qp "include_sessions" $include_sessions "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({room_id: (encode-path-segment $room_id)} | format pattern "/rooms/{room_id}") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"include_sessions": $include_sessions} | compact), body: null}
 }
 
 # Create Client Token to join a room.
@@ -8286,12 +8474,13 @@ export def "rooms-actions-generate-join-client-token create" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($room_id | is-empty) { error make --unspanned { msg: "path parameter 'room_id' must be non-empty" } }
   let full_url = (build-url $base ({room_id: (encode-path-segment $room_id)} | format pattern "/rooms/{room_id}/actions/generate_join_client_token"))
   let req_body = {"refresh_token_ttl_secs": $refresh_token_ttl_secs, "token_ttl_secs": $token_ttl_secs} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: {}, body: $req_body}
 }
 
 # Refresh Client Token to join a room.
@@ -8315,12 +8504,13 @@ export def "rooms-actions-refresh-client-token refresh" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($room_id | is-empty) { error make --unspanned { msg: "path parameter 'room_id' must be non-empty" } }
   let full_url = (build-url $base ({room_id: (encode-path-segment $room_id)} | format pattern "/rooms/{room_id}/actions/refresh_client_token"))
   let req_body = {"refresh_token": $refresh_token, "token_ttl_secs": $token_ttl_secs} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: {}, body: $req_body}
 }
 
 # View a list of room sessions.
@@ -8354,11 +8544,12 @@ export def "rooms-sessions list-nested" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($room_id | is-empty) { error make --unspanned { msg: "path parameter 'room_id' must be non-empty" } }
   let qp = [(serialize-qp "filter[date_created_at][eq]" $filter_date_created_at_eq "scalar") (serialize-qp "filter[date_created_at][gte]" $filter_date_created_at_gte "scalar") (serialize-qp "filter[date_created_at][lte]" $filter_date_created_at_lte "scalar") (serialize-qp "filter[date_updated_at][eq]" $filter_date_updated_at_eq "scalar") (serialize-qp "filter[date_updated_at][gte]" $filter_date_updated_at_gte "scalar") (serialize-qp "filter[date_updated_at][lte]" $filter_date_updated_at_lte "scalar") (serialize-qp "filter[date_ended_at][eq]" $filter_date_ended_at_eq "scalar") (serialize-qp "filter[date_ended_at][gte]" $filter_date_ended_at_gte "scalar") (serialize-qp "filter[date_ended_at][lte]" $filter_date_ended_at_lte "scalar") (serialize-qp "filter[active]" $filter_active "scalar") (serialize-qp "include_participants" $include_participants "scalar") (serialize-qp "page[size]" $page_size "scalar") (serialize-qp "page[number]" $page_number "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({room_id: (encode-path-segment $room_id)} | format pattern "/rooms/{room_id}/sessions") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"filter[date_created_at][eq]": $filter_date_created_at_eq, "filter[date_created_at][gte]": $filter_date_created_at_gte, "filter[date_created_at][lte]": $filter_date_created_at_lte, "filter[date_updated_at][eq]": $filter_date_updated_at_eq, "filter[date_updated_at][gte]": $filter_date_updated_at_gte, "filter[date_updated_at][lte]": $filter_date_updated_at_lte, "filter[date_ended_at][eq]": $filter_date_ended_at_eq, "filter[date_ended_at][gte]": $filter_date_ended_at_gte, "filter[date_ended_at][lte]": $filter_date_ended_at_lte, "filter[active]": $filter_active, "include_participants": $include_participants, "page[size]": $page_size, "page[number]": $page_number} | compact), body: null}
 }
 
 # List short codes
@@ -8385,7 +8576,7 @@ export def "short-codes list" [
   let full_url = (build-url $base "/short_codes" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"page[number]": $page_number, "page[size]": $page_size, "filter[messaging_profile_id]": $filter_messaging_profile_id} | compact), body: null}
 }
 
 # Retrieve a short code
@@ -8406,10 +8597,11 @@ export def "short-codes get" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
   let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/short_codes/{id}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
 }
 
 # Update short code
@@ -8432,12 +8624,13 @@ export def "short-codes update" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
   let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/short_codes/{id}"))
   let req_body = {"messaging_profile_id": $messaging_profile_id} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "patch" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body
+  do-request "patch" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: {}, body: $req_body}
 }
 
 # List SIM card group actions
@@ -8466,7 +8659,7 @@ export def "sim-card-group-actions list" [
   let full_url = (build-url $base "/sim_card_group_actions" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"page[number]": $page_number, "page[size]": $page_size, "filter[sim_card_group_id]": $filter_sim_card_group_id, "filter[status]": $filter_status, "filter[type]": $filter_type} | compact), body: null}
 }
 
 # Get SIM card group action details
@@ -8487,10 +8680,11 @@ export def "sim-card-group-actions get" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
   let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/sim_card_group_actions/{id}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
 }
 
 # Get all SIM card groups
@@ -8517,7 +8711,7 @@ export def "sim-card-groups get-list" [
   let full_url = (build-url $base "/sim_card_groups" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"page[number]": $page_number, "page[size]": $page_size, "filter[name]": $filter_name} | compact), body: null}
 }
 
 # Create a SIM card group
@@ -8545,7 +8739,7 @@ export def "sim-card-groups create" [
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: {}, body: $req_body}
 }
 
 # Delete a SIM card group
@@ -8566,10 +8760,11 @@ export def "sim-card-groups delete" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
   let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/sim_card_groups/{id}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
 }
 
 # Get SIM card group
@@ -8590,10 +8785,11 @@ export def "sim-card-groups get" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
   let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/sim_card_groups/{id}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
 }
 
 # Update a SIM card group
@@ -8617,12 +8813,13 @@ export def "sim-card-groups update" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
   let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/sim_card_groups/{id}"))
   let req_body = {"data_limit": $data_limit, "name": $name} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "patch" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body
+  do-request "patch" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: {}, body: $req_body}
 }
 
 # Request Private Wireless Gateway removal from SIM card group
@@ -8643,10 +8840,11 @@ export def "sim-card-groups-actions-remove-private-wireless-gateway delete" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
   let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/sim_card_groups/{id}/actions/remove_private_wireless_gateway"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
 }
 
 # Request Private Wireless Gateway assignment for SIM card group
@@ -8669,12 +8867,13 @@ export def "sim-card-groups-actions-set-private-wireless-gateway update" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
   let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/sim_card_groups/{id}/actions/set_private_wireless_gateway"))
   let req_body = {"private_wireless_gateway_id": $private_wireless_gateway_id} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: {}, body: $req_body}
 }
 
 # Preview SIM card orders
@@ -8702,7 +8901,7 @@ export def "sim-card-order-preview create" [
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: {}, body: $req_body}
 }
 
 # Get all SIM card orders
@@ -8740,7 +8939,7 @@ export def "sim-card-orders list" [
   let full_url = (build-url $base "/sim_card_orders" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"filter[created_at]": $filter_created_at, "filter[updated_at]": $filter_updated_at, "filter[quantity]": $filter_quantity, "filter[cost.amount]": $filter_cost_amount, "filter[cost.currency]": $filter_cost_currency, "filter[address.id]": $filter_address_id, "filter[address.street_address]": $filter_address_street_address, "filter[address.extended_address]": $filter_address_extended_address, "filter[address.locality]": $filter_address_locality, "filter[address.administrative_area]": $filter_address_administrative_area, "filter[address.country_code]": $filter_address_country_code, "filter[address.postal_code]": $filter_address_postal_code, "page[number]": $page_number, "page[size]": $page_size} | compact), body: null}
 }
 
 # Create a SIM card order
@@ -8768,7 +8967,7 @@ export def "sim-card-orders create" [
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: {}, body: $req_body}
 }
 
 # Get a single SIM card order
@@ -8789,10 +8988,11 @@ export def "sim-card-orders get" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
   let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/sim_card_orders/{id}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
 }
 
 # Get all SIM cards
@@ -8822,7 +9022,7 @@ export def "sim-cards list" [
   let full_url = (build-url $base "/sim_cards" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"page[number]": $page_number, "page[size]": $page_size, "include_sim_card_group": $include_sim_card_group, "filter[sim_card_group_id]": $filter_sim_card_group_id, "filter[tags]": $filter_tags, "filter[iccid]": $filter_iccid} | compact), body: null}
 }
 
 # Validate SIM cards registration codes
@@ -8849,7 +9049,7 @@ export def "sim-cards-actions-validate-registration-codes create" [
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: {}, body: $req_body}
 }
 
 # Deletes a SIM card
@@ -8870,10 +9070,11 @@ export def "sim-cards delete" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
   let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/sim_cards/{id}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
 }
 
 # Get SIM card
@@ -8895,11 +9096,12 @@ export def "sim-cards get" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
   let qp = [(serialize-qp "include_sim_card_group" $include_sim_card_group "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/sim_cards/{id}") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"include_sim_card_group": $include_sim_card_group} | compact), body: null}
 }
 
 # Update a SIM card
@@ -8923,12 +9125,13 @@ export def "sim-cards update" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
   let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/sim_cards/{id}"))
   let req_body = {"sim_card_group_id": $sim_card_group_id, "tags": $tags} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "patch" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body
+  do-request "patch" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: {}, body: $req_body}
 }
 
 # Request a SIM card disable
@@ -8949,10 +9152,11 @@ export def "sim-cards-actions-disable disable" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
   let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/sim_cards/{id}/actions/disable"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
 }
 
 # Request a SIM card enable
@@ -8973,10 +9177,11 @@ export def "sim-cards-actions-enable enable" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
   let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/sim_cards/{id}/actions/enable"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
 }
 
 # Request setting a SIM card to standby
@@ -8997,10 +9202,11 @@ export def "sim-cards-actions-set-standby update" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
   let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/sim_cards/{id}/actions/set_standby"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
 }
 
 # DELETE network preferences
@@ -9021,10 +9227,11 @@ export def "sim-cards-network-preferences delete" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($sim_card_id | is-empty) { error make --unspanned { msg: "path parameter 'sim_card_id' must be non-empty" } }
   let full_url = (build-url $base ({sim_card_id: (encode-path-segment $sim_card_id)} | format pattern "/sim_cards/{sim_card_id}/network_preferences"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
 }
 
 # Get network preferences
@@ -9046,11 +9253,12 @@ export def "sim-cards-network-preferences get" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($sim_card_id | is-empty) { error make --unspanned { msg: "path parameter 'sim_card_id' must be non-empty" } }
   let qp = [(serialize-qp "include_ota_updates" $include_ota_updates "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({sim_card_id: (encode-path-segment $sim_card_id)} | format pattern "/sim_cards/{sim_card_id}/network_preferences") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"include_ota_updates": $include_ota_updates} | compact), body: null}
 }
 
 # Set network preferences
@@ -9074,12 +9282,13 @@ export def "sim-cards-network-preferences update" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($sim_card_id | is-empty) { error make --unspanned { msg: "path parameter 'sim_card_id' must be non-empty" } }
   let full_url = (build-url $base ({sim_card_id: (encode-path-segment $sim_card_id)} | format pattern "/sim_cards/{sim_card_id}/network_preferences"))
   let req_body = {"mobile_operator_networks_preferences": $mobile_operator_networks_preferences} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: {}, body: $req_body}
 }
 
 # Delete SIM card public IP
@@ -9100,10 +9309,11 @@ export def "sim-cards-public-ip delete" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($sim_card_id | is-empty) { error make --unspanned { msg: "path parameter 'sim_card_id' must be non-empty" } }
   let full_url = (build-url $base ({sim_card_id: (encode-path-segment $sim_card_id)} | format pattern "/sim_cards/{sim_card_id}/public_ip"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
 }
 
 # Get SIM card public IP definition
@@ -9124,10 +9334,11 @@ export def "sim-cards-public-ip get" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($sim_card_id | is-empty) { error make --unspanned { msg: "path parameter 'sim_card_id' must be non-empty" } }
   let full_url = (build-url $base ({sim_card_id: (encode-path-segment $sim_card_id)} | format pattern "/sim_cards/{sim_card_id}/public_ip"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
 }
 
 # Set SIM card public IP
@@ -9148,10 +9359,11 @@ export def "sim-cards-public-ip create" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($sim_card_id | is-empty) { error make --unspanned { msg: "path parameter 'sim_card_id' must be non-empty" } }
   let full_url = (build-url $base ({sim_card_id: (encode-path-segment $sim_card_id)} | format pattern "/sim_cards/{sim_card_id}/public_ip"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
 }
 
 # List wireless connectivity logs
@@ -9174,11 +9386,12 @@ export def "sim-cards-wireless-connectivity-logs get" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($sim_card_id | is-empty) { error make --unspanned { msg: "path parameter 'sim_card_id' must be non-empty" } }
   let qp = [(serialize-qp "page[number]" $page_number "scalar") (serialize-qp "page[size]" $page_size "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({sim_card_id: (encode-path-segment $sim_card_id)} | format pattern "/sim_cards/{sim_card_id}/wireless_connectivity_logs") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"page[number]": $page_number, "page[size]": $page_size} | compact), body: null}
 }
 
 # List sub number orders
@@ -9207,7 +9420,7 @@ export def "sub-number-orders list" [
   let full_url = (build-url $base "/sub_number_orders" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"filter[user_id]": $filter_user_id, "filter[order_request_id]": $filter_order_request_id, "filter[country_code]": $filter_country_code, "filter[phone_number_type]": $filter_phone_number_type, "filter[phone_numbers_count]": $filter_phone_numbers_count} | compact), body: null}
 }
 
 # Retrieve a sub number order
@@ -9229,11 +9442,12 @@ export def "sub-number-orders get" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($sub_number_order_id | is-empty) { error make --unspanned { msg: "path parameter 'sub_number_order_id' must be non-empty" } }
   let qp = [(serialize-qp "filter[include_phone_numbers]" $filter_include_phone_numbers "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({sub_number_order_id: (encode-path-segment $sub_number_order_id)} | format pattern "/sub_number_orders/{sub_number_order_id}") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"filter[include_phone_numbers]": $filter_include_phone_numbers} | compact), body: null}
 }
 
 # Update a sub number order
@@ -9257,12 +9471,13 @@ export def "sub-number-orders update" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($sub_number_order_id | is-empty) { error make --unspanned { msg: "path parameter 'sub_number_order_id' must be non-empty" } }
   let full_url = (build-url $base ({sub_number_order_id: (encode-path-segment $sub_number_order_id)} | format pattern "/sub_number_orders/{sub_number_order_id}"))
   let req_body = {"regulatory_requirements": $regulatory_requirements} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "patch" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body
+  do-request "patch" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: {}, body: $req_body}
 }
 
 # List all credentials
@@ -9293,7 +9508,7 @@ export def "telephony-credentials find" [
   let full_url = (build-url $base "/telephony_credentials" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"page[number]": $page_number, "page[size]": $page_size, "filter[tag]": $filter_tag, "filter[name]": $filter_name, "filter[status]": $filter_status, "filter[resource_id]": $filter_resource_id, "filter[sip_username]": $filter_sip_username} | compact), body: null}
 }
 
 # Create a credential
@@ -9323,7 +9538,7 @@ export def "telephony-credentials create" [
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: {}, body: $req_body}
 }
 
 # List all tags
@@ -9349,7 +9564,7 @@ export def "telephony-credentials-tags list" [
   let full_url = (build-url $base "/telephony_credentials/tags" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"page[number]": $page_number, "page[size]": $page_size} | compact), body: null}
 }
 
 # Delete a credential
@@ -9370,10 +9585,11 @@ export def "telephony-credentials delete" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
   let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/telephony_credentials/{id}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
 }
 
 # Get a credential
@@ -9394,10 +9610,11 @@ export def "telephony-credentials get" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
   let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/telephony_credentials/{id}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
 }
 
 # Update a credential
@@ -9423,12 +9640,13 @@ export def "telephony-credentials update" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
   let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/telephony_credentials/{id}"))
   let req_body = {"connection_id": $connection_id, "expires_at": $expires_at, "name": $name, "tag": $tag} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "patch" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body
+  do-request "patch" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: {}, body: $req_body}
 }
 
 # Perform activate or deactivate action on provided Credential
@@ -9450,10 +9668,12 @@ export def "telephony-credentials-actions create" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
+  if ($action | is-empty) { error make --unspanned { msg: "path parameter 'action' must be non-empty" } }
   let full_url = (build-url $base ({id: (encode-path-segment $id), action: (encode-path-segment $action)} | format pattern "/telephony_credentials/{id}/actions/{action}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
 }
 
 # Create an Access Token.
@@ -9474,10 +9694,11 @@ export def "telephony-credentials-token create" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
   let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/telephony_credentials/{id}/token"))
   let accept_val = "text/plain"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
 }
 
 # List all TeXML Applications
@@ -9506,7 +9727,7 @@ export def "texml-applications find" [
   let full_url = (build-url $base "/texml_applications" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"page[number]": $page_number, "page[size]": $page_size, "filter[friendly_name][contains]": $filter_friendly_name_contains, "filter[outbound_voice_profile_id]": $filter_outbound_voice_profile_id, "sort": $qp_sort} | compact), body: null}
 }
 
 # Creates a TeXML Application
@@ -9547,7 +9768,7 @@ export def "texml-applications create" [
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: {}, body: $req_body}
 }
 
 # Deletes a TeXML Application
@@ -9568,10 +9789,11 @@ export def "texml-applications delete" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
   let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/texml_applications/{id}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
 }
 
 # Retrieve a TeXML Application
@@ -9592,10 +9814,11 @@ export def "texml-applications get" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
   let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/texml_applications/{id}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
 }
 
 # Update a TeXML Application
@@ -9632,12 +9855,13 @@ export def "texml-applications update" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
   let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/texml_applications/{id}"))
   let req_body = {"active": $active, "anchorsite_override": $anchorsite_override, "dtmf_type": $dtmf_type, "first_command_timeout": $first_command_timeout, "first_command_timeout_secs": $first_command_timeout_secs, "friendly_name": $friendly_name, "inbound": $inbound, "outbound": $outbound, "status_callback": $status_callback, "status_callback_method": $status_callback_method, "voice_fallback_url": $voice_fallback_url, "voice_method": $voice_method, "voice_url": $voice_url} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "patch" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body
+  do-request "patch" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: {}, body: $req_body}
 }
 
 # List verifications by phone number
@@ -9658,10 +9882,11 @@ export def "verifications-by-phone-number list" [
 ]: nothing -> record<data: table<call_timeout_secs: int, created_at: string, id: string, phone_number: string, record_type: string, status: string, timeout_secs: int, updated_at: string, verification_type: string, verify_profile_id: string>, meta: record<page_number: int, page_size: int, total_pages: int, total_results: int>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($phone_number | is-empty) { error make --unspanned { msg: "path parameter 'phone_number' must be non-empty" } }
   let full_url = (build-url $base ({phone_number: (encode-path-segment $phone_number)} | format pattern "/verifications/by_phone_number/{phone_number}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
 }
 
 # Submit a verification code
@@ -9684,12 +9909,13 @@ export def "verifications-by-phone-number-actions-verify verify-code" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($phone_number | is-empty) { error make --unspanned { msg: "path parameter 'phone_number' must be non-empty" } }
   let full_url = (build-url $base ({phone_number: (encode-path-segment $phone_number)} | format pattern "/verifications/by_phone_number/{phone_number}/actions/verify"))
   let req_body = {"code": $code} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: {}, body: $req_body}
 }
 
 # Trigger a Call verification
@@ -9719,7 +9945,7 @@ export def "verifications-call create" [
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: {}, body: $req_body}
 }
 
 # Trigger a Flash call verification
@@ -9748,7 +9974,7 @@ export def "verifications-flashcall create" [
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: {}, body: $req_body}
 }
 
 # Trigger a PSD2 verification
@@ -9780,7 +10006,7 @@ export def "verifications-psd2 create" [
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: {}, body: $req_body}
 }
 
 # Trigger a SMS verification
@@ -9809,7 +10035,7 @@ export def "verifications-sms create" [
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: {}, body: $req_body}
 }
 
 # Trigger a Whatsapp verification
@@ -9838,7 +10064,7 @@ export def "verifications-whatsapp create" [
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: {}, body: $req_body}
 }
 
 # Retrieve a verification
@@ -9859,10 +10085,11 @@ export def "verifications get" [
 ]: nothing -> record<data: record<call_timeout_secs: int, created_at: string, id: string, phone_number: string, record_type: string, status: string, timeout_secs: int, updated_at: string, verification_type: string, verify_profile_id: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($verification_id | is-empty) { error make --unspanned { msg: "path parameter 'verification_id' must be non-empty" } }
   let full_url = (build-url $base ({verification_id: (encode-path-segment $verification_id)} | format pattern "/verifications/{verification_id}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
 }
 
 # List all Verify profiles
@@ -9889,7 +10116,7 @@ export def "verify-profiles list" [
   let full_url = (build-url $base "/verify_profiles" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"filter[name]": $filter_name, "page[size]": $page_size, "page[number]": $page_number} | compact), body: null}
 }
 
 # Create a Verify profile
@@ -9929,7 +10156,7 @@ export def "verify-profiles create" [
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: {}, body: $req_body}
 }
 
 # Delete a Verify profile
@@ -9950,10 +10177,11 @@ export def "verify-profiles delete" [
 ]: nothing -> record<data: record<call: record<default_call_timeout_secs: int, default_verification_timeout_secs: int, speech_template: string>, created_at: string, flashcall: record<default_verification_timeout_secs: int>, id: string, language: string, name: string, psd2: record<default_verification_timeout_secs: int>, record_type: string, sms: record<default_verification_timeout_secs: int, messaging_enabled: bool, messaging_template: string, rcs_enabled: bool, vsms_enabled: bool>, updated_at: string, webhook_failover_url: string, webhook_url: string, whatsapp: record<app_name: string, default_verification_timeout_secs: int>>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($verify_profile_id | is-empty) { error make --unspanned { msg: "path parameter 'verify_profile_id' must be non-empty" } }
   let full_url = (build-url $base ({verify_profile_id: (encode-path-segment $verify_profile_id)} | format pattern "/verify_profiles/{verify_profile_id}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
 }
 
 # Retrieve a Verify profile
@@ -9974,10 +10202,11 @@ export def "verify-profiles get" [
 ]: nothing -> record<data: record<call: record<default_call_timeout_secs: int, default_verification_timeout_secs: int, speech_template: string>, created_at: string, flashcall: record<default_verification_timeout_secs: int>, id: string, language: string, name: string, psd2: record<default_verification_timeout_secs: int>, record_type: string, sms: record<default_verification_timeout_secs: int, messaging_enabled: bool, messaging_template: string, rcs_enabled: bool, vsms_enabled: bool>, updated_at: string, webhook_failover_url: string, webhook_url: string, whatsapp: record<app_name: string, default_verification_timeout_secs: int>>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($verify_profile_id | is-empty) { error make --unspanned { msg: "path parameter 'verify_profile_id' must be non-empty" } }
   let full_url = (build-url $base ({verify_profile_id: (encode-path-segment $verify_profile_id)} | format pattern "/verify_profiles/{verify_profile_id}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
 }
 
 # Update a Verify profile
@@ -10013,12 +10242,13 @@ export def "verify-profiles update" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($verify_profile_id | is-empty) { error make --unspanned { msg: "path parameter 'verify_profile_id' must be non-empty" } }
   let full_url = (build-url $base ({verify_profile_id: (encode-path-segment $verify_profile_id)} | format pattern "/verify_profiles/{verify_profile_id}"))
   let req_body = {"call": $call, "flashcall": $flashcall, "language": $language, "name": $name, "psd2": $psd2, "sms": $sms, "webhook_failover_url": $webhook_failover_url, "webhook_url": $webhook_url, "whatsapp": $whatsapp} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "patch" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body
+  do-request "patch" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: {}, body: $req_body}
 }
 
 # List webhook deliveries
@@ -10051,7 +10281,7 @@ export def "webhook-deliveries get" [
   let full_url = (build-url $base "/webhook_deliveries" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"filter[status][eq]": $filter_status_eq, "filter[webhook][contains]": $filter_webhook_contains, "filter[attempts][contains]": $filter_attempts_contains, "filter[started_at][gte]": $filter_started_at_gte, "filter[started_at][lte]": $filter_started_at_lte, "filter[finished_at][gte]": $filter_finished_at_gte, "filter[finished_at][lte]": $filter_finished_at_lte, "page[number]": $page_number, "page[size]": $page_size} | compact), body: null}
 }
 
 # Find webhook_delivery details by ID
@@ -10072,10 +10302,11 @@ export def "webhook-deliveries get-delivery" [
 ]: nothing -> record<data: record<attempts: list<record>, finished_at: string, id: string, record_type: string, started_at: string, status: string, user_id: string, webhook: record<event_type: string, id: string, occurred_at: string, payload: record, record_type: string>>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
   let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/webhook_deliveries/{id}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
 }
 
 # Check Contact
@@ -10104,7 +10335,7 @@ export def "whatsapp-contacts check" [
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: {}, body: $req_body}
 }
 
 # Fetch all previous requests for WhatsApp detail reports. WhatsApp detail reports are reports for pulling all WhatsApp records.
@@ -10130,7 +10361,7 @@ export def "whatsapp-detail-record-reports get-requests" [
   let full_url = (build-url $base "/whatsapp_detail_record_reports" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"page[number]": $page_number, "page[size]": $page_size} | compact), body: null}
 }
 
 # Submit a request for new WhatsApp detail report. WhatsApp detail report pulls all raw WhatsApp data according to defined filters.
@@ -10158,7 +10389,7 @@ export def "whatsapp-detail-record-reports submit-request" [
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: {}, body: $req_body}
 }
 
 # Delete generated WhatsApp detail report by id
@@ -10179,10 +10410,11 @@ export def "whatsapp-detail-record-reports delete-request" [
 ]: nothing -> record<data: record<created_at: string, download_link: string, end_date: string, id: string, record_type: string, start_date: string, status: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
   let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/whatsapp_detail_record_reports/{id}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
 }
 
 # Fetch single whatsapp detail report by id.
@@ -10203,10 +10435,11 @@ export def "whatsapp-detail-record-reports get-request" [
 ]: nothing -> record<data: record<created_at: string, download_link: string, end_date: string, id: string, record_type: string, start_date: string, status: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
   let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/whatsapp_detail_record_reports/{id}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
 }
 
 # Upload Media
@@ -10237,7 +10470,7 @@ export def "whatsapp-media upload" [
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let req_body = if ($req_body | describe | str starts-with "record") { $req_body } else { {} }
   let mp = (build-multipart-body $req_body ["upload_file"] $dry_run)
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full $mp.content_type $mp.body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full $mp.content_type $mp.body {query: {}, body: $req_body}
 }
 
 # Delete Media
@@ -10258,10 +10491,12 @@ export def "whatsapp-media delete" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($whatsapp_user_id | is-empty) { error make --unspanned { msg: "path parameter 'whatsapp_user_id' must be non-empty" } }
+  if ($media_id | is-empty) { error make --unspanned { msg: "path parameter 'media_id' must be non-empty" } }
   let full_url = (build-url $base ({whatsapp_user_id: (encode-path-segment $whatsapp_user_id), media_id: (encode-path-segment $media_id)} | format pattern "/whatsapp_media/{whatsapp_user_id}/{media_id}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
 }
 
 # Download Media
@@ -10282,10 +10517,12 @@ export def "whatsapp-media get" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($whatsapp_user_id | is-empty) { error make --unspanned { msg: "path parameter 'whatsapp_user_id' must be non-empty" } }
+  if ($media_id | is-empty) { error make --unspanned { msg: "path parameter 'media_id' must be non-empty" } }
   let full_url = (build-url $base ({whatsapp_user_id: (encode-path-segment $whatsapp_user_id), media_id: (encode-path-segment $media_id)} | format pattern "/whatsapp_media/{whatsapp_user_id}/{media_id}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
 }
 
 # Send Message
@@ -10333,7 +10570,7 @@ export def "whatsapp-messages send" [
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: {}, body: $req_body}
 }
 
 # Mark Message As Read
@@ -10357,12 +10594,13 @@ export def "whatsapp-messages get-mark-as" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($message_id | is-empty) { error make --unspanned { msg: "path parameter 'message_id' must be non-empty" } }
   let full_url = (build-url $base ({message_id: (encode-path-segment $message_id)} | format pattern "/whatsapp_messages/{message_id}"))
   let req_body = {"status": $status, "whatsapp_user_id": $whatsapp_user_id} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "patch" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body
+  do-request "patch" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: {}, body: $req_body}
 }
 
 # Generate and fetch WhatsApp usage aggregations synchronously. This endpoint will both generate and fetch the WhatsApp aggregations over a specified time period.
@@ -10388,7 +10626,7 @@ export def "whatsapp-usage-aggregations get-sync" [
   let full_url = (build-url $base "/whatsapp_usage_aggregations" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"start_date": $start_date, "end_date": $end_date} | compact), body: null}
 }
 
 # Get User
@@ -10409,10 +10647,11 @@ export def "whatsapp-users get" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($whatsapp_user_id | is-empty) { error make --unspanned { msg: "path parameter 'whatsapp_user_id' must be non-empty" } }
   let full_url = (build-url $base ({whatsapp_user_id: (encode-path-segment $whatsapp_user_id)} | format pattern "/whatsapp_users/{whatsapp_user_id}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
 }
 
 # Update WhatsApp User
@@ -10435,12 +10674,13 @@ export def "whatsapp-users update-whats-app-webhook" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($whatsapp_user_id | is-empty) { error make --unspanned { msg: "path parameter 'whatsapp_user_id' must be non-empty" } }
   let full_url = (build-url $base ({whatsapp_user_id: (encode-path-segment $whatsapp_user_id)} | format pattern "/whatsapp_users/{whatsapp_user_id}"))
   let req_body = {"webhook_url": $webhook_url} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "patch" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body
+  do-request "patch" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: {}, body: $req_body}
 }
 
 # Get all Wireless Detail Records (WDRs) Reports
@@ -10466,7 +10706,7 @@ export def "wireless-detail-records-reports list" [
   let full_url = (build-url $base "/wireless/detail_records_reports" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"page[number]": $page_number, "page[size]": $page_size} | compact), body: null}
 }
 
 # Create a Wireless Detail Records (WDRs) Report
@@ -10494,7 +10734,7 @@ export def "wireless-detail-records-reports create-wdr" [
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: {}, body: $req_body}
 }
 
 # Delete a Wireless Detail Record (WDR) Report
@@ -10515,10 +10755,11 @@ export def "wireless-detail-records-reports delete-wdr" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
   let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/wireless/detail_records_reports/{id}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
 }
 
 # Get a Wireless Detail Record (WDR) Report
@@ -10539,8 +10780,9 @@ export def "wireless-detail-records-reports get-wdr" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
   let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/wireless/detail_records_reports/{id}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
 }

@@ -3,17 +3,18 @@
 # Auth: --token flag or $env.JELLYFIN_API_TOKEN
 
 const BASE_URL = "http://jellyfin.local"
-const DEFAULT_AUTH = "x-emby-authorization"
 
-# Build auth: returns {headers: record, query: string}
+# Build auth: returns {scheme: string, headers: record, query: string, location: string}.
+# `location` is "header" | "query" | "cookie" | "none" and tells dry-run callers
+# where the token went without inspecting headers/query themselves.
 def build-auth [token?: string, auth_scheme?: string]: nothing -> record {
   let token_val = if ($token != null) and ($token | is-not-empty) { $token } else { $env | get -o JELLYFIN_API_TOKEN | default "" }
   let scheme = ($auth_scheme | default "bearer")
-  if ($scheme == "none") or ($token_val | is-empty) { return {headers: {}, query: ""} }
+  if ($scheme == "none") or ($token_val | is-empty) { return {scheme: $scheme, headers: {}, query: "", location: "none"} }
   match $scheme {
-    "x-emby-authorization" => { {headers: {X-Emby-Authorization: $token_val}, query: ""} }
-    "none" => { {headers: {}, query: ""} }
-    _ => { {headers: {Authorization: $"Bearer ($token_val)"}, query: ""} }
+    "x-emby-authorization" => { {scheme: $scheme, headers: {X-Emby-Authorization: $token_val}, query: "", location: "header"} }
+    "none" => { {scheme: $scheme, headers: {}, query: "", location: "none"} }
+    _ => { {scheme: $scheme, headers: {Authorization: $"Bearer ($token_val)"}, query: "", location: "header"} }
   }
 }
 
@@ -22,8 +23,9 @@ def build-auth [token?: string, auth_scheme?: string]: nothing -> record {
 # ([A-Za-z0-9-._~]) stay literal; everything else gets %XX.
 def serialize-qp [name: string, value: any, style: string]: nothing -> list<string> {
   if ($value == null) { return [] }
-  let n = (encode-path-segment $name)
   let is_list = ($value | describe | str starts-with "list")
+  if $is_list and ($value | is-empty) { return [] }
+  let n = (encode-path-segment $name)
   if ($value | describe | str starts-with "record") { return ($value | transpose k v | each { $"($n)[(encode-path-segment $in.k)]=(encode-path-segment $in.v)" }) }
   if not $is_list { return [$"($n)=(encode-path-segment $value)"] }
   match $style {
@@ -54,22 +56,42 @@ def build-url [base: string, path: string, query?: string]: nothing -> string {
   if ($query != null) and ($query | is-not-empty) { $result | upsert query $query | url join } else { $result | url join }
 }
 
+# Build the dry-run record returned by --dry-run. Shape:
+#   {dry_run: true, method, url, query: <record>, headers, body, content_type, timeout,
+#    auth: {scheme, location}}
+# `meta` carries logical-form data (the query record by spec name, the pre-serialization
+# body) that do-request itself cannot reconstruct from its wire-format args.
+def build-dry-run-record [method: string, url: string, auth: record, content_type: string, timeout: duration, meta?: record]: nothing -> record {
+  let m = ($meta | default {})
+  {
+    dry_run: true
+    method: $method
+    url: $url
+    query: ($m | get -o query | default {})
+    headers: $auth.headers
+    body: ($m | get -o body)
+    content_type: $content_type
+    timeout: $timeout
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+}
+
 # Execute HTTP request with method dispatch
-def do-request [method: string, url: string, auth: record, insecure: bool, raw: bool, dry_run: bool, max_time?: duration, allow_errors?: bool, full?: bool, content_type?: string, body?: any]: nothing -> any {
+def do-request [method: string, url: string, auth: record, insecure: bool, raw: bool, dry_run: bool, max_time?: duration, allow_errors?: bool, full?: bool, content_type?: string, body?: any, dry_run_meta?: record]: nothing -> any {
   let req_url = if ($auth.query | is-not-empty) { if ($url | str contains "?") { $"($url)&($auth.query)" } else { $"($url)?($auth.query)" } } else { $url }
   let timeout = ($max_time | default 30min)
   let ct = ($content_type | default "application/json")
-  if $dry_run { return {method: $method, url: $req_url, headers: $auth.headers, query_string: $auth.query, content_type: $ct, timeout: $timeout, body: $body} }
+  if $dry_run { return (build-dry-run-record $method $req_url $auth $ct $timeout $dry_run_meta) }
   let resp = match $method {
     "get" => { http get --headers $auth.headers --full --allow-errors --max-time $timeout --insecure=$insecure --raw=$raw $req_url }
-    "head" => { http head --headers $auth.headers --max-time $timeout --insecure=$insecure $req_url }
-    "options" => { http options --headers $auth.headers --max-time $timeout --insecure=$insecure $req_url }
+    "head" => { http head --headers $auth.headers --full --allow-errors --max-time $timeout --insecure=$insecure $req_url }
+    "options" => { http options --headers $auth.headers --full --allow-errors --max-time $timeout --insecure=$insecure $req_url }
     "post" => { if ($body | is-empty) { http post --headers $auth.headers --full --allow-errors --max-time $timeout --insecure=$insecure --raw=$raw $req_url "" } else { http post --headers $auth.headers --content-type $ct --full --allow-errors --max-time $timeout --insecure=$insecure --raw=$raw $req_url $body } }
     "put" => { if ($body | is-empty) { http put --headers $auth.headers --full --allow-errors --max-time $timeout --insecure=$insecure --raw=$raw $req_url "" } else { http put --headers $auth.headers --content-type $ct --full --allow-errors --max-time $timeout --insecure=$insecure --raw=$raw $req_url $body } }
     "patch" => { if ($body | is-empty) { http patch --headers $auth.headers --full --allow-errors --max-time $timeout --insecure=$insecure --raw=$raw $req_url "" } else { http patch --headers $auth.headers --content-type $ct --full --allow-errors --max-time $timeout --insecure=$insecure --raw=$raw $req_url $body } }
     "delete" => { if ($body | is-empty) { http delete --headers $auth.headers --full --allow-errors --max-time $timeout --insecure=$insecure --raw=$raw $req_url } else { http delete --headers $auth.headers --content-type $ct --data $body --full --allow-errors --max-time $timeout --insecure=$insecure --raw=$raw $req_url } }
   }
-  if ($method in ["head" "options"]) { return $resp }
+  if ($method == "head") and (not $full) and (not $allow_errors) and $resp.status < 400 { return $resp.headers }
   if $allow_errors { $resp } else if $resp.status >= 400 { error make --unspanned { msg: $"HTTP ($resp.status): ($resp.body)" } } else if $full { {status: $resp.status, headers: $resp.headers, body: $resp.body} } else if $resp.status == 204 { null } else { $resp.body }
 }
 
@@ -164,11 +186,12 @@ export def "albums-instant-mix get" [
 ]: nothing -> record<Items: table<AirDays: list, AirTime: string, AirsAfterSeasonNumber: int, AirsBeforeEpisodeNumber: int, AirsBeforeSeasonNumber: int, Album: string, AlbumArtist: string, AlbumArtists: list, AlbumCount: int, AlbumId: string, AlbumPrimaryImageTag: string, Altitude: float, Aperture: float, ArtistCount: int, ArtistItems: list, Artists: list, AspectRatio: string, Audio: string, BackdropImageTags: list, CameraMake: string, CameraModel: string, CanDelete: bool, CanDownload: bool, ChannelId: string, ChannelName: string, ChannelNumber: string, ChannelPrimaryImageTag: string, ChannelType: string, Chapters: list, ChildCount: int, CollectionType: string, CommunityRating: float, CompletionPercentage: float, Container: string, CriticRating: float, CumulativeRunTimeTicks: int, CurrentProgram: any, CustomRating: string, DateCreated: string, DateLastMediaAdded: string, DisplayOrder: string, DisplayPreferencesId: string, EnableMediaSourceDisplay: bool, EndDate: string, EpisodeCount: int, EpisodeTitle: string, Etag: string, ExposureTime: float, ExternalUrls: list, ExtraType: string, FocalLength: float, ForcedSortName: string, GenreItems: list, Genres: list, HasSubtitles: bool, Height: int, Id: string, ImageBlurHashes: record, ImageOrientation: string, ImageTags: record, IndexNumber: int, IndexNumberEnd: int, IsFolder: bool, IsHD: bool, IsKids: bool, IsLive: bool, IsMovie: bool, IsNews: bool, IsPlaceHolder: bool, IsPremiere: bool, IsRepeat: bool, IsSeries: bool, IsSports: bool, IsoSpeedRating: int, IsoType: string, Latitude: float, LocalTrailerCount: int, LocationType: string, LockData: bool, LockedFields: list, Longitude: float, MediaSourceCount: int, MediaSources: list, MediaStreams: list, MediaType: string, MovieCount: int, MusicVideoCount: int, Name: string, Number: string, OfficialRating: string, OriginalTitle: string, Overview: string, ParentArtImageTag: string, ParentArtItemId: string, ParentBackdropImageTags: list, ParentBackdropItemId: string, ParentId: string, ParentIndexNumber: int, ParentLogoImageTag: string, ParentLogoItemId: string, ParentPrimaryImageItemId: string, ParentPrimaryImageTag: string, ParentThumbImageTag: string, ParentThumbItemId: string, PartCount: int, Path: string, People: list, PlayAccess: string, PlaylistItemId: string, PreferredMetadataCountryCode: string, PreferredMetadataLanguage: string, PremiereDate: string, PrimaryImageAspectRatio: float, ProductionLocations: list, ProductionYear: int, ProgramCount: int, ProgramId: string, ProviderIds: record, RecursiveItemCount: int, RemoteTrailers: list, RunTimeTicks: int, ScreenshotImageTags: list, SeasonId: string, SeasonName: string, SeriesCount: int, SeriesId: string, SeriesName: string, SeriesPrimaryImageTag: string, SeriesStudio: string, SeriesThumbImageTag: string, SeriesTimerId: string, ServerId: string, ShutterSpeed: float, Software: string, SongCount: int, SortName: string, SourceType: string, SpecialFeatureCount: int, StartDate: string, Status: string, Studios: list, SupportsSync: bool, Taglines: list, Tags: list, TimerId: string, TrailerCount: int, Type: string, UserData: record, Video3DFormat: string, VideoType: string, Width: int>, StartIndex: int, TotalRecordCount: int> {
   let auth = (build-auth $token ($auth_scheme | default "x-emby-authorization"))
   let base = ($base_url | default $BASE_URL)
+  if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
   let qp = [(serialize-qp "userId" $user_id "scalar") (serialize-qp "limit" $limit "scalar") (serialize-qp "fields" $fields "multi") (serialize-qp "enableImages" $enable_images "scalar") (serialize-qp "enableUserData" $enable_user_data "scalar") (serialize-qp "imageTypeLimit" $image_type_limit "scalar") (serialize-qp "enableImageTypes" $enable_image_types "multi")] | flatten | str join "&"
   let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/Albums/{id}/InstantMix") $qp)
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"userId": $user_id, "limit": $limit, "fields": $fields, "enableImages": $enable_images, "enableUserData": $enable_user_data, "imageTypeLimit": $image_type_limit, "enableImageTypes": $enable_image_types} | compact), body: null}
 }
 
 # Gets similar items.
@@ -194,11 +217,12 @@ export def "albums-similar get" [
 ]: nothing -> record<Items: table<AirDays: list, AirTime: string, AirsAfterSeasonNumber: int, AirsBeforeEpisodeNumber: int, AirsBeforeSeasonNumber: int, Album: string, AlbumArtist: string, AlbumArtists: list, AlbumCount: int, AlbumId: string, AlbumPrimaryImageTag: string, Altitude: float, Aperture: float, ArtistCount: int, ArtistItems: list, Artists: list, AspectRatio: string, Audio: string, BackdropImageTags: list, CameraMake: string, CameraModel: string, CanDelete: bool, CanDownload: bool, ChannelId: string, ChannelName: string, ChannelNumber: string, ChannelPrimaryImageTag: string, ChannelType: string, Chapters: list, ChildCount: int, CollectionType: string, CommunityRating: float, CompletionPercentage: float, Container: string, CriticRating: float, CumulativeRunTimeTicks: int, CurrentProgram: any, CustomRating: string, DateCreated: string, DateLastMediaAdded: string, DisplayOrder: string, DisplayPreferencesId: string, EnableMediaSourceDisplay: bool, EndDate: string, EpisodeCount: int, EpisodeTitle: string, Etag: string, ExposureTime: float, ExternalUrls: list, ExtraType: string, FocalLength: float, ForcedSortName: string, GenreItems: list, Genres: list, HasSubtitles: bool, Height: int, Id: string, ImageBlurHashes: record, ImageOrientation: string, ImageTags: record, IndexNumber: int, IndexNumberEnd: int, IsFolder: bool, IsHD: bool, IsKids: bool, IsLive: bool, IsMovie: bool, IsNews: bool, IsPlaceHolder: bool, IsPremiere: bool, IsRepeat: bool, IsSeries: bool, IsSports: bool, IsoSpeedRating: int, IsoType: string, Latitude: float, LocalTrailerCount: int, LocationType: string, LockData: bool, LockedFields: list, Longitude: float, MediaSourceCount: int, MediaSources: list, MediaStreams: list, MediaType: string, MovieCount: int, MusicVideoCount: int, Name: string, Number: string, OfficialRating: string, OriginalTitle: string, Overview: string, ParentArtImageTag: string, ParentArtItemId: string, ParentBackdropImageTags: list, ParentBackdropItemId: string, ParentId: string, ParentIndexNumber: int, ParentLogoImageTag: string, ParentLogoItemId: string, ParentPrimaryImageItemId: string, ParentPrimaryImageTag: string, ParentThumbImageTag: string, ParentThumbItemId: string, PartCount: int, Path: string, People: list, PlayAccess: string, PlaylistItemId: string, PreferredMetadataCountryCode: string, PreferredMetadataLanguage: string, PremiereDate: string, PrimaryImageAspectRatio: float, ProductionLocations: list, ProductionYear: int, ProgramCount: int, ProgramId: string, ProviderIds: record, RecursiveItemCount: int, RemoteTrailers: list, RunTimeTicks: int, ScreenshotImageTags: list, SeasonId: string, SeasonName: string, SeriesCount: int, SeriesId: string, SeriesName: string, SeriesPrimaryImageTag: string, SeriesStudio: string, SeriesThumbImageTag: string, SeriesTimerId: string, ServerId: string, ShutterSpeed: float, Software: string, SongCount: int, SortName: string, SourceType: string, SpecialFeatureCount: int, StartDate: string, Status: string, Studios: list, SupportsSync: bool, Taglines: list, Tags: list, TimerId: string, TrailerCount: int, Type: string, UserData: record, Video3DFormat: string, VideoType: string, Width: int>, StartIndex: int, TotalRecordCount: int> {
   let auth = (build-auth $token ($auth_scheme | default "x-emby-authorization"))
   let base = ($base_url | default $BASE_URL)
+  if ($item_id | is-empty) { error make --unspanned { msg: "path parameter 'itemId' must be non-empty" } }
   let qp = [(serialize-qp "excludeArtistIds" $exclude_artist_ids "multi") (serialize-qp "userId" $user_id "scalar") (serialize-qp "limit" $limit "scalar") (serialize-qp "fields" $fields "multi")] | flatten | str join "&"
   let full_url = (build-url $base ({item_id: (encode-path-segment $item_id)} | format pattern "/Albums/{item_id}/Similar") $qp)
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"excludeArtistIds": $exclude_artist_ids, "userId": $user_id, "limit": $limit, "fields": $fields} | compact), body: null}
 }
 
 # Gets all artists from a given item, folder, or the entire library.
@@ -253,7 +277,7 @@ export def "artists list" [
   let full_url = (build-url $base "/Artists" $qp)
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"minCommunityRating": $min_community_rating, "startIndex": $start_index, "limit": $limit, "searchTerm": $search_term, "parentId": $parent_id, "fields": $fields, "excludeItemTypes": $exclude_item_types, "includeItemTypes": $include_item_types, "filters": $filters, "isFavorite": $is_favorite, "mediaTypes": $media_types, "genres": $genres, "genreIds": $genre_ids, "officialRatings": $official_ratings, "tags": $tags, "years": $years, "enableUserData": $enable_user_data, "imageTypeLimit": $image_type_limit, "enableImageTypes": $enable_image_types, "person": $person, "personIds": $person_ids, "personTypes": $person_types, "studios": $studios, "studioIds": $studio_ids, "userId": $user_id, "nameStartsWithOrGreater": $name_starts_with_or_greater, "nameStartsWith": $name_starts_with, "nameLessThan": $name_less_than, "enableImages": $enable_images, "enableTotalRecordCount": $enable_total_record_count} | compact), body: null}
 }
 
 # Gets all album artists from a given item, folder, or the entire library.
@@ -308,7 +332,7 @@ export def "artists-album-artists get" [
   let full_url = (build-url $base "/Artists/AlbumArtists" $qp)
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"minCommunityRating": $min_community_rating, "startIndex": $start_index, "limit": $limit, "searchTerm": $search_term, "parentId": $parent_id, "fields": $fields, "excludeItemTypes": $exclude_item_types, "includeItemTypes": $include_item_types, "filters": $filters, "isFavorite": $is_favorite, "mediaTypes": $media_types, "genres": $genres, "genreIds": $genre_ids, "officialRatings": $official_ratings, "tags": $tags, "years": $years, "enableUserData": $enable_user_data, "imageTypeLimit": $image_type_limit, "enableImageTypes": $enable_image_types, "person": $person, "personIds": $person_ids, "personTypes": $person_types, "studios": $studios, "studioIds": $studio_ids, "userId": $user_id, "nameStartsWithOrGreater": $name_starts_with_or_greater, "nameStartsWith": $name_starts_with, "nameLessThan": $name_less_than, "enableImages": $enable_images, "enableTotalRecordCount": $enable_total_record_count} | compact), body: null}
 }
 
 # Creates an instant playlist based on a given song.
@@ -337,11 +361,12 @@ export def "artists-instant-mix get" [
 ]: nothing -> record<Items: table<AirDays: list, AirTime: string, AirsAfterSeasonNumber: int, AirsBeforeEpisodeNumber: int, AirsBeforeSeasonNumber: int, Album: string, AlbumArtist: string, AlbumArtists: list, AlbumCount: int, AlbumId: string, AlbumPrimaryImageTag: string, Altitude: float, Aperture: float, ArtistCount: int, ArtistItems: list, Artists: list, AspectRatio: string, Audio: string, BackdropImageTags: list, CameraMake: string, CameraModel: string, CanDelete: bool, CanDownload: bool, ChannelId: string, ChannelName: string, ChannelNumber: string, ChannelPrimaryImageTag: string, ChannelType: string, Chapters: list, ChildCount: int, CollectionType: string, CommunityRating: float, CompletionPercentage: float, Container: string, CriticRating: float, CumulativeRunTimeTicks: int, CurrentProgram: any, CustomRating: string, DateCreated: string, DateLastMediaAdded: string, DisplayOrder: string, DisplayPreferencesId: string, EnableMediaSourceDisplay: bool, EndDate: string, EpisodeCount: int, EpisodeTitle: string, Etag: string, ExposureTime: float, ExternalUrls: list, ExtraType: string, FocalLength: float, ForcedSortName: string, GenreItems: list, Genres: list, HasSubtitles: bool, Height: int, Id: string, ImageBlurHashes: record, ImageOrientation: string, ImageTags: record, IndexNumber: int, IndexNumberEnd: int, IsFolder: bool, IsHD: bool, IsKids: bool, IsLive: bool, IsMovie: bool, IsNews: bool, IsPlaceHolder: bool, IsPremiere: bool, IsRepeat: bool, IsSeries: bool, IsSports: bool, IsoSpeedRating: int, IsoType: string, Latitude: float, LocalTrailerCount: int, LocationType: string, LockData: bool, LockedFields: list, Longitude: float, MediaSourceCount: int, MediaSources: list, MediaStreams: list, MediaType: string, MovieCount: int, MusicVideoCount: int, Name: string, Number: string, OfficialRating: string, OriginalTitle: string, Overview: string, ParentArtImageTag: string, ParentArtItemId: string, ParentBackdropImageTags: list, ParentBackdropItemId: string, ParentId: string, ParentIndexNumber: int, ParentLogoImageTag: string, ParentLogoItemId: string, ParentPrimaryImageItemId: string, ParentPrimaryImageTag: string, ParentThumbImageTag: string, ParentThumbItemId: string, PartCount: int, Path: string, People: list, PlayAccess: string, PlaylistItemId: string, PreferredMetadataCountryCode: string, PreferredMetadataLanguage: string, PremiereDate: string, PrimaryImageAspectRatio: float, ProductionLocations: list, ProductionYear: int, ProgramCount: int, ProgramId: string, ProviderIds: record, RecursiveItemCount: int, RemoteTrailers: list, RunTimeTicks: int, ScreenshotImageTags: list, SeasonId: string, SeasonName: string, SeriesCount: int, SeriesId: string, SeriesName: string, SeriesPrimaryImageTag: string, SeriesStudio: string, SeriesThumbImageTag: string, SeriesTimerId: string, ServerId: string, ShutterSpeed: float, Software: string, SongCount: int, SortName: string, SourceType: string, SpecialFeatureCount: int, StartDate: string, Status: string, Studios: list, SupportsSync: bool, Taglines: list, Tags: list, TimerId: string, TrailerCount: int, Type: string, UserData: record, Video3DFormat: string, VideoType: string, Width: int>, StartIndex: int, TotalRecordCount: int> {
   let auth = (build-auth $token ($auth_scheme | default "x-emby-authorization"))
   let base = ($base_url | default $BASE_URL)
+  if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
   let qp = [(serialize-qp "userId" $user_id "scalar") (serialize-qp "limit" $limit "scalar") (serialize-qp "fields" $fields "multi") (serialize-qp "enableImages" $enable_images "scalar") (serialize-qp "enableUserData" $enable_user_data "scalar") (serialize-qp "imageTypeLimit" $image_type_limit "scalar") (serialize-qp "enableImageTypes" $enable_image_types "multi")] | flatten | str join "&"
   let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/Artists/{id}/InstantMix") $qp)
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"userId": $user_id, "limit": $limit, "fields": $fields, "enableImages": $enable_images, "enableUserData": $enable_user_data, "imageTypeLimit": $image_type_limit, "enableImageTypes": $enable_image_types} | compact), body: null}
 }
 
 # Gets similar items.
@@ -367,11 +392,12 @@ export def "artists-similar get" [
 ]: nothing -> record<Items: table<AirDays: list, AirTime: string, AirsAfterSeasonNumber: int, AirsBeforeEpisodeNumber: int, AirsBeforeSeasonNumber: int, Album: string, AlbumArtist: string, AlbumArtists: list, AlbumCount: int, AlbumId: string, AlbumPrimaryImageTag: string, Altitude: float, Aperture: float, ArtistCount: int, ArtistItems: list, Artists: list, AspectRatio: string, Audio: string, BackdropImageTags: list, CameraMake: string, CameraModel: string, CanDelete: bool, CanDownload: bool, ChannelId: string, ChannelName: string, ChannelNumber: string, ChannelPrimaryImageTag: string, ChannelType: string, Chapters: list, ChildCount: int, CollectionType: string, CommunityRating: float, CompletionPercentage: float, Container: string, CriticRating: float, CumulativeRunTimeTicks: int, CurrentProgram: any, CustomRating: string, DateCreated: string, DateLastMediaAdded: string, DisplayOrder: string, DisplayPreferencesId: string, EnableMediaSourceDisplay: bool, EndDate: string, EpisodeCount: int, EpisodeTitle: string, Etag: string, ExposureTime: float, ExternalUrls: list, ExtraType: string, FocalLength: float, ForcedSortName: string, GenreItems: list, Genres: list, HasSubtitles: bool, Height: int, Id: string, ImageBlurHashes: record, ImageOrientation: string, ImageTags: record, IndexNumber: int, IndexNumberEnd: int, IsFolder: bool, IsHD: bool, IsKids: bool, IsLive: bool, IsMovie: bool, IsNews: bool, IsPlaceHolder: bool, IsPremiere: bool, IsRepeat: bool, IsSeries: bool, IsSports: bool, IsoSpeedRating: int, IsoType: string, Latitude: float, LocalTrailerCount: int, LocationType: string, LockData: bool, LockedFields: list, Longitude: float, MediaSourceCount: int, MediaSources: list, MediaStreams: list, MediaType: string, MovieCount: int, MusicVideoCount: int, Name: string, Number: string, OfficialRating: string, OriginalTitle: string, Overview: string, ParentArtImageTag: string, ParentArtItemId: string, ParentBackdropImageTags: list, ParentBackdropItemId: string, ParentId: string, ParentIndexNumber: int, ParentLogoImageTag: string, ParentLogoItemId: string, ParentPrimaryImageItemId: string, ParentPrimaryImageTag: string, ParentThumbImageTag: string, ParentThumbItemId: string, PartCount: int, Path: string, People: list, PlayAccess: string, PlaylistItemId: string, PreferredMetadataCountryCode: string, PreferredMetadataLanguage: string, PremiereDate: string, PrimaryImageAspectRatio: float, ProductionLocations: list, ProductionYear: int, ProgramCount: int, ProgramId: string, ProviderIds: record, RecursiveItemCount: int, RemoteTrailers: list, RunTimeTicks: int, ScreenshotImageTags: list, SeasonId: string, SeasonName: string, SeriesCount: int, SeriesId: string, SeriesName: string, SeriesPrimaryImageTag: string, SeriesStudio: string, SeriesThumbImageTag: string, SeriesTimerId: string, ServerId: string, ShutterSpeed: float, Software: string, SongCount: int, SortName: string, SourceType: string, SpecialFeatureCount: int, StartDate: string, Status: string, Studios: list, SupportsSync: bool, Taglines: list, Tags: list, TimerId: string, TrailerCount: int, Type: string, UserData: record, Video3DFormat: string, VideoType: string, Width: int>, StartIndex: int, TotalRecordCount: int> {
   let auth = (build-auth $token ($auth_scheme | default "x-emby-authorization"))
   let base = ($base_url | default $BASE_URL)
+  if ($item_id | is-empty) { error make --unspanned { msg: "path parameter 'itemId' must be non-empty" } }
   let qp = [(serialize-qp "excludeArtistIds" $exclude_artist_ids "multi") (serialize-qp "userId" $user_id "scalar") (serialize-qp "limit" $limit "scalar") (serialize-qp "fields" $fields "multi")] | flatten | str join "&"
   let full_url = (build-url $base ({item_id: (encode-path-segment $item_id)} | format pattern "/Artists/{item_id}/Similar") $qp)
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"excludeArtistIds": $exclude_artist_ids, "userId": $user_id, "limit": $limit, "fields": $fields} | compact), body: null}
 }
 
 # Gets an artist by name.
@@ -394,11 +420,12 @@ export def "artists get" [
 ]: nothing -> record<AirDays: list<string>, AirTime: string, AirsAfterSeasonNumber: int, AirsBeforeEpisodeNumber: int, AirsBeforeSeasonNumber: int, Album: string, AlbumArtist: string, AlbumArtists: table<Id: string, Name: string>, AlbumCount: int, AlbumId: string, AlbumPrimaryImageTag: string, Altitude: float, Aperture: float, ArtistCount: int, ArtistItems: table<Id: string, Name: string>, Artists: list<string>, AspectRatio: string, Audio: string, BackdropImageTags: list<string>, CameraMake: string, CameraModel: string, CanDelete: bool, CanDownload: bool, ChannelId: string, ChannelName: string, ChannelNumber: string, ChannelPrimaryImageTag: string, ChannelType: string, Chapters: table<ImageDateModified: string, ImagePath: string, ImageTag: string, Name: string, StartPositionTicks: int>, ChildCount: int, CollectionType: string, CommunityRating: float, CompletionPercentage: float, Container: string, CriticRating: float, CumulativeRunTimeTicks: int, CurrentProgram: any, CustomRating: string, DateCreated: string, DateLastMediaAdded: string, DisplayOrder: string, DisplayPreferencesId: string, EnableMediaSourceDisplay: bool, EndDate: string, EpisodeCount: int, EpisodeTitle: string, Etag: string, ExposureTime: float, ExternalUrls: table<Name: string, Url: string>, ExtraType: string, FocalLength: float, ForcedSortName: string, GenreItems: table<Id: string, Name: string>, Genres: list<string>, HasSubtitles: bool, Height: int, Id: string, ImageBlurHashes: record<Art: record, Backdrop: record, Banner: record, Box: record, BoxRear: record, Chapter: record, Disc: record, Logo: record, Menu: record, Primary: record, Profile: record, Screenshot: record, Thumb: record>, ImageOrientation: string, ImageTags: record, IndexNumber: int, IndexNumberEnd: int, IsFolder: bool, IsHD: bool, IsKids: bool, IsLive: bool, IsMovie: bool, IsNews: bool, IsPlaceHolder: bool, IsPremiere: bool, IsRepeat: bool, IsSeries: bool, IsSports: bool, IsoSpeedRating: int, IsoType: string, Latitude: float, LocalTrailerCount: int, LocationType: string, LockData: bool, LockedFields: list<string>, Longitude: float, MediaSourceCount: int, MediaSources: table<AnalyzeDurationMs: int, Bitrate: int, BufferMs: int, Container: string, DefaultAudioStreamIndex: int, DefaultSubtitleStreamIndex: int, ETag: string, EncoderPath: string, EncoderProtocol: string, Formats: list, GenPtsInput: bool, Id: string, IgnoreDts: bool, IgnoreIndex: bool, IsInfiniteStream: bool, IsRemote: bool, IsoType: string, LiveStreamId: string, MediaAttachments: list, MediaStreams: list, Name: string, OpenToken: string, Path: string, Protocol: string, ReadAtNativeFramerate: bool, RequiredHttpHeaders: record, RequiresClosing: bool, RequiresLooping: bool, RequiresOpening: bool, RunTimeTicks: int, Size: int, SupportsDirectPlay: bool, SupportsDirectStream: bool, SupportsProbing: bool, SupportsTranscoding: bool, Timestamp: string, TranscodingContainer: string, TranscodingSubProtocol: string, TranscodingUrl: string, Type: string, Video3DFormat: string, VideoType: string>, MediaStreams: table<AspectRatio: string, AverageFrameRate: float, BitDepth: int, BitRate: int, ChannelLayout: string, Channels: int, Codec: string, CodecTag: string, CodecTimeBase: string, ColorPrimaries: string, ColorRange: string, ColorSpace: string, ColorTransfer: string, Comment: string, DeliveryMethod: string, DeliveryUrl: string, DisplayTitle: string, Height: int, Index: int, IsAVC: bool, IsAnamorphic: bool, IsDefault: bool, IsExternal: bool, IsExternalUrl: bool, IsForced: bool, IsInterlaced: bool, IsTextSubtitleStream: bool, Language: string, Level: float, NalLengthSize: string, PacketLength: int, Path: string, PixelFormat: string, Profile: string, RealFrameRate: float, RefFrames: int, SampleRate: int, Score: int, SupportsExternalStream: bool, TimeBase: string, Title: string, Type: string, VideoRange: string, Width: int, localizedDefault: string, localizedForced: string, localizedUndefined: string>, MediaType: string, MovieCount: int, MusicVideoCount: int, Name: string, Number: string, OfficialRating: string, OriginalTitle: string, Overview: string, ParentArtImageTag: string, ParentArtItemId: string, ParentBackdropImageTags: list<string>, ParentBackdropItemId: string, ParentId: string, ParentIndexNumber: int, ParentLogoImageTag: string, ParentLogoItemId: string, ParentPrimaryImageItemId: string, ParentPrimaryImageTag: string, ParentThumbImageTag: string, ParentThumbItemId: string, PartCount: int, Path: string, People: table<Id: string, ImageBlurHashes: record, Name: string, PrimaryImageTag: string, Role: string, Type: string>, PlayAccess: string, PlaylistItemId: string, PreferredMetadataCountryCode: string, PreferredMetadataLanguage: string, PremiereDate: string, PrimaryImageAspectRatio: float, ProductionLocations: list<string>, ProductionYear: int, ProgramCount: int, ProgramId: string, ProviderIds: record, RecursiveItemCount: int, RemoteTrailers: table<Name: string, Url: string>, RunTimeTicks: int, ScreenshotImageTags: list<string>, SeasonId: string, SeasonName: string, SeriesCount: int, SeriesId: string, SeriesName: string, SeriesPrimaryImageTag: string, SeriesStudio: string, SeriesThumbImageTag: string, SeriesTimerId: string, ServerId: string, ShutterSpeed: float, Software: string, SongCount: int, SortName: string, SourceType: string, SpecialFeatureCount: int, StartDate: string, Status: string, Studios: table<Id: string, Name: string>, SupportsSync: bool, Taglines: list<string>, Tags: list<string>, TimerId: string, TrailerCount: int, Type: string, UserData: record<IsFavorite: bool, ItemId: string, Key: string, LastPlayedDate: string, Likes: bool, PlayCount: int, PlaybackPositionTicks: int, Played: bool, PlayedPercentage: float, Rating: float, UnplayedItemCount: int>, Video3DFormat: string, VideoType: string, Width: int> {
   let auth = (build-auth $token ($auth_scheme | default "x-emby-authorization"))
   let base = ($base_url | default $BASE_URL)
+  if ($name | is-empty) { error make --unspanned { msg: "path parameter 'name' must be non-empty" } }
   let qp = [(serialize-qp "userId" $user_id "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({name: (encode-path-segment $name)} | format pattern "/Artists/{name}") $qp)
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"userId": $user_id} | compact), body: null}
 }
 
 # Get artist image by name.
@@ -435,11 +462,14 @@ export def "artists-images get" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "x-emby-authorization"))
   let base = ($base_url | default $BASE_URL)
+  if ($name | is-empty) { error make --unspanned { msg: "path parameter 'name' must be non-empty" } }
+  if ($image_type | is-empty) { error make --unspanned { msg: "path parameter 'imageType' must be non-empty" } }
+  if ($image_index | is-empty) { error make --unspanned { msg: "path parameter 'imageIndex' must be non-empty" } }
   let qp = [(serialize-qp "tag" $tag "scalar") (serialize-qp "format" $format "scalar") (serialize-qp "maxWidth" $max_width "scalar") (serialize-qp "maxHeight" $max_height "scalar") (serialize-qp "percentPlayed" $percent_played "scalar") (serialize-qp "unplayedCount" $unplayed_count "scalar") (serialize-qp "width" $width "scalar") (serialize-qp "height" $height "scalar") (serialize-qp "quality" $quality "scalar") (serialize-qp "cropWhitespace" $crop_whitespace "scalar") (serialize-qp "addPlayedIndicator" $add_played_indicator "scalar") (serialize-qp "blur" $blur "scalar") (serialize-qp "backgroundColor" $background_color "scalar") (serialize-qp "foregroundLayer" $foreground_layer "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({name: (encode-path-segment $name), image_type: (encode-path-segment $image_type), image_index: (encode-path-segment $image_index)} | format pattern "/Artists/{name}/Images/{image_type}/{image_index}") $qp)
   let accept_val = "image/*"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"tag": $tag, "format": $format, "maxWidth": $max_width, "maxHeight": $max_height, "percentPlayed": $percent_played, "unplayedCount": $unplayed_count, "width": $width, "height": $height, "quality": $quality, "cropWhitespace": $crop_whitespace, "addPlayedIndicator": $add_played_indicator, "blur": $blur, "backgroundColor": $background_color, "foregroundLayer": $foreground_layer} | compact), body: null}
 }
 
 # Get artist image by name.
@@ -476,11 +506,14 @@ export def "artists-images head-head" [
 ]: nothing -> record {
   let auth = (build-auth $token ($auth_scheme | default "x-emby-authorization"))
   let base = ($base_url | default $BASE_URL)
+  if ($name | is-empty) { error make --unspanned { msg: "path parameter 'name' must be non-empty" } }
+  if ($image_type | is-empty) { error make --unspanned { msg: "path parameter 'imageType' must be non-empty" } }
+  if ($image_index | is-empty) { error make --unspanned { msg: "path parameter 'imageIndex' must be non-empty" } }
   let qp = [(serialize-qp "tag" $tag "scalar") (serialize-qp "format" $format "scalar") (serialize-qp "maxWidth" $max_width "scalar") (serialize-qp "maxHeight" $max_height "scalar") (serialize-qp "percentPlayed" $percent_played "scalar") (serialize-qp "unplayedCount" $unplayed_count "scalar") (serialize-qp "width" $width "scalar") (serialize-qp "height" $height "scalar") (serialize-qp "quality" $quality "scalar") (serialize-qp "cropWhitespace" $crop_whitespace "scalar") (serialize-qp "addPlayedIndicator" $add_played_indicator "scalar") (serialize-qp "blur" $blur "scalar") (serialize-qp "backgroundColor" $background_color "scalar") (serialize-qp "foregroundLayer" $foreground_layer "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({name: (encode-path-segment $name), image_type: (encode-path-segment $image_type), image_index: (encode-path-segment $image_index)} | format pattern "/Artists/{name}/Images/{image_type}/{image_index}") $qp)
   let accept_val = "image/*"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "head" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "head" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"tag": $tag, "format": $format, "maxWidth": $max_width, "maxHeight": $max_height, "percentPlayed": $percent_played, "unplayedCount": $unplayed_count, "width": $width, "height": $height, "quality": $quality, "cropWhitespace": $crop_whitespace, "addPlayedIndicator": $add_played_indicator, "blur": $blur, "backgroundColor": $background_color, "foregroundLayer": $foreground_layer} | compact), body: null}
 }
 
 # Gets the specified audio segment for an audio item.
@@ -502,10 +535,12 @@ export def "audio-hls-stream-aac get-segment-legacy" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "x-emby-authorization"))
   let base = ($base_url | default $BASE_URL)
+  if ($item_id | is-empty) { error make --unspanned { msg: "path parameter 'itemId' must be non-empty" } }
+  if ($segment_id | is-empty) { error make --unspanned { msg: "path parameter 'segmentId' must be non-empty" } }
   let full_url = (build-url $base ({item_id: (encode-path-segment $item_id), segment_id: (encode-path-segment $segment_id)} | format pattern "/Audio/{item_id}/hls/{segment_id}/stream.aac"))
   let accept_val = "audio/*"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
 }
 
 # Gets the specified audio segment for an audio item.
@@ -527,10 +562,12 @@ export def "audio-hls-stream-mp3 get-segment-legacy" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "x-emby-authorization"))
   let base = ($base_url | default $BASE_URL)
+  if ($item_id | is-empty) { error make --unspanned { msg: "path parameter 'itemId' must be non-empty" } }
+  if ($segment_id | is-empty) { error make --unspanned { msg: "path parameter 'segmentId' must be non-empty" } }
   let full_url = (build-url $base ({item_id: (encode-path-segment $item_id), segment_id: (encode-path-segment $segment_id)} | format pattern "/Audio/{item_id}/hls/{segment_id}/stream.mp3"))
   let accept_val = "audio/*"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
 }
 
 # Gets a video stream using HTTP live streaming.
@@ -602,11 +639,15 @@ export def "audio-hls1 get-hls-segment" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "x-emby-authorization"))
   let base = ($base_url | default $BASE_URL)
+  if ($item_id | is-empty) { error make --unspanned { msg: "path parameter 'itemId' must be non-empty" } }
+  if ($playlist_id | is-empty) { error make --unspanned { msg: "path parameter 'playlistId' must be non-empty" } }
+  if ($segment_id | is-empty) { error make --unspanned { msg: "path parameter 'segmentId' must be non-empty" } }
+  if ($container | is-empty) { error make --unspanned { msg: "path parameter 'container' must be non-empty" } }
   let qp = [(serialize-qp "static" $static "scalar") (serialize-qp "params" $params "scalar") (serialize-qp "tag" $tag "scalar") (serialize-qp "deviceProfileId" $device_profile_id "scalar") (serialize-qp "playSessionId" $play_session_id "scalar") (serialize-qp "segmentContainer" $segment_container "scalar") (serialize-qp "segmentLength" $segment_length "scalar") (serialize-qp "minSegments" $min_segments "scalar") (serialize-qp "mediaSourceId" $media_source_id "scalar") (serialize-qp "deviceId" $device_id "scalar") (serialize-qp "audioCodec" $audio_codec "scalar") (serialize-qp "enableAutoStreamCopy" $enable_auto_stream_copy "scalar") (serialize-qp "allowVideoStreamCopy" $allow_video_stream_copy "scalar") (serialize-qp "allowAudioStreamCopy" $allow_audio_stream_copy "scalar") (serialize-qp "breakOnNonKeyFrames" $break_on_non_key_frames "scalar") (serialize-qp "audioSampleRate" $audio_sample_rate "scalar") (serialize-qp "maxAudioBitDepth" $max_audio_bit_depth "scalar") (serialize-qp "maxStreamingBitrate" $max_streaming_bitrate "scalar") (serialize-qp "audioBitRate" $audio_bit_rate "scalar") (serialize-qp "audioChannels" $audio_channels "scalar") (serialize-qp "maxAudioChannels" $max_audio_channels "scalar") (serialize-qp "profile" $profile "scalar") (serialize-qp "level" $level "scalar") (serialize-qp "framerate" $framerate "scalar") (serialize-qp "maxFramerate" $max_framerate "scalar") (serialize-qp "copyTimestamps" $copy_timestamps "scalar") (serialize-qp "startTimeTicks" $start_time_ticks "scalar") (serialize-qp "width" $width "scalar") (serialize-qp "height" $height "scalar") (serialize-qp "videoBitRate" $video_bit_rate "scalar") (serialize-qp "subtitleStreamIndex" $subtitle_stream_index "scalar") (serialize-qp "subtitleMethod" $subtitle_method "scalar") (serialize-qp "maxRefFrames" $max_ref_frames "scalar") (serialize-qp "maxVideoBitDepth" $max_video_bit_depth "scalar") (serialize-qp "requireAvc" $require_avc "scalar") (serialize-qp "deInterlace" $de_interlace "scalar") (serialize-qp "requireNonAnamorphic" $require_non_anamorphic "scalar") (serialize-qp "transcodingMaxAudioChannels" $transcoding_max_audio_channels "scalar") (serialize-qp "cpuCoreLimit" $cpu_core_limit "scalar") (serialize-qp "liveStreamId" $live_stream_id "scalar") (serialize-qp "enableMpegtsM2TsMode" $enable_mpegts_m2_ts_mode "scalar") (serialize-qp "videoCodec" $video_codec "scalar") (serialize-qp "subtitleCodec" $subtitle_codec "scalar") (serialize-qp "transcodeReasons" $transcode_reasons "scalar") (serialize-qp "audioStreamIndex" $audio_stream_index "scalar") (serialize-qp "videoStreamIndex" $video_stream_index "scalar") (serialize-qp "context" $context "scalar") (serialize-qp "streamOptions" $stream_options "multi")] | flatten | str join "&"
   let full_url = (build-url $base ({item_id: (encode-path-segment $item_id), playlist_id: (encode-path-segment $playlist_id), segment_id: (encode-path-segment $segment_id), container: (encode-path-segment $container)} | format pattern "/Audio/{item_id}/hls1/{playlist_id}/{segment_id}.{container}") $qp)
   let accept_val = "audio/*"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"static": $static, "params": $params, "tag": $tag, "deviceProfileId": $device_profile_id, "playSessionId": $play_session_id, "segmentContainer": $segment_container, "segmentLength": $segment_length, "minSegments": $min_segments, "mediaSourceId": $media_source_id, "deviceId": $device_id, "audioCodec": $audio_codec, "enableAutoStreamCopy": $enable_auto_stream_copy, "allowVideoStreamCopy": $allow_video_stream_copy, "allowAudioStreamCopy": $allow_audio_stream_copy, "breakOnNonKeyFrames": $break_on_non_key_frames, "audioSampleRate": $audio_sample_rate, "maxAudioBitDepth": $max_audio_bit_depth, "maxStreamingBitrate": $max_streaming_bitrate, "audioBitRate": $audio_bit_rate, "audioChannels": $audio_channels, "maxAudioChannels": $max_audio_channels, "profile": $profile, "level": $level, "framerate": $framerate, "maxFramerate": $max_framerate, "copyTimestamps": $copy_timestamps, "startTimeTicks": $start_time_ticks, "width": $width, "height": $height, "videoBitRate": $video_bit_rate, "subtitleStreamIndex": $subtitle_stream_index, "subtitleMethod": $subtitle_method, "maxRefFrames": $max_ref_frames, "maxVideoBitDepth": $max_video_bit_depth, "requireAvc": $require_avc, "deInterlace": $de_interlace, "requireNonAnamorphic": $require_non_anamorphic, "transcodingMaxAudioChannels": $transcoding_max_audio_channels, "cpuCoreLimit": $cpu_core_limit, "liveStreamId": $live_stream_id, "enableMpegtsM2TsMode": $enable_mpegts_m2_ts_mode, "videoCodec": $video_codec, "subtitleCodec": $subtitle_codec, "transcodeReasons": $transcode_reasons, "audioStreamIndex": $audio_stream_index, "videoStreamIndex": $video_stream_index, "context": $context, "streamOptions": $stream_options} | compact), body: null}
 }
 
 # Gets an audio stream using HTTP live streaming.
@@ -675,11 +716,12 @@ export def "audio-main-m3u8 get-variant-hls-playlist" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "x-emby-authorization"))
   let base = ($base_url | default $BASE_URL)
+  if ($item_id | is-empty) { error make --unspanned { msg: "path parameter 'itemId' must be non-empty" } }
   let qp = [(serialize-qp "static" $static "scalar") (serialize-qp "params" $params "scalar") (serialize-qp "tag" $tag "scalar") (serialize-qp "deviceProfileId" $device_profile_id "scalar") (serialize-qp "playSessionId" $play_session_id "scalar") (serialize-qp "segmentContainer" $segment_container "scalar") (serialize-qp "segmentLength" $segment_length "scalar") (serialize-qp "minSegments" $min_segments "scalar") (serialize-qp "mediaSourceId" $media_source_id "scalar") (serialize-qp "deviceId" $device_id "scalar") (serialize-qp "audioCodec" $audio_codec "scalar") (serialize-qp "enableAutoStreamCopy" $enable_auto_stream_copy "scalar") (serialize-qp "allowVideoStreamCopy" $allow_video_stream_copy "scalar") (serialize-qp "allowAudioStreamCopy" $allow_audio_stream_copy "scalar") (serialize-qp "breakOnNonKeyFrames" $break_on_non_key_frames "scalar") (serialize-qp "audioSampleRate" $audio_sample_rate "scalar") (serialize-qp "maxAudioBitDepth" $max_audio_bit_depth "scalar") (serialize-qp "maxStreamingBitrate" $max_streaming_bitrate "scalar") (serialize-qp "audioBitRate" $audio_bit_rate "scalar") (serialize-qp "audioChannels" $audio_channels "scalar") (serialize-qp "maxAudioChannels" $max_audio_channels "scalar") (serialize-qp "profile" $profile "scalar") (serialize-qp "level" $level "scalar") (serialize-qp "framerate" $framerate "scalar") (serialize-qp "maxFramerate" $max_framerate "scalar") (serialize-qp "copyTimestamps" $copy_timestamps "scalar") (serialize-qp "startTimeTicks" $start_time_ticks "scalar") (serialize-qp "width" $width "scalar") (serialize-qp "height" $height "scalar") (serialize-qp "videoBitRate" $video_bit_rate "scalar") (serialize-qp "subtitleStreamIndex" $subtitle_stream_index "scalar") (serialize-qp "subtitleMethod" $subtitle_method "scalar") (serialize-qp "maxRefFrames" $max_ref_frames "scalar") (serialize-qp "maxVideoBitDepth" $max_video_bit_depth "scalar") (serialize-qp "requireAvc" $require_avc "scalar") (serialize-qp "deInterlace" $de_interlace "scalar") (serialize-qp "requireNonAnamorphic" $require_non_anamorphic "scalar") (serialize-qp "transcodingMaxAudioChannels" $transcoding_max_audio_channels "scalar") (serialize-qp "cpuCoreLimit" $cpu_core_limit "scalar") (serialize-qp "liveStreamId" $live_stream_id "scalar") (serialize-qp "enableMpegtsM2TsMode" $enable_mpegts_m2_ts_mode "scalar") (serialize-qp "videoCodec" $video_codec "scalar") (serialize-qp "subtitleCodec" $subtitle_codec "scalar") (serialize-qp "transcodeReasons" $transcode_reasons "scalar") (serialize-qp "audioStreamIndex" $audio_stream_index "scalar") (serialize-qp "videoStreamIndex" $video_stream_index "scalar") (serialize-qp "context" $context "scalar") (serialize-qp "streamOptions" $stream_options "multi")] | flatten | str join "&"
   let full_url = (build-url $base ({item_id: (encode-path-segment $item_id)} | format pattern "/Audio/{item_id}/main.m3u8") $qp)
   let accept_val = "application/x-mpegURL"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"static": $static, "params": $params, "tag": $tag, "deviceProfileId": $device_profile_id, "playSessionId": $play_session_id, "segmentContainer": $segment_container, "segmentLength": $segment_length, "minSegments": $min_segments, "mediaSourceId": $media_source_id, "deviceId": $device_id, "audioCodec": $audio_codec, "enableAutoStreamCopy": $enable_auto_stream_copy, "allowVideoStreamCopy": $allow_video_stream_copy, "allowAudioStreamCopy": $allow_audio_stream_copy, "breakOnNonKeyFrames": $break_on_non_key_frames, "audioSampleRate": $audio_sample_rate, "maxAudioBitDepth": $max_audio_bit_depth, "maxStreamingBitrate": $max_streaming_bitrate, "audioBitRate": $audio_bit_rate, "audioChannels": $audio_channels, "maxAudioChannels": $max_audio_channels, "profile": $profile, "level": $level, "framerate": $framerate, "maxFramerate": $max_framerate, "copyTimestamps": $copy_timestamps, "startTimeTicks": $start_time_ticks, "width": $width, "height": $height, "videoBitRate": $video_bit_rate, "subtitleStreamIndex": $subtitle_stream_index, "subtitleMethod": $subtitle_method, "maxRefFrames": $max_ref_frames, "maxVideoBitDepth": $max_video_bit_depth, "requireAvc": $require_avc, "deInterlace": $de_interlace, "requireNonAnamorphic": $require_non_anamorphic, "transcodingMaxAudioChannels": $transcoding_max_audio_channels, "cpuCoreLimit": $cpu_core_limit, "liveStreamId": $live_stream_id, "enableMpegtsM2TsMode": $enable_mpegts_m2_ts_mode, "videoCodec": $video_codec, "subtitleCodec": $subtitle_codec, "transcodeReasons": $transcode_reasons, "audioStreamIndex": $audio_stream_index, "videoStreamIndex": $video_stream_index, "context": $context, "streamOptions": $stream_options} | compact), body: null}
 }
 
 # Gets an audio hls playlist stream.
@@ -749,11 +791,12 @@ export def "audio-master-m3u8 get-hls-playlist" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "x-emby-authorization"))
   let base = ($base_url | default $BASE_URL)
+  if ($item_id | is-empty) { error make --unspanned { msg: "path parameter 'itemId' must be non-empty" } }
   let qp = [(serialize-qp "static" $static "scalar") (serialize-qp "params" $params "scalar") (serialize-qp "tag" $tag "scalar") (serialize-qp "deviceProfileId" $device_profile_id "scalar") (serialize-qp "playSessionId" $play_session_id "scalar") (serialize-qp "segmentContainer" $segment_container "scalar") (serialize-qp "segmentLength" $segment_length "scalar") (serialize-qp "minSegments" $min_segments "scalar") (serialize-qp "mediaSourceId" $media_source_id "scalar") (serialize-qp "deviceId" $device_id "scalar") (serialize-qp "audioCodec" $audio_codec "scalar") (serialize-qp "enableAutoStreamCopy" $enable_auto_stream_copy "scalar") (serialize-qp "allowVideoStreamCopy" $allow_video_stream_copy "scalar") (serialize-qp "allowAudioStreamCopy" $allow_audio_stream_copy "scalar") (serialize-qp "breakOnNonKeyFrames" $break_on_non_key_frames "scalar") (serialize-qp "audioSampleRate" $audio_sample_rate "scalar") (serialize-qp "maxAudioBitDepth" $max_audio_bit_depth "scalar") (serialize-qp "maxStreamingBitrate" $max_streaming_bitrate "scalar") (serialize-qp "audioBitRate" $audio_bit_rate "scalar") (serialize-qp "audioChannels" $audio_channels "scalar") (serialize-qp "maxAudioChannels" $max_audio_channels "scalar") (serialize-qp "profile" $profile "scalar") (serialize-qp "level" $level "scalar") (serialize-qp "framerate" $framerate "scalar") (serialize-qp "maxFramerate" $max_framerate "scalar") (serialize-qp "copyTimestamps" $copy_timestamps "scalar") (serialize-qp "startTimeTicks" $start_time_ticks "scalar") (serialize-qp "width" $width "scalar") (serialize-qp "height" $height "scalar") (serialize-qp "videoBitRate" $video_bit_rate "scalar") (serialize-qp "subtitleStreamIndex" $subtitle_stream_index "scalar") (serialize-qp "subtitleMethod" $subtitle_method "scalar") (serialize-qp "maxRefFrames" $max_ref_frames "scalar") (serialize-qp "maxVideoBitDepth" $max_video_bit_depth "scalar") (serialize-qp "requireAvc" $require_avc "scalar") (serialize-qp "deInterlace" $de_interlace "scalar") (serialize-qp "requireNonAnamorphic" $require_non_anamorphic "scalar") (serialize-qp "transcodingMaxAudioChannels" $transcoding_max_audio_channels "scalar") (serialize-qp "cpuCoreLimit" $cpu_core_limit "scalar") (serialize-qp "liveStreamId" $live_stream_id "scalar") (serialize-qp "enableMpegtsM2TsMode" $enable_mpegts_m2_ts_mode "scalar") (serialize-qp "videoCodec" $video_codec "scalar") (serialize-qp "subtitleCodec" $subtitle_codec "scalar") (serialize-qp "transcodeReasons" $transcode_reasons "scalar") (serialize-qp "audioStreamIndex" $audio_stream_index "scalar") (serialize-qp "videoStreamIndex" $video_stream_index "scalar") (serialize-qp "context" $context "scalar") (serialize-qp "streamOptions" $stream_options "multi") (serialize-qp "enableAdaptiveBitrateStreaming" $enable_adaptive_bitrate_streaming "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({item_id: (encode-path-segment $item_id)} | format pattern "/Audio/{item_id}/master.m3u8") $qp)
   let accept_val = "application/x-mpegURL"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"static": $static, "params": $params, "tag": $tag, "deviceProfileId": $device_profile_id, "playSessionId": $play_session_id, "segmentContainer": $segment_container, "segmentLength": $segment_length, "minSegments": $min_segments, "mediaSourceId": $media_source_id, "deviceId": $device_id, "audioCodec": $audio_codec, "enableAutoStreamCopy": $enable_auto_stream_copy, "allowVideoStreamCopy": $allow_video_stream_copy, "allowAudioStreamCopy": $allow_audio_stream_copy, "breakOnNonKeyFrames": $break_on_non_key_frames, "audioSampleRate": $audio_sample_rate, "maxAudioBitDepth": $max_audio_bit_depth, "maxStreamingBitrate": $max_streaming_bitrate, "audioBitRate": $audio_bit_rate, "audioChannels": $audio_channels, "maxAudioChannels": $max_audio_channels, "profile": $profile, "level": $level, "framerate": $framerate, "maxFramerate": $max_framerate, "copyTimestamps": $copy_timestamps, "startTimeTicks": $start_time_ticks, "width": $width, "height": $height, "videoBitRate": $video_bit_rate, "subtitleStreamIndex": $subtitle_stream_index, "subtitleMethod": $subtitle_method, "maxRefFrames": $max_ref_frames, "maxVideoBitDepth": $max_video_bit_depth, "requireAvc": $require_avc, "deInterlace": $de_interlace, "requireNonAnamorphic": $require_non_anamorphic, "transcodingMaxAudioChannels": $transcoding_max_audio_channels, "cpuCoreLimit": $cpu_core_limit, "liveStreamId": $live_stream_id, "enableMpegtsM2TsMode": $enable_mpegts_m2_ts_mode, "videoCodec": $video_codec, "subtitleCodec": $subtitle_codec, "transcodeReasons": $transcode_reasons, "audioStreamIndex": $audio_stream_index, "videoStreamIndex": $video_stream_index, "context": $context, "streamOptions": $stream_options, "enableAdaptiveBitrateStreaming": $enable_adaptive_bitrate_streaming} | compact), body: null}
 }
 
 # Gets an audio hls playlist stream.
@@ -823,11 +866,12 @@ export def "audio-master-m3u8 head-head-hls-playlist" [
 ]: nothing -> record {
   let auth = (build-auth $token ($auth_scheme | default "x-emby-authorization"))
   let base = ($base_url | default $BASE_URL)
+  if ($item_id | is-empty) { error make --unspanned { msg: "path parameter 'itemId' must be non-empty" } }
   let qp = [(serialize-qp "static" $static "scalar") (serialize-qp "params" $params "scalar") (serialize-qp "tag" $tag "scalar") (serialize-qp "deviceProfileId" $device_profile_id "scalar") (serialize-qp "playSessionId" $play_session_id "scalar") (serialize-qp "segmentContainer" $segment_container "scalar") (serialize-qp "segmentLength" $segment_length "scalar") (serialize-qp "minSegments" $min_segments "scalar") (serialize-qp "mediaSourceId" $media_source_id "scalar") (serialize-qp "deviceId" $device_id "scalar") (serialize-qp "audioCodec" $audio_codec "scalar") (serialize-qp "enableAutoStreamCopy" $enable_auto_stream_copy "scalar") (serialize-qp "allowVideoStreamCopy" $allow_video_stream_copy "scalar") (serialize-qp "allowAudioStreamCopy" $allow_audio_stream_copy "scalar") (serialize-qp "breakOnNonKeyFrames" $break_on_non_key_frames "scalar") (serialize-qp "audioSampleRate" $audio_sample_rate "scalar") (serialize-qp "maxAudioBitDepth" $max_audio_bit_depth "scalar") (serialize-qp "maxStreamingBitrate" $max_streaming_bitrate "scalar") (serialize-qp "audioBitRate" $audio_bit_rate "scalar") (serialize-qp "audioChannels" $audio_channels "scalar") (serialize-qp "maxAudioChannels" $max_audio_channels "scalar") (serialize-qp "profile" $profile "scalar") (serialize-qp "level" $level "scalar") (serialize-qp "framerate" $framerate "scalar") (serialize-qp "maxFramerate" $max_framerate "scalar") (serialize-qp "copyTimestamps" $copy_timestamps "scalar") (serialize-qp "startTimeTicks" $start_time_ticks "scalar") (serialize-qp "width" $width "scalar") (serialize-qp "height" $height "scalar") (serialize-qp "videoBitRate" $video_bit_rate "scalar") (serialize-qp "subtitleStreamIndex" $subtitle_stream_index "scalar") (serialize-qp "subtitleMethod" $subtitle_method "scalar") (serialize-qp "maxRefFrames" $max_ref_frames "scalar") (serialize-qp "maxVideoBitDepth" $max_video_bit_depth "scalar") (serialize-qp "requireAvc" $require_avc "scalar") (serialize-qp "deInterlace" $de_interlace "scalar") (serialize-qp "requireNonAnamorphic" $require_non_anamorphic "scalar") (serialize-qp "transcodingMaxAudioChannels" $transcoding_max_audio_channels "scalar") (serialize-qp "cpuCoreLimit" $cpu_core_limit "scalar") (serialize-qp "liveStreamId" $live_stream_id "scalar") (serialize-qp "enableMpegtsM2TsMode" $enable_mpegts_m2_ts_mode "scalar") (serialize-qp "videoCodec" $video_codec "scalar") (serialize-qp "subtitleCodec" $subtitle_codec "scalar") (serialize-qp "transcodeReasons" $transcode_reasons "scalar") (serialize-qp "audioStreamIndex" $audio_stream_index "scalar") (serialize-qp "videoStreamIndex" $video_stream_index "scalar") (serialize-qp "context" $context "scalar") (serialize-qp "streamOptions" $stream_options "multi") (serialize-qp "enableAdaptiveBitrateStreaming" $enable_adaptive_bitrate_streaming "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({item_id: (encode-path-segment $item_id)} | format pattern "/Audio/{item_id}/master.m3u8") $qp)
   let accept_val = "application/x-mpegURL"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "head" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "head" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"static": $static, "params": $params, "tag": $tag, "deviceProfileId": $device_profile_id, "playSessionId": $play_session_id, "segmentContainer": $segment_container, "segmentLength": $segment_length, "minSegments": $min_segments, "mediaSourceId": $media_source_id, "deviceId": $device_id, "audioCodec": $audio_codec, "enableAutoStreamCopy": $enable_auto_stream_copy, "allowVideoStreamCopy": $allow_video_stream_copy, "allowAudioStreamCopy": $allow_audio_stream_copy, "breakOnNonKeyFrames": $break_on_non_key_frames, "audioSampleRate": $audio_sample_rate, "maxAudioBitDepth": $max_audio_bit_depth, "maxStreamingBitrate": $max_streaming_bitrate, "audioBitRate": $audio_bit_rate, "audioChannels": $audio_channels, "maxAudioChannels": $max_audio_channels, "profile": $profile, "level": $level, "framerate": $framerate, "maxFramerate": $max_framerate, "copyTimestamps": $copy_timestamps, "startTimeTicks": $start_time_ticks, "width": $width, "height": $height, "videoBitRate": $video_bit_rate, "subtitleStreamIndex": $subtitle_stream_index, "subtitleMethod": $subtitle_method, "maxRefFrames": $max_ref_frames, "maxVideoBitDepth": $max_video_bit_depth, "requireAvc": $require_avc, "deInterlace": $de_interlace, "requireNonAnamorphic": $require_non_anamorphic, "transcodingMaxAudioChannels": $transcoding_max_audio_channels, "cpuCoreLimit": $cpu_core_limit, "liveStreamId": $live_stream_id, "enableMpegtsM2TsMode": $enable_mpegts_m2_ts_mode, "videoCodec": $video_codec, "subtitleCodec": $subtitle_codec, "transcodeReasons": $transcode_reasons, "audioStreamIndex": $audio_stream_index, "videoStreamIndex": $video_stream_index, "context": $context, "streamOptions": $stream_options, "enableAdaptiveBitrateStreaming": $enable_adaptive_bitrate_streaming} | compact), body: null}
 }
 
 # Gets an audio stream.
@@ -896,11 +940,12 @@ export def "audio-stream get" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "x-emby-authorization"))
   let base = ($base_url | default $BASE_URL)
+  if ($item_id | is-empty) { error make --unspanned { msg: "path parameter 'itemId' must be non-empty" } }
   let qp = [(serialize-qp "container" $container "scalar") (serialize-qp "static" $static "scalar") (serialize-qp "params" $params "scalar") (serialize-qp "tag" $tag "scalar") (serialize-qp "deviceProfileId" $device_profile_id "scalar") (serialize-qp "playSessionId" $play_session_id "scalar") (serialize-qp "segmentContainer" $segment_container "scalar") (serialize-qp "segmentLength" $segment_length "scalar") (serialize-qp "minSegments" $min_segments "scalar") (serialize-qp "mediaSourceId" $media_source_id "scalar") (serialize-qp "deviceId" $device_id "scalar") (serialize-qp "audioCodec" $audio_codec "scalar") (serialize-qp "enableAutoStreamCopy" $enable_auto_stream_copy "scalar") (serialize-qp "allowVideoStreamCopy" $allow_video_stream_copy "scalar") (serialize-qp "allowAudioStreamCopy" $allow_audio_stream_copy "scalar") (serialize-qp "breakOnNonKeyFrames" $break_on_non_key_frames "scalar") (serialize-qp "audioSampleRate" $audio_sample_rate "scalar") (serialize-qp "maxAudioBitDepth" $max_audio_bit_depth "scalar") (serialize-qp "audioBitRate" $audio_bit_rate "scalar") (serialize-qp "audioChannels" $audio_channels "scalar") (serialize-qp "maxAudioChannels" $max_audio_channels "scalar") (serialize-qp "profile" $profile "scalar") (serialize-qp "level" $level "scalar") (serialize-qp "framerate" $framerate "scalar") (serialize-qp "maxFramerate" $max_framerate "scalar") (serialize-qp "copyTimestamps" $copy_timestamps "scalar") (serialize-qp "startTimeTicks" $start_time_ticks "scalar") (serialize-qp "width" $width "scalar") (serialize-qp "height" $height "scalar") (serialize-qp "videoBitRate" $video_bit_rate "scalar") (serialize-qp "subtitleStreamIndex" $subtitle_stream_index "scalar") (serialize-qp "subtitleMethod" $subtitle_method "scalar") (serialize-qp "maxRefFrames" $max_ref_frames "scalar") (serialize-qp "maxVideoBitDepth" $max_video_bit_depth "scalar") (serialize-qp "requireAvc" $require_avc "scalar") (serialize-qp "deInterlace" $de_interlace "scalar") (serialize-qp "requireNonAnamorphic" $require_non_anamorphic "scalar") (serialize-qp "transcodingMaxAudioChannels" $transcoding_max_audio_channels "scalar") (serialize-qp "cpuCoreLimit" $cpu_core_limit "scalar") (serialize-qp "liveStreamId" $live_stream_id "scalar") (serialize-qp "enableMpegtsM2TsMode" $enable_mpegts_m2_ts_mode "scalar") (serialize-qp "videoCodec" $video_codec "scalar") (serialize-qp "subtitleCodec" $subtitle_codec "scalar") (serialize-qp "transcodeReasons" $transcode_reasons "scalar") (serialize-qp "audioStreamIndex" $audio_stream_index "scalar") (serialize-qp "videoStreamIndex" $video_stream_index "scalar") (serialize-qp "context" $context "scalar") (serialize-qp "streamOptions" $stream_options "multi")] | flatten | str join "&"
   let full_url = (build-url $base ({item_id: (encode-path-segment $item_id)} | format pattern "/Audio/{item_id}/stream") $qp)
   let accept_val = "audio/*"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"container": $container, "static": $static, "params": $params, "tag": $tag, "deviceProfileId": $device_profile_id, "playSessionId": $play_session_id, "segmentContainer": $segment_container, "segmentLength": $segment_length, "minSegments": $min_segments, "mediaSourceId": $media_source_id, "deviceId": $device_id, "audioCodec": $audio_codec, "enableAutoStreamCopy": $enable_auto_stream_copy, "allowVideoStreamCopy": $allow_video_stream_copy, "allowAudioStreamCopy": $allow_audio_stream_copy, "breakOnNonKeyFrames": $break_on_non_key_frames, "audioSampleRate": $audio_sample_rate, "maxAudioBitDepth": $max_audio_bit_depth, "audioBitRate": $audio_bit_rate, "audioChannels": $audio_channels, "maxAudioChannels": $max_audio_channels, "profile": $profile, "level": $level, "framerate": $framerate, "maxFramerate": $max_framerate, "copyTimestamps": $copy_timestamps, "startTimeTicks": $start_time_ticks, "width": $width, "height": $height, "videoBitRate": $video_bit_rate, "subtitleStreamIndex": $subtitle_stream_index, "subtitleMethod": $subtitle_method, "maxRefFrames": $max_ref_frames, "maxVideoBitDepth": $max_video_bit_depth, "requireAvc": $require_avc, "deInterlace": $de_interlace, "requireNonAnamorphic": $require_non_anamorphic, "transcodingMaxAudioChannels": $transcoding_max_audio_channels, "cpuCoreLimit": $cpu_core_limit, "liveStreamId": $live_stream_id, "enableMpegtsM2TsMode": $enable_mpegts_m2_ts_mode, "videoCodec": $video_codec, "subtitleCodec": $subtitle_codec, "transcodeReasons": $transcode_reasons, "audioStreamIndex": $audio_stream_index, "videoStreamIndex": $video_stream_index, "context": $context, "streamOptions": $stream_options} | compact), body: null}
 }
 
 # Gets an audio stream.
@@ -969,11 +1014,12 @@ export def "audio-stream head-head" [
 ]: nothing -> record {
   let auth = (build-auth $token ($auth_scheme | default "x-emby-authorization"))
   let base = ($base_url | default $BASE_URL)
+  if ($item_id | is-empty) { error make --unspanned { msg: "path parameter 'itemId' must be non-empty" } }
   let qp = [(serialize-qp "container" $container "scalar") (serialize-qp "static" $static "scalar") (serialize-qp "params" $params "scalar") (serialize-qp "tag" $tag "scalar") (serialize-qp "deviceProfileId" $device_profile_id "scalar") (serialize-qp "playSessionId" $play_session_id "scalar") (serialize-qp "segmentContainer" $segment_container "scalar") (serialize-qp "segmentLength" $segment_length "scalar") (serialize-qp "minSegments" $min_segments "scalar") (serialize-qp "mediaSourceId" $media_source_id "scalar") (serialize-qp "deviceId" $device_id "scalar") (serialize-qp "audioCodec" $audio_codec "scalar") (serialize-qp "enableAutoStreamCopy" $enable_auto_stream_copy "scalar") (serialize-qp "allowVideoStreamCopy" $allow_video_stream_copy "scalar") (serialize-qp "allowAudioStreamCopy" $allow_audio_stream_copy "scalar") (serialize-qp "breakOnNonKeyFrames" $break_on_non_key_frames "scalar") (serialize-qp "audioSampleRate" $audio_sample_rate "scalar") (serialize-qp "maxAudioBitDepth" $max_audio_bit_depth "scalar") (serialize-qp "audioBitRate" $audio_bit_rate "scalar") (serialize-qp "audioChannels" $audio_channels "scalar") (serialize-qp "maxAudioChannels" $max_audio_channels "scalar") (serialize-qp "profile" $profile "scalar") (serialize-qp "level" $level "scalar") (serialize-qp "framerate" $framerate "scalar") (serialize-qp "maxFramerate" $max_framerate "scalar") (serialize-qp "copyTimestamps" $copy_timestamps "scalar") (serialize-qp "startTimeTicks" $start_time_ticks "scalar") (serialize-qp "width" $width "scalar") (serialize-qp "height" $height "scalar") (serialize-qp "videoBitRate" $video_bit_rate "scalar") (serialize-qp "subtitleStreamIndex" $subtitle_stream_index "scalar") (serialize-qp "subtitleMethod" $subtitle_method "scalar") (serialize-qp "maxRefFrames" $max_ref_frames "scalar") (serialize-qp "maxVideoBitDepth" $max_video_bit_depth "scalar") (serialize-qp "requireAvc" $require_avc "scalar") (serialize-qp "deInterlace" $de_interlace "scalar") (serialize-qp "requireNonAnamorphic" $require_non_anamorphic "scalar") (serialize-qp "transcodingMaxAudioChannels" $transcoding_max_audio_channels "scalar") (serialize-qp "cpuCoreLimit" $cpu_core_limit "scalar") (serialize-qp "liveStreamId" $live_stream_id "scalar") (serialize-qp "enableMpegtsM2TsMode" $enable_mpegts_m2_ts_mode "scalar") (serialize-qp "videoCodec" $video_codec "scalar") (serialize-qp "subtitleCodec" $subtitle_codec "scalar") (serialize-qp "transcodeReasons" $transcode_reasons "scalar") (serialize-qp "audioStreamIndex" $audio_stream_index "scalar") (serialize-qp "videoStreamIndex" $video_stream_index "scalar") (serialize-qp "context" $context "scalar") (serialize-qp "streamOptions" $stream_options "multi")] | flatten | str join "&"
   let full_url = (build-url $base ({item_id: (encode-path-segment $item_id)} | format pattern "/Audio/{item_id}/stream") $qp)
   let accept_val = "audio/*"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "head" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "head" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"container": $container, "static": $static, "params": $params, "tag": $tag, "deviceProfileId": $device_profile_id, "playSessionId": $play_session_id, "segmentContainer": $segment_container, "segmentLength": $segment_length, "minSegments": $min_segments, "mediaSourceId": $media_source_id, "deviceId": $device_id, "audioCodec": $audio_codec, "enableAutoStreamCopy": $enable_auto_stream_copy, "allowVideoStreamCopy": $allow_video_stream_copy, "allowAudioStreamCopy": $allow_audio_stream_copy, "breakOnNonKeyFrames": $break_on_non_key_frames, "audioSampleRate": $audio_sample_rate, "maxAudioBitDepth": $max_audio_bit_depth, "audioBitRate": $audio_bit_rate, "audioChannels": $audio_channels, "maxAudioChannels": $max_audio_channels, "profile": $profile, "level": $level, "framerate": $framerate, "maxFramerate": $max_framerate, "copyTimestamps": $copy_timestamps, "startTimeTicks": $start_time_ticks, "width": $width, "height": $height, "videoBitRate": $video_bit_rate, "subtitleStreamIndex": $subtitle_stream_index, "subtitleMethod": $subtitle_method, "maxRefFrames": $max_ref_frames, "maxVideoBitDepth": $max_video_bit_depth, "requireAvc": $require_avc, "deInterlace": $de_interlace, "requireNonAnamorphic": $require_non_anamorphic, "transcodingMaxAudioChannels": $transcoding_max_audio_channels, "cpuCoreLimit": $cpu_core_limit, "liveStreamId": $live_stream_id, "enableMpegtsM2TsMode": $enable_mpegts_m2_ts_mode, "videoCodec": $video_codec, "subtitleCodec": $subtitle_codec, "transcodeReasons": $transcode_reasons, "audioStreamIndex": $audio_stream_index, "videoStreamIndex": $video_stream_index, "context": $context, "streamOptions": $stream_options} | compact), body: null}
 }
 
 # Gets an audio stream.
@@ -1042,11 +1088,13 @@ export def "audio-stream-container get" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "x-emby-authorization"))
   let base = ($base_url | default $BASE_URL)
+  if ($item_id | is-empty) { error make --unspanned { msg: "path parameter 'itemId' must be non-empty" } }
+  if ($container | is-empty) { error make --unspanned { msg: "path parameter 'container' must be non-empty" } }
   let qp = [(serialize-qp "static" $static "scalar") (serialize-qp "params" $params "scalar") (serialize-qp "tag" $tag "scalar") (serialize-qp "deviceProfileId" $device_profile_id "scalar") (serialize-qp "playSessionId" $play_session_id "scalar") (serialize-qp "segmentContainer" $segment_container "scalar") (serialize-qp "segmentLength" $segment_length "scalar") (serialize-qp "minSegments" $min_segments "scalar") (serialize-qp "mediaSourceId" $media_source_id "scalar") (serialize-qp "deviceId" $device_id "scalar") (serialize-qp "audioCodec" $audio_codec "scalar") (serialize-qp "enableAutoStreamCopy" $enable_auto_stream_copy "scalar") (serialize-qp "allowVideoStreamCopy" $allow_video_stream_copy "scalar") (serialize-qp "allowAudioStreamCopy" $allow_audio_stream_copy "scalar") (serialize-qp "breakOnNonKeyFrames" $break_on_non_key_frames "scalar") (serialize-qp "audioSampleRate" $audio_sample_rate "scalar") (serialize-qp "maxAudioBitDepth" $max_audio_bit_depth "scalar") (serialize-qp "audioBitRate" $audio_bit_rate "scalar") (serialize-qp "audioChannels" $audio_channels "scalar") (serialize-qp "maxAudioChannels" $max_audio_channels "scalar") (serialize-qp "profile" $profile "scalar") (serialize-qp "level" $level "scalar") (serialize-qp "framerate" $framerate "scalar") (serialize-qp "maxFramerate" $max_framerate "scalar") (serialize-qp "copyTimestamps" $copy_timestamps "scalar") (serialize-qp "startTimeTicks" $start_time_ticks "scalar") (serialize-qp "width" $width "scalar") (serialize-qp "height" $height "scalar") (serialize-qp "videoBitRate" $video_bit_rate "scalar") (serialize-qp "subtitleStreamIndex" $subtitle_stream_index "scalar") (serialize-qp "subtitleMethod" $subtitle_method "scalar") (serialize-qp "maxRefFrames" $max_ref_frames "scalar") (serialize-qp "maxVideoBitDepth" $max_video_bit_depth "scalar") (serialize-qp "requireAvc" $require_avc "scalar") (serialize-qp "deInterlace" $de_interlace "scalar") (serialize-qp "requireNonAnamorphic" $require_non_anamorphic "scalar") (serialize-qp "transcodingMaxAudioChannels" $transcoding_max_audio_channels "scalar") (serialize-qp "cpuCoreLimit" $cpu_core_limit "scalar") (serialize-qp "liveStreamId" $live_stream_id "scalar") (serialize-qp "enableMpegtsM2TsMode" $enable_mpegts_m2_ts_mode "scalar") (serialize-qp "videoCodec" $video_codec "scalar") (serialize-qp "subtitleCodec" $subtitle_codec "scalar") (serialize-qp "transcodeReasons" $transcode_reasons "scalar") (serialize-qp "audioStreamIndex" $audio_stream_index "scalar") (serialize-qp "videoStreamIndex" $video_stream_index "scalar") (serialize-qp "context" $context "scalar") (serialize-qp "streamOptions" $stream_options "multi")] | flatten | str join "&"
   let full_url = (build-url $base ({item_id: (encode-path-segment $item_id), container: (encode-path-segment $container)} | format pattern "/Audio/{item_id}/stream.{container}") $qp)
   let accept_val = "audio/*"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"static": $static, "params": $params, "tag": $tag, "deviceProfileId": $device_profile_id, "playSessionId": $play_session_id, "segmentContainer": $segment_container, "segmentLength": $segment_length, "minSegments": $min_segments, "mediaSourceId": $media_source_id, "deviceId": $device_id, "audioCodec": $audio_codec, "enableAutoStreamCopy": $enable_auto_stream_copy, "allowVideoStreamCopy": $allow_video_stream_copy, "allowAudioStreamCopy": $allow_audio_stream_copy, "breakOnNonKeyFrames": $break_on_non_key_frames, "audioSampleRate": $audio_sample_rate, "maxAudioBitDepth": $max_audio_bit_depth, "audioBitRate": $audio_bit_rate, "audioChannels": $audio_channels, "maxAudioChannels": $max_audio_channels, "profile": $profile, "level": $level, "framerate": $framerate, "maxFramerate": $max_framerate, "copyTimestamps": $copy_timestamps, "startTimeTicks": $start_time_ticks, "width": $width, "height": $height, "videoBitRate": $video_bit_rate, "subtitleStreamIndex": $subtitle_stream_index, "subtitleMethod": $subtitle_method, "maxRefFrames": $max_ref_frames, "maxVideoBitDepth": $max_video_bit_depth, "requireAvc": $require_avc, "deInterlace": $de_interlace, "requireNonAnamorphic": $require_non_anamorphic, "transcodingMaxAudioChannels": $transcoding_max_audio_channels, "cpuCoreLimit": $cpu_core_limit, "liveStreamId": $live_stream_id, "enableMpegtsM2TsMode": $enable_mpegts_m2_ts_mode, "videoCodec": $video_codec, "subtitleCodec": $subtitle_codec, "transcodeReasons": $transcode_reasons, "audioStreamIndex": $audio_stream_index, "videoStreamIndex": $video_stream_index, "context": $context, "streamOptions": $stream_options} | compact), body: null}
 }
 
 # Gets an audio stream.
@@ -1115,11 +1163,13 @@ export def "audio-stream-container head-head" [
 ]: nothing -> record {
   let auth = (build-auth $token ($auth_scheme | default "x-emby-authorization"))
   let base = ($base_url | default $BASE_URL)
+  if ($item_id | is-empty) { error make --unspanned { msg: "path parameter 'itemId' must be non-empty" } }
+  if ($container | is-empty) { error make --unspanned { msg: "path parameter 'container' must be non-empty" } }
   let qp = [(serialize-qp "static" $static "scalar") (serialize-qp "params" $params "scalar") (serialize-qp "tag" $tag "scalar") (serialize-qp "deviceProfileId" $device_profile_id "scalar") (serialize-qp "playSessionId" $play_session_id "scalar") (serialize-qp "segmentContainer" $segment_container "scalar") (serialize-qp "segmentLength" $segment_length "scalar") (serialize-qp "minSegments" $min_segments "scalar") (serialize-qp "mediaSourceId" $media_source_id "scalar") (serialize-qp "deviceId" $device_id "scalar") (serialize-qp "audioCodec" $audio_codec "scalar") (serialize-qp "enableAutoStreamCopy" $enable_auto_stream_copy "scalar") (serialize-qp "allowVideoStreamCopy" $allow_video_stream_copy "scalar") (serialize-qp "allowAudioStreamCopy" $allow_audio_stream_copy "scalar") (serialize-qp "breakOnNonKeyFrames" $break_on_non_key_frames "scalar") (serialize-qp "audioSampleRate" $audio_sample_rate "scalar") (serialize-qp "maxAudioBitDepth" $max_audio_bit_depth "scalar") (serialize-qp "audioBitRate" $audio_bit_rate "scalar") (serialize-qp "audioChannels" $audio_channels "scalar") (serialize-qp "maxAudioChannels" $max_audio_channels "scalar") (serialize-qp "profile" $profile "scalar") (serialize-qp "level" $level "scalar") (serialize-qp "framerate" $framerate "scalar") (serialize-qp "maxFramerate" $max_framerate "scalar") (serialize-qp "copyTimestamps" $copy_timestamps "scalar") (serialize-qp "startTimeTicks" $start_time_ticks "scalar") (serialize-qp "width" $width "scalar") (serialize-qp "height" $height "scalar") (serialize-qp "videoBitRate" $video_bit_rate "scalar") (serialize-qp "subtitleStreamIndex" $subtitle_stream_index "scalar") (serialize-qp "subtitleMethod" $subtitle_method "scalar") (serialize-qp "maxRefFrames" $max_ref_frames "scalar") (serialize-qp "maxVideoBitDepth" $max_video_bit_depth "scalar") (serialize-qp "requireAvc" $require_avc "scalar") (serialize-qp "deInterlace" $de_interlace "scalar") (serialize-qp "requireNonAnamorphic" $require_non_anamorphic "scalar") (serialize-qp "transcodingMaxAudioChannels" $transcoding_max_audio_channels "scalar") (serialize-qp "cpuCoreLimit" $cpu_core_limit "scalar") (serialize-qp "liveStreamId" $live_stream_id "scalar") (serialize-qp "enableMpegtsM2TsMode" $enable_mpegts_m2_ts_mode "scalar") (serialize-qp "videoCodec" $video_codec "scalar") (serialize-qp "subtitleCodec" $subtitle_codec "scalar") (serialize-qp "transcodeReasons" $transcode_reasons "scalar") (serialize-qp "audioStreamIndex" $audio_stream_index "scalar") (serialize-qp "videoStreamIndex" $video_stream_index "scalar") (serialize-qp "context" $context "scalar") (serialize-qp "streamOptions" $stream_options "multi")] | flatten | str join "&"
   let full_url = (build-url $base ({item_id: (encode-path-segment $item_id), container: (encode-path-segment $container)} | format pattern "/Audio/{item_id}/stream.{container}") $qp)
   let accept_val = "audio/*"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "head" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "head" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"static": $static, "params": $params, "tag": $tag, "deviceProfileId": $device_profile_id, "playSessionId": $play_session_id, "segmentContainer": $segment_container, "segmentLength": $segment_length, "minSegments": $min_segments, "mediaSourceId": $media_source_id, "deviceId": $device_id, "audioCodec": $audio_codec, "enableAutoStreamCopy": $enable_auto_stream_copy, "allowVideoStreamCopy": $allow_video_stream_copy, "allowAudioStreamCopy": $allow_audio_stream_copy, "breakOnNonKeyFrames": $break_on_non_key_frames, "audioSampleRate": $audio_sample_rate, "maxAudioBitDepth": $max_audio_bit_depth, "audioBitRate": $audio_bit_rate, "audioChannels": $audio_channels, "maxAudioChannels": $max_audio_channels, "profile": $profile, "level": $level, "framerate": $framerate, "maxFramerate": $max_framerate, "copyTimestamps": $copy_timestamps, "startTimeTicks": $start_time_ticks, "width": $width, "height": $height, "videoBitRate": $video_bit_rate, "subtitleStreamIndex": $subtitle_stream_index, "subtitleMethod": $subtitle_method, "maxRefFrames": $max_ref_frames, "maxVideoBitDepth": $max_video_bit_depth, "requireAvc": $require_avc, "deInterlace": $de_interlace, "requireNonAnamorphic": $require_non_anamorphic, "transcodingMaxAudioChannels": $transcoding_max_audio_channels, "cpuCoreLimit": $cpu_core_limit, "liveStreamId": $live_stream_id, "enableMpegtsM2TsMode": $enable_mpegts_m2_ts_mode, "videoCodec": $video_codec, "subtitleCodec": $subtitle_codec, "transcodeReasons": $transcode_reasons, "audioStreamIndex": $audio_stream_index, "videoStreamIndex": $video_stream_index, "context": $context, "streamOptions": $stream_options} | compact), body: null}
 }
 
 # Gets an audio stream.
@@ -1157,11 +1207,12 @@ export def "audio-universal get-stream" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "x-emby-authorization"))
   let base = ($base_url | default $BASE_URL)
+  if ($item_id | is-empty) { error make --unspanned { msg: "path parameter 'itemId' must be non-empty" } }
   let qp = [(serialize-qp "container" $container "multi") (serialize-qp "mediaSourceId" $media_source_id "scalar") (serialize-qp "deviceId" $device_id "scalar") (serialize-qp "userId" $user_id "scalar") (serialize-qp "audioCodec" $audio_codec "scalar") (serialize-qp "maxAudioChannels" $max_audio_channels "scalar") (serialize-qp "transcodingAudioChannels" $transcoding_audio_channels "scalar") (serialize-qp "maxStreamingBitrate" $max_streaming_bitrate "scalar") (serialize-qp "audioBitRate" $audio_bit_rate "scalar") (serialize-qp "startTimeTicks" $start_time_ticks "scalar") (serialize-qp "transcodingContainer" $transcoding_container "scalar") (serialize-qp "transcodingProtocol" $transcoding_protocol "scalar") (serialize-qp "maxAudioSampleRate" $max_audio_sample_rate "scalar") (serialize-qp "maxAudioBitDepth" $max_audio_bit_depth "scalar") (serialize-qp "enableRemoteMedia" $enable_remote_media "scalar") (serialize-qp "breakOnNonKeyFrames" $break_on_non_key_frames "scalar") (serialize-qp "enableRedirection" $enable_redirection "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({item_id: (encode-path-segment $item_id)} | format pattern "/Audio/{item_id}/universal") $qp)
   let accept_val = "audio/*"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"container": $container, "mediaSourceId": $media_source_id, "deviceId": $device_id, "userId": $user_id, "audioCodec": $audio_codec, "maxAudioChannels": $max_audio_channels, "transcodingAudioChannels": $transcoding_audio_channels, "maxStreamingBitrate": $max_streaming_bitrate, "audioBitRate": $audio_bit_rate, "startTimeTicks": $start_time_ticks, "transcodingContainer": $transcoding_container, "transcodingProtocol": $transcoding_protocol, "maxAudioSampleRate": $max_audio_sample_rate, "maxAudioBitDepth": $max_audio_bit_depth, "enableRemoteMedia": $enable_remote_media, "breakOnNonKeyFrames": $break_on_non_key_frames, "enableRedirection": $enable_redirection} | compact), body: null}
 }
 
 # Gets an audio stream.
@@ -1199,11 +1250,12 @@ export def "audio-universal head-head-stream" [
 ]: nothing -> record {
   let auth = (build-auth $token ($auth_scheme | default "x-emby-authorization"))
   let base = ($base_url | default $BASE_URL)
+  if ($item_id | is-empty) { error make --unspanned { msg: "path parameter 'itemId' must be non-empty" } }
   let qp = [(serialize-qp "container" $container "multi") (serialize-qp "mediaSourceId" $media_source_id "scalar") (serialize-qp "deviceId" $device_id "scalar") (serialize-qp "userId" $user_id "scalar") (serialize-qp "audioCodec" $audio_codec "scalar") (serialize-qp "maxAudioChannels" $max_audio_channels "scalar") (serialize-qp "transcodingAudioChannels" $transcoding_audio_channels "scalar") (serialize-qp "maxStreamingBitrate" $max_streaming_bitrate "scalar") (serialize-qp "audioBitRate" $audio_bit_rate "scalar") (serialize-qp "startTimeTicks" $start_time_ticks "scalar") (serialize-qp "transcodingContainer" $transcoding_container "scalar") (serialize-qp "transcodingProtocol" $transcoding_protocol "scalar") (serialize-qp "maxAudioSampleRate" $max_audio_sample_rate "scalar") (serialize-qp "maxAudioBitDepth" $max_audio_bit_depth "scalar") (serialize-qp "enableRemoteMedia" $enable_remote_media "scalar") (serialize-qp "breakOnNonKeyFrames" $break_on_non_key_frames "scalar") (serialize-qp "enableRedirection" $enable_redirection "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({item_id: (encode-path-segment $item_id)} | format pattern "/Audio/{item_id}/universal") $qp)
   let accept_val = "audio/*"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "head" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "head" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"container": $container, "mediaSourceId": $media_source_id, "deviceId": $device_id, "userId": $user_id, "audioCodec": $audio_codec, "maxAudioChannels": $max_audio_channels, "transcodingAudioChannels": $transcoding_audio_channels, "maxStreamingBitrate": $max_streaming_bitrate, "audioBitRate": $audio_bit_rate, "startTimeTicks": $start_time_ticks, "transcodingContainer": $transcoding_container, "transcodingProtocol": $transcoding_protocol, "maxAudioSampleRate": $max_audio_sample_rate, "maxAudioBitDepth": $max_audio_bit_depth, "enableRemoteMedia": $enable_remote_media, "breakOnNonKeyFrames": $break_on_non_key_frames, "enableRedirection": $enable_redirection} | compact), body: null}
 }
 
 # Get all keys.
@@ -1227,7 +1279,7 @@ export def "auth-keys get" [
   let full_url = (build-url $base "/Auth/Keys")
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
 }
 
 # Create a new api key.
@@ -1252,7 +1304,7 @@ export def "auth-keys create" [
   let full_url = (build-url $base "/Auth/Keys" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"app": $app} | compact), body: null}
 }
 
 # Remove an api key.
@@ -1273,10 +1325,11 @@ export def "auth-keys delete" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "x-emby-authorization"))
   let base = ($base_url | default $BASE_URL)
+  if ($key | is-empty) { error make --unspanned { msg: "path parameter 'key' must be non-empty" } }
   let full_url = (build-url $base ({key: (encode-path-segment $key)} | format pattern "/Auth/Keys/{key}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
 }
 
 # Get all password reset providers.
@@ -1300,7 +1353,7 @@ export def "auth-password-reset-providers get" [
   let full_url = (build-url $base "/Auth/PasswordResetProviders")
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
 }
 
 # Get all auth providers.
@@ -1324,7 +1377,7 @@ export def "auth-providers get" [
   let full_url = (build-url $base "/Auth/Providers")
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
 }
 
 # Gets branding configuration.
@@ -1348,7 +1401,7 @@ export def "branding-configuration get-options" [
   let full_url = (build-url $base "/Branding/Configuration")
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
 }
 
 # Gets branding css.
@@ -1372,14 +1425,14 @@ export def "branding-css get" [
   let full_url = (build-url $base "/Branding/Css")
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
 }
 
 # Gets branding css.
 #
 # GET /Branding/Css.css
 # operationId: GetBrandingCss_2
-export def "branding-css-css get-by-" [
+export def "branding-css-css get" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1396,7 +1449,7 @@ export def "branding-css-css get-by-" [
   let full_url = (build-url $base "/Branding/Css.css")
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
 }
 
 # Gets available channels.
@@ -1427,7 +1480,7 @@ export def "channels get" [
   let full_url = (build-url $base "/Channels" $qp)
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"userId": $user_id, "startIndex": $start_index, "limit": $limit, "supportsLatestItems": $supports_latest_items, "supportsMediaDeletion": $supports_media_deletion, "isFavorite": $is_favorite} | compact), body: null}
 }
 
 # Get all channel features.
@@ -1451,7 +1504,7 @@ export def "channels-features get-list" [
   let full_url = (build-url $base "/Channels/Features")
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
 }
 
 # Gets latest channel items.
@@ -1482,7 +1535,7 @@ export def "channels-items-latest get" [
   let full_url = (build-url $base "/Channels/Items/Latest" $qp)
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"userId": $user_id, "startIndex": $start_index, "limit": $limit, "filters": $filters, "fields": $fields, "channelIds": $channel_ids} | compact), body: null}
 }
 
 # Get channel features.
@@ -1504,10 +1557,11 @@ export def "channels-features get" [
 ]: nothing -> record<AutoRefreshLevels: int, CanFilter: bool, CanSearch: bool, ContentTypes: list<string>, DefaultSortFields: list<string>, Id: string, MaxPageSize: int, MediaTypes: list<string>, Name: string, SupportsContentDownloading: bool, SupportsLatestMedia: bool, SupportsSortOrderToggle: bool> {
   let auth = (build-auth $token ($auth_scheme | default "x-emby-authorization"))
   let base = ($base_url | default $BASE_URL)
+  if ($channel_id | is-empty) { error make --unspanned { msg: "path parameter 'channelId' must be non-empty" } }
   let full_url = (build-url $base ({channel_id: (encode-path-segment $channel_id)} | format pattern "/Channels/{channel_id}/Features"))
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
 }
 
 # Get channel items.
@@ -1537,11 +1591,12 @@ export def "channels-items get" [
 ]: nothing -> record<Items: table<AirDays: list, AirTime: string, AirsAfterSeasonNumber: int, AirsBeforeEpisodeNumber: int, AirsBeforeSeasonNumber: int, Album: string, AlbumArtist: string, AlbumArtists: list, AlbumCount: int, AlbumId: string, AlbumPrimaryImageTag: string, Altitude: float, Aperture: float, ArtistCount: int, ArtistItems: list, Artists: list, AspectRatio: string, Audio: string, BackdropImageTags: list, CameraMake: string, CameraModel: string, CanDelete: bool, CanDownload: bool, ChannelId: string, ChannelName: string, ChannelNumber: string, ChannelPrimaryImageTag: string, ChannelType: string, Chapters: list, ChildCount: int, CollectionType: string, CommunityRating: float, CompletionPercentage: float, Container: string, CriticRating: float, CumulativeRunTimeTicks: int, CurrentProgram: any, CustomRating: string, DateCreated: string, DateLastMediaAdded: string, DisplayOrder: string, DisplayPreferencesId: string, EnableMediaSourceDisplay: bool, EndDate: string, EpisodeCount: int, EpisodeTitle: string, Etag: string, ExposureTime: float, ExternalUrls: list, ExtraType: string, FocalLength: float, ForcedSortName: string, GenreItems: list, Genres: list, HasSubtitles: bool, Height: int, Id: string, ImageBlurHashes: record, ImageOrientation: string, ImageTags: record, IndexNumber: int, IndexNumberEnd: int, IsFolder: bool, IsHD: bool, IsKids: bool, IsLive: bool, IsMovie: bool, IsNews: bool, IsPlaceHolder: bool, IsPremiere: bool, IsRepeat: bool, IsSeries: bool, IsSports: bool, IsoSpeedRating: int, IsoType: string, Latitude: float, LocalTrailerCount: int, LocationType: string, LockData: bool, LockedFields: list, Longitude: float, MediaSourceCount: int, MediaSources: list, MediaStreams: list, MediaType: string, MovieCount: int, MusicVideoCount: int, Name: string, Number: string, OfficialRating: string, OriginalTitle: string, Overview: string, ParentArtImageTag: string, ParentArtItemId: string, ParentBackdropImageTags: list, ParentBackdropItemId: string, ParentId: string, ParentIndexNumber: int, ParentLogoImageTag: string, ParentLogoItemId: string, ParentPrimaryImageItemId: string, ParentPrimaryImageTag: string, ParentThumbImageTag: string, ParentThumbItemId: string, PartCount: int, Path: string, People: list, PlayAccess: string, PlaylistItemId: string, PreferredMetadataCountryCode: string, PreferredMetadataLanguage: string, PremiereDate: string, PrimaryImageAspectRatio: float, ProductionLocations: list, ProductionYear: int, ProgramCount: int, ProgramId: string, ProviderIds: record, RecursiveItemCount: int, RemoteTrailers: list, RunTimeTicks: int, ScreenshotImageTags: list, SeasonId: string, SeasonName: string, SeriesCount: int, SeriesId: string, SeriesName: string, SeriesPrimaryImageTag: string, SeriesStudio: string, SeriesThumbImageTag: string, SeriesTimerId: string, ServerId: string, ShutterSpeed: float, Software: string, SongCount: int, SortName: string, SourceType: string, SpecialFeatureCount: int, StartDate: string, Status: string, Studios: list, SupportsSync: bool, Taglines: list, Tags: list, TimerId: string, TrailerCount: int, Type: string, UserData: record, Video3DFormat: string, VideoType: string, Width: int>, StartIndex: int, TotalRecordCount: int> {
   let auth = (build-auth $token ($auth_scheme | default "x-emby-authorization"))
   let base = ($base_url | default $BASE_URL)
+  if ($channel_id | is-empty) { error make --unspanned { msg: "path parameter 'channelId' must be non-empty" } }
   let qp = [(serialize-qp "folderId" $folder_id "scalar") (serialize-qp "userId" $user_id "scalar") (serialize-qp "startIndex" $start_index "scalar") (serialize-qp "limit" $limit "scalar") (serialize-qp "sortOrder" $sort_order "scalar") (serialize-qp "filters" $filters "multi") (serialize-qp "sortBy" $sort_by "scalar") (serialize-qp "fields" $fields "multi")] | flatten | str join "&"
   let full_url = (build-url $base ({channel_id: (encode-path-segment $channel_id)} | format pattern "/Channels/{channel_id}/Items") $qp)
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"folderId": $folder_id, "userId": $user_id, "startIndex": $start_index, "limit": $limit, "sortOrder": $sort_order, "filters": $filters, "sortBy": $sort_by, "fields": $fields} | compact), body: null}
 }
 
 # Creates a new collection.
@@ -1570,7 +1625,7 @@ export def "collections create" [
   let full_url = (build-url $base "/Collections" $qp)
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"name": $name, "ids": $ids, "parentId": $parent_id, "isLocked": $is_locked} | compact), body: null}
 }
 
 # Removes items from a collection.
@@ -1592,11 +1647,12 @@ export def "collections-items delete" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "x-emby-authorization"))
   let base = ($base_url | default $BASE_URL)
+  if ($collection_id | is-empty) { error make --unspanned { msg: "path parameter 'collectionId' must be non-empty" } }
   let qp = [(serialize-qp "ids" $ids "multi")] | flatten | str join "&"
   let full_url = (build-url $base ({collection_id: (encode-path-segment $collection_id)} | format pattern "/Collections/{collection_id}/Items") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"ids": $ids} | compact), body: null}
 }
 
 # Adds items to a collection.
@@ -1618,11 +1674,12 @@ export def "collections-items create" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "x-emby-authorization"))
   let base = ($base_url | default $BASE_URL)
+  if ($collection_id | is-empty) { error make --unspanned { msg: "path parameter 'collectionId' must be non-empty" } }
   let qp = [(serialize-qp "ids" $ids "multi")] | flatten | str join "&"
   let full_url = (build-url $base ({collection_id: (encode-path-segment $collection_id)} | format pattern "/Collections/{collection_id}/Items") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"ids": $ids} | compact), body: null}
 }
 
 # Deletes a device.
@@ -1647,7 +1704,7 @@ export def "devices delete" [
   let full_url = (build-url $base "/Devices" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"id": $id} | compact), body: null}
 }
 
 # Get Devices.
@@ -1674,7 +1731,7 @@ export def "devices get" [
   let full_url = (build-url $base "/Devices" $qp)
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"supportsSync": $supports_sync, "userId": $user_id} | compact), body: null}
 }
 
 # Get info for a device.
@@ -1700,7 +1757,7 @@ export def "devices-info get" [
   let full_url = (build-url $base "/Devices/Info" $qp)
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"id": $id} | compact), body: null}
 }
 
 # Get options for a device.
@@ -1726,7 +1783,7 @@ export def "devices-options get" [
   let full_url = (build-url $base "/Devices/Options" $qp)
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"id": $id} | compact), body: null}
 }
 
 # Update device options.
@@ -1755,7 +1812,7 @@ export def "devices-options update" [
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: ({"id": $id} | compact), body: $req_body}
 }
 
 # Get Display Preferences.
@@ -1779,11 +1836,12 @@ export def "display-preferences get" [
 ]: nothing -> record<Client: string, CustomPrefs: record, Id: string, IndexBy: string, PrimaryImageHeight: int, PrimaryImageWidth: int, RememberIndexing: bool, RememberSorting: bool, ScrollDirection: string, ShowBackdrop: bool, ShowSidebar: bool, SortBy: string, SortOrder: string, ViewType: string> {
   let auth = (build-auth $token ($auth_scheme | default "x-emby-authorization"))
   let base = ($base_url | default $BASE_URL)
+  if ($display_preferences_id | is-empty) { error make --unspanned { msg: "path parameter 'displayPreferencesId' must be non-empty" } }
   let qp = [(serialize-qp "userId" $user_id "scalar") (serialize-qp "client" $client "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({display_preferences_id: (encode-path-segment $display_preferences_id)} | format pattern "/DisplayPreferences/{display_preferences_id}") $qp)
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"userId": $user_id, "client": $client} | compact), body: null}
 }
 
 # Update Display Preferences.
@@ -1803,7 +1861,7 @@ export def "display-preferences update" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --user-id: string # User Id. (format: uuid)
   --client: string # Client.
-  --client: string # Gets or sets the client. (nullable)
+  --client-body: string # Gets or sets the client. (nullable) (body field)
   --custom-prefs: record # Gets or sets the custom prefs. (nullable)
   --id: string # Gets or sets the user id. (nullable)
   --index-by: string # Gets or sets the index by. (nullable)
@@ -1821,13 +1879,14 @@ export def "display-preferences update" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "x-emby-authorization"))
   let base = ($base_url | default $BASE_URL)
+  if ($display_preferences_id | is-empty) { error make --unspanned { msg: "path parameter 'displayPreferencesId' must be non-empty" } }
   let qp = [(serialize-qp "userId" $user_id "scalar") (serialize-qp "client" $client "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({display_preferences_id: (encode-path-segment $display_preferences_id)} | format pattern "/DisplayPreferences/{display_preferences_id}") $qp)
-  let req_body = {"Client": $client, "CustomPrefs": $custom_prefs, "Id": $id, "IndexBy": $index_by, "PrimaryImageHeight": $primary_image_height, "PrimaryImageWidth": $primary_image_width, "RememberIndexing": $remember_indexing, "RememberSorting": $remember_sorting, "ScrollDirection": $scroll_direction, "ShowBackdrop": $show_backdrop, "ShowSidebar": $show_sidebar, "SortBy": $sort_by, "SortOrder": $sort_order, "ViewType": $view_type} | compact
+  let req_body = {"Client": $client_body, "CustomPrefs": $custom_prefs, "Id": $id, "IndexBy": $index_by, "PrimaryImageHeight": $primary_image_height, "PrimaryImageWidth": $primary_image_width, "RememberIndexing": $remember_indexing, "RememberSorting": $remember_sorting, "ScrollDirection": $scroll_direction, "ShowBackdrop": $show_backdrop, "ShowSidebar": $show_sidebar, "SortBy": $sort_by, "SortOrder": $sort_order, "ViewType": $view_type} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: ({"userId": $user_id, "client": $client} | compact), body: $req_body}
 }
 
 # Get profile infos.
@@ -1851,7 +1910,7 @@ export def "dlna-profile-infos get" [
   let full_url = (build-url $base "/Dlna/ProfileInfos")
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
 }
 
 # Creates a profile.
@@ -1924,7 +1983,7 @@ export def "dlna-profiles create" [
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: {}, body: $req_body}
 }
 
 # Gets the default profile.
@@ -1948,7 +2007,7 @@ export def "dlna-profiles-default get" [
   let full_url = (build-url $base "/Dlna/Profiles/Default")
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
 }
 
 # Deletes a profile.
@@ -1969,10 +2028,11 @@ export def "dlna-profiles delete" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "x-emby-authorization"))
   let base = ($base_url | default $BASE_URL)
+  if ($profile_id | is-empty) { error make --unspanned { msg: "path parameter 'profileId' must be non-empty" } }
   let full_url = (build-url $base ({profile_id: (encode-path-segment $profile_id)} | format pattern "/Dlna/Profiles/{profile_id}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
 }
 
 # Gets a single profile.
@@ -1994,10 +2054,11 @@ export def "dlna-profiles get" [
 ]: nothing -> record<AlbumArtPn: string, CodecProfiles: table<ApplyConditions: list, Codec: string, Conditions: list, Container: string, Type: string>, ContainerProfiles: table<Conditions: list, Container: string, Type: string>, DirectPlayProfiles: table<AudioCodec: string, Container: string, Type: string, VideoCodec: string>, EnableAlbumArtInDidl: bool, EnableMSMediaReceiverRegistrar: bool, EnableSingleAlbumArtLimit: bool, EnableSingleSubtitleLimit: bool, FriendlyName: string, Id: string, Identification: record<FriendlyName: string, Headers: list<record>, Manufacturer: string, ManufacturerUrl: string, ModelDescription: string, ModelName: string, ModelNumber: string, ModelUrl: string, SerialNumber: string>, IgnoreTranscodeByteRangeRequests: bool, Manufacturer: string, ManufacturerUrl: string, MaxAlbumArtHeight: int, MaxAlbumArtWidth: int, MaxIconHeight: int, MaxIconWidth: int, MaxStaticBitrate: int, MaxStaticMusicBitrate: int, MaxStreamingBitrate: int, ModelDescription: string, ModelName: string, ModelNumber: string, ModelUrl: string, MusicStreamingTranscodingBitrate: int, Name: string, ProtocolInfo: string, RequiresPlainFolders: bool, RequiresPlainVideoItems: bool, ResponseProfiles: table<AudioCodec: string, Conditions: list, Container: string, MimeType: string, OrgPn: string, Type: string, VideoCodec: string>, SerialNumber: string, SonyAggregationFlags: string, SubtitleProfiles: table<Container: string, DidlMode: string, Format: string, Language: string, Method: string>, SupportedMediaTypes: string, TimelineOffsetSeconds: int, TranscodingProfiles: table<AudioCodec: string, BreakOnNonKeyFrames: bool, Container: string, Context: string, CopyTimestamps: bool, EnableMpegtsM2TsMode: bool, EnableSubtitlesInManifest: bool, EstimateContentLength: bool, MaxAudioChannels: string, MinSegments: int, Protocol: string, SegmentLength: int, TranscodeSeekInfo: string, Type: string, VideoCodec: string>, UserId: string, XmlRootAttributes: table<Name: string, Value: string>> {
   let auth = (build-auth $token ($auth_scheme | default "x-emby-authorization"))
   let base = ($base_url | default $BASE_URL)
+  if ($profile_id | is-empty) { error make --unspanned { msg: "path parameter 'profileId' must be non-empty" } }
   let full_url = (build-url $base ({profile_id: (encode-path-segment $profile_id)} | format pattern "/Dlna/Profiles/{profile_id}"))
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
 }
 
 # Updates a profile.
@@ -2066,12 +2127,13 @@ export def "dlna-profiles update" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "x-emby-authorization"))
   let base = ($base_url | default $BASE_URL)
+  if ($profile_id | is-empty) { error make --unspanned { msg: "path parameter 'profileId' must be non-empty" } }
   let full_url = (build-url $base ({profile_id: (encode-path-segment $profile_id)} | format pattern "/Dlna/Profiles/{profile_id}"))
   let req_body = {"AlbumArtPn": $album_art_pn, "CodecProfiles": $codec_profiles, "ContainerProfiles": $container_profiles, "DirectPlayProfiles": $direct_play_profiles, "EnableAlbumArtInDidl": $enable_album_art_in_didl, "EnableMSMediaReceiverRegistrar": $enable_ms_media_receiver_registrar, "EnableSingleAlbumArtLimit": $enable_single_album_art_limit, "EnableSingleSubtitleLimit": $enable_single_subtitle_limit, "FriendlyName": $friendly_name, "Id": $id, "Identification": $identification, "IgnoreTranscodeByteRangeRequests": $ignore_transcode_byte_range_requests, "Manufacturer": $manufacturer, "ManufacturerUrl": $manufacturer_url, "MaxAlbumArtHeight": $max_album_art_height, "MaxAlbumArtWidth": $max_album_art_width, "MaxIconHeight": $max_icon_height, "MaxIconWidth": $max_icon_width, "MaxStaticBitrate": $max_static_bitrate, "MaxStaticMusicBitrate": $max_static_music_bitrate, "MaxStreamingBitrate": $max_streaming_bitrate, "ModelDescription": $model_description, "ModelName": $model_name, "ModelNumber": $model_number, "ModelUrl": $model_url, "MusicStreamingTranscodingBitrate": $music_streaming_transcoding_bitrate, "Name": $name, "ProtocolInfo": $protocol_info, "RequiresPlainFolders": $requires_plain_folders, "RequiresPlainVideoItems": $requires_plain_video_items, "ResponseProfiles": $response_profiles, "SerialNumber": $serial_number, "SonyAggregationFlags": $sony_aggregation_flags, "SubtitleProfiles": $subtitle_profiles, "SupportedMediaTypes": $supported_media_types, "TimelineOffsetSeconds": $timeline_offset_seconds, "TranscodingProfiles": $transcoding_profiles, "UserId": $user_id, "XmlRootAttributes": $xml_root_attributes} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: {}, body: $req_body}
 }
 
 # Gets a server icon.
@@ -2092,10 +2154,11 @@ export def "dlna-icons list" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "x-emby-authorization"))
   let base = ($base_url | default $BASE_URL)
+  if ($file_name | is-empty) { error make --unspanned { msg: "path parameter 'fileName' must be non-empty" } }
   let full_url = (build-url $base ({file_name: (encode-path-segment $file_name)} | format pattern "/Dlna/icons/{file_name}"))
   let accept_val = "image/*"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
 }
 
 # Gets Dlna media receiver registrar xml.
@@ -2116,17 +2179,18 @@ export def "dlna-connection-manager get" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "x-emby-authorization"))
   let base = ($base_url | default $BASE_URL)
+  if ($server_id | is-empty) { error make --unspanned { msg: "path parameter 'serverId' must be non-empty" } }
   let full_url = (build-url $base ({server_id: (encode-path-segment $server_id)} | format pattern "/Dlna/{server_id}/ConnectionManager"))
   let accept_val = "text/xml"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
 }
 
 # Gets Dlna media receiver registrar xml.
 #
 # GET /Dlna/{serverId}/ConnectionManager/ConnectionManager
 # operationId: GetConnectionManager_2
-export def "dlna-connection-manager-connection-manager get-by-serverId" [
+export def "dlna-connection-manager-connection-manager get-by-server-id" [
   server_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -2140,17 +2204,18 @@ export def "dlna-connection-manager-connection-manager get-by-serverId" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "x-emby-authorization"))
   let base = ($base_url | default $BASE_URL)
+  if ($server_id | is-empty) { error make --unspanned { msg: "path parameter 'serverId' must be non-empty" } }
   let full_url = (build-url $base ({server_id: (encode-path-segment $server_id)} | format pattern "/Dlna/{server_id}/ConnectionManager/ConnectionManager"))
   let accept_val = "text/xml"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
 }
 
 # Gets Dlna media receiver registrar xml.
 #
 # GET /Dlna/{serverId}/ConnectionManager/ConnectionManager.xml
 # operationId: GetConnectionManager_3
-export def "dlna-connection-manager-connection-manager-xml get-by-serverId" [
+export def "dlna-connection-manager-connection-manager-xml get-by-server-id" [
   server_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -2164,10 +2229,11 @@ export def "dlna-connection-manager-connection-manager-xml get-by-serverId" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "x-emby-authorization"))
   let base = ($base_url | default $BASE_URL)
+  if ($server_id | is-empty) { error make --unspanned { msg: "path parameter 'serverId' must be non-empty" } }
   let full_url = (build-url $base ({server_id: (encode-path-segment $server_id)} | format pattern "/Dlna/{server_id}/ConnectionManager/ConnectionManager.xml"))
   let accept_val = "text/xml"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
 }
 
 # Process a connection manager control request.
@@ -2188,10 +2254,11 @@ export def "dlna-connection-manager-control request-process" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "x-emby-authorization"))
   let base = ($base_url | default $BASE_URL)
+  if ($server_id | is-empty) { error make --unspanned { msg: "path parameter 'serverId' must be non-empty" } }
   let full_url = (build-url $base ({server_id: (encode-path-segment $server_id)} | format pattern "/Dlna/{server_id}/ConnectionManager/Control"))
   let accept_val = "text/xml"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
 }
 
 # Gets Dlna content directory xml.
@@ -2212,17 +2279,18 @@ export def "dlna-content-directory get" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "x-emby-authorization"))
   let base = ($base_url | default $BASE_URL)
+  if ($server_id | is-empty) { error make --unspanned { msg: "path parameter 'serverId' must be non-empty" } }
   let full_url = (build-url $base ({server_id: (encode-path-segment $server_id)} | format pattern "/Dlna/{server_id}/ContentDirectory"))
   let accept_val = "text/xml"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
 }
 
 # Gets Dlna content directory xml.
 #
 # GET /Dlna/{serverId}/ContentDirectory/ContentDirectory
 # operationId: GetContentDirectory_2
-export def "dlna-content-directory-content-directory get-by-serverId" [
+export def "dlna-content-directory-content-directory get-by-server-id" [
   server_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -2236,17 +2304,18 @@ export def "dlna-content-directory-content-directory get-by-serverId" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "x-emby-authorization"))
   let base = ($base_url | default $BASE_URL)
+  if ($server_id | is-empty) { error make --unspanned { msg: "path parameter 'serverId' must be non-empty" } }
   let full_url = (build-url $base ({server_id: (encode-path-segment $server_id)} | format pattern "/Dlna/{server_id}/ContentDirectory/ContentDirectory"))
   let accept_val = "text/xml"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
 }
 
 # Gets Dlna content directory xml.
 #
 # GET /Dlna/{serverId}/ContentDirectory/ContentDirectory.xml
 # operationId: GetContentDirectory_3
-export def "dlna-content-directory-content-directory-xml get-by-serverId" [
+export def "dlna-content-directory-content-directory-xml get-by-server-id" [
   server_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -2260,10 +2329,11 @@ export def "dlna-content-directory-content-directory-xml get-by-serverId" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "x-emby-authorization"))
   let base = ($base_url | default $BASE_URL)
+  if ($server_id | is-empty) { error make --unspanned { msg: "path parameter 'serverId' must be non-empty" } }
   let full_url = (build-url $base ({server_id: (encode-path-segment $server_id)} | format pattern "/Dlna/{server_id}/ContentDirectory/ContentDirectory.xml"))
   let accept_val = "text/xml"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
 }
 
 # Process a content directory control request.
@@ -2284,10 +2354,11 @@ export def "dlna-content-directory-control request-process" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "x-emby-authorization"))
   let base = ($base_url | default $BASE_URL)
+  if ($server_id | is-empty) { error make --unspanned { msg: "path parameter 'serverId' must be non-empty" } }
   let full_url = (build-url $base ({server_id: (encode-path-segment $server_id)} | format pattern "/Dlna/{server_id}/ContentDirectory/Control"))
   let accept_val = "text/xml"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
 }
 
 # Gets Dlna media receiver registrar xml.
@@ -2308,10 +2379,11 @@ export def "dlna-media-receiver-registrar get" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "x-emby-authorization"))
   let base = ($base_url | default $BASE_URL)
+  if ($server_id | is-empty) { error make --unspanned { msg: "path parameter 'serverId' must be non-empty" } }
   let full_url = (build-url $base ({server_id: (encode-path-segment $server_id)} | format pattern "/Dlna/{server_id}/MediaReceiverRegistrar"))
   let accept_val = "text/xml"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
 }
 
 # Process a media receiver registrar control request.
@@ -2332,17 +2404,18 @@ export def "dlna-media-receiver-registrar-control request-process" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "x-emby-authorization"))
   let base = ($base_url | default $BASE_URL)
+  if ($server_id | is-empty) { error make --unspanned { msg: "path parameter 'serverId' must be non-empty" } }
   let full_url = (build-url $base ({server_id: (encode-path-segment $server_id)} | format pattern "/Dlna/{server_id}/MediaReceiverRegistrar/Control"))
   let accept_val = "text/xml"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
 }
 
 # Gets Dlna media receiver registrar xml.
 #
 # GET /Dlna/{serverId}/MediaReceiverRegistrar/MediaReceiverRegistrar
 # operationId: GetMediaReceiverRegistrar_2
-export def "dlna-media-receiver-registrar-media-receiver-registrar get-by-serverId" [
+export def "dlna-media-receiver-registrar-media-receiver-registrar get-by-server-id" [
   server_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -2356,17 +2429,18 @@ export def "dlna-media-receiver-registrar-media-receiver-registrar get-by-server
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "x-emby-authorization"))
   let base = ($base_url | default $BASE_URL)
+  if ($server_id | is-empty) { error make --unspanned { msg: "path parameter 'serverId' must be non-empty" } }
   let full_url = (build-url $base ({server_id: (encode-path-segment $server_id)} | format pattern "/Dlna/{server_id}/MediaReceiverRegistrar/MediaReceiverRegistrar"))
   let accept_val = "text/xml"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
 }
 
 # Gets Dlna media receiver registrar xml.
 #
 # GET /Dlna/{serverId}/MediaReceiverRegistrar/MediaReceiverRegistrar.xml
 # operationId: GetMediaReceiverRegistrar_3
-export def "dlna-media-receiver-registrar-media-receiver-registrar-xml get-by-serverId" [
+export def "dlna-media-receiver-registrar-media-receiver-registrar-xml get-by-server-id" [
   server_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -2380,10 +2454,11 @@ export def "dlna-media-receiver-registrar-media-receiver-registrar-xml get-by-se
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "x-emby-authorization"))
   let base = ($base_url | default $BASE_URL)
+  if ($server_id | is-empty) { error make --unspanned { msg: "path parameter 'serverId' must be non-empty" } }
   let full_url = (build-url $base ({server_id: (encode-path-segment $server_id)} | format pattern "/Dlna/{server_id}/MediaReceiverRegistrar/MediaReceiverRegistrar.xml"))
   let accept_val = "text/xml"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
 }
 
 # Get Description Xml.
@@ -2404,17 +2479,18 @@ export def "dlna-description get-xml" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "x-emby-authorization"))
   let base = ($base_url | default $BASE_URL)
+  if ($server_id | is-empty) { error make --unspanned { msg: "path parameter 'serverId' must be non-empty" } }
   let full_url = (build-url $base ({server_id: (encode-path-segment $server_id)} | format pattern "/Dlna/{server_id}/description"))
   let accept_val = "text/xml"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
 }
 
 # Get Description Xml.
 #
 # GET /Dlna/{serverId}/description.xml
 # operationId: GetDescriptionXml_2
-export def "dlna-description-xml get-by-serverId" [
+export def "dlna-description-xml get-by-server-id" [
   server_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -2428,10 +2504,11 @@ export def "dlna-description-xml get-by-serverId" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "x-emby-authorization"))
   let base = ($base_url | default $BASE_URL)
+  if ($server_id | is-empty) { error make --unspanned { msg: "path parameter 'serverId' must be non-empty" } }
   let full_url = (build-url $base ({server_id: (encode-path-segment $server_id)} | format pattern "/Dlna/{server_id}/description.xml"))
   let accept_val = "text/xml"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
 }
 
 # Gets a server icon.
@@ -2453,10 +2530,12 @@ export def "dlna-icons get" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "x-emby-authorization"))
   let base = ($base_url | default $BASE_URL)
+  if ($server_id | is-empty) { error make --unspanned { msg: "path parameter 'serverId' must be non-empty" } }
+  if ($file_name | is-empty) { error make --unspanned { msg: "path parameter 'fileName' must be non-empty" } }
   let full_url = (build-url $base ({server_id: (encode-path-segment $server_id), file_name: (encode-path-segment $file_name)} | format pattern "/Dlna/{server_id}/icons/{file_name}"))
   let accept_val = "image/*"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
 }
 
 # Get Default directory browser.
@@ -2480,7 +2559,7 @@ export def "environment-default-directory-browser get" [
   let full_url = (build-url $base "/Environment/DefaultDirectoryBrowser")
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
 }
 
 # Gets the contents of a given directory in the file system.
@@ -2508,7 +2587,7 @@ export def "environment-directory-contents get" [
   let full_url = (build-url $base "/Environment/DirectoryContents" $qp)
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"path": $path, "includeFiles": $include_files, "includeDirectories": $include_directories} | compact), body: null}
 }
 
 # Gets available drives from the server's file system.
@@ -2532,7 +2611,7 @@ export def "environment-drives get" [
   let full_url = (build-url $base "/Environment/Drives")
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
 }
 
 # Gets network paths.
@@ -2558,7 +2637,7 @@ export def "environment-network-shares get" [
   let full_url = (build-url $base "/Environment/NetworkShares")
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
 }
 
 # Gets the parent path of a given path.
@@ -2584,7 +2663,7 @@ export def "environment-parent-path get" [
   let full_url = (build-url $base "/Environment/ParentPath" $qp)
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"path": $path} | compact), body: null}
 }
 
 # Validates path.
@@ -2613,7 +2692,7 @@ export def "environment-validate-path validate" [
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: {}, body: $req_body}
 }
 
 # Gets a list of available fallback font files.
@@ -2637,7 +2716,7 @@ export def "fallback-font-fonts get-list" [
   let full_url = (build-url $base "/FallbackFont/Fonts")
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
 }
 
 # Gets a fallback font file.
@@ -2658,10 +2737,11 @@ export def "fallback-font-fonts get" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "x-emby-authorization"))
   let base = ($base_url | default $BASE_URL)
+  if ($name | is-empty) { error make --unspanned { msg: "path parameter 'name' must be non-empty" } }
   let full_url = (build-url $base ({name: (encode-path-segment $name)} | format pattern "/FallbackFont/Fonts/{name}"))
   let accept_val = "font/*"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
 }
 
 # Gets all genres from a given item, folder, or the entire library.
@@ -2702,7 +2782,7 @@ export def "genres list" [
   let full_url = (build-url $base "/Genres" $qp)
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"startIndex": $start_index, "limit": $limit, "searchTerm": $search_term, "parentId": $parent_id, "fields": $fields, "excludeItemTypes": $exclude_item_types, "includeItemTypes": $include_item_types, "isFavorite": $is_favorite, "imageTypeLimit": $image_type_limit, "enableImageTypes": $enable_image_types, "userId": $user_id, "nameStartsWithOrGreater": $name_starts_with_or_greater, "nameStartsWith": $name_starts_with, "nameLessThan": $name_less_than, "enableImages": $enable_images, "enableTotalRecordCount": $enable_total_record_count} | compact), body: null}
 }
 
 # Gets a genre, by name.
@@ -2725,11 +2805,12 @@ export def "genres get" [
 ]: nothing -> record<AirDays: list<string>, AirTime: string, AirsAfterSeasonNumber: int, AirsBeforeEpisodeNumber: int, AirsBeforeSeasonNumber: int, Album: string, AlbumArtist: string, AlbumArtists: table<Id: string, Name: string>, AlbumCount: int, AlbumId: string, AlbumPrimaryImageTag: string, Altitude: float, Aperture: float, ArtistCount: int, ArtistItems: table<Id: string, Name: string>, Artists: list<string>, AspectRatio: string, Audio: string, BackdropImageTags: list<string>, CameraMake: string, CameraModel: string, CanDelete: bool, CanDownload: bool, ChannelId: string, ChannelName: string, ChannelNumber: string, ChannelPrimaryImageTag: string, ChannelType: string, Chapters: table<ImageDateModified: string, ImagePath: string, ImageTag: string, Name: string, StartPositionTicks: int>, ChildCount: int, CollectionType: string, CommunityRating: float, CompletionPercentage: float, Container: string, CriticRating: float, CumulativeRunTimeTicks: int, CurrentProgram: any, CustomRating: string, DateCreated: string, DateLastMediaAdded: string, DisplayOrder: string, DisplayPreferencesId: string, EnableMediaSourceDisplay: bool, EndDate: string, EpisodeCount: int, EpisodeTitle: string, Etag: string, ExposureTime: float, ExternalUrls: table<Name: string, Url: string>, ExtraType: string, FocalLength: float, ForcedSortName: string, GenreItems: table<Id: string, Name: string>, Genres: list<string>, HasSubtitles: bool, Height: int, Id: string, ImageBlurHashes: record<Art: record, Backdrop: record, Banner: record, Box: record, BoxRear: record, Chapter: record, Disc: record, Logo: record, Menu: record, Primary: record, Profile: record, Screenshot: record, Thumb: record>, ImageOrientation: string, ImageTags: record, IndexNumber: int, IndexNumberEnd: int, IsFolder: bool, IsHD: bool, IsKids: bool, IsLive: bool, IsMovie: bool, IsNews: bool, IsPlaceHolder: bool, IsPremiere: bool, IsRepeat: bool, IsSeries: bool, IsSports: bool, IsoSpeedRating: int, IsoType: string, Latitude: float, LocalTrailerCount: int, LocationType: string, LockData: bool, LockedFields: list<string>, Longitude: float, MediaSourceCount: int, MediaSources: table<AnalyzeDurationMs: int, Bitrate: int, BufferMs: int, Container: string, DefaultAudioStreamIndex: int, DefaultSubtitleStreamIndex: int, ETag: string, EncoderPath: string, EncoderProtocol: string, Formats: list, GenPtsInput: bool, Id: string, IgnoreDts: bool, IgnoreIndex: bool, IsInfiniteStream: bool, IsRemote: bool, IsoType: string, LiveStreamId: string, MediaAttachments: list, MediaStreams: list, Name: string, OpenToken: string, Path: string, Protocol: string, ReadAtNativeFramerate: bool, RequiredHttpHeaders: record, RequiresClosing: bool, RequiresLooping: bool, RequiresOpening: bool, RunTimeTicks: int, Size: int, SupportsDirectPlay: bool, SupportsDirectStream: bool, SupportsProbing: bool, SupportsTranscoding: bool, Timestamp: string, TranscodingContainer: string, TranscodingSubProtocol: string, TranscodingUrl: string, Type: string, Video3DFormat: string, VideoType: string>, MediaStreams: table<AspectRatio: string, AverageFrameRate: float, BitDepth: int, BitRate: int, ChannelLayout: string, Channels: int, Codec: string, CodecTag: string, CodecTimeBase: string, ColorPrimaries: string, ColorRange: string, ColorSpace: string, ColorTransfer: string, Comment: string, DeliveryMethod: string, DeliveryUrl: string, DisplayTitle: string, Height: int, Index: int, IsAVC: bool, IsAnamorphic: bool, IsDefault: bool, IsExternal: bool, IsExternalUrl: bool, IsForced: bool, IsInterlaced: bool, IsTextSubtitleStream: bool, Language: string, Level: float, NalLengthSize: string, PacketLength: int, Path: string, PixelFormat: string, Profile: string, RealFrameRate: float, RefFrames: int, SampleRate: int, Score: int, SupportsExternalStream: bool, TimeBase: string, Title: string, Type: string, VideoRange: string, Width: int, localizedDefault: string, localizedForced: string, localizedUndefined: string>, MediaType: string, MovieCount: int, MusicVideoCount: int, Name: string, Number: string, OfficialRating: string, OriginalTitle: string, Overview: string, ParentArtImageTag: string, ParentArtItemId: string, ParentBackdropImageTags: list<string>, ParentBackdropItemId: string, ParentId: string, ParentIndexNumber: int, ParentLogoImageTag: string, ParentLogoItemId: string, ParentPrimaryImageItemId: string, ParentPrimaryImageTag: string, ParentThumbImageTag: string, ParentThumbItemId: string, PartCount: int, Path: string, People: table<Id: string, ImageBlurHashes: record, Name: string, PrimaryImageTag: string, Role: string, Type: string>, PlayAccess: string, PlaylistItemId: string, PreferredMetadataCountryCode: string, PreferredMetadataLanguage: string, PremiereDate: string, PrimaryImageAspectRatio: float, ProductionLocations: list<string>, ProductionYear: int, ProgramCount: int, ProgramId: string, ProviderIds: record, RecursiveItemCount: int, RemoteTrailers: table<Name: string, Url: string>, RunTimeTicks: int, ScreenshotImageTags: list<string>, SeasonId: string, SeasonName: string, SeriesCount: int, SeriesId: string, SeriesName: string, SeriesPrimaryImageTag: string, SeriesStudio: string, SeriesThumbImageTag: string, SeriesTimerId: string, ServerId: string, ShutterSpeed: float, Software: string, SongCount: int, SortName: string, SourceType: string, SpecialFeatureCount: int, StartDate: string, Status: string, Studios: table<Id: string, Name: string>, SupportsSync: bool, Taglines: list<string>, Tags: list<string>, TimerId: string, TrailerCount: int, Type: string, UserData: record<IsFavorite: bool, ItemId: string, Key: string, LastPlayedDate: string, Likes: bool, PlayCount: int, PlaybackPositionTicks: int, Played: bool, PlayedPercentage: float, Rating: float, UnplayedItemCount: int>, Video3DFormat: string, VideoType: string, Width: int> {
   let auth = (build-auth $token ($auth_scheme | default "x-emby-authorization"))
   let base = ($base_url | default $BASE_URL)
+  if ($genre_name | is-empty) { error make --unspanned { msg: "path parameter 'genreName' must be non-empty" } }
   let qp = [(serialize-qp "userId" $user_id "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({genre_name: (encode-path-segment $genre_name)} | format pattern "/Genres/{genre_name}") $qp)
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"userId": $user_id} | compact), body: null}
 }
 
 # Get genre image by name.
@@ -2766,11 +2847,13 @@ export def "genres-images get" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "x-emby-authorization"))
   let base = ($base_url | default $BASE_URL)
+  if ($name | is-empty) { error make --unspanned { msg: "path parameter 'name' must be non-empty" } }
+  if ($image_type | is-empty) { error make --unspanned { msg: "path parameter 'imageType' must be non-empty" } }
   let qp = [(serialize-qp "tag" $tag "scalar") (serialize-qp "format" $format "scalar") (serialize-qp "maxWidth" $max_width "scalar") (serialize-qp "maxHeight" $max_height "scalar") (serialize-qp "percentPlayed" $percent_played "scalar") (serialize-qp "unplayedCount" $unplayed_count "scalar") (serialize-qp "width" $width "scalar") (serialize-qp "height" $height "scalar") (serialize-qp "quality" $quality "scalar") (serialize-qp "cropWhitespace" $crop_whitespace "scalar") (serialize-qp "addPlayedIndicator" $add_played_indicator "scalar") (serialize-qp "blur" $blur "scalar") (serialize-qp "backgroundColor" $background_color "scalar") (serialize-qp "foregroundLayer" $foreground_layer "scalar") (serialize-qp "imageIndex" $image_index "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({name: (encode-path-segment $name), image_type: (encode-path-segment $image_type)} | format pattern "/Genres/{name}/Images/{image_type}") $qp)
   let accept_val = "image/*"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"tag": $tag, "format": $format, "maxWidth": $max_width, "maxHeight": $max_height, "percentPlayed": $percent_played, "unplayedCount": $unplayed_count, "width": $width, "height": $height, "quality": $quality, "cropWhitespace": $crop_whitespace, "addPlayedIndicator": $add_played_indicator, "blur": $blur, "backgroundColor": $background_color, "foregroundLayer": $foreground_layer, "imageIndex": $image_index} | compact), body: null}
 }
 
 # Get genre image by name.
@@ -2807,11 +2890,13 @@ export def "genres-images head-head" [
 ]: nothing -> record {
   let auth = (build-auth $token ($auth_scheme | default "x-emby-authorization"))
   let base = ($base_url | default $BASE_URL)
+  if ($name | is-empty) { error make --unspanned { msg: "path parameter 'name' must be non-empty" } }
+  if ($image_type | is-empty) { error make --unspanned { msg: "path parameter 'imageType' must be non-empty" } }
   let qp = [(serialize-qp "tag" $tag "scalar") (serialize-qp "format" $format "scalar") (serialize-qp "maxWidth" $max_width "scalar") (serialize-qp "maxHeight" $max_height "scalar") (serialize-qp "percentPlayed" $percent_played "scalar") (serialize-qp "unplayedCount" $unplayed_count "scalar") (serialize-qp "width" $width "scalar") (serialize-qp "height" $height "scalar") (serialize-qp "quality" $quality "scalar") (serialize-qp "cropWhitespace" $crop_whitespace "scalar") (serialize-qp "addPlayedIndicator" $add_played_indicator "scalar") (serialize-qp "blur" $blur "scalar") (serialize-qp "backgroundColor" $background_color "scalar") (serialize-qp "foregroundLayer" $foreground_layer "scalar") (serialize-qp "imageIndex" $image_index "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({name: (encode-path-segment $name), image_type: (encode-path-segment $image_type)} | format pattern "/Genres/{name}/Images/{image_type}") $qp)
   let accept_val = "image/*"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "head" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "head" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"tag": $tag, "format": $format, "maxWidth": $max_width, "maxHeight": $max_height, "percentPlayed": $percent_played, "unplayedCount": $unplayed_count, "width": $width, "height": $height, "quality": $quality, "cropWhitespace": $crop_whitespace, "addPlayedIndicator": $add_played_indicator, "blur": $blur, "backgroundColor": $background_color, "foregroundLayer": $foreground_layer, "imageIndex": $image_index} | compact), body: null}
 }
 
 # Get genre image by name.
@@ -2848,11 +2933,14 @@ export def "genres-images get-by-index" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "x-emby-authorization"))
   let base = ($base_url | default $BASE_URL)
+  if ($name | is-empty) { error make --unspanned { msg: "path parameter 'name' must be non-empty" } }
+  if ($image_type | is-empty) { error make --unspanned { msg: "path parameter 'imageType' must be non-empty" } }
+  if ($image_index | is-empty) { error make --unspanned { msg: "path parameter 'imageIndex' must be non-empty" } }
   let qp = [(serialize-qp "tag" $tag "scalar") (serialize-qp "format" $format "scalar") (serialize-qp "maxWidth" $max_width "scalar") (serialize-qp "maxHeight" $max_height "scalar") (serialize-qp "percentPlayed" $percent_played "scalar") (serialize-qp "unplayedCount" $unplayed_count "scalar") (serialize-qp "width" $width "scalar") (serialize-qp "height" $height "scalar") (serialize-qp "quality" $quality "scalar") (serialize-qp "cropWhitespace" $crop_whitespace "scalar") (serialize-qp "addPlayedIndicator" $add_played_indicator "scalar") (serialize-qp "blur" $blur "scalar") (serialize-qp "backgroundColor" $background_color "scalar") (serialize-qp "foregroundLayer" $foreground_layer "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({name: (encode-path-segment $name), image_type: (encode-path-segment $image_type), image_index: (encode-path-segment $image_index)} | format pattern "/Genres/{name}/Images/{image_type}/{image_index}") $qp)
   let accept_val = "image/*"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"tag": $tag, "format": $format, "maxWidth": $max_width, "maxHeight": $max_height, "percentPlayed": $percent_played, "unplayedCount": $unplayed_count, "width": $width, "height": $height, "quality": $quality, "cropWhitespace": $crop_whitespace, "addPlayedIndicator": $add_played_indicator, "blur": $blur, "backgroundColor": $background_color, "foregroundLayer": $foreground_layer} | compact), body: null}
 }
 
 # Get genre image by name.
@@ -2889,11 +2977,14 @@ export def "genres-images head-head-by-index" [
 ]: nothing -> record {
   let auth = (build-auth $token ($auth_scheme | default "x-emby-authorization"))
   let base = ($base_url | default $BASE_URL)
+  if ($name | is-empty) { error make --unspanned { msg: "path parameter 'name' must be non-empty" } }
+  if ($image_type | is-empty) { error make --unspanned { msg: "path parameter 'imageType' must be non-empty" } }
+  if ($image_index | is-empty) { error make --unspanned { msg: "path parameter 'imageIndex' must be non-empty" } }
   let qp = [(serialize-qp "tag" $tag "scalar") (serialize-qp "format" $format "scalar") (serialize-qp "maxWidth" $max_width "scalar") (serialize-qp "maxHeight" $max_height "scalar") (serialize-qp "percentPlayed" $percent_played "scalar") (serialize-qp "unplayedCount" $unplayed_count "scalar") (serialize-qp "width" $width "scalar") (serialize-qp "height" $height "scalar") (serialize-qp "quality" $quality "scalar") (serialize-qp "cropWhitespace" $crop_whitespace "scalar") (serialize-qp "addPlayedIndicator" $add_played_indicator "scalar") (serialize-qp "blur" $blur "scalar") (serialize-qp "backgroundColor" $background_color "scalar") (serialize-qp "foregroundLayer" $foreground_layer "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({name: (encode-path-segment $name), image_type: (encode-path-segment $image_type), image_index: (encode-path-segment $image_index)} | format pattern "/Genres/{name}/Images/{image_type}/{image_index}") $qp)
   let accept_val = "image/*"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "head" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "head" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"tag": $tag, "format": $format, "maxWidth": $max_width, "maxHeight": $max_height, "percentPlayed": $percent_played, "unplayedCount": $unplayed_count, "width": $width, "height": $height, "quality": $quality, "cropWhitespace": $crop_whitespace, "addPlayedIndicator": $add_played_indicator, "blur": $blur, "backgroundColor": $background_color, "foregroundLayer": $foreground_layer} | compact), body: null}
 }
 
 # Gets the current UTC time.
@@ -2917,7 +3008,7 @@ export def "get-utc-time get" [
   let full_url = (build-url $base "/GetUtcTime")
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
 }
 
 # Get all general images.
@@ -2941,7 +3032,7 @@ export def "images-general get" [
   let full_url = (build-url $base "/Images/General")
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
 }
 
 # Get General Image.
@@ -2963,10 +3054,12 @@ export def "images-general get-by-name-type" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "x-emby-authorization"))
   let base = ($base_url | default $BASE_URL)
+  if ($name | is-empty) { error make --unspanned { msg: "path parameter 'name' must be non-empty" } }
+  if ($type | is-empty) { error make --unspanned { msg: "path parameter 'type' must be non-empty" } }
   let full_url = (build-url $base ({name: (encode-path-segment $name), type: (encode-path-segment $type)} | format pattern "/Images/General/{name}/{type}"))
   let accept_val = "image/*"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
 }
 
 # Get all media info images.
@@ -2990,7 +3083,7 @@ export def "images-media-info get" [
   let full_url = (build-url $base "/Images/MediaInfo")
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
 }
 
 # Get media info image.
@@ -3012,10 +3105,12 @@ export def "images-media-info get-by-theme-name" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "x-emby-authorization"))
   let base = ($base_url | default $BASE_URL)
+  if ($theme | is-empty) { error make --unspanned { msg: "path parameter 'theme' must be non-empty" } }
+  if ($name | is-empty) { error make --unspanned { msg: "path parameter 'name' must be non-empty" } }
   let full_url = (build-url $base ({theme: (encode-path-segment $theme), name: (encode-path-segment $name)} | format pattern "/Images/MediaInfo/{theme}/{name}"))
   let accept_val = "image/*"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
 }
 
 # Get all general images.
@@ -3039,7 +3134,7 @@ export def "images-ratings get" [
   let full_url = (build-url $base "/Images/Ratings")
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
 }
 
 # Get rating image.
@@ -3061,10 +3156,12 @@ export def "images-ratings get-by-theme-name" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "x-emby-authorization"))
   let base = ($base_url | default $BASE_URL)
+  if ($theme | is-empty) { error make --unspanned { msg: "path parameter 'theme' must be non-empty" } }
+  if ($name | is-empty) { error make --unspanned { msg: "path parameter 'name' must be non-empty" } }
   let full_url = (build-url $base ({theme: (encode-path-segment $theme), name: (encode-path-segment $name)} | format pattern "/Images/Ratings/{theme}/{name}"))
   let accept_val = "image/*"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
 }
 
 # Gets a remote image.
@@ -3089,7 +3186,7 @@ export def "images-remote get" [
   let full_url = (build-url $base "/Images/Remote" $qp)
   let accept_val = "image/*"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"imageUrl": $image_url} | compact), body: null}
 }
 
 # Deletes items from the library and filesystem.
@@ -3114,7 +3211,7 @@ export def "items delete" [
   let full_url = (build-url $base "/Items" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"ids": $ids} | compact), body: null}
 }
 
 # Gets items based on a query.
@@ -3219,7 +3316,7 @@ export def "items get" [
   let full_url = (build-url $base "/Items" $qp)
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"userId": $user_id, "maxOfficialRating": $max_official_rating, "hasThemeSong": $has_theme_song, "hasThemeVideo": $has_theme_video, "hasSubtitles": $has_subtitles, "hasSpecialFeature": $has_special_feature, "hasTrailer": $has_trailer, "adjacentTo": $adjacent_to, "parentIndexNumber": $parent_index_number, "hasParentalRating": $has_parental_rating, "isHd": $is_hd, "is4K": $is4_k, "locationTypes": $location_types, "excludeLocationTypes": $exclude_location_types, "isMissing": $is_missing, "isUnaired": $is_unaired, "minCommunityRating": $min_community_rating, "minCriticRating": $min_critic_rating, "minPremiereDate": $min_premiere_date, "minDateLastSaved": $min_date_last_saved, "minDateLastSavedForUser": $min_date_last_saved_for_user, "maxPremiereDate": $max_premiere_date, "hasOverview": $has_overview, "hasImdbId": $has_imdb_id, "hasTmdbId": $has_tmdb_id, "hasTvdbId": $has_tvdb_id, "excludeItemIds": $exclude_item_ids, "startIndex": $start_index, "limit": $limit, "recursive": $recursive, "searchTerm": $search_term, "sortOrder": $sort_order, "parentId": $parent_id, "fields": $fields, "excludeItemTypes": $exclude_item_types, "includeItemTypes": $include_item_types, "filters": $filters, "isFavorite": $is_favorite, "mediaTypes": $media_types, "imageTypes": $image_types, "sortBy": $sort_by, "isPlayed": $is_played, "genres": $genres, "officialRatings": $official_ratings, "tags": $tags, "years": $years, "enableUserData": $enable_user_data, "imageTypeLimit": $image_type_limit, "enableImageTypes": $enable_image_types, "person": $person, "personIds": $person_ids, "personTypes": $person_types, "studios": $studios, "artists": $artists, "excludeArtistIds": $exclude_artist_ids, "artistIds": $artist_ids, "albumArtistIds": $album_artist_ids, "contributingArtistIds": $contributing_artist_ids, "albums": $albums, "albumIds": $album_ids, "ids": $ids, "videoTypes": $video_types, "minOfficialRating": $min_official_rating, "isLocked": $is_locked, "isPlaceHolder": $is_place_holder, "hasOfficialRating": $has_official_rating, "collapseBoxSetItems": $collapse_box_set_items, "minWidth": $min_width, "minHeight": $min_height, "maxWidth": $max_width, "maxHeight": $max_height, "is3D": $is3_d, "seriesStatus": $series_status, "nameStartsWithOrGreater": $name_starts_with_or_greater, "nameStartsWith": $name_starts_with, "nameLessThan": $name_less_than, "studioIds": $studio_ids, "genreIds": $genre_ids, "enableTotalRecordCount": $enable_total_record_count, "enableImages": $enable_images} | compact), body: null}
 }
 
 # Get item counts.
@@ -3246,7 +3343,7 @@ export def "items-counts get" [
   let full_url = (build-url $base "/Items/Counts" $qp)
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"userId": $user_id, "isFavorite": $is_favorite} | compact), body: null}
 }
 
 # Gets legacy query filters.
@@ -3275,7 +3372,7 @@ export def "items-filters get-list-legacy" [
   let full_url = (build-url $base "/Items/Filters" $qp)
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"userId": $user_id, "parentId": $parent_id, "includeItemTypes": $include_item_types, "mediaTypes": $media_types} | compact), body: null}
 }
 
 # Gets query filters.
@@ -3310,7 +3407,7 @@ export def "items-filters2 get-list-filters" [
   let full_url = (build-url $base "/Items/Filters2" $qp)
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"userId": $user_id, "parentId": $parent_id, "includeItemTypes": $include_item_types, "isAiring": $is_airing, "isMovie": $is_movie, "isSports": $is_sports, "isKids": $is_kids, "isNews": $is_news, "isSeries": $is_series, "recursive": $recursive} | compact), body: null}
 }
 
 # Applies search criteria to an item and refreshes metadata.
@@ -3347,13 +3444,14 @@ export def "items-remote-search-apply list-criteria" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "x-emby-authorization"))
   let base = ($base_url | default $BASE_URL)
+  if ($item_id | is-empty) { error make --unspanned { msg: "path parameter 'itemId' must be non-empty" } }
   let qp = [(serialize-qp "replaceAllImages" $replace_all_images "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({item_id: (encode-path-segment $item_id)} | format pattern "/Items/RemoteSearch/Apply/{item_id}") $qp)
   let req_body = {"AlbumArtist": $album_artist, "Artists": $artists, "ImageUrl": $image_url, "IndexNumber": $index_number, "IndexNumberEnd": $index_number_end, "Name": $name, "Overview": $overview, "ParentIndexNumber": $parent_index_number, "PremiereDate": $premiere_date, "ProductionYear": $production_year, "ProviderIds": $provider_ids, "SearchProviderName": $search_provider_name} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: ({"replaceAllImages": $replace_all_images} | compact), body: $req_body}
 }
 
 # Get book remote search.
@@ -3385,7 +3483,7 @@ export def "items-remote-search-book get-results" [
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: {}, body: $req_body}
 }
 
 # Get box set remote search.
@@ -3417,7 +3515,7 @@ export def "items-remote-search-box-set get-results" [
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: {}, body: $req_body}
 }
 
 # Gets a remote image.
@@ -3443,7 +3541,7 @@ export def "items-remote-search-image get" [
   let full_url = (build-url $base "/Items/RemoteSearch/Image" $qp)
   let accept_val = "image/*"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"imageUrl": $image_url, "providerName": $provider_name} | compact), body: null}
 }
 
 # Get movie remote search.
@@ -3475,7 +3573,7 @@ export def "items-remote-search-movie get-results" [
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: {}, body: $req_body}
 }
 
 # Get music album remote search.
@@ -3507,7 +3605,7 @@ export def "items-remote-search-music-album get-results" [
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: {}, body: $req_body}
 }
 
 # Get music artist remote search.
@@ -3539,7 +3637,7 @@ export def "items-remote-search-music-artist get-results" [
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: {}, body: $req_body}
 }
 
 # Get music video remote search.
@@ -3571,7 +3669,7 @@ export def "items-remote-search-music-video get-results" [
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: {}, body: $req_body}
 }
 
 # Get person remote search.
@@ -3603,7 +3701,7 @@ export def "items-remote-search-person get-results" [
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: {}, body: $req_body}
 }
 
 # Get series remote search.
@@ -3635,7 +3733,7 @@ export def "items-remote-search-series get-results" [
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: {}, body: $req_body}
 }
 
 # Get trailer remote search.
@@ -3667,7 +3765,7 @@ export def "items-remote-search-trailer get-results" [
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: {}, body: $req_body}
 }
 
 # Creates an instant playlist based on a given song.
@@ -3696,18 +3794,19 @@ export def "items-instant-mix get" [
 ]: nothing -> record<Items: table<AirDays: list, AirTime: string, AirsAfterSeasonNumber: int, AirsBeforeEpisodeNumber: int, AirsBeforeSeasonNumber: int, Album: string, AlbumArtist: string, AlbumArtists: list, AlbumCount: int, AlbumId: string, AlbumPrimaryImageTag: string, Altitude: float, Aperture: float, ArtistCount: int, ArtistItems: list, Artists: list, AspectRatio: string, Audio: string, BackdropImageTags: list, CameraMake: string, CameraModel: string, CanDelete: bool, CanDownload: bool, ChannelId: string, ChannelName: string, ChannelNumber: string, ChannelPrimaryImageTag: string, ChannelType: string, Chapters: list, ChildCount: int, CollectionType: string, CommunityRating: float, CompletionPercentage: float, Container: string, CriticRating: float, CumulativeRunTimeTicks: int, CurrentProgram: any, CustomRating: string, DateCreated: string, DateLastMediaAdded: string, DisplayOrder: string, DisplayPreferencesId: string, EnableMediaSourceDisplay: bool, EndDate: string, EpisodeCount: int, EpisodeTitle: string, Etag: string, ExposureTime: float, ExternalUrls: list, ExtraType: string, FocalLength: float, ForcedSortName: string, GenreItems: list, Genres: list, HasSubtitles: bool, Height: int, Id: string, ImageBlurHashes: record, ImageOrientation: string, ImageTags: record, IndexNumber: int, IndexNumberEnd: int, IsFolder: bool, IsHD: bool, IsKids: bool, IsLive: bool, IsMovie: bool, IsNews: bool, IsPlaceHolder: bool, IsPremiere: bool, IsRepeat: bool, IsSeries: bool, IsSports: bool, IsoSpeedRating: int, IsoType: string, Latitude: float, LocalTrailerCount: int, LocationType: string, LockData: bool, LockedFields: list, Longitude: float, MediaSourceCount: int, MediaSources: list, MediaStreams: list, MediaType: string, MovieCount: int, MusicVideoCount: int, Name: string, Number: string, OfficialRating: string, OriginalTitle: string, Overview: string, ParentArtImageTag: string, ParentArtItemId: string, ParentBackdropImageTags: list, ParentBackdropItemId: string, ParentId: string, ParentIndexNumber: int, ParentLogoImageTag: string, ParentLogoItemId: string, ParentPrimaryImageItemId: string, ParentPrimaryImageTag: string, ParentThumbImageTag: string, ParentThumbItemId: string, PartCount: int, Path: string, People: list, PlayAccess: string, PlaylistItemId: string, PreferredMetadataCountryCode: string, PreferredMetadataLanguage: string, PremiereDate: string, PrimaryImageAspectRatio: float, ProductionLocations: list, ProductionYear: int, ProgramCount: int, ProgramId: string, ProviderIds: record, RecursiveItemCount: int, RemoteTrailers: list, RunTimeTicks: int, ScreenshotImageTags: list, SeasonId: string, SeasonName: string, SeriesCount: int, SeriesId: string, SeriesName: string, SeriesPrimaryImageTag: string, SeriesStudio: string, SeriesThumbImageTag: string, SeriesTimerId: string, ServerId: string, ShutterSpeed: float, Software: string, SongCount: int, SortName: string, SourceType: string, SpecialFeatureCount: int, StartDate: string, Status: string, Studios: list, SupportsSync: bool, Taglines: list, Tags: list, TimerId: string, TrailerCount: int, Type: string, UserData: record, Video3DFormat: string, VideoType: string, Width: int>, StartIndex: int, TotalRecordCount: int> {
   let auth = (build-auth $token ($auth_scheme | default "x-emby-authorization"))
   let base = ($base_url | default $BASE_URL)
+  if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
   let qp = [(serialize-qp "userId" $user_id "scalar") (serialize-qp "limit" $limit "scalar") (serialize-qp "fields" $fields "multi") (serialize-qp "enableImages" $enable_images "scalar") (serialize-qp "enableUserData" $enable_user_data "scalar") (serialize-qp "imageTypeLimit" $image_type_limit "scalar") (serialize-qp "enableImageTypes" $enable_image_types "multi")] | flatten | str join "&"
   let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/Items/{id}/InstantMix") $qp)
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"userId": $user_id, "limit": $limit, "fields": $fields, "enableImages": $enable_images, "enableUserData": $enable_user_data, "imageTypeLimit": $image_type_limit, "enableImageTypes": $enable_image_types} | compact), body: null}
 }
 
 # Deletes an item from the library and filesystem.
 #
 # DELETE /Items/{itemId}
 # operationId: DeleteItem
-export def "items delete-by-itemId" [
+export def "items delete-by-item-id" [
   item_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -3721,10 +3820,11 @@ export def "items delete-by-itemId" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "x-emby-authorization"))
   let base = ($base_url | default $BASE_URL)
+  if ($item_id | is-empty) { error make --unspanned { msg: "path parameter 'itemId' must be non-empty" } }
   let full_url = (build-url $base ({item_id: (encode-path-segment $item_id)} | format pattern "/Items/{item_id}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
 }
 
 # Updates an item.
@@ -3910,12 +4010,13 @@ export def "items update" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "x-emby-authorization"))
   let base = ($base_url | default $BASE_URL)
+  if ($item_id | is-empty) { error make --unspanned { msg: "path parameter 'itemId' must be non-empty" } }
   let full_url = (build-url $base ({item_id: (encode-path-segment $item_id)} | format pattern "/Items/{item_id}"))
   let req_body = {"AirDays": $air_days, "AirTime": $air_time, "AirsAfterSeasonNumber": $airs_after_season_number, "AirsBeforeEpisodeNumber": $airs_before_episode_number, "AirsBeforeSeasonNumber": $airs_before_season_number, "Album": $album, "AlbumArtist": $album_artist, "AlbumArtists": $album_artists, "AlbumCount": $album_count, "AlbumId": $album_id, "AlbumPrimaryImageTag": $album_primary_image_tag, "Altitude": $altitude, "Aperture": $aperture, "ArtistCount": $artist_count, "ArtistItems": $artist_items, "Artists": $artists, "AspectRatio": $aspect_ratio, "Audio": $audio, "BackdropImageTags": $backdrop_image_tags, "CameraMake": $camera_make, "CameraModel": $camera_model, "CanDelete": $can_delete, "CanDownload": $can_download, "ChannelId": $channel_id, "ChannelName": $channel_name, "ChannelNumber": $channel_number, "ChannelPrimaryImageTag": $channel_primary_image_tag, "ChannelType": $channel_type, "Chapters": $chapters, "ChildCount": $child_count, "CollectionType": $collection_type, "CommunityRating": $community_rating, "CompletionPercentage": $completion_percentage, "Container": $container, "CriticRating": $critic_rating, "CumulativeRunTimeTicks": $cumulative_run_time_ticks, "CurrentProgram": $current_program, "CustomRating": $custom_rating, "DateCreated": $date_created, "DateLastMediaAdded": $date_last_media_added, "DisplayOrder": $display_order, "DisplayPreferencesId": $display_preferences_id, "EnableMediaSourceDisplay": $enable_media_source_display, "EndDate": $end_date, "EpisodeCount": $episode_count, "EpisodeTitle": $episode_title, "Etag": $etag, "ExposureTime": $exposure_time, "ExternalUrls": $external_urls, "ExtraType": $extra_type, "FocalLength": $focal_length, "ForcedSortName": $forced_sort_name, "GenreItems": $genre_items, "Genres": $genres, "HasSubtitles": $has_subtitles, "Height": $height, "Id": $id, "ImageBlurHashes": $image_blur_hashes, "ImageOrientation": $image_orientation, "ImageTags": $image_tags, "IndexNumber": $index_number, "IndexNumberEnd": $index_number_end, "IsFolder": $is_folder, "IsHD": $is_hd, "IsKids": $is_kids, "IsLive": $is_live, "IsMovie": $is_movie, "IsNews": $is_news, "IsPlaceHolder": $is_place_holder, "IsPremiere": $is_premiere, "IsRepeat": $is_repeat, "IsSeries": $is_series, "IsSports": $is_sports, "IsoSpeedRating": $iso_speed_rating, "IsoType": $iso_type, "Latitude": $latitude, "LocalTrailerCount": $local_trailer_count, "LocationType": $location_type, "LockData": $lock_data, "LockedFields": $locked_fields, "Longitude": $longitude, "MediaSourceCount": $media_source_count, "MediaSources": $media_sources, "MediaStreams": $media_streams, "MediaType": $media_type, "MovieCount": $movie_count, "MusicVideoCount": $music_video_count, "Name": $name, "Number": $number, "OfficialRating": $official_rating, "OriginalTitle": $original_title, "Overview": $overview, "ParentArtImageTag": $parent_art_image_tag, "ParentArtItemId": $parent_art_item_id, "ParentBackdropImageTags": $parent_backdrop_image_tags, "ParentBackdropItemId": $parent_backdrop_item_id, "ParentId": $parent_id, "ParentIndexNumber": $parent_index_number, "ParentLogoImageTag": $parent_logo_image_tag, "ParentLogoItemId": $parent_logo_item_id, "ParentPrimaryImageItemId": $parent_primary_image_item_id, "ParentPrimaryImageTag": $parent_primary_image_tag, "ParentThumbImageTag": $parent_thumb_image_tag, "ParentThumbItemId": $parent_thumb_item_id, "PartCount": $part_count, "Path": $path, "People": $people, "PlayAccess": $play_access, "PlaylistItemId": $playlist_item_id, "PreferredMetadataCountryCode": $preferred_metadata_country_code, "PreferredMetadataLanguage": $preferred_metadata_language, "PremiereDate": $premiere_date, "PrimaryImageAspectRatio": $primary_image_aspect_ratio, "ProductionLocations": $production_locations, "ProductionYear": $production_year, "ProgramCount": $program_count, "ProgramId": $program_id, "ProviderIds": $provider_ids, "RecursiveItemCount": $recursive_item_count, "RemoteTrailers": $remote_trailers, "RunTimeTicks": $run_time_ticks, "ScreenshotImageTags": $screenshot_image_tags, "SeasonId": $season_id, "SeasonName": $season_name, "SeriesCount": $series_count, "SeriesId": $series_id, "SeriesName": $series_name, "SeriesPrimaryImageTag": $series_primary_image_tag, "SeriesStudio": $series_studio, "SeriesThumbImageTag": $series_thumb_image_tag, "SeriesTimerId": $series_timer_id, "ServerId": $server_id, "ShutterSpeed": $shutter_speed, "Software": $software, "SongCount": $song_count, "SortName": $sort_name, "SourceType": $source_type, "SpecialFeatureCount": $special_feature_count, "StartDate": $start_date, "Status": $status, "Studios": $studios, "SupportsSync": $supports_sync, "Taglines": $taglines, "Tags": $tags, "TimerId": $timer_id, "TrailerCount": $trailer_count, "Type": $type, "UserData": $user_data, "Video3DFormat": $video3_d_format, "VideoType": $video_type, "Width": $width} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: {}, body: $req_body}
 }
 
 # Gets all parents of an item.
@@ -3938,11 +4039,12 @@ export def "items-ancestors get" [
 ]: nothing -> table<AirDays: list<string>, AirTime: string, AirsAfterSeasonNumber: int, AirsBeforeEpisodeNumber: int, AirsBeforeSeasonNumber: int, Album: string, AlbumArtist: string, AlbumArtists: list<record>, AlbumCount: int, AlbumId: string, AlbumPrimaryImageTag: string, Altitude: float, Aperture: float, ArtistCount: int, ArtistItems: list<record>, Artists: list<string>, AspectRatio: string, Audio: string, BackdropImageTags: list<string>, CameraMake: string, CameraModel: string, CanDelete: bool, CanDownload: bool, ChannelId: string, ChannelName: string, ChannelNumber: string, ChannelPrimaryImageTag: string, ChannelType: string, Chapters: list<record>, ChildCount: int, CollectionType: string, CommunityRating: float, CompletionPercentage: float, Container: string, CriticRating: float, CumulativeRunTimeTicks: int, CurrentProgram: any, CustomRating: string, DateCreated: string, DateLastMediaAdded: string, DisplayOrder: string, DisplayPreferencesId: string, EnableMediaSourceDisplay: bool, EndDate: string, EpisodeCount: int, EpisodeTitle: string, Etag: string, ExposureTime: float, ExternalUrls: list<record>, ExtraType: string, FocalLength: float, ForcedSortName: string, GenreItems: list<record>, Genres: list<string>, HasSubtitles: bool, Height: int, Id: string, ImageBlurHashes: record<Art: record, Backdrop: record, Banner: record, Box: record, BoxRear: record, Chapter: record, Disc: record, Logo: record, Menu: record, Primary: record, Profile: record, Screenshot: record, Thumb: record>, ImageOrientation: string, ImageTags: record, IndexNumber: int, IndexNumberEnd: int, IsFolder: bool, IsHD: bool, IsKids: bool, IsLive: bool, IsMovie: bool, IsNews: bool, IsPlaceHolder: bool, IsPremiere: bool, IsRepeat: bool, IsSeries: bool, IsSports: bool, IsoSpeedRating: int, IsoType: string, Latitude: float, LocalTrailerCount: int, LocationType: string, LockData: bool, LockedFields: list<string>, Longitude: float, MediaSourceCount: int, MediaSources: list<record>, MediaStreams: list<record>, MediaType: string, MovieCount: int, MusicVideoCount: int, Name: string, Number: string, OfficialRating: string, OriginalTitle: string, Overview: string, ParentArtImageTag: string, ParentArtItemId: string, ParentBackdropImageTags: list<string>, ParentBackdropItemId: string, ParentId: string, ParentIndexNumber: int, ParentLogoImageTag: string, ParentLogoItemId: string, ParentPrimaryImageItemId: string, ParentPrimaryImageTag: string, ParentThumbImageTag: string, ParentThumbItemId: string, PartCount: int, Path: string, People: list<record>, PlayAccess: string, PlaylistItemId: string, PreferredMetadataCountryCode: string, PreferredMetadataLanguage: string, PremiereDate: string, PrimaryImageAspectRatio: float, ProductionLocations: list<string>, ProductionYear: int, ProgramCount: int, ProgramId: string, ProviderIds: record, RecursiveItemCount: int, RemoteTrailers: list<record>, RunTimeTicks: int, ScreenshotImageTags: list<string>, SeasonId: string, SeasonName: string, SeriesCount: int, SeriesId: string, SeriesName: string, SeriesPrimaryImageTag: string, SeriesStudio: string, SeriesThumbImageTag: string, SeriesTimerId: string, ServerId: string, ShutterSpeed: float, Software: string, SongCount: int, SortName: string, SourceType: string, SpecialFeatureCount: int, StartDate: string, Status: string, Studios: list<record>, SupportsSync: bool, Taglines: list<string>, Tags: list<string>, TimerId: string, TrailerCount: int, Type: string, UserData: record<IsFavorite: bool, ItemId: string, Key: string, LastPlayedDate: string, Likes: bool, PlayCount: int, PlaybackPositionTicks: int, Played: bool, PlayedPercentage: float, Rating: float, UnplayedItemCount: int>, Video3DFormat: string, VideoType: string, Width: int> {
   let auth = (build-auth $token ($auth_scheme | default "x-emby-authorization"))
   let base = ($base_url | default $BASE_URL)
+  if ($item_id | is-empty) { error make --unspanned { msg: "path parameter 'itemId' must be non-empty" } }
   let qp = [(serialize-qp "userId" $user_id "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({item_id: (encode-path-segment $item_id)} | format pattern "/Items/{item_id}/Ancestors") $qp)
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"userId": $user_id} | compact), body: null}
 }
 
 # Updates an item's content type.
@@ -3964,11 +4066,12 @@ export def "items-content-type update" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "x-emby-authorization"))
   let base = ($base_url | default $BASE_URL)
+  if ($item_id | is-empty) { error make --unspanned { msg: "path parameter 'itemId' must be non-empty" } }
   let qp = [(serialize-qp "contentType" $content_type "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({item_id: (encode-path-segment $item_id)} | format pattern "/Items/{item_id}/ContentType") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"contentType": $content_type} | compact), body: null}
 }
 
 # Gets critic review for an item.
@@ -3992,10 +4095,11 @@ export def "items-critic-reviews get" [
 ]: nothing -> record<Items: table<AirDays: list, AirTime: string, AirsAfterSeasonNumber: int, AirsBeforeEpisodeNumber: int, AirsBeforeSeasonNumber: int, Album: string, AlbumArtist: string, AlbumArtists: list, AlbumCount: int, AlbumId: string, AlbumPrimaryImageTag: string, Altitude: float, Aperture: float, ArtistCount: int, ArtistItems: list, Artists: list, AspectRatio: string, Audio: string, BackdropImageTags: list, CameraMake: string, CameraModel: string, CanDelete: bool, CanDownload: bool, ChannelId: string, ChannelName: string, ChannelNumber: string, ChannelPrimaryImageTag: string, ChannelType: string, Chapters: list, ChildCount: int, CollectionType: string, CommunityRating: float, CompletionPercentage: float, Container: string, CriticRating: float, CumulativeRunTimeTicks: int, CurrentProgram: any, CustomRating: string, DateCreated: string, DateLastMediaAdded: string, DisplayOrder: string, DisplayPreferencesId: string, EnableMediaSourceDisplay: bool, EndDate: string, EpisodeCount: int, EpisodeTitle: string, Etag: string, ExposureTime: float, ExternalUrls: list, ExtraType: string, FocalLength: float, ForcedSortName: string, GenreItems: list, Genres: list, HasSubtitles: bool, Height: int, Id: string, ImageBlurHashes: record, ImageOrientation: string, ImageTags: record, IndexNumber: int, IndexNumberEnd: int, IsFolder: bool, IsHD: bool, IsKids: bool, IsLive: bool, IsMovie: bool, IsNews: bool, IsPlaceHolder: bool, IsPremiere: bool, IsRepeat: bool, IsSeries: bool, IsSports: bool, IsoSpeedRating: int, IsoType: string, Latitude: float, LocalTrailerCount: int, LocationType: string, LockData: bool, LockedFields: list, Longitude: float, MediaSourceCount: int, MediaSources: list, MediaStreams: list, MediaType: string, MovieCount: int, MusicVideoCount: int, Name: string, Number: string, OfficialRating: string, OriginalTitle: string, Overview: string, ParentArtImageTag: string, ParentArtItemId: string, ParentBackdropImageTags: list, ParentBackdropItemId: string, ParentId: string, ParentIndexNumber: int, ParentLogoImageTag: string, ParentLogoItemId: string, ParentPrimaryImageItemId: string, ParentPrimaryImageTag: string, ParentThumbImageTag: string, ParentThumbItemId: string, PartCount: int, Path: string, People: list, PlayAccess: string, PlaylistItemId: string, PreferredMetadataCountryCode: string, PreferredMetadataLanguage: string, PremiereDate: string, PrimaryImageAspectRatio: float, ProductionLocations: list, ProductionYear: int, ProgramCount: int, ProgramId: string, ProviderIds: record, RecursiveItemCount: int, RemoteTrailers: list, RunTimeTicks: int, ScreenshotImageTags: list, SeasonId: string, SeasonName: string, SeriesCount: int, SeriesId: string, SeriesName: string, SeriesPrimaryImageTag: string, SeriesStudio: string, SeriesThumbImageTag: string, SeriesTimerId: string, ServerId: string, ShutterSpeed: float, Software: string, SongCount: int, SortName: string, SourceType: string, SpecialFeatureCount: int, StartDate: string, Status: string, Studios: list, SupportsSync: bool, Taglines: list, Tags: list, TimerId: string, TrailerCount: int, Type: string, UserData: record, Video3DFormat: string, VideoType: string, Width: int>, StartIndex: int, TotalRecordCount: int> {
   let auth = (build-auth $token ($auth_scheme | default "x-emby-authorization"))
   let base = ($base_url | default $BASE_URL)
+  if ($item_id | is-empty) { error make --unspanned { msg: "path parameter 'itemId' must be non-empty" } }
   let full_url = (build-url $base ({item_id: (encode-path-segment $item_id)} | format pattern "/Items/{item_id}/CriticReviews"))
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
 }
 
 # Downloads item media.
@@ -4017,10 +4121,11 @@ export def "items-download get" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "x-emby-authorization"))
   let base = ($base_url | default $BASE_URL)
+  if ($item_id | is-empty) { error make --unspanned { msg: "path parameter 'itemId' must be non-empty" } }
   let full_url = (build-url $base ({item_id: (encode-path-segment $item_id)} | format pattern "/Items/{item_id}/Download"))
   let accept_val = ($accept | default "audio/*")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
 }
 
 # Get the item's external id info.
@@ -4042,10 +4147,11 @@ export def "items-external-id-infos get" [
 ]: nothing -> table<Key: string, Name: string, Type: string, UrlFormatString: string> {
   let auth = (build-auth $token ($auth_scheme | default "x-emby-authorization"))
   let base = ($base_url | default $BASE_URL)
+  if ($item_id | is-empty) { error make --unspanned { msg: "path parameter 'itemId' must be non-empty" } }
   let full_url = (build-url $base ({item_id: (encode-path-segment $item_id)} | format pattern "/Items/{item_id}/ExternalIdInfos"))
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
 }
 
 # Get the original file of an item.
@@ -4067,10 +4173,11 @@ export def "items-file get" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "x-emby-authorization"))
   let base = ($base_url | default $BASE_URL)
+  if ($item_id | is-empty) { error make --unspanned { msg: "path parameter 'itemId' must be non-empty" } }
   let full_url = (build-url $base ({item_id: (encode-path-segment $item_id)} | format pattern "/Items/{item_id}/File"))
   let accept_val = ($accept | default "audio/*")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
 }
 
 # Get item image infos.
@@ -4092,10 +4199,11 @@ export def "items-images get-infos" [
 ]: nothing -> table<BlurHash: string, Height: int, ImageIndex: int, ImageTag: string, ImageType: string, Path: string, Size: int, Width: int> {
   let auth = (build-auth $token ($auth_scheme | default "x-emby-authorization"))
   let base = ($base_url | default $BASE_URL)
+  if ($item_id | is-empty) { error make --unspanned { msg: "path parameter 'itemId' must be non-empty" } }
   let full_url = (build-url $base ({item_id: (encode-path-segment $item_id)} | format pattern "/Items/{item_id}/Images"))
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
 }
 
 # Delete an item's image.
@@ -4118,11 +4226,13 @@ export def "items-images delete" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "x-emby-authorization"))
   let base = ($base_url | default $BASE_URL)
+  if ($item_id | is-empty) { error make --unspanned { msg: "path parameter 'itemId' must be non-empty" } }
+  if ($image_type | is-empty) { error make --unspanned { msg: "path parameter 'imageType' must be non-empty" } }
   let qp = [(serialize-qp "imageIndex" $image_index "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({item_id: (encode-path-segment $item_id), image_type: (encode-path-segment $image_type)} | format pattern "/Items/{item_id}/Images/{image_type}") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"imageIndex": $image_index} | compact), body: null}
 }
 
 # Gets the item's image.
@@ -4159,11 +4269,13 @@ export def "items-images get" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "x-emby-authorization"))
   let base = ($base_url | default $BASE_URL)
+  if ($item_id | is-empty) { error make --unspanned { msg: "path parameter 'itemId' must be non-empty" } }
+  if ($image_type | is-empty) { error make --unspanned { msg: "path parameter 'imageType' must be non-empty" } }
   let qp = [(serialize-qp "maxWidth" $max_width "scalar") (serialize-qp "maxHeight" $max_height "scalar") (serialize-qp "width" $width "scalar") (serialize-qp "height" $height "scalar") (serialize-qp "quality" $quality "scalar") (serialize-qp "tag" $tag "scalar") (serialize-qp "cropWhitespace" $crop_whitespace "scalar") (serialize-qp "format" $format "scalar") (serialize-qp "addPlayedIndicator" $add_played_indicator "scalar") (serialize-qp "percentPlayed" $percent_played "scalar") (serialize-qp "unplayedCount" $unplayed_count "scalar") (serialize-qp "blur" $blur "scalar") (serialize-qp "backgroundColor" $background_color "scalar") (serialize-qp "foregroundLayer" $foreground_layer "scalar") (serialize-qp "imageIndex" $image_index "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({item_id: (encode-path-segment $item_id), image_type: (encode-path-segment $image_type)} | format pattern "/Items/{item_id}/Images/{image_type}") $qp)
   let accept_val = "image/*"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"maxWidth": $max_width, "maxHeight": $max_height, "width": $width, "height": $height, "quality": $quality, "tag": $tag, "cropWhitespace": $crop_whitespace, "format": $format, "addPlayedIndicator": $add_played_indicator, "percentPlayed": $percent_played, "unplayedCount": $unplayed_count, "blur": $blur, "backgroundColor": $background_color, "foregroundLayer": $foreground_layer, "imageIndex": $image_index} | compact), body: null}
 }
 
 # Gets the item's image.
@@ -4200,11 +4312,13 @@ export def "items-images head-head" [
 ]: nothing -> record {
   let auth = (build-auth $token ($auth_scheme | default "x-emby-authorization"))
   let base = ($base_url | default $BASE_URL)
+  if ($item_id | is-empty) { error make --unspanned { msg: "path parameter 'itemId' must be non-empty" } }
+  if ($image_type | is-empty) { error make --unspanned { msg: "path parameter 'imageType' must be non-empty" } }
   let qp = [(serialize-qp "maxWidth" $max_width "scalar") (serialize-qp "maxHeight" $max_height "scalar") (serialize-qp "width" $width "scalar") (serialize-qp "height" $height "scalar") (serialize-qp "quality" $quality "scalar") (serialize-qp "tag" $tag "scalar") (serialize-qp "cropWhitespace" $crop_whitespace "scalar") (serialize-qp "format" $format "scalar") (serialize-qp "addPlayedIndicator" $add_played_indicator "scalar") (serialize-qp "percentPlayed" $percent_played "scalar") (serialize-qp "unplayedCount" $unplayed_count "scalar") (serialize-qp "blur" $blur "scalar") (serialize-qp "backgroundColor" $background_color "scalar") (serialize-qp "foregroundLayer" $foreground_layer "scalar") (serialize-qp "imageIndex" $image_index "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({item_id: (encode-path-segment $item_id), image_type: (encode-path-segment $image_type)} | format pattern "/Items/{item_id}/Images/{image_type}") $qp)
   let accept_val = "image/*"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "head" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "head" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"maxWidth": $max_width, "maxHeight": $max_height, "width": $width, "height": $height, "quality": $quality, "tag": $tag, "cropWhitespace": $crop_whitespace, "format": $format, "addPlayedIndicator": $add_played_indicator, "percentPlayed": $percent_played, "unplayedCount": $unplayed_count, "blur": $blur, "backgroundColor": $background_color, "foregroundLayer": $foreground_layer, "imageIndex": $image_index} | compact), body: null}
 }
 
 # Set item image.
@@ -4226,10 +4340,12 @@ export def "items-images update" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "x-emby-authorization"))
   let base = ($base_url | default $BASE_URL)
+  if ($item_id | is-empty) { error make --unspanned { msg: "path parameter 'itemId' must be non-empty" } }
+  if ($image_type | is-empty) { error make --unspanned { msg: "path parameter 'imageType' must be non-empty" } }
   let full_url = (build-url $base ({item_id: (encode-path-segment $item_id), image_type: (encode-path-segment $image_type)} | format pattern "/Items/{item_id}/Images/{image_type}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
 }
 
 # Delete an item's image.
@@ -4252,10 +4368,13 @@ export def "items-images delete-by-index" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "x-emby-authorization"))
   let base = ($base_url | default $BASE_URL)
+  if ($item_id | is-empty) { error make --unspanned { msg: "path parameter 'itemId' must be non-empty" } }
+  if ($image_type | is-empty) { error make --unspanned { msg: "path parameter 'imageType' must be non-empty" } }
+  if ($image_index | is-empty) { error make --unspanned { msg: "path parameter 'imageIndex' must be non-empty" } }
   let full_url = (build-url $base ({item_id: (encode-path-segment $item_id), image_type: (encode-path-segment $image_type), image_index: (encode-path-segment $image_index)} | format pattern "/Items/{item_id}/Images/{image_type}/{image_index}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
 }
 
 # Gets the item's image.
@@ -4292,11 +4411,14 @@ export def "items-images get-by-index" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "x-emby-authorization"))
   let base = ($base_url | default $BASE_URL)
+  if ($item_id | is-empty) { error make --unspanned { msg: "path parameter 'itemId' must be non-empty" } }
+  if ($image_type | is-empty) { error make --unspanned { msg: "path parameter 'imageType' must be non-empty" } }
+  if ($image_index | is-empty) { error make --unspanned { msg: "path parameter 'imageIndex' must be non-empty" } }
   let qp = [(serialize-qp "maxWidth" $max_width "scalar") (serialize-qp "maxHeight" $max_height "scalar") (serialize-qp "width" $width "scalar") (serialize-qp "height" $height "scalar") (serialize-qp "quality" $quality "scalar") (serialize-qp "tag" $tag "scalar") (serialize-qp "cropWhitespace" $crop_whitespace "scalar") (serialize-qp "format" $format "scalar") (serialize-qp "addPlayedIndicator" $add_played_indicator "scalar") (serialize-qp "percentPlayed" $percent_played "scalar") (serialize-qp "unplayedCount" $unplayed_count "scalar") (serialize-qp "blur" $blur "scalar") (serialize-qp "backgroundColor" $background_color "scalar") (serialize-qp "foregroundLayer" $foreground_layer "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({item_id: (encode-path-segment $item_id), image_type: (encode-path-segment $image_type), image_index: (encode-path-segment $image_index)} | format pattern "/Items/{item_id}/Images/{image_type}/{image_index}") $qp)
   let accept_val = "image/*"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"maxWidth": $max_width, "maxHeight": $max_height, "width": $width, "height": $height, "quality": $quality, "tag": $tag, "cropWhitespace": $crop_whitespace, "format": $format, "addPlayedIndicator": $add_played_indicator, "percentPlayed": $percent_played, "unplayedCount": $unplayed_count, "blur": $blur, "backgroundColor": $background_color, "foregroundLayer": $foreground_layer} | compact), body: null}
 }
 
 # Gets the item's image.
@@ -4333,11 +4455,14 @@ export def "items-images head-head-by-index" [
 ]: nothing -> record {
   let auth = (build-auth $token ($auth_scheme | default "x-emby-authorization"))
   let base = ($base_url | default $BASE_URL)
+  if ($item_id | is-empty) { error make --unspanned { msg: "path parameter 'itemId' must be non-empty" } }
+  if ($image_type | is-empty) { error make --unspanned { msg: "path parameter 'imageType' must be non-empty" } }
+  if ($image_index | is-empty) { error make --unspanned { msg: "path parameter 'imageIndex' must be non-empty" } }
   let qp = [(serialize-qp "maxWidth" $max_width "scalar") (serialize-qp "maxHeight" $max_height "scalar") (serialize-qp "width" $width "scalar") (serialize-qp "height" $height "scalar") (serialize-qp "quality" $quality "scalar") (serialize-qp "tag" $tag "scalar") (serialize-qp "cropWhitespace" $crop_whitespace "scalar") (serialize-qp "format" $format "scalar") (serialize-qp "addPlayedIndicator" $add_played_indicator "scalar") (serialize-qp "percentPlayed" $percent_played "scalar") (serialize-qp "unplayedCount" $unplayed_count "scalar") (serialize-qp "blur" $blur "scalar") (serialize-qp "backgroundColor" $background_color "scalar") (serialize-qp "foregroundLayer" $foreground_layer "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({item_id: (encode-path-segment $item_id), image_type: (encode-path-segment $image_type), image_index: (encode-path-segment $image_index)} | format pattern "/Items/{item_id}/Images/{image_type}/{image_index}") $qp)
   let accept_val = "image/*"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "head" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "head" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"maxWidth": $max_width, "maxHeight": $max_height, "width": $width, "height": $height, "quality": $quality, "tag": $tag, "cropWhitespace": $crop_whitespace, "format": $format, "addPlayedIndicator": $add_played_indicator, "percentPlayed": $percent_played, "unplayedCount": $unplayed_count, "blur": $blur, "backgroundColor": $background_color, "foregroundLayer": $foreground_layer} | compact), body: null}
 }
 
 # Set item image.
@@ -4360,10 +4485,13 @@ export def "items-images update-by-index" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "x-emby-authorization"))
   let base = ($base_url | default $BASE_URL)
+  if ($item_id | is-empty) { error make --unspanned { msg: "path parameter 'itemId' must be non-empty" } }
+  if ($image_type | is-empty) { error make --unspanned { msg: "path parameter 'imageType' must be non-empty" } }
+  if ($image_index | is-empty) { error make --unspanned { msg: "path parameter 'imageIndex' must be non-empty" } }
   let full_url = (build-url $base ({item_id: (encode-path-segment $item_id), image_type: (encode-path-segment $image_type), image_index: (encode-path-segment $image_index)} | format pattern "/Items/{item_id}/Images/{image_type}/{image_index}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
 }
 
 # Updates the index for an item image.
@@ -4387,11 +4515,14 @@ export def "items-images-index update" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "x-emby-authorization"))
   let base = ($base_url | default $BASE_URL)
+  if ($item_id | is-empty) { error make --unspanned { msg: "path parameter 'itemId' must be non-empty" } }
+  if ($image_type | is-empty) { error make --unspanned { msg: "path parameter 'imageType' must be non-empty" } }
+  if ($image_index | is-empty) { error make --unspanned { msg: "path parameter 'imageIndex' must be non-empty" } }
   let qp = [(serialize-qp "newIndex" $new_index "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({item_id: (encode-path-segment $item_id), image_type: (encode-path-segment $image_type), image_index: (encode-path-segment $image_index)} | format pattern "/Items/{item_id}/Images/{image_type}/{image_index}/Index") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"newIndex": $new_index} | compact), body: null}
 }
 
 # Gets the item's image.
@@ -4428,11 +4559,20 @@ export def "items-images get-image2" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "x-emby-authorization"))
   let base = ($base_url | default $BASE_URL)
+  if ($item_id | is-empty) { error make --unspanned { msg: "path parameter 'itemId' must be non-empty" } }
+  if ($image_type | is-empty) { error make --unspanned { msg: "path parameter 'imageType' must be non-empty" } }
+  if ($image_index | is-empty) { error make --unspanned { msg: "path parameter 'imageIndex' must be non-empty" } }
+  if ($tag | is-empty) { error make --unspanned { msg: "path parameter 'tag' must be non-empty" } }
+  if ($format | is-empty) { error make --unspanned { msg: "path parameter 'format' must be non-empty" } }
+  if ($max_width | is-empty) { error make --unspanned { msg: "path parameter 'maxWidth' must be non-empty" } }
+  if ($max_height | is-empty) { error make --unspanned { msg: "path parameter 'maxHeight' must be non-empty" } }
+  if ($percent_played | is-empty) { error make --unspanned { msg: "path parameter 'percentPlayed' must be non-empty" } }
+  if ($unplayed_count | is-empty) { error make --unspanned { msg: "path parameter 'unplayedCount' must be non-empty" } }
   let qp = [(serialize-qp "width" $width "scalar") (serialize-qp "height" $height "scalar") (serialize-qp "quality" $quality "scalar") (serialize-qp "cropWhitespace" $crop_whitespace "scalar") (serialize-qp "addPlayedIndicator" $add_played_indicator "scalar") (serialize-qp "blur" $blur "scalar") (serialize-qp "backgroundColor" $background_color "scalar") (serialize-qp "foregroundLayer" $foreground_layer "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({item_id: (encode-path-segment $item_id), image_type: (encode-path-segment $image_type), image_index: (encode-path-segment $image_index), tag: (encode-path-segment $tag), format: (encode-path-segment $format), max_width: (encode-path-segment $max_width), max_height: (encode-path-segment $max_height), percent_played: (encode-path-segment $percent_played), unplayed_count: (encode-path-segment $unplayed_count)} | format pattern "/Items/{item_id}/Images/{image_type}/{image_index}/{tag}/{format}/{max_width}/{max_height}/{percent_played}/{unplayed_count}") $qp)
   let accept_val = "image/*"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"width": $width, "height": $height, "quality": $quality, "cropWhitespace": $crop_whitespace, "addPlayedIndicator": $add_played_indicator, "blur": $blur, "backgroundColor": $background_color, "foregroundLayer": $foreground_layer} | compact), body: null}
 }
 
 # Gets the item's image.
@@ -4469,18 +4609,27 @@ export def "items-images head-head-image2" [
 ]: nothing -> record {
   let auth = (build-auth $token ($auth_scheme | default "x-emby-authorization"))
   let base = ($base_url | default $BASE_URL)
+  if ($item_id | is-empty) { error make --unspanned { msg: "path parameter 'itemId' must be non-empty" } }
+  if ($image_type | is-empty) { error make --unspanned { msg: "path parameter 'imageType' must be non-empty" } }
+  if ($image_index | is-empty) { error make --unspanned { msg: "path parameter 'imageIndex' must be non-empty" } }
+  if ($tag | is-empty) { error make --unspanned { msg: "path parameter 'tag' must be non-empty" } }
+  if ($format | is-empty) { error make --unspanned { msg: "path parameter 'format' must be non-empty" } }
+  if ($max_width | is-empty) { error make --unspanned { msg: "path parameter 'maxWidth' must be non-empty" } }
+  if ($max_height | is-empty) { error make --unspanned { msg: "path parameter 'maxHeight' must be non-empty" } }
+  if ($percent_played | is-empty) { error make --unspanned { msg: "path parameter 'percentPlayed' must be non-empty" } }
+  if ($unplayed_count | is-empty) { error make --unspanned { msg: "path parameter 'unplayedCount' must be non-empty" } }
   let qp = [(serialize-qp "width" $width "scalar") (serialize-qp "height" $height "scalar") (serialize-qp "quality" $quality "scalar") (serialize-qp "cropWhitespace" $crop_whitespace "scalar") (serialize-qp "addPlayedIndicator" $add_played_indicator "scalar") (serialize-qp "blur" $blur "scalar") (serialize-qp "backgroundColor" $background_color "scalar") (serialize-qp "foregroundLayer" $foreground_layer "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({item_id: (encode-path-segment $item_id), image_type: (encode-path-segment $image_type), image_index: (encode-path-segment $image_index), tag: (encode-path-segment $tag), format: (encode-path-segment $format), max_width: (encode-path-segment $max_width), max_height: (encode-path-segment $max_height), percent_played: (encode-path-segment $percent_played), unplayed_count: (encode-path-segment $unplayed_count)} | format pattern "/Items/{item_id}/Images/{image_type}/{image_index}/{tag}/{format}/{max_width}/{max_height}/{percent_played}/{unplayed_count}") $qp)
   let accept_val = "image/*"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "head" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "head" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"width": $width, "height": $height, "quality": $quality, "cropWhitespace": $crop_whitespace, "addPlayedIndicator": $add_played_indicator, "blur": $blur, "backgroundColor": $background_color, "foregroundLayer": $foreground_layer} | compact), body: null}
 }
 
 # Gets metadata editor info for an item.
 #
 # GET /Items/{itemId}/MetadataEditor
 # operationId: GetMetadataEditorInfo
-export def "items-metadata-editor get-get" [
+export def "items-metadata-editor get" [
   item_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -4495,10 +4644,11 @@ export def "items-metadata-editor get-get" [
 ]: nothing -> record<ContentType: string, ContentTypeOptions: table<Name: string, Value: string>, Countries: table<DisplayName: string, Name: string, ThreeLetterISORegionName: string, TwoLetterISORegionName: string>, Cultures: table<DisplayName: string, Name: string, ThreeLetterISOLanguageName: string, ThreeLetterISOLanguageNames: list, TwoLetterISOLanguageName: string>, ExternalIdInfos: table<Key: string, Name: string, Type: string, UrlFormatString: string>, ParentalRatingOptions: table<Name: string, Value: int>> {
   let auth = (build-auth $token ($auth_scheme | default "x-emby-authorization"))
   let base = ($base_url | default $BASE_URL)
+  if ($item_id | is-empty) { error make --unspanned { msg: "path parameter 'itemId' must be non-empty" } }
   let full_url = (build-url $base ({item_id: (encode-path-segment $item_id)} | format pattern "/Items/{item_id}/MetadataEditor"))
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
 }
 
 # Gets live playback media info for an item.
@@ -4521,11 +4671,12 @@ export def "items-playback-info get" [
 ]: nothing -> record<ErrorCode: string, MediaSources: table<AnalyzeDurationMs: int, Bitrate: int, BufferMs: int, Container: string, DefaultAudioStreamIndex: int, DefaultSubtitleStreamIndex: int, ETag: string, EncoderPath: string, EncoderProtocol: string, Formats: list, GenPtsInput: bool, Id: string, IgnoreDts: bool, IgnoreIndex: bool, IsInfiniteStream: bool, IsRemote: bool, IsoType: string, LiveStreamId: string, MediaAttachments: list, MediaStreams: list, Name: string, OpenToken: string, Path: string, Protocol: string, ReadAtNativeFramerate: bool, RequiredHttpHeaders: record, RequiresClosing: bool, RequiresLooping: bool, RequiresOpening: bool, RunTimeTicks: int, Size: int, SupportsDirectPlay: bool, SupportsDirectStream: bool, SupportsProbing: bool, SupportsTranscoding: bool, Timestamp: string, TranscodingContainer: string, TranscodingSubProtocol: string, TranscodingUrl: string, Type: string, Video3DFormat: string, VideoType: string>, PlaySessionId: string> {
   let auth = (build-auth $token ($auth_scheme | default "x-emby-authorization"))
   let base = ($base_url | default $BASE_URL)
+  if ($item_id | is-empty) { error make --unspanned { msg: "path parameter 'itemId' must be non-empty" } }
   let qp = [(serialize-qp "userId" $user_id "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({item_id: (encode-path-segment $item_id)} | format pattern "/Items/{item_id}/PlaybackInfo") $qp)
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"userId": $user_id} | compact), body: null}
 }
 
 # Gets live playback media info for an item.
@@ -4559,32 +4710,33 @@ export def "items-playback-info get-posted" [
   --enable-transcoding: oneof<nothing, bool> # Whether to enable transcoding. Default: true. (nullable)
   --allow-video-stream-copy: oneof<nothing, bool> # Whether to allow to copy the video stream. Default: true. (nullable)
   --allow-audio-stream-copy: oneof<nothing, bool> # Whether to allow to copy the audio stream. Default: true. (nullable)
-  --allow-audio-stream-copy: oneof<nothing, bool> # Gets or sets a value indicating whether to allow audio stream copy. (nullable)
-  --allow-video-stream-copy: oneof<nothing, bool> # Gets or sets a value indicating whether to enable video stream copy. (nullable)
-  --audio-stream-index: int # Gets or sets the audio stream index. (nullable, format: int32)
-  --auto-open-live-stream: oneof<nothing, bool> # Gets or sets a value indicating whether to auto open the live stream. (nullable)
+  --allow-audio-stream-copy-body: oneof<nothing, bool> # Gets or sets a value indicating whether to allow audio stream copy. (nullable) (body field)
+  --allow-video-stream-copy-body: oneof<nothing, bool> # Gets or sets a value indicating whether to enable video stream copy. (nullable) (body field)
+  --audio-stream-index-body: int # Gets or sets the audio stream index. (nullable, format: int32) (body field)
+  --auto-open-live-stream-body: oneof<nothing, bool> # Gets or sets a value indicating whether to auto open the live stream. (nullable) (body field)
   --device-profile: record # Defines the MediaBrowser.Model.Dlna.DeviceProfile. — shape: {AlbumArtPn?: string, CodecProfiles?: list, ContainerProfiles?: list, DirectPlayProfiles?: list, EnableAlbumArtInDidl?: bool, EnableMSMediaReceiverRegistrar?: bool, EnableSingleAlbumArtLimit?: bool, EnableSingleSubtitleLimit?: bool, FriendlyName?: string, Id?: string, Identification?: record, IgnoreTranscodeByteRangeRequests?: bool, Manufacturer?: string, ManufacturerUrl?: string, MaxAlbumArtHeight?: int, MaxAlbumArtWidth?: int, MaxIconHeight?: int, MaxIconWidth?: int, MaxStaticBitrate?: int, ... (20 more fields)}
-  --enable-direct-play: oneof<nothing, bool> # Gets or sets a value indicating whether to enable direct play. (nullable)
-  --enable-direct-stream: oneof<nothing, bool> # Gets or sets a value indicating whether to enable direct stream. (nullable)
-  --enable-transcoding: oneof<nothing, bool> # Gets or sets a value indicating whether to enable transcoding. (nullable)
-  --live-stream-id: string # Gets or sets the live stream id. (nullable)
-  --max-audio-channels: int # Gets or sets the max audio channels. (nullable, format: int32)
-  --max-streaming-bitrate: int # Gets or sets the max streaming bitrate. (nullable, format: int32)
-  --media-source-id: string # Gets or sets the media source id. (nullable)
-  --start-time-ticks: int # Gets or sets the start time in ticks. (nullable, format: int64)
-  --subtitle-stream-index: int # Gets or sets the subtitle stream index. (nullable, format: int32)
-  --user-id: string # Gets or sets the playback userId. (nullable, format: uuid)
+  --enable-direct-play-body: oneof<nothing, bool> # Gets or sets a value indicating whether to enable direct play. (nullable) (body field)
+  --enable-direct-stream-body: oneof<nothing, bool> # Gets or sets a value indicating whether to enable direct stream. (nullable) (body field)
+  --enable-transcoding-body: oneof<nothing, bool> # Gets or sets a value indicating whether to enable transcoding. (nullable) (body field)
+  --live-stream-id-body: string # Gets or sets the live stream id. (nullable) (body field)
+  --max-audio-channels-body: int # Gets or sets the max audio channels. (nullable, format: int32) (body field)
+  --max-streaming-bitrate-body: int # Gets or sets the max streaming bitrate. (nullable, format: int32) (body field)
+  --media-source-id-body: string # Gets or sets the media source id. (nullable) (body field)
+  --start-time-ticks-body: int # Gets or sets the start time in ticks. (nullable, format: int64) (body field)
+  --subtitle-stream-index-body: int # Gets or sets the subtitle stream index. (nullable, format: int32) (body field)
+  --user-id-body: string # Gets or sets the playback userId. (nullable, format: uuid) (body field)
 ]: any -> record<ErrorCode: string, MediaSources: table<AnalyzeDurationMs: int, Bitrate: int, BufferMs: int, Container: string, DefaultAudioStreamIndex: int, DefaultSubtitleStreamIndex: int, ETag: string, EncoderPath: string, EncoderProtocol: string, Formats: list, GenPtsInput: bool, Id: string, IgnoreDts: bool, IgnoreIndex: bool, IsInfiniteStream: bool, IsRemote: bool, IsoType: string, LiveStreamId: string, MediaAttachments: list, MediaStreams: list, Name: string, OpenToken: string, Path: string, Protocol: string, ReadAtNativeFramerate: bool, RequiredHttpHeaders: record, RequiresClosing: bool, RequiresLooping: bool, RequiresOpening: bool, RunTimeTicks: int, Size: int, SupportsDirectPlay: bool, SupportsDirectStream: bool, SupportsProbing: bool, SupportsTranscoding: bool, Timestamp: string, TranscodingContainer: string, TranscodingSubProtocol: string, TranscodingUrl: string, Type: string, Video3DFormat: string, VideoType: string>, PlaySessionId: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "x-emby-authorization"))
   let base = ($base_url | default $BASE_URL)
+  if ($item_id | is-empty) { error make --unspanned { msg: "path parameter 'itemId' must be non-empty" } }
   let qp = [(serialize-qp "userId" $user_id "scalar") (serialize-qp "maxStreamingBitrate" $max_streaming_bitrate "scalar") (serialize-qp "startTimeTicks" $start_time_ticks "scalar") (serialize-qp "audioStreamIndex" $audio_stream_index "scalar") (serialize-qp "subtitleStreamIndex" $subtitle_stream_index "scalar") (serialize-qp "maxAudioChannels" $max_audio_channels "scalar") (serialize-qp "mediaSourceId" $media_source_id "scalar") (serialize-qp "liveStreamId" $live_stream_id "scalar") (serialize-qp "autoOpenLiveStream" $auto_open_live_stream "scalar") (serialize-qp "enableDirectPlay" $enable_direct_play "scalar") (serialize-qp "enableDirectStream" $enable_direct_stream "scalar") (serialize-qp "enableTranscoding" $enable_transcoding "scalar") (serialize-qp "allowVideoStreamCopy" $allow_video_stream_copy "scalar") (serialize-qp "allowAudioStreamCopy" $allow_audio_stream_copy "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({item_id: (encode-path-segment $item_id)} | format pattern "/Items/{item_id}/PlaybackInfo") $qp)
-  let req_body = {"AllowAudioStreamCopy": $allow_audio_stream_copy, "AllowVideoStreamCopy": $allow_video_stream_copy, "AudioStreamIndex": $audio_stream_index, "AutoOpenLiveStream": $auto_open_live_stream, "DeviceProfile": $device_profile, "EnableDirectPlay": $enable_direct_play, "EnableDirectStream": $enable_direct_stream, "EnableTranscoding": $enable_transcoding, "LiveStreamId": $live_stream_id, "MaxAudioChannels": $max_audio_channels, "MaxStreamingBitrate": $max_streaming_bitrate, "MediaSourceId": $media_source_id, "StartTimeTicks": $start_time_ticks, "SubtitleStreamIndex": $subtitle_stream_index, "UserId": $user_id} | compact
+  let req_body = {"AllowAudioStreamCopy": $allow_audio_stream_copy_body, "AllowVideoStreamCopy": $allow_video_stream_copy_body, "AudioStreamIndex": $audio_stream_index_body, "AutoOpenLiveStream": $auto_open_live_stream_body, "DeviceProfile": $device_profile, "EnableDirectPlay": $enable_direct_play_body, "EnableDirectStream": $enable_direct_stream_body, "EnableTranscoding": $enable_transcoding_body, "LiveStreamId": $live_stream_id_body, "MaxAudioChannels": $max_audio_channels_body, "MaxStreamingBitrate": $max_streaming_bitrate_body, "MediaSourceId": $media_source_id_body, "StartTimeTicks": $start_time_ticks_body, "SubtitleStreamIndex": $subtitle_stream_index_body, "UserId": $user_id_body} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: ({"userId": $user_id, "maxStreamingBitrate": $max_streaming_bitrate, "startTimeTicks": $start_time_ticks, "audioStreamIndex": $audio_stream_index, "subtitleStreamIndex": $subtitle_stream_index, "maxAudioChannels": $max_audio_channels, "mediaSourceId": $media_source_id, "liveStreamId": $live_stream_id, "autoOpenLiveStream": $auto_open_live_stream, "enableDirectPlay": $enable_direct_play, "enableDirectStream": $enable_direct_stream, "enableTranscoding": $enable_transcoding, "allowVideoStreamCopy": $allow_video_stream_copy, "allowAudioStreamCopy": $allow_audio_stream_copy} | compact), body: $req_body}
 }
 
 # Refreshes metadata for an item.
@@ -4609,11 +4761,12 @@ export def "items-refresh create" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "x-emby-authorization"))
   let base = ($base_url | default $BASE_URL)
+  if ($item_id | is-empty) { error make --unspanned { msg: "path parameter 'itemId' must be non-empty" } }
   let qp = [(serialize-qp "metadataRefreshMode" $metadata_refresh_mode "scalar") (serialize-qp "imageRefreshMode" $image_refresh_mode "scalar") (serialize-qp "replaceAllMetadata" $replace_all_metadata "scalar") (serialize-qp "replaceAllImages" $replace_all_images "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({item_id: (encode-path-segment $item_id)} | format pattern "/Items/{item_id}/Refresh") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"metadataRefreshMode": $metadata_refresh_mode, "imageRefreshMode": $image_refresh_mode, "replaceAllMetadata": $replace_all_metadata, "replaceAllImages": $replace_all_images} | compact), body: null}
 }
 
 # Gets available remote images for an item.
@@ -4640,11 +4793,12 @@ export def "items-remote-images get" [
 ]: nothing -> record<Images: table<CommunityRating: float, Height: int, Language: string, ProviderName: string, RatingType: string, ThumbnailUrl: string, Type: string, Url: string, VoteCount: int, Width: int>, Providers: list<string>, TotalRecordCount: int> {
   let auth = (build-auth $token ($auth_scheme | default "x-emby-authorization"))
   let base = ($base_url | default $BASE_URL)
+  if ($item_id | is-empty) { error make --unspanned { msg: "path parameter 'itemId' must be non-empty" } }
   let qp = [(serialize-qp "type" $type "scalar") (serialize-qp "startIndex" $start_index "scalar") (serialize-qp "limit" $limit "scalar") (serialize-qp "providerName" $provider_name "scalar") (serialize-qp "includeAllLanguages" $include_all_languages "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({item_id: (encode-path-segment $item_id)} | format pattern "/Items/{item_id}/RemoteImages") $qp)
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"type": $type, "startIndex": $start_index, "limit": $limit, "providerName": $provider_name, "includeAllLanguages": $include_all_languages} | compact), body: null}
 }
 
 # Downloads a remote image for an item.
@@ -4667,11 +4821,12 @@ export def "items-remote-images-download download" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "x-emby-authorization"))
   let base = ($base_url | default $BASE_URL)
+  if ($item_id | is-empty) { error make --unspanned { msg: "path parameter 'itemId' must be non-empty" } }
   let qp = [(serialize-qp "type" $type "scalar") (serialize-qp "imageUrl" $image_url "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({item_id: (encode-path-segment $item_id)} | format pattern "/Items/{item_id}/RemoteImages/Download") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"type": $type, "imageUrl": $image_url} | compact), body: null}
 }
 
 # Gets available remote image providers for an item.
@@ -4693,10 +4848,11 @@ export def "items-remote-images-providers get" [
 ]: nothing -> table<Name: string, SupportedImages: list<string>> {
   let auth = (build-auth $token ($auth_scheme | default "x-emby-authorization"))
   let base = ($base_url | default $BASE_URL)
+  if ($item_id | is-empty) { error make --unspanned { msg: "path parameter 'itemId' must be non-empty" } }
   let full_url = (build-url $base ({item_id: (encode-path-segment $item_id)} | format pattern "/Items/{item_id}/RemoteImages/Providers"))
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
 }
 
 # Search remote subtitles.
@@ -4720,11 +4876,13 @@ export def "items-remote-search-subtitles list" [
 ]: nothing -> table<Author: string, Comment: string, CommunityRating: float, DateCreated: string, DownloadCount: int, Format: string, Id: string, IsHashMatch: bool, Name: string, ProviderName: string, ThreeLetterISOLanguageName: string> {
   let auth = (build-auth $token ($auth_scheme | default "x-emby-authorization"))
   let base = ($base_url | default $BASE_URL)
+  if ($item_id | is-empty) { error make --unspanned { msg: "path parameter 'itemId' must be non-empty" } }
+  if ($language | is-empty) { error make --unspanned { msg: "path parameter 'language' must be non-empty" } }
   let qp = [(serialize-qp "isPerfectMatch" $is_perfect_match "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({item_id: (encode-path-segment $item_id), language: (encode-path-segment $language)} | format pattern "/Items/{item_id}/RemoteSearch/Subtitles/{language}") $qp)
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"isPerfectMatch": $is_perfect_match} | compact), body: null}
 }
 
 # Downloads a remote subtitle.
@@ -4746,10 +4904,12 @@ export def "items-remote-search-subtitles download" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "x-emby-authorization"))
   let base = ($base_url | default $BASE_URL)
+  if ($item_id | is-empty) { error make --unspanned { msg: "path parameter 'itemId' must be non-empty" } }
+  if ($subtitle_id | is-empty) { error make --unspanned { msg: "path parameter 'subtitleId' must be non-empty" } }
   let full_url = (build-url $base ({item_id: (encode-path-segment $item_id), subtitle_id: (encode-path-segment $subtitle_id)} | format pattern "/Items/{item_id}/RemoteSearch/Subtitles/{subtitle_id}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
 }
 
 # Gets similar items.
@@ -4775,11 +4935,12 @@ export def "items-similar get" [
 ]: nothing -> record<Items: table<AirDays: list, AirTime: string, AirsAfterSeasonNumber: int, AirsBeforeEpisodeNumber: int, AirsBeforeSeasonNumber: int, Album: string, AlbumArtist: string, AlbumArtists: list, AlbumCount: int, AlbumId: string, AlbumPrimaryImageTag: string, Altitude: float, Aperture: float, ArtistCount: int, ArtistItems: list, Artists: list, AspectRatio: string, Audio: string, BackdropImageTags: list, CameraMake: string, CameraModel: string, CanDelete: bool, CanDownload: bool, ChannelId: string, ChannelName: string, ChannelNumber: string, ChannelPrimaryImageTag: string, ChannelType: string, Chapters: list, ChildCount: int, CollectionType: string, CommunityRating: float, CompletionPercentage: float, Container: string, CriticRating: float, CumulativeRunTimeTicks: int, CurrentProgram: any, CustomRating: string, DateCreated: string, DateLastMediaAdded: string, DisplayOrder: string, DisplayPreferencesId: string, EnableMediaSourceDisplay: bool, EndDate: string, EpisodeCount: int, EpisodeTitle: string, Etag: string, ExposureTime: float, ExternalUrls: list, ExtraType: string, FocalLength: float, ForcedSortName: string, GenreItems: list, Genres: list, HasSubtitles: bool, Height: int, Id: string, ImageBlurHashes: record, ImageOrientation: string, ImageTags: record, IndexNumber: int, IndexNumberEnd: int, IsFolder: bool, IsHD: bool, IsKids: bool, IsLive: bool, IsMovie: bool, IsNews: bool, IsPlaceHolder: bool, IsPremiere: bool, IsRepeat: bool, IsSeries: bool, IsSports: bool, IsoSpeedRating: int, IsoType: string, Latitude: float, LocalTrailerCount: int, LocationType: string, LockData: bool, LockedFields: list, Longitude: float, MediaSourceCount: int, MediaSources: list, MediaStreams: list, MediaType: string, MovieCount: int, MusicVideoCount: int, Name: string, Number: string, OfficialRating: string, OriginalTitle: string, Overview: string, ParentArtImageTag: string, ParentArtItemId: string, ParentBackdropImageTags: list, ParentBackdropItemId: string, ParentId: string, ParentIndexNumber: int, ParentLogoImageTag: string, ParentLogoItemId: string, ParentPrimaryImageItemId: string, ParentPrimaryImageTag: string, ParentThumbImageTag: string, ParentThumbItemId: string, PartCount: int, Path: string, People: list, PlayAccess: string, PlaylistItemId: string, PreferredMetadataCountryCode: string, PreferredMetadataLanguage: string, PremiereDate: string, PrimaryImageAspectRatio: float, ProductionLocations: list, ProductionYear: int, ProgramCount: int, ProgramId: string, ProviderIds: record, RecursiveItemCount: int, RemoteTrailers: list, RunTimeTicks: int, ScreenshotImageTags: list, SeasonId: string, SeasonName: string, SeriesCount: int, SeriesId: string, SeriesName: string, SeriesPrimaryImageTag: string, SeriesStudio: string, SeriesThumbImageTag: string, SeriesTimerId: string, ServerId: string, ShutterSpeed: float, Software: string, SongCount: int, SortName: string, SourceType: string, SpecialFeatureCount: int, StartDate: string, Status: string, Studios: list, SupportsSync: bool, Taglines: list, Tags: list, TimerId: string, TrailerCount: int, Type: string, UserData: record, Video3DFormat: string, VideoType: string, Width: int>, StartIndex: int, TotalRecordCount: int> {
   let auth = (build-auth $token ($auth_scheme | default "x-emby-authorization"))
   let base = ($base_url | default $BASE_URL)
+  if ($item_id | is-empty) { error make --unspanned { msg: "path parameter 'itemId' must be non-empty" } }
   let qp = [(serialize-qp "excludeArtistIds" $exclude_artist_ids "multi") (serialize-qp "userId" $user_id "scalar") (serialize-qp "limit" $limit "scalar") (serialize-qp "fields" $fields "multi")] | flatten | str join "&"
   let full_url = (build-url $base ({item_id: (encode-path-segment $item_id)} | format pattern "/Items/{item_id}/Similar") $qp)
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"excludeArtistIds": $exclude_artist_ids, "userId": $user_id, "limit": $limit, "fields": $fields} | compact), body: null}
 }
 
 # Get theme songs and videos for an item.
@@ -4803,11 +4964,12 @@ export def "items-theme-media get" [
 ]: nothing -> record<SoundtrackSongsResult: record<Items: list<record>, OwnerId: string, StartIndex: int, TotalRecordCount: int>, ThemeSongsResult: record<Items: list<record>, OwnerId: string, StartIndex: int, TotalRecordCount: int>, ThemeVideosResult: record<Items: list<record>, OwnerId: string, StartIndex: int, TotalRecordCount: int>> {
   let auth = (build-auth $token ($auth_scheme | default "x-emby-authorization"))
   let base = ($base_url | default $BASE_URL)
+  if ($item_id | is-empty) { error make --unspanned { msg: "path parameter 'itemId' must be non-empty" } }
   let qp = [(serialize-qp "userId" $user_id "scalar") (serialize-qp "inheritFromParent" $inherit_from_parent "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({item_id: (encode-path-segment $item_id)} | format pattern "/Items/{item_id}/ThemeMedia") $qp)
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"userId": $user_id, "inheritFromParent": $inherit_from_parent} | compact), body: null}
 }
 
 # Get theme songs for an item.
@@ -4831,11 +4993,12 @@ export def "items-theme-songs get" [
 ]: nothing -> record<Items: table<AirDays: list, AirTime: string, AirsAfterSeasonNumber: int, AirsBeforeEpisodeNumber: int, AirsBeforeSeasonNumber: int, Album: string, AlbumArtist: string, AlbumArtists: list, AlbumCount: int, AlbumId: string, AlbumPrimaryImageTag: string, Altitude: float, Aperture: float, ArtistCount: int, ArtistItems: list, Artists: list, AspectRatio: string, Audio: string, BackdropImageTags: list, CameraMake: string, CameraModel: string, CanDelete: bool, CanDownload: bool, ChannelId: string, ChannelName: string, ChannelNumber: string, ChannelPrimaryImageTag: string, ChannelType: string, Chapters: list, ChildCount: int, CollectionType: string, CommunityRating: float, CompletionPercentage: float, Container: string, CriticRating: float, CumulativeRunTimeTicks: int, CurrentProgram: any, CustomRating: string, DateCreated: string, DateLastMediaAdded: string, DisplayOrder: string, DisplayPreferencesId: string, EnableMediaSourceDisplay: bool, EndDate: string, EpisodeCount: int, EpisodeTitle: string, Etag: string, ExposureTime: float, ExternalUrls: list, ExtraType: string, FocalLength: float, ForcedSortName: string, GenreItems: list, Genres: list, HasSubtitles: bool, Height: int, Id: string, ImageBlurHashes: record, ImageOrientation: string, ImageTags: record, IndexNumber: int, IndexNumberEnd: int, IsFolder: bool, IsHD: bool, IsKids: bool, IsLive: bool, IsMovie: bool, IsNews: bool, IsPlaceHolder: bool, IsPremiere: bool, IsRepeat: bool, IsSeries: bool, IsSports: bool, IsoSpeedRating: int, IsoType: string, Latitude: float, LocalTrailerCount: int, LocationType: string, LockData: bool, LockedFields: list, Longitude: float, MediaSourceCount: int, MediaSources: list, MediaStreams: list, MediaType: string, MovieCount: int, MusicVideoCount: int, Name: string, Number: string, OfficialRating: string, OriginalTitle: string, Overview: string, ParentArtImageTag: string, ParentArtItemId: string, ParentBackdropImageTags: list, ParentBackdropItemId: string, ParentId: string, ParentIndexNumber: int, ParentLogoImageTag: string, ParentLogoItemId: string, ParentPrimaryImageItemId: string, ParentPrimaryImageTag: string, ParentThumbImageTag: string, ParentThumbItemId: string, PartCount: int, Path: string, People: list, PlayAccess: string, PlaylistItemId: string, PreferredMetadataCountryCode: string, PreferredMetadataLanguage: string, PremiereDate: string, PrimaryImageAspectRatio: float, ProductionLocations: list, ProductionYear: int, ProgramCount: int, ProgramId: string, ProviderIds: record, RecursiveItemCount: int, RemoteTrailers: list, RunTimeTicks: int, ScreenshotImageTags: list, SeasonId: string, SeasonName: string, SeriesCount: int, SeriesId: string, SeriesName: string, SeriesPrimaryImageTag: string, SeriesStudio: string, SeriesThumbImageTag: string, SeriesTimerId: string, ServerId: string, ShutterSpeed: float, Software: string, SongCount: int, SortName: string, SourceType: string, SpecialFeatureCount: int, StartDate: string, Status: string, Studios: list, SupportsSync: bool, Taglines: list, Tags: list, TimerId: string, TrailerCount: int, Type: string, UserData: record, Video3DFormat: string, VideoType: string, Width: int>, OwnerId: string, StartIndex: int, TotalRecordCount: int> {
   let auth = (build-auth $token ($auth_scheme | default "x-emby-authorization"))
   let base = ($base_url | default $BASE_URL)
+  if ($item_id | is-empty) { error make --unspanned { msg: "path parameter 'itemId' must be non-empty" } }
   let qp = [(serialize-qp "userId" $user_id "scalar") (serialize-qp "inheritFromParent" $inherit_from_parent "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({item_id: (encode-path-segment $item_id)} | format pattern "/Items/{item_id}/ThemeSongs") $qp)
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"userId": $user_id, "inheritFromParent": $inherit_from_parent} | compact), body: null}
 }
 
 # Get theme videos for an item.
@@ -4859,18 +5022,19 @@ export def "items-theme-videos get" [
 ]: nothing -> record<Items: table<AirDays: list, AirTime: string, AirsAfterSeasonNumber: int, AirsBeforeEpisodeNumber: int, AirsBeforeSeasonNumber: int, Album: string, AlbumArtist: string, AlbumArtists: list, AlbumCount: int, AlbumId: string, AlbumPrimaryImageTag: string, Altitude: float, Aperture: float, ArtistCount: int, ArtistItems: list, Artists: list, AspectRatio: string, Audio: string, BackdropImageTags: list, CameraMake: string, CameraModel: string, CanDelete: bool, CanDownload: bool, ChannelId: string, ChannelName: string, ChannelNumber: string, ChannelPrimaryImageTag: string, ChannelType: string, Chapters: list, ChildCount: int, CollectionType: string, CommunityRating: float, CompletionPercentage: float, Container: string, CriticRating: float, CumulativeRunTimeTicks: int, CurrentProgram: any, CustomRating: string, DateCreated: string, DateLastMediaAdded: string, DisplayOrder: string, DisplayPreferencesId: string, EnableMediaSourceDisplay: bool, EndDate: string, EpisodeCount: int, EpisodeTitle: string, Etag: string, ExposureTime: float, ExternalUrls: list, ExtraType: string, FocalLength: float, ForcedSortName: string, GenreItems: list, Genres: list, HasSubtitles: bool, Height: int, Id: string, ImageBlurHashes: record, ImageOrientation: string, ImageTags: record, IndexNumber: int, IndexNumberEnd: int, IsFolder: bool, IsHD: bool, IsKids: bool, IsLive: bool, IsMovie: bool, IsNews: bool, IsPlaceHolder: bool, IsPremiere: bool, IsRepeat: bool, IsSeries: bool, IsSports: bool, IsoSpeedRating: int, IsoType: string, Latitude: float, LocalTrailerCount: int, LocationType: string, LockData: bool, LockedFields: list, Longitude: float, MediaSourceCount: int, MediaSources: list, MediaStreams: list, MediaType: string, MovieCount: int, MusicVideoCount: int, Name: string, Number: string, OfficialRating: string, OriginalTitle: string, Overview: string, ParentArtImageTag: string, ParentArtItemId: string, ParentBackdropImageTags: list, ParentBackdropItemId: string, ParentId: string, ParentIndexNumber: int, ParentLogoImageTag: string, ParentLogoItemId: string, ParentPrimaryImageItemId: string, ParentPrimaryImageTag: string, ParentThumbImageTag: string, ParentThumbItemId: string, PartCount: int, Path: string, People: list, PlayAccess: string, PlaylistItemId: string, PreferredMetadataCountryCode: string, PreferredMetadataLanguage: string, PremiereDate: string, PrimaryImageAspectRatio: float, ProductionLocations: list, ProductionYear: int, ProgramCount: int, ProgramId: string, ProviderIds: record, RecursiveItemCount: int, RemoteTrailers: list, RunTimeTicks: int, ScreenshotImageTags: list, SeasonId: string, SeasonName: string, SeriesCount: int, SeriesId: string, SeriesName: string, SeriesPrimaryImageTag: string, SeriesStudio: string, SeriesThumbImageTag: string, SeriesTimerId: string, ServerId: string, ShutterSpeed: float, Software: string, SongCount: int, SortName: string, SourceType: string, SpecialFeatureCount: int, StartDate: string, Status: string, Studios: list, SupportsSync: bool, Taglines: list, Tags: list, TimerId: string, TrailerCount: int, Type: string, UserData: record, Video3DFormat: string, VideoType: string, Width: int>, OwnerId: string, StartIndex: int, TotalRecordCount: int> {
   let auth = (build-auth $token ($auth_scheme | default "x-emby-authorization"))
   let base = ($base_url | default $BASE_URL)
+  if ($item_id | is-empty) { error make --unspanned { msg: "path parameter 'itemId' must be non-empty" } }
   let qp = [(serialize-qp "userId" $user_id "scalar") (serialize-qp "inheritFromParent" $inherit_from_parent "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({item_id: (encode-path-segment $item_id)} | format pattern "/Items/{item_id}/ThemeVideos") $qp)
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"userId": $user_id, "inheritFromParent": $inherit_from_parent} | compact), body: null}
 }
 
 # Gets the library options info.
 #
 # GET /Libraries/AvailableOptions
 # operationId: GetLibraryOptionsInfo
-export def "libraries-available-options get-library-get" [
+export def "libraries-available-options get-library" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -4890,7 +5054,7 @@ export def "libraries-available-options get-library-get" [
   let full_url = (build-url $base "/Libraries/AvailableOptions" $qp)
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"libraryContentType": $library_content_type, "isNewLibrary": $is_new_library} | compact), body: null}
 }
 
 # Reports that new movies have been added by an external source.
@@ -4917,7 +5081,7 @@ export def "library-media-updated create" [
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else if (($input | is-not-empty) and ($req_body | is-empty)) { $input } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: {}, body: $req_body}
 }
 
 # Gets all user media folders.
@@ -4943,7 +5107,7 @@ export def "library-media-folders get" [
   let full_url = (build-url $base "/Library/MediaFolders" $qp)
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"isHidden": $is_hidden} | compact), body: null}
 }
 
 # Reports that new movies have been added by an external source.
@@ -4969,7 +5133,7 @@ export def "library-movies-added create" [
   let full_url = (build-url $base "/Library/Movies/Added" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"tmdbId": $tmdb_id, "imdbId": $imdb_id} | compact), body: null}
 }
 
 # Reports that new movies have been added by an external source.
@@ -4995,7 +5159,7 @@ export def "library-movies-updated create" [
   let full_url = (build-url $base "/Library/Movies/Updated" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"tmdbId": $tmdb_id, "imdbId": $imdb_id} | compact), body: null}
 }
 
 # Gets a list of physical paths from virtual folders.
@@ -5019,7 +5183,7 @@ export def "library-physical-paths get" [
   let full_url = (build-url $base "/Library/PhysicalPaths")
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
 }
 
 # Starts a library scan.
@@ -5042,7 +5206,7 @@ export def "library-refresh refresh" [
   let full_url = (build-url $base "/Library/Refresh")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
 }
 
 # Reports that new episodes of a series have been added by an external source.
@@ -5067,7 +5231,7 @@ export def "library-series-added create" [
   let full_url = (build-url $base "/Library/Series/Added" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"tvdbId": $tvdb_id} | compact), body: null}
 }
 
 # Reports that new episodes of a series have been added by an external source.
@@ -5092,7 +5256,7 @@ export def "library-series-updated create" [
   let full_url = (build-url $base "/Library/Series/Updated" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"tvdbId": $tvdb_id} | compact), body: null}
 }
 
 # Removes a virtual folder.
@@ -5118,7 +5282,7 @@ export def "library-virtual-folders delete" [
   let full_url = (build-url $base "/Library/VirtualFolders" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"name": $name, "refreshLibrary": $refresh_library} | compact), body: null}
 }
 
 # Gets all virtual folders.
@@ -5142,7 +5306,7 @@ export def "library-virtual-folders get" [
   let full_url = (build-url $base "/Library/VirtualFolders")
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
 }
 
 # Adds a virtual folder.
@@ -5175,7 +5339,7 @@ export def "library-virtual-folders create" [
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: ({"name": $name, "collectionType": $collection_type, "paths": $paths, "refreshLibrary": $refresh_library} | compact), body: $req_body}
 }
 
 # Update library options.
@@ -5204,7 +5368,7 @@ export def "library-virtual-folders-library-options update" [
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: {}, body: $req_body}
 }
 
 # Renames a virtual folder.
@@ -5231,7 +5395,7 @@ export def "library-virtual-folders-name rename" [
   let full_url = (build-url $base "/Library/VirtualFolders/Name" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"name": $name, "newName": $new_name, "refreshLibrary": $refresh_library} | compact), body: null}
 }
 
 # Remove a media path.
@@ -5258,7 +5422,7 @@ export def "library-virtual-folders-paths delete-media" [
   let full_url = (build-url $base "/Library/VirtualFolders/Paths" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"name": $name, "path": $path, "refreshLibrary": $refresh_library} | compact), body: null}
 }
 
 # Add a media path to a library.
@@ -5290,7 +5454,7 @@ export def "library-virtual-folders-paths create-media" [
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: ({"refreshLibrary": $refresh_library} | compact), body: $req_body}
 }
 
 # Updates a media path.
@@ -5320,7 +5484,7 @@ export def "library-virtual-folders-paths-update update-media" [
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: ({"name": $name} | compact), body: $req_body}
 }
 
 # Closes a media source.
@@ -5345,7 +5509,7 @@ export def "live-streams-close close" [
   let full_url = (build-url $base "/LiveStreams/Close" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"liveStreamId": $live_stream_id} | compact), body: null}
 }
 
 # Opens a media source.
@@ -5375,30 +5539,30 @@ export def "live-streams-open open" [
   --item-id: string # The item id. (nullable, format: uuid)
   --enable-direct-play: oneof<nothing, bool> # Whether to enable direct play. Default: true. (nullable)
   --enable-direct-stream: oneof<nothing, bool> # Whether to enable direct stream. Default: true. (nullable)
-  --audio-stream-index: int # Gets or sets the audio stream index. (nullable, format: int32)
+  --audio-stream-index-body: int # Gets or sets the audio stream index. (nullable, format: int32) (body field)
   --device-profile: record # Defines the MediaBrowser.Model.Dlna.DeviceProfile. — shape: {AlbumArtPn?: string, CodecProfiles?: list, ContainerProfiles?: list, DirectPlayProfiles?: list, EnableAlbumArtInDidl?: bool, EnableMSMediaReceiverRegistrar?: bool, EnableSingleAlbumArtLimit?: bool, EnableSingleSubtitleLimit?: bool, FriendlyName?: string, Id?: string, Identification?: record, IgnoreTranscodeByteRangeRequests?: bool, Manufacturer?: string, ManufacturerUrl?: string, MaxAlbumArtHeight?: int, MaxAlbumArtWidth?: int, MaxIconHeight?: int, MaxIconWidth?: int, MaxStaticBitrate?: int, ... (20 more fields)}
   --direct-play-protocols: list<string> # Gets or sets the device play protocols. (nullable)
-  --enable-direct-play: oneof<nothing, bool> # Gets or sets a value indicating whether to enable direct play. (nullable)
-  --enable-direct-stream: oneof<nothing, bool> # Gets or sets a value indicating whether to enale direct stream. (nullable)
-  --item-id: string # Gets or sets the item id. (nullable, format: uuid)
-  --max-audio-channels: int # Gets or sets the max audio channels. (nullable, format: int32)
-  --max-streaming-bitrate: int # Gets or sets the max streaming bitrate. (nullable, format: int32)
-  --open-token: string # Gets or sets the open token. (nullable)
-  --play-session-id: string # Gets or sets the play session id. (nullable)
-  --start-time-ticks: int # Gets or sets the start time in ticks. (nullable, format: int64)
-  --subtitle-stream-index: int # Gets or sets the subtitle stream index. (nullable, format: int32)
-  --user-id: string # Gets or sets the user id. (nullable, format: uuid)
+  --enable-direct-play-body: oneof<nothing, bool> # Gets or sets a value indicating whether to enable direct play. (nullable) (body field)
+  --enable-direct-stream-body: oneof<nothing, bool> # Gets or sets a value indicating whether to enale direct stream. (nullable) (body field)
+  --item-id-body: string # Gets or sets the item id. (nullable, format: uuid) (body field)
+  --max-audio-channels-body: int # Gets or sets the max audio channels. (nullable, format: int32) (body field)
+  --max-streaming-bitrate-body: int # Gets or sets the max streaming bitrate. (nullable, format: int32) (body field)
+  --open-token-body: string # Gets or sets the open token. (nullable) (body field)
+  --play-session-id-body: string # Gets or sets the play session id. (nullable) (body field)
+  --start-time-ticks-body: int # Gets or sets the start time in ticks. (nullable, format: int64) (body field)
+  --subtitle-stream-index-body: int # Gets or sets the subtitle stream index. (nullable, format: int32) (body field)
+  --user-id-body: string # Gets or sets the user id. (nullable, format: uuid) (body field)
 ]: any -> record<MediaSource: record<AnalyzeDurationMs: int, Bitrate: int, BufferMs: int, Container: string, DefaultAudioStreamIndex: int, DefaultSubtitleStreamIndex: int, ETag: string, EncoderPath: string, EncoderProtocol: string, Formats: list<string>, GenPtsInput: bool, Id: string, IgnoreDts: bool, IgnoreIndex: bool, IsInfiniteStream: bool, IsRemote: bool, IsoType: string, LiveStreamId: string, MediaAttachments: list<record>, MediaStreams: list<record>, Name: string, OpenToken: string, Path: string, Protocol: string, ReadAtNativeFramerate: bool, RequiredHttpHeaders: record, RequiresClosing: bool, RequiresLooping: bool, RequiresOpening: bool, RunTimeTicks: int, Size: int, SupportsDirectPlay: bool, SupportsDirectStream: bool, SupportsProbing: bool, SupportsTranscoding: bool, Timestamp: string, TranscodingContainer: string, TranscodingSubProtocol: string, TranscodingUrl: string, Type: string, Video3DFormat: string, VideoType: string>> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "x-emby-authorization"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "openToken" $open_token "scalar") (serialize-qp "userId" $user_id "scalar") (serialize-qp "playSessionId" $play_session_id "scalar") (serialize-qp "maxStreamingBitrate" $max_streaming_bitrate "scalar") (serialize-qp "startTimeTicks" $start_time_ticks "scalar") (serialize-qp "audioStreamIndex" $audio_stream_index "scalar") (serialize-qp "subtitleStreamIndex" $subtitle_stream_index "scalar") (serialize-qp "maxAudioChannels" $max_audio_channels "scalar") (serialize-qp "itemId" $item_id "scalar") (serialize-qp "enableDirectPlay" $enable_direct_play "scalar") (serialize-qp "enableDirectStream" $enable_direct_stream "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/LiveStreams/Open" $qp)
-  let req_body = {"AudioStreamIndex": $audio_stream_index, "DeviceProfile": $device_profile, "DirectPlayProtocols": $direct_play_protocols, "EnableDirectPlay": $enable_direct_play, "EnableDirectStream": $enable_direct_stream, "ItemId": $item_id, "MaxAudioChannels": $max_audio_channels, "MaxStreamingBitrate": $max_streaming_bitrate, "OpenToken": $open_token, "PlaySessionId": $play_session_id, "StartTimeTicks": $start_time_ticks, "SubtitleStreamIndex": $subtitle_stream_index, "UserId": $user_id} | compact
+  let req_body = {"AudioStreamIndex": $audio_stream_index_body, "DeviceProfile": $device_profile, "DirectPlayProtocols": $direct_play_protocols, "EnableDirectPlay": $enable_direct_play_body, "EnableDirectStream": $enable_direct_stream_body, "ItemId": $item_id_body, "MaxAudioChannels": $max_audio_channels_body, "MaxStreamingBitrate": $max_streaming_bitrate_body, "OpenToken": $open_token_body, "PlaySessionId": $play_session_id_body, "StartTimeTicks": $start_time_ticks_body, "SubtitleStreamIndex": $subtitle_stream_index_body, "UserId": $user_id_body} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: ({"openToken": $open_token, "userId": $user_id, "playSessionId": $play_session_id, "maxStreamingBitrate": $max_streaming_bitrate, "startTimeTicks": $start_time_ticks, "audioStreamIndex": $audio_stream_index, "subtitleStreamIndex": $subtitle_stream_index, "maxAudioChannels": $max_audio_channels, "itemId": $item_id, "enableDirectPlay": $enable_direct_play, "enableDirectStream": $enable_direct_stream} | compact), body: $req_body}
 }
 
 # Get channel mapping options.
@@ -5424,7 +5588,7 @@ export def "live-tv-channel-mapping-options get" [
   let full_url = (build-url $base "/LiveTv/ChannelMappingOptions" $qp)
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"providerId": $provider_id} | compact), body: null}
 }
 
 # Set channel mappings.
@@ -5454,7 +5618,7 @@ export def "live-tv-channel-mappings update" [
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: {}, body: $req_body}
 }
 
 # Gets available live tv channels.
@@ -5500,7 +5664,7 @@ export def "live-tv-channels list" [
   let full_url = (build-url $base "/LiveTv/Channels" $qp)
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"type": $type, "userId": $user_id, "startIndex": $start_index, "isMovie": $is_movie, "isSeries": $is_series, "isNews": $is_news, "isKids": $is_kids, "isSports": $is_sports, "limit": $limit, "isFavorite": $is_favorite, "isLiked": $is_liked, "isDisliked": $is_disliked, "enableImages": $enable_images, "imageTypeLimit": $image_type_limit, "enableImageTypes": $enable_image_types, "fields": $fields, "enableUserData": $enable_user_data, "sortBy": $sort_by, "sortOrder": $sort_order, "enableFavoriteSorting": $enable_favorite_sorting, "addCurrentProgram": $add_current_program} | compact), body: null}
 }
 
 # Gets a live tv channel.
@@ -5523,11 +5687,12 @@ export def "live-tv-channels get" [
 ]: nothing -> record<AirDays: list<string>, AirTime: string, AirsAfterSeasonNumber: int, AirsBeforeEpisodeNumber: int, AirsBeforeSeasonNumber: int, Album: string, AlbumArtist: string, AlbumArtists: table<Id: string, Name: string>, AlbumCount: int, AlbumId: string, AlbumPrimaryImageTag: string, Altitude: float, Aperture: float, ArtistCount: int, ArtistItems: table<Id: string, Name: string>, Artists: list<string>, AspectRatio: string, Audio: string, BackdropImageTags: list<string>, CameraMake: string, CameraModel: string, CanDelete: bool, CanDownload: bool, ChannelId: string, ChannelName: string, ChannelNumber: string, ChannelPrimaryImageTag: string, ChannelType: string, Chapters: table<ImageDateModified: string, ImagePath: string, ImageTag: string, Name: string, StartPositionTicks: int>, ChildCount: int, CollectionType: string, CommunityRating: float, CompletionPercentage: float, Container: string, CriticRating: float, CumulativeRunTimeTicks: int, CurrentProgram: any, CustomRating: string, DateCreated: string, DateLastMediaAdded: string, DisplayOrder: string, DisplayPreferencesId: string, EnableMediaSourceDisplay: bool, EndDate: string, EpisodeCount: int, EpisodeTitle: string, Etag: string, ExposureTime: float, ExternalUrls: table<Name: string, Url: string>, ExtraType: string, FocalLength: float, ForcedSortName: string, GenreItems: table<Id: string, Name: string>, Genres: list<string>, HasSubtitles: bool, Height: int, Id: string, ImageBlurHashes: record<Art: record, Backdrop: record, Banner: record, Box: record, BoxRear: record, Chapter: record, Disc: record, Logo: record, Menu: record, Primary: record, Profile: record, Screenshot: record, Thumb: record>, ImageOrientation: string, ImageTags: record, IndexNumber: int, IndexNumberEnd: int, IsFolder: bool, IsHD: bool, IsKids: bool, IsLive: bool, IsMovie: bool, IsNews: bool, IsPlaceHolder: bool, IsPremiere: bool, IsRepeat: bool, IsSeries: bool, IsSports: bool, IsoSpeedRating: int, IsoType: string, Latitude: float, LocalTrailerCount: int, LocationType: string, LockData: bool, LockedFields: list<string>, Longitude: float, MediaSourceCount: int, MediaSources: table<AnalyzeDurationMs: int, Bitrate: int, BufferMs: int, Container: string, DefaultAudioStreamIndex: int, DefaultSubtitleStreamIndex: int, ETag: string, EncoderPath: string, EncoderProtocol: string, Formats: list, GenPtsInput: bool, Id: string, IgnoreDts: bool, IgnoreIndex: bool, IsInfiniteStream: bool, IsRemote: bool, IsoType: string, LiveStreamId: string, MediaAttachments: list, MediaStreams: list, Name: string, OpenToken: string, Path: string, Protocol: string, ReadAtNativeFramerate: bool, RequiredHttpHeaders: record, RequiresClosing: bool, RequiresLooping: bool, RequiresOpening: bool, RunTimeTicks: int, Size: int, SupportsDirectPlay: bool, SupportsDirectStream: bool, SupportsProbing: bool, SupportsTranscoding: bool, Timestamp: string, TranscodingContainer: string, TranscodingSubProtocol: string, TranscodingUrl: string, Type: string, Video3DFormat: string, VideoType: string>, MediaStreams: table<AspectRatio: string, AverageFrameRate: float, BitDepth: int, BitRate: int, ChannelLayout: string, Channels: int, Codec: string, CodecTag: string, CodecTimeBase: string, ColorPrimaries: string, ColorRange: string, ColorSpace: string, ColorTransfer: string, Comment: string, DeliveryMethod: string, DeliveryUrl: string, DisplayTitle: string, Height: int, Index: int, IsAVC: bool, IsAnamorphic: bool, IsDefault: bool, IsExternal: bool, IsExternalUrl: bool, IsForced: bool, IsInterlaced: bool, IsTextSubtitleStream: bool, Language: string, Level: float, NalLengthSize: string, PacketLength: int, Path: string, PixelFormat: string, Profile: string, RealFrameRate: float, RefFrames: int, SampleRate: int, Score: int, SupportsExternalStream: bool, TimeBase: string, Title: string, Type: string, VideoRange: string, Width: int, localizedDefault: string, localizedForced: string, localizedUndefined: string>, MediaType: string, MovieCount: int, MusicVideoCount: int, Name: string, Number: string, OfficialRating: string, OriginalTitle: string, Overview: string, ParentArtImageTag: string, ParentArtItemId: string, ParentBackdropImageTags: list<string>, ParentBackdropItemId: string, ParentId: string, ParentIndexNumber: int, ParentLogoImageTag: string, ParentLogoItemId: string, ParentPrimaryImageItemId: string, ParentPrimaryImageTag: string, ParentThumbImageTag: string, ParentThumbItemId: string, PartCount: int, Path: string, People: table<Id: string, ImageBlurHashes: record, Name: string, PrimaryImageTag: string, Role: string, Type: string>, PlayAccess: string, PlaylistItemId: string, PreferredMetadataCountryCode: string, PreferredMetadataLanguage: string, PremiereDate: string, PrimaryImageAspectRatio: float, ProductionLocations: list<string>, ProductionYear: int, ProgramCount: int, ProgramId: string, ProviderIds: record, RecursiveItemCount: int, RemoteTrailers: table<Name: string, Url: string>, RunTimeTicks: int, ScreenshotImageTags: list<string>, SeasonId: string, SeasonName: string, SeriesCount: int, SeriesId: string, SeriesName: string, SeriesPrimaryImageTag: string, SeriesStudio: string, SeriesThumbImageTag: string, SeriesTimerId: string, ServerId: string, ShutterSpeed: float, Software: string, SongCount: int, SortName: string, SourceType: string, SpecialFeatureCount: int, StartDate: string, Status: string, Studios: table<Id: string, Name: string>, SupportsSync: bool, Taglines: list<string>, Tags: list<string>, TimerId: string, TrailerCount: int, Type: string, UserData: record<IsFavorite: bool, ItemId: string, Key: string, LastPlayedDate: string, Likes: bool, PlayCount: int, PlaybackPositionTicks: int, Played: bool, PlayedPercentage: float, Rating: float, UnplayedItemCount: int>, Video3DFormat: string, VideoType: string, Width: int> {
   let auth = (build-auth $token ($auth_scheme | default "x-emby-authorization"))
   let base = ($base_url | default $BASE_URL)
+  if ($channel_id | is-empty) { error make --unspanned { msg: "path parameter 'channelId' must be non-empty" } }
   let qp = [(serialize-qp "userId" $user_id "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({channel_id: (encode-path-segment $channel_id)} | format pattern "/LiveTv/Channels/{channel_id}") $qp)
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"userId": $user_id} | compact), body: null}
 }
 
 # Get guid info.
@@ -5551,7 +5716,7 @@ export def "live-tv-guide-info get" [
   let full_url = (build-url $base "/LiveTv/GuideInfo")
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
 }
 
 # Gets available live tv services.
@@ -5575,7 +5740,7 @@ export def "live-tv-info get" [
   let full_url = (build-url $base "/LiveTv/Info")
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
 }
 
 # Delete listing provider.
@@ -5600,7 +5765,7 @@ export def "live-tv-listing-providers delete" [
   let full_url = (build-url $base "/LiveTv/ListingProviders" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"id": $id} | compact), body: null}
 }
 
 # Adds a listings provider.
@@ -5650,7 +5815,7 @@ export def "live-tv-listing-providers create" [
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: ({"pw": $pw, "validateListings": $validate_listings, "validateLogin": $validate_login} | compact), body: $req_body}
 }
 
 # Gets default listings provider info.
@@ -5674,7 +5839,7 @@ export def "live-tv-listing-providers-default get" [
   let full_url = (build-url $base "/LiveTv/ListingProviders/Default")
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
 }
 
 # Gets available lineups.
@@ -5703,7 +5868,7 @@ export def "live-tv-listing-providers-lineups get" [
   let full_url = (build-url $base "/LiveTv/ListingProviders/Lineups" $qp)
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"id": $id, "type": $type, "location": $location, "country": $country} | compact), body: null}
 }
 
 # Gets available countries.
@@ -5726,7 +5891,7 @@ export def "live-tv-listing-providers-schedules-direct-countries get" [
   let full_url = (build-url $base "/LiveTv/ListingProviders/SchedulesDirect/Countries")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
 }
 
 # Gets a live tv recording stream.
@@ -5747,10 +5912,11 @@ export def "live-tv-live-recordings-stream get-file" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "x-emby-authorization"))
   let base = ($base_url | default $BASE_URL)
+  if ($recording_id | is-empty) { error make --unspanned { msg: "path parameter 'recordingId' must be non-empty" } }
   let full_url = (build-url $base ({recording_id: (encode-path-segment $recording_id)} | format pattern "/LiveTv/LiveRecordings/{recording_id}/stream"))
   let accept_val = "video/*"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
 }
 
 # Gets a live tv channel stream.
@@ -5772,10 +5938,12 @@ export def "live-tv-live-stream-files-stream-container get" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "x-emby-authorization"))
   let base = ($base_url | default $BASE_URL)
+  if ($stream_id | is-empty) { error make --unspanned { msg: "path parameter 'streamId' must be non-empty" } }
+  if ($container | is-empty) { error make --unspanned { msg: "path parameter 'container' must be non-empty" } }
   let full_url = (build-url $base ({stream_id: (encode-path-segment $stream_id), container: (encode-path-segment $container)} | format pattern "/LiveTv/LiveStreamFiles/{stream_id}/stream.{container}"))
   let accept_val = "video/*"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
 }
 
 # Gets available live tv epgs.
@@ -5827,7 +5995,7 @@ export def "live-tv-programs get" [
   let full_url = (build-url $base "/LiveTv/Programs" $qp)
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"channelIds": $channel_ids, "userId": $user_id, "minStartDate": $min_start_date, "hasAired": $has_aired, "isAiring": $is_airing, "maxStartDate": $max_start_date, "minEndDate": $min_end_date, "maxEndDate": $max_end_date, "isMovie": $is_movie, "isSeries": $is_series, "isNews": $is_news, "isKids": $is_kids, "isSports": $is_sports, "startIndex": $start_index, "limit": $limit, "sortBy": $sort_by, "sortOrder": $sort_order, "genres": $genres, "genreIds": $genre_ids, "enableImages": $enable_images, "imageTypeLimit": $image_type_limit, "enableImageTypes": $enable_image_types, "enableUserData": $enable_user_data, "seriesTimerId": $series_timer_id, "librarySeriesId": $library_series_id, "fields": $fields, "enableTotalRecordCount": $enable_total_record_count} | compact), body: null}
 }
 
 # Gets available live tv epgs.
@@ -5881,7 +6049,7 @@ export def "live-tv-programs get-1" [
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: {}, body: $req_body}
 }
 
 # Gets recommended live tv epgs.
@@ -5922,14 +6090,14 @@ export def "live-tv-programs-recommended get" [
   let full_url = (build-url $base "/LiveTv/Programs/Recommended" $qp)
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"userId": $user_id, "limit": $limit, "isAiring": $is_airing, "hasAired": $has_aired, "isSeries": $is_series, "isMovie": $is_movie, "isNews": $is_news, "isKids": $is_kids, "isSports": $is_sports, "enableImages": $enable_images, "imageTypeLimit": $image_type_limit, "enableImageTypes": $enable_image_types, "genreIds": $genre_ids, "fields": $fields, "enableUserData": $enable_user_data, "enableTotalRecordCount": $enable_total_record_count} | compact), body: null}
 }
 
 # Gets a live tv program.
 #
 # GET /LiveTv/Programs/{programId}
 # operationId: GetProgram
-export def "live-tv-programs get-by-programId" [
+export def "live-tv-programs get-by-program-id" [
   program_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -5945,11 +6113,12 @@ export def "live-tv-programs get-by-programId" [
 ]: nothing -> record<AirDays: list<string>, AirTime: string, AirsAfterSeasonNumber: int, AirsBeforeEpisodeNumber: int, AirsBeforeSeasonNumber: int, Album: string, AlbumArtist: string, AlbumArtists: table<Id: string, Name: string>, AlbumCount: int, AlbumId: string, AlbumPrimaryImageTag: string, Altitude: float, Aperture: float, ArtistCount: int, ArtistItems: table<Id: string, Name: string>, Artists: list<string>, AspectRatio: string, Audio: string, BackdropImageTags: list<string>, CameraMake: string, CameraModel: string, CanDelete: bool, CanDownload: bool, ChannelId: string, ChannelName: string, ChannelNumber: string, ChannelPrimaryImageTag: string, ChannelType: string, Chapters: table<ImageDateModified: string, ImagePath: string, ImageTag: string, Name: string, StartPositionTicks: int>, ChildCount: int, CollectionType: string, CommunityRating: float, CompletionPercentage: float, Container: string, CriticRating: float, CumulativeRunTimeTicks: int, CurrentProgram: any, CustomRating: string, DateCreated: string, DateLastMediaAdded: string, DisplayOrder: string, DisplayPreferencesId: string, EnableMediaSourceDisplay: bool, EndDate: string, EpisodeCount: int, EpisodeTitle: string, Etag: string, ExposureTime: float, ExternalUrls: table<Name: string, Url: string>, ExtraType: string, FocalLength: float, ForcedSortName: string, GenreItems: table<Id: string, Name: string>, Genres: list<string>, HasSubtitles: bool, Height: int, Id: string, ImageBlurHashes: record<Art: record, Backdrop: record, Banner: record, Box: record, BoxRear: record, Chapter: record, Disc: record, Logo: record, Menu: record, Primary: record, Profile: record, Screenshot: record, Thumb: record>, ImageOrientation: string, ImageTags: record, IndexNumber: int, IndexNumberEnd: int, IsFolder: bool, IsHD: bool, IsKids: bool, IsLive: bool, IsMovie: bool, IsNews: bool, IsPlaceHolder: bool, IsPremiere: bool, IsRepeat: bool, IsSeries: bool, IsSports: bool, IsoSpeedRating: int, IsoType: string, Latitude: float, LocalTrailerCount: int, LocationType: string, LockData: bool, LockedFields: list<string>, Longitude: float, MediaSourceCount: int, MediaSources: table<AnalyzeDurationMs: int, Bitrate: int, BufferMs: int, Container: string, DefaultAudioStreamIndex: int, DefaultSubtitleStreamIndex: int, ETag: string, EncoderPath: string, EncoderProtocol: string, Formats: list, GenPtsInput: bool, Id: string, IgnoreDts: bool, IgnoreIndex: bool, IsInfiniteStream: bool, IsRemote: bool, IsoType: string, LiveStreamId: string, MediaAttachments: list, MediaStreams: list, Name: string, OpenToken: string, Path: string, Protocol: string, ReadAtNativeFramerate: bool, RequiredHttpHeaders: record, RequiresClosing: bool, RequiresLooping: bool, RequiresOpening: bool, RunTimeTicks: int, Size: int, SupportsDirectPlay: bool, SupportsDirectStream: bool, SupportsProbing: bool, SupportsTranscoding: bool, Timestamp: string, TranscodingContainer: string, TranscodingSubProtocol: string, TranscodingUrl: string, Type: string, Video3DFormat: string, VideoType: string>, MediaStreams: table<AspectRatio: string, AverageFrameRate: float, BitDepth: int, BitRate: int, ChannelLayout: string, Channels: int, Codec: string, CodecTag: string, CodecTimeBase: string, ColorPrimaries: string, ColorRange: string, ColorSpace: string, ColorTransfer: string, Comment: string, DeliveryMethod: string, DeliveryUrl: string, DisplayTitle: string, Height: int, Index: int, IsAVC: bool, IsAnamorphic: bool, IsDefault: bool, IsExternal: bool, IsExternalUrl: bool, IsForced: bool, IsInterlaced: bool, IsTextSubtitleStream: bool, Language: string, Level: float, NalLengthSize: string, PacketLength: int, Path: string, PixelFormat: string, Profile: string, RealFrameRate: float, RefFrames: int, SampleRate: int, Score: int, SupportsExternalStream: bool, TimeBase: string, Title: string, Type: string, VideoRange: string, Width: int, localizedDefault: string, localizedForced: string, localizedUndefined: string>, MediaType: string, MovieCount: int, MusicVideoCount: int, Name: string, Number: string, OfficialRating: string, OriginalTitle: string, Overview: string, ParentArtImageTag: string, ParentArtItemId: string, ParentBackdropImageTags: list<string>, ParentBackdropItemId: string, ParentId: string, ParentIndexNumber: int, ParentLogoImageTag: string, ParentLogoItemId: string, ParentPrimaryImageItemId: string, ParentPrimaryImageTag: string, ParentThumbImageTag: string, ParentThumbItemId: string, PartCount: int, Path: string, People: table<Id: string, ImageBlurHashes: record, Name: string, PrimaryImageTag: string, Role: string, Type: string>, PlayAccess: string, PlaylistItemId: string, PreferredMetadataCountryCode: string, PreferredMetadataLanguage: string, PremiereDate: string, PrimaryImageAspectRatio: float, ProductionLocations: list<string>, ProductionYear: int, ProgramCount: int, ProgramId: string, ProviderIds: record, RecursiveItemCount: int, RemoteTrailers: table<Name: string, Url: string>, RunTimeTicks: int, ScreenshotImageTags: list<string>, SeasonId: string, SeasonName: string, SeriesCount: int, SeriesId: string, SeriesName: string, SeriesPrimaryImageTag: string, SeriesStudio: string, SeriesThumbImageTag: string, SeriesTimerId: string, ServerId: string, ShutterSpeed: float, Software: string, SongCount: int, SortName: string, SourceType: string, SpecialFeatureCount: int, StartDate: string, Status: string, Studios: table<Id: string, Name: string>, SupportsSync: bool, Taglines: list<string>, Tags: list<string>, TimerId: string, TrailerCount: int, Type: string, UserData: record<IsFavorite: bool, ItemId: string, Key: string, LastPlayedDate: string, Likes: bool, PlayCount: int, PlaybackPositionTicks: int, Played: bool, PlayedPercentage: float, Rating: float, UnplayedItemCount: int>, Video3DFormat: string, VideoType: string, Width: int> {
   let auth = (build-auth $token ($auth_scheme | default "x-emby-authorization"))
   let base = ($base_url | default $BASE_URL)
+  if ($program_id | is-empty) { error make --unspanned { msg: "path parameter 'programId' must be non-empty" } }
   let qp = [(serialize-qp "userId" $user_id "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({program_id: (encode-path-segment $program_id)} | format pattern "/LiveTv/Programs/{program_id}") $qp)
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"userId": $user_id} | compact), body: null}
 }
 
 # Gets live tv recordings.
@@ -5993,7 +6162,7 @@ export def "live-tv-recordings list" [
   let full_url = (build-url $base "/LiveTv/Recordings" $qp)
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"channelId": $channel_id, "userId": $user_id, "startIndex": $start_index, "limit": $limit, "status": $status, "isInProgress": $is_in_progress, "seriesTimerId": $series_timer_id, "enableImages": $enable_images, "imageTypeLimit": $image_type_limit, "enableImageTypes": $enable_image_types, "fields": $fields, "enableUserData": $enable_user_data, "isMovie": $is_movie, "isSeries": $is_series, "isKids": $is_kids, "isSports": $is_sports, "isNews": $is_news, "isLibraryItem": $is_library_item, "enableTotalRecordCount": $enable_total_record_count} | compact), body: null}
 }
 
 # Gets recording folders.
@@ -6019,7 +6188,7 @@ export def "live-tv-recordings-folders get" [
   let full_url = (build-url $base "/LiveTv/Recordings/Folders" $qp)
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"userId": $user_id} | compact), body: null}
 }
 
 # Gets live tv recording groups.
@@ -6047,7 +6216,7 @@ export def "live-tv-recordings-groups list" [
   let full_url = (build-url $base "/LiveTv/Recordings/Groups" $qp)
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"userId": $user_id} | compact), body: null}
 }
 
 # Get recording group.
@@ -6070,10 +6239,11 @@ export def "live-tv-recordings-groups get" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "x-emby-authorization"))
   let base = ($base_url | default $BASE_URL)
+  if ($group_id | is-empty) { error make --unspanned { msg: "path parameter 'groupId' must be non-empty" } }
   let full_url = (build-url $base ({group_id: (encode-path-segment $group_id)} | format pattern "/LiveTv/Recordings/Groups/{group_id}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
 }
 
 # Gets live tv recording series.
@@ -6114,7 +6284,7 @@ export def "live-tv-recordings-series get" [
   let full_url = (build-url $base "/LiveTv/Recordings/Series" $qp)
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"channelId": $channel_id, "userId": $user_id, "groupId": $group_id, "startIndex": $start_index, "limit": $limit, "status": $status, "isInProgress": $is_in_progress, "seriesTimerId": $series_timer_id, "enableImages": $enable_images, "imageTypeLimit": $image_type_limit, "enableImageTypes": $enable_image_types, "fields": $fields, "enableUserData": $enable_user_data, "enableTotalRecordCount": $enable_total_record_count} | compact), body: null}
 }
 
 # Deletes a live tv recording.
@@ -6135,10 +6305,11 @@ export def "live-tv-recordings delete" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "x-emby-authorization"))
   let base = ($base_url | default $BASE_URL)
+  if ($recording_id | is-empty) { error make --unspanned { msg: "path parameter 'recordingId' must be non-empty" } }
   let full_url = (build-url $base ({recording_id: (encode-path-segment $recording_id)} | format pattern "/LiveTv/Recordings/{recording_id}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
 }
 
 # Gets a live tv recording.
@@ -6161,11 +6332,12 @@ export def "live-tv-recordings get" [
 ]: nothing -> record<AirDays: list<string>, AirTime: string, AirsAfterSeasonNumber: int, AirsBeforeEpisodeNumber: int, AirsBeforeSeasonNumber: int, Album: string, AlbumArtist: string, AlbumArtists: table<Id: string, Name: string>, AlbumCount: int, AlbumId: string, AlbumPrimaryImageTag: string, Altitude: float, Aperture: float, ArtistCount: int, ArtistItems: table<Id: string, Name: string>, Artists: list<string>, AspectRatio: string, Audio: string, BackdropImageTags: list<string>, CameraMake: string, CameraModel: string, CanDelete: bool, CanDownload: bool, ChannelId: string, ChannelName: string, ChannelNumber: string, ChannelPrimaryImageTag: string, ChannelType: string, Chapters: table<ImageDateModified: string, ImagePath: string, ImageTag: string, Name: string, StartPositionTicks: int>, ChildCount: int, CollectionType: string, CommunityRating: float, CompletionPercentage: float, Container: string, CriticRating: float, CumulativeRunTimeTicks: int, CurrentProgram: any, CustomRating: string, DateCreated: string, DateLastMediaAdded: string, DisplayOrder: string, DisplayPreferencesId: string, EnableMediaSourceDisplay: bool, EndDate: string, EpisodeCount: int, EpisodeTitle: string, Etag: string, ExposureTime: float, ExternalUrls: table<Name: string, Url: string>, ExtraType: string, FocalLength: float, ForcedSortName: string, GenreItems: table<Id: string, Name: string>, Genres: list<string>, HasSubtitles: bool, Height: int, Id: string, ImageBlurHashes: record<Art: record, Backdrop: record, Banner: record, Box: record, BoxRear: record, Chapter: record, Disc: record, Logo: record, Menu: record, Primary: record, Profile: record, Screenshot: record, Thumb: record>, ImageOrientation: string, ImageTags: record, IndexNumber: int, IndexNumberEnd: int, IsFolder: bool, IsHD: bool, IsKids: bool, IsLive: bool, IsMovie: bool, IsNews: bool, IsPlaceHolder: bool, IsPremiere: bool, IsRepeat: bool, IsSeries: bool, IsSports: bool, IsoSpeedRating: int, IsoType: string, Latitude: float, LocalTrailerCount: int, LocationType: string, LockData: bool, LockedFields: list<string>, Longitude: float, MediaSourceCount: int, MediaSources: table<AnalyzeDurationMs: int, Bitrate: int, BufferMs: int, Container: string, DefaultAudioStreamIndex: int, DefaultSubtitleStreamIndex: int, ETag: string, EncoderPath: string, EncoderProtocol: string, Formats: list, GenPtsInput: bool, Id: string, IgnoreDts: bool, IgnoreIndex: bool, IsInfiniteStream: bool, IsRemote: bool, IsoType: string, LiveStreamId: string, MediaAttachments: list, MediaStreams: list, Name: string, OpenToken: string, Path: string, Protocol: string, ReadAtNativeFramerate: bool, RequiredHttpHeaders: record, RequiresClosing: bool, RequiresLooping: bool, RequiresOpening: bool, RunTimeTicks: int, Size: int, SupportsDirectPlay: bool, SupportsDirectStream: bool, SupportsProbing: bool, SupportsTranscoding: bool, Timestamp: string, TranscodingContainer: string, TranscodingSubProtocol: string, TranscodingUrl: string, Type: string, Video3DFormat: string, VideoType: string>, MediaStreams: table<AspectRatio: string, AverageFrameRate: float, BitDepth: int, BitRate: int, ChannelLayout: string, Channels: int, Codec: string, CodecTag: string, CodecTimeBase: string, ColorPrimaries: string, ColorRange: string, ColorSpace: string, ColorTransfer: string, Comment: string, DeliveryMethod: string, DeliveryUrl: string, DisplayTitle: string, Height: int, Index: int, IsAVC: bool, IsAnamorphic: bool, IsDefault: bool, IsExternal: bool, IsExternalUrl: bool, IsForced: bool, IsInterlaced: bool, IsTextSubtitleStream: bool, Language: string, Level: float, NalLengthSize: string, PacketLength: int, Path: string, PixelFormat: string, Profile: string, RealFrameRate: float, RefFrames: int, SampleRate: int, Score: int, SupportsExternalStream: bool, TimeBase: string, Title: string, Type: string, VideoRange: string, Width: int, localizedDefault: string, localizedForced: string, localizedUndefined: string>, MediaType: string, MovieCount: int, MusicVideoCount: int, Name: string, Number: string, OfficialRating: string, OriginalTitle: string, Overview: string, ParentArtImageTag: string, ParentArtItemId: string, ParentBackdropImageTags: list<string>, ParentBackdropItemId: string, ParentId: string, ParentIndexNumber: int, ParentLogoImageTag: string, ParentLogoItemId: string, ParentPrimaryImageItemId: string, ParentPrimaryImageTag: string, ParentThumbImageTag: string, ParentThumbItemId: string, PartCount: int, Path: string, People: table<Id: string, ImageBlurHashes: record, Name: string, PrimaryImageTag: string, Role: string, Type: string>, PlayAccess: string, PlaylistItemId: string, PreferredMetadataCountryCode: string, PreferredMetadataLanguage: string, PremiereDate: string, PrimaryImageAspectRatio: float, ProductionLocations: list<string>, ProductionYear: int, ProgramCount: int, ProgramId: string, ProviderIds: record, RecursiveItemCount: int, RemoteTrailers: table<Name: string, Url: string>, RunTimeTicks: int, ScreenshotImageTags: list<string>, SeasonId: string, SeasonName: string, SeriesCount: int, SeriesId: string, SeriesName: string, SeriesPrimaryImageTag: string, SeriesStudio: string, SeriesThumbImageTag: string, SeriesTimerId: string, ServerId: string, ShutterSpeed: float, Software: string, SongCount: int, SortName: string, SourceType: string, SpecialFeatureCount: int, StartDate: string, Status: string, Studios: table<Id: string, Name: string>, SupportsSync: bool, Taglines: list<string>, Tags: list<string>, TimerId: string, TrailerCount: int, Type: string, UserData: record<IsFavorite: bool, ItemId: string, Key: string, LastPlayedDate: string, Likes: bool, PlayCount: int, PlaybackPositionTicks: int, Played: bool, PlayedPercentage: float, Rating: float, UnplayedItemCount: int>, Video3DFormat: string, VideoType: string, Width: int> {
   let auth = (build-auth $token ($auth_scheme | default "x-emby-authorization"))
   let base = ($base_url | default $BASE_URL)
+  if ($recording_id | is-empty) { error make --unspanned { msg: "path parameter 'recordingId' must be non-empty" } }
   let qp = [(serialize-qp "userId" $user_id "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({recording_id: (encode-path-segment $recording_id)} | format pattern "/LiveTv/Recordings/{recording_id}") $qp)
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"userId": $user_id} | compact), body: null}
 }
 
 # Gets live tv series timers.
@@ -6192,7 +6364,7 @@ export def "live-tv-series-timers list" [
   let full_url = (build-url $base "/LiveTv/SeriesTimers" $qp)
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"sortBy": $sort_by, "sortOrder": $sort_order} | compact), body: null}
 }
 
 # Creates a live tv series timer.
@@ -6253,7 +6425,7 @@ export def "live-tv-series-timers create" [
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: {}, body: $req_body}
 }
 
 # Cancels a live tv series timer.
@@ -6274,10 +6446,11 @@ export def "live-tv-series-timers cancel" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "x-emby-authorization"))
   let base = ($base_url | default $BASE_URL)
+  if ($timer_id | is-empty) { error make --unspanned { msg: "path parameter 'timerId' must be non-empty" } }
   let full_url = (build-url $base ({timer_id: (encode-path-segment $timer_id)} | format pattern "/LiveTv/SeriesTimers/{timer_id}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
 }
 
 # Gets a live tv series timer.
@@ -6299,10 +6472,11 @@ export def "live-tv-series-timers get" [
 ]: nothing -> record<ChannelId: string, ChannelName: string, ChannelPrimaryImageTag: string, DayPattern: string, Days: list<string>, EndDate: string, ExternalChannelId: string, ExternalId: string, ExternalProgramId: string, Id: string, ImageTags: record, IsPostPaddingRequired: bool, IsPrePaddingRequired: bool, KeepUntil: string, KeepUpTo: int, Name: string, Overview: string, ParentBackdropImageTags: list<string>, ParentBackdropItemId: string, ParentPrimaryImageItemId: string, ParentPrimaryImageTag: string, ParentThumbImageTag: string, ParentThumbItemId: string, PostPaddingSeconds: int, PrePaddingSeconds: int, Priority: int, ProgramId: string, RecordAnyChannel: bool, RecordAnyTime: bool, RecordNewOnly: bool, ServerId: string, ServiceName: string, SkipEpisodesInLibrary: bool, StartDate: string, Type: string> {
   let auth = (build-auth $token ($auth_scheme | default "x-emby-authorization"))
   let base = ($base_url | default $BASE_URL)
+  if ($timer_id | is-empty) { error make --unspanned { msg: "path parameter 'timerId' must be non-empty" } }
   let full_url = (build-url $base ({timer_id: (encode-path-segment $timer_id)} | format pattern "/LiveTv/SeriesTimers/{timer_id}"))
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
 }
 
 # Updates a live tv series timer.
@@ -6359,12 +6533,13 @@ export def "live-tv-series-timers update" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "x-emby-authorization"))
   let base = ($base_url | default $BASE_URL)
+  if ($timer_id | is-empty) { error make --unspanned { msg: "path parameter 'timerId' must be non-empty" } }
   let full_url = (build-url $base ({timer_id: (encode-path-segment $timer_id)} | format pattern "/LiveTv/SeriesTimers/{timer_id}"))
   let req_body = {"ChannelId": $channel_id, "ChannelName": $channel_name, "ChannelPrimaryImageTag": $channel_primary_image_tag, "DayPattern": $day_pattern, "Days": $days, "EndDate": $end_date, "ExternalChannelId": $external_channel_id, "ExternalId": $external_id, "ExternalProgramId": $external_program_id, "Id": $id, "ImageTags": $image_tags, "IsPostPaddingRequired": $is_post_padding_required, "IsPrePaddingRequired": $is_pre_padding_required, "KeepUntil": $keep_until, "KeepUpTo": $keep_up_to, "Name": $name, "Overview": $overview, "ParentBackdropImageTags": $parent_backdrop_image_tags, "ParentBackdropItemId": $parent_backdrop_item_id, "ParentPrimaryImageItemId": $parent_primary_image_item_id, "ParentPrimaryImageTag": $parent_primary_image_tag, "ParentThumbImageTag": $parent_thumb_image_tag, "ParentThumbItemId": $parent_thumb_item_id, "PostPaddingSeconds": $post_padding_seconds, "PrePaddingSeconds": $pre_padding_seconds, "Priority": $priority, "ProgramId": $program_id, "RecordAnyChannel": $record_any_channel, "RecordAnyTime": $record_any_time, "RecordNewOnly": $record_new_only, "ServerId": $server_id, "ServiceName": $service_name, "SkipEpisodesInLibrary": $skip_episodes_in_library, "StartDate": $start_date, "Type": $type} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: {}, body: $req_body}
 }
 
 # Gets the live tv timers.
@@ -6393,7 +6568,7 @@ export def "live-tv-timers list" [
   let full_url = (build-url $base "/LiveTv/Timers" $qp)
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"channelId": $channel_id, "seriesTimerId": $series_timer_id, "isActive": $is_active, "isScheduled": $is_scheduled} | compact), body: null}
 }
 
 # Creates a live tv timer.
@@ -6448,7 +6623,7 @@ export def "live-tv-timers create" [
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: {}, body: $req_body}
 }
 
 # Gets the default values for a new timer.
@@ -6474,7 +6649,7 @@ export def "live-tv-timers-defaults get" [
   let full_url = (build-url $base "/LiveTv/Timers/Defaults" $qp)
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"programId": $program_id} | compact), body: null}
 }
 
 # Cancels a live tv timer.
@@ -6495,10 +6670,11 @@ export def "live-tv-timers cancel" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "x-emby-authorization"))
   let base = ($base_url | default $BASE_URL)
+  if ($timer_id | is-empty) { error make --unspanned { msg: "path parameter 'timerId' must be non-empty" } }
   let full_url = (build-url $base ({timer_id: (encode-path-segment $timer_id)} | format pattern "/LiveTv/Timers/{timer_id}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
 }
 
 # Gets a timer.
@@ -6520,10 +6696,11 @@ export def "live-tv-timers get" [
 ]: nothing -> record<ChannelId: string, ChannelName: string, ChannelPrimaryImageTag: string, EndDate: string, ExternalChannelId: string, ExternalId: string, ExternalProgramId: string, ExternalSeriesTimerId: string, Id: string, IsPostPaddingRequired: bool, IsPrePaddingRequired: bool, KeepUntil: string, Name: string, Overview: string, ParentBackdropImageTags: list<string>, ParentBackdropItemId: string, PostPaddingSeconds: int, PrePaddingSeconds: int, Priority: int, ProgramId: string, ProgramInfo: record<AirDays: list<string>, AirTime: string, AirsAfterSeasonNumber: int, AirsBeforeEpisodeNumber: int, AirsBeforeSeasonNumber: int, Album: string, AlbumArtist: string, AlbumArtists: list<record>, AlbumCount: int, AlbumId: string, AlbumPrimaryImageTag: string, Altitude: float, Aperture: float, ArtistCount: int, ArtistItems: list<record>, Artists: list<string>, AspectRatio: string, Audio: string, BackdropImageTags: list<string>, CameraMake: string, CameraModel: string, CanDelete: bool, CanDownload: bool, ChannelId: string, ChannelName: string, ChannelNumber: string, ChannelPrimaryImageTag: string, ChannelType: string, Chapters: list<record>, ChildCount: int, CollectionType: string, CommunityRating: float, CompletionPercentage: float, Container: string, CriticRating: float, CumulativeRunTimeTicks: int, CurrentProgram: any, CustomRating: string, DateCreated: string, DateLastMediaAdded: string, DisplayOrder: string, DisplayPreferencesId: string, EnableMediaSourceDisplay: bool, EndDate: string, EpisodeCount: int, EpisodeTitle: string, Etag: string, ExposureTime: float, ExternalUrls: list<record>, ExtraType: string, FocalLength: float, ForcedSortName: string, GenreItems: list<record>, Genres: list<string>, HasSubtitles: bool, Height: int, Id: string, ImageBlurHashes: record<Art: record, Backdrop: record, Banner: record, Box: record, BoxRear: record, Chapter: record, Disc: record, Logo: record, Menu: record, Primary: record, Profile: record, Screenshot: record, Thumb: record>, ImageOrientation: string, ImageTags: record, IndexNumber: int, IndexNumberEnd: int, IsFolder: bool, IsHD: bool, IsKids: bool, IsLive: bool, IsMovie: bool, IsNews: bool, IsPlaceHolder: bool, IsPremiere: bool, IsRepeat: bool, IsSeries: bool, IsSports: bool, IsoSpeedRating: int, IsoType: string, Latitude: float, LocalTrailerCount: int, LocationType: string, LockData: bool, LockedFields: list<string>, Longitude: float, MediaSourceCount: int, MediaSources: list<record>, MediaStreams: list<record>, MediaType: string, MovieCount: int, MusicVideoCount: int, Name: string, Number: string, OfficialRating: string, OriginalTitle: string, Overview: string, ParentArtImageTag: string, ParentArtItemId: string, ParentBackdropImageTags: list<string>, ParentBackdropItemId: string, ParentId: string, ParentIndexNumber: int, ParentLogoImageTag: string, ParentLogoItemId: string, ParentPrimaryImageItemId: string, ParentPrimaryImageTag: string, ParentThumbImageTag: string, ParentThumbItemId: string, PartCount: int, Path: string, People: list<record>, PlayAccess: string, PlaylistItemId: string, PreferredMetadataCountryCode: string, PreferredMetadataLanguage: string, PremiereDate: string, PrimaryImageAspectRatio: float, ProductionLocations: list<string>, ProductionYear: int, ProgramCount: int, ProgramId: string, ProviderIds: record, RecursiveItemCount: int, RemoteTrailers: list<record>, RunTimeTicks: int, ScreenshotImageTags: list<string>, SeasonId: string, SeasonName: string, SeriesCount: int, SeriesId: string, SeriesName: string, SeriesPrimaryImageTag: string, SeriesStudio: string, SeriesThumbImageTag: string, SeriesTimerId: string, ServerId: string, ShutterSpeed: float, Software: string, SongCount: int, SortName: string, SourceType: string, SpecialFeatureCount: int, StartDate: string, Status: string, Studios: list<record>, SupportsSync: bool, Taglines: list<string>, Tags: list<string>, TimerId: string, TrailerCount: int, Type: string, UserData: record<IsFavorite: bool, ItemId: string, Key: string, LastPlayedDate: string, Likes: bool, PlayCount: int, PlaybackPositionTicks: int, Played: bool, PlayedPercentage: float, Rating: float, UnplayedItemCount: int>, Video3DFormat: string, VideoType: string, Width: int>, RunTimeTicks: int, SeriesTimerId: string, ServerId: string, ServiceName: string, StartDate: string, Status: string, Type: string> {
   let auth = (build-auth $token ($auth_scheme | default "x-emby-authorization"))
   let base = ($base_url | default $BASE_URL)
+  if ($timer_id | is-empty) { error make --unspanned { msg: "path parameter 'timerId' must be non-empty" } }
   let full_url = (build-url $base ({timer_id: (encode-path-segment $timer_id)} | format pattern "/LiveTv/Timers/{timer_id}"))
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
 }
 
 # Updates a live tv timer.
@@ -6574,12 +6751,13 @@ export def "live-tv-timers update" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "x-emby-authorization"))
   let base = ($base_url | default $BASE_URL)
+  if ($timer_id | is-empty) { error make --unspanned { msg: "path parameter 'timerId' must be non-empty" } }
   let full_url = (build-url $base ({timer_id: (encode-path-segment $timer_id)} | format pattern "/LiveTv/Timers/{timer_id}"))
   let req_body = {"ChannelId": $channel_id, "ChannelName": $channel_name, "ChannelPrimaryImageTag": $channel_primary_image_tag, "EndDate": $end_date, "ExternalChannelId": $external_channel_id, "ExternalId": $external_id, "ExternalProgramId": $external_program_id, "ExternalSeriesTimerId": $external_series_timer_id, "Id": $id, "IsPostPaddingRequired": $is_post_padding_required, "IsPrePaddingRequired": $is_pre_padding_required, "KeepUntil": $keep_until, "Name": $name, "Overview": $overview, "ParentBackdropImageTags": $parent_backdrop_image_tags, "ParentBackdropItemId": $parent_backdrop_item_id, "PostPaddingSeconds": $post_padding_seconds, "PrePaddingSeconds": $pre_padding_seconds, "Priority": $priority, "ProgramId": $program_id, "ProgramInfo": $program_info, "RunTimeTicks": $run_time_ticks, "SeriesTimerId": $series_timer_id, "ServerId": $server_id, "ServiceName": $service_name, "StartDate": $start_date, "Status": $status, "Type": $type} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: {}, body: $req_body}
 }
 
 # Deletes a tuner host.
@@ -6604,7 +6782,7 @@ export def "live-tv-tuner-hosts delete" [
   let full_url = (build-url $base "/LiveTv/TunerHosts" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"id": $id} | compact), body: null}
 }
 
 # Adds a tuner host.
@@ -6642,7 +6820,7 @@ export def "live-tv-tuner-hosts create" [
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: {}, body: $req_body}
 }
 
 # Get tuner host types.
@@ -6666,7 +6844,7 @@ export def "live-tv-tuner-hosts-types get" [
   let full_url = (build-url $base "/LiveTv/TunerHosts/Types")
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
 }
 
 # Discover tuners.
@@ -6692,7 +6870,7 @@ export def "live-tv-tuners-discover get" [
   let full_url = (build-url $base "/LiveTv/Tuners/Discover" $qp)
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"newDevicesOnly": $new_devices_only} | compact), body: null}
 }
 
 # Discover tuners.
@@ -6718,7 +6896,7 @@ export def "live-tv-tuners-discvover get" [
   let full_url = (build-url $base "/LiveTv/Tuners/Discvover" $qp)
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"newDevicesOnly": $new_devices_only} | compact), body: null}
 }
 
 # Resets a tv tuner.
@@ -6739,10 +6917,11 @@ export def "live-tv-tuners-reset reset" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "x-emby-authorization"))
   let base = ($base_url | default $BASE_URL)
+  if ($tuner_id | is-empty) { error make --unspanned { msg: "path parameter 'tunerId' must be non-empty" } }
   let full_url = (build-url $base ({tuner_id: (encode-path-segment $tuner_id)} | format pattern "/LiveTv/Tuners/{tuner_id}/Reset"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
 }
 
 # Gets known countries.
@@ -6766,7 +6945,7 @@ export def "localization-countries get" [
   let full_url = (build-url $base "/Localization/Countries")
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
 }
 
 # Gets known cultures.
@@ -6790,7 +6969,7 @@ export def "localization-cultures get" [
   let full_url = (build-url $base "/Localization/Cultures")
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
 }
 
 # Gets localization options.
@@ -6814,7 +6993,7 @@ export def "localization-options get" [
   let full_url = (build-url $base "/Localization/Options")
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
 }
 
 # Gets known parental ratings.
@@ -6838,7 +7017,7 @@ export def "localization-parental-ratings get" [
   let full_url = (build-url $base "/Localization/ParentalRatings")
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
 }
 
 # Gets movie recommendations.
@@ -6868,7 +7047,7 @@ export def "movies-recommendations get" [
   let full_url = (build-url $base "/Movies/Recommendations" $qp)
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"userId": $user_id, "parentId": $parent_id, "fields": $fields, "categoryLimit": $category_limit, "itemLimit": $item_limit} | compact), body: null}
 }
 
 # Gets similar items.
@@ -6894,11 +7073,12 @@ export def "movies-similar get" [
 ]: nothing -> record<Items: table<AirDays: list, AirTime: string, AirsAfterSeasonNumber: int, AirsBeforeEpisodeNumber: int, AirsBeforeSeasonNumber: int, Album: string, AlbumArtist: string, AlbumArtists: list, AlbumCount: int, AlbumId: string, AlbumPrimaryImageTag: string, Altitude: float, Aperture: float, ArtistCount: int, ArtistItems: list, Artists: list, AspectRatio: string, Audio: string, BackdropImageTags: list, CameraMake: string, CameraModel: string, CanDelete: bool, CanDownload: bool, ChannelId: string, ChannelName: string, ChannelNumber: string, ChannelPrimaryImageTag: string, ChannelType: string, Chapters: list, ChildCount: int, CollectionType: string, CommunityRating: float, CompletionPercentage: float, Container: string, CriticRating: float, CumulativeRunTimeTicks: int, CurrentProgram: any, CustomRating: string, DateCreated: string, DateLastMediaAdded: string, DisplayOrder: string, DisplayPreferencesId: string, EnableMediaSourceDisplay: bool, EndDate: string, EpisodeCount: int, EpisodeTitle: string, Etag: string, ExposureTime: float, ExternalUrls: list, ExtraType: string, FocalLength: float, ForcedSortName: string, GenreItems: list, Genres: list, HasSubtitles: bool, Height: int, Id: string, ImageBlurHashes: record, ImageOrientation: string, ImageTags: record, IndexNumber: int, IndexNumberEnd: int, IsFolder: bool, IsHD: bool, IsKids: bool, IsLive: bool, IsMovie: bool, IsNews: bool, IsPlaceHolder: bool, IsPremiere: bool, IsRepeat: bool, IsSeries: bool, IsSports: bool, IsoSpeedRating: int, IsoType: string, Latitude: float, LocalTrailerCount: int, LocationType: string, LockData: bool, LockedFields: list, Longitude: float, MediaSourceCount: int, MediaSources: list, MediaStreams: list, MediaType: string, MovieCount: int, MusicVideoCount: int, Name: string, Number: string, OfficialRating: string, OriginalTitle: string, Overview: string, ParentArtImageTag: string, ParentArtItemId: string, ParentBackdropImageTags: list, ParentBackdropItemId: string, ParentId: string, ParentIndexNumber: int, ParentLogoImageTag: string, ParentLogoItemId: string, ParentPrimaryImageItemId: string, ParentPrimaryImageTag: string, ParentThumbImageTag: string, ParentThumbItemId: string, PartCount: int, Path: string, People: list, PlayAccess: string, PlaylistItemId: string, PreferredMetadataCountryCode: string, PreferredMetadataLanguage: string, PremiereDate: string, PrimaryImageAspectRatio: float, ProductionLocations: list, ProductionYear: int, ProgramCount: int, ProgramId: string, ProviderIds: record, RecursiveItemCount: int, RemoteTrailers: list, RunTimeTicks: int, ScreenshotImageTags: list, SeasonId: string, SeasonName: string, SeriesCount: int, SeriesId: string, SeriesName: string, SeriesPrimaryImageTag: string, SeriesStudio: string, SeriesThumbImageTag: string, SeriesTimerId: string, ServerId: string, ShutterSpeed: float, Software: string, SongCount: int, SortName: string, SourceType: string, SpecialFeatureCount: int, StartDate: string, Status: string, Studios: list, SupportsSync: bool, Taglines: list, Tags: list, TimerId: string, TrailerCount: int, Type: string, UserData: record, Video3DFormat: string, VideoType: string, Width: int>, StartIndex: int, TotalRecordCount: int> {
   let auth = (build-auth $token ($auth_scheme | default "x-emby-authorization"))
   let base = ($base_url | default $BASE_URL)
+  if ($item_id | is-empty) { error make --unspanned { msg: "path parameter 'itemId' must be non-empty" } }
   let qp = [(serialize-qp "excludeArtistIds" $exclude_artist_ids "multi") (serialize-qp "userId" $user_id "scalar") (serialize-qp "limit" $limit "scalar") (serialize-qp "fields" $fields "multi")] | flatten | str join "&"
   let full_url = (build-url $base ({item_id: (encode-path-segment $item_id)} | format pattern "/Movies/{item_id}/Similar") $qp)
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"excludeArtistIds": $exclude_artist_ids, "userId": $user_id, "limit": $limit, "fields": $fields} | compact), body: null}
 }
 
 # Gets all music genres from a given item, folder, or the entire library.
@@ -6941,7 +7121,7 @@ export def "music-genres list" [
   let full_url = (build-url $base "/MusicGenres" $qp)
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"startIndex": $start_index, "limit": $limit, "searchTerm": $search_term, "parentId": $parent_id, "fields": $fields, "excludeItemTypes": $exclude_item_types, "includeItemTypes": $include_item_types, "isFavorite": $is_favorite, "imageTypeLimit": $image_type_limit, "enableImageTypes": $enable_image_types, "userId": $user_id, "nameStartsWithOrGreater": $name_starts_with_or_greater, "nameStartsWith": $name_starts_with, "nameLessThan": $name_less_than, "enableImages": $enable_images, "enableTotalRecordCount": $enable_total_record_count} | compact), body: null}
 }
 
 # Gets a music genre, by name.
@@ -6964,11 +7144,12 @@ export def "music-genres get" [
 ]: nothing -> record<AirDays: list<string>, AirTime: string, AirsAfterSeasonNumber: int, AirsBeforeEpisodeNumber: int, AirsBeforeSeasonNumber: int, Album: string, AlbumArtist: string, AlbumArtists: table<Id: string, Name: string>, AlbumCount: int, AlbumId: string, AlbumPrimaryImageTag: string, Altitude: float, Aperture: float, ArtistCount: int, ArtistItems: table<Id: string, Name: string>, Artists: list<string>, AspectRatio: string, Audio: string, BackdropImageTags: list<string>, CameraMake: string, CameraModel: string, CanDelete: bool, CanDownload: bool, ChannelId: string, ChannelName: string, ChannelNumber: string, ChannelPrimaryImageTag: string, ChannelType: string, Chapters: table<ImageDateModified: string, ImagePath: string, ImageTag: string, Name: string, StartPositionTicks: int>, ChildCount: int, CollectionType: string, CommunityRating: float, CompletionPercentage: float, Container: string, CriticRating: float, CumulativeRunTimeTicks: int, CurrentProgram: any, CustomRating: string, DateCreated: string, DateLastMediaAdded: string, DisplayOrder: string, DisplayPreferencesId: string, EnableMediaSourceDisplay: bool, EndDate: string, EpisodeCount: int, EpisodeTitle: string, Etag: string, ExposureTime: float, ExternalUrls: table<Name: string, Url: string>, ExtraType: string, FocalLength: float, ForcedSortName: string, GenreItems: table<Id: string, Name: string>, Genres: list<string>, HasSubtitles: bool, Height: int, Id: string, ImageBlurHashes: record<Art: record, Backdrop: record, Banner: record, Box: record, BoxRear: record, Chapter: record, Disc: record, Logo: record, Menu: record, Primary: record, Profile: record, Screenshot: record, Thumb: record>, ImageOrientation: string, ImageTags: record, IndexNumber: int, IndexNumberEnd: int, IsFolder: bool, IsHD: bool, IsKids: bool, IsLive: bool, IsMovie: bool, IsNews: bool, IsPlaceHolder: bool, IsPremiere: bool, IsRepeat: bool, IsSeries: bool, IsSports: bool, IsoSpeedRating: int, IsoType: string, Latitude: float, LocalTrailerCount: int, LocationType: string, LockData: bool, LockedFields: list<string>, Longitude: float, MediaSourceCount: int, MediaSources: table<AnalyzeDurationMs: int, Bitrate: int, BufferMs: int, Container: string, DefaultAudioStreamIndex: int, DefaultSubtitleStreamIndex: int, ETag: string, EncoderPath: string, EncoderProtocol: string, Formats: list, GenPtsInput: bool, Id: string, IgnoreDts: bool, IgnoreIndex: bool, IsInfiniteStream: bool, IsRemote: bool, IsoType: string, LiveStreamId: string, MediaAttachments: list, MediaStreams: list, Name: string, OpenToken: string, Path: string, Protocol: string, ReadAtNativeFramerate: bool, RequiredHttpHeaders: record, RequiresClosing: bool, RequiresLooping: bool, RequiresOpening: bool, RunTimeTicks: int, Size: int, SupportsDirectPlay: bool, SupportsDirectStream: bool, SupportsProbing: bool, SupportsTranscoding: bool, Timestamp: string, TranscodingContainer: string, TranscodingSubProtocol: string, TranscodingUrl: string, Type: string, Video3DFormat: string, VideoType: string>, MediaStreams: table<AspectRatio: string, AverageFrameRate: float, BitDepth: int, BitRate: int, ChannelLayout: string, Channels: int, Codec: string, CodecTag: string, CodecTimeBase: string, ColorPrimaries: string, ColorRange: string, ColorSpace: string, ColorTransfer: string, Comment: string, DeliveryMethod: string, DeliveryUrl: string, DisplayTitle: string, Height: int, Index: int, IsAVC: bool, IsAnamorphic: bool, IsDefault: bool, IsExternal: bool, IsExternalUrl: bool, IsForced: bool, IsInterlaced: bool, IsTextSubtitleStream: bool, Language: string, Level: float, NalLengthSize: string, PacketLength: int, Path: string, PixelFormat: string, Profile: string, RealFrameRate: float, RefFrames: int, SampleRate: int, Score: int, SupportsExternalStream: bool, TimeBase: string, Title: string, Type: string, VideoRange: string, Width: int, localizedDefault: string, localizedForced: string, localizedUndefined: string>, MediaType: string, MovieCount: int, MusicVideoCount: int, Name: string, Number: string, OfficialRating: string, OriginalTitle: string, Overview: string, ParentArtImageTag: string, ParentArtItemId: string, ParentBackdropImageTags: list<string>, ParentBackdropItemId: string, ParentId: string, ParentIndexNumber: int, ParentLogoImageTag: string, ParentLogoItemId: string, ParentPrimaryImageItemId: string, ParentPrimaryImageTag: string, ParentThumbImageTag: string, ParentThumbItemId: string, PartCount: int, Path: string, People: table<Id: string, ImageBlurHashes: record, Name: string, PrimaryImageTag: string, Role: string, Type: string>, PlayAccess: string, PlaylistItemId: string, PreferredMetadataCountryCode: string, PreferredMetadataLanguage: string, PremiereDate: string, PrimaryImageAspectRatio: float, ProductionLocations: list<string>, ProductionYear: int, ProgramCount: int, ProgramId: string, ProviderIds: record, RecursiveItemCount: int, RemoteTrailers: table<Name: string, Url: string>, RunTimeTicks: int, ScreenshotImageTags: list<string>, SeasonId: string, SeasonName: string, SeriesCount: int, SeriesId: string, SeriesName: string, SeriesPrimaryImageTag: string, SeriesStudio: string, SeriesThumbImageTag: string, SeriesTimerId: string, ServerId: string, ShutterSpeed: float, Software: string, SongCount: int, SortName: string, SourceType: string, SpecialFeatureCount: int, StartDate: string, Status: string, Studios: table<Id: string, Name: string>, SupportsSync: bool, Taglines: list<string>, Tags: list<string>, TimerId: string, TrailerCount: int, Type: string, UserData: record<IsFavorite: bool, ItemId: string, Key: string, LastPlayedDate: string, Likes: bool, PlayCount: int, PlaybackPositionTicks: int, Played: bool, PlayedPercentage: float, Rating: float, UnplayedItemCount: int>, Video3DFormat: string, VideoType: string, Width: int> {
   let auth = (build-auth $token ($auth_scheme | default "x-emby-authorization"))
   let base = ($base_url | default $BASE_URL)
+  if ($genre_name | is-empty) { error make --unspanned { msg: "path parameter 'genreName' must be non-empty" } }
   let qp = [(serialize-qp "userId" $user_id "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({genre_name: (encode-path-segment $genre_name)} | format pattern "/MusicGenres/{genre_name}") $qp)
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"userId": $user_id} | compact), body: null}
 }
 
 # Creates an instant playlist based on a given song.
@@ -6997,11 +7178,12 @@ export def "music-genres-instant-mix get-by-id" [
 ]: nothing -> record<Items: table<AirDays: list, AirTime: string, AirsAfterSeasonNumber: int, AirsBeforeEpisodeNumber: int, AirsBeforeSeasonNumber: int, Album: string, AlbumArtist: string, AlbumArtists: list, AlbumCount: int, AlbumId: string, AlbumPrimaryImageTag: string, Altitude: float, Aperture: float, ArtistCount: int, ArtistItems: list, Artists: list, AspectRatio: string, Audio: string, BackdropImageTags: list, CameraMake: string, CameraModel: string, CanDelete: bool, CanDownload: bool, ChannelId: string, ChannelName: string, ChannelNumber: string, ChannelPrimaryImageTag: string, ChannelType: string, Chapters: list, ChildCount: int, CollectionType: string, CommunityRating: float, CompletionPercentage: float, Container: string, CriticRating: float, CumulativeRunTimeTicks: int, CurrentProgram: any, CustomRating: string, DateCreated: string, DateLastMediaAdded: string, DisplayOrder: string, DisplayPreferencesId: string, EnableMediaSourceDisplay: bool, EndDate: string, EpisodeCount: int, EpisodeTitle: string, Etag: string, ExposureTime: float, ExternalUrls: list, ExtraType: string, FocalLength: float, ForcedSortName: string, GenreItems: list, Genres: list, HasSubtitles: bool, Height: int, Id: string, ImageBlurHashes: record, ImageOrientation: string, ImageTags: record, IndexNumber: int, IndexNumberEnd: int, IsFolder: bool, IsHD: bool, IsKids: bool, IsLive: bool, IsMovie: bool, IsNews: bool, IsPlaceHolder: bool, IsPremiere: bool, IsRepeat: bool, IsSeries: bool, IsSports: bool, IsoSpeedRating: int, IsoType: string, Latitude: float, LocalTrailerCount: int, LocationType: string, LockData: bool, LockedFields: list, Longitude: float, MediaSourceCount: int, MediaSources: list, MediaStreams: list, MediaType: string, MovieCount: int, MusicVideoCount: int, Name: string, Number: string, OfficialRating: string, OriginalTitle: string, Overview: string, ParentArtImageTag: string, ParentArtItemId: string, ParentBackdropImageTags: list, ParentBackdropItemId: string, ParentId: string, ParentIndexNumber: int, ParentLogoImageTag: string, ParentLogoItemId: string, ParentPrimaryImageItemId: string, ParentPrimaryImageTag: string, ParentThumbImageTag: string, ParentThumbItemId: string, PartCount: int, Path: string, People: list, PlayAccess: string, PlaylistItemId: string, PreferredMetadataCountryCode: string, PreferredMetadataLanguage: string, PremiereDate: string, PrimaryImageAspectRatio: float, ProductionLocations: list, ProductionYear: int, ProgramCount: int, ProgramId: string, ProviderIds: record, RecursiveItemCount: int, RemoteTrailers: list, RunTimeTicks: int, ScreenshotImageTags: list, SeasonId: string, SeasonName: string, SeriesCount: int, SeriesId: string, SeriesName: string, SeriesPrimaryImageTag: string, SeriesStudio: string, SeriesThumbImageTag: string, SeriesTimerId: string, ServerId: string, ShutterSpeed: float, Software: string, SongCount: int, SortName: string, SourceType: string, SpecialFeatureCount: int, StartDate: string, Status: string, Studios: list, SupportsSync: bool, Taglines: list, Tags: list, TimerId: string, TrailerCount: int, Type: string, UserData: record, Video3DFormat: string, VideoType: string, Width: int>, StartIndex: int, TotalRecordCount: int> {
   let auth = (build-auth $token ($auth_scheme | default "x-emby-authorization"))
   let base = ($base_url | default $BASE_URL)
+  if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
   let qp = [(serialize-qp "userId" $user_id "scalar") (serialize-qp "limit" $limit "scalar") (serialize-qp "fields" $fields "multi") (serialize-qp "enableImages" $enable_images "scalar") (serialize-qp "enableUserData" $enable_user_data "scalar") (serialize-qp "imageTypeLimit" $image_type_limit "scalar") (serialize-qp "enableImageTypes" $enable_image_types "multi")] | flatten | str join "&"
   let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/MusicGenres/{id}/InstantMix") $qp)
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"userId": $user_id, "limit": $limit, "fields": $fields, "enableImages": $enable_images, "enableUserData": $enable_user_data, "imageTypeLimit": $image_type_limit, "enableImageTypes": $enable_image_types} | compact), body: null}
 }
 
 # Get music genre image by name.
@@ -7038,11 +7220,13 @@ export def "music-genres-images get" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "x-emby-authorization"))
   let base = ($base_url | default $BASE_URL)
+  if ($name | is-empty) { error make --unspanned { msg: "path parameter 'name' must be non-empty" } }
+  if ($image_type | is-empty) { error make --unspanned { msg: "path parameter 'imageType' must be non-empty" } }
   let qp = [(serialize-qp "tag" $tag "scalar") (serialize-qp "format" $format "scalar") (serialize-qp "maxWidth" $max_width "scalar") (serialize-qp "maxHeight" $max_height "scalar") (serialize-qp "percentPlayed" $percent_played "scalar") (serialize-qp "unplayedCount" $unplayed_count "scalar") (serialize-qp "width" $width "scalar") (serialize-qp "height" $height "scalar") (serialize-qp "quality" $quality "scalar") (serialize-qp "cropWhitespace" $crop_whitespace "scalar") (serialize-qp "addPlayedIndicator" $add_played_indicator "scalar") (serialize-qp "blur" $blur "scalar") (serialize-qp "backgroundColor" $background_color "scalar") (serialize-qp "foregroundLayer" $foreground_layer "scalar") (serialize-qp "imageIndex" $image_index "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({name: (encode-path-segment $name), image_type: (encode-path-segment $image_type)} | format pattern "/MusicGenres/{name}/Images/{image_type}") $qp)
   let accept_val = "image/*"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"tag": $tag, "format": $format, "maxWidth": $max_width, "maxHeight": $max_height, "percentPlayed": $percent_played, "unplayedCount": $unplayed_count, "width": $width, "height": $height, "quality": $quality, "cropWhitespace": $crop_whitespace, "addPlayedIndicator": $add_played_indicator, "blur": $blur, "backgroundColor": $background_color, "foregroundLayer": $foreground_layer, "imageIndex": $image_index} | compact), body: null}
 }
 
 # Get music genre image by name.
@@ -7079,11 +7263,13 @@ export def "music-genres-images head-head" [
 ]: nothing -> record {
   let auth = (build-auth $token ($auth_scheme | default "x-emby-authorization"))
   let base = ($base_url | default $BASE_URL)
+  if ($name | is-empty) { error make --unspanned { msg: "path parameter 'name' must be non-empty" } }
+  if ($image_type | is-empty) { error make --unspanned { msg: "path parameter 'imageType' must be non-empty" } }
   let qp = [(serialize-qp "tag" $tag "scalar") (serialize-qp "format" $format "scalar") (serialize-qp "maxWidth" $max_width "scalar") (serialize-qp "maxHeight" $max_height "scalar") (serialize-qp "percentPlayed" $percent_played "scalar") (serialize-qp "unplayedCount" $unplayed_count "scalar") (serialize-qp "width" $width "scalar") (serialize-qp "height" $height "scalar") (serialize-qp "quality" $quality "scalar") (serialize-qp "cropWhitespace" $crop_whitespace "scalar") (serialize-qp "addPlayedIndicator" $add_played_indicator "scalar") (serialize-qp "blur" $blur "scalar") (serialize-qp "backgroundColor" $background_color "scalar") (serialize-qp "foregroundLayer" $foreground_layer "scalar") (serialize-qp "imageIndex" $image_index "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({name: (encode-path-segment $name), image_type: (encode-path-segment $image_type)} | format pattern "/MusicGenres/{name}/Images/{image_type}") $qp)
   let accept_val = "image/*"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "head" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "head" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"tag": $tag, "format": $format, "maxWidth": $max_width, "maxHeight": $max_height, "percentPlayed": $percent_played, "unplayedCount": $unplayed_count, "width": $width, "height": $height, "quality": $quality, "cropWhitespace": $crop_whitespace, "addPlayedIndicator": $add_played_indicator, "blur": $blur, "backgroundColor": $background_color, "foregroundLayer": $foreground_layer, "imageIndex": $image_index} | compact), body: null}
 }
 
 # Get music genre image by name.
@@ -7120,11 +7306,14 @@ export def "music-genres-images get-by-index" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "x-emby-authorization"))
   let base = ($base_url | default $BASE_URL)
+  if ($name | is-empty) { error make --unspanned { msg: "path parameter 'name' must be non-empty" } }
+  if ($image_type | is-empty) { error make --unspanned { msg: "path parameter 'imageType' must be non-empty" } }
+  if ($image_index | is-empty) { error make --unspanned { msg: "path parameter 'imageIndex' must be non-empty" } }
   let qp = [(serialize-qp "tag" $tag "scalar") (serialize-qp "format" $format "scalar") (serialize-qp "maxWidth" $max_width "scalar") (serialize-qp "maxHeight" $max_height "scalar") (serialize-qp "percentPlayed" $percent_played "scalar") (serialize-qp "unplayedCount" $unplayed_count "scalar") (serialize-qp "width" $width "scalar") (serialize-qp "height" $height "scalar") (serialize-qp "quality" $quality "scalar") (serialize-qp "cropWhitespace" $crop_whitespace "scalar") (serialize-qp "addPlayedIndicator" $add_played_indicator "scalar") (serialize-qp "blur" $blur "scalar") (serialize-qp "backgroundColor" $background_color "scalar") (serialize-qp "foregroundLayer" $foreground_layer "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({name: (encode-path-segment $name), image_type: (encode-path-segment $image_type), image_index: (encode-path-segment $image_index)} | format pattern "/MusicGenres/{name}/Images/{image_type}/{image_index}") $qp)
   let accept_val = "image/*"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"tag": $tag, "format": $format, "maxWidth": $max_width, "maxHeight": $max_height, "percentPlayed": $percent_played, "unplayedCount": $unplayed_count, "width": $width, "height": $height, "quality": $quality, "cropWhitespace": $crop_whitespace, "addPlayedIndicator": $add_played_indicator, "blur": $blur, "backgroundColor": $background_color, "foregroundLayer": $foreground_layer} | compact), body: null}
 }
 
 # Get music genre image by name.
@@ -7161,11 +7350,14 @@ export def "music-genres-images head-head-by-index" [
 ]: nothing -> record {
   let auth = (build-auth $token ($auth_scheme | default "x-emby-authorization"))
   let base = ($base_url | default $BASE_URL)
+  if ($name | is-empty) { error make --unspanned { msg: "path parameter 'name' must be non-empty" } }
+  if ($image_type | is-empty) { error make --unspanned { msg: "path parameter 'imageType' must be non-empty" } }
+  if ($image_index | is-empty) { error make --unspanned { msg: "path parameter 'imageIndex' must be non-empty" } }
   let qp = [(serialize-qp "tag" $tag "scalar") (serialize-qp "format" $format "scalar") (serialize-qp "maxWidth" $max_width "scalar") (serialize-qp "maxHeight" $max_height "scalar") (serialize-qp "percentPlayed" $percent_played "scalar") (serialize-qp "unplayedCount" $unplayed_count "scalar") (serialize-qp "width" $width "scalar") (serialize-qp "height" $height "scalar") (serialize-qp "quality" $quality "scalar") (serialize-qp "cropWhitespace" $crop_whitespace "scalar") (serialize-qp "addPlayedIndicator" $add_played_indicator "scalar") (serialize-qp "blur" $blur "scalar") (serialize-qp "backgroundColor" $background_color "scalar") (serialize-qp "foregroundLayer" $foreground_layer "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({name: (encode-path-segment $name), image_type: (encode-path-segment $image_type), image_index: (encode-path-segment $image_index)} | format pattern "/MusicGenres/{name}/Images/{image_type}/{image_index}") $qp)
   let accept_val = "image/*"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "head" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "head" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"tag": $tag, "format": $format, "maxWidth": $max_width, "maxHeight": $max_height, "percentPlayed": $percent_played, "unplayedCount": $unplayed_count, "width": $width, "height": $height, "quality": $quality, "cropWhitespace": $crop_whitespace, "addPlayedIndicator": $add_played_indicator, "blur": $blur, "backgroundColor": $background_color, "foregroundLayer": $foreground_layer} | compact), body: null}
 }
 
 # Creates an instant playlist based on a given song.
@@ -7194,11 +7386,12 @@ export def "music-genres-instant-mix get-by-name" [
 ]: nothing -> record<Items: table<AirDays: list, AirTime: string, AirsAfterSeasonNumber: int, AirsBeforeEpisodeNumber: int, AirsBeforeSeasonNumber: int, Album: string, AlbumArtist: string, AlbumArtists: list, AlbumCount: int, AlbumId: string, AlbumPrimaryImageTag: string, Altitude: float, Aperture: float, ArtistCount: int, ArtistItems: list, Artists: list, AspectRatio: string, Audio: string, BackdropImageTags: list, CameraMake: string, CameraModel: string, CanDelete: bool, CanDownload: bool, ChannelId: string, ChannelName: string, ChannelNumber: string, ChannelPrimaryImageTag: string, ChannelType: string, Chapters: list, ChildCount: int, CollectionType: string, CommunityRating: float, CompletionPercentage: float, Container: string, CriticRating: float, CumulativeRunTimeTicks: int, CurrentProgram: any, CustomRating: string, DateCreated: string, DateLastMediaAdded: string, DisplayOrder: string, DisplayPreferencesId: string, EnableMediaSourceDisplay: bool, EndDate: string, EpisodeCount: int, EpisodeTitle: string, Etag: string, ExposureTime: float, ExternalUrls: list, ExtraType: string, FocalLength: float, ForcedSortName: string, GenreItems: list, Genres: list, HasSubtitles: bool, Height: int, Id: string, ImageBlurHashes: record, ImageOrientation: string, ImageTags: record, IndexNumber: int, IndexNumberEnd: int, IsFolder: bool, IsHD: bool, IsKids: bool, IsLive: bool, IsMovie: bool, IsNews: bool, IsPlaceHolder: bool, IsPremiere: bool, IsRepeat: bool, IsSeries: bool, IsSports: bool, IsoSpeedRating: int, IsoType: string, Latitude: float, LocalTrailerCount: int, LocationType: string, LockData: bool, LockedFields: list, Longitude: float, MediaSourceCount: int, MediaSources: list, MediaStreams: list, MediaType: string, MovieCount: int, MusicVideoCount: int, Name: string, Number: string, OfficialRating: string, OriginalTitle: string, Overview: string, ParentArtImageTag: string, ParentArtItemId: string, ParentBackdropImageTags: list, ParentBackdropItemId: string, ParentId: string, ParentIndexNumber: int, ParentLogoImageTag: string, ParentLogoItemId: string, ParentPrimaryImageItemId: string, ParentPrimaryImageTag: string, ParentThumbImageTag: string, ParentThumbItemId: string, PartCount: int, Path: string, People: list, PlayAccess: string, PlaylistItemId: string, PreferredMetadataCountryCode: string, PreferredMetadataLanguage: string, PremiereDate: string, PrimaryImageAspectRatio: float, ProductionLocations: list, ProductionYear: int, ProgramCount: int, ProgramId: string, ProviderIds: record, RecursiveItemCount: int, RemoteTrailers: list, RunTimeTicks: int, ScreenshotImageTags: list, SeasonId: string, SeasonName: string, SeriesCount: int, SeriesId: string, SeriesName: string, SeriesPrimaryImageTag: string, SeriesStudio: string, SeriesThumbImageTag: string, SeriesTimerId: string, ServerId: string, ShutterSpeed: float, Software: string, SongCount: int, SortName: string, SourceType: string, SpecialFeatureCount: int, StartDate: string, Status: string, Studios: list, SupportsSync: bool, Taglines: list, Tags: list, TimerId: string, TrailerCount: int, Type: string, UserData: record, Video3DFormat: string, VideoType: string, Width: int>, StartIndex: int, TotalRecordCount: int> {
   let auth = (build-auth $token ($auth_scheme | default "x-emby-authorization"))
   let base = ($base_url | default $BASE_URL)
+  if ($name | is-empty) { error make --unspanned { msg: "path parameter 'name' must be non-empty" } }
   let qp = [(serialize-qp "userId" $user_id "scalar") (serialize-qp "limit" $limit "scalar") (serialize-qp "fields" $fields "multi") (serialize-qp "enableImages" $enable_images "scalar") (serialize-qp "enableUserData" $enable_user_data "scalar") (serialize-qp "imageTypeLimit" $image_type_limit "scalar") (serialize-qp "enableImageTypes" $enable_image_types "multi")] | flatten | str join "&"
   let full_url = (build-url $base ({name: (encode-path-segment $name)} | format pattern "/MusicGenres/{name}/InstantMix") $qp)
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"userId": $user_id, "limit": $limit, "fields": $fields, "enableImages": $enable_images, "enableUserData": $enable_user_data, "imageTypeLimit": $image_type_limit, "enableImageTypes": $enable_image_types} | compact), body: null}
 }
 
 # Sends a notification to all admins.
@@ -7226,7 +7419,7 @@ export def "notifications-admin create" [
   let full_url = (build-url $base "/Notifications/Admin" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"url": $url, "level": $level, "name": $name, "description": $description} | compact), body: null}
 }
 
 # Gets notification services.
@@ -7250,7 +7443,7 @@ export def "notifications-services get" [
   let full_url = (build-url $base "/Notifications/Services")
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
 }
 
 # Gets notification types.
@@ -7274,7 +7467,7 @@ export def "notifications-types get" [
   let full_url = (build-url $base "/Notifications/Types")
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
 }
 
 # Gets a user's notifications.
@@ -7296,10 +7489,11 @@ export def "notifications get" [
 ]: nothing -> record<Notifications: table<Date: string, Description: string, Id: string, IsRead: bool, Level: string, Name: string, Url: string, UserId: string>, TotalRecordCount: int> {
   let auth = (build-auth $token ($auth_scheme | default "x-emby-authorization"))
   let base = ($base_url | default $BASE_URL)
+  if ($user_id | is-empty) { error make --unspanned { msg: "path parameter 'userId' must be non-empty" } }
   let full_url = (build-url $base ({user_id: (encode-path-segment $user_id)} | format pattern "/Notifications/{user_id}"))
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
 }
 
 # Sets notifications as read.
@@ -7320,10 +7514,11 @@ export def "notifications-read update" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "x-emby-authorization"))
   let base = ($base_url | default $BASE_URL)
+  if ($user_id | is-empty) { error make --unspanned { msg: "path parameter 'userId' must be non-empty" } }
   let full_url = (build-url $base ({user_id: (encode-path-segment $user_id)} | format pattern "/Notifications/{user_id}/Read"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
 }
 
 # Gets a user's notification summary.
@@ -7345,10 +7540,11 @@ export def "notifications-summary get" [
 ]: nothing -> record<MaxUnreadNotificationLevel: string, UnreadCount: int> {
   let auth = (build-auth $token ($auth_scheme | default "x-emby-authorization"))
   let base = ($base_url | default $BASE_URL)
+  if ($user_id | is-empty) { error make --unspanned { msg: "path parameter 'userId' must be non-empty" } }
   let full_url = (build-url $base ({user_id: (encode-path-segment $user_id)} | format pattern "/Notifications/{user_id}/Summary"))
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
 }
 
 # Sets notifications as unread.
@@ -7369,17 +7565,18 @@ export def "notifications-unread update" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "x-emby-authorization"))
   let base = ($base_url | default $BASE_URL)
+  if ($user_id | is-empty) { error make --unspanned { msg: "path parameter 'userId' must be non-empty" } }
   let full_url = (build-url $base ({user_id: (encode-path-segment $user_id)} | format pattern "/Notifications/{user_id}/Unread"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
 }
 
 # Gets available packages.
 #
 # GET /Packages
 # operationId: GetPackages
-export def "packages get" [
+export def "packages list" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -7396,7 +7593,7 @@ export def "packages get" [
   let full_url = (build-url $base "/Packages")
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
 }
 
 # Installs a package.
@@ -7420,11 +7617,12 @@ export def "packages-installed create-install" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "x-emby-authorization"))
   let base = ($base_url | default $BASE_URL)
+  if ($name | is-empty) { error make --unspanned { msg: "path parameter 'name' must be non-empty" } }
   let qp = [(serialize-qp "assemblyGuid" $assembly_guid "scalar") (serialize-qp "version" $version "scalar") (serialize-qp "repositoryUrl" $repository_url "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({name: (encode-path-segment $name)} | format pattern "/Packages/Installed/{name}") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"assemblyGuid": $assembly_guid, "version": $version, "repositoryUrl": $repository_url} | compact), body: null}
 }
 
 # Cancels a package installation.
@@ -7445,17 +7643,18 @@ export def "packages-installing cancel-installation" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "x-emby-authorization"))
   let base = ($base_url | default $BASE_URL)
+  if ($package_id | is-empty) { error make --unspanned { msg: "path parameter 'packageId' must be non-empty" } }
   let full_url = (build-url $base ({package_id: (encode-path-segment $package_id)} | format pattern "/Packages/Installing/{package_id}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
 }
 
 # Gets a package by name or assembly GUID.
 #
 # GET /Packages/{name}
 # operationId: GetPackageInfo
-export def "packages get-get" [
+export def "packages get" [
   name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -7471,11 +7670,12 @@ export def "packages get-get" [
 ]: nothing -> record<category: string, description: string, guid: string, imageUrl: string, name: string, overview: string, owner: string, versions: table<VersionNumber: record, changelog: string, checksum: string, repositoryName: string, repositoryUrl: string, sourceUrl: string, targetAbi: string, timestamp: string, version: string>> {
   let auth = (build-auth $token ($auth_scheme | default "x-emby-authorization"))
   let base = ($base_url | default $BASE_URL)
+  if ($name | is-empty) { error make --unspanned { msg: "path parameter 'name' must be non-empty" } }
   let qp = [(serialize-qp "assemblyGuid" $assembly_guid "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({name: (encode-path-segment $name)} | format pattern "/Packages/{name}") $qp)
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"assemblyGuid": $assembly_guid} | compact), body: null}
 }
 
 # Gets all persons.
@@ -7513,7 +7713,7 @@ export def "persons list" [
   let full_url = (build-url $base "/Persons" $qp)
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"limit": $limit, "searchTerm": $search_term, "fields": $fields, "filters": $filters, "isFavorite": $is_favorite, "enableUserData": $enable_user_data, "imageTypeLimit": $image_type_limit, "enableImageTypes": $enable_image_types, "excludePersonTypes": $exclude_person_types, "personTypes": $person_types, "appearsInItemId": $appears_in_item_id, "userId": $user_id, "enableImages": $enable_images} | compact), body: null}
 }
 
 # Get person by name.
@@ -7536,11 +7736,12 @@ export def "persons get" [
 ]: nothing -> record<AirDays: list<string>, AirTime: string, AirsAfterSeasonNumber: int, AirsBeforeEpisodeNumber: int, AirsBeforeSeasonNumber: int, Album: string, AlbumArtist: string, AlbumArtists: table<Id: string, Name: string>, AlbumCount: int, AlbumId: string, AlbumPrimaryImageTag: string, Altitude: float, Aperture: float, ArtistCount: int, ArtistItems: table<Id: string, Name: string>, Artists: list<string>, AspectRatio: string, Audio: string, BackdropImageTags: list<string>, CameraMake: string, CameraModel: string, CanDelete: bool, CanDownload: bool, ChannelId: string, ChannelName: string, ChannelNumber: string, ChannelPrimaryImageTag: string, ChannelType: string, Chapters: table<ImageDateModified: string, ImagePath: string, ImageTag: string, Name: string, StartPositionTicks: int>, ChildCount: int, CollectionType: string, CommunityRating: float, CompletionPercentage: float, Container: string, CriticRating: float, CumulativeRunTimeTicks: int, CurrentProgram: any, CustomRating: string, DateCreated: string, DateLastMediaAdded: string, DisplayOrder: string, DisplayPreferencesId: string, EnableMediaSourceDisplay: bool, EndDate: string, EpisodeCount: int, EpisodeTitle: string, Etag: string, ExposureTime: float, ExternalUrls: table<Name: string, Url: string>, ExtraType: string, FocalLength: float, ForcedSortName: string, GenreItems: table<Id: string, Name: string>, Genres: list<string>, HasSubtitles: bool, Height: int, Id: string, ImageBlurHashes: record<Art: record, Backdrop: record, Banner: record, Box: record, BoxRear: record, Chapter: record, Disc: record, Logo: record, Menu: record, Primary: record, Profile: record, Screenshot: record, Thumb: record>, ImageOrientation: string, ImageTags: record, IndexNumber: int, IndexNumberEnd: int, IsFolder: bool, IsHD: bool, IsKids: bool, IsLive: bool, IsMovie: bool, IsNews: bool, IsPlaceHolder: bool, IsPremiere: bool, IsRepeat: bool, IsSeries: bool, IsSports: bool, IsoSpeedRating: int, IsoType: string, Latitude: float, LocalTrailerCount: int, LocationType: string, LockData: bool, LockedFields: list<string>, Longitude: float, MediaSourceCount: int, MediaSources: table<AnalyzeDurationMs: int, Bitrate: int, BufferMs: int, Container: string, DefaultAudioStreamIndex: int, DefaultSubtitleStreamIndex: int, ETag: string, EncoderPath: string, EncoderProtocol: string, Formats: list, GenPtsInput: bool, Id: string, IgnoreDts: bool, IgnoreIndex: bool, IsInfiniteStream: bool, IsRemote: bool, IsoType: string, LiveStreamId: string, MediaAttachments: list, MediaStreams: list, Name: string, OpenToken: string, Path: string, Protocol: string, ReadAtNativeFramerate: bool, RequiredHttpHeaders: record, RequiresClosing: bool, RequiresLooping: bool, RequiresOpening: bool, RunTimeTicks: int, Size: int, SupportsDirectPlay: bool, SupportsDirectStream: bool, SupportsProbing: bool, SupportsTranscoding: bool, Timestamp: string, TranscodingContainer: string, TranscodingSubProtocol: string, TranscodingUrl: string, Type: string, Video3DFormat: string, VideoType: string>, MediaStreams: table<AspectRatio: string, AverageFrameRate: float, BitDepth: int, BitRate: int, ChannelLayout: string, Channels: int, Codec: string, CodecTag: string, CodecTimeBase: string, ColorPrimaries: string, ColorRange: string, ColorSpace: string, ColorTransfer: string, Comment: string, DeliveryMethod: string, DeliveryUrl: string, DisplayTitle: string, Height: int, Index: int, IsAVC: bool, IsAnamorphic: bool, IsDefault: bool, IsExternal: bool, IsExternalUrl: bool, IsForced: bool, IsInterlaced: bool, IsTextSubtitleStream: bool, Language: string, Level: float, NalLengthSize: string, PacketLength: int, Path: string, PixelFormat: string, Profile: string, RealFrameRate: float, RefFrames: int, SampleRate: int, Score: int, SupportsExternalStream: bool, TimeBase: string, Title: string, Type: string, VideoRange: string, Width: int, localizedDefault: string, localizedForced: string, localizedUndefined: string>, MediaType: string, MovieCount: int, MusicVideoCount: int, Name: string, Number: string, OfficialRating: string, OriginalTitle: string, Overview: string, ParentArtImageTag: string, ParentArtItemId: string, ParentBackdropImageTags: list<string>, ParentBackdropItemId: string, ParentId: string, ParentIndexNumber: int, ParentLogoImageTag: string, ParentLogoItemId: string, ParentPrimaryImageItemId: string, ParentPrimaryImageTag: string, ParentThumbImageTag: string, ParentThumbItemId: string, PartCount: int, Path: string, People: table<Id: string, ImageBlurHashes: record, Name: string, PrimaryImageTag: string, Role: string, Type: string>, PlayAccess: string, PlaylistItemId: string, PreferredMetadataCountryCode: string, PreferredMetadataLanguage: string, PremiereDate: string, PrimaryImageAspectRatio: float, ProductionLocations: list<string>, ProductionYear: int, ProgramCount: int, ProgramId: string, ProviderIds: record, RecursiveItemCount: int, RemoteTrailers: table<Name: string, Url: string>, RunTimeTicks: int, ScreenshotImageTags: list<string>, SeasonId: string, SeasonName: string, SeriesCount: int, SeriesId: string, SeriesName: string, SeriesPrimaryImageTag: string, SeriesStudio: string, SeriesThumbImageTag: string, SeriesTimerId: string, ServerId: string, ShutterSpeed: float, Software: string, SongCount: int, SortName: string, SourceType: string, SpecialFeatureCount: int, StartDate: string, Status: string, Studios: table<Id: string, Name: string>, SupportsSync: bool, Taglines: list<string>, Tags: list<string>, TimerId: string, TrailerCount: int, Type: string, UserData: record<IsFavorite: bool, ItemId: string, Key: string, LastPlayedDate: string, Likes: bool, PlayCount: int, PlaybackPositionTicks: int, Played: bool, PlayedPercentage: float, Rating: float, UnplayedItemCount: int>, Video3DFormat: string, VideoType: string, Width: int> {
   let auth = (build-auth $token ($auth_scheme | default "x-emby-authorization"))
   let base = ($base_url | default $BASE_URL)
+  if ($name | is-empty) { error make --unspanned { msg: "path parameter 'name' must be non-empty" } }
   let qp = [(serialize-qp "userId" $user_id "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({name: (encode-path-segment $name)} | format pattern "/Persons/{name}") $qp)
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"userId": $user_id} | compact), body: null}
 }
 
 # Get person image by name.
@@ -7577,11 +7778,13 @@ export def "persons-images get" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "x-emby-authorization"))
   let base = ($base_url | default $BASE_URL)
+  if ($name | is-empty) { error make --unspanned { msg: "path parameter 'name' must be non-empty" } }
+  if ($image_type | is-empty) { error make --unspanned { msg: "path parameter 'imageType' must be non-empty" } }
   let qp = [(serialize-qp "tag" $tag "scalar") (serialize-qp "format" $format "scalar") (serialize-qp "maxWidth" $max_width "scalar") (serialize-qp "maxHeight" $max_height "scalar") (serialize-qp "percentPlayed" $percent_played "scalar") (serialize-qp "unplayedCount" $unplayed_count "scalar") (serialize-qp "width" $width "scalar") (serialize-qp "height" $height "scalar") (serialize-qp "quality" $quality "scalar") (serialize-qp "cropWhitespace" $crop_whitespace "scalar") (serialize-qp "addPlayedIndicator" $add_played_indicator "scalar") (serialize-qp "blur" $blur "scalar") (serialize-qp "backgroundColor" $background_color "scalar") (serialize-qp "foregroundLayer" $foreground_layer "scalar") (serialize-qp "imageIndex" $image_index "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({name: (encode-path-segment $name), image_type: (encode-path-segment $image_type)} | format pattern "/Persons/{name}/Images/{image_type}") $qp)
   let accept_val = "image/*"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"tag": $tag, "format": $format, "maxWidth": $max_width, "maxHeight": $max_height, "percentPlayed": $percent_played, "unplayedCount": $unplayed_count, "width": $width, "height": $height, "quality": $quality, "cropWhitespace": $crop_whitespace, "addPlayedIndicator": $add_played_indicator, "blur": $blur, "backgroundColor": $background_color, "foregroundLayer": $foreground_layer, "imageIndex": $image_index} | compact), body: null}
 }
 
 # Get person image by name.
@@ -7618,11 +7821,13 @@ export def "persons-images head-head" [
 ]: nothing -> record {
   let auth = (build-auth $token ($auth_scheme | default "x-emby-authorization"))
   let base = ($base_url | default $BASE_URL)
+  if ($name | is-empty) { error make --unspanned { msg: "path parameter 'name' must be non-empty" } }
+  if ($image_type | is-empty) { error make --unspanned { msg: "path parameter 'imageType' must be non-empty" } }
   let qp = [(serialize-qp "tag" $tag "scalar") (serialize-qp "format" $format "scalar") (serialize-qp "maxWidth" $max_width "scalar") (serialize-qp "maxHeight" $max_height "scalar") (serialize-qp "percentPlayed" $percent_played "scalar") (serialize-qp "unplayedCount" $unplayed_count "scalar") (serialize-qp "width" $width "scalar") (serialize-qp "height" $height "scalar") (serialize-qp "quality" $quality "scalar") (serialize-qp "cropWhitespace" $crop_whitespace "scalar") (serialize-qp "addPlayedIndicator" $add_played_indicator "scalar") (serialize-qp "blur" $blur "scalar") (serialize-qp "backgroundColor" $background_color "scalar") (serialize-qp "foregroundLayer" $foreground_layer "scalar") (serialize-qp "imageIndex" $image_index "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({name: (encode-path-segment $name), image_type: (encode-path-segment $image_type)} | format pattern "/Persons/{name}/Images/{image_type}") $qp)
   let accept_val = "image/*"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "head" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "head" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"tag": $tag, "format": $format, "maxWidth": $max_width, "maxHeight": $max_height, "percentPlayed": $percent_played, "unplayedCount": $unplayed_count, "width": $width, "height": $height, "quality": $quality, "cropWhitespace": $crop_whitespace, "addPlayedIndicator": $add_played_indicator, "blur": $blur, "backgroundColor": $background_color, "foregroundLayer": $foreground_layer, "imageIndex": $image_index} | compact), body: null}
 }
 
 # Get person image by name.
@@ -7659,11 +7864,14 @@ export def "persons-images get-by-index" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "x-emby-authorization"))
   let base = ($base_url | default $BASE_URL)
+  if ($name | is-empty) { error make --unspanned { msg: "path parameter 'name' must be non-empty" } }
+  if ($image_type | is-empty) { error make --unspanned { msg: "path parameter 'imageType' must be non-empty" } }
+  if ($image_index | is-empty) { error make --unspanned { msg: "path parameter 'imageIndex' must be non-empty" } }
   let qp = [(serialize-qp "tag" $tag "scalar") (serialize-qp "format" $format "scalar") (serialize-qp "maxWidth" $max_width "scalar") (serialize-qp "maxHeight" $max_height "scalar") (serialize-qp "percentPlayed" $percent_played "scalar") (serialize-qp "unplayedCount" $unplayed_count "scalar") (serialize-qp "width" $width "scalar") (serialize-qp "height" $height "scalar") (serialize-qp "quality" $quality "scalar") (serialize-qp "cropWhitespace" $crop_whitespace "scalar") (serialize-qp "addPlayedIndicator" $add_played_indicator "scalar") (serialize-qp "blur" $blur "scalar") (serialize-qp "backgroundColor" $background_color "scalar") (serialize-qp "foregroundLayer" $foreground_layer "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({name: (encode-path-segment $name), image_type: (encode-path-segment $image_type), image_index: (encode-path-segment $image_index)} | format pattern "/Persons/{name}/Images/{image_type}/{image_index}") $qp)
   let accept_val = "image/*"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"tag": $tag, "format": $format, "maxWidth": $max_width, "maxHeight": $max_height, "percentPlayed": $percent_played, "unplayedCount": $unplayed_count, "width": $width, "height": $height, "quality": $quality, "cropWhitespace": $crop_whitespace, "addPlayedIndicator": $add_played_indicator, "blur": $blur, "backgroundColor": $background_color, "foregroundLayer": $foreground_layer} | compact), body: null}
 }
 
 # Get person image by name.
@@ -7700,11 +7908,14 @@ export def "persons-images head-head-by-index" [
 ]: nothing -> record {
   let auth = (build-auth $token ($auth_scheme | default "x-emby-authorization"))
   let base = ($base_url | default $BASE_URL)
+  if ($name | is-empty) { error make --unspanned { msg: "path parameter 'name' must be non-empty" } }
+  if ($image_type | is-empty) { error make --unspanned { msg: "path parameter 'imageType' must be non-empty" } }
+  if ($image_index | is-empty) { error make --unspanned { msg: "path parameter 'imageIndex' must be non-empty" } }
   let qp = [(serialize-qp "tag" $tag "scalar") (serialize-qp "format" $format "scalar") (serialize-qp "maxWidth" $max_width "scalar") (serialize-qp "maxHeight" $max_height "scalar") (serialize-qp "percentPlayed" $percent_played "scalar") (serialize-qp "unplayedCount" $unplayed_count "scalar") (serialize-qp "width" $width "scalar") (serialize-qp "height" $height "scalar") (serialize-qp "quality" $quality "scalar") (serialize-qp "cropWhitespace" $crop_whitespace "scalar") (serialize-qp "addPlayedIndicator" $add_played_indicator "scalar") (serialize-qp "blur" $blur "scalar") (serialize-qp "backgroundColor" $background_color "scalar") (serialize-qp "foregroundLayer" $foreground_layer "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({name: (encode-path-segment $name), image_type: (encode-path-segment $image_type), image_index: (encode-path-segment $image_index)} | format pattern "/Persons/{name}/Images/{image_type}/{image_index}") $qp)
   let accept_val = "image/*"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "head" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "head" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"tag": $tag, "format": $format, "maxWidth": $max_width, "maxHeight": $max_height, "percentPlayed": $percent_played, "unplayedCount": $unplayed_count, "width": $width, "height": $height, "quality": $quality, "cropWhitespace": $crop_whitespace, "addPlayedIndicator": $add_played_indicator, "blur": $blur, "backgroundColor": $background_color, "foregroundLayer": $foreground_layer} | compact), body: null}
 }
 
 # Tests the network with a request with the size of the bitrate.
@@ -7729,7 +7940,7 @@ export def "playback-bitrate-test get-bytes" [
   let full_url = (build-url $base "/Playback/BitrateTest" $qp)
   let accept_val = "application/octet-stream"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"size": $size} | compact), body: null}
 }
 
 # Creates a new playlist.
@@ -7751,21 +7962,21 @@ export def "playlists create" [
   --ids: list<string> # The item ids. (nullable)
   --user-id: string # The user id. (nullable, format: uuid)
   --media-type: string # The media type. (nullable)
-  --ids: list<string> # Gets or sets item ids to add to the playlist. (nullable)
-  --media-type: string # Gets or sets the media type. (nullable)
-  --name: string # Gets or sets the name of the new playlist. (nullable)
-  --user-id: string # Gets or sets the user id. (nullable, format: uuid)
+  --ids-body: list<string> # Gets or sets item ids to add to the playlist. (nullable) (body field)
+  --media-type-body: string # Gets or sets the media type. (nullable) (body field)
+  --name-body: string # Gets or sets the name of the new playlist. (nullable) (body field)
+  --user-id-body: string # Gets or sets the user id. (nullable, format: uuid) (body field)
 ]: any -> record<Id: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "x-emby-authorization"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "name" $name "scalar") (serialize-qp "ids" $ids "multi") (serialize-qp "userId" $user_id "scalar") (serialize-qp "mediaType" $media_type "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/Playlists" $qp)
-  let req_body = {"Ids": $ids, "MediaType": $media_type, "Name": $name, "UserId": $user_id} | compact
+  let req_body = {"Ids": $ids_body, "MediaType": $media_type_body, "Name": $name_body, "UserId": $user_id_body} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: ({"name": $name, "ids": $ids, "userId": $user_id, "mediaType": $media_type} | compact), body: $req_body}
 }
 
 # Creates an instant playlist based on a given song.
@@ -7794,11 +8005,12 @@ export def "playlists-instant-mix get" [
 ]: nothing -> record<Items: table<AirDays: list, AirTime: string, AirsAfterSeasonNumber: int, AirsBeforeEpisodeNumber: int, AirsBeforeSeasonNumber: int, Album: string, AlbumArtist: string, AlbumArtists: list, AlbumCount: int, AlbumId: string, AlbumPrimaryImageTag: string, Altitude: float, Aperture: float, ArtistCount: int, ArtistItems: list, Artists: list, AspectRatio: string, Audio: string, BackdropImageTags: list, CameraMake: string, CameraModel: string, CanDelete: bool, CanDownload: bool, ChannelId: string, ChannelName: string, ChannelNumber: string, ChannelPrimaryImageTag: string, ChannelType: string, Chapters: list, ChildCount: int, CollectionType: string, CommunityRating: float, CompletionPercentage: float, Container: string, CriticRating: float, CumulativeRunTimeTicks: int, CurrentProgram: any, CustomRating: string, DateCreated: string, DateLastMediaAdded: string, DisplayOrder: string, DisplayPreferencesId: string, EnableMediaSourceDisplay: bool, EndDate: string, EpisodeCount: int, EpisodeTitle: string, Etag: string, ExposureTime: float, ExternalUrls: list, ExtraType: string, FocalLength: float, ForcedSortName: string, GenreItems: list, Genres: list, HasSubtitles: bool, Height: int, Id: string, ImageBlurHashes: record, ImageOrientation: string, ImageTags: record, IndexNumber: int, IndexNumberEnd: int, IsFolder: bool, IsHD: bool, IsKids: bool, IsLive: bool, IsMovie: bool, IsNews: bool, IsPlaceHolder: bool, IsPremiere: bool, IsRepeat: bool, IsSeries: bool, IsSports: bool, IsoSpeedRating: int, IsoType: string, Latitude: float, LocalTrailerCount: int, LocationType: string, LockData: bool, LockedFields: list, Longitude: float, MediaSourceCount: int, MediaSources: list, MediaStreams: list, MediaType: string, MovieCount: int, MusicVideoCount: int, Name: string, Number: string, OfficialRating: string, OriginalTitle: string, Overview: string, ParentArtImageTag: string, ParentArtItemId: string, ParentBackdropImageTags: list, ParentBackdropItemId: string, ParentId: string, ParentIndexNumber: int, ParentLogoImageTag: string, ParentLogoItemId: string, ParentPrimaryImageItemId: string, ParentPrimaryImageTag: string, ParentThumbImageTag: string, ParentThumbItemId: string, PartCount: int, Path: string, People: list, PlayAccess: string, PlaylistItemId: string, PreferredMetadataCountryCode: string, PreferredMetadataLanguage: string, PremiereDate: string, PrimaryImageAspectRatio: float, ProductionLocations: list, ProductionYear: int, ProgramCount: int, ProgramId: string, ProviderIds: record, RecursiveItemCount: int, RemoteTrailers: list, RunTimeTicks: int, ScreenshotImageTags: list, SeasonId: string, SeasonName: string, SeriesCount: int, SeriesId: string, SeriesName: string, SeriesPrimaryImageTag: string, SeriesStudio: string, SeriesThumbImageTag: string, SeriesTimerId: string, ServerId: string, ShutterSpeed: float, Software: string, SongCount: int, SortName: string, SourceType: string, SpecialFeatureCount: int, StartDate: string, Status: string, Studios: list, SupportsSync: bool, Taglines: list, Tags: list, TimerId: string, TrailerCount: int, Type: string, UserData: record, Video3DFormat: string, VideoType: string, Width: int>, StartIndex: int, TotalRecordCount: int> {
   let auth = (build-auth $token ($auth_scheme | default "x-emby-authorization"))
   let base = ($base_url | default $BASE_URL)
+  if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
   let qp = [(serialize-qp "userId" $user_id "scalar") (serialize-qp "limit" $limit "scalar") (serialize-qp "fields" $fields "multi") (serialize-qp "enableImages" $enable_images "scalar") (serialize-qp "enableUserData" $enable_user_data "scalar") (serialize-qp "imageTypeLimit" $image_type_limit "scalar") (serialize-qp "enableImageTypes" $enable_image_types "multi")] | flatten | str join "&"
   let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/Playlists/{id}/InstantMix") $qp)
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"userId": $user_id, "limit": $limit, "fields": $fields, "enableImages": $enable_images, "enableUserData": $enable_user_data, "imageTypeLimit": $image_type_limit, "enableImageTypes": $enable_image_types} | compact), body: null}
 }
 
 # Removes items from a playlist.
@@ -7820,11 +8032,12 @@ export def "playlists-items delete" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "x-emby-authorization"))
   let base = ($base_url | default $BASE_URL)
+  if ($playlist_id | is-empty) { error make --unspanned { msg: "path parameter 'playlistId' must be non-empty" } }
   let qp = [(serialize-qp "entryIds" $entry_ids "multi")] | flatten | str join "&"
   let full_url = (build-url $base ({playlist_id: (encode-path-segment $playlist_id)} | format pattern "/Playlists/{playlist_id}/Items") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"entryIds": $entry_ids} | compact), body: null}
 }
 
 # Gets the original items of a playlist.
@@ -7854,11 +8067,12 @@ export def "playlists-items get" [
 ]: nothing -> record<Items: table<AirDays: list, AirTime: string, AirsAfterSeasonNumber: int, AirsBeforeEpisodeNumber: int, AirsBeforeSeasonNumber: int, Album: string, AlbumArtist: string, AlbumArtists: list, AlbumCount: int, AlbumId: string, AlbumPrimaryImageTag: string, Altitude: float, Aperture: float, ArtistCount: int, ArtistItems: list, Artists: list, AspectRatio: string, Audio: string, BackdropImageTags: list, CameraMake: string, CameraModel: string, CanDelete: bool, CanDownload: bool, ChannelId: string, ChannelName: string, ChannelNumber: string, ChannelPrimaryImageTag: string, ChannelType: string, Chapters: list, ChildCount: int, CollectionType: string, CommunityRating: float, CompletionPercentage: float, Container: string, CriticRating: float, CumulativeRunTimeTicks: int, CurrentProgram: any, CustomRating: string, DateCreated: string, DateLastMediaAdded: string, DisplayOrder: string, DisplayPreferencesId: string, EnableMediaSourceDisplay: bool, EndDate: string, EpisodeCount: int, EpisodeTitle: string, Etag: string, ExposureTime: float, ExternalUrls: list, ExtraType: string, FocalLength: float, ForcedSortName: string, GenreItems: list, Genres: list, HasSubtitles: bool, Height: int, Id: string, ImageBlurHashes: record, ImageOrientation: string, ImageTags: record, IndexNumber: int, IndexNumberEnd: int, IsFolder: bool, IsHD: bool, IsKids: bool, IsLive: bool, IsMovie: bool, IsNews: bool, IsPlaceHolder: bool, IsPremiere: bool, IsRepeat: bool, IsSeries: bool, IsSports: bool, IsoSpeedRating: int, IsoType: string, Latitude: float, LocalTrailerCount: int, LocationType: string, LockData: bool, LockedFields: list, Longitude: float, MediaSourceCount: int, MediaSources: list, MediaStreams: list, MediaType: string, MovieCount: int, MusicVideoCount: int, Name: string, Number: string, OfficialRating: string, OriginalTitle: string, Overview: string, ParentArtImageTag: string, ParentArtItemId: string, ParentBackdropImageTags: list, ParentBackdropItemId: string, ParentId: string, ParentIndexNumber: int, ParentLogoImageTag: string, ParentLogoItemId: string, ParentPrimaryImageItemId: string, ParentPrimaryImageTag: string, ParentThumbImageTag: string, ParentThumbItemId: string, PartCount: int, Path: string, People: list, PlayAccess: string, PlaylistItemId: string, PreferredMetadataCountryCode: string, PreferredMetadataLanguage: string, PremiereDate: string, PrimaryImageAspectRatio: float, ProductionLocations: list, ProductionYear: int, ProgramCount: int, ProgramId: string, ProviderIds: record, RecursiveItemCount: int, RemoteTrailers: list, RunTimeTicks: int, ScreenshotImageTags: list, SeasonId: string, SeasonName: string, SeriesCount: int, SeriesId: string, SeriesName: string, SeriesPrimaryImageTag: string, SeriesStudio: string, SeriesThumbImageTag: string, SeriesTimerId: string, ServerId: string, ShutterSpeed: float, Software: string, SongCount: int, SortName: string, SourceType: string, SpecialFeatureCount: int, StartDate: string, Status: string, Studios: list, SupportsSync: bool, Taglines: list, Tags: list, TimerId: string, TrailerCount: int, Type: string, UserData: record, Video3DFormat: string, VideoType: string, Width: int>, StartIndex: int, TotalRecordCount: int> {
   let auth = (build-auth $token ($auth_scheme | default "x-emby-authorization"))
   let base = ($base_url | default $BASE_URL)
+  if ($playlist_id | is-empty) { error make --unspanned { msg: "path parameter 'playlistId' must be non-empty" } }
   let qp = [(serialize-qp "userId" $user_id "scalar") (serialize-qp "startIndex" $start_index "scalar") (serialize-qp "limit" $limit "scalar") (serialize-qp "fields" $fields "multi") (serialize-qp "enableImages" $enable_images "scalar") (serialize-qp "enableUserData" $enable_user_data "scalar") (serialize-qp "imageTypeLimit" $image_type_limit "scalar") (serialize-qp "enableImageTypes" $enable_image_types "multi")] | flatten | str join "&"
   let full_url = (build-url $base ({playlist_id: (encode-path-segment $playlist_id)} | format pattern "/Playlists/{playlist_id}/Items") $qp)
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"userId": $user_id, "startIndex": $start_index, "limit": $limit, "fields": $fields, "enableImages": $enable_images, "enableUserData": $enable_user_data, "imageTypeLimit": $image_type_limit, "enableImageTypes": $enable_image_types} | compact), body: null}
 }
 
 # Adds items to a playlist.
@@ -7881,11 +8095,12 @@ export def "playlists-items create" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "x-emby-authorization"))
   let base = ($base_url | default $BASE_URL)
+  if ($playlist_id | is-empty) { error make --unspanned { msg: "path parameter 'playlistId' must be non-empty" } }
   let qp = [(serialize-qp "ids" $ids "multi") (serialize-qp "userId" $user_id "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({playlist_id: (encode-path-segment $playlist_id)} | format pattern "/Playlists/{playlist_id}/Items") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"ids": $ids, "userId": $user_id} | compact), body: null}
 }
 
 # Moves a playlist item.
@@ -7908,10 +8123,13 @@ export def "playlists-items-move move" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "x-emby-authorization"))
   let base = ($base_url | default $BASE_URL)
+  if ($playlist_id | is-empty) { error make --unspanned { msg: "path parameter 'playlistId' must be non-empty" } }
+  if ($item_id | is-empty) { error make --unspanned { msg: "path parameter 'itemId' must be non-empty" } }
+  if ($new_index | is-empty) { error make --unspanned { msg: "path parameter 'newIndex' must be non-empty" } }
   let full_url = (build-url $base ({playlist_id: (encode-path-segment $playlist_id), item_id: (encode-path-segment $item_id), new_index: (encode-path-segment $new_index)} | format pattern "/Playlists/{playlist_id}/Items/{item_id}/Move/{new_index}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
 }
 
 # Gets a list of currently installed plugins.
@@ -7935,7 +8153,7 @@ export def "plugins get" [
   let full_url = (build-url $base "/Plugins")
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
 }
 
 # Updates plugin security info.
@@ -7965,7 +8183,7 @@ export def "plugins-security-info update" [
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: {}, body: $req_body}
 }
 
 # Uninstalls a plugin.
@@ -7988,10 +8206,11 @@ export def "plugins delete-uninstall" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "x-emby-authorization"))
   let base = ($base_url | default $BASE_URL)
+  if ($plugin_id | is-empty) { error make --unspanned { msg: "path parameter 'pluginId' must be non-empty" } }
   let full_url = (build-url $base ({plugin_id: (encode-path-segment $plugin_id)} | format pattern "/Plugins/{plugin_id}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
 }
 
 # Gets plugin configuration.
@@ -8013,10 +8232,11 @@ export def "plugins-configuration get" [
 ]: nothing -> record {
   let auth = (build-auth $token ($auth_scheme | default "x-emby-authorization"))
   let base = ($base_url | default $BASE_URL)
+  if ($plugin_id | is-empty) { error make --unspanned { msg: "path parameter 'pluginId' must be non-empty" } }
   let full_url = (build-url $base ({plugin_id: (encode-path-segment $plugin_id)} | format pattern "/Plugins/{plugin_id}/Configuration"))
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
 }
 
 # Updates plugin configuration.
@@ -8037,10 +8257,11 @@ export def "plugins-configuration update" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "x-emby-authorization"))
   let base = ($base_url | default $BASE_URL)
+  if ($plugin_id | is-empty) { error make --unspanned { msg: "path parameter 'pluginId' must be non-empty" } }
   let full_url = (build-url $base ({plugin_id: (encode-path-segment $plugin_id)} | format pattern "/Plugins/{plugin_id}/Configuration"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
 }
 
 # Gets a plugin's manifest.
@@ -8061,10 +8282,11 @@ export def "plugins-manifest get" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "x-emby-authorization"))
   let base = ($base_url | default $BASE_URL)
+  if ($plugin_id | is-empty) { error make --unspanned { msg: "path parameter 'pluginId' must be non-empty" } }
   let full_url = (build-url $base ({plugin_id: (encode-path-segment $plugin_id)} | format pattern "/Plugins/{plugin_id}/Manifest"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
 }
 
 # Uninstalls a plugin by version.
@@ -8086,10 +8308,12 @@ export def "plugins version-uninstall" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "x-emby-authorization"))
   let base = ($base_url | default $BASE_URL)
+  if ($plugin_id | is-empty) { error make --unspanned { msg: "path parameter 'pluginId' must be non-empty" } }
+  if ($version | is-empty) { error make --unspanned { msg: "path parameter 'version' must be non-empty" } }
   let full_url = (build-url $base ({plugin_id: (encode-path-segment $plugin_id), version: (encode-path-segment $version)} | format pattern "/Plugins/{plugin_id}/{version}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
 }
 
 # Disable a plugin.
@@ -8111,10 +8335,12 @@ export def "plugins-disable disable" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "x-emby-authorization"))
   let base = ($base_url | default $BASE_URL)
+  if ($plugin_id | is-empty) { error make --unspanned { msg: "path parameter 'pluginId' must be non-empty" } }
+  if ($version | is-empty) { error make --unspanned { msg: "path parameter 'version' must be non-empty" } }
   let full_url = (build-url $base ({plugin_id: (encode-path-segment $plugin_id), version: (encode-path-segment $version)} | format pattern "/Plugins/{plugin_id}/{version}/Disable"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
 }
 
 # Enables a disabled plugin.
@@ -8136,10 +8362,12 @@ export def "plugins-enable enable" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "x-emby-authorization"))
   let base = ($base_url | default $BASE_URL)
+  if ($plugin_id | is-empty) { error make --unspanned { msg: "path parameter 'pluginId' must be non-empty" } }
+  if ($version | is-empty) { error make --unspanned { msg: "path parameter 'version' must be non-empty" } }
   let full_url = (build-url $base ({plugin_id: (encode-path-segment $plugin_id), version: (encode-path-segment $version)} | format pattern "/Plugins/{plugin_id}/{version}/Enable"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
 }
 
 # Gets a plugin's image.
@@ -8161,10 +8389,12 @@ export def "plugins-image get" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "x-emby-authorization"))
   let base = ($base_url | default $BASE_URL)
+  if ($plugin_id | is-empty) { error make --unspanned { msg: "path parameter 'pluginId' must be non-empty" } }
+  if ($version | is-empty) { error make --unspanned { msg: "path parameter 'version' must be non-empty" } }
   let full_url = (build-url $base ({plugin_id: (encode-path-segment $plugin_id), version: (encode-path-segment $version)} | format pattern "/Plugins/{plugin_id}/{version}/Image"))
   let accept_val = "image/*"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
 }
 
 # Gets the remote subtitles.
@@ -8185,10 +8415,11 @@ export def "providers-subtitles-subtitles get-remote" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "x-emby-authorization"))
   let base = ($base_url | default $BASE_URL)
+  if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
   let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/Providers/Subtitles/Subtitles/{id}"))
   let accept_val = "text/*"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
 }
 
 # Temporarily activates quick connect for five minutes.
@@ -8211,7 +8442,7 @@ export def "quick-connect-activate create" [
   let full_url = (build-url $base "/QuickConnect/Activate")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
 }
 
 # Authorizes a pending quick connect request.
@@ -8237,7 +8468,7 @@ export def "quick-connect-authorize create" [
   let full_url = (build-url $base "/QuickConnect/Authorize" $qp)
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"code": $code} | compact), body: null}
 }
 
 # Enables or disables quick connect.
@@ -8262,7 +8493,7 @@ export def "quick-connect-available create" [
   let full_url = (build-url $base "/QuickConnect/Available" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"status": $status} | compact), body: null}
 }
 
 # Attempts to retrieve authentication information.
@@ -8288,7 +8519,7 @@ export def "quick-connect-connect get" [
   let full_url = (build-url $base "/QuickConnect/Connect" $qp)
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"secret": $secret} | compact), body: null}
 }
 
 # Deauthorize all quick connect devices for the current user.
@@ -8312,7 +8543,7 @@ export def "quick-connect-deauthorize create" [
   let full_url = (build-url $base "/QuickConnect/Deauthorize")
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
 }
 
 # Initiate a new quick connect request.
@@ -8336,7 +8567,7 @@ export def "quick-connect-initiate get" [
   let full_url = (build-url $base "/QuickConnect/Initiate")
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
 }
 
 # Gets the current quick connect state.
@@ -8360,7 +8591,7 @@ export def "quick-connect-status get" [
   let full_url = (build-url $base "/QuickConnect/Status")
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
 }
 
 # Gets all package repositories.
@@ -8384,7 +8615,7 @@ export def "repositories get" [
   let full_url = (build-url $base "/Repositories")
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
 }
 
 # Sets the enabled and existing package repositories.
@@ -8411,7 +8642,7 @@ export def "repositories update" [
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else if (($input | is-not-empty) and ($req_body | is-empty)) { $input } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: {}, body: $req_body}
 }
 
 # Get tasks.
@@ -8438,7 +8669,7 @@ export def "scheduled-tasks list" [
   let full_url = (build-url $base "/ScheduledTasks" $qp)
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"isHidden": $is_hidden, "isEnabled": $is_enabled} | compact), body: null}
 }
 
 # Stop specified task.
@@ -8459,10 +8690,11 @@ export def "scheduled-tasks-running stop" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "x-emby-authorization"))
   let base = ($base_url | default $BASE_URL)
+  if ($task_id | is-empty) { error make --unspanned { msg: "path parameter 'taskId' must be non-empty" } }
   let full_url = (build-url $base ({task_id: (encode-path-segment $task_id)} | format pattern "/ScheduledTasks/Running/{task_id}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
 }
 
 # Start specified task.
@@ -8483,10 +8715,11 @@ export def "scheduled-tasks-running start" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "x-emby-authorization"))
   let base = ($base_url | default $BASE_URL)
+  if ($task_id | is-empty) { error make --unspanned { msg: "path parameter 'taskId' must be non-empty" } }
   let full_url = (build-url $base ({task_id: (encode-path-segment $task_id)} | format pattern "/ScheduledTasks/Running/{task_id}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
 }
 
 # Get task by id.
@@ -8508,10 +8741,11 @@ export def "scheduled-tasks get" [
 ]: nothing -> record<Category: string, CurrentProgressPercentage: float, Description: string, Id: string, IsHidden: bool, Key: string, LastExecutionResult: record<EndTimeUtc: string, ErrorMessage: string, Id: string, Key: string, LongErrorMessage: string, Name: string, StartTimeUtc: string, Status: string>, Name: string, State: string, Triggers: table<DayOfWeek: string, IntervalTicks: int, MaxRuntimeTicks: int, TimeOfDayTicks: int, Type: string>> {
   let auth = (build-auth $token ($auth_scheme | default "x-emby-authorization"))
   let base = ($base_url | default $BASE_URL)
+  if ($task_id | is-empty) { error make --unspanned { msg: "path parameter 'taskId' must be non-empty" } }
   let full_url = (build-url $base ({task_id: (encode-path-segment $task_id)} | format pattern "/ScheduledTasks/{task_id}"))
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
 }
 
 # Update specified task triggers.
@@ -8534,12 +8768,13 @@ export def "scheduled-tasks-triggers update" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "x-emby-authorization"))
   let base = ($base_url | default $BASE_URL)
+  if ($task_id | is-empty) { error make --unspanned { msg: "path parameter 'taskId' must be non-empty" } }
   let full_url = (build-url $base ({task_id: (encode-path-segment $task_id)} | format pattern "/ScheduledTasks/{task_id}/Triggers"))
   let req_body = $body
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else if (($input | is-not-empty) and ($req_body | is-empty)) { $input } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: {}, body: $req_body}
 }
 
 # Gets the search hint result.
@@ -8582,7 +8817,7 @@ export def "search-hints get" [
   let full_url = (build-url $base "/Search/Hints" $qp)
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"startIndex": $start_index, "limit": $limit, "userId": $user_id, "searchTerm": $search_term, "includeItemTypes": $include_item_types, "excludeItemTypes": $exclude_item_types, "mediaTypes": $media_types, "parentId": $parent_id, "isMovie": $is_movie, "isSeries": $is_series, "isNews": $is_news, "isKids": $is_kids, "isSports": $is_sports, "includePeople": $include_people, "includeMedia": $include_media, "includeGenres": $include_genres, "includeStudios": $include_studios, "includeArtists": $include_artists} | compact), body: null}
 }
 
 # Gets a list of sessions.
@@ -8610,7 +8845,7 @@ export def "sessions get" [
   let full_url = (build-url $base "/Sessions" $qp)
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"controllableByUserId": $controllable_by_user_id, "deviceId": $device_id, "activeWithinSeconds": $active_within_seconds} | compact), body: null}
 }
 
 # Updates capabilities for a device.
@@ -8640,7 +8875,7 @@ export def "sessions-capabilities create" [
   let full_url = (build-url $base "/Sessions/Capabilities" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"id": $id, "playableMediaTypes": $playable_media_types, "supportedCommands": $supported_commands, "supportsMediaControl": $supports_media_control, "supportsSync": $supports_sync, "supportsPersistentIdentifier": $supports_persistent_identifier} | compact), body: null}
 }
 
 # Updates capabilities for a device.
@@ -8679,7 +8914,7 @@ export def "sessions-capabilities-full create" [
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: ({"id": $id} | compact), body: $req_body}
 }
 
 # Reports that a session has ended.
@@ -8702,7 +8937,7 @@ export def "sessions-logout create-report-ended" [
   let full_url = (build-url $base "/Sessions/Logout")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
 }
 
 # Reports playback has started within a session.
@@ -8750,7 +8985,7 @@ export def "sessions-playing start-report-playback" [
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: {}, body: $req_body}
 }
 
 # Pings a playback session.
@@ -8775,7 +9010,7 @@ export def "sessions-playing-ping ping-playback" [
   let full_url = (build-url $base "/Sessions/Playing/Ping" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"playSessionId": $play_session_id} | compact), body: null}
 }
 
 # Reports playback progress within a session.
@@ -8823,7 +9058,7 @@ export def "sessions-playing-progress create-report-playback" [
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: {}, body: $req_body}
 }
 
 # Reports playback has stopped within a session.
@@ -8862,7 +9097,7 @@ export def "sessions-playing-stopped create-report-playback" [
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: {}, body: $req_body}
 }
 
 # Reports that a session is viewing an item.
@@ -8888,7 +9123,7 @@ export def "sessions-viewing create-report" [
   let full_url = (build-url $base "/Sessions/Viewing" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"sessionId": $session_id, "itemId": $item_id} | compact), body: null}
 }
 
 # Issues a full general command to a client.
@@ -8913,12 +9148,13 @@ export def "sessions-command send-full-general" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "x-emby-authorization"))
   let base = ($base_url | default $BASE_URL)
+  if ($session_id | is-empty) { error make --unspanned { msg: "path parameter 'sessionId' must be non-empty" } }
   let full_url = (build-url $base ({session_id: (encode-path-segment $session_id)} | format pattern "/Sessions/{session_id}/Command"))
   let req_body = {"Arguments": $arguments, "ControllingUserId": $controlling_user_id, "Name": $name} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: {}, body: $req_body}
 }
 
 # Issues a general command to a client.
@@ -8940,10 +9176,12 @@ export def "sessions-command send-general" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "x-emby-authorization"))
   let base = ($base_url | default $BASE_URL)
+  if ($session_id | is-empty) { error make --unspanned { msg: "path parameter 'sessionId' must be non-empty" } }
+  if ($command | is-empty) { error make --unspanned { msg: "path parameter 'command' must be non-empty" } }
   let full_url = (build-url $base ({session_id: (encode-path-segment $session_id), command: (encode-path-segment $command)} | format pattern "/Sessions/{session_id}/Command/{command}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
 }
 
 # Issues a command to a client to display a message to the user.
@@ -8967,11 +9205,12 @@ export def "sessions-message send-command" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "x-emby-authorization"))
   let base = ($base_url | default $BASE_URL)
+  if ($session_id | is-empty) { error make --unspanned { msg: "path parameter 'sessionId' must be non-empty" } }
   let qp = [(serialize-qp "text" $text "scalar") (serialize-qp "header" $header "scalar") (serialize-qp "timeoutMs" $timeout_ms "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({session_id: (encode-path-segment $session_id)} | format pattern "/Sessions/{session_id}/Message") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"text": $text, "header": $header, "timeoutMs": $timeout_ms} | compact), body: null}
 }
 
 # Instructs a session to play an item.
@@ -8995,11 +9234,12 @@ export def "sessions-playing create-play" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "x-emby-authorization"))
   let base = ($base_url | default $BASE_URL)
+  if ($session_id | is-empty) { error make --unspanned { msg: "path parameter 'sessionId' must be non-empty" } }
   let qp = [(serialize-qp "playCommand" $play_command "scalar") (serialize-qp "itemIds" $item_ids "multi") (serialize-qp "startPositionTicks" $start_position_ticks "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({session_id: (encode-path-segment $session_id)} | format pattern "/Sessions/{session_id}/Playing") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"playCommand": $play_command, "itemIds": $item_ids, "startPositionTicks": $start_position_ticks} | compact), body: null}
 }
 
 # Issues a playstate command to a client.
@@ -9023,11 +9263,13 @@ export def "sessions-playing send-playstate" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "x-emby-authorization"))
   let base = ($base_url | default $BASE_URL)
+  if ($session_id | is-empty) { error make --unspanned { msg: "path parameter 'sessionId' must be non-empty" } }
+  if ($command | is-empty) { error make --unspanned { msg: "path parameter 'command' must be non-empty" } }
   let qp = [(serialize-qp "seekPositionTicks" $seek_position_ticks "scalar") (serialize-qp "controllingUserId" $controlling_user_id "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({session_id: (encode-path-segment $session_id), command: (encode-path-segment $command)} | format pattern "/Sessions/{session_id}/Playing/{command}") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"seekPositionTicks": $seek_position_ticks, "controllingUserId": $controlling_user_id} | compact), body: null}
 }
 
 # Issues a system command to a client.
@@ -9049,10 +9291,12 @@ export def "sessions-system send" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "x-emby-authorization"))
   let base = ($base_url | default $BASE_URL)
+  if ($session_id | is-empty) { error make --unspanned { msg: "path parameter 'sessionId' must be non-empty" } }
+  if ($command | is-empty) { error make --unspanned { msg: "path parameter 'command' must be non-empty" } }
   let full_url = (build-url $base ({session_id: (encode-path-segment $session_id), command: (encode-path-segment $command)} | format pattern "/Sessions/{session_id}/System/{command}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
 }
 
 # Removes an additional user from a session.
@@ -9074,10 +9318,12 @@ export def "sessions-user delete" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "x-emby-authorization"))
   let base = ($base_url | default $BASE_URL)
+  if ($session_id | is-empty) { error make --unspanned { msg: "path parameter 'sessionId' must be non-empty" } }
+  if ($user_id | is-empty) { error make --unspanned { msg: "path parameter 'userId' must be non-empty" } }
   let full_url = (build-url $base ({session_id: (encode-path-segment $session_id), user_id: (encode-path-segment $user_id)} | format pattern "/Sessions/{session_id}/User/{user_id}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
 }
 
 # Adds an additional user to a session.
@@ -9099,10 +9345,12 @@ export def "sessions-user create" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "x-emby-authorization"))
   let base = ($base_url | default $BASE_URL)
+  if ($session_id | is-empty) { error make --unspanned { msg: "path parameter 'sessionId' must be non-empty" } }
+  if ($user_id | is-empty) { error make --unspanned { msg: "path parameter 'userId' must be non-empty" } }
   let full_url = (build-url $base ({session_id: (encode-path-segment $session_id), user_id: (encode-path-segment $user_id)} | format pattern "/Sessions/{session_id}/User/{user_id}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
 }
 
 # Instructs a session to browse to an item or view.
@@ -9126,11 +9374,12 @@ export def "sessions-viewing create-display-content" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "x-emby-authorization"))
   let base = ($base_url | default $BASE_URL)
+  if ($session_id | is-empty) { error make --unspanned { msg: "path parameter 'sessionId' must be non-empty" } }
   let qp = [(serialize-qp "itemType" $item_type "scalar") (serialize-qp "itemId" $item_id "scalar") (serialize-qp "itemName" $item_name "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({session_id: (encode-path-segment $session_id)} | format pattern "/Sessions/{session_id}/Viewing") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"itemType": $item_type, "itemId": $item_id, "itemName": $item_name} | compact), body: null}
 }
 
 # Gets a list of next up episodes.
@@ -9166,7 +9415,7 @@ export def "shows-next-up get" [
   let full_url = (build-url $base "/Shows/NextUp" $qp)
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"userId": $user_id, "startIndex": $start_index, "limit": $limit, "fields": $fields, "seriesId": $series_id, "parentId": $parent_id, "enableImges": $enable_imges, "imageTypeLimit": $image_type_limit, "enableImageTypes": $enable_image_types, "enableUserData": $enable_user_data, "enableTotalRecordCount": $enable_total_record_count} | compact), body: null}
 }
 
 # Gets a list of upcoming episodes.
@@ -9200,7 +9449,7 @@ export def "shows-upcoming get-episodes" [
   let full_url = (build-url $base "/Shows/Upcoming" $qp)
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"userId": $user_id, "startIndex": $start_index, "limit": $limit, "fields": $fields, "parentId": $parent_id, "enableImges": $enable_imges, "imageTypeLimit": $image_type_limit, "enableImageTypes": $enable_image_types, "enableUserData": $enable_user_data} | compact), body: null}
 }
 
 # Gets similar items.
@@ -9226,11 +9475,12 @@ export def "shows-similar get" [
 ]: nothing -> record<Items: table<AirDays: list, AirTime: string, AirsAfterSeasonNumber: int, AirsBeforeEpisodeNumber: int, AirsBeforeSeasonNumber: int, Album: string, AlbumArtist: string, AlbumArtists: list, AlbumCount: int, AlbumId: string, AlbumPrimaryImageTag: string, Altitude: float, Aperture: float, ArtistCount: int, ArtistItems: list, Artists: list, AspectRatio: string, Audio: string, BackdropImageTags: list, CameraMake: string, CameraModel: string, CanDelete: bool, CanDownload: bool, ChannelId: string, ChannelName: string, ChannelNumber: string, ChannelPrimaryImageTag: string, ChannelType: string, Chapters: list, ChildCount: int, CollectionType: string, CommunityRating: float, CompletionPercentage: float, Container: string, CriticRating: float, CumulativeRunTimeTicks: int, CurrentProgram: any, CustomRating: string, DateCreated: string, DateLastMediaAdded: string, DisplayOrder: string, DisplayPreferencesId: string, EnableMediaSourceDisplay: bool, EndDate: string, EpisodeCount: int, EpisodeTitle: string, Etag: string, ExposureTime: float, ExternalUrls: list, ExtraType: string, FocalLength: float, ForcedSortName: string, GenreItems: list, Genres: list, HasSubtitles: bool, Height: int, Id: string, ImageBlurHashes: record, ImageOrientation: string, ImageTags: record, IndexNumber: int, IndexNumberEnd: int, IsFolder: bool, IsHD: bool, IsKids: bool, IsLive: bool, IsMovie: bool, IsNews: bool, IsPlaceHolder: bool, IsPremiere: bool, IsRepeat: bool, IsSeries: bool, IsSports: bool, IsoSpeedRating: int, IsoType: string, Latitude: float, LocalTrailerCount: int, LocationType: string, LockData: bool, LockedFields: list, Longitude: float, MediaSourceCount: int, MediaSources: list, MediaStreams: list, MediaType: string, MovieCount: int, MusicVideoCount: int, Name: string, Number: string, OfficialRating: string, OriginalTitle: string, Overview: string, ParentArtImageTag: string, ParentArtItemId: string, ParentBackdropImageTags: list, ParentBackdropItemId: string, ParentId: string, ParentIndexNumber: int, ParentLogoImageTag: string, ParentLogoItemId: string, ParentPrimaryImageItemId: string, ParentPrimaryImageTag: string, ParentThumbImageTag: string, ParentThumbItemId: string, PartCount: int, Path: string, People: list, PlayAccess: string, PlaylistItemId: string, PreferredMetadataCountryCode: string, PreferredMetadataLanguage: string, PremiereDate: string, PrimaryImageAspectRatio: float, ProductionLocations: list, ProductionYear: int, ProgramCount: int, ProgramId: string, ProviderIds: record, RecursiveItemCount: int, RemoteTrailers: list, RunTimeTicks: int, ScreenshotImageTags: list, SeasonId: string, SeasonName: string, SeriesCount: int, SeriesId: string, SeriesName: string, SeriesPrimaryImageTag: string, SeriesStudio: string, SeriesThumbImageTag: string, SeriesTimerId: string, ServerId: string, ShutterSpeed: float, Software: string, SongCount: int, SortName: string, SourceType: string, SpecialFeatureCount: int, StartDate: string, Status: string, Studios: list, SupportsSync: bool, Taglines: list, Tags: list, TimerId: string, TrailerCount: int, Type: string, UserData: record, Video3DFormat: string, VideoType: string, Width: int>, StartIndex: int, TotalRecordCount: int> {
   let auth = (build-auth $token ($auth_scheme | default "x-emby-authorization"))
   let base = ($base_url | default $BASE_URL)
+  if ($item_id | is-empty) { error make --unspanned { msg: "path parameter 'itemId' must be non-empty" } }
   let qp = [(serialize-qp "excludeArtistIds" $exclude_artist_ids "multi") (serialize-qp "userId" $user_id "scalar") (serialize-qp "limit" $limit "scalar") (serialize-qp "fields" $fields "multi")] | flatten | str join "&"
   let full_url = (build-url $base ({item_id: (encode-path-segment $item_id)} | format pattern "/Shows/{item_id}/Similar") $qp)
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"excludeArtistIds": $exclude_artist_ids, "userId": $user_id, "limit": $limit, "fields": $fields} | compact), body: null}
 }
 
 # Gets episodes for a tv season.
@@ -9266,11 +9516,12 @@ export def "shows-episodes get" [
 ]: nothing -> record<Items: table<AirDays: list, AirTime: string, AirsAfterSeasonNumber: int, AirsBeforeEpisodeNumber: int, AirsBeforeSeasonNumber: int, Album: string, AlbumArtist: string, AlbumArtists: list, AlbumCount: int, AlbumId: string, AlbumPrimaryImageTag: string, Altitude: float, Aperture: float, ArtistCount: int, ArtistItems: list, Artists: list, AspectRatio: string, Audio: string, BackdropImageTags: list, CameraMake: string, CameraModel: string, CanDelete: bool, CanDownload: bool, ChannelId: string, ChannelName: string, ChannelNumber: string, ChannelPrimaryImageTag: string, ChannelType: string, Chapters: list, ChildCount: int, CollectionType: string, CommunityRating: float, CompletionPercentage: float, Container: string, CriticRating: float, CumulativeRunTimeTicks: int, CurrentProgram: any, CustomRating: string, DateCreated: string, DateLastMediaAdded: string, DisplayOrder: string, DisplayPreferencesId: string, EnableMediaSourceDisplay: bool, EndDate: string, EpisodeCount: int, EpisodeTitle: string, Etag: string, ExposureTime: float, ExternalUrls: list, ExtraType: string, FocalLength: float, ForcedSortName: string, GenreItems: list, Genres: list, HasSubtitles: bool, Height: int, Id: string, ImageBlurHashes: record, ImageOrientation: string, ImageTags: record, IndexNumber: int, IndexNumberEnd: int, IsFolder: bool, IsHD: bool, IsKids: bool, IsLive: bool, IsMovie: bool, IsNews: bool, IsPlaceHolder: bool, IsPremiere: bool, IsRepeat: bool, IsSeries: bool, IsSports: bool, IsoSpeedRating: int, IsoType: string, Latitude: float, LocalTrailerCount: int, LocationType: string, LockData: bool, LockedFields: list, Longitude: float, MediaSourceCount: int, MediaSources: list, MediaStreams: list, MediaType: string, MovieCount: int, MusicVideoCount: int, Name: string, Number: string, OfficialRating: string, OriginalTitle: string, Overview: string, ParentArtImageTag: string, ParentArtItemId: string, ParentBackdropImageTags: list, ParentBackdropItemId: string, ParentId: string, ParentIndexNumber: int, ParentLogoImageTag: string, ParentLogoItemId: string, ParentPrimaryImageItemId: string, ParentPrimaryImageTag: string, ParentThumbImageTag: string, ParentThumbItemId: string, PartCount: int, Path: string, People: list, PlayAccess: string, PlaylistItemId: string, PreferredMetadataCountryCode: string, PreferredMetadataLanguage: string, PremiereDate: string, PrimaryImageAspectRatio: float, ProductionLocations: list, ProductionYear: int, ProgramCount: int, ProgramId: string, ProviderIds: record, RecursiveItemCount: int, RemoteTrailers: list, RunTimeTicks: int, ScreenshotImageTags: list, SeasonId: string, SeasonName: string, SeriesCount: int, SeriesId: string, SeriesName: string, SeriesPrimaryImageTag: string, SeriesStudio: string, SeriesThumbImageTag: string, SeriesTimerId: string, ServerId: string, ShutterSpeed: float, Software: string, SongCount: int, SortName: string, SourceType: string, SpecialFeatureCount: int, StartDate: string, Status: string, Studios: list, SupportsSync: bool, Taglines: list, Tags: list, TimerId: string, TrailerCount: int, Type: string, UserData: record, Video3DFormat: string, VideoType: string, Width: int>, StartIndex: int, TotalRecordCount: int> {
   let auth = (build-auth $token ($auth_scheme | default "x-emby-authorization"))
   let base = ($base_url | default $BASE_URL)
+  if ($series_id | is-empty) { error make --unspanned { msg: "path parameter 'seriesId' must be non-empty" } }
   let qp = [(serialize-qp "userId" $user_id "scalar") (serialize-qp "fields" $fields "multi") (serialize-qp "season" $season "scalar") (serialize-qp "seasonId" $season_id "scalar") (serialize-qp "isMissing" $is_missing "scalar") (serialize-qp "adjacentTo" $adjacent_to "scalar") (serialize-qp "startItemId" $start_item_id "scalar") (serialize-qp "startIndex" $start_index "scalar") (serialize-qp "limit" $limit "scalar") (serialize-qp "enableImages" $enable_images "scalar") (serialize-qp "imageTypeLimit" $image_type_limit "scalar") (serialize-qp "enableImageTypes" $enable_image_types "multi") (serialize-qp "enableUserData" $enable_user_data "scalar") (serialize-qp "sortBy" $sort_by "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({series_id: (encode-path-segment $series_id)} | format pattern "/Shows/{series_id}/Episodes") $qp)
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"userId": $user_id, "fields": $fields, "season": $season, "seasonId": $season_id, "isMissing": $is_missing, "adjacentTo": $adjacent_to, "startItemId": $start_item_id, "startIndex": $start_index, "limit": $limit, "enableImages": $enable_images, "imageTypeLimit": $image_type_limit, "enableImageTypes": $enable_image_types, "enableUserData": $enable_user_data, "sortBy": $sort_by} | compact), body: null}
 }
 
 # Gets seasons for a tv series.
@@ -9301,11 +9552,12 @@ export def "shows-seasons get" [
 ]: nothing -> record<Items: table<AirDays: list, AirTime: string, AirsAfterSeasonNumber: int, AirsBeforeEpisodeNumber: int, AirsBeforeSeasonNumber: int, Album: string, AlbumArtist: string, AlbumArtists: list, AlbumCount: int, AlbumId: string, AlbumPrimaryImageTag: string, Altitude: float, Aperture: float, ArtistCount: int, ArtistItems: list, Artists: list, AspectRatio: string, Audio: string, BackdropImageTags: list, CameraMake: string, CameraModel: string, CanDelete: bool, CanDownload: bool, ChannelId: string, ChannelName: string, ChannelNumber: string, ChannelPrimaryImageTag: string, ChannelType: string, Chapters: list, ChildCount: int, CollectionType: string, CommunityRating: float, CompletionPercentage: float, Container: string, CriticRating: float, CumulativeRunTimeTicks: int, CurrentProgram: any, CustomRating: string, DateCreated: string, DateLastMediaAdded: string, DisplayOrder: string, DisplayPreferencesId: string, EnableMediaSourceDisplay: bool, EndDate: string, EpisodeCount: int, EpisodeTitle: string, Etag: string, ExposureTime: float, ExternalUrls: list, ExtraType: string, FocalLength: float, ForcedSortName: string, GenreItems: list, Genres: list, HasSubtitles: bool, Height: int, Id: string, ImageBlurHashes: record, ImageOrientation: string, ImageTags: record, IndexNumber: int, IndexNumberEnd: int, IsFolder: bool, IsHD: bool, IsKids: bool, IsLive: bool, IsMovie: bool, IsNews: bool, IsPlaceHolder: bool, IsPremiere: bool, IsRepeat: bool, IsSeries: bool, IsSports: bool, IsoSpeedRating: int, IsoType: string, Latitude: float, LocalTrailerCount: int, LocationType: string, LockData: bool, LockedFields: list, Longitude: float, MediaSourceCount: int, MediaSources: list, MediaStreams: list, MediaType: string, MovieCount: int, MusicVideoCount: int, Name: string, Number: string, OfficialRating: string, OriginalTitle: string, Overview: string, ParentArtImageTag: string, ParentArtItemId: string, ParentBackdropImageTags: list, ParentBackdropItemId: string, ParentId: string, ParentIndexNumber: int, ParentLogoImageTag: string, ParentLogoItemId: string, ParentPrimaryImageItemId: string, ParentPrimaryImageTag: string, ParentThumbImageTag: string, ParentThumbItemId: string, PartCount: int, Path: string, People: list, PlayAccess: string, PlaylistItemId: string, PreferredMetadataCountryCode: string, PreferredMetadataLanguage: string, PremiereDate: string, PrimaryImageAspectRatio: float, ProductionLocations: list, ProductionYear: int, ProgramCount: int, ProgramId: string, ProviderIds: record, RecursiveItemCount: int, RemoteTrailers: list, RunTimeTicks: int, ScreenshotImageTags: list, SeasonId: string, SeasonName: string, SeriesCount: int, SeriesId: string, SeriesName: string, SeriesPrimaryImageTag: string, SeriesStudio: string, SeriesThumbImageTag: string, SeriesTimerId: string, ServerId: string, ShutterSpeed: float, Software: string, SongCount: int, SortName: string, SourceType: string, SpecialFeatureCount: int, StartDate: string, Status: string, Studios: list, SupportsSync: bool, Taglines: list, Tags: list, TimerId: string, TrailerCount: int, Type: string, UserData: record, Video3DFormat: string, VideoType: string, Width: int>, StartIndex: int, TotalRecordCount: int> {
   let auth = (build-auth $token ($auth_scheme | default "x-emby-authorization"))
   let base = ($base_url | default $BASE_URL)
+  if ($series_id | is-empty) { error make --unspanned { msg: "path parameter 'seriesId' must be non-empty" } }
   let qp = [(serialize-qp "userId" $user_id "scalar") (serialize-qp "fields" $fields "multi") (serialize-qp "isSpecialSeason" $is_special_season "scalar") (serialize-qp "isMissing" $is_missing "scalar") (serialize-qp "adjacentTo" $adjacent_to "scalar") (serialize-qp "enableImages" $enable_images "scalar") (serialize-qp "imageTypeLimit" $image_type_limit "scalar") (serialize-qp "enableImageTypes" $enable_image_types "multi") (serialize-qp "enableUserData" $enable_user_data "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({series_id: (encode-path-segment $series_id)} | format pattern "/Shows/{series_id}/Seasons") $qp)
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"userId": $user_id, "fields": $fields, "isSpecialSeason": $is_special_season, "isMissing": $is_missing, "adjacentTo": $adjacent_to, "enableImages": $enable_images, "imageTypeLimit": $image_type_limit, "enableImageTypes": $enable_image_types, "enableUserData": $enable_user_data} | compact), body: null}
 }
 
 # Creates an instant playlist based on a given song.
@@ -9334,11 +9586,12 @@ export def "songs-instant-mix get" [
 ]: nothing -> record<Items: table<AirDays: list, AirTime: string, AirsAfterSeasonNumber: int, AirsBeforeEpisodeNumber: int, AirsBeforeSeasonNumber: int, Album: string, AlbumArtist: string, AlbumArtists: list, AlbumCount: int, AlbumId: string, AlbumPrimaryImageTag: string, Altitude: float, Aperture: float, ArtistCount: int, ArtistItems: list, Artists: list, AspectRatio: string, Audio: string, BackdropImageTags: list, CameraMake: string, CameraModel: string, CanDelete: bool, CanDownload: bool, ChannelId: string, ChannelName: string, ChannelNumber: string, ChannelPrimaryImageTag: string, ChannelType: string, Chapters: list, ChildCount: int, CollectionType: string, CommunityRating: float, CompletionPercentage: float, Container: string, CriticRating: float, CumulativeRunTimeTicks: int, CurrentProgram: any, CustomRating: string, DateCreated: string, DateLastMediaAdded: string, DisplayOrder: string, DisplayPreferencesId: string, EnableMediaSourceDisplay: bool, EndDate: string, EpisodeCount: int, EpisodeTitle: string, Etag: string, ExposureTime: float, ExternalUrls: list, ExtraType: string, FocalLength: float, ForcedSortName: string, GenreItems: list, Genres: list, HasSubtitles: bool, Height: int, Id: string, ImageBlurHashes: record, ImageOrientation: string, ImageTags: record, IndexNumber: int, IndexNumberEnd: int, IsFolder: bool, IsHD: bool, IsKids: bool, IsLive: bool, IsMovie: bool, IsNews: bool, IsPlaceHolder: bool, IsPremiere: bool, IsRepeat: bool, IsSeries: bool, IsSports: bool, IsoSpeedRating: int, IsoType: string, Latitude: float, LocalTrailerCount: int, LocationType: string, LockData: bool, LockedFields: list, Longitude: float, MediaSourceCount: int, MediaSources: list, MediaStreams: list, MediaType: string, MovieCount: int, MusicVideoCount: int, Name: string, Number: string, OfficialRating: string, OriginalTitle: string, Overview: string, ParentArtImageTag: string, ParentArtItemId: string, ParentBackdropImageTags: list, ParentBackdropItemId: string, ParentId: string, ParentIndexNumber: int, ParentLogoImageTag: string, ParentLogoItemId: string, ParentPrimaryImageItemId: string, ParentPrimaryImageTag: string, ParentThumbImageTag: string, ParentThumbItemId: string, PartCount: int, Path: string, People: list, PlayAccess: string, PlaylistItemId: string, PreferredMetadataCountryCode: string, PreferredMetadataLanguage: string, PremiereDate: string, PrimaryImageAspectRatio: float, ProductionLocations: list, ProductionYear: int, ProgramCount: int, ProgramId: string, ProviderIds: record, RecursiveItemCount: int, RemoteTrailers: list, RunTimeTicks: int, ScreenshotImageTags: list, SeasonId: string, SeasonName: string, SeriesCount: int, SeriesId: string, SeriesName: string, SeriesPrimaryImageTag: string, SeriesStudio: string, SeriesThumbImageTag: string, SeriesTimerId: string, ServerId: string, ShutterSpeed: float, Software: string, SongCount: int, SortName: string, SourceType: string, SpecialFeatureCount: int, StartDate: string, Status: string, Studios: list, SupportsSync: bool, Taglines: list, Tags: list, TimerId: string, TrailerCount: int, Type: string, UserData: record, Video3DFormat: string, VideoType: string, Width: int>, StartIndex: int, TotalRecordCount: int> {
   let auth = (build-auth $token ($auth_scheme | default "x-emby-authorization"))
   let base = ($base_url | default $BASE_URL)
+  if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
   let qp = [(serialize-qp "userId" $user_id "scalar") (serialize-qp "limit" $limit "scalar") (serialize-qp "fields" $fields "multi") (serialize-qp "enableImages" $enable_images "scalar") (serialize-qp "enableUserData" $enable_user_data "scalar") (serialize-qp "imageTypeLimit" $image_type_limit "scalar") (serialize-qp "enableImageTypes" $enable_image_types "multi")] | flatten | str join "&"
   let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/Songs/{id}/InstantMix") $qp)
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"userId": $user_id, "limit": $limit, "fields": $fields, "enableImages": $enable_images, "enableUserData": $enable_user_data, "imageTypeLimit": $image_type_limit, "enableImageTypes": $enable_image_types} | compact), body: null}
 }
 
 # Completes the startup wizard.
@@ -9361,7 +9614,7 @@ export def "startup-complete complete-wizard" [
   let full_url = (build-url $base "/Startup/Complete")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
 }
 
 # Gets the initial startup wizard configuration.
@@ -9385,7 +9638,7 @@ export def "startup-configuration get" [
   let full_url = (build-url $base "/Startup/Configuration")
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
 }
 
 # Sets the initial startup wizard configuration.
@@ -9414,14 +9667,14 @@ export def "startup-configuration update-initial" [
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: {}, body: $req_body}
 }
 
 # Gets the first user.
 #
 # GET /Startup/FirstUser
 # operationId: GetFirstUser_2
-export def "startup-first-user get-by-" [
+export def "startup-first-user get" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -9438,7 +9691,7 @@ export def "startup-first-user get-by-" [
   let full_url = (build-url $base "/Startup/FirstUser")
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
 }
 
 # Sets remote access and UPnP.
@@ -9466,7 +9719,7 @@ export def "startup-remote-access update" [
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: {}, body: $req_body}
 }
 
 # Gets the first user.
@@ -9490,7 +9743,7 @@ export def "startup-user get-first" [
   let full_url = (build-url $base "/Startup/User")
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
 }
 
 # Sets the user name and password.
@@ -9518,7 +9771,7 @@ export def "startup-user update" [
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: {}, body: $req_body}
 }
 
 # Gets all studios from a given item, folder, or the entire library.
@@ -9560,7 +9813,7 @@ export def "studios list" [
   let full_url = (build-url $base "/Studios" $qp)
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"startIndex": $start_index, "limit": $limit, "searchTerm": $search_term, "parentId": $parent_id, "fields": $fields, "excludeItemTypes": $exclude_item_types, "includeItemTypes": $include_item_types, "isFavorite": $is_favorite, "enableUserData": $enable_user_data, "imageTypeLimit": $image_type_limit, "enableImageTypes": $enable_image_types, "userId": $user_id, "nameStartsWithOrGreater": $name_starts_with_or_greater, "nameStartsWith": $name_starts_with, "nameLessThan": $name_less_than, "enableImages": $enable_images, "enableTotalRecordCount": $enable_total_record_count} | compact), body: null}
 }
 
 # Gets a studio by name.
@@ -9583,11 +9836,12 @@ export def "studios get" [
 ]: nothing -> record<AirDays: list<string>, AirTime: string, AirsAfterSeasonNumber: int, AirsBeforeEpisodeNumber: int, AirsBeforeSeasonNumber: int, Album: string, AlbumArtist: string, AlbumArtists: table<Id: string, Name: string>, AlbumCount: int, AlbumId: string, AlbumPrimaryImageTag: string, Altitude: float, Aperture: float, ArtistCount: int, ArtistItems: table<Id: string, Name: string>, Artists: list<string>, AspectRatio: string, Audio: string, BackdropImageTags: list<string>, CameraMake: string, CameraModel: string, CanDelete: bool, CanDownload: bool, ChannelId: string, ChannelName: string, ChannelNumber: string, ChannelPrimaryImageTag: string, ChannelType: string, Chapters: table<ImageDateModified: string, ImagePath: string, ImageTag: string, Name: string, StartPositionTicks: int>, ChildCount: int, CollectionType: string, CommunityRating: float, CompletionPercentage: float, Container: string, CriticRating: float, CumulativeRunTimeTicks: int, CurrentProgram: any, CustomRating: string, DateCreated: string, DateLastMediaAdded: string, DisplayOrder: string, DisplayPreferencesId: string, EnableMediaSourceDisplay: bool, EndDate: string, EpisodeCount: int, EpisodeTitle: string, Etag: string, ExposureTime: float, ExternalUrls: table<Name: string, Url: string>, ExtraType: string, FocalLength: float, ForcedSortName: string, GenreItems: table<Id: string, Name: string>, Genres: list<string>, HasSubtitles: bool, Height: int, Id: string, ImageBlurHashes: record<Art: record, Backdrop: record, Banner: record, Box: record, BoxRear: record, Chapter: record, Disc: record, Logo: record, Menu: record, Primary: record, Profile: record, Screenshot: record, Thumb: record>, ImageOrientation: string, ImageTags: record, IndexNumber: int, IndexNumberEnd: int, IsFolder: bool, IsHD: bool, IsKids: bool, IsLive: bool, IsMovie: bool, IsNews: bool, IsPlaceHolder: bool, IsPremiere: bool, IsRepeat: bool, IsSeries: bool, IsSports: bool, IsoSpeedRating: int, IsoType: string, Latitude: float, LocalTrailerCount: int, LocationType: string, LockData: bool, LockedFields: list<string>, Longitude: float, MediaSourceCount: int, MediaSources: table<AnalyzeDurationMs: int, Bitrate: int, BufferMs: int, Container: string, DefaultAudioStreamIndex: int, DefaultSubtitleStreamIndex: int, ETag: string, EncoderPath: string, EncoderProtocol: string, Formats: list, GenPtsInput: bool, Id: string, IgnoreDts: bool, IgnoreIndex: bool, IsInfiniteStream: bool, IsRemote: bool, IsoType: string, LiveStreamId: string, MediaAttachments: list, MediaStreams: list, Name: string, OpenToken: string, Path: string, Protocol: string, ReadAtNativeFramerate: bool, RequiredHttpHeaders: record, RequiresClosing: bool, RequiresLooping: bool, RequiresOpening: bool, RunTimeTicks: int, Size: int, SupportsDirectPlay: bool, SupportsDirectStream: bool, SupportsProbing: bool, SupportsTranscoding: bool, Timestamp: string, TranscodingContainer: string, TranscodingSubProtocol: string, TranscodingUrl: string, Type: string, Video3DFormat: string, VideoType: string>, MediaStreams: table<AspectRatio: string, AverageFrameRate: float, BitDepth: int, BitRate: int, ChannelLayout: string, Channels: int, Codec: string, CodecTag: string, CodecTimeBase: string, ColorPrimaries: string, ColorRange: string, ColorSpace: string, ColorTransfer: string, Comment: string, DeliveryMethod: string, DeliveryUrl: string, DisplayTitle: string, Height: int, Index: int, IsAVC: bool, IsAnamorphic: bool, IsDefault: bool, IsExternal: bool, IsExternalUrl: bool, IsForced: bool, IsInterlaced: bool, IsTextSubtitleStream: bool, Language: string, Level: float, NalLengthSize: string, PacketLength: int, Path: string, PixelFormat: string, Profile: string, RealFrameRate: float, RefFrames: int, SampleRate: int, Score: int, SupportsExternalStream: bool, TimeBase: string, Title: string, Type: string, VideoRange: string, Width: int, localizedDefault: string, localizedForced: string, localizedUndefined: string>, MediaType: string, MovieCount: int, MusicVideoCount: int, Name: string, Number: string, OfficialRating: string, OriginalTitle: string, Overview: string, ParentArtImageTag: string, ParentArtItemId: string, ParentBackdropImageTags: list<string>, ParentBackdropItemId: string, ParentId: string, ParentIndexNumber: int, ParentLogoImageTag: string, ParentLogoItemId: string, ParentPrimaryImageItemId: string, ParentPrimaryImageTag: string, ParentThumbImageTag: string, ParentThumbItemId: string, PartCount: int, Path: string, People: table<Id: string, ImageBlurHashes: record, Name: string, PrimaryImageTag: string, Role: string, Type: string>, PlayAccess: string, PlaylistItemId: string, PreferredMetadataCountryCode: string, PreferredMetadataLanguage: string, PremiereDate: string, PrimaryImageAspectRatio: float, ProductionLocations: list<string>, ProductionYear: int, ProgramCount: int, ProgramId: string, ProviderIds: record, RecursiveItemCount: int, RemoteTrailers: table<Name: string, Url: string>, RunTimeTicks: int, ScreenshotImageTags: list<string>, SeasonId: string, SeasonName: string, SeriesCount: int, SeriesId: string, SeriesName: string, SeriesPrimaryImageTag: string, SeriesStudio: string, SeriesThumbImageTag: string, SeriesTimerId: string, ServerId: string, ShutterSpeed: float, Software: string, SongCount: int, SortName: string, SourceType: string, SpecialFeatureCount: int, StartDate: string, Status: string, Studios: table<Id: string, Name: string>, SupportsSync: bool, Taglines: list<string>, Tags: list<string>, TimerId: string, TrailerCount: int, Type: string, UserData: record<IsFavorite: bool, ItemId: string, Key: string, LastPlayedDate: string, Likes: bool, PlayCount: int, PlaybackPositionTicks: int, Played: bool, PlayedPercentage: float, Rating: float, UnplayedItemCount: int>, Video3DFormat: string, VideoType: string, Width: int> {
   let auth = (build-auth $token ($auth_scheme | default "x-emby-authorization"))
   let base = ($base_url | default $BASE_URL)
+  if ($name | is-empty) { error make --unspanned { msg: "path parameter 'name' must be non-empty" } }
   let qp = [(serialize-qp "userId" $user_id "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({name: (encode-path-segment $name)} | format pattern "/Studios/{name}") $qp)
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"userId": $user_id} | compact), body: null}
 }
 
 # Get studio image by name.
@@ -9624,11 +9878,13 @@ export def "studios-images get" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "x-emby-authorization"))
   let base = ($base_url | default $BASE_URL)
+  if ($name | is-empty) { error make --unspanned { msg: "path parameter 'name' must be non-empty" } }
+  if ($image_type | is-empty) { error make --unspanned { msg: "path parameter 'imageType' must be non-empty" } }
   let qp = [(serialize-qp "tag" $tag "scalar") (serialize-qp "format" $format "scalar") (serialize-qp "maxWidth" $max_width "scalar") (serialize-qp "maxHeight" $max_height "scalar") (serialize-qp "percentPlayed" $percent_played "scalar") (serialize-qp "unplayedCount" $unplayed_count "scalar") (serialize-qp "width" $width "scalar") (serialize-qp "height" $height "scalar") (serialize-qp "quality" $quality "scalar") (serialize-qp "cropWhitespace" $crop_whitespace "scalar") (serialize-qp "addPlayedIndicator" $add_played_indicator "scalar") (serialize-qp "blur" $blur "scalar") (serialize-qp "backgroundColor" $background_color "scalar") (serialize-qp "foregroundLayer" $foreground_layer "scalar") (serialize-qp "imageIndex" $image_index "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({name: (encode-path-segment $name), image_type: (encode-path-segment $image_type)} | format pattern "/Studios/{name}/Images/{image_type}") $qp)
   let accept_val = "image/*"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"tag": $tag, "format": $format, "maxWidth": $max_width, "maxHeight": $max_height, "percentPlayed": $percent_played, "unplayedCount": $unplayed_count, "width": $width, "height": $height, "quality": $quality, "cropWhitespace": $crop_whitespace, "addPlayedIndicator": $add_played_indicator, "blur": $blur, "backgroundColor": $background_color, "foregroundLayer": $foreground_layer, "imageIndex": $image_index} | compact), body: null}
 }
 
 # Get studio image by name.
@@ -9665,11 +9921,13 @@ export def "studios-images head-head" [
 ]: nothing -> record {
   let auth = (build-auth $token ($auth_scheme | default "x-emby-authorization"))
   let base = ($base_url | default $BASE_URL)
+  if ($name | is-empty) { error make --unspanned { msg: "path parameter 'name' must be non-empty" } }
+  if ($image_type | is-empty) { error make --unspanned { msg: "path parameter 'imageType' must be non-empty" } }
   let qp = [(serialize-qp "tag" $tag "scalar") (serialize-qp "format" $format "scalar") (serialize-qp "maxWidth" $max_width "scalar") (serialize-qp "maxHeight" $max_height "scalar") (serialize-qp "percentPlayed" $percent_played "scalar") (serialize-qp "unplayedCount" $unplayed_count "scalar") (serialize-qp "width" $width "scalar") (serialize-qp "height" $height "scalar") (serialize-qp "quality" $quality "scalar") (serialize-qp "cropWhitespace" $crop_whitespace "scalar") (serialize-qp "addPlayedIndicator" $add_played_indicator "scalar") (serialize-qp "blur" $blur "scalar") (serialize-qp "backgroundColor" $background_color "scalar") (serialize-qp "foregroundLayer" $foreground_layer "scalar") (serialize-qp "imageIndex" $image_index "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({name: (encode-path-segment $name), image_type: (encode-path-segment $image_type)} | format pattern "/Studios/{name}/Images/{image_type}") $qp)
   let accept_val = "image/*"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "head" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "head" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"tag": $tag, "format": $format, "maxWidth": $max_width, "maxHeight": $max_height, "percentPlayed": $percent_played, "unplayedCount": $unplayed_count, "width": $width, "height": $height, "quality": $quality, "cropWhitespace": $crop_whitespace, "addPlayedIndicator": $add_played_indicator, "blur": $blur, "backgroundColor": $background_color, "foregroundLayer": $foreground_layer, "imageIndex": $image_index} | compact), body: null}
 }
 
 # Get studio image by name.
@@ -9706,11 +9964,14 @@ export def "studios-images get-by-index" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "x-emby-authorization"))
   let base = ($base_url | default $BASE_URL)
+  if ($name | is-empty) { error make --unspanned { msg: "path parameter 'name' must be non-empty" } }
+  if ($image_type | is-empty) { error make --unspanned { msg: "path parameter 'imageType' must be non-empty" } }
+  if ($image_index | is-empty) { error make --unspanned { msg: "path parameter 'imageIndex' must be non-empty" } }
   let qp = [(serialize-qp "tag" $tag "scalar") (serialize-qp "format" $format "scalar") (serialize-qp "maxWidth" $max_width "scalar") (serialize-qp "maxHeight" $max_height "scalar") (serialize-qp "percentPlayed" $percent_played "scalar") (serialize-qp "unplayedCount" $unplayed_count "scalar") (serialize-qp "width" $width "scalar") (serialize-qp "height" $height "scalar") (serialize-qp "quality" $quality "scalar") (serialize-qp "cropWhitespace" $crop_whitespace "scalar") (serialize-qp "addPlayedIndicator" $add_played_indicator "scalar") (serialize-qp "blur" $blur "scalar") (serialize-qp "backgroundColor" $background_color "scalar") (serialize-qp "foregroundLayer" $foreground_layer "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({name: (encode-path-segment $name), image_type: (encode-path-segment $image_type), image_index: (encode-path-segment $image_index)} | format pattern "/Studios/{name}/Images/{image_type}/{image_index}") $qp)
   let accept_val = "image/*"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"tag": $tag, "format": $format, "maxWidth": $max_width, "maxHeight": $max_height, "percentPlayed": $percent_played, "unplayedCount": $unplayed_count, "width": $width, "height": $height, "quality": $quality, "cropWhitespace": $crop_whitespace, "addPlayedIndicator": $add_played_indicator, "blur": $blur, "backgroundColor": $background_color, "foregroundLayer": $foreground_layer} | compact), body: null}
 }
 
 # Get studio image by name.
@@ -9747,11 +10008,14 @@ export def "studios-images head-head-by-index" [
 ]: nothing -> record {
   let auth = (build-auth $token ($auth_scheme | default "x-emby-authorization"))
   let base = ($base_url | default $BASE_URL)
+  if ($name | is-empty) { error make --unspanned { msg: "path parameter 'name' must be non-empty" } }
+  if ($image_type | is-empty) { error make --unspanned { msg: "path parameter 'imageType' must be non-empty" } }
+  if ($image_index | is-empty) { error make --unspanned { msg: "path parameter 'imageIndex' must be non-empty" } }
   let qp = [(serialize-qp "tag" $tag "scalar") (serialize-qp "format" $format "scalar") (serialize-qp "maxWidth" $max_width "scalar") (serialize-qp "maxHeight" $max_height "scalar") (serialize-qp "percentPlayed" $percent_played "scalar") (serialize-qp "unplayedCount" $unplayed_count "scalar") (serialize-qp "width" $width "scalar") (serialize-qp "height" $height "scalar") (serialize-qp "quality" $quality "scalar") (serialize-qp "cropWhitespace" $crop_whitespace "scalar") (serialize-qp "addPlayedIndicator" $add_played_indicator "scalar") (serialize-qp "blur" $blur "scalar") (serialize-qp "backgroundColor" $background_color "scalar") (serialize-qp "foregroundLayer" $foreground_layer "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({name: (encode-path-segment $name), image_type: (encode-path-segment $image_type), image_index: (encode-path-segment $image_index)} | format pattern "/Studios/{name}/Images/{image_type}/{image_index}") $qp)
   let accept_val = "image/*"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "head" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "head" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"tag": $tag, "format": $format, "maxWidth": $max_width, "maxHeight": $max_height, "percentPlayed": $percent_played, "unplayedCount": $unplayed_count, "width": $width, "height": $height, "quality": $quality, "cropWhitespace": $crop_whitespace, "addPlayedIndicator": $add_played_indicator, "blur": $blur, "backgroundColor": $background_color, "foregroundLayer": $foreground_layer} | compact), body: null}
 }
 
 # Notify SyncPlay group that member is buffering.
@@ -9781,7 +10045,7 @@ export def "sync-play-buffering sync" [
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: {}, body: $req_body}
 }
 
 # Join an existing SyncPlay group.
@@ -9808,7 +10072,7 @@ export def "sync-play-join sync-group" [
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: {}, body: $req_body}
 }
 
 # Leave the joined SyncPlay group.
@@ -9831,7 +10095,7 @@ export def "sync-play-leave sync-group" [
   let full_url = (build-url $base "/SyncPlay/Leave")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
 }
 
 # Gets all SyncPlay groups.
@@ -9855,7 +10119,7 @@ export def "sync-play-list get-groups" [
   let full_url = (build-url $base "/SyncPlay/List")
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
 }
 
 # Request to move an item in the playlist in SyncPlay group.
@@ -9883,7 +10147,7 @@ export def "sync-play-move-playlist-item sync" [
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: {}, body: $req_body}
 }
 
 # Create a new SyncPlay group.
@@ -9910,7 +10174,7 @@ export def "sync-play-new create-group" [
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: {}, body: $req_body}
 }
 
 # Request next item in SyncPlay group.
@@ -9937,7 +10201,7 @@ export def "sync-play-next-item sync" [
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: {}, body: $req_body}
 }
 
 # Request pause in SyncPlay group.
@@ -9960,7 +10224,7 @@ export def "sync-play-pause sync" [
   let full_url = (build-url $base "/SyncPlay/Pause")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
 }
 
 # Update session ping.
@@ -9987,7 +10251,7 @@ export def "sync-play-ping sync" [
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: {}, body: $req_body}
 }
 
 # Request previous item in SyncPlay group.
@@ -10014,7 +10278,7 @@ export def "sync-play-previous-item sync" [
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: {}, body: $req_body}
 }
 
 # Request to queue items to the playlist of a SyncPlay group.
@@ -10042,7 +10306,7 @@ export def "sync-play-queue sync" [
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: {}, body: $req_body}
 }
 
 # Notify SyncPlay group that member is ready for playback.
@@ -10072,7 +10336,7 @@ export def "sync-play-ready sync" [
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: {}, body: $req_body}
 }
 
 # Request to remove items from the playlist in SyncPlay group.
@@ -10099,7 +10363,7 @@ export def "sync-play-remove-from-playlist sync" [
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: {}, body: $req_body}
 }
 
 # Request seek in SyncPlay group.
@@ -10126,7 +10390,7 @@ export def "sync-play-seek sync" [
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: {}, body: $req_body}
 }
 
 # Request SyncPlay group to ignore member during group-wait.
@@ -10153,7 +10417,7 @@ export def "sync-play-set-ignore-wait sync" [
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: {}, body: $req_body}
 }
 
 # Request to set new playlist in SyncPlay group.
@@ -10182,7 +10446,7 @@ export def "sync-play-set-new-queue sync" [
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: {}, body: $req_body}
 }
 
 # Request to change playlist item in SyncPlay group.
@@ -10209,7 +10473,7 @@ export def "sync-play-set-playlist-item sync" [
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: {}, body: $req_body}
 }
 
 # Request to set repeat mode in SyncPlay group.
@@ -10236,7 +10500,7 @@ export def "sync-play-set-repeat-mode sync" [
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: {}, body: $req_body}
 }
 
 # Request to set shuffle mode in SyncPlay group.
@@ -10263,7 +10527,7 @@ export def "sync-play-set-shuffle-mode sync" [
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: {}, body: $req_body}
 }
 
 # Request stop in SyncPlay group.
@@ -10286,7 +10550,7 @@ export def "sync-play-stop sync" [
   let full_url = (build-url $base "/SyncPlay/Stop")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
 }
 
 # Request unpause in SyncPlay group.
@@ -10309,7 +10573,7 @@ export def "sync-play-unpause sync" [
   let full_url = (build-url $base "/SyncPlay/Unpause")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
 }
 
 # Gets activity log entries.
@@ -10338,7 +10602,7 @@ export def "system-activity-log-entries get" [
   let full_url = (build-url $base "/System/ActivityLog/Entries" $qp)
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"startIndex": $start_index, "limit": $limit, "minDate": $min_date, "hasUserId": $has_user_id} | compact), body: null}
 }
 
 # Gets application configuration.
@@ -10362,7 +10626,7 @@ export def "system-configuration get" [
   let full_url = (build-url $base "/System/Configuration")
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
 }
 
 # Updates application configuration.
@@ -10476,7 +10740,7 @@ export def "system-configuration update" [
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: {}, body: $req_body}
 }
 
 # Gets a default MetadataOptions object.
@@ -10500,7 +10764,7 @@ export def "system-configuration-metadata-options-default get" [
   let full_url = (build-url $base "/System/Configuration/MetadataOptions/Default")
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
 }
 
 # Gets a named configuration.
@@ -10521,10 +10785,11 @@ export def "system-configuration get-named" [
 ]: nothing -> string {
   let auth = (build-auth $token ($auth_scheme | default "x-emby-authorization"))
   let base = ($base_url | default $BASE_URL)
+  if ($key | is-empty) { error make --unspanned { msg: "path parameter 'key' must be non-empty" } }
   let full_url = (build-url $base ({key: (encode-path-segment $key)} | format pattern "/System/Configuration/{key}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
 }
 
 # Updates named configuration.
@@ -10545,17 +10810,18 @@ export def "system-configuration update-named" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "x-emby-authorization"))
   let base = ($base_url | default $BASE_URL)
+  if ($key | is-empty) { error make --unspanned { msg: "path parameter 'key' must be non-empty" } }
   let full_url = (build-url $base ({key: (encode-path-segment $key)} | format pattern "/System/Configuration/{key}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
 }
 
 # Gets information about the request endpoint.
 #
 # GET /System/Endpoint
 # operationId: GetEndpointInfo
-export def "system-endpoint get-get" [
+export def "system-endpoint get" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -10572,7 +10838,7 @@ export def "system-endpoint get-get" [
   let full_url = (build-url $base "/System/Endpoint")
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
 }
 
 # Gets information about the server.
@@ -10596,7 +10862,7 @@ export def "system-info get" [
   let full_url = (build-url $base "/System/Info")
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
 }
 
 # Gets public information about the server.
@@ -10620,7 +10886,7 @@ export def "system-info-public get" [
   let full_url = (build-url $base "/System/Info/Public")
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
 }
 
 # Gets a list of available server log files.
@@ -10644,7 +10910,7 @@ export def "system-logs get-server" [
   let full_url = (build-url $base "/System/Logs")
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
 }
 
 # Gets a log file.
@@ -10669,7 +10935,7 @@ export def "system-logs-log get-file" [
   let full_url = (build-url $base "/System/Logs/Log" $qp)
   let accept_val = "text/plain"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"name": $name} | compact), body: null}
 }
 
 # Updates the path to the media encoder.
@@ -10697,7 +10963,7 @@ export def "system-media-encoder-path update" [
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: {}, body: $req_body}
 }
 
 # Pings the system.
@@ -10721,7 +10987,7 @@ export def "system-ping get" [
   let full_url = (build-url $base "/System/Ping")
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
 }
 
 # Pings the system.
@@ -10745,7 +11011,7 @@ export def "system-ping create" [
   let full_url = (build-url $base "/System/Ping")
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
 }
 
 # Restarts the application.
@@ -10768,7 +11034,7 @@ export def "system-restart restart-application" [
   let full_url = (build-url $base "/System/Restart")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
 }
 
 # Shuts down the application.
@@ -10791,7 +11057,7 @@ export def "system-shutdown create-application" [
   let full_url = (build-url $base "/System/Shutdown")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
 }
 
 # Gets wake on lan information.
@@ -10815,7 +11081,7 @@ export def "system-wake-on-lan-info get" [
   let full_url = (build-url $base "/System/WakeOnLanInfo")
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
 }
 
 # Finds movies and trailers similar to a given trailer.
@@ -10919,7 +11185,7 @@ export def "trailers get" [
   let full_url = (build-url $base "/Trailers" $qp)
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"userId": $user_id, "maxOfficialRating": $max_official_rating, "hasThemeSong": $has_theme_song, "hasThemeVideo": $has_theme_video, "hasSubtitles": $has_subtitles, "hasSpecialFeature": $has_special_feature, "hasTrailer": $has_trailer, "adjacentTo": $adjacent_to, "parentIndexNumber": $parent_index_number, "hasParentalRating": $has_parental_rating, "isHd": $is_hd, "is4K": $is4_k, "locationTypes": $location_types, "excludeLocationTypes": $exclude_location_types, "isMissing": $is_missing, "isUnaired": $is_unaired, "minCommunityRating": $min_community_rating, "minCriticRating": $min_critic_rating, "minPremiereDate": $min_premiere_date, "minDateLastSaved": $min_date_last_saved, "minDateLastSavedForUser": $min_date_last_saved_for_user, "maxPremiereDate": $max_premiere_date, "hasOverview": $has_overview, "hasImdbId": $has_imdb_id, "hasTmdbId": $has_tmdb_id, "hasTvdbId": $has_tvdb_id, "excludeItemIds": $exclude_item_ids, "startIndex": $start_index, "limit": $limit, "recursive": $recursive, "searchTerm": $search_term, "sortOrder": $sort_order, "parentId": $parent_id, "fields": $fields, "excludeItemTypes": $exclude_item_types, "filters": $filters, "isFavorite": $is_favorite, "mediaTypes": $media_types, "imageTypes": $image_types, "sortBy": $sort_by, "isPlayed": $is_played, "genres": $genres, "officialRatings": $official_ratings, "tags": $tags, "years": $years, "enableUserData": $enable_user_data, "imageTypeLimit": $image_type_limit, "enableImageTypes": $enable_image_types, "person": $person, "personIds": $person_ids, "personTypes": $person_types, "studios": $studios, "artists": $artists, "excludeArtistIds": $exclude_artist_ids, "artistIds": $artist_ids, "albumArtistIds": $album_artist_ids, "contributingArtistIds": $contributing_artist_ids, "albums": $albums, "albumIds": $album_ids, "ids": $ids, "videoTypes": $video_types, "minOfficialRating": $min_official_rating, "isLocked": $is_locked, "isPlaceHolder": $is_place_holder, "hasOfficialRating": $has_official_rating, "collapseBoxSetItems": $collapse_box_set_items, "minWidth": $min_width, "minHeight": $min_height, "maxWidth": $max_width, "maxHeight": $max_height, "is3D": $is3_d, "seriesStatus": $series_status, "nameStartsWithOrGreater": $name_starts_with_or_greater, "nameStartsWith": $name_starts_with, "nameLessThan": $name_less_than, "studioIds": $studio_ids, "genreIds": $genre_ids, "enableTotalRecordCount": $enable_total_record_count, "enableImages": $enable_images} | compact), body: null}
 }
 
 # Gets similar items.
@@ -10945,11 +11211,12 @@ export def "trailers-similar get" [
 ]: nothing -> record<Items: table<AirDays: list, AirTime: string, AirsAfterSeasonNumber: int, AirsBeforeEpisodeNumber: int, AirsBeforeSeasonNumber: int, Album: string, AlbumArtist: string, AlbumArtists: list, AlbumCount: int, AlbumId: string, AlbumPrimaryImageTag: string, Altitude: float, Aperture: float, ArtistCount: int, ArtistItems: list, Artists: list, AspectRatio: string, Audio: string, BackdropImageTags: list, CameraMake: string, CameraModel: string, CanDelete: bool, CanDownload: bool, ChannelId: string, ChannelName: string, ChannelNumber: string, ChannelPrimaryImageTag: string, ChannelType: string, Chapters: list, ChildCount: int, CollectionType: string, CommunityRating: float, CompletionPercentage: float, Container: string, CriticRating: float, CumulativeRunTimeTicks: int, CurrentProgram: any, CustomRating: string, DateCreated: string, DateLastMediaAdded: string, DisplayOrder: string, DisplayPreferencesId: string, EnableMediaSourceDisplay: bool, EndDate: string, EpisodeCount: int, EpisodeTitle: string, Etag: string, ExposureTime: float, ExternalUrls: list, ExtraType: string, FocalLength: float, ForcedSortName: string, GenreItems: list, Genres: list, HasSubtitles: bool, Height: int, Id: string, ImageBlurHashes: record, ImageOrientation: string, ImageTags: record, IndexNumber: int, IndexNumberEnd: int, IsFolder: bool, IsHD: bool, IsKids: bool, IsLive: bool, IsMovie: bool, IsNews: bool, IsPlaceHolder: bool, IsPremiere: bool, IsRepeat: bool, IsSeries: bool, IsSports: bool, IsoSpeedRating: int, IsoType: string, Latitude: float, LocalTrailerCount: int, LocationType: string, LockData: bool, LockedFields: list, Longitude: float, MediaSourceCount: int, MediaSources: list, MediaStreams: list, MediaType: string, MovieCount: int, MusicVideoCount: int, Name: string, Number: string, OfficialRating: string, OriginalTitle: string, Overview: string, ParentArtImageTag: string, ParentArtItemId: string, ParentBackdropImageTags: list, ParentBackdropItemId: string, ParentId: string, ParentIndexNumber: int, ParentLogoImageTag: string, ParentLogoItemId: string, ParentPrimaryImageItemId: string, ParentPrimaryImageTag: string, ParentThumbImageTag: string, ParentThumbItemId: string, PartCount: int, Path: string, People: list, PlayAccess: string, PlaylistItemId: string, PreferredMetadataCountryCode: string, PreferredMetadataLanguage: string, PremiereDate: string, PrimaryImageAspectRatio: float, ProductionLocations: list, ProductionYear: int, ProgramCount: int, ProgramId: string, ProviderIds: record, RecursiveItemCount: int, RemoteTrailers: list, RunTimeTicks: int, ScreenshotImageTags: list, SeasonId: string, SeasonName: string, SeriesCount: int, SeriesId: string, SeriesName: string, SeriesPrimaryImageTag: string, SeriesStudio: string, SeriesThumbImageTag: string, SeriesTimerId: string, ServerId: string, ShutterSpeed: float, Software: string, SongCount: int, SortName: string, SourceType: string, SpecialFeatureCount: int, StartDate: string, Status: string, Studios: list, SupportsSync: bool, Taglines: list, Tags: list, TimerId: string, TrailerCount: int, Type: string, UserData: record, Video3DFormat: string, VideoType: string, Width: int>, StartIndex: int, TotalRecordCount: int> {
   let auth = (build-auth $token ($auth_scheme | default "x-emby-authorization"))
   let base = ($base_url | default $BASE_URL)
+  if ($item_id | is-empty) { error make --unspanned { msg: "path parameter 'itemId' must be non-empty" } }
   let qp = [(serialize-qp "excludeArtistIds" $exclude_artist_ids "multi") (serialize-qp "userId" $user_id "scalar") (serialize-qp "limit" $limit "scalar") (serialize-qp "fields" $fields "multi")] | flatten | str join "&"
   let full_url = (build-url $base ({item_id: (encode-path-segment $item_id)} | format pattern "/Trailers/{item_id}/Similar") $qp)
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"excludeArtistIds": $exclude_artist_ids, "userId": $user_id, "limit": $limit, "fields": $fields} | compact), body: null}
 }
 
 # Gets a list of users.
@@ -10976,7 +11243,7 @@ export def "users list" [
   let full_url = (build-url $base "/Users" $qp)
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"isHidden": $is_hidden, "isDisabled": $is_disabled} | compact), body: null}
 }
 
 # Authenticates a user by name.
@@ -11006,7 +11273,7 @@ export def "users-authenticate-by-name create" [
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: {}, body: $req_body}
 }
 
 # Authenticates a user with quick connect.
@@ -11034,7 +11301,7 @@ export def "users-authenticate-with-quick-connect create" [
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: {}, body: $req_body}
 }
 
 # Initiates the forgot password process for a local user.
@@ -11062,7 +11329,7 @@ export def "users-forgot-password create" [
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: {}, body: $req_body}
 }
 
 # Redeems a forgot password pin.
@@ -11090,14 +11357,14 @@ export def "users-forgot-password-pin create" [
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else if (($input | is-not-empty) and ($req_body | is-empty)) { $input } else { $req_body }
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: {}, body: $req_body}
 }
 
 # Gets the user based on auth token.
 #
 # GET /Users/Me
 # operationId: GetCurrentUser
-export def "users-me get-get" [
+export def "users-me get" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -11114,7 +11381,7 @@ export def "users-me get-get" [
   let full_url = (build-url $base "/Users/Me")
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
 }
 
 # Creates a user.
@@ -11143,7 +11410,7 @@ export def "users-new create-by-name" [
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: {}, body: $req_body}
 }
 
 # Gets a list of publicly visible users for display on a login screen.
@@ -11167,7 +11434,7 @@ export def "users-public get" [
   let full_url = (build-url $base "/Users/Public")
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
 }
 
 # Deletes a user.
@@ -11188,10 +11455,11 @@ export def "users delete" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "x-emby-authorization"))
   let base = ($base_url | default $BASE_URL)
+  if ($user_id | is-empty) { error make --unspanned { msg: "path parameter 'userId' must be non-empty" } }
   let full_url = (build-url $base ({user_id: (encode-path-segment $user_id)} | format pattern "/Users/{user_id}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
 }
 
 # Gets a user by Id.
@@ -11213,10 +11481,11 @@ export def "users get" [
 ]: nothing -> record<Configuration: record<AudioLanguagePreference: string, DisplayCollectionsView: bool, DisplayMissingEpisodes: bool, EnableLocalPassword: bool, EnableNextEpisodeAutoPlay: bool, GroupedFolders: list<string>, HidePlayedInLatest: bool, LatestItemsExcludes: list<string>, MyMediaExcludes: list<string>, OrderedViews: list<string>, PlayDefaultAudioTrack: bool, RememberAudioSelections: bool, RememberSubtitleSelections: bool, SubtitleLanguagePreference: string, SubtitleMode: string>, EnableAutoLogin: bool, HasConfiguredEasyPassword: bool, HasConfiguredPassword: bool, HasPassword: bool, Id: string, LastActivityDate: string, LastLoginDate: string, Name: string, Policy: record<AccessSchedules: list<record>, AuthenticationProviderId: string, BlockUnratedItems: list<string>, BlockedChannels: list<string>, BlockedMediaFolders: list<string>, BlockedTags: list<string>, EnableAllChannels: bool, EnableAllDevices: bool, EnableAllFolders: bool, EnableAudioPlaybackTranscoding: bool, EnableContentDeletion: bool, EnableContentDeletionFromFolders: list<string>, EnableContentDownloading: bool, EnableLiveTvAccess: bool, EnableLiveTvManagement: bool, EnableMediaConversion: bool, EnableMediaPlayback: bool, EnablePlaybackRemuxing: bool, EnablePublicSharing: bool, EnableRemoteAccess: bool, EnableRemoteControlOfOtherUsers: bool, EnableSharedDeviceControl: bool, EnableSyncTranscoding: bool, EnableUserPreferenceAccess: bool, EnableVideoPlaybackTranscoding: bool, EnabledChannels: list<string>, EnabledDevices: list<string>, EnabledFolders: list<string>, ForceRemoteSourceTranscoding: bool, InvalidLoginAttemptCount: int, IsAdministrator: bool, IsDisabled: bool, IsHidden: bool, LoginAttemptsBeforeLockout: int, MaxActiveSessions: int, MaxParentalRating: int, PasswordResetProviderId: string, RemoteClientBitrateLimit: int, SyncPlayAccess: string>, PrimaryImageAspectRatio: float, PrimaryImageTag: string, ServerId: string, ServerName: string> {
   let auth = (build-auth $token ($auth_scheme | default "x-emby-authorization"))
   let base = ($base_url | default $BASE_URL)
+  if ($user_id | is-empty) { error make --unspanned { msg: "path parameter 'userId' must be non-empty" } }
   let full_url = (build-url $base ({user_id: (encode-path-segment $user_id)} | format pattern "/Users/{user_id}"))
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
 }
 
 # Updates a user.
@@ -11254,12 +11523,13 @@ export def "users update" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "x-emby-authorization"))
   let base = ($base_url | default $BASE_URL)
+  if ($user_id | is-empty) { error make --unspanned { msg: "path parameter 'userId' must be non-empty" } }
   let full_url = (build-url $base ({user_id: (encode-path-segment $user_id)} | format pattern "/Users/{user_id}"))
   let req_body = {"Configuration": $configuration, "EnableAutoLogin": $enable_auto_login, "HasConfiguredEasyPassword": $has_configured_easy_password, "HasConfiguredPassword": $has_configured_password, "HasPassword": $has_password, "Id": $id, "LastActivityDate": $last_activity_date, "LastLoginDate": $last_login_date, "Name": $name, "Policy": $policy, "PrimaryImageAspectRatio": $primary_image_aspect_ratio, "PrimaryImageTag": $primary_image_tag, "ServerId": $server_id, "ServerName": $server_name} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: {}, body: $req_body}
 }
 
 # Authenticates a user.
@@ -11283,11 +11553,12 @@ export def "users-authenticate create" [
 ]: nothing -> record<AccessToken: string, ServerId: string, SessionInfo: record<AdditionalUsers: list<record>, ApplicationVersion: string, Capabilities: record<AppStoreUrl: string, DeviceProfile: record, IconUrl: string, MessageCallbackUrl: string, PlayableMediaTypes: list, SupportedCommands: list, SupportsContentUploading: bool, SupportsMediaControl: bool, SupportsPersistentIdentifier: bool, SupportsSync: bool>, Client: string, DeviceId: string, DeviceName: string, DeviceType: string, FullNowPlayingItem: record<Container: string, DateLastSaved: string, ExtraIds: list, Height: int, IsHD: bool, IsShortcut: bool, RemoteTrailers: list, ShortcutPath: string, Size: int, SupportsExternalTransfer: bool, Width: int>, HasCustomDeviceName: bool, Id: string, IsActive: bool, LastActivityDate: string, LastPlaybackCheckIn: string, NowPlayingItem: record<AirDays: list, AirTime: string, AirsAfterSeasonNumber: int, AirsBeforeEpisodeNumber: int, AirsBeforeSeasonNumber: int, Album: string, AlbumArtist: string, AlbumArtists: list, AlbumCount: int, AlbumId: string, AlbumPrimaryImageTag: string, Altitude: float, Aperture: float, ArtistCount: int, ArtistItems: list, Artists: list, AspectRatio: string, Audio: string, BackdropImageTags: list, CameraMake: string, CameraModel: string, CanDelete: bool, CanDownload: bool, ChannelId: string, ChannelName: string, ChannelNumber: string, ChannelPrimaryImageTag: string, ChannelType: string, Chapters: list, ChildCount: int, CollectionType: string, CommunityRating: float, CompletionPercentage: float, Container: string, CriticRating: float, CumulativeRunTimeTicks: int, CurrentProgram: any, CustomRating: string, DateCreated: string, DateLastMediaAdded: string, DisplayOrder: string, DisplayPreferencesId: string, EnableMediaSourceDisplay: bool, EndDate: string, EpisodeCount: int, EpisodeTitle: string, Etag: string, ExposureTime: float, ExternalUrls: list, ExtraType: string, FocalLength: float, ForcedSortName: string, GenreItems: list, Genres: list, HasSubtitles: bool, Height: int, Id: string, ImageBlurHashes: record, ImageOrientation: string, ImageTags: record, IndexNumber: int, IndexNumberEnd: int, IsFolder: bool, IsHD: bool, IsKids: bool, IsLive: bool, IsMovie: bool, IsNews: bool, IsPlaceHolder: bool, IsPremiere: bool, IsRepeat: bool, IsSeries: bool, IsSports: bool, IsoSpeedRating: int, IsoType: string, Latitude: float, LocalTrailerCount: int, LocationType: string, LockData: bool, LockedFields: list, Longitude: float, MediaSourceCount: int, MediaSources: list, MediaStreams: list, MediaType: string, MovieCount: int, MusicVideoCount: int, Name: string, Number: string, OfficialRating: string, OriginalTitle: string, Overview: string, ParentArtImageTag: string, ParentArtItemId: string, ParentBackdropImageTags: list, ParentBackdropItemId: string, ParentId: string, ParentIndexNumber: int, ParentLogoImageTag: string, ParentLogoItemId: string, ParentPrimaryImageItemId: string, ParentPrimaryImageTag: string, ParentThumbImageTag: string, ParentThumbItemId: string, PartCount: int, Path: string, People: list, PlayAccess: string, PlaylistItemId: string, PreferredMetadataCountryCode: string, PreferredMetadataLanguage: string, PremiereDate: string, PrimaryImageAspectRatio: float, ProductionLocations: list, ProductionYear: int, ProgramCount: int, ProgramId: string, ProviderIds: record, RecursiveItemCount: int, RemoteTrailers: list, RunTimeTicks: int, ScreenshotImageTags: list, SeasonId: string, SeasonName: string, SeriesCount: int, SeriesId: string, SeriesName: string, SeriesPrimaryImageTag: string, SeriesStudio: string, SeriesThumbImageTag: string, SeriesTimerId: string, ServerId: string, ShutterSpeed: float, Software: string, SongCount: int, SortName: string, SourceType: string, SpecialFeatureCount: int, StartDate: string, Status: string, Studios: list, SupportsSync: bool, Taglines: list, Tags: list, TimerId: string, TrailerCount: int, Type: string, UserData: record, Video3DFormat: string, VideoType: string, Width: int>, NowPlayingQueue: list<record>, NowViewingItem: record<AirDays: list, AirTime: string, AirsAfterSeasonNumber: int, AirsBeforeEpisodeNumber: int, AirsBeforeSeasonNumber: int, Album: string, AlbumArtist: string, AlbumArtists: list, AlbumCount: int, AlbumId: string, AlbumPrimaryImageTag: string, Altitude: float, Aperture: float, ArtistCount: int, ArtistItems: list, Artists: list, AspectRatio: string, Audio: string, BackdropImageTags: list, CameraMake: string, CameraModel: string, CanDelete: bool, CanDownload: bool, ChannelId: string, ChannelName: string, ChannelNumber: string, ChannelPrimaryImageTag: string, ChannelType: string, Chapters: list, ChildCount: int, CollectionType: string, CommunityRating: float, CompletionPercentage: float, Container: string, CriticRating: float, CumulativeRunTimeTicks: int, CurrentProgram: any, CustomRating: string, DateCreated: string, DateLastMediaAdded: string, DisplayOrder: string, DisplayPreferencesId: string, EnableMediaSourceDisplay: bool, EndDate: string, EpisodeCount: int, EpisodeTitle: string, Etag: string, ExposureTime: float, ExternalUrls: list, ExtraType: string, FocalLength: float, ForcedSortName: string, GenreItems: list, Genres: list, HasSubtitles: bool, Height: int, Id: string, ImageBlurHashes: record, ImageOrientation: string, ImageTags: record, IndexNumber: int, IndexNumberEnd: int, IsFolder: bool, IsHD: bool, IsKids: bool, IsLive: bool, IsMovie: bool, IsNews: bool, IsPlaceHolder: bool, IsPremiere: bool, IsRepeat: bool, IsSeries: bool, IsSports: bool, IsoSpeedRating: int, IsoType: string, Latitude: float, LocalTrailerCount: int, LocationType: string, LockData: bool, LockedFields: list, Longitude: float, MediaSourceCount: int, MediaSources: list, MediaStreams: list, MediaType: string, MovieCount: int, MusicVideoCount: int, Name: string, Number: string, OfficialRating: string, OriginalTitle: string, Overview: string, ParentArtImageTag: string, ParentArtItemId: string, ParentBackdropImageTags: list, ParentBackdropItemId: string, ParentId: string, ParentIndexNumber: int, ParentLogoImageTag: string, ParentLogoItemId: string, ParentPrimaryImageItemId: string, ParentPrimaryImageTag: string, ParentThumbImageTag: string, ParentThumbItemId: string, PartCount: int, Path: string, People: list, PlayAccess: string, PlaylistItemId: string, PreferredMetadataCountryCode: string, PreferredMetadataLanguage: string, PremiereDate: string, PrimaryImageAspectRatio: float, ProductionLocations: list, ProductionYear: int, ProgramCount: int, ProgramId: string, ProviderIds: record, RecursiveItemCount: int, RemoteTrailers: list, RunTimeTicks: int, ScreenshotImageTags: list, SeasonId: string, SeasonName: string, SeriesCount: int, SeriesId: string, SeriesName: string, SeriesPrimaryImageTag: string, SeriesStudio: string, SeriesThumbImageTag: string, SeriesTimerId: string, ServerId: string, ShutterSpeed: float, Software: string, SongCount: int, SortName: string, SourceType: string, SpecialFeatureCount: int, StartDate: string, Status: string, Studios: list, SupportsSync: bool, Taglines: list, Tags: list, TimerId: string, TrailerCount: int, Type: string, UserData: record, Video3DFormat: string, VideoType: string, Width: int>, PlayState: record<AudioStreamIndex: int, CanSeek: bool, IsMuted: bool, IsPaused: bool, MediaSourceId: string, PlayMethod: string, PositionTicks: int, RepeatMode: string, SubtitleStreamIndex: int, VolumeLevel: int>, PlayableMediaTypes: list<string>, PlaylistItemId: string, RemoteEndPoint: string, ServerId: string, SupportedCommands: list<string>, SupportsMediaControl: bool, SupportsRemoteControl: bool, TranscodingInfo: record<AudioChannels: int, AudioCodec: string, Bitrate: int, CompletionPercentage: float, Container: string, Framerate: float, Height: int, IsAudioDirect: bool, IsVideoDirect: bool, TranscodeReasons: list, VideoCodec: string, Width: int>, UserId: string, UserName: string, UserPrimaryImageTag: string>, User: record<Configuration: record<AudioLanguagePreference: string, DisplayCollectionsView: bool, DisplayMissingEpisodes: bool, EnableLocalPassword: bool, EnableNextEpisodeAutoPlay: bool, GroupedFolders: list, HidePlayedInLatest: bool, LatestItemsExcludes: list, MyMediaExcludes: list, OrderedViews: list, PlayDefaultAudioTrack: bool, RememberAudioSelections: bool, RememberSubtitleSelections: bool, SubtitleLanguagePreference: string, SubtitleMode: string>, EnableAutoLogin: bool, HasConfiguredEasyPassword: bool, HasConfiguredPassword: bool, HasPassword: bool, Id: string, LastActivityDate: string, LastLoginDate: string, Name: string, Policy: record<AccessSchedules: list, AuthenticationProviderId: string, BlockUnratedItems: list, BlockedChannels: list, BlockedMediaFolders: list, BlockedTags: list, EnableAllChannels: bool, EnableAllDevices: bool, EnableAllFolders: bool, EnableAudioPlaybackTranscoding: bool, EnableContentDeletion: bool, EnableContentDeletionFromFolders: list, EnableContentDownloading: bool, EnableLiveTvAccess: bool, EnableLiveTvManagement: bool, EnableMediaConversion: bool, EnableMediaPlayback: bool, EnablePlaybackRemuxing: bool, EnablePublicSharing: bool, EnableRemoteAccess: bool, EnableRemoteControlOfOtherUsers: bool, EnableSharedDeviceControl: bool, EnableSyncTranscoding: bool, EnableUserPreferenceAccess: bool, EnableVideoPlaybackTranscoding: bool, EnabledChannels: list, EnabledDevices: list, EnabledFolders: list, ForceRemoteSourceTranscoding: bool, InvalidLoginAttemptCount: int, IsAdministrator: bool, IsDisabled: bool, IsHidden: bool, LoginAttemptsBeforeLockout: int, MaxActiveSessions: int, MaxParentalRating: int, PasswordResetProviderId: string, RemoteClientBitrateLimit: int, SyncPlayAccess: string>, PrimaryImageAspectRatio: float, PrimaryImageTag: string, ServerId: string, ServerName: string>> {
   let auth = (build-auth $token ($auth_scheme | default "x-emby-authorization"))
   let base = ($base_url | default $BASE_URL)
+  if ($user_id | is-empty) { error make --unspanned { msg: "path parameter 'userId' must be non-empty" } }
   let qp = [(serialize-qp "pw" $pw "scalar") (serialize-qp "password" $password "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({user_id: (encode-path-segment $user_id)} | format pattern "/Users/{user_id}/Authenticate") $qp)
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"pw": $pw, "password": $password} | compact), body: null}
 }
 
 # Updates a user configuration.
@@ -11324,12 +11595,13 @@ export def "users-configuration update" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "x-emby-authorization"))
   let base = ($base_url | default $BASE_URL)
+  if ($user_id | is-empty) { error make --unspanned { msg: "path parameter 'userId' must be non-empty" } }
   let full_url = (build-url $base ({user_id: (encode-path-segment $user_id)} | format pattern "/Users/{user_id}/Configuration"))
   let req_body = {"AudioLanguagePreference": $audio_language_preference, "DisplayCollectionsView": $display_collections_view, "DisplayMissingEpisodes": $display_missing_episodes, "EnableLocalPassword": $enable_local_password, "EnableNextEpisodeAutoPlay": $enable_next_episode_auto_play, "GroupedFolders": $grouped_folders, "HidePlayedInLatest": $hide_played_in_latest, "LatestItemsExcludes": $latest_items_excludes, "MyMediaExcludes": $my_media_excludes, "OrderedViews": $ordered_views, "PlayDefaultAudioTrack": $play_default_audio_track, "RememberAudioSelections": $remember_audio_selections, "RememberSubtitleSelections": $remember_subtitle_selections, "SubtitleLanguagePreference": $subtitle_language_preference, "SubtitleMode": $subtitle_mode} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: {}, body: $req_body}
 }
 
 # Updates a user's easy password.
@@ -11354,12 +11626,13 @@ export def "users-easy-password update" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "x-emby-authorization"))
   let base = ($base_url | default $BASE_URL)
+  if ($user_id | is-empty) { error make --unspanned { msg: "path parameter 'userId' must be non-empty" } }
   let full_url = (build-url $base ({user_id: (encode-path-segment $user_id)} | format pattern "/Users/{user_id}/EasyPassword"))
   let req_body = {"NewPassword": $new_password, "NewPw": $new_pw, "ResetPassword": $reset_password} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: {}, body: $req_body}
 }
 
 # Unmarks item as a favorite.
@@ -11382,10 +11655,12 @@ export def "users-favorite-items delete-unmark" [
 ]: nothing -> record<IsFavorite: bool, ItemId: string, Key: string, LastPlayedDate: string, Likes: bool, PlayCount: int, PlaybackPositionTicks: int, Played: bool, PlayedPercentage: float, Rating: float, UnplayedItemCount: int> {
   let auth = (build-auth $token ($auth_scheme | default "x-emby-authorization"))
   let base = ($base_url | default $BASE_URL)
+  if ($user_id | is-empty) { error make --unspanned { msg: "path parameter 'userId' must be non-empty" } }
+  if ($item_id | is-empty) { error make --unspanned { msg: "path parameter 'itemId' must be non-empty" } }
   let full_url = (build-url $base ({user_id: (encode-path-segment $user_id), item_id: (encode-path-segment $item_id)} | format pattern "/Users/{user_id}/FavoriteItems/{item_id}"))
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
 }
 
 # Marks an item as a favorite.
@@ -11408,10 +11683,12 @@ export def "users-favorite-items create-mark" [
 ]: nothing -> record<IsFavorite: bool, ItemId: string, Key: string, LastPlayedDate: string, Likes: bool, PlayCount: int, PlaybackPositionTicks: int, Played: bool, PlayedPercentage: float, Rating: float, UnplayedItemCount: int> {
   let auth = (build-auth $token ($auth_scheme | default "x-emby-authorization"))
   let base = ($base_url | default $BASE_URL)
+  if ($user_id | is-empty) { error make --unspanned { msg: "path parameter 'userId' must be non-empty" } }
+  if ($item_id | is-empty) { error make --unspanned { msg: "path parameter 'itemId' must be non-empty" } }
   let full_url = (build-url $base ({user_id: (encode-path-segment $user_id), item_id: (encode-path-segment $item_id)} | format pattern "/Users/{user_id}/FavoriteItems/{item_id}"))
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
 }
 
 # Get user view grouping options.
@@ -11433,17 +11710,18 @@ export def "users-grouping-options get" [
 ]: nothing -> table<Id: string, Name: string> {
   let auth = (build-auth $token ($auth_scheme | default "x-emby-authorization"))
   let base = ($base_url | default $BASE_URL)
+  if ($user_id | is-empty) { error make --unspanned { msg: "path parameter 'userId' must be non-empty" } }
   let full_url = (build-url $base ({user_id: (encode-path-segment $user_id)} | format pattern "/Users/{user_id}/GroupingOptions"))
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
 }
 
 # Delete the user's image.
 #
 # DELETE /Users/{userId}/Images/{imageType}
 # operationId: DeleteUserImage
-export def "users-images delete-by-userId-imageType" [
+export def "users-images delete-by-user-id-image-type" [
   user_id: string
   image_type: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -11459,11 +11737,13 @@ export def "users-images delete-by-userId-imageType" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "x-emby-authorization"))
   let base = ($base_url | default $BASE_URL)
+  if ($user_id | is-empty) { error make --unspanned { msg: "path parameter 'userId' must be non-empty" } }
+  if ($image_type | is-empty) { error make --unspanned { msg: "path parameter 'imageType' must be non-empty" } }
   let qp = [(serialize-qp "index" $index "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({user_id: (encode-path-segment $user_id), image_type: (encode-path-segment $image_type)} | format pattern "/Users/{user_id}/Images/{image_type}") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"index": $index} | compact), body: null}
 }
 
 # Get user profile image.
@@ -11500,11 +11780,13 @@ export def "users-images get" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "x-emby-authorization"))
   let base = ($base_url | default $BASE_URL)
+  if ($user_id | is-empty) { error make --unspanned { msg: "path parameter 'userId' must be non-empty" } }
+  if ($image_type | is-empty) { error make --unspanned { msg: "path parameter 'imageType' must be non-empty" } }
   let qp = [(serialize-qp "tag" $tag "scalar") (serialize-qp "format" $format "scalar") (serialize-qp "maxWidth" $max_width "scalar") (serialize-qp "maxHeight" $max_height "scalar") (serialize-qp "percentPlayed" $percent_played "scalar") (serialize-qp "unplayedCount" $unplayed_count "scalar") (serialize-qp "width" $width "scalar") (serialize-qp "height" $height "scalar") (serialize-qp "quality" $quality "scalar") (serialize-qp "cropWhitespace" $crop_whitespace "scalar") (serialize-qp "addPlayedIndicator" $add_played_indicator "scalar") (serialize-qp "blur" $blur "scalar") (serialize-qp "backgroundColor" $background_color "scalar") (serialize-qp "foregroundLayer" $foreground_layer "scalar") (serialize-qp "imageIndex" $image_index "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({user_id: (encode-path-segment $user_id), image_type: (encode-path-segment $image_type)} | format pattern "/Users/{user_id}/Images/{image_type}") $qp)
   let accept_val = "image/*"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"tag": $tag, "format": $format, "maxWidth": $max_width, "maxHeight": $max_height, "percentPlayed": $percent_played, "unplayedCount": $unplayed_count, "width": $width, "height": $height, "quality": $quality, "cropWhitespace": $crop_whitespace, "addPlayedIndicator": $add_played_indicator, "blur": $blur, "backgroundColor": $background_color, "foregroundLayer": $foreground_layer, "imageIndex": $image_index} | compact), body: null}
 }
 
 # Get user profile image.
@@ -11541,18 +11823,20 @@ export def "users-images head-head" [
 ]: nothing -> record {
   let auth = (build-auth $token ($auth_scheme | default "x-emby-authorization"))
   let base = ($base_url | default $BASE_URL)
+  if ($user_id | is-empty) { error make --unspanned { msg: "path parameter 'userId' must be non-empty" } }
+  if ($image_type | is-empty) { error make --unspanned { msg: "path parameter 'imageType' must be non-empty" } }
   let qp = [(serialize-qp "tag" $tag "scalar") (serialize-qp "format" $format "scalar") (serialize-qp "maxWidth" $max_width "scalar") (serialize-qp "maxHeight" $max_height "scalar") (serialize-qp "percentPlayed" $percent_played "scalar") (serialize-qp "unplayedCount" $unplayed_count "scalar") (serialize-qp "width" $width "scalar") (serialize-qp "height" $height "scalar") (serialize-qp "quality" $quality "scalar") (serialize-qp "cropWhitespace" $crop_whitespace "scalar") (serialize-qp "addPlayedIndicator" $add_played_indicator "scalar") (serialize-qp "blur" $blur "scalar") (serialize-qp "backgroundColor" $background_color "scalar") (serialize-qp "foregroundLayer" $foreground_layer "scalar") (serialize-qp "imageIndex" $image_index "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({user_id: (encode-path-segment $user_id), image_type: (encode-path-segment $image_type)} | format pattern "/Users/{user_id}/Images/{image_type}") $qp)
   let accept_val = "image/*"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "head" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "head" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"tag": $tag, "format": $format, "maxWidth": $max_width, "maxHeight": $max_height, "percentPlayed": $percent_played, "unplayedCount": $unplayed_count, "width": $width, "height": $height, "quality": $quality, "cropWhitespace": $crop_whitespace, "addPlayedIndicator": $add_played_indicator, "blur": $blur, "backgroundColor": $background_color, "foregroundLayer": $foreground_layer, "imageIndex": $image_index} | compact), body: null}
 }
 
 # Sets the user image.
 #
 # POST /Users/{userId}/Images/{imageType}
 # operationId: PostUserImage
-export def "users-images create-by-userId-imageType" [
+export def "users-images create-by-user-id-image-type" [
   user_id: string
   image_type: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -11568,11 +11852,13 @@ export def "users-images create-by-userId-imageType" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "x-emby-authorization"))
   let base = ($base_url | default $BASE_URL)
+  if ($user_id | is-empty) { error make --unspanned { msg: "path parameter 'userId' must be non-empty" } }
+  if ($image_type | is-empty) { error make --unspanned { msg: "path parameter 'imageType' must be non-empty" } }
   let qp = [(serialize-qp "index" $index "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({user_id: (encode-path-segment $user_id), image_type: (encode-path-segment $image_type)} | format pattern "/Users/{user_id}/Images/{image_type}") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"index": $index} | compact), body: null}
 }
 
 # Get user profile image.
@@ -11609,11 +11895,14 @@ export def "users-images get-by-index" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "x-emby-authorization"))
   let base = ($base_url | default $BASE_URL)
+  if ($user_id | is-empty) { error make --unspanned { msg: "path parameter 'userId' must be non-empty" } }
+  if ($image_type | is-empty) { error make --unspanned { msg: "path parameter 'imageType' must be non-empty" } }
+  if ($image_index | is-empty) { error make --unspanned { msg: "path parameter 'imageIndex' must be non-empty" } }
   let qp = [(serialize-qp "tag" $tag "scalar") (serialize-qp "format" $format "scalar") (serialize-qp "maxWidth" $max_width "scalar") (serialize-qp "maxHeight" $max_height "scalar") (serialize-qp "percentPlayed" $percent_played "scalar") (serialize-qp "unplayedCount" $unplayed_count "scalar") (serialize-qp "width" $width "scalar") (serialize-qp "height" $height "scalar") (serialize-qp "quality" $quality "scalar") (serialize-qp "cropWhitespace" $crop_whitespace "scalar") (serialize-qp "addPlayedIndicator" $add_played_indicator "scalar") (serialize-qp "blur" $blur "scalar") (serialize-qp "backgroundColor" $background_color "scalar") (serialize-qp "foregroundLayer" $foreground_layer "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({user_id: (encode-path-segment $user_id), image_type: (encode-path-segment $image_type), image_index: (encode-path-segment $image_index)} | format pattern "/Users/{user_id}/Images/{image_type}/{image_index}") $qp)
   let accept_val = "image/*"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"tag": $tag, "format": $format, "maxWidth": $max_width, "maxHeight": $max_height, "percentPlayed": $percent_played, "unplayedCount": $unplayed_count, "width": $width, "height": $height, "quality": $quality, "cropWhitespace": $crop_whitespace, "addPlayedIndicator": $add_played_indicator, "blur": $blur, "backgroundColor": $background_color, "foregroundLayer": $foreground_layer} | compact), body: null}
 }
 
 # Get user profile image.
@@ -11650,18 +11939,21 @@ export def "users-images head-head-by-index" [
 ]: nothing -> record {
   let auth = (build-auth $token ($auth_scheme | default "x-emby-authorization"))
   let base = ($base_url | default $BASE_URL)
+  if ($user_id | is-empty) { error make --unspanned { msg: "path parameter 'userId' must be non-empty" } }
+  if ($image_type | is-empty) { error make --unspanned { msg: "path parameter 'imageType' must be non-empty" } }
+  if ($image_index | is-empty) { error make --unspanned { msg: "path parameter 'imageIndex' must be non-empty" } }
   let qp = [(serialize-qp "tag" $tag "scalar") (serialize-qp "format" $format "scalar") (serialize-qp "maxWidth" $max_width "scalar") (serialize-qp "maxHeight" $max_height "scalar") (serialize-qp "percentPlayed" $percent_played "scalar") (serialize-qp "unplayedCount" $unplayed_count "scalar") (serialize-qp "width" $width "scalar") (serialize-qp "height" $height "scalar") (serialize-qp "quality" $quality "scalar") (serialize-qp "cropWhitespace" $crop_whitespace "scalar") (serialize-qp "addPlayedIndicator" $add_played_indicator "scalar") (serialize-qp "blur" $blur "scalar") (serialize-qp "backgroundColor" $background_color "scalar") (serialize-qp "foregroundLayer" $foreground_layer "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({user_id: (encode-path-segment $user_id), image_type: (encode-path-segment $image_type), image_index: (encode-path-segment $image_index)} | format pattern "/Users/{user_id}/Images/{image_type}/{image_index}") $qp)
   let accept_val = "image/*"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "head" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "head" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"tag": $tag, "format": $format, "maxWidth": $max_width, "maxHeight": $max_height, "percentPlayed": $percent_played, "unplayedCount": $unplayed_count, "width": $width, "height": $height, "quality": $quality, "cropWhitespace": $crop_whitespace, "addPlayedIndicator": $add_played_indicator, "blur": $blur, "backgroundColor": $background_color, "foregroundLayer": $foreground_layer} | compact), body: null}
 }
 
 # Delete the user's image.
 #
 # DELETE /Users/{userId}/Images/{imageType}/{index}
 # operationId: DeleteUserImageByIndex
-export def "users-images delete-by-userId-imageType-index" [
+export def "users-images delete-by-user-id-image-type-index" [
   user_id: string
   image_type: string
   index: int
@@ -11677,17 +11969,20 @@ export def "users-images delete-by-userId-imageType-index" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "x-emby-authorization"))
   let base = ($base_url | default $BASE_URL)
+  if ($user_id | is-empty) { error make --unspanned { msg: "path parameter 'userId' must be non-empty" } }
+  if ($image_type | is-empty) { error make --unspanned { msg: "path parameter 'imageType' must be non-empty" } }
+  if ($index | is-empty) { error make --unspanned { msg: "path parameter 'index' must be non-empty" } }
   let full_url = (build-url $base ({user_id: (encode-path-segment $user_id), image_type: (encode-path-segment $image_type), index: (encode-path-segment $index)} | format pattern "/Users/{user_id}/Images/{image_type}/{index}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
 }
 
 # Sets the user image.
 #
 # POST /Users/{userId}/Images/{imageType}/{index}
 # operationId: PostUserImageByIndex
-export def "users-images create-by-userId-imageType-index" [
+export def "users-images create-by-user-id-image-type-index" [
   user_id: string
   image_type: string
   index: int
@@ -11703,10 +11998,13 @@ export def "users-images create-by-userId-imageType-index" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "x-emby-authorization"))
   let base = ($base_url | default $BASE_URL)
+  if ($user_id | is-empty) { error make --unspanned { msg: "path parameter 'userId' must be non-empty" } }
+  if ($image_type | is-empty) { error make --unspanned { msg: "path parameter 'imageType' must be non-empty" } }
+  if ($index | is-empty) { error make --unspanned { msg: "path parameter 'index' must be non-empty" } }
   let full_url = (build-url $base ({user_id: (encode-path-segment $user_id), image_type: (encode-path-segment $image_type), index: (encode-path-segment $index)} | format pattern "/Users/{user_id}/Images/{image_type}/{index}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
 }
 
 # Gets items based on a query.
@@ -11807,11 +12105,12 @@ export def "users-items list" [
 ]: nothing -> record<Items: table<AirDays: list, AirTime: string, AirsAfterSeasonNumber: int, AirsBeforeEpisodeNumber: int, AirsBeforeSeasonNumber: int, Album: string, AlbumArtist: string, AlbumArtists: list, AlbumCount: int, AlbumId: string, AlbumPrimaryImageTag: string, Altitude: float, Aperture: float, ArtistCount: int, ArtistItems: list, Artists: list, AspectRatio: string, Audio: string, BackdropImageTags: list, CameraMake: string, CameraModel: string, CanDelete: bool, CanDownload: bool, ChannelId: string, ChannelName: string, ChannelNumber: string, ChannelPrimaryImageTag: string, ChannelType: string, Chapters: list, ChildCount: int, CollectionType: string, CommunityRating: float, CompletionPercentage: float, Container: string, CriticRating: float, CumulativeRunTimeTicks: int, CurrentProgram: any, CustomRating: string, DateCreated: string, DateLastMediaAdded: string, DisplayOrder: string, DisplayPreferencesId: string, EnableMediaSourceDisplay: bool, EndDate: string, EpisodeCount: int, EpisodeTitle: string, Etag: string, ExposureTime: float, ExternalUrls: list, ExtraType: string, FocalLength: float, ForcedSortName: string, GenreItems: list, Genres: list, HasSubtitles: bool, Height: int, Id: string, ImageBlurHashes: record, ImageOrientation: string, ImageTags: record, IndexNumber: int, IndexNumberEnd: int, IsFolder: bool, IsHD: bool, IsKids: bool, IsLive: bool, IsMovie: bool, IsNews: bool, IsPlaceHolder: bool, IsPremiere: bool, IsRepeat: bool, IsSeries: bool, IsSports: bool, IsoSpeedRating: int, IsoType: string, Latitude: float, LocalTrailerCount: int, LocationType: string, LockData: bool, LockedFields: list, Longitude: float, MediaSourceCount: int, MediaSources: list, MediaStreams: list, MediaType: string, MovieCount: int, MusicVideoCount: int, Name: string, Number: string, OfficialRating: string, OriginalTitle: string, Overview: string, ParentArtImageTag: string, ParentArtItemId: string, ParentBackdropImageTags: list, ParentBackdropItemId: string, ParentId: string, ParentIndexNumber: int, ParentLogoImageTag: string, ParentLogoItemId: string, ParentPrimaryImageItemId: string, ParentPrimaryImageTag: string, ParentThumbImageTag: string, ParentThumbItemId: string, PartCount: int, Path: string, People: list, PlayAccess: string, PlaylistItemId: string, PreferredMetadataCountryCode: string, PreferredMetadataLanguage: string, PremiereDate: string, PrimaryImageAspectRatio: float, ProductionLocations: list, ProductionYear: int, ProgramCount: int, ProgramId: string, ProviderIds: record, RecursiveItemCount: int, RemoteTrailers: list, RunTimeTicks: int, ScreenshotImageTags: list, SeasonId: string, SeasonName: string, SeriesCount: int, SeriesId: string, SeriesName: string, SeriesPrimaryImageTag: string, SeriesStudio: string, SeriesThumbImageTag: string, SeriesTimerId: string, ServerId: string, ShutterSpeed: float, Software: string, SongCount: int, SortName: string, SourceType: string, SpecialFeatureCount: int, StartDate: string, Status: string, Studios: list, SupportsSync: bool, Taglines: list, Tags: list, TimerId: string, TrailerCount: int, Type: string, UserData: record, Video3DFormat: string, VideoType: string, Width: int>, StartIndex: int, TotalRecordCount: int> {
   let auth = (build-auth $token ($auth_scheme | default "x-emby-authorization"))
   let base = ($base_url | default $BASE_URL)
+  if ($user_id | is-empty) { error make --unspanned { msg: "path parameter 'userId' must be non-empty" } }
   let qp = [(serialize-qp "maxOfficialRating" $max_official_rating "scalar") (serialize-qp "hasThemeSong" $has_theme_song "scalar") (serialize-qp "hasThemeVideo" $has_theme_video "scalar") (serialize-qp "hasSubtitles" $has_subtitles "scalar") (serialize-qp "hasSpecialFeature" $has_special_feature "scalar") (serialize-qp "hasTrailer" $has_trailer "scalar") (serialize-qp "adjacentTo" $adjacent_to "scalar") (serialize-qp "parentIndexNumber" $parent_index_number "scalar") (serialize-qp "hasParentalRating" $has_parental_rating "scalar") (serialize-qp "isHd" $is_hd "scalar") (serialize-qp "is4K" $is4_k "scalar") (serialize-qp "locationTypes" $location_types "multi") (serialize-qp "excludeLocationTypes" $exclude_location_types "multi") (serialize-qp "isMissing" $is_missing "scalar") (serialize-qp "isUnaired" $is_unaired "scalar") (serialize-qp "minCommunityRating" $min_community_rating "scalar") (serialize-qp "minCriticRating" $min_critic_rating "scalar") (serialize-qp "minPremiereDate" $min_premiere_date "scalar") (serialize-qp "minDateLastSaved" $min_date_last_saved "scalar") (serialize-qp "minDateLastSavedForUser" $min_date_last_saved_for_user "scalar") (serialize-qp "maxPremiereDate" $max_premiere_date "scalar") (serialize-qp "hasOverview" $has_overview "scalar") (serialize-qp "hasImdbId" $has_imdb_id "scalar") (serialize-qp "hasTmdbId" $has_tmdb_id "scalar") (serialize-qp "hasTvdbId" $has_tvdb_id "scalar") (serialize-qp "excludeItemIds" $exclude_item_ids "multi") (serialize-qp "startIndex" $start_index "scalar") (serialize-qp "limit" $limit "scalar") (serialize-qp "recursive" $recursive "scalar") (serialize-qp "searchTerm" $search_term "scalar") (serialize-qp "sortOrder" $sort_order "scalar") (serialize-qp "parentId" $parent_id "scalar") (serialize-qp "fields" $fields "multi") (serialize-qp "excludeItemTypes" $exclude_item_types "multi") (serialize-qp "includeItemTypes" $include_item_types "multi") (serialize-qp "filters" $filters "multi") (serialize-qp "isFavorite" $is_favorite "scalar") (serialize-qp "mediaTypes" $media_types "multi") (serialize-qp "imageTypes" $image_types "multi") (serialize-qp "sortBy" $sort_by "scalar") (serialize-qp "isPlayed" $is_played "scalar") (serialize-qp "genres" $genres "multi") (serialize-qp "officialRatings" $official_ratings "multi") (serialize-qp "tags" $tags "multi") (serialize-qp "years" $years "multi") (serialize-qp "enableUserData" $enable_user_data "scalar") (serialize-qp "imageTypeLimit" $image_type_limit "scalar") (serialize-qp "enableImageTypes" $enable_image_types "multi") (serialize-qp "person" $person "scalar") (serialize-qp "personIds" $person_ids "multi") (serialize-qp "personTypes" $person_types "multi") (serialize-qp "studios" $studios "multi") (serialize-qp "artists" $artists "multi") (serialize-qp "excludeArtistIds" $exclude_artist_ids "multi") (serialize-qp "artistIds" $artist_ids "multi") (serialize-qp "albumArtistIds" $album_artist_ids "multi") (serialize-qp "contributingArtistIds" $contributing_artist_ids "multi") (serialize-qp "albums" $albums "multi") (serialize-qp "albumIds" $album_ids "multi") (serialize-qp "ids" $ids "multi") (serialize-qp "videoTypes" $video_types "multi") (serialize-qp "minOfficialRating" $min_official_rating "scalar") (serialize-qp "isLocked" $is_locked "scalar") (serialize-qp "isPlaceHolder" $is_place_holder "scalar") (serialize-qp "hasOfficialRating" $has_official_rating "scalar") (serialize-qp "collapseBoxSetItems" $collapse_box_set_items "scalar") (serialize-qp "minWidth" $min_width "scalar") (serialize-qp "minHeight" $min_height "scalar") (serialize-qp "maxWidth" $max_width "scalar") (serialize-qp "maxHeight" $max_height "scalar") (serialize-qp "is3D" $is3_d "scalar") (serialize-qp "seriesStatus" $series_status "multi") (serialize-qp "nameStartsWithOrGreater" $name_starts_with_or_greater "scalar") (serialize-qp "nameStartsWith" $name_starts_with "scalar") (serialize-qp "nameLessThan" $name_less_than "scalar") (serialize-qp "studioIds" $studio_ids "multi") (serialize-qp "genreIds" $genre_ids "multi") (serialize-qp "enableTotalRecordCount" $enable_total_record_count "scalar") (serialize-qp "enableImages" $enable_images "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({user_id: (encode-path-segment $user_id)} | format pattern "/Users/{user_id}/Items") $qp)
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"maxOfficialRating": $max_official_rating, "hasThemeSong": $has_theme_song, "hasThemeVideo": $has_theme_video, "hasSubtitles": $has_subtitles, "hasSpecialFeature": $has_special_feature, "hasTrailer": $has_trailer, "adjacentTo": $adjacent_to, "parentIndexNumber": $parent_index_number, "hasParentalRating": $has_parental_rating, "isHd": $is_hd, "is4K": $is4_k, "locationTypes": $location_types, "excludeLocationTypes": $exclude_location_types, "isMissing": $is_missing, "isUnaired": $is_unaired, "minCommunityRating": $min_community_rating, "minCriticRating": $min_critic_rating, "minPremiereDate": $min_premiere_date, "minDateLastSaved": $min_date_last_saved, "minDateLastSavedForUser": $min_date_last_saved_for_user, "maxPremiereDate": $max_premiere_date, "hasOverview": $has_overview, "hasImdbId": $has_imdb_id, "hasTmdbId": $has_tmdb_id, "hasTvdbId": $has_tvdb_id, "excludeItemIds": $exclude_item_ids, "startIndex": $start_index, "limit": $limit, "recursive": $recursive, "searchTerm": $search_term, "sortOrder": $sort_order, "parentId": $parent_id, "fields": $fields, "excludeItemTypes": $exclude_item_types, "includeItemTypes": $include_item_types, "filters": $filters, "isFavorite": $is_favorite, "mediaTypes": $media_types, "imageTypes": $image_types, "sortBy": $sort_by, "isPlayed": $is_played, "genres": $genres, "officialRatings": $official_ratings, "tags": $tags, "years": $years, "enableUserData": $enable_user_data, "imageTypeLimit": $image_type_limit, "enableImageTypes": $enable_image_types, "person": $person, "personIds": $person_ids, "personTypes": $person_types, "studios": $studios, "artists": $artists, "excludeArtistIds": $exclude_artist_ids, "artistIds": $artist_ids, "albumArtistIds": $album_artist_ids, "contributingArtistIds": $contributing_artist_ids, "albums": $albums, "albumIds": $album_ids, "ids": $ids, "videoTypes": $video_types, "minOfficialRating": $min_official_rating, "isLocked": $is_locked, "isPlaceHolder": $is_place_holder, "hasOfficialRating": $has_official_rating, "collapseBoxSetItems": $collapse_box_set_items, "minWidth": $min_width, "minHeight": $min_height, "maxWidth": $max_width, "maxHeight": $max_height, "is3D": $is3_d, "seriesStatus": $series_status, "nameStartsWithOrGreater": $name_starts_with_or_greater, "nameStartsWith": $name_starts_with, "nameLessThan": $name_less_than, "studioIds": $studio_ids, "genreIds": $genre_ids, "enableTotalRecordCount": $enable_total_record_count, "enableImages": $enable_images} | compact), body: null}
 }
 
 # Gets latest media.
@@ -11843,11 +12142,12 @@ export def "users-items-latest get-media" [
 ]: nothing -> table<AirDays: list<string>, AirTime: string, AirsAfterSeasonNumber: int, AirsBeforeEpisodeNumber: int, AirsBeforeSeasonNumber: int, Album: string, AlbumArtist: string, AlbumArtists: list<record>, AlbumCount: int, AlbumId: string, AlbumPrimaryImageTag: string, Altitude: float, Aperture: float, ArtistCount: int, ArtistItems: list<record>, Artists: list<string>, AspectRatio: string, Audio: string, BackdropImageTags: list<string>, CameraMake: string, CameraModel: string, CanDelete: bool, CanDownload: bool, ChannelId: string, ChannelName: string, ChannelNumber: string, ChannelPrimaryImageTag: string, ChannelType: string, Chapters: list<record>, ChildCount: int, CollectionType: string, CommunityRating: float, CompletionPercentage: float, Container: string, CriticRating: float, CumulativeRunTimeTicks: int, CurrentProgram: any, CustomRating: string, DateCreated: string, DateLastMediaAdded: string, DisplayOrder: string, DisplayPreferencesId: string, EnableMediaSourceDisplay: bool, EndDate: string, EpisodeCount: int, EpisodeTitle: string, Etag: string, ExposureTime: float, ExternalUrls: list<record>, ExtraType: string, FocalLength: float, ForcedSortName: string, GenreItems: list<record>, Genres: list<string>, HasSubtitles: bool, Height: int, Id: string, ImageBlurHashes: record<Art: record, Backdrop: record, Banner: record, Box: record, BoxRear: record, Chapter: record, Disc: record, Logo: record, Menu: record, Primary: record, Profile: record, Screenshot: record, Thumb: record>, ImageOrientation: string, ImageTags: record, IndexNumber: int, IndexNumberEnd: int, IsFolder: bool, IsHD: bool, IsKids: bool, IsLive: bool, IsMovie: bool, IsNews: bool, IsPlaceHolder: bool, IsPremiere: bool, IsRepeat: bool, IsSeries: bool, IsSports: bool, IsoSpeedRating: int, IsoType: string, Latitude: float, LocalTrailerCount: int, LocationType: string, LockData: bool, LockedFields: list<string>, Longitude: float, MediaSourceCount: int, MediaSources: list<record>, MediaStreams: list<record>, MediaType: string, MovieCount: int, MusicVideoCount: int, Name: string, Number: string, OfficialRating: string, OriginalTitle: string, Overview: string, ParentArtImageTag: string, ParentArtItemId: string, ParentBackdropImageTags: list<string>, ParentBackdropItemId: string, ParentId: string, ParentIndexNumber: int, ParentLogoImageTag: string, ParentLogoItemId: string, ParentPrimaryImageItemId: string, ParentPrimaryImageTag: string, ParentThumbImageTag: string, ParentThumbItemId: string, PartCount: int, Path: string, People: list<record>, PlayAccess: string, PlaylistItemId: string, PreferredMetadataCountryCode: string, PreferredMetadataLanguage: string, PremiereDate: string, PrimaryImageAspectRatio: float, ProductionLocations: list<string>, ProductionYear: int, ProgramCount: int, ProgramId: string, ProviderIds: record, RecursiveItemCount: int, RemoteTrailers: list<record>, RunTimeTicks: int, ScreenshotImageTags: list<string>, SeasonId: string, SeasonName: string, SeriesCount: int, SeriesId: string, SeriesName: string, SeriesPrimaryImageTag: string, SeriesStudio: string, SeriesThumbImageTag: string, SeriesTimerId: string, ServerId: string, ShutterSpeed: float, Software: string, SongCount: int, SortName: string, SourceType: string, SpecialFeatureCount: int, StartDate: string, Status: string, Studios: list<record>, SupportsSync: bool, Taglines: list<string>, Tags: list<string>, TimerId: string, TrailerCount: int, Type: string, UserData: record<IsFavorite: bool, ItemId: string, Key: string, LastPlayedDate: string, Likes: bool, PlayCount: int, PlaybackPositionTicks: int, Played: bool, PlayedPercentage: float, Rating: float, UnplayedItemCount: int>, Video3DFormat: string, VideoType: string, Width: int> {
   let auth = (build-auth $token ($auth_scheme | default "x-emby-authorization"))
   let base = ($base_url | default $BASE_URL)
+  if ($user_id | is-empty) { error make --unspanned { msg: "path parameter 'userId' must be non-empty" } }
   let qp = [(serialize-qp "parentId" $parent_id "scalar") (serialize-qp "fields" $fields "multi") (serialize-qp "includeItemTypes" $include_item_types "multi") (serialize-qp "isPlayed" $is_played "scalar") (serialize-qp "enableImages" $enable_images "scalar") (serialize-qp "imageTypeLimit" $image_type_limit "scalar") (serialize-qp "enableImageTypes" $enable_image_types "multi") (serialize-qp "enableUserData" $enable_user_data "scalar") (serialize-qp "limit" $limit "scalar") (serialize-qp "groupItems" $group_items "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({user_id: (encode-path-segment $user_id)} | format pattern "/Users/{user_id}/Items/Latest") $qp)
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"parentId": $parent_id, "fields": $fields, "includeItemTypes": $include_item_types, "isPlayed": $is_played, "enableImages": $enable_images, "imageTypeLimit": $image_type_limit, "enableImageTypes": $enable_image_types, "enableUserData": $enable_user_data, "limit": $limit, "groupItems": $group_items} | compact), body: null}
 }
 
 # Gets items based on a query.
@@ -11882,11 +12182,12 @@ export def "users-items-resume get" [
 ]: nothing -> record<Items: table<AirDays: list, AirTime: string, AirsAfterSeasonNumber: int, AirsBeforeEpisodeNumber: int, AirsBeforeSeasonNumber: int, Album: string, AlbumArtist: string, AlbumArtists: list, AlbumCount: int, AlbumId: string, AlbumPrimaryImageTag: string, Altitude: float, Aperture: float, ArtistCount: int, ArtistItems: list, Artists: list, AspectRatio: string, Audio: string, BackdropImageTags: list, CameraMake: string, CameraModel: string, CanDelete: bool, CanDownload: bool, ChannelId: string, ChannelName: string, ChannelNumber: string, ChannelPrimaryImageTag: string, ChannelType: string, Chapters: list, ChildCount: int, CollectionType: string, CommunityRating: float, CompletionPercentage: float, Container: string, CriticRating: float, CumulativeRunTimeTicks: int, CurrentProgram: any, CustomRating: string, DateCreated: string, DateLastMediaAdded: string, DisplayOrder: string, DisplayPreferencesId: string, EnableMediaSourceDisplay: bool, EndDate: string, EpisodeCount: int, EpisodeTitle: string, Etag: string, ExposureTime: float, ExternalUrls: list, ExtraType: string, FocalLength: float, ForcedSortName: string, GenreItems: list, Genres: list, HasSubtitles: bool, Height: int, Id: string, ImageBlurHashes: record, ImageOrientation: string, ImageTags: record, IndexNumber: int, IndexNumberEnd: int, IsFolder: bool, IsHD: bool, IsKids: bool, IsLive: bool, IsMovie: bool, IsNews: bool, IsPlaceHolder: bool, IsPremiere: bool, IsRepeat: bool, IsSeries: bool, IsSports: bool, IsoSpeedRating: int, IsoType: string, Latitude: float, LocalTrailerCount: int, LocationType: string, LockData: bool, LockedFields: list, Longitude: float, MediaSourceCount: int, MediaSources: list, MediaStreams: list, MediaType: string, MovieCount: int, MusicVideoCount: int, Name: string, Number: string, OfficialRating: string, OriginalTitle: string, Overview: string, ParentArtImageTag: string, ParentArtItemId: string, ParentBackdropImageTags: list, ParentBackdropItemId: string, ParentId: string, ParentIndexNumber: int, ParentLogoImageTag: string, ParentLogoItemId: string, ParentPrimaryImageItemId: string, ParentPrimaryImageTag: string, ParentThumbImageTag: string, ParentThumbItemId: string, PartCount: int, Path: string, People: list, PlayAccess: string, PlaylistItemId: string, PreferredMetadataCountryCode: string, PreferredMetadataLanguage: string, PremiereDate: string, PrimaryImageAspectRatio: float, ProductionLocations: list, ProductionYear: int, ProgramCount: int, ProgramId: string, ProviderIds: record, RecursiveItemCount: int, RemoteTrailers: list, RunTimeTicks: int, ScreenshotImageTags: list, SeasonId: string, SeasonName: string, SeriesCount: int, SeriesId: string, SeriesName: string, SeriesPrimaryImageTag: string, SeriesStudio: string, SeriesThumbImageTag: string, SeriesTimerId: string, ServerId: string, ShutterSpeed: float, Software: string, SongCount: int, SortName: string, SourceType: string, SpecialFeatureCount: int, StartDate: string, Status: string, Studios: list, SupportsSync: bool, Taglines: list, Tags: list, TimerId: string, TrailerCount: int, Type: string, UserData: record, Video3DFormat: string, VideoType: string, Width: int>, StartIndex: int, TotalRecordCount: int> {
   let auth = (build-auth $token ($auth_scheme | default "x-emby-authorization"))
   let base = ($base_url | default $BASE_URL)
+  if ($user_id | is-empty) { error make --unspanned { msg: "path parameter 'userId' must be non-empty" } }
   let qp = [(serialize-qp "startIndex" $start_index "scalar") (serialize-qp "limit" $limit "scalar") (serialize-qp "searchTerm" $search_term "scalar") (serialize-qp "parentId" $parent_id "scalar") (serialize-qp "fields" $fields "multi") (serialize-qp "mediaTypes" $media_types "multi") (serialize-qp "enableUserData" $enable_user_data "scalar") (serialize-qp "imageTypeLimit" $image_type_limit "scalar") (serialize-qp "enableImageTypes" $enable_image_types "multi") (serialize-qp "excludeItemTypes" $exclude_item_types "multi") (serialize-qp "includeItemTypes" $include_item_types "multi") (serialize-qp "enableTotalRecordCount" $enable_total_record_count "scalar") (serialize-qp "enableImages" $enable_images "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({user_id: (encode-path-segment $user_id)} | format pattern "/Users/{user_id}/Items/Resume") $qp)
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"startIndex": $start_index, "limit": $limit, "searchTerm": $search_term, "parentId": $parent_id, "fields": $fields, "mediaTypes": $media_types, "enableUserData": $enable_user_data, "imageTypeLimit": $image_type_limit, "enableImageTypes": $enable_image_types, "excludeItemTypes": $exclude_item_types, "includeItemTypes": $include_item_types, "enableTotalRecordCount": $enable_total_record_count, "enableImages": $enable_images} | compact), body: null}
 }
 
 # Gets the root folder from a user's library.
@@ -11908,10 +12209,11 @@ export def "users-items-root get-folder" [
 ]: nothing -> record<AirDays: list<string>, AirTime: string, AirsAfterSeasonNumber: int, AirsBeforeEpisodeNumber: int, AirsBeforeSeasonNumber: int, Album: string, AlbumArtist: string, AlbumArtists: table<Id: string, Name: string>, AlbumCount: int, AlbumId: string, AlbumPrimaryImageTag: string, Altitude: float, Aperture: float, ArtistCount: int, ArtistItems: table<Id: string, Name: string>, Artists: list<string>, AspectRatio: string, Audio: string, BackdropImageTags: list<string>, CameraMake: string, CameraModel: string, CanDelete: bool, CanDownload: bool, ChannelId: string, ChannelName: string, ChannelNumber: string, ChannelPrimaryImageTag: string, ChannelType: string, Chapters: table<ImageDateModified: string, ImagePath: string, ImageTag: string, Name: string, StartPositionTicks: int>, ChildCount: int, CollectionType: string, CommunityRating: float, CompletionPercentage: float, Container: string, CriticRating: float, CumulativeRunTimeTicks: int, CurrentProgram: any, CustomRating: string, DateCreated: string, DateLastMediaAdded: string, DisplayOrder: string, DisplayPreferencesId: string, EnableMediaSourceDisplay: bool, EndDate: string, EpisodeCount: int, EpisodeTitle: string, Etag: string, ExposureTime: float, ExternalUrls: table<Name: string, Url: string>, ExtraType: string, FocalLength: float, ForcedSortName: string, GenreItems: table<Id: string, Name: string>, Genres: list<string>, HasSubtitles: bool, Height: int, Id: string, ImageBlurHashes: record<Art: record, Backdrop: record, Banner: record, Box: record, BoxRear: record, Chapter: record, Disc: record, Logo: record, Menu: record, Primary: record, Profile: record, Screenshot: record, Thumb: record>, ImageOrientation: string, ImageTags: record, IndexNumber: int, IndexNumberEnd: int, IsFolder: bool, IsHD: bool, IsKids: bool, IsLive: bool, IsMovie: bool, IsNews: bool, IsPlaceHolder: bool, IsPremiere: bool, IsRepeat: bool, IsSeries: bool, IsSports: bool, IsoSpeedRating: int, IsoType: string, Latitude: float, LocalTrailerCount: int, LocationType: string, LockData: bool, LockedFields: list<string>, Longitude: float, MediaSourceCount: int, MediaSources: table<AnalyzeDurationMs: int, Bitrate: int, BufferMs: int, Container: string, DefaultAudioStreamIndex: int, DefaultSubtitleStreamIndex: int, ETag: string, EncoderPath: string, EncoderProtocol: string, Formats: list, GenPtsInput: bool, Id: string, IgnoreDts: bool, IgnoreIndex: bool, IsInfiniteStream: bool, IsRemote: bool, IsoType: string, LiveStreamId: string, MediaAttachments: list, MediaStreams: list, Name: string, OpenToken: string, Path: string, Protocol: string, ReadAtNativeFramerate: bool, RequiredHttpHeaders: record, RequiresClosing: bool, RequiresLooping: bool, RequiresOpening: bool, RunTimeTicks: int, Size: int, SupportsDirectPlay: bool, SupportsDirectStream: bool, SupportsProbing: bool, SupportsTranscoding: bool, Timestamp: string, TranscodingContainer: string, TranscodingSubProtocol: string, TranscodingUrl: string, Type: string, Video3DFormat: string, VideoType: string>, MediaStreams: table<AspectRatio: string, AverageFrameRate: float, BitDepth: int, BitRate: int, ChannelLayout: string, Channels: int, Codec: string, CodecTag: string, CodecTimeBase: string, ColorPrimaries: string, ColorRange: string, ColorSpace: string, ColorTransfer: string, Comment: string, DeliveryMethod: string, DeliveryUrl: string, DisplayTitle: string, Height: int, Index: int, IsAVC: bool, IsAnamorphic: bool, IsDefault: bool, IsExternal: bool, IsExternalUrl: bool, IsForced: bool, IsInterlaced: bool, IsTextSubtitleStream: bool, Language: string, Level: float, NalLengthSize: string, PacketLength: int, Path: string, PixelFormat: string, Profile: string, RealFrameRate: float, RefFrames: int, SampleRate: int, Score: int, SupportsExternalStream: bool, TimeBase: string, Title: string, Type: string, VideoRange: string, Width: int, localizedDefault: string, localizedForced: string, localizedUndefined: string>, MediaType: string, MovieCount: int, MusicVideoCount: int, Name: string, Number: string, OfficialRating: string, OriginalTitle: string, Overview: string, ParentArtImageTag: string, ParentArtItemId: string, ParentBackdropImageTags: list<string>, ParentBackdropItemId: string, ParentId: string, ParentIndexNumber: int, ParentLogoImageTag: string, ParentLogoItemId: string, ParentPrimaryImageItemId: string, ParentPrimaryImageTag: string, ParentThumbImageTag: string, ParentThumbItemId: string, PartCount: int, Path: string, People: table<Id: string, ImageBlurHashes: record, Name: string, PrimaryImageTag: string, Role: string, Type: string>, PlayAccess: string, PlaylistItemId: string, PreferredMetadataCountryCode: string, PreferredMetadataLanguage: string, PremiereDate: string, PrimaryImageAspectRatio: float, ProductionLocations: list<string>, ProductionYear: int, ProgramCount: int, ProgramId: string, ProviderIds: record, RecursiveItemCount: int, RemoteTrailers: table<Name: string, Url: string>, RunTimeTicks: int, ScreenshotImageTags: list<string>, SeasonId: string, SeasonName: string, SeriesCount: int, SeriesId: string, SeriesName: string, SeriesPrimaryImageTag: string, SeriesStudio: string, SeriesThumbImageTag: string, SeriesTimerId: string, ServerId: string, ShutterSpeed: float, Software: string, SongCount: int, SortName: string, SourceType: string, SpecialFeatureCount: int, StartDate: string, Status: string, Studios: table<Id: string, Name: string>, SupportsSync: bool, Taglines: list<string>, Tags: list<string>, TimerId: string, TrailerCount: int, Type: string, UserData: record<IsFavorite: bool, ItemId: string, Key: string, LastPlayedDate: string, Likes: bool, PlayCount: int, PlaybackPositionTicks: int, Played: bool, PlayedPercentage: float, Rating: float, UnplayedItemCount: int>, Video3DFormat: string, VideoType: string, Width: int> {
   let auth = (build-auth $token ($auth_scheme | default "x-emby-authorization"))
   let base = ($base_url | default $BASE_URL)
+  if ($user_id | is-empty) { error make --unspanned { msg: "path parameter 'userId' must be non-empty" } }
   let full_url = (build-url $base ({user_id: (encode-path-segment $user_id)} | format pattern "/Users/{user_id}/Items/Root"))
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
 }
 
 # Gets an item from a user's library.
@@ -11934,10 +12236,12 @@ export def "users-items get" [
 ]: nothing -> record<AirDays: list<string>, AirTime: string, AirsAfterSeasonNumber: int, AirsBeforeEpisodeNumber: int, AirsBeforeSeasonNumber: int, Album: string, AlbumArtist: string, AlbumArtists: table<Id: string, Name: string>, AlbumCount: int, AlbumId: string, AlbumPrimaryImageTag: string, Altitude: float, Aperture: float, ArtistCount: int, ArtistItems: table<Id: string, Name: string>, Artists: list<string>, AspectRatio: string, Audio: string, BackdropImageTags: list<string>, CameraMake: string, CameraModel: string, CanDelete: bool, CanDownload: bool, ChannelId: string, ChannelName: string, ChannelNumber: string, ChannelPrimaryImageTag: string, ChannelType: string, Chapters: table<ImageDateModified: string, ImagePath: string, ImageTag: string, Name: string, StartPositionTicks: int>, ChildCount: int, CollectionType: string, CommunityRating: float, CompletionPercentage: float, Container: string, CriticRating: float, CumulativeRunTimeTicks: int, CurrentProgram: any, CustomRating: string, DateCreated: string, DateLastMediaAdded: string, DisplayOrder: string, DisplayPreferencesId: string, EnableMediaSourceDisplay: bool, EndDate: string, EpisodeCount: int, EpisodeTitle: string, Etag: string, ExposureTime: float, ExternalUrls: table<Name: string, Url: string>, ExtraType: string, FocalLength: float, ForcedSortName: string, GenreItems: table<Id: string, Name: string>, Genres: list<string>, HasSubtitles: bool, Height: int, Id: string, ImageBlurHashes: record<Art: record, Backdrop: record, Banner: record, Box: record, BoxRear: record, Chapter: record, Disc: record, Logo: record, Menu: record, Primary: record, Profile: record, Screenshot: record, Thumb: record>, ImageOrientation: string, ImageTags: record, IndexNumber: int, IndexNumberEnd: int, IsFolder: bool, IsHD: bool, IsKids: bool, IsLive: bool, IsMovie: bool, IsNews: bool, IsPlaceHolder: bool, IsPremiere: bool, IsRepeat: bool, IsSeries: bool, IsSports: bool, IsoSpeedRating: int, IsoType: string, Latitude: float, LocalTrailerCount: int, LocationType: string, LockData: bool, LockedFields: list<string>, Longitude: float, MediaSourceCount: int, MediaSources: table<AnalyzeDurationMs: int, Bitrate: int, BufferMs: int, Container: string, DefaultAudioStreamIndex: int, DefaultSubtitleStreamIndex: int, ETag: string, EncoderPath: string, EncoderProtocol: string, Formats: list, GenPtsInput: bool, Id: string, IgnoreDts: bool, IgnoreIndex: bool, IsInfiniteStream: bool, IsRemote: bool, IsoType: string, LiveStreamId: string, MediaAttachments: list, MediaStreams: list, Name: string, OpenToken: string, Path: string, Protocol: string, ReadAtNativeFramerate: bool, RequiredHttpHeaders: record, RequiresClosing: bool, RequiresLooping: bool, RequiresOpening: bool, RunTimeTicks: int, Size: int, SupportsDirectPlay: bool, SupportsDirectStream: bool, SupportsProbing: bool, SupportsTranscoding: bool, Timestamp: string, TranscodingContainer: string, TranscodingSubProtocol: string, TranscodingUrl: string, Type: string, Video3DFormat: string, VideoType: string>, MediaStreams: table<AspectRatio: string, AverageFrameRate: float, BitDepth: int, BitRate: int, ChannelLayout: string, Channels: int, Codec: string, CodecTag: string, CodecTimeBase: string, ColorPrimaries: string, ColorRange: string, ColorSpace: string, ColorTransfer: string, Comment: string, DeliveryMethod: string, DeliveryUrl: string, DisplayTitle: string, Height: int, Index: int, IsAVC: bool, IsAnamorphic: bool, IsDefault: bool, IsExternal: bool, IsExternalUrl: bool, IsForced: bool, IsInterlaced: bool, IsTextSubtitleStream: bool, Language: string, Level: float, NalLengthSize: string, PacketLength: int, Path: string, PixelFormat: string, Profile: string, RealFrameRate: float, RefFrames: int, SampleRate: int, Score: int, SupportsExternalStream: bool, TimeBase: string, Title: string, Type: string, VideoRange: string, Width: int, localizedDefault: string, localizedForced: string, localizedUndefined: string>, MediaType: string, MovieCount: int, MusicVideoCount: int, Name: string, Number: string, OfficialRating: string, OriginalTitle: string, Overview: string, ParentArtImageTag: string, ParentArtItemId: string, ParentBackdropImageTags: list<string>, ParentBackdropItemId: string, ParentId: string, ParentIndexNumber: int, ParentLogoImageTag: string, ParentLogoItemId: string, ParentPrimaryImageItemId: string, ParentPrimaryImageTag: string, ParentThumbImageTag: string, ParentThumbItemId: string, PartCount: int, Path: string, People: table<Id: string, ImageBlurHashes: record, Name: string, PrimaryImageTag: string, Role: string, Type: string>, PlayAccess: string, PlaylistItemId: string, PreferredMetadataCountryCode: string, PreferredMetadataLanguage: string, PremiereDate: string, PrimaryImageAspectRatio: float, ProductionLocations: list<string>, ProductionYear: int, ProgramCount: int, ProgramId: string, ProviderIds: record, RecursiveItemCount: int, RemoteTrailers: table<Name: string, Url: string>, RunTimeTicks: int, ScreenshotImageTags: list<string>, SeasonId: string, SeasonName: string, SeriesCount: int, SeriesId: string, SeriesName: string, SeriesPrimaryImageTag: string, SeriesStudio: string, SeriesThumbImageTag: string, SeriesTimerId: string, ServerId: string, ShutterSpeed: float, Software: string, SongCount: int, SortName: string, SourceType: string, SpecialFeatureCount: int, StartDate: string, Status: string, Studios: table<Id: string, Name: string>, SupportsSync: bool, Taglines: list<string>, Tags: list<string>, TimerId: string, TrailerCount: int, Type: string, UserData: record<IsFavorite: bool, ItemId: string, Key: string, LastPlayedDate: string, Likes: bool, PlayCount: int, PlaybackPositionTicks: int, Played: bool, PlayedPercentage: float, Rating: float, UnplayedItemCount: int>, Video3DFormat: string, VideoType: string, Width: int> {
   let auth = (build-auth $token ($auth_scheme | default "x-emby-authorization"))
   let base = ($base_url | default $BASE_URL)
+  if ($user_id | is-empty) { error make --unspanned { msg: "path parameter 'userId' must be non-empty" } }
+  if ($item_id | is-empty) { error make --unspanned { msg: "path parameter 'itemId' must be non-empty" } }
   let full_url = (build-url $base ({user_id: (encode-path-segment $user_id), item_id: (encode-path-segment $item_id)} | format pattern "/Users/{user_id}/Items/{item_id}"))
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
 }
 
 # Gets intros to play before the main media item plays.
@@ -11960,10 +12264,12 @@ export def "users-items-intros get" [
 ]: nothing -> record<Items: table<AirDays: list, AirTime: string, AirsAfterSeasonNumber: int, AirsBeforeEpisodeNumber: int, AirsBeforeSeasonNumber: int, Album: string, AlbumArtist: string, AlbumArtists: list, AlbumCount: int, AlbumId: string, AlbumPrimaryImageTag: string, Altitude: float, Aperture: float, ArtistCount: int, ArtistItems: list, Artists: list, AspectRatio: string, Audio: string, BackdropImageTags: list, CameraMake: string, CameraModel: string, CanDelete: bool, CanDownload: bool, ChannelId: string, ChannelName: string, ChannelNumber: string, ChannelPrimaryImageTag: string, ChannelType: string, Chapters: list, ChildCount: int, CollectionType: string, CommunityRating: float, CompletionPercentage: float, Container: string, CriticRating: float, CumulativeRunTimeTicks: int, CurrentProgram: any, CustomRating: string, DateCreated: string, DateLastMediaAdded: string, DisplayOrder: string, DisplayPreferencesId: string, EnableMediaSourceDisplay: bool, EndDate: string, EpisodeCount: int, EpisodeTitle: string, Etag: string, ExposureTime: float, ExternalUrls: list, ExtraType: string, FocalLength: float, ForcedSortName: string, GenreItems: list, Genres: list, HasSubtitles: bool, Height: int, Id: string, ImageBlurHashes: record, ImageOrientation: string, ImageTags: record, IndexNumber: int, IndexNumberEnd: int, IsFolder: bool, IsHD: bool, IsKids: bool, IsLive: bool, IsMovie: bool, IsNews: bool, IsPlaceHolder: bool, IsPremiere: bool, IsRepeat: bool, IsSeries: bool, IsSports: bool, IsoSpeedRating: int, IsoType: string, Latitude: float, LocalTrailerCount: int, LocationType: string, LockData: bool, LockedFields: list, Longitude: float, MediaSourceCount: int, MediaSources: list, MediaStreams: list, MediaType: string, MovieCount: int, MusicVideoCount: int, Name: string, Number: string, OfficialRating: string, OriginalTitle: string, Overview: string, ParentArtImageTag: string, ParentArtItemId: string, ParentBackdropImageTags: list, ParentBackdropItemId: string, ParentId: string, ParentIndexNumber: int, ParentLogoImageTag: string, ParentLogoItemId: string, ParentPrimaryImageItemId: string, ParentPrimaryImageTag: string, ParentThumbImageTag: string, ParentThumbItemId: string, PartCount: int, Path: string, People: list, PlayAccess: string, PlaylistItemId: string, PreferredMetadataCountryCode: string, PreferredMetadataLanguage: string, PremiereDate: string, PrimaryImageAspectRatio: float, ProductionLocations: list, ProductionYear: int, ProgramCount: int, ProgramId: string, ProviderIds: record, RecursiveItemCount: int, RemoteTrailers: list, RunTimeTicks: int, ScreenshotImageTags: list, SeasonId: string, SeasonName: string, SeriesCount: int, SeriesId: string, SeriesName: string, SeriesPrimaryImageTag: string, SeriesStudio: string, SeriesThumbImageTag: string, SeriesTimerId: string, ServerId: string, ShutterSpeed: float, Software: string, SongCount: int, SortName: string, SourceType: string, SpecialFeatureCount: int, StartDate: string, Status: string, Studios: list, SupportsSync: bool, Taglines: list, Tags: list, TimerId: string, TrailerCount: int, Type: string, UserData: record, Video3DFormat: string, VideoType: string, Width: int>, StartIndex: int, TotalRecordCount: int> {
   let auth = (build-auth $token ($auth_scheme | default "x-emby-authorization"))
   let base = ($base_url | default $BASE_URL)
+  if ($user_id | is-empty) { error make --unspanned { msg: "path parameter 'userId' must be non-empty" } }
+  if ($item_id | is-empty) { error make --unspanned { msg: "path parameter 'itemId' must be non-empty" } }
   let full_url = (build-url $base ({user_id: (encode-path-segment $user_id), item_id: (encode-path-segment $item_id)} | format pattern "/Users/{user_id}/Items/{item_id}/Intros"))
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
 }
 
 # Gets local trailers for an item.
@@ -11986,10 +12292,12 @@ export def "users-items-local-trailers get" [
 ]: nothing -> table<AirDays: list<string>, AirTime: string, AirsAfterSeasonNumber: int, AirsBeforeEpisodeNumber: int, AirsBeforeSeasonNumber: int, Album: string, AlbumArtist: string, AlbumArtists: list<record>, AlbumCount: int, AlbumId: string, AlbumPrimaryImageTag: string, Altitude: float, Aperture: float, ArtistCount: int, ArtistItems: list<record>, Artists: list<string>, AspectRatio: string, Audio: string, BackdropImageTags: list<string>, CameraMake: string, CameraModel: string, CanDelete: bool, CanDownload: bool, ChannelId: string, ChannelName: string, ChannelNumber: string, ChannelPrimaryImageTag: string, ChannelType: string, Chapters: list<record>, ChildCount: int, CollectionType: string, CommunityRating: float, CompletionPercentage: float, Container: string, CriticRating: float, CumulativeRunTimeTicks: int, CurrentProgram: any, CustomRating: string, DateCreated: string, DateLastMediaAdded: string, DisplayOrder: string, DisplayPreferencesId: string, EnableMediaSourceDisplay: bool, EndDate: string, EpisodeCount: int, EpisodeTitle: string, Etag: string, ExposureTime: float, ExternalUrls: list<record>, ExtraType: string, FocalLength: float, ForcedSortName: string, GenreItems: list<record>, Genres: list<string>, HasSubtitles: bool, Height: int, Id: string, ImageBlurHashes: record<Art: record, Backdrop: record, Banner: record, Box: record, BoxRear: record, Chapter: record, Disc: record, Logo: record, Menu: record, Primary: record, Profile: record, Screenshot: record, Thumb: record>, ImageOrientation: string, ImageTags: record, IndexNumber: int, IndexNumberEnd: int, IsFolder: bool, IsHD: bool, IsKids: bool, IsLive: bool, IsMovie: bool, IsNews: bool, IsPlaceHolder: bool, IsPremiere: bool, IsRepeat: bool, IsSeries: bool, IsSports: bool, IsoSpeedRating: int, IsoType: string, Latitude: float, LocalTrailerCount: int, LocationType: string, LockData: bool, LockedFields: list<string>, Longitude: float, MediaSourceCount: int, MediaSources: list<record>, MediaStreams: list<record>, MediaType: string, MovieCount: int, MusicVideoCount: int, Name: string, Number: string, OfficialRating: string, OriginalTitle: string, Overview: string, ParentArtImageTag: string, ParentArtItemId: string, ParentBackdropImageTags: list<string>, ParentBackdropItemId: string, ParentId: string, ParentIndexNumber: int, ParentLogoImageTag: string, ParentLogoItemId: string, ParentPrimaryImageItemId: string, ParentPrimaryImageTag: string, ParentThumbImageTag: string, ParentThumbItemId: string, PartCount: int, Path: string, People: list<record>, PlayAccess: string, PlaylistItemId: string, PreferredMetadataCountryCode: string, PreferredMetadataLanguage: string, PremiereDate: string, PrimaryImageAspectRatio: float, ProductionLocations: list<string>, ProductionYear: int, ProgramCount: int, ProgramId: string, ProviderIds: record, RecursiveItemCount: int, RemoteTrailers: list<record>, RunTimeTicks: int, ScreenshotImageTags: list<string>, SeasonId: string, SeasonName: string, SeriesCount: int, SeriesId: string, SeriesName: string, SeriesPrimaryImageTag: string, SeriesStudio: string, SeriesThumbImageTag: string, SeriesTimerId: string, ServerId: string, ShutterSpeed: float, Software: string, SongCount: int, SortName: string, SourceType: string, SpecialFeatureCount: int, StartDate: string, Status: string, Studios: list<record>, SupportsSync: bool, Taglines: list<string>, Tags: list<string>, TimerId: string, TrailerCount: int, Type: string, UserData: record<IsFavorite: bool, ItemId: string, Key: string, LastPlayedDate: string, Likes: bool, PlayCount: int, PlaybackPositionTicks: int, Played: bool, PlayedPercentage: float, Rating: float, UnplayedItemCount: int>, Video3DFormat: string, VideoType: string, Width: int> {
   let auth = (build-auth $token ($auth_scheme | default "x-emby-authorization"))
   let base = ($base_url | default $BASE_URL)
+  if ($user_id | is-empty) { error make --unspanned { msg: "path parameter 'userId' must be non-empty" } }
+  if ($item_id | is-empty) { error make --unspanned { msg: "path parameter 'itemId' must be non-empty" } }
   let full_url = (build-url $base ({user_id: (encode-path-segment $user_id), item_id: (encode-path-segment $item_id)} | format pattern "/Users/{user_id}/Items/{item_id}/LocalTrailers"))
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
 }
 
 # Deletes a user's saved personal rating for an item.
@@ -12012,10 +12320,12 @@ export def "users-items-rating delete" [
 ]: nothing -> record<IsFavorite: bool, ItemId: string, Key: string, LastPlayedDate: string, Likes: bool, PlayCount: int, PlaybackPositionTicks: int, Played: bool, PlayedPercentage: float, Rating: float, UnplayedItemCount: int> {
   let auth = (build-auth $token ($auth_scheme | default "x-emby-authorization"))
   let base = ($base_url | default $BASE_URL)
+  if ($user_id | is-empty) { error make --unspanned { msg: "path parameter 'userId' must be non-empty" } }
+  if ($item_id | is-empty) { error make --unspanned { msg: "path parameter 'itemId' must be non-empty" } }
   let full_url = (build-url $base ({user_id: (encode-path-segment $user_id), item_id: (encode-path-segment $item_id)} | format pattern "/Users/{user_id}/Items/{item_id}/Rating"))
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
 }
 
 # Updates a user's rating for an item.
@@ -12039,11 +12349,13 @@ export def "users-items-rating update" [
 ]: nothing -> record<IsFavorite: bool, ItemId: string, Key: string, LastPlayedDate: string, Likes: bool, PlayCount: int, PlaybackPositionTicks: int, Played: bool, PlayedPercentage: float, Rating: float, UnplayedItemCount: int> {
   let auth = (build-auth $token ($auth_scheme | default "x-emby-authorization"))
   let base = ($base_url | default $BASE_URL)
+  if ($user_id | is-empty) { error make --unspanned { msg: "path parameter 'userId' must be non-empty" } }
+  if ($item_id | is-empty) { error make --unspanned { msg: "path parameter 'itemId' must be non-empty" } }
   let qp = [(serialize-qp "likes" $likes "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({user_id: (encode-path-segment $user_id), item_id: (encode-path-segment $item_id)} | format pattern "/Users/{user_id}/Items/{item_id}/Rating") $qp)
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"likes": $likes} | compact), body: null}
 }
 
 # Gets special features for an item.
@@ -12066,10 +12378,12 @@ export def "users-items-special-features get" [
 ]: nothing -> table<AirDays: list<string>, AirTime: string, AirsAfterSeasonNumber: int, AirsBeforeEpisodeNumber: int, AirsBeforeSeasonNumber: int, Album: string, AlbumArtist: string, AlbumArtists: list<record>, AlbumCount: int, AlbumId: string, AlbumPrimaryImageTag: string, Altitude: float, Aperture: float, ArtistCount: int, ArtistItems: list<record>, Artists: list<string>, AspectRatio: string, Audio: string, BackdropImageTags: list<string>, CameraMake: string, CameraModel: string, CanDelete: bool, CanDownload: bool, ChannelId: string, ChannelName: string, ChannelNumber: string, ChannelPrimaryImageTag: string, ChannelType: string, Chapters: list<record>, ChildCount: int, CollectionType: string, CommunityRating: float, CompletionPercentage: float, Container: string, CriticRating: float, CumulativeRunTimeTicks: int, CurrentProgram: any, CustomRating: string, DateCreated: string, DateLastMediaAdded: string, DisplayOrder: string, DisplayPreferencesId: string, EnableMediaSourceDisplay: bool, EndDate: string, EpisodeCount: int, EpisodeTitle: string, Etag: string, ExposureTime: float, ExternalUrls: list<record>, ExtraType: string, FocalLength: float, ForcedSortName: string, GenreItems: list<record>, Genres: list<string>, HasSubtitles: bool, Height: int, Id: string, ImageBlurHashes: record<Art: record, Backdrop: record, Banner: record, Box: record, BoxRear: record, Chapter: record, Disc: record, Logo: record, Menu: record, Primary: record, Profile: record, Screenshot: record, Thumb: record>, ImageOrientation: string, ImageTags: record, IndexNumber: int, IndexNumberEnd: int, IsFolder: bool, IsHD: bool, IsKids: bool, IsLive: bool, IsMovie: bool, IsNews: bool, IsPlaceHolder: bool, IsPremiere: bool, IsRepeat: bool, IsSeries: bool, IsSports: bool, IsoSpeedRating: int, IsoType: string, Latitude: float, LocalTrailerCount: int, LocationType: string, LockData: bool, LockedFields: list<string>, Longitude: float, MediaSourceCount: int, MediaSources: list<record>, MediaStreams: list<record>, MediaType: string, MovieCount: int, MusicVideoCount: int, Name: string, Number: string, OfficialRating: string, OriginalTitle: string, Overview: string, ParentArtImageTag: string, ParentArtItemId: string, ParentBackdropImageTags: list<string>, ParentBackdropItemId: string, ParentId: string, ParentIndexNumber: int, ParentLogoImageTag: string, ParentLogoItemId: string, ParentPrimaryImageItemId: string, ParentPrimaryImageTag: string, ParentThumbImageTag: string, ParentThumbItemId: string, PartCount: int, Path: string, People: list<record>, PlayAccess: string, PlaylistItemId: string, PreferredMetadataCountryCode: string, PreferredMetadataLanguage: string, PremiereDate: string, PrimaryImageAspectRatio: float, ProductionLocations: list<string>, ProductionYear: int, ProgramCount: int, ProgramId: string, ProviderIds: record, RecursiveItemCount: int, RemoteTrailers: list<record>, RunTimeTicks: int, ScreenshotImageTags: list<string>, SeasonId: string, SeasonName: string, SeriesCount: int, SeriesId: string, SeriesName: string, SeriesPrimaryImageTag: string, SeriesStudio: string, SeriesThumbImageTag: string, SeriesTimerId: string, ServerId: string, ShutterSpeed: float, Software: string, SongCount: int, SortName: string, SourceType: string, SpecialFeatureCount: int, StartDate: string, Status: string, Studios: list<record>, SupportsSync: bool, Taglines: list<string>, Tags: list<string>, TimerId: string, TrailerCount: int, Type: string, UserData: record<IsFavorite: bool, ItemId: string, Key: string, LastPlayedDate: string, Likes: bool, PlayCount: int, PlaybackPositionTicks: int, Played: bool, PlayedPercentage: float, Rating: float, UnplayedItemCount: int>, Video3DFormat: string, VideoType: string, Width: int> {
   let auth = (build-auth $token ($auth_scheme | default "x-emby-authorization"))
   let base = ($base_url | default $BASE_URL)
+  if ($user_id | is-empty) { error make --unspanned { msg: "path parameter 'userId' must be non-empty" } }
+  if ($item_id | is-empty) { error make --unspanned { msg: "path parameter 'itemId' must be non-empty" } }
   let full_url = (build-url $base ({user_id: (encode-path-segment $user_id), item_id: (encode-path-segment $item_id)} | format pattern "/Users/{user_id}/Items/{item_id}/SpecialFeatures"))
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
 }
 
 # Updates a user's password.
@@ -12095,12 +12409,13 @@ export def "users-password update" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "x-emby-authorization"))
   let base = ($base_url | default $BASE_URL)
+  if ($user_id | is-empty) { error make --unspanned { msg: "path parameter 'userId' must be non-empty" } }
   let full_url = (build-url $base ({user_id: (encode-path-segment $user_id)} | format pattern "/Users/{user_id}/Password"))
   let req_body = {"CurrentPassword": $current_password, "CurrentPw": $current_pw, "NewPw": $new_pw, "ResetPassword": $reset_password} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: {}, body: $req_body}
 }
 
 # Marks an item as unplayed for user.
@@ -12123,10 +12438,12 @@ export def "users-played-items delete-mark-unplayed" [
 ]: nothing -> record<IsFavorite: bool, ItemId: string, Key: string, LastPlayedDate: string, Likes: bool, PlayCount: int, PlaybackPositionTicks: int, Played: bool, PlayedPercentage: float, Rating: float, UnplayedItemCount: int> {
   let auth = (build-auth $token ($auth_scheme | default "x-emby-authorization"))
   let base = ($base_url | default $BASE_URL)
+  if ($user_id | is-empty) { error make --unspanned { msg: "path parameter 'userId' must be non-empty" } }
+  if ($item_id | is-empty) { error make --unspanned { msg: "path parameter 'itemId' must be non-empty" } }
   let full_url = (build-url $base ({user_id: (encode-path-segment $user_id), item_id: (encode-path-segment $item_id)} | format pattern "/Users/{user_id}/PlayedItems/{item_id}"))
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
 }
 
 # Marks an item as played for user.
@@ -12150,11 +12467,13 @@ export def "users-played-items create-mark" [
 ]: nothing -> record<IsFavorite: bool, ItemId: string, Key: string, LastPlayedDate: string, Likes: bool, PlayCount: int, PlaybackPositionTicks: int, Played: bool, PlayedPercentage: float, Rating: float, UnplayedItemCount: int> {
   let auth = (build-auth $token ($auth_scheme | default "x-emby-authorization"))
   let base = ($base_url | default $BASE_URL)
+  if ($user_id | is-empty) { error make --unspanned { msg: "path parameter 'userId' must be non-empty" } }
+  if ($item_id | is-empty) { error make --unspanned { msg: "path parameter 'itemId' must be non-empty" } }
   let qp = [(serialize-qp "datePlayed" $date_played "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({user_id: (encode-path-segment $user_id), item_id: (encode-path-segment $item_id)} | format pattern "/Users/{user_id}/PlayedItems/{item_id}") $qp)
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"datePlayed": $date_played} | compact), body: null}
 }
 
 # Reports that a user has stopped playing an item.
@@ -12181,11 +12500,13 @@ export def "users-playing-items delete-on-playback-stopped" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "x-emby-authorization"))
   let base = ($base_url | default $BASE_URL)
+  if ($user_id | is-empty) { error make --unspanned { msg: "path parameter 'userId' must be non-empty" } }
+  if ($item_id | is-empty) { error make --unspanned { msg: "path parameter 'itemId' must be non-empty" } }
   let qp = [(serialize-qp "mediaSourceId" $media_source_id "scalar") (serialize-qp "nextMediaType" $next_media_type "scalar") (serialize-qp "positionTicks" $position_ticks "scalar") (serialize-qp "liveStreamId" $live_stream_id "scalar") (serialize-qp "playSessionId" $play_session_id "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({user_id: (encode-path-segment $user_id), item_id: (encode-path-segment $item_id)} | format pattern "/Users/{user_id}/PlayingItems/{item_id}") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"mediaSourceId": $media_source_id, "nextMediaType": $next_media_type, "positionTicks": $position_ticks, "liveStreamId": $live_stream_id, "playSessionId": $play_session_id} | compact), body: null}
 }
 
 # Reports that a user has begun playing an item.
@@ -12214,11 +12535,13 @@ export def "users-playing-items start-on-playback" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "x-emby-authorization"))
   let base = ($base_url | default $BASE_URL)
+  if ($user_id | is-empty) { error make --unspanned { msg: "path parameter 'userId' must be non-empty" } }
+  if ($item_id | is-empty) { error make --unspanned { msg: "path parameter 'itemId' must be non-empty" } }
   let qp = [(serialize-qp "mediaSourceId" $media_source_id "scalar") (serialize-qp "audioStreamIndex" $audio_stream_index "scalar") (serialize-qp "subtitleStreamIndex" $subtitle_stream_index "scalar") (serialize-qp "playMethod" $play_method "scalar") (serialize-qp "liveStreamId" $live_stream_id "scalar") (serialize-qp "playSessionId" $play_session_id "scalar") (serialize-qp "canSeek" $can_seek "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({user_id: (encode-path-segment $user_id), item_id: (encode-path-segment $item_id)} | format pattern "/Users/{user_id}/PlayingItems/{item_id}") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"mediaSourceId": $media_source_id, "audioStreamIndex": $audio_stream_index, "subtitleStreamIndex": $subtitle_stream_index, "playMethod": $play_method, "liveStreamId": $live_stream_id, "playSessionId": $play_session_id, "canSeek": $can_seek} | compact), body: null}
 }
 
 # Reports a user's playback progress.
@@ -12251,11 +12574,13 @@ export def "users-playing-items-progress create-on-playback" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "x-emby-authorization"))
   let base = ($base_url | default $BASE_URL)
+  if ($user_id | is-empty) { error make --unspanned { msg: "path parameter 'userId' must be non-empty" } }
+  if ($item_id | is-empty) { error make --unspanned { msg: "path parameter 'itemId' must be non-empty" } }
   let qp = [(serialize-qp "mediaSourceId" $media_source_id "scalar") (serialize-qp "positionTicks" $position_ticks "scalar") (serialize-qp "audioStreamIndex" $audio_stream_index "scalar") (serialize-qp "subtitleStreamIndex" $subtitle_stream_index "scalar") (serialize-qp "volumeLevel" $volume_level "scalar") (serialize-qp "playMethod" $play_method "scalar") (serialize-qp "liveStreamId" $live_stream_id "scalar") (serialize-qp "playSessionId" $play_session_id "scalar") (serialize-qp "repeatMode" $repeat_mode "scalar") (serialize-qp "isPaused" $is_paused "scalar") (serialize-qp "isMuted" $is_muted "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({user_id: (encode-path-segment $user_id), item_id: (encode-path-segment $item_id)} | format pattern "/Users/{user_id}/PlayingItems/{item_id}/Progress") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"mediaSourceId": $media_source_id, "positionTicks": $position_ticks, "audioStreamIndex": $audio_stream_index, "subtitleStreamIndex": $subtitle_stream_index, "volumeLevel": $volume_level, "playMethod": $play_method, "liveStreamId": $live_stream_id, "playSessionId": $play_session_id, "repeatMode": $repeat_mode, "isPaused": $is_paused, "isMuted": $is_muted} | compact), body: null}
 }
 
 # Updates a user policy.
@@ -12317,12 +12642,13 @@ export def "users-policy update" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "x-emby-authorization"))
   let base = ($base_url | default $BASE_URL)
+  if ($user_id | is-empty) { error make --unspanned { msg: "path parameter 'userId' must be non-empty" } }
   let full_url = (build-url $base ({user_id: (encode-path-segment $user_id)} | format pattern "/Users/{user_id}/Policy"))
   let req_body = {"AccessSchedules": $access_schedules, "AuthenticationProviderId": $authentication_provider_id, "BlockUnratedItems": $block_unrated_items, "BlockedChannels": $blocked_channels, "BlockedMediaFolders": $blocked_media_folders, "BlockedTags": $blocked_tags, "EnableAllChannels": $enable_all_channels, "EnableAllDevices": $enable_all_devices, "EnableAllFolders": $enable_all_folders, "EnableAudioPlaybackTranscoding": $enable_audio_playback_transcoding, "EnableContentDeletion": $enable_content_deletion, "EnableContentDeletionFromFolders": $enable_content_deletion_from_folders, "EnableContentDownloading": $enable_content_downloading, "EnableLiveTvAccess": $enable_live_tv_access, "EnableLiveTvManagement": $enable_live_tv_management, "EnableMediaConversion": $enable_media_conversion, "EnableMediaPlayback": $enable_media_playback, "EnablePlaybackRemuxing": $enable_playback_remuxing, "EnablePublicSharing": $enable_public_sharing, "EnableRemoteAccess": $enable_remote_access, "EnableRemoteControlOfOtherUsers": $enable_remote_control_of_other_users, "EnableSharedDeviceControl": $enable_shared_device_control, "EnableSyncTranscoding": $enable_sync_transcoding, "EnableUserPreferenceAccess": $enable_user_preference_access, "EnableVideoPlaybackTranscoding": $enable_video_playback_transcoding, "EnabledChannels": $enabled_channels, "EnabledDevices": $enabled_devices, "EnabledFolders": $enabled_folders, "ForceRemoteSourceTranscoding": $force_remote_source_transcoding, "InvalidLoginAttemptCount": $invalid_login_attempt_count, "IsAdministrator": $is_administrator, "IsDisabled": $is_disabled, "IsHidden": $is_hidden, "LoginAttemptsBeforeLockout": $login_attempts_before_lockout, "MaxActiveSessions": $max_active_sessions, "MaxParentalRating": $max_parental_rating, "PasswordResetProviderId": $password_reset_provider_id, "RemoteClientBitrateLimit": $remote_client_bitrate_limit, "SyncPlayAccess": $sync_play_access} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: {}, body: $req_body}
 }
 
 # Gets suggestions.
@@ -12349,11 +12675,12 @@ export def "users-suggestions get" [
 ]: nothing -> record<Items: table<AirDays: list, AirTime: string, AirsAfterSeasonNumber: int, AirsBeforeEpisodeNumber: int, AirsBeforeSeasonNumber: int, Album: string, AlbumArtist: string, AlbumArtists: list, AlbumCount: int, AlbumId: string, AlbumPrimaryImageTag: string, Altitude: float, Aperture: float, ArtistCount: int, ArtistItems: list, Artists: list, AspectRatio: string, Audio: string, BackdropImageTags: list, CameraMake: string, CameraModel: string, CanDelete: bool, CanDownload: bool, ChannelId: string, ChannelName: string, ChannelNumber: string, ChannelPrimaryImageTag: string, ChannelType: string, Chapters: list, ChildCount: int, CollectionType: string, CommunityRating: float, CompletionPercentage: float, Container: string, CriticRating: float, CumulativeRunTimeTicks: int, CurrentProgram: any, CustomRating: string, DateCreated: string, DateLastMediaAdded: string, DisplayOrder: string, DisplayPreferencesId: string, EnableMediaSourceDisplay: bool, EndDate: string, EpisodeCount: int, EpisodeTitle: string, Etag: string, ExposureTime: float, ExternalUrls: list, ExtraType: string, FocalLength: float, ForcedSortName: string, GenreItems: list, Genres: list, HasSubtitles: bool, Height: int, Id: string, ImageBlurHashes: record, ImageOrientation: string, ImageTags: record, IndexNumber: int, IndexNumberEnd: int, IsFolder: bool, IsHD: bool, IsKids: bool, IsLive: bool, IsMovie: bool, IsNews: bool, IsPlaceHolder: bool, IsPremiere: bool, IsRepeat: bool, IsSeries: bool, IsSports: bool, IsoSpeedRating: int, IsoType: string, Latitude: float, LocalTrailerCount: int, LocationType: string, LockData: bool, LockedFields: list, Longitude: float, MediaSourceCount: int, MediaSources: list, MediaStreams: list, MediaType: string, MovieCount: int, MusicVideoCount: int, Name: string, Number: string, OfficialRating: string, OriginalTitle: string, Overview: string, ParentArtImageTag: string, ParentArtItemId: string, ParentBackdropImageTags: list, ParentBackdropItemId: string, ParentId: string, ParentIndexNumber: int, ParentLogoImageTag: string, ParentLogoItemId: string, ParentPrimaryImageItemId: string, ParentPrimaryImageTag: string, ParentThumbImageTag: string, ParentThumbItemId: string, PartCount: int, Path: string, People: list, PlayAccess: string, PlaylistItemId: string, PreferredMetadataCountryCode: string, PreferredMetadataLanguage: string, PremiereDate: string, PrimaryImageAspectRatio: float, ProductionLocations: list, ProductionYear: int, ProgramCount: int, ProgramId: string, ProviderIds: record, RecursiveItemCount: int, RemoteTrailers: list, RunTimeTicks: int, ScreenshotImageTags: list, SeasonId: string, SeasonName: string, SeriesCount: int, SeriesId: string, SeriesName: string, SeriesPrimaryImageTag: string, SeriesStudio: string, SeriesThumbImageTag: string, SeriesTimerId: string, ServerId: string, ShutterSpeed: float, Software: string, SongCount: int, SortName: string, SourceType: string, SpecialFeatureCount: int, StartDate: string, Status: string, Studios: list, SupportsSync: bool, Taglines: list, Tags: list, TimerId: string, TrailerCount: int, Type: string, UserData: record, Video3DFormat: string, VideoType: string, Width: int>, StartIndex: int, TotalRecordCount: int> {
   let auth = (build-auth $token ($auth_scheme | default "x-emby-authorization"))
   let base = ($base_url | default $BASE_URL)
+  if ($user_id | is-empty) { error make --unspanned { msg: "path parameter 'userId' must be non-empty" } }
   let qp = [(serialize-qp "mediaType" $media_type "multi") (serialize-qp "type" $type "multi") (serialize-qp "startIndex" $start_index "scalar") (serialize-qp "limit" $limit "scalar") (serialize-qp "enableTotalRecordCount" $enable_total_record_count "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({user_id: (encode-path-segment $user_id)} | format pattern "/Users/{user_id}/Suggestions") $qp)
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"mediaType": $media_type, "type": $type, "startIndex": $start_index, "limit": $limit, "enableTotalRecordCount": $enable_total_record_count} | compact), body: null}
 }
 
 # Get user views.
@@ -12378,11 +12705,12 @@ export def "users-views get" [
 ]: nothing -> record<Items: table<AirDays: list, AirTime: string, AirsAfterSeasonNumber: int, AirsBeforeEpisodeNumber: int, AirsBeforeSeasonNumber: int, Album: string, AlbumArtist: string, AlbumArtists: list, AlbumCount: int, AlbumId: string, AlbumPrimaryImageTag: string, Altitude: float, Aperture: float, ArtistCount: int, ArtistItems: list, Artists: list, AspectRatio: string, Audio: string, BackdropImageTags: list, CameraMake: string, CameraModel: string, CanDelete: bool, CanDownload: bool, ChannelId: string, ChannelName: string, ChannelNumber: string, ChannelPrimaryImageTag: string, ChannelType: string, Chapters: list, ChildCount: int, CollectionType: string, CommunityRating: float, CompletionPercentage: float, Container: string, CriticRating: float, CumulativeRunTimeTicks: int, CurrentProgram: any, CustomRating: string, DateCreated: string, DateLastMediaAdded: string, DisplayOrder: string, DisplayPreferencesId: string, EnableMediaSourceDisplay: bool, EndDate: string, EpisodeCount: int, EpisodeTitle: string, Etag: string, ExposureTime: float, ExternalUrls: list, ExtraType: string, FocalLength: float, ForcedSortName: string, GenreItems: list, Genres: list, HasSubtitles: bool, Height: int, Id: string, ImageBlurHashes: record, ImageOrientation: string, ImageTags: record, IndexNumber: int, IndexNumberEnd: int, IsFolder: bool, IsHD: bool, IsKids: bool, IsLive: bool, IsMovie: bool, IsNews: bool, IsPlaceHolder: bool, IsPremiere: bool, IsRepeat: bool, IsSeries: bool, IsSports: bool, IsoSpeedRating: int, IsoType: string, Latitude: float, LocalTrailerCount: int, LocationType: string, LockData: bool, LockedFields: list, Longitude: float, MediaSourceCount: int, MediaSources: list, MediaStreams: list, MediaType: string, MovieCount: int, MusicVideoCount: int, Name: string, Number: string, OfficialRating: string, OriginalTitle: string, Overview: string, ParentArtImageTag: string, ParentArtItemId: string, ParentBackdropImageTags: list, ParentBackdropItemId: string, ParentId: string, ParentIndexNumber: int, ParentLogoImageTag: string, ParentLogoItemId: string, ParentPrimaryImageItemId: string, ParentPrimaryImageTag: string, ParentThumbImageTag: string, ParentThumbItemId: string, PartCount: int, Path: string, People: list, PlayAccess: string, PlaylistItemId: string, PreferredMetadataCountryCode: string, PreferredMetadataLanguage: string, PremiereDate: string, PrimaryImageAspectRatio: float, ProductionLocations: list, ProductionYear: int, ProgramCount: int, ProgramId: string, ProviderIds: record, RecursiveItemCount: int, RemoteTrailers: list, RunTimeTicks: int, ScreenshotImageTags: list, SeasonId: string, SeasonName: string, SeriesCount: int, SeriesId: string, SeriesName: string, SeriesPrimaryImageTag: string, SeriesStudio: string, SeriesThumbImageTag: string, SeriesTimerId: string, ServerId: string, ShutterSpeed: float, Software: string, SongCount: int, SortName: string, SourceType: string, SpecialFeatureCount: int, StartDate: string, Status: string, Studios: list, SupportsSync: bool, Taglines: list, Tags: list, TimerId: string, TrailerCount: int, Type: string, UserData: record, Video3DFormat: string, VideoType: string, Width: int>, StartIndex: int, TotalRecordCount: int> {
   let auth = (build-auth $token ($auth_scheme | default "x-emby-authorization"))
   let base = ($base_url | default $BASE_URL)
+  if ($user_id | is-empty) { error make --unspanned { msg: "path parameter 'userId' must be non-empty" } }
   let qp = [(serialize-qp "includeExternalContent" $include_external_content "scalar") (serialize-qp "presetViews" $preset_views "multi") (serialize-qp "includeHidden" $include_hidden "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({user_id: (encode-path-segment $user_id)} | format pattern "/Users/{user_id}/Views") $qp)
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"includeExternalContent": $include_external_content, "presetViews": $preset_views, "includeHidden": $include_hidden} | compact), body: null}
 }
 
 # Stops an active encoding.
@@ -12408,7 +12736,7 @@ export def "videos-active-encodings stop-process" [
   let full_url = (build-url $base "/Videos/ActiveEncodings" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"deviceId": $device_id, "playSessionId": $play_session_id} | compact), body: null}
 }
 
 # Merges videos into a single record.
@@ -12433,7 +12761,7 @@ export def "videos-merge-versions create" [
   let full_url = (build-url $base "/Videos/MergeVersions" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"ids": $ids} | compact), body: null}
 }
 
 # Gets additional parts for a video.
@@ -12456,11 +12784,12 @@ export def "videos-additional-parts get" [
 ]: nothing -> record<Items: table<AirDays: list, AirTime: string, AirsAfterSeasonNumber: int, AirsBeforeEpisodeNumber: int, AirsBeforeSeasonNumber: int, Album: string, AlbumArtist: string, AlbumArtists: list, AlbumCount: int, AlbumId: string, AlbumPrimaryImageTag: string, Altitude: float, Aperture: float, ArtistCount: int, ArtistItems: list, Artists: list, AspectRatio: string, Audio: string, BackdropImageTags: list, CameraMake: string, CameraModel: string, CanDelete: bool, CanDownload: bool, ChannelId: string, ChannelName: string, ChannelNumber: string, ChannelPrimaryImageTag: string, ChannelType: string, Chapters: list, ChildCount: int, CollectionType: string, CommunityRating: float, CompletionPercentage: float, Container: string, CriticRating: float, CumulativeRunTimeTicks: int, CurrentProgram: any, CustomRating: string, DateCreated: string, DateLastMediaAdded: string, DisplayOrder: string, DisplayPreferencesId: string, EnableMediaSourceDisplay: bool, EndDate: string, EpisodeCount: int, EpisodeTitle: string, Etag: string, ExposureTime: float, ExternalUrls: list, ExtraType: string, FocalLength: float, ForcedSortName: string, GenreItems: list, Genres: list, HasSubtitles: bool, Height: int, Id: string, ImageBlurHashes: record, ImageOrientation: string, ImageTags: record, IndexNumber: int, IndexNumberEnd: int, IsFolder: bool, IsHD: bool, IsKids: bool, IsLive: bool, IsMovie: bool, IsNews: bool, IsPlaceHolder: bool, IsPremiere: bool, IsRepeat: bool, IsSeries: bool, IsSports: bool, IsoSpeedRating: int, IsoType: string, Latitude: float, LocalTrailerCount: int, LocationType: string, LockData: bool, LockedFields: list, Longitude: float, MediaSourceCount: int, MediaSources: list, MediaStreams: list, MediaType: string, MovieCount: int, MusicVideoCount: int, Name: string, Number: string, OfficialRating: string, OriginalTitle: string, Overview: string, ParentArtImageTag: string, ParentArtItemId: string, ParentBackdropImageTags: list, ParentBackdropItemId: string, ParentId: string, ParentIndexNumber: int, ParentLogoImageTag: string, ParentLogoItemId: string, ParentPrimaryImageItemId: string, ParentPrimaryImageTag: string, ParentThumbImageTag: string, ParentThumbItemId: string, PartCount: int, Path: string, People: list, PlayAccess: string, PlaylistItemId: string, PreferredMetadataCountryCode: string, PreferredMetadataLanguage: string, PremiereDate: string, PrimaryImageAspectRatio: float, ProductionLocations: list, ProductionYear: int, ProgramCount: int, ProgramId: string, ProviderIds: record, RecursiveItemCount: int, RemoteTrailers: list, RunTimeTicks: int, ScreenshotImageTags: list, SeasonId: string, SeasonName: string, SeriesCount: int, SeriesId: string, SeriesName: string, SeriesPrimaryImageTag: string, SeriesStudio: string, SeriesThumbImageTag: string, SeriesTimerId: string, ServerId: string, ShutterSpeed: float, Software: string, SongCount: int, SortName: string, SourceType: string, SpecialFeatureCount: int, StartDate: string, Status: string, Studios: list, SupportsSync: bool, Taglines: list, Tags: list, TimerId: string, TrailerCount: int, Type: string, UserData: record, Video3DFormat: string, VideoType: string, Width: int>, StartIndex: int, TotalRecordCount: int> {
   let auth = (build-auth $token ($auth_scheme | default "x-emby-authorization"))
   let base = ($base_url | default $BASE_URL)
+  if ($item_id | is-empty) { error make --unspanned { msg: "path parameter 'itemId' must be non-empty" } }
   let qp = [(serialize-qp "userId" $user_id "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({item_id: (encode-path-segment $item_id)} | format pattern "/Videos/{item_id}/AdditionalParts") $qp)
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"userId": $user_id} | compact), body: null}
 }
 
 # Removes alternate video sources.
@@ -12481,10 +12810,11 @@ export def "videos-alternate-sources delete" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "x-emby-authorization"))
   let base = ($base_url | default $BASE_URL)
+  if ($item_id | is-empty) { error make --unspanned { msg: "path parameter 'itemId' must be non-empty" } }
   let full_url = (build-url $base ({item_id: (encode-path-segment $item_id)} | format pattern "/Videos/{item_id}/AlternateSources"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
 }
 
 # Upload an external subtitle file.
@@ -12510,12 +12840,13 @@ export def "videos-subtitles upload" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "x-emby-authorization"))
   let base = ($base_url | default $BASE_URL)
+  if ($item_id | is-empty) { error make --unspanned { msg: "path parameter 'itemId' must be non-empty" } }
   let full_url = (build-url $base ({item_id: (encode-path-segment $item_id)} | format pattern "/Videos/{item_id}/Subtitles"))
   let req_body = {"Data": $data, "Format": $format, "IsForced": $is_forced, "Language": $language} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: {}, body: $req_body}
 }
 
 # Deletes an external subtitle file.
@@ -12537,10 +12868,12 @@ export def "videos-subtitles delete" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "x-emby-authorization"))
   let base = ($base_url | default $BASE_URL)
+  if ($item_id | is-empty) { error make --unspanned { msg: "path parameter 'itemId' must be non-empty" } }
+  if ($index | is-empty) { error make --unspanned { msg: "path parameter 'index' must be non-empty" } }
   let full_url = (build-url $base ({item_id: (encode-path-segment $item_id), index: (encode-path-segment $index)} | format pattern "/Videos/{item_id}/Subtitles/{index}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
 }
 
 # Gets a hls video playlist.
@@ -12562,10 +12895,12 @@ export def "videos-hls-stream-m3u8 get-playlist-legacy" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "x-emby-authorization"))
   let base = ($base_url | default $BASE_URL)
+  if ($item_id | is-empty) { error make --unspanned { msg: "path parameter 'itemId' must be non-empty" } }
+  if ($playlist_id | is-empty) { error make --unspanned { msg: "path parameter 'playlistId' must be non-empty" } }
   let full_url = (build-url $base ({item_id: (encode-path-segment $item_id), playlist_id: (encode-path-segment $playlist_id)} | format pattern "/Videos/{item_id}/hls/{playlist_id}/stream.m3u8"))
   let accept_val = "application/x-mpegURL"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
 }
 
 # Gets a hls video segment.
@@ -12589,10 +12924,14 @@ export def "videos-hls get-segment-legacy" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "x-emby-authorization"))
   let base = ($base_url | default $BASE_URL)
+  if ($item_id | is-empty) { error make --unspanned { msg: "path parameter 'itemId' must be non-empty" } }
+  if ($playlist_id | is-empty) { error make --unspanned { msg: "path parameter 'playlistId' must be non-empty" } }
+  if ($segment_id | is-empty) { error make --unspanned { msg: "path parameter 'segmentId' must be non-empty" } }
+  if ($segment_container | is-empty) { error make --unspanned { msg: "path parameter 'segmentContainer' must be non-empty" } }
   let full_url = (build-url $base ({item_id: (encode-path-segment $item_id), playlist_id: (encode-path-segment $playlist_id), segment_id: (encode-path-segment $segment_id), segment_container: (encode-path-segment $segment_container)} | format pattern "/Videos/{item_id}/hls/{playlist_id}/{segment_id}.{segment_container}"))
   let accept_val = "video/*"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
 }
 
 # Gets a video stream using HTTP live streaming.
@@ -12663,11 +13002,15 @@ export def "videos-hls1 get-hls-segment" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "x-emby-authorization"))
   let base = ($base_url | default $BASE_URL)
+  if ($item_id | is-empty) { error make --unspanned { msg: "path parameter 'itemId' must be non-empty" } }
+  if ($playlist_id | is-empty) { error make --unspanned { msg: "path parameter 'playlistId' must be non-empty" } }
+  if ($segment_id | is-empty) { error make --unspanned { msg: "path parameter 'segmentId' must be non-empty" } }
+  if ($container | is-empty) { error make --unspanned { msg: "path parameter 'container' must be non-empty" } }
   let qp = [(serialize-qp "static" $static "scalar") (serialize-qp "params" $params "scalar") (serialize-qp "tag" $tag "scalar") (serialize-qp "deviceProfileId" $device_profile_id "scalar") (serialize-qp "playSessionId" $play_session_id "scalar") (serialize-qp "segmentContainer" $segment_container "scalar") (serialize-qp "segmentLength" $segment_length "scalar") (serialize-qp "minSegments" $min_segments "scalar") (serialize-qp "mediaSourceId" $media_source_id "scalar") (serialize-qp "deviceId" $device_id "scalar") (serialize-qp "audioCodec" $audio_codec "scalar") (serialize-qp "enableAutoStreamCopy" $enable_auto_stream_copy "scalar") (serialize-qp "allowVideoStreamCopy" $allow_video_stream_copy "scalar") (serialize-qp "allowAudioStreamCopy" $allow_audio_stream_copy "scalar") (serialize-qp "breakOnNonKeyFrames" $break_on_non_key_frames "scalar") (serialize-qp "audioSampleRate" $audio_sample_rate "scalar") (serialize-qp "maxAudioBitDepth" $max_audio_bit_depth "scalar") (serialize-qp "audioBitRate" $audio_bit_rate "scalar") (serialize-qp "audioChannels" $audio_channels "scalar") (serialize-qp "maxAudioChannels" $max_audio_channels "scalar") (serialize-qp "profile" $profile "scalar") (serialize-qp "level" $level "scalar") (serialize-qp "framerate" $framerate "scalar") (serialize-qp "maxFramerate" $max_framerate "scalar") (serialize-qp "copyTimestamps" $copy_timestamps "scalar") (serialize-qp "startTimeTicks" $start_time_ticks "scalar") (serialize-qp "width" $width "scalar") (serialize-qp "height" $height "scalar") (serialize-qp "videoBitRate" $video_bit_rate "scalar") (serialize-qp "subtitleStreamIndex" $subtitle_stream_index "scalar") (serialize-qp "subtitleMethod" $subtitle_method "scalar") (serialize-qp "maxRefFrames" $max_ref_frames "scalar") (serialize-qp "maxVideoBitDepth" $max_video_bit_depth "scalar") (serialize-qp "requireAvc" $require_avc "scalar") (serialize-qp "deInterlace" $de_interlace "scalar") (serialize-qp "requireNonAnamorphic" $require_non_anamorphic "scalar") (serialize-qp "transcodingMaxAudioChannels" $transcoding_max_audio_channels "scalar") (serialize-qp "cpuCoreLimit" $cpu_core_limit "scalar") (serialize-qp "liveStreamId" $live_stream_id "scalar") (serialize-qp "enableMpegtsM2TsMode" $enable_mpegts_m2_ts_mode "scalar") (serialize-qp "videoCodec" $video_codec "scalar") (serialize-qp "subtitleCodec" $subtitle_codec "scalar") (serialize-qp "transcodeReasons" $transcode_reasons "scalar") (serialize-qp "audioStreamIndex" $audio_stream_index "scalar") (serialize-qp "videoStreamIndex" $video_stream_index "scalar") (serialize-qp "context" $context "scalar") (serialize-qp "streamOptions" $stream_options "multi")] | flatten | str join "&"
   let full_url = (build-url $base ({item_id: (encode-path-segment $item_id), playlist_id: (encode-path-segment $playlist_id), segment_id: (encode-path-segment $segment_id), container: (encode-path-segment $container)} | format pattern "/Videos/{item_id}/hls1/{playlist_id}/{segment_id}.{container}") $qp)
   let accept_val = "video/*"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"static": $static, "params": $params, "tag": $tag, "deviceProfileId": $device_profile_id, "playSessionId": $play_session_id, "segmentContainer": $segment_container, "segmentLength": $segment_length, "minSegments": $min_segments, "mediaSourceId": $media_source_id, "deviceId": $device_id, "audioCodec": $audio_codec, "enableAutoStreamCopy": $enable_auto_stream_copy, "allowVideoStreamCopy": $allow_video_stream_copy, "allowAudioStreamCopy": $allow_audio_stream_copy, "breakOnNonKeyFrames": $break_on_non_key_frames, "audioSampleRate": $audio_sample_rate, "maxAudioBitDepth": $max_audio_bit_depth, "audioBitRate": $audio_bit_rate, "audioChannels": $audio_channels, "maxAudioChannels": $max_audio_channels, "profile": $profile, "level": $level, "framerate": $framerate, "maxFramerate": $max_framerate, "copyTimestamps": $copy_timestamps, "startTimeTicks": $start_time_ticks, "width": $width, "height": $height, "videoBitRate": $video_bit_rate, "subtitleStreamIndex": $subtitle_stream_index, "subtitleMethod": $subtitle_method, "maxRefFrames": $max_ref_frames, "maxVideoBitDepth": $max_video_bit_depth, "requireAvc": $require_avc, "deInterlace": $de_interlace, "requireNonAnamorphic": $require_non_anamorphic, "transcodingMaxAudioChannels": $transcoding_max_audio_channels, "cpuCoreLimit": $cpu_core_limit, "liveStreamId": $live_stream_id, "enableMpegtsM2TsMode": $enable_mpegts_m2_ts_mode, "videoCodec": $video_codec, "subtitleCodec": $subtitle_codec, "transcodeReasons": $transcode_reasons, "audioStreamIndex": $audio_stream_index, "videoStreamIndex": $video_stream_index, "context": $context, "streamOptions": $stream_options} | compact), body: null}
 }
 
 # Gets a hls live stream.
@@ -12739,11 +13082,12 @@ export def "videos-live-m3u8 get-hls-stream" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "x-emby-authorization"))
   let base = ($base_url | default $BASE_URL)
+  if ($item_id | is-empty) { error make --unspanned { msg: "path parameter 'itemId' must be non-empty" } }
   let qp = [(serialize-qp "container" $container "scalar") (serialize-qp "static" $static "scalar") (serialize-qp "params" $params "scalar") (serialize-qp "tag" $tag "scalar") (serialize-qp "deviceProfileId" $device_profile_id "scalar") (serialize-qp "playSessionId" $play_session_id "scalar") (serialize-qp "segmentContainer" $segment_container "scalar") (serialize-qp "segmentLength" $segment_length "scalar") (serialize-qp "minSegments" $min_segments "scalar") (serialize-qp "mediaSourceId" $media_source_id "scalar") (serialize-qp "deviceId" $device_id "scalar") (serialize-qp "audioCodec" $audio_codec "scalar") (serialize-qp "enableAutoStreamCopy" $enable_auto_stream_copy "scalar") (serialize-qp "allowVideoStreamCopy" $allow_video_stream_copy "scalar") (serialize-qp "allowAudioStreamCopy" $allow_audio_stream_copy "scalar") (serialize-qp "breakOnNonKeyFrames" $break_on_non_key_frames "scalar") (serialize-qp "audioSampleRate" $audio_sample_rate "scalar") (serialize-qp "maxAudioBitDepth" $max_audio_bit_depth "scalar") (serialize-qp "audioBitRate" $audio_bit_rate "scalar") (serialize-qp "audioChannels" $audio_channels "scalar") (serialize-qp "maxAudioChannels" $max_audio_channels "scalar") (serialize-qp "profile" $profile "scalar") (serialize-qp "level" $level "scalar") (serialize-qp "framerate" $framerate "scalar") (serialize-qp "maxFramerate" $max_framerate "scalar") (serialize-qp "copyTimestamps" $copy_timestamps "scalar") (serialize-qp "startTimeTicks" $start_time_ticks "scalar") (serialize-qp "width" $width "scalar") (serialize-qp "height" $height "scalar") (serialize-qp "videoBitRate" $video_bit_rate "scalar") (serialize-qp "subtitleStreamIndex" $subtitle_stream_index "scalar") (serialize-qp "subtitleMethod" $subtitle_method "scalar") (serialize-qp "maxRefFrames" $max_ref_frames "scalar") (serialize-qp "maxVideoBitDepth" $max_video_bit_depth "scalar") (serialize-qp "requireAvc" $require_avc "scalar") (serialize-qp "deInterlace" $de_interlace "scalar") (serialize-qp "requireNonAnamorphic" $require_non_anamorphic "scalar") (serialize-qp "transcodingMaxAudioChannels" $transcoding_max_audio_channels "scalar") (serialize-qp "cpuCoreLimit" $cpu_core_limit "scalar") (serialize-qp "liveStreamId" $live_stream_id "scalar") (serialize-qp "enableMpegtsM2TsMode" $enable_mpegts_m2_ts_mode "scalar") (serialize-qp "videoCodec" $video_codec "scalar") (serialize-qp "subtitleCodec" $subtitle_codec "scalar") (serialize-qp "transcodeReasons" $transcode_reasons "scalar") (serialize-qp "audioStreamIndex" $audio_stream_index "scalar") (serialize-qp "videoStreamIndex" $video_stream_index "scalar") (serialize-qp "context" $context "scalar") (serialize-qp "streamOptions" $stream_options "multi") (serialize-qp "maxWidth" $max_width "scalar") (serialize-qp "maxHeight" $max_height "scalar") (serialize-qp "enableSubtitlesInManifest" $enable_subtitles_in_manifest "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({item_id: (encode-path-segment $item_id)} | format pattern "/Videos/{item_id}/live.m3u8") $qp)
   let accept_val = "application/x-mpegURL"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"container": $container, "static": $static, "params": $params, "tag": $tag, "deviceProfileId": $device_profile_id, "playSessionId": $play_session_id, "segmentContainer": $segment_container, "segmentLength": $segment_length, "minSegments": $min_segments, "mediaSourceId": $media_source_id, "deviceId": $device_id, "audioCodec": $audio_codec, "enableAutoStreamCopy": $enable_auto_stream_copy, "allowVideoStreamCopy": $allow_video_stream_copy, "allowAudioStreamCopy": $allow_audio_stream_copy, "breakOnNonKeyFrames": $break_on_non_key_frames, "audioSampleRate": $audio_sample_rate, "maxAudioBitDepth": $max_audio_bit_depth, "audioBitRate": $audio_bit_rate, "audioChannels": $audio_channels, "maxAudioChannels": $max_audio_channels, "profile": $profile, "level": $level, "framerate": $framerate, "maxFramerate": $max_framerate, "copyTimestamps": $copy_timestamps, "startTimeTicks": $start_time_ticks, "width": $width, "height": $height, "videoBitRate": $video_bit_rate, "subtitleStreamIndex": $subtitle_stream_index, "subtitleMethod": $subtitle_method, "maxRefFrames": $max_ref_frames, "maxVideoBitDepth": $max_video_bit_depth, "requireAvc": $require_avc, "deInterlace": $de_interlace, "requireNonAnamorphic": $require_non_anamorphic, "transcodingMaxAudioChannels": $transcoding_max_audio_channels, "cpuCoreLimit": $cpu_core_limit, "liveStreamId": $live_stream_id, "enableMpegtsM2TsMode": $enable_mpegts_m2_ts_mode, "videoCodec": $video_codec, "subtitleCodec": $subtitle_codec, "transcodeReasons": $transcode_reasons, "audioStreamIndex": $audio_stream_index, "videoStreamIndex": $video_stream_index, "context": $context, "streamOptions": $stream_options, "maxWidth": $max_width, "maxHeight": $max_height, "enableSubtitlesInManifest": $enable_subtitles_in_manifest} | compact), body: null}
 }
 
 # Gets a video stream using HTTP live streaming.
@@ -12811,11 +13155,12 @@ export def "videos-main-m3u8 get-variant-hls-playlist" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "x-emby-authorization"))
   let base = ($base_url | default $BASE_URL)
+  if ($item_id | is-empty) { error make --unspanned { msg: "path parameter 'itemId' must be non-empty" } }
   let qp = [(serialize-qp "static" $static "scalar") (serialize-qp "params" $params "scalar") (serialize-qp "tag" $tag "scalar") (serialize-qp "deviceProfileId" $device_profile_id "scalar") (serialize-qp "playSessionId" $play_session_id "scalar") (serialize-qp "segmentContainer" $segment_container "scalar") (serialize-qp "segmentLength" $segment_length "scalar") (serialize-qp "minSegments" $min_segments "scalar") (serialize-qp "mediaSourceId" $media_source_id "scalar") (serialize-qp "deviceId" $device_id "scalar") (serialize-qp "audioCodec" $audio_codec "scalar") (serialize-qp "enableAutoStreamCopy" $enable_auto_stream_copy "scalar") (serialize-qp "allowVideoStreamCopy" $allow_video_stream_copy "scalar") (serialize-qp "allowAudioStreamCopy" $allow_audio_stream_copy "scalar") (serialize-qp "breakOnNonKeyFrames" $break_on_non_key_frames "scalar") (serialize-qp "audioSampleRate" $audio_sample_rate "scalar") (serialize-qp "maxAudioBitDepth" $max_audio_bit_depth "scalar") (serialize-qp "audioBitRate" $audio_bit_rate "scalar") (serialize-qp "audioChannels" $audio_channels "scalar") (serialize-qp "maxAudioChannels" $max_audio_channels "scalar") (serialize-qp "profile" $profile "scalar") (serialize-qp "level" $level "scalar") (serialize-qp "framerate" $framerate "scalar") (serialize-qp "maxFramerate" $max_framerate "scalar") (serialize-qp "copyTimestamps" $copy_timestamps "scalar") (serialize-qp "startTimeTicks" $start_time_ticks "scalar") (serialize-qp "width" $width "scalar") (serialize-qp "height" $height "scalar") (serialize-qp "videoBitRate" $video_bit_rate "scalar") (serialize-qp "subtitleStreamIndex" $subtitle_stream_index "scalar") (serialize-qp "subtitleMethod" $subtitle_method "scalar") (serialize-qp "maxRefFrames" $max_ref_frames "scalar") (serialize-qp "maxVideoBitDepth" $max_video_bit_depth "scalar") (serialize-qp "requireAvc" $require_avc "scalar") (serialize-qp "deInterlace" $de_interlace "scalar") (serialize-qp "requireNonAnamorphic" $require_non_anamorphic "scalar") (serialize-qp "transcodingMaxAudioChannels" $transcoding_max_audio_channels "scalar") (serialize-qp "cpuCoreLimit" $cpu_core_limit "scalar") (serialize-qp "liveStreamId" $live_stream_id "scalar") (serialize-qp "enableMpegtsM2TsMode" $enable_mpegts_m2_ts_mode "scalar") (serialize-qp "videoCodec" $video_codec "scalar") (serialize-qp "subtitleCodec" $subtitle_codec "scalar") (serialize-qp "transcodeReasons" $transcode_reasons "scalar") (serialize-qp "audioStreamIndex" $audio_stream_index "scalar") (serialize-qp "videoStreamIndex" $video_stream_index "scalar") (serialize-qp "context" $context "scalar") (serialize-qp "streamOptions" $stream_options "multi")] | flatten | str join "&"
   let full_url = (build-url $base ({item_id: (encode-path-segment $item_id)} | format pattern "/Videos/{item_id}/main.m3u8") $qp)
   let accept_val = "application/x-mpegURL"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"static": $static, "params": $params, "tag": $tag, "deviceProfileId": $device_profile_id, "playSessionId": $play_session_id, "segmentContainer": $segment_container, "segmentLength": $segment_length, "minSegments": $min_segments, "mediaSourceId": $media_source_id, "deviceId": $device_id, "audioCodec": $audio_codec, "enableAutoStreamCopy": $enable_auto_stream_copy, "allowVideoStreamCopy": $allow_video_stream_copy, "allowAudioStreamCopy": $allow_audio_stream_copy, "breakOnNonKeyFrames": $break_on_non_key_frames, "audioSampleRate": $audio_sample_rate, "maxAudioBitDepth": $max_audio_bit_depth, "audioBitRate": $audio_bit_rate, "audioChannels": $audio_channels, "maxAudioChannels": $max_audio_channels, "profile": $profile, "level": $level, "framerate": $framerate, "maxFramerate": $max_framerate, "copyTimestamps": $copy_timestamps, "startTimeTicks": $start_time_ticks, "width": $width, "height": $height, "videoBitRate": $video_bit_rate, "subtitleStreamIndex": $subtitle_stream_index, "subtitleMethod": $subtitle_method, "maxRefFrames": $max_ref_frames, "maxVideoBitDepth": $max_video_bit_depth, "requireAvc": $require_avc, "deInterlace": $de_interlace, "requireNonAnamorphic": $require_non_anamorphic, "transcodingMaxAudioChannels": $transcoding_max_audio_channels, "cpuCoreLimit": $cpu_core_limit, "liveStreamId": $live_stream_id, "enableMpegtsM2TsMode": $enable_mpegts_m2_ts_mode, "videoCodec": $video_codec, "subtitleCodec": $subtitle_codec, "transcodeReasons": $transcode_reasons, "audioStreamIndex": $audio_stream_index, "videoStreamIndex": $video_stream_index, "context": $context, "streamOptions": $stream_options} | compact), body: null}
 }
 
 # Gets a video hls playlist stream.
@@ -12884,11 +13229,12 @@ export def "videos-master-m3u8 get-hls-playlist" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "x-emby-authorization"))
   let base = ($base_url | default $BASE_URL)
+  if ($item_id | is-empty) { error make --unspanned { msg: "path parameter 'itemId' must be non-empty" } }
   let qp = [(serialize-qp "static" $static "scalar") (serialize-qp "params" $params "scalar") (serialize-qp "tag" $tag "scalar") (serialize-qp "deviceProfileId" $device_profile_id "scalar") (serialize-qp "playSessionId" $play_session_id "scalar") (serialize-qp "segmentContainer" $segment_container "scalar") (serialize-qp "segmentLength" $segment_length "scalar") (serialize-qp "minSegments" $min_segments "scalar") (serialize-qp "mediaSourceId" $media_source_id "scalar") (serialize-qp "deviceId" $device_id "scalar") (serialize-qp "audioCodec" $audio_codec "scalar") (serialize-qp "enableAutoStreamCopy" $enable_auto_stream_copy "scalar") (serialize-qp "allowVideoStreamCopy" $allow_video_stream_copy "scalar") (serialize-qp "allowAudioStreamCopy" $allow_audio_stream_copy "scalar") (serialize-qp "breakOnNonKeyFrames" $break_on_non_key_frames "scalar") (serialize-qp "audioSampleRate" $audio_sample_rate "scalar") (serialize-qp "maxAudioBitDepth" $max_audio_bit_depth "scalar") (serialize-qp "audioBitRate" $audio_bit_rate "scalar") (serialize-qp "audioChannels" $audio_channels "scalar") (serialize-qp "maxAudioChannels" $max_audio_channels "scalar") (serialize-qp "profile" $profile "scalar") (serialize-qp "level" $level "scalar") (serialize-qp "framerate" $framerate "scalar") (serialize-qp "maxFramerate" $max_framerate "scalar") (serialize-qp "copyTimestamps" $copy_timestamps "scalar") (serialize-qp "startTimeTicks" $start_time_ticks "scalar") (serialize-qp "width" $width "scalar") (serialize-qp "height" $height "scalar") (serialize-qp "videoBitRate" $video_bit_rate "scalar") (serialize-qp "subtitleStreamIndex" $subtitle_stream_index "scalar") (serialize-qp "subtitleMethod" $subtitle_method "scalar") (serialize-qp "maxRefFrames" $max_ref_frames "scalar") (serialize-qp "maxVideoBitDepth" $max_video_bit_depth "scalar") (serialize-qp "requireAvc" $require_avc "scalar") (serialize-qp "deInterlace" $de_interlace "scalar") (serialize-qp "requireNonAnamorphic" $require_non_anamorphic "scalar") (serialize-qp "transcodingMaxAudioChannels" $transcoding_max_audio_channels "scalar") (serialize-qp "cpuCoreLimit" $cpu_core_limit "scalar") (serialize-qp "liveStreamId" $live_stream_id "scalar") (serialize-qp "enableMpegtsM2TsMode" $enable_mpegts_m2_ts_mode "scalar") (serialize-qp "videoCodec" $video_codec "scalar") (serialize-qp "subtitleCodec" $subtitle_codec "scalar") (serialize-qp "transcodeReasons" $transcode_reasons "scalar") (serialize-qp "audioStreamIndex" $audio_stream_index "scalar") (serialize-qp "videoStreamIndex" $video_stream_index "scalar") (serialize-qp "context" $context "scalar") (serialize-qp "streamOptions" $stream_options "multi") (serialize-qp "enableAdaptiveBitrateStreaming" $enable_adaptive_bitrate_streaming "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({item_id: (encode-path-segment $item_id)} | format pattern "/Videos/{item_id}/master.m3u8") $qp)
   let accept_val = "application/x-mpegURL"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"static": $static, "params": $params, "tag": $tag, "deviceProfileId": $device_profile_id, "playSessionId": $play_session_id, "segmentContainer": $segment_container, "segmentLength": $segment_length, "minSegments": $min_segments, "mediaSourceId": $media_source_id, "deviceId": $device_id, "audioCodec": $audio_codec, "enableAutoStreamCopy": $enable_auto_stream_copy, "allowVideoStreamCopy": $allow_video_stream_copy, "allowAudioStreamCopy": $allow_audio_stream_copy, "breakOnNonKeyFrames": $break_on_non_key_frames, "audioSampleRate": $audio_sample_rate, "maxAudioBitDepth": $max_audio_bit_depth, "audioBitRate": $audio_bit_rate, "audioChannels": $audio_channels, "maxAudioChannels": $max_audio_channels, "profile": $profile, "level": $level, "framerate": $framerate, "maxFramerate": $max_framerate, "copyTimestamps": $copy_timestamps, "startTimeTicks": $start_time_ticks, "width": $width, "height": $height, "videoBitRate": $video_bit_rate, "subtitleStreamIndex": $subtitle_stream_index, "subtitleMethod": $subtitle_method, "maxRefFrames": $max_ref_frames, "maxVideoBitDepth": $max_video_bit_depth, "requireAvc": $require_avc, "deInterlace": $de_interlace, "requireNonAnamorphic": $require_non_anamorphic, "transcodingMaxAudioChannels": $transcoding_max_audio_channels, "cpuCoreLimit": $cpu_core_limit, "liveStreamId": $live_stream_id, "enableMpegtsM2TsMode": $enable_mpegts_m2_ts_mode, "videoCodec": $video_codec, "subtitleCodec": $subtitle_codec, "transcodeReasons": $transcode_reasons, "audioStreamIndex": $audio_stream_index, "videoStreamIndex": $video_stream_index, "context": $context, "streamOptions": $stream_options, "enableAdaptiveBitrateStreaming": $enable_adaptive_bitrate_streaming} | compact), body: null}
 }
 
 # Gets a video hls playlist stream.
@@ -12957,11 +13303,12 @@ export def "videos-master-m3u8 head-head-hls-playlist" [
 ]: nothing -> record {
   let auth = (build-auth $token ($auth_scheme | default "x-emby-authorization"))
   let base = ($base_url | default $BASE_URL)
+  if ($item_id | is-empty) { error make --unspanned { msg: "path parameter 'itemId' must be non-empty" } }
   let qp = [(serialize-qp "static" $static "scalar") (serialize-qp "params" $params "scalar") (serialize-qp "tag" $tag "scalar") (serialize-qp "deviceProfileId" $device_profile_id "scalar") (serialize-qp "playSessionId" $play_session_id "scalar") (serialize-qp "segmentContainer" $segment_container "scalar") (serialize-qp "segmentLength" $segment_length "scalar") (serialize-qp "minSegments" $min_segments "scalar") (serialize-qp "mediaSourceId" $media_source_id "scalar") (serialize-qp "deviceId" $device_id "scalar") (serialize-qp "audioCodec" $audio_codec "scalar") (serialize-qp "enableAutoStreamCopy" $enable_auto_stream_copy "scalar") (serialize-qp "allowVideoStreamCopy" $allow_video_stream_copy "scalar") (serialize-qp "allowAudioStreamCopy" $allow_audio_stream_copy "scalar") (serialize-qp "breakOnNonKeyFrames" $break_on_non_key_frames "scalar") (serialize-qp "audioSampleRate" $audio_sample_rate "scalar") (serialize-qp "maxAudioBitDepth" $max_audio_bit_depth "scalar") (serialize-qp "audioBitRate" $audio_bit_rate "scalar") (serialize-qp "audioChannels" $audio_channels "scalar") (serialize-qp "maxAudioChannels" $max_audio_channels "scalar") (serialize-qp "profile" $profile "scalar") (serialize-qp "level" $level "scalar") (serialize-qp "framerate" $framerate "scalar") (serialize-qp "maxFramerate" $max_framerate "scalar") (serialize-qp "copyTimestamps" $copy_timestamps "scalar") (serialize-qp "startTimeTicks" $start_time_ticks "scalar") (serialize-qp "width" $width "scalar") (serialize-qp "height" $height "scalar") (serialize-qp "videoBitRate" $video_bit_rate "scalar") (serialize-qp "subtitleStreamIndex" $subtitle_stream_index "scalar") (serialize-qp "subtitleMethod" $subtitle_method "scalar") (serialize-qp "maxRefFrames" $max_ref_frames "scalar") (serialize-qp "maxVideoBitDepth" $max_video_bit_depth "scalar") (serialize-qp "requireAvc" $require_avc "scalar") (serialize-qp "deInterlace" $de_interlace "scalar") (serialize-qp "requireNonAnamorphic" $require_non_anamorphic "scalar") (serialize-qp "transcodingMaxAudioChannels" $transcoding_max_audio_channels "scalar") (serialize-qp "cpuCoreLimit" $cpu_core_limit "scalar") (serialize-qp "liveStreamId" $live_stream_id "scalar") (serialize-qp "enableMpegtsM2TsMode" $enable_mpegts_m2_ts_mode "scalar") (serialize-qp "videoCodec" $video_codec "scalar") (serialize-qp "subtitleCodec" $subtitle_codec "scalar") (serialize-qp "transcodeReasons" $transcode_reasons "scalar") (serialize-qp "audioStreamIndex" $audio_stream_index "scalar") (serialize-qp "videoStreamIndex" $video_stream_index "scalar") (serialize-qp "context" $context "scalar") (serialize-qp "streamOptions" $stream_options "multi") (serialize-qp "enableAdaptiveBitrateStreaming" $enable_adaptive_bitrate_streaming "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({item_id: (encode-path-segment $item_id)} | format pattern "/Videos/{item_id}/master.m3u8") $qp)
   let accept_val = "application/x-mpegURL"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "head" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "head" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"static": $static, "params": $params, "tag": $tag, "deviceProfileId": $device_profile_id, "playSessionId": $play_session_id, "segmentContainer": $segment_container, "segmentLength": $segment_length, "minSegments": $min_segments, "mediaSourceId": $media_source_id, "deviceId": $device_id, "audioCodec": $audio_codec, "enableAutoStreamCopy": $enable_auto_stream_copy, "allowVideoStreamCopy": $allow_video_stream_copy, "allowAudioStreamCopy": $allow_audio_stream_copy, "breakOnNonKeyFrames": $break_on_non_key_frames, "audioSampleRate": $audio_sample_rate, "maxAudioBitDepth": $max_audio_bit_depth, "audioBitRate": $audio_bit_rate, "audioChannels": $audio_channels, "maxAudioChannels": $max_audio_channels, "profile": $profile, "level": $level, "framerate": $framerate, "maxFramerate": $max_framerate, "copyTimestamps": $copy_timestamps, "startTimeTicks": $start_time_ticks, "width": $width, "height": $height, "videoBitRate": $video_bit_rate, "subtitleStreamIndex": $subtitle_stream_index, "subtitleMethod": $subtitle_method, "maxRefFrames": $max_ref_frames, "maxVideoBitDepth": $max_video_bit_depth, "requireAvc": $require_avc, "deInterlace": $de_interlace, "requireNonAnamorphic": $require_non_anamorphic, "transcodingMaxAudioChannels": $transcoding_max_audio_channels, "cpuCoreLimit": $cpu_core_limit, "liveStreamId": $live_stream_id, "enableMpegtsM2TsMode": $enable_mpegts_m2_ts_mode, "videoCodec": $video_codec, "subtitleCodec": $subtitle_codec, "transcodeReasons": $transcode_reasons, "audioStreamIndex": $audio_stream_index, "videoStreamIndex": $video_stream_index, "context": $context, "streamOptions": $stream_options, "enableAdaptiveBitrateStreaming": $enable_adaptive_bitrate_streaming} | compact), body: null}
 }
 
 # Gets a video stream.
@@ -13030,11 +13377,12 @@ export def "videos-stream get" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "x-emby-authorization"))
   let base = ($base_url | default $BASE_URL)
+  if ($item_id | is-empty) { error make --unspanned { msg: "path parameter 'itemId' must be non-empty" } }
   let qp = [(serialize-qp "container" $container "scalar") (serialize-qp "static" $static "scalar") (serialize-qp "params" $params "scalar") (serialize-qp "tag" $tag "scalar") (serialize-qp "deviceProfileId" $device_profile_id "scalar") (serialize-qp "playSessionId" $play_session_id "scalar") (serialize-qp "segmentContainer" $segment_container "scalar") (serialize-qp "segmentLength" $segment_length "scalar") (serialize-qp "minSegments" $min_segments "scalar") (serialize-qp "mediaSourceId" $media_source_id "scalar") (serialize-qp "deviceId" $device_id "scalar") (serialize-qp "audioCodec" $audio_codec "scalar") (serialize-qp "enableAutoStreamCopy" $enable_auto_stream_copy "scalar") (serialize-qp "allowVideoStreamCopy" $allow_video_stream_copy "scalar") (serialize-qp "allowAudioStreamCopy" $allow_audio_stream_copy "scalar") (serialize-qp "breakOnNonKeyFrames" $break_on_non_key_frames "scalar") (serialize-qp "audioSampleRate" $audio_sample_rate "scalar") (serialize-qp "maxAudioBitDepth" $max_audio_bit_depth "scalar") (serialize-qp "audioBitRate" $audio_bit_rate "scalar") (serialize-qp "audioChannels" $audio_channels "scalar") (serialize-qp "maxAudioChannels" $max_audio_channels "scalar") (serialize-qp "profile" $profile "scalar") (serialize-qp "level" $level "scalar") (serialize-qp "framerate" $framerate "scalar") (serialize-qp "maxFramerate" $max_framerate "scalar") (serialize-qp "copyTimestamps" $copy_timestamps "scalar") (serialize-qp "startTimeTicks" $start_time_ticks "scalar") (serialize-qp "width" $width "scalar") (serialize-qp "height" $height "scalar") (serialize-qp "videoBitRate" $video_bit_rate "scalar") (serialize-qp "subtitleStreamIndex" $subtitle_stream_index "scalar") (serialize-qp "subtitleMethod" $subtitle_method "scalar") (serialize-qp "maxRefFrames" $max_ref_frames "scalar") (serialize-qp "maxVideoBitDepth" $max_video_bit_depth "scalar") (serialize-qp "requireAvc" $require_avc "scalar") (serialize-qp "deInterlace" $de_interlace "scalar") (serialize-qp "requireNonAnamorphic" $require_non_anamorphic "scalar") (serialize-qp "transcodingMaxAudioChannels" $transcoding_max_audio_channels "scalar") (serialize-qp "cpuCoreLimit" $cpu_core_limit "scalar") (serialize-qp "liveStreamId" $live_stream_id "scalar") (serialize-qp "enableMpegtsM2TsMode" $enable_mpegts_m2_ts_mode "scalar") (serialize-qp "videoCodec" $video_codec "scalar") (serialize-qp "subtitleCodec" $subtitle_codec "scalar") (serialize-qp "transcodeReasons" $transcode_reasons "scalar") (serialize-qp "audioStreamIndex" $audio_stream_index "scalar") (serialize-qp "videoStreamIndex" $video_stream_index "scalar") (serialize-qp "context" $context "scalar") (serialize-qp "streamOptions" $stream_options "multi")] | flatten | str join "&"
   let full_url = (build-url $base ({item_id: (encode-path-segment $item_id)} | format pattern "/Videos/{item_id}/stream") $qp)
   let accept_val = "video/*"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"container": $container, "static": $static, "params": $params, "tag": $tag, "deviceProfileId": $device_profile_id, "playSessionId": $play_session_id, "segmentContainer": $segment_container, "segmentLength": $segment_length, "minSegments": $min_segments, "mediaSourceId": $media_source_id, "deviceId": $device_id, "audioCodec": $audio_codec, "enableAutoStreamCopy": $enable_auto_stream_copy, "allowVideoStreamCopy": $allow_video_stream_copy, "allowAudioStreamCopy": $allow_audio_stream_copy, "breakOnNonKeyFrames": $break_on_non_key_frames, "audioSampleRate": $audio_sample_rate, "maxAudioBitDepth": $max_audio_bit_depth, "audioBitRate": $audio_bit_rate, "audioChannels": $audio_channels, "maxAudioChannels": $max_audio_channels, "profile": $profile, "level": $level, "framerate": $framerate, "maxFramerate": $max_framerate, "copyTimestamps": $copy_timestamps, "startTimeTicks": $start_time_ticks, "width": $width, "height": $height, "videoBitRate": $video_bit_rate, "subtitleStreamIndex": $subtitle_stream_index, "subtitleMethod": $subtitle_method, "maxRefFrames": $max_ref_frames, "maxVideoBitDepth": $max_video_bit_depth, "requireAvc": $require_avc, "deInterlace": $de_interlace, "requireNonAnamorphic": $require_non_anamorphic, "transcodingMaxAudioChannels": $transcoding_max_audio_channels, "cpuCoreLimit": $cpu_core_limit, "liveStreamId": $live_stream_id, "enableMpegtsM2TsMode": $enable_mpegts_m2_ts_mode, "videoCodec": $video_codec, "subtitleCodec": $subtitle_codec, "transcodeReasons": $transcode_reasons, "audioStreamIndex": $audio_stream_index, "videoStreamIndex": $video_stream_index, "context": $context, "streamOptions": $stream_options} | compact), body: null}
 }
 
 # Gets a video stream.
@@ -13103,11 +13451,12 @@ export def "videos-stream head-head" [
 ]: nothing -> record {
   let auth = (build-auth $token ($auth_scheme | default "x-emby-authorization"))
   let base = ($base_url | default $BASE_URL)
+  if ($item_id | is-empty) { error make --unspanned { msg: "path parameter 'itemId' must be non-empty" } }
   let qp = [(serialize-qp "container" $container "scalar") (serialize-qp "static" $static "scalar") (serialize-qp "params" $params "scalar") (serialize-qp "tag" $tag "scalar") (serialize-qp "deviceProfileId" $device_profile_id "scalar") (serialize-qp "playSessionId" $play_session_id "scalar") (serialize-qp "segmentContainer" $segment_container "scalar") (serialize-qp "segmentLength" $segment_length "scalar") (serialize-qp "minSegments" $min_segments "scalar") (serialize-qp "mediaSourceId" $media_source_id "scalar") (serialize-qp "deviceId" $device_id "scalar") (serialize-qp "audioCodec" $audio_codec "scalar") (serialize-qp "enableAutoStreamCopy" $enable_auto_stream_copy "scalar") (serialize-qp "allowVideoStreamCopy" $allow_video_stream_copy "scalar") (serialize-qp "allowAudioStreamCopy" $allow_audio_stream_copy "scalar") (serialize-qp "breakOnNonKeyFrames" $break_on_non_key_frames "scalar") (serialize-qp "audioSampleRate" $audio_sample_rate "scalar") (serialize-qp "maxAudioBitDepth" $max_audio_bit_depth "scalar") (serialize-qp "audioBitRate" $audio_bit_rate "scalar") (serialize-qp "audioChannels" $audio_channels "scalar") (serialize-qp "maxAudioChannels" $max_audio_channels "scalar") (serialize-qp "profile" $profile "scalar") (serialize-qp "level" $level "scalar") (serialize-qp "framerate" $framerate "scalar") (serialize-qp "maxFramerate" $max_framerate "scalar") (serialize-qp "copyTimestamps" $copy_timestamps "scalar") (serialize-qp "startTimeTicks" $start_time_ticks "scalar") (serialize-qp "width" $width "scalar") (serialize-qp "height" $height "scalar") (serialize-qp "videoBitRate" $video_bit_rate "scalar") (serialize-qp "subtitleStreamIndex" $subtitle_stream_index "scalar") (serialize-qp "subtitleMethod" $subtitle_method "scalar") (serialize-qp "maxRefFrames" $max_ref_frames "scalar") (serialize-qp "maxVideoBitDepth" $max_video_bit_depth "scalar") (serialize-qp "requireAvc" $require_avc "scalar") (serialize-qp "deInterlace" $de_interlace "scalar") (serialize-qp "requireNonAnamorphic" $require_non_anamorphic "scalar") (serialize-qp "transcodingMaxAudioChannels" $transcoding_max_audio_channels "scalar") (serialize-qp "cpuCoreLimit" $cpu_core_limit "scalar") (serialize-qp "liveStreamId" $live_stream_id "scalar") (serialize-qp "enableMpegtsM2TsMode" $enable_mpegts_m2_ts_mode "scalar") (serialize-qp "videoCodec" $video_codec "scalar") (serialize-qp "subtitleCodec" $subtitle_codec "scalar") (serialize-qp "transcodeReasons" $transcode_reasons "scalar") (serialize-qp "audioStreamIndex" $audio_stream_index "scalar") (serialize-qp "videoStreamIndex" $video_stream_index "scalar") (serialize-qp "context" $context "scalar") (serialize-qp "streamOptions" $stream_options "multi")] | flatten | str join "&"
   let full_url = (build-url $base ({item_id: (encode-path-segment $item_id)} | format pattern "/Videos/{item_id}/stream") $qp)
   let accept_val = "video/*"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "head" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "head" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"container": $container, "static": $static, "params": $params, "tag": $tag, "deviceProfileId": $device_profile_id, "playSessionId": $play_session_id, "segmentContainer": $segment_container, "segmentLength": $segment_length, "minSegments": $min_segments, "mediaSourceId": $media_source_id, "deviceId": $device_id, "audioCodec": $audio_codec, "enableAutoStreamCopy": $enable_auto_stream_copy, "allowVideoStreamCopy": $allow_video_stream_copy, "allowAudioStreamCopy": $allow_audio_stream_copy, "breakOnNonKeyFrames": $break_on_non_key_frames, "audioSampleRate": $audio_sample_rate, "maxAudioBitDepth": $max_audio_bit_depth, "audioBitRate": $audio_bit_rate, "audioChannels": $audio_channels, "maxAudioChannels": $max_audio_channels, "profile": $profile, "level": $level, "framerate": $framerate, "maxFramerate": $max_framerate, "copyTimestamps": $copy_timestamps, "startTimeTicks": $start_time_ticks, "width": $width, "height": $height, "videoBitRate": $video_bit_rate, "subtitleStreamIndex": $subtitle_stream_index, "subtitleMethod": $subtitle_method, "maxRefFrames": $max_ref_frames, "maxVideoBitDepth": $max_video_bit_depth, "requireAvc": $require_avc, "deInterlace": $de_interlace, "requireNonAnamorphic": $require_non_anamorphic, "transcodingMaxAudioChannels": $transcoding_max_audio_channels, "cpuCoreLimit": $cpu_core_limit, "liveStreamId": $live_stream_id, "enableMpegtsM2TsMode": $enable_mpegts_m2_ts_mode, "videoCodec": $video_codec, "subtitleCodec": $subtitle_codec, "transcodeReasons": $transcode_reasons, "audioStreamIndex": $audio_stream_index, "videoStreamIndex": $video_stream_index, "context": $context, "streamOptions": $stream_options} | compact), body: null}
 }
 
 # Gets subtitles in a specified format.
@@ -13135,11 +13484,15 @@ export def "videos-subtitles-stream-format get" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "x-emby-authorization"))
   let base = ($base_url | default $BASE_URL)
+  if ($item_id | is-empty) { error make --unspanned { msg: "path parameter 'itemId' must be non-empty" } }
+  if ($media_source_id | is-empty) { error make --unspanned { msg: "path parameter 'mediaSourceId' must be non-empty" } }
+  if ($index | is-empty) { error make --unspanned { msg: "path parameter 'index' must be non-empty" } }
+  if ($format | is-empty) { error make --unspanned { msg: "path parameter 'format' must be non-empty" } }
   let qp = [(serialize-qp "endPositionTicks" $end_position_ticks "scalar") (serialize-qp "copyTimestamps" $copy_timestamps "scalar") (serialize-qp "addVttTimeMap" $add_vtt_time_map "scalar") (serialize-qp "startPositionTicks" $start_position_ticks "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({item_id: (encode-path-segment $item_id), media_source_id: (encode-path-segment $media_source_id), index: (encode-path-segment $index), format: (encode-path-segment $format)} | format pattern "/Videos/{item_id}/{media_source_id}/Subtitles/{index}/Stream.{format}") $qp)
   let accept_val = "text/*"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"endPositionTicks": $end_position_ticks, "copyTimestamps": $copy_timestamps, "addVttTimeMap": $add_vtt_time_map, "startPositionTicks": $start_position_ticks} | compact), body: null}
 }
 
 # Gets an HLS subtitle playlist.
@@ -13163,11 +13516,14 @@ export def "videos-subtitles-subtitles-m3u8 get-playlist" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "x-emby-authorization"))
   let base = ($base_url | default $BASE_URL)
+  if ($item_id | is-empty) { error make --unspanned { msg: "path parameter 'itemId' must be non-empty" } }
+  if ($media_source_id | is-empty) { error make --unspanned { msg: "path parameter 'mediaSourceId' must be non-empty" } }
+  if ($index | is-empty) { error make --unspanned { msg: "path parameter 'index' must be non-empty" } }
   let qp = [(serialize-qp "segmentLength" $segment_length "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({item_id: (encode-path-segment $item_id), media_source_id: (encode-path-segment $media_source_id), index: (encode-path-segment $index)} | format pattern "/Videos/{item_id}/{media_source_id}/Subtitles/{index}/subtitles.m3u8") $qp)
   let accept_val = "application/x-mpegURL"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"segmentLength": $segment_length} | compact), body: null}
 }
 
 # Gets subtitles in a specified format.
@@ -13195,11 +13551,16 @@ export def "videos-subtitles-stream-format get-with-ticks" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "x-emby-authorization"))
   let base = ($base_url | default $BASE_URL)
+  if ($item_id | is-empty) { error make --unspanned { msg: "path parameter 'itemId' must be non-empty" } }
+  if ($media_source_id | is-empty) { error make --unspanned { msg: "path parameter 'mediaSourceId' must be non-empty" } }
+  if ($index | is-empty) { error make --unspanned { msg: "path parameter 'index' must be non-empty" } }
+  if ($start_position_ticks | is-empty) { error make --unspanned { msg: "path parameter 'startPositionTicks' must be non-empty" } }
+  if ($format | is-empty) { error make --unspanned { msg: "path parameter 'format' must be non-empty" } }
   let qp = [(serialize-qp "endPositionTicks" $end_position_ticks "scalar") (serialize-qp "copyTimestamps" $copy_timestamps "scalar") (serialize-qp "addVttTimeMap" $add_vtt_time_map "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({item_id: (encode-path-segment $item_id), media_source_id: (encode-path-segment $media_source_id), index: (encode-path-segment $index), start_position_ticks: (encode-path-segment $start_position_ticks), format: (encode-path-segment $format)} | format pattern "/Videos/{item_id}/{media_source_id}/Subtitles/{index}/{start_position_ticks}/Stream.{format}") $qp)
   let accept_val = "text/*"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"endPositionTicks": $end_position_ticks, "copyTimestamps": $copy_timestamps, "addVttTimeMap": $add_vtt_time_map} | compact), body: null}
 }
 
 # Gets a video stream.
@@ -13269,11 +13630,14 @@ export def "videos get" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "x-emby-authorization"))
   let base = ($base_url | default $BASE_URL)
+  if ($item_id | is-empty) { error make --unspanned { msg: "path parameter 'itemId' must be non-empty" } }
+  if ($stream | is-empty) { error make --unspanned { msg: "path parameter 'stream' must be non-empty" } }
+  if ($container | is-empty) { error make --unspanned { msg: "path parameter 'container' must be non-empty" } }
   let qp = [(serialize-qp "static" $static "scalar") (serialize-qp "params" $params "scalar") (serialize-qp "tag" $tag "scalar") (serialize-qp "deviceProfileId" $device_profile_id "scalar") (serialize-qp "playSessionId" $play_session_id "scalar") (serialize-qp "segmentContainer" $segment_container "scalar") (serialize-qp "segmentLength" $segment_length "scalar") (serialize-qp "minSegments" $min_segments "scalar") (serialize-qp "mediaSourceId" $media_source_id "scalar") (serialize-qp "deviceId" $device_id "scalar") (serialize-qp "audioCodec" $audio_codec "scalar") (serialize-qp "enableAutoStreamCopy" $enable_auto_stream_copy "scalar") (serialize-qp "allowVideoStreamCopy" $allow_video_stream_copy "scalar") (serialize-qp "allowAudioStreamCopy" $allow_audio_stream_copy "scalar") (serialize-qp "breakOnNonKeyFrames" $break_on_non_key_frames "scalar") (serialize-qp "audioSampleRate" $audio_sample_rate "scalar") (serialize-qp "maxAudioBitDepth" $max_audio_bit_depth "scalar") (serialize-qp "audioBitRate" $audio_bit_rate "scalar") (serialize-qp "audioChannels" $audio_channels "scalar") (serialize-qp "maxAudioChannels" $max_audio_channels "scalar") (serialize-qp "profile" $profile "scalar") (serialize-qp "level" $level "scalar") (serialize-qp "framerate" $framerate "scalar") (serialize-qp "maxFramerate" $max_framerate "scalar") (serialize-qp "copyTimestamps" $copy_timestamps "scalar") (serialize-qp "startTimeTicks" $start_time_ticks "scalar") (serialize-qp "width" $width "scalar") (serialize-qp "height" $height "scalar") (serialize-qp "videoBitRate" $video_bit_rate "scalar") (serialize-qp "subtitleStreamIndex" $subtitle_stream_index "scalar") (serialize-qp "subtitleMethod" $subtitle_method "scalar") (serialize-qp "maxRefFrames" $max_ref_frames "scalar") (serialize-qp "maxVideoBitDepth" $max_video_bit_depth "scalar") (serialize-qp "requireAvc" $require_avc "scalar") (serialize-qp "deInterlace" $de_interlace "scalar") (serialize-qp "requireNonAnamorphic" $require_non_anamorphic "scalar") (serialize-qp "transcodingMaxAudioChannels" $transcoding_max_audio_channels "scalar") (serialize-qp "cpuCoreLimit" $cpu_core_limit "scalar") (serialize-qp "liveStreamId" $live_stream_id "scalar") (serialize-qp "enableMpegtsM2TsMode" $enable_mpegts_m2_ts_mode "scalar") (serialize-qp "videoCodec" $video_codec "scalar") (serialize-qp "subtitleCodec" $subtitle_codec "scalar") (serialize-qp "transcodeReasons" $transcode_reasons "scalar") (serialize-qp "audioStreamIndex" $audio_stream_index "scalar") (serialize-qp "videoStreamIndex" $video_stream_index "scalar") (serialize-qp "context" $context "scalar") (serialize-qp "streamOptions" $stream_options "multi")] | flatten | str join "&"
   let full_url = (build-url $base ({item_id: (encode-path-segment $item_id), stream: (encode-path-segment $stream), container: (encode-path-segment $container)} | format pattern "/Videos/{item_id}/{stream}.{container}") $qp)
   let accept_val = "video/*"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"static": $static, "params": $params, "tag": $tag, "deviceProfileId": $device_profile_id, "playSessionId": $play_session_id, "segmentContainer": $segment_container, "segmentLength": $segment_length, "minSegments": $min_segments, "mediaSourceId": $media_source_id, "deviceId": $device_id, "audioCodec": $audio_codec, "enableAutoStreamCopy": $enable_auto_stream_copy, "allowVideoStreamCopy": $allow_video_stream_copy, "allowAudioStreamCopy": $allow_audio_stream_copy, "breakOnNonKeyFrames": $break_on_non_key_frames, "audioSampleRate": $audio_sample_rate, "maxAudioBitDepth": $max_audio_bit_depth, "audioBitRate": $audio_bit_rate, "audioChannels": $audio_channels, "maxAudioChannels": $max_audio_channels, "profile": $profile, "level": $level, "framerate": $framerate, "maxFramerate": $max_framerate, "copyTimestamps": $copy_timestamps, "startTimeTicks": $start_time_ticks, "width": $width, "height": $height, "videoBitRate": $video_bit_rate, "subtitleStreamIndex": $subtitle_stream_index, "subtitleMethod": $subtitle_method, "maxRefFrames": $max_ref_frames, "maxVideoBitDepth": $max_video_bit_depth, "requireAvc": $require_avc, "deInterlace": $de_interlace, "requireNonAnamorphic": $require_non_anamorphic, "transcodingMaxAudioChannels": $transcoding_max_audio_channels, "cpuCoreLimit": $cpu_core_limit, "liveStreamId": $live_stream_id, "enableMpegtsM2TsMode": $enable_mpegts_m2_ts_mode, "videoCodec": $video_codec, "subtitleCodec": $subtitle_codec, "transcodeReasons": $transcode_reasons, "audioStreamIndex": $audio_stream_index, "videoStreamIndex": $video_stream_index, "context": $context, "streamOptions": $stream_options} | compact), body: null}
 }
 
 # Gets a video stream.
@@ -13343,11 +13707,14 @@ export def "videos head-head" [
 ]: nothing -> record {
   let auth = (build-auth $token ($auth_scheme | default "x-emby-authorization"))
   let base = ($base_url | default $BASE_URL)
+  if ($item_id | is-empty) { error make --unspanned { msg: "path parameter 'itemId' must be non-empty" } }
+  if ($stream | is-empty) { error make --unspanned { msg: "path parameter 'stream' must be non-empty" } }
+  if ($container | is-empty) { error make --unspanned { msg: "path parameter 'container' must be non-empty" } }
   let qp = [(serialize-qp "static" $static "scalar") (serialize-qp "params" $params "scalar") (serialize-qp "tag" $tag "scalar") (serialize-qp "deviceProfileId" $device_profile_id "scalar") (serialize-qp "playSessionId" $play_session_id "scalar") (serialize-qp "segmentContainer" $segment_container "scalar") (serialize-qp "segmentLength" $segment_length "scalar") (serialize-qp "minSegments" $min_segments "scalar") (serialize-qp "mediaSourceId" $media_source_id "scalar") (serialize-qp "deviceId" $device_id "scalar") (serialize-qp "audioCodec" $audio_codec "scalar") (serialize-qp "enableAutoStreamCopy" $enable_auto_stream_copy "scalar") (serialize-qp "allowVideoStreamCopy" $allow_video_stream_copy "scalar") (serialize-qp "allowAudioStreamCopy" $allow_audio_stream_copy "scalar") (serialize-qp "breakOnNonKeyFrames" $break_on_non_key_frames "scalar") (serialize-qp "audioSampleRate" $audio_sample_rate "scalar") (serialize-qp "maxAudioBitDepth" $max_audio_bit_depth "scalar") (serialize-qp "audioBitRate" $audio_bit_rate "scalar") (serialize-qp "audioChannels" $audio_channels "scalar") (serialize-qp "maxAudioChannels" $max_audio_channels "scalar") (serialize-qp "profile" $profile "scalar") (serialize-qp "level" $level "scalar") (serialize-qp "framerate" $framerate "scalar") (serialize-qp "maxFramerate" $max_framerate "scalar") (serialize-qp "copyTimestamps" $copy_timestamps "scalar") (serialize-qp "startTimeTicks" $start_time_ticks "scalar") (serialize-qp "width" $width "scalar") (serialize-qp "height" $height "scalar") (serialize-qp "videoBitRate" $video_bit_rate "scalar") (serialize-qp "subtitleStreamIndex" $subtitle_stream_index "scalar") (serialize-qp "subtitleMethod" $subtitle_method "scalar") (serialize-qp "maxRefFrames" $max_ref_frames "scalar") (serialize-qp "maxVideoBitDepth" $max_video_bit_depth "scalar") (serialize-qp "requireAvc" $require_avc "scalar") (serialize-qp "deInterlace" $de_interlace "scalar") (serialize-qp "requireNonAnamorphic" $require_non_anamorphic "scalar") (serialize-qp "transcodingMaxAudioChannels" $transcoding_max_audio_channels "scalar") (serialize-qp "cpuCoreLimit" $cpu_core_limit "scalar") (serialize-qp "liveStreamId" $live_stream_id "scalar") (serialize-qp "enableMpegtsM2TsMode" $enable_mpegts_m2_ts_mode "scalar") (serialize-qp "videoCodec" $video_codec "scalar") (serialize-qp "subtitleCodec" $subtitle_codec "scalar") (serialize-qp "transcodeReasons" $transcode_reasons "scalar") (serialize-qp "audioStreamIndex" $audio_stream_index "scalar") (serialize-qp "videoStreamIndex" $video_stream_index "scalar") (serialize-qp "context" $context "scalar") (serialize-qp "streamOptions" $stream_options "multi")] | flatten | str join "&"
   let full_url = (build-url $base ({item_id: (encode-path-segment $item_id), stream: (encode-path-segment $stream), container: (encode-path-segment $container)} | format pattern "/Videos/{item_id}/{stream}.{container}") $qp)
   let accept_val = "video/*"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "head" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "head" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"static": $static, "params": $params, "tag": $tag, "deviceProfileId": $device_profile_id, "playSessionId": $play_session_id, "segmentContainer": $segment_container, "segmentLength": $segment_length, "minSegments": $min_segments, "mediaSourceId": $media_source_id, "deviceId": $device_id, "audioCodec": $audio_codec, "enableAutoStreamCopy": $enable_auto_stream_copy, "allowVideoStreamCopy": $allow_video_stream_copy, "allowAudioStreamCopy": $allow_audio_stream_copy, "breakOnNonKeyFrames": $break_on_non_key_frames, "audioSampleRate": $audio_sample_rate, "maxAudioBitDepth": $max_audio_bit_depth, "audioBitRate": $audio_bit_rate, "audioChannels": $audio_channels, "maxAudioChannels": $max_audio_channels, "profile": $profile, "level": $level, "framerate": $framerate, "maxFramerate": $max_framerate, "copyTimestamps": $copy_timestamps, "startTimeTicks": $start_time_ticks, "width": $width, "height": $height, "videoBitRate": $video_bit_rate, "subtitleStreamIndex": $subtitle_stream_index, "subtitleMethod": $subtitle_method, "maxRefFrames": $max_ref_frames, "maxVideoBitDepth": $max_video_bit_depth, "requireAvc": $require_avc, "deInterlace": $de_interlace, "requireNonAnamorphic": $require_non_anamorphic, "transcodingMaxAudioChannels": $transcoding_max_audio_channels, "cpuCoreLimit": $cpu_core_limit, "liveStreamId": $live_stream_id, "enableMpegtsM2TsMode": $enable_mpegts_m2_ts_mode, "videoCodec": $video_codec, "subtitleCodec": $subtitle_codec, "transcodeReasons": $transcode_reasons, "audioStreamIndex": $audio_stream_index, "videoStreamIndex": $video_stream_index, "context": $context, "streamOptions": $stream_options} | compact), body: null}
 }
 
 # Get video attachment.
@@ -13370,10 +13737,13 @@ export def "videos-attachments get" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "x-emby-authorization"))
   let base = ($base_url | default $BASE_URL)
+  if ($video_id | is-empty) { error make --unspanned { msg: "path parameter 'videoId' must be non-empty" } }
+  if ($media_source_id | is-empty) { error make --unspanned { msg: "path parameter 'mediaSourceId' must be non-empty" } }
+  if ($index | is-empty) { error make --unspanned { msg: "path parameter 'index' must be non-empty" } }
   let full_url = (build-url $base ({video_id: (encode-path-segment $video_id), media_source_id: (encode-path-segment $media_source_id), index: (encode-path-segment $index)} | format pattern "/Videos/{video_id}/{media_source_id}/Attachments/{index}"))
   let accept_val = "application/octet-stream"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
 }
 
 # Get years.
@@ -13413,7 +13783,7 @@ export def "years list" [
   let full_url = (build-url $base "/Years" $qp)
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"startIndex": $start_index, "limit": $limit, "sortOrder": $sort_order, "parentId": $parent_id, "fields": $fields, "excludeItemTypes": $exclude_item_types, "includeItemTypes": $include_item_types, "mediaTypes": $media_types, "sortBy": $sort_by, "enableUserData": $enable_user_data, "imageTypeLimit": $image_type_limit, "enableImageTypes": $enable_image_types, "userId": $user_id, "recursive": $recursive, "enableImages": $enable_images} | compact), body: null}
 }
 
 # Gets a year.
@@ -13436,11 +13806,12 @@ export def "years get" [
 ]: nothing -> record<AirDays: list<string>, AirTime: string, AirsAfterSeasonNumber: int, AirsBeforeEpisodeNumber: int, AirsBeforeSeasonNumber: int, Album: string, AlbumArtist: string, AlbumArtists: table<Id: string, Name: string>, AlbumCount: int, AlbumId: string, AlbumPrimaryImageTag: string, Altitude: float, Aperture: float, ArtistCount: int, ArtistItems: table<Id: string, Name: string>, Artists: list<string>, AspectRatio: string, Audio: string, BackdropImageTags: list<string>, CameraMake: string, CameraModel: string, CanDelete: bool, CanDownload: bool, ChannelId: string, ChannelName: string, ChannelNumber: string, ChannelPrimaryImageTag: string, ChannelType: string, Chapters: table<ImageDateModified: string, ImagePath: string, ImageTag: string, Name: string, StartPositionTicks: int>, ChildCount: int, CollectionType: string, CommunityRating: float, CompletionPercentage: float, Container: string, CriticRating: float, CumulativeRunTimeTicks: int, CurrentProgram: any, CustomRating: string, DateCreated: string, DateLastMediaAdded: string, DisplayOrder: string, DisplayPreferencesId: string, EnableMediaSourceDisplay: bool, EndDate: string, EpisodeCount: int, EpisodeTitle: string, Etag: string, ExposureTime: float, ExternalUrls: table<Name: string, Url: string>, ExtraType: string, FocalLength: float, ForcedSortName: string, GenreItems: table<Id: string, Name: string>, Genres: list<string>, HasSubtitles: bool, Height: int, Id: string, ImageBlurHashes: record<Art: record, Backdrop: record, Banner: record, Box: record, BoxRear: record, Chapter: record, Disc: record, Logo: record, Menu: record, Primary: record, Profile: record, Screenshot: record, Thumb: record>, ImageOrientation: string, ImageTags: record, IndexNumber: int, IndexNumberEnd: int, IsFolder: bool, IsHD: bool, IsKids: bool, IsLive: bool, IsMovie: bool, IsNews: bool, IsPlaceHolder: bool, IsPremiere: bool, IsRepeat: bool, IsSeries: bool, IsSports: bool, IsoSpeedRating: int, IsoType: string, Latitude: float, LocalTrailerCount: int, LocationType: string, LockData: bool, LockedFields: list<string>, Longitude: float, MediaSourceCount: int, MediaSources: table<AnalyzeDurationMs: int, Bitrate: int, BufferMs: int, Container: string, DefaultAudioStreamIndex: int, DefaultSubtitleStreamIndex: int, ETag: string, EncoderPath: string, EncoderProtocol: string, Formats: list, GenPtsInput: bool, Id: string, IgnoreDts: bool, IgnoreIndex: bool, IsInfiniteStream: bool, IsRemote: bool, IsoType: string, LiveStreamId: string, MediaAttachments: list, MediaStreams: list, Name: string, OpenToken: string, Path: string, Protocol: string, ReadAtNativeFramerate: bool, RequiredHttpHeaders: record, RequiresClosing: bool, RequiresLooping: bool, RequiresOpening: bool, RunTimeTicks: int, Size: int, SupportsDirectPlay: bool, SupportsDirectStream: bool, SupportsProbing: bool, SupportsTranscoding: bool, Timestamp: string, TranscodingContainer: string, TranscodingSubProtocol: string, TranscodingUrl: string, Type: string, Video3DFormat: string, VideoType: string>, MediaStreams: table<AspectRatio: string, AverageFrameRate: float, BitDepth: int, BitRate: int, ChannelLayout: string, Channels: int, Codec: string, CodecTag: string, CodecTimeBase: string, ColorPrimaries: string, ColorRange: string, ColorSpace: string, ColorTransfer: string, Comment: string, DeliveryMethod: string, DeliveryUrl: string, DisplayTitle: string, Height: int, Index: int, IsAVC: bool, IsAnamorphic: bool, IsDefault: bool, IsExternal: bool, IsExternalUrl: bool, IsForced: bool, IsInterlaced: bool, IsTextSubtitleStream: bool, Language: string, Level: float, NalLengthSize: string, PacketLength: int, Path: string, PixelFormat: string, Profile: string, RealFrameRate: float, RefFrames: int, SampleRate: int, Score: int, SupportsExternalStream: bool, TimeBase: string, Title: string, Type: string, VideoRange: string, Width: int, localizedDefault: string, localizedForced: string, localizedUndefined: string>, MediaType: string, MovieCount: int, MusicVideoCount: int, Name: string, Number: string, OfficialRating: string, OriginalTitle: string, Overview: string, ParentArtImageTag: string, ParentArtItemId: string, ParentBackdropImageTags: list<string>, ParentBackdropItemId: string, ParentId: string, ParentIndexNumber: int, ParentLogoImageTag: string, ParentLogoItemId: string, ParentPrimaryImageItemId: string, ParentPrimaryImageTag: string, ParentThumbImageTag: string, ParentThumbItemId: string, PartCount: int, Path: string, People: table<Id: string, ImageBlurHashes: record, Name: string, PrimaryImageTag: string, Role: string, Type: string>, PlayAccess: string, PlaylistItemId: string, PreferredMetadataCountryCode: string, PreferredMetadataLanguage: string, PremiereDate: string, PrimaryImageAspectRatio: float, ProductionLocations: list<string>, ProductionYear: int, ProgramCount: int, ProgramId: string, ProviderIds: record, RecursiveItemCount: int, RemoteTrailers: table<Name: string, Url: string>, RunTimeTicks: int, ScreenshotImageTags: list<string>, SeasonId: string, SeasonName: string, SeriesCount: int, SeriesId: string, SeriesName: string, SeriesPrimaryImageTag: string, SeriesStudio: string, SeriesThumbImageTag: string, SeriesTimerId: string, ServerId: string, ShutterSpeed: float, Software: string, SongCount: int, SortName: string, SourceType: string, SpecialFeatureCount: int, StartDate: string, Status: string, Studios: table<Id: string, Name: string>, SupportsSync: bool, Taglines: list<string>, Tags: list<string>, TimerId: string, TrailerCount: int, Type: string, UserData: record<IsFavorite: bool, ItemId: string, Key: string, LastPlayedDate: string, Likes: bool, PlayCount: int, PlaybackPositionTicks: int, Played: bool, PlayedPercentage: float, Rating: float, UnplayedItemCount: int>, Video3DFormat: string, VideoType: string, Width: int> {
   let auth = (build-auth $token ($auth_scheme | default "x-emby-authorization"))
   let base = ($base_url | default $BASE_URL)
+  if ($year | is-empty) { error make --unspanned { msg: "path parameter 'year' must be non-empty" } }
   let qp = [(serialize-qp "userId" $user_id "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({year: (encode-path-segment $year)} | format pattern "/Years/{year}") $qp)
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"userId": $user_id} | compact), body: null}
 }
 
 # Gets a dashboard configuration page.
@@ -13466,7 +13837,7 @@ export def "web-configuration-page get-dashboard" [
   let full_url = (build-url $base "/web/ConfigurationPage" $qp)
   let accept_val = ($accept | default "application/x-javascript")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"name": $name} | compact), body: null}
 }
 
 # Gets the configuration pages.
@@ -13493,5 +13864,5 @@ export def "web-configuration-pages get" [
   let full_url = (build-url $base "/web/ConfigurationPages" $qp)
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"enableInMainMenu": $enable_in_main_menu, "pageType": $page_type} | compact), body: null}
 }

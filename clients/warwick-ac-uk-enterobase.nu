@@ -3,18 +3,19 @@
 # Auth: --token flag or $env.ENTEROBASE_API_TOKEN
 
 const BASE_URL = "http://localhost"
-const DEFAULT_AUTH = "basic"
 
-# Build auth: returns {headers: record, query: string}
+# Build auth: returns {scheme: string, headers: record, query: string, location: string}.
+# `location` is "header" | "query" | "cookie" | "none" and tells dry-run callers
+# where the token went without inspecting headers/query themselves.
 def build-auth [token?: string, auth_scheme?: string]: nothing -> record {
   let token_val = if ($token != null) and ($token | is-not-empty) { $token } else { $env | get -o ENTEROBASE_API_TOKEN | default "" }
   let scheme = ($auth_scheme | default "bearer")
-  if ($scheme == "none") or ($token_val | is-empty) { return {headers: {}, query: ""} }
+  if ($scheme == "none") or ($token_val | is-empty) { return {scheme: $scheme, headers: {}, query: "", location: "none"} }
   match $scheme {
-    "basic" => { {headers: {Authorization: $"Basic ($token_val)"}, query: ""} }
-    "basic-credentials" => { {headers: {Authorization: $"Basic ($token_val | encode base64)"}, query: ""} }
-    "none" => { {headers: {}, query: ""} }
-    _ => { {headers: {Authorization: $"Bearer ($token_val)"}, query: ""} }
+    "basic" => { {scheme: $scheme, headers: {Authorization: $"Basic ($token_val)"}, query: "", location: "header"} }
+    "basic-credentials" => { {scheme: $scheme, headers: {Authorization: $"Basic ($token_val | encode base64)"}, query: "", location: "header"} }
+    "none" => { {scheme: $scheme, headers: {}, query: "", location: "none"} }
+    _ => { {scheme: $scheme, headers: {Authorization: $"Bearer ($token_val)"}, query: "", location: "header"} }
   }
 }
 
@@ -23,8 +24,9 @@ def build-auth [token?: string, auth_scheme?: string]: nothing -> record {
 # ([A-Za-z0-9-._~]) stay literal; everything else gets %XX.
 def serialize-qp [name: string, value: any, style: string]: nothing -> list<string> {
   if ($value == null) { return [] }
-  let n = (encode-path-segment $name)
   let is_list = ($value | describe | str starts-with "list")
+  if $is_list and ($value | is-empty) { return [] }
+  let n = (encode-path-segment $name)
   if ($value | describe | str starts-with "record") { return ($value | transpose k v | each { $"($n)[(encode-path-segment $in.k)]=(encode-path-segment $in.v)" }) }
   if not $is_list { return [$"($n)=(encode-path-segment $value)"] }
   match $style {
@@ -55,22 +57,42 @@ def build-url [base: string, path: string, query?: string]: nothing -> string {
   if ($query != null) and ($query | is-not-empty) { $result | upsert query $query | url join } else { $result | url join }
 }
 
+# Build the dry-run record returned by --dry-run. Shape:
+#   {dry_run: true, method, url, query: <record>, headers, body, content_type, timeout,
+#    auth: {scheme, location}}
+# `meta` carries logical-form data (the query record by spec name, the pre-serialization
+# body) that do-request itself cannot reconstruct from its wire-format args.
+def build-dry-run-record [method: string, url: string, auth: record, content_type: string, timeout: duration, meta?: record]: nothing -> record {
+  let m = ($meta | default {})
+  {
+    dry_run: true
+    method: $method
+    url: $url
+    query: ($m | get -o query | default {})
+    headers: $auth.headers
+    body: ($m | get -o body)
+    content_type: $content_type
+    timeout: $timeout
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+}
+
 # Execute HTTP request with method dispatch
-def do-request [method: string, url: string, auth: record, insecure: bool, raw: bool, dry_run: bool, max_time?: duration, allow_errors?: bool, full?: bool, content_type?: string, body?: any]: nothing -> any {
+def do-request [method: string, url: string, auth: record, insecure: bool, raw: bool, dry_run: bool, max_time?: duration, allow_errors?: bool, full?: bool, content_type?: string, body?: any, dry_run_meta?: record]: nothing -> any {
   let req_url = if ($auth.query | is-not-empty) { if ($url | str contains "?") { $"($url)&($auth.query)" } else { $"($url)?($auth.query)" } } else { $url }
   let timeout = ($max_time | default 30min)
   let ct = ($content_type | default "application/json")
-  if $dry_run { return {method: $method, url: $req_url, headers: $auth.headers, query_string: $auth.query, content_type: $ct, timeout: $timeout, body: $body} }
+  if $dry_run { return (build-dry-run-record $method $req_url $auth $ct $timeout $dry_run_meta) }
   let resp = match $method {
     "get" => { http get --headers $auth.headers --full --allow-errors --max-time $timeout --insecure=$insecure --raw=$raw $req_url }
-    "head" => { http head --headers $auth.headers --max-time $timeout --insecure=$insecure $req_url }
-    "options" => { http options --headers $auth.headers --max-time $timeout --insecure=$insecure $req_url }
+    "head" => { http head --headers $auth.headers --full --allow-errors --max-time $timeout --insecure=$insecure $req_url }
+    "options" => { http options --headers $auth.headers --full --allow-errors --max-time $timeout --insecure=$insecure $req_url }
     "post" => { if ($body | is-empty) { http post --headers $auth.headers --full --allow-errors --max-time $timeout --insecure=$insecure --raw=$raw $req_url "" } else { http post --headers $auth.headers --content-type $ct --full --allow-errors --max-time $timeout --insecure=$insecure --raw=$raw $req_url $body } }
     "put" => { if ($body | is-empty) { http put --headers $auth.headers --full --allow-errors --max-time $timeout --insecure=$insecure --raw=$raw $req_url "" } else { http put --headers $auth.headers --content-type $ct --full --allow-errors --max-time $timeout --insecure=$insecure --raw=$raw $req_url $body } }
     "patch" => { if ($body | is-empty) { http patch --headers $auth.headers --full --allow-errors --max-time $timeout --insecure=$insecure --raw=$raw $req_url "" } else { http patch --headers $auth.headers --content-type $ct --full --allow-errors --max-time $timeout --insecure=$insecure --raw=$raw $req_url $body } }
     "delete" => { if ($body | is-empty) { http delete --headers $auth.headers --full --allow-errors --max-time $timeout --insecure=$insecure --raw=$raw $req_url } else { http delete --headers $auth.headers --content-type $ct --data $body --full --allow-errors --max-time $timeout --insecure=$insecure --raw=$raw $req_url } }
   }
-  if ($method in ["head" "options"]) { return $resp }
+  if ($method == "head") and (not $full) and (not $allow_errors) and $resp.status < 400 { return $resp.headers }
   if $allow_errors { $resp } else if $resp.status >= 400 { error make --unspanned { msg: $"HTTP ($resp.status): ($resp.body)" } } else if $full { {status: $resp.status, headers: $resp.headers, body: $resp.body} } else if $resp.status == 204 { null } else { $resp.body }
 }
 
@@ -124,7 +146,7 @@ export def "v2-0 get" [
   let full_url = (build-url $base "/api/v2.0" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"prefix": $prefix, "name": $name, "description": $description} | compact), body: null}
 }
 
 # Login endpoint, refresh your API token
@@ -149,7 +171,7 @@ export def "v2-0-login get" [
   let full_url = (build-url $base "/api/v2.0/login" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"username": $username, "password": $password} | compact), body: null}
 }
 
 # Generic endpoint for lookup list of barcodes
@@ -173,7 +195,7 @@ export def "v2-0-lookup list" [
   let full_url = (build-url $base "/api/v2.0/lookup" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"barcode": $barcode} | compact), body: null}
 }
 
 # Generic endpoint for lookup of barcodes
@@ -193,10 +215,11 @@ export def "v2-0-lookup get" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
+  if ($barcode | is-empty) { error make --unspanned { msg: "path parameter 'barcode' must be non-empty" } }
   let full_url = (build-url $base ({barcode: (encode-path-segment $barcode)} | format pattern "/api/v2.0/lookup/{barcode}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
 }
 
 # Generic endpoint for lookup of barcodes
@@ -218,12 +241,13 @@ export def "v2-0-lookup create" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
+  if ($barcode | is-empty) { error make --unspanned { msg: "path parameter 'barcode' must be non-empty" } }
   let full_url = (build-url $base ({barcode: (encode-path-segment $barcode)} | format pattern "/api/v2.0/lookup/{barcode}"))
   let req_body = {"barcode": $body_barcode} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: {}, body: $req_body}
 }
 
 # Genome assemblies
@@ -255,11 +279,12 @@ export def "v2-0-assemblies list" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
+  if ($database | is-empty) { error make --unspanned { msg: "path parameter 'database' must be non-empty" } }
   let qp = [(serialize-qp "orderby" $orderby "scalar") (serialize-qp "only_fields" $only_fields "multi") (serialize-qp "barcode" $barcode "multi") (serialize-qp "n50" $n50 "scalar") (serialize-qp "top_species" $top_species "scalar") (serialize-qp "uberstrain" $uberstrain "scalar") (serialize-qp "version" $version "scalar") (serialize-qp "limit" $limit "scalar") (serialize-qp "reldate" $reldate "scalar") (serialize-qp "offset" $offset "scalar") (serialize-qp "assembly_status" $assembly_status "scalar") (serialize-qp "sortorder" $sortorder "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({database: (encode-path-segment $database)} | format pattern "/api/v2.0/{database}/assemblies") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"orderby": $orderby, "only_fields": $only_fields, "barcode": $barcode, "n50": $n50, "top_species": $top_species, "uberstrain": $uberstrain, "version": $version, "limit": $limit, "reldate": $reldate, "offset": $offset, "assembly_status": $assembly_status, "sortorder": $sortorder} | compact), body: null}
 }
 
 # Genome assemblies
@@ -293,12 +318,14 @@ export def "v2-0-assemblies get" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
+  if ($database | is-empty) { error make --unspanned { msg: "path parameter 'database' must be non-empty" } }
+  if ($barcode | is-empty) { error make --unspanned { msg: "path parameter 'barcode' must be non-empty" } }
   let full_url = (build-url $base ({database: (encode-path-segment $database), barcode: (encode-path-segment $barcode)} | format pattern "/api/v2.0/{database}/assemblies/{barcode}"))
   let req_body = {"assembly_status": $assembly_status, "barcode": $body_barcode, "limit": $limit, "n50": $n50, "offset": $offset, "only_fields": $only_fields, "orderby": $orderby, "reldate": $reldate, "sortorder": $sortorder, "top_species": $top_species, "uberstrain": $uberstrain, "version": $version} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: {}, body: $req_body}
 }
 
 # Genome assemblies
@@ -332,12 +359,14 @@ export def "v2-0-assemblies create" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
+  if ($database | is-empty) { error make --unspanned { msg: "path parameter 'database' must be non-empty" } }
+  if ($barcode | is-empty) { error make --unspanned { msg: "path parameter 'barcode' must be non-empty" } }
   let full_url = (build-url $base ({database: (encode-path-segment $database), barcode: (encode-path-segment $barcode)} | format pattern "/api/v2.0/{database}/assemblies/{barcode}"))
   let req_body = {"assembly_status": $assembly_status, "barcode": $body_barcode, "limit": $limit, "n50": $n50, "offset": $offset, "only_fields": $only_fields, "orderby": $orderby, "reldate": $reldate, "sortorder": $sortorder, "top_species": $top_species, "uberstrain": $uberstrain, "version": $version} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: {}, body: $req_body}
 }
 
 # Genome assemblies
@@ -371,12 +400,14 @@ export def "v2-0-assemblies update" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
+  if ($database | is-empty) { error make --unspanned { msg: "path parameter 'database' must be non-empty" } }
+  if ($barcode | is-empty) { error make --unspanned { msg: "path parameter 'barcode' must be non-empty" } }
   let full_url = (build-url $base ({database: (encode-path-segment $database), barcode: (encode-path-segment $barcode)} | format pattern "/api/v2.0/{database}/assemblies/{barcode}"))
   let req_body = {"assembly_status": $assembly_status, "barcode": $body_barcode, "limit": $limit, "n50": $n50, "offset": $offset, "only_fields": $only_fields, "orderby": $orderby, "reldate": $reldate, "sortorder": $sortorder, "top_species": $top_species, "uberstrain": $uberstrain, "version": $version} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: {}, body: $req_body}
 }
 
 # Genotyping schemes
@@ -407,11 +438,12 @@ export def "v2-0-schemes list" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
+  if ($database | is-empty) { error make --unspanned { msg: "path parameter 'database' must be non-empty" } }
   let qp = [(serialize-qp "orderby" $orderby "scalar") (serialize-qp "scheme_name" $scheme_name "scalar") (serialize-qp "created" $created "scalar") (serialize-qp "lastmodified" $lastmodified "scalar") (serialize-qp "barcode" $barcode "multi") (serialize-qp "label" $label "scalar") (serialize-qp "only_fields" $only_fields "multi") (serialize-qp "version" $version "scalar") (serialize-qp "limit" $limit "scalar") (serialize-qp "sortorder" $sortorder "scalar") (serialize-qp "offset" $offset "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({database: (encode-path-segment $database)} | format pattern "/api/v2.0/{database}/schemes") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"orderby": $orderby, "scheme_name": $scheme_name, "created": $created, "lastmodified": $lastmodified, "barcode": $barcode, "label": $label, "only_fields": $only_fields, "version": $version, "limit": $limit, "sortorder": $sortorder, "offset": $offset} | compact), body: null}
 }
 
 # Genotyping schemes
@@ -444,12 +476,14 @@ export def "v2-0-schemes get" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
+  if ($database | is-empty) { error make --unspanned { msg: "path parameter 'database' must be non-empty" } }
+  if ($barcode | is-empty) { error make --unspanned { msg: "path parameter 'barcode' must be non-empty" } }
   let full_url = (build-url $base ({database: (encode-path-segment $database), barcode: (encode-path-segment $barcode)} | format pattern "/api/v2.0/{database}/schemes/{barcode}"))
   let req_body = {"barcode": $body_barcode, "created": $created, "label": $label, "lastmodified": $lastmodified, "limit": $limit, "offset": $offset, "only_fields": $only_fields, "orderby": $orderby, "scheme_name": $scheme_name, "sortorder": $sortorder, "version": $version} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: {}, body: $req_body}
 }
 
 # Genotyping schemes
@@ -482,12 +516,14 @@ export def "v2-0-schemes create" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
+  if ($database | is-empty) { error make --unspanned { msg: "path parameter 'database' must be non-empty" } }
+  if ($barcode | is-empty) { error make --unspanned { msg: "path parameter 'barcode' must be non-empty" } }
   let full_url = (build-url $base ({database: (encode-path-segment $database), barcode: (encode-path-segment $barcode)} | format pattern "/api/v2.0/{database}/schemes/{barcode}"))
   let req_body = {"barcode": $body_barcode, "created": $created, "label": $label, "lastmodified": $lastmodified, "limit": $limit, "offset": $offset, "only_fields": $only_fields, "orderby": $orderby, "scheme_name": $scheme_name, "sortorder": $sortorder, "version": $version} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: {}, body: $req_body}
 }
 
 # Genotyping schemes
@@ -520,12 +556,14 @@ export def "v2-0-schemes update" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
+  if ($database | is-empty) { error make --unspanned { msg: "path parameter 'database' must be non-empty" } }
+  if ($barcode | is-empty) { error make --unspanned { msg: "path parameter 'barcode' must be non-empty" } }
   let full_url = (build-url $base ({database: (encode-path-segment $database), barcode: (encode-path-segment $barcode)} | format pattern "/api/v2.0/{database}/schemes/{barcode}"))
   let req_body = {"barcode": $body_barcode, "created": $created, "label": $label, "lastmodified": $lastmodified, "limit": $limit, "offset": $offset, "only_fields": $only_fields, "orderby": $orderby, "scheme_name": $scheme_name, "sortorder": $sortorder, "version": $version} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: {}, body: $req_body}
 }
 
 # Strain data
@@ -582,11 +620,12 @@ export def "v2-0-straindata get" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
+  if ($database | is-empty) { error make --unspanned { msg: "path parameter 'database' must be non-empty" } }
   let qp = [(serialize-qp "comment" $comment "scalar") (serialize-qp "secondary_sample_accession" $secondary_sample_accession "scalar") (serialize-qp "my_strains" $my_strains "scalar") (serialize-qp "offset" $offset "scalar") (serialize-qp "serotype" $serotype "scalar") (serialize-qp "n50" $n50 "scalar") (serialize-qp "county" $county "scalar") (serialize-qp "only_fields" $only_fields "multi") (serialize-qp "postcode" $postcode "scalar") (serialize-qp "lab_contact" $lab_contact "scalar") (serialize-qp "substrains" $substrains "scalar") (serialize-qp "custom_fields" $custom_fields "scalar") (serialize-qp "city" $city "scalar") (serialize-qp "strain_name" $strain_name "scalar") (serialize-qp "collection_date" $collection_date "scalar") (serialize-qp "collection_month" $collection_month "scalar") (serialize-qp "reldate" $reldate "scalar") (serialize-qp "continent" $continent "scalar") (serialize-qp "source_details" $source_details "scalar") (serialize-qp "version" $version "scalar") (serialize-qp "latitude" $latitude "scalar") (serialize-qp "email" $email "scalar") (serialize-qp "source_niche" $source_niche "scalar") (serialize-qp "barcode" $barcode "multi") (serialize-qp "uberstrain" $uberstrain "scalar") (serialize-qp "sortorder" $sortorder "scalar") (serialize-qp "collection_year" $collection_year "scalar") (serialize-qp "orderby" $orderby "scalar") (serialize-qp "assembly_status" $assembly_status "scalar") (serialize-qp "source_type" $source_type "scalar") (serialize-qp "country" $country "scalar") (serialize-qp "region" $region "scalar") (serialize-qp "longitude" $longitude "scalar") (serialize-qp "sample_accession" $sample_accession "scalar") (serialize-qp "limit" $limit "scalar") (serialize-qp "top_species" $top_species "scalar") (serialize-qp "collection_time" $collection_time "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({database: (encode-path-segment $database)} | format pattern "/api/v2.0/{database}/straindata") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"comment": $comment, "secondary_sample_accession": $secondary_sample_accession, "my_strains": $my_strains, "offset": $offset, "serotype": $serotype, "n50": $n50, "county": $county, "only_fields": $only_fields, "postcode": $postcode, "lab_contact": $lab_contact, "substrains": $substrains, "custom_fields": $custom_fields, "city": $city, "strain_name": $strain_name, "collection_date": $collection_date, "collection_month": $collection_month, "reldate": $reldate, "continent": $continent, "source_details": $source_details, "version": $version, "latitude": $latitude, "email": $email, "source_niche": $source_niche, "barcode": $barcode, "uberstrain": $uberstrain, "sortorder": $sortorder, "collection_year": $collection_year, "orderby": $orderby, "assembly_status": $assembly_status, "source_type": $source_type, "country": $country, "region": $region, "longitude": $longitude, "sample_accession": $sample_accession, "limit": $limit, "top_species": $top_species, "collection_time": $collection_time} | compact), body: null}
 }
 
 # Strain metadata
@@ -641,11 +680,12 @@ export def "v2-0-strains list" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
+  if ($database | is-empty) { error make --unspanned { msg: "path parameter 'database' must be non-empty" } }
   let qp = [(serialize-qp "comment" $comment "scalar") (serialize-qp "secondary_sample_accession" $secondary_sample_accession "scalar") (serialize-qp "antigenic_formulas" $antigenic_formulas "scalar") (serialize-qp "my_strains" $my_strains "scalar") (serialize-qp "serotype" $serotype "scalar") (serialize-qp "county" $county "scalar") (serialize-qp "only_fields" $only_fields "multi") (serialize-qp "postcode" $postcode "scalar") (serialize-qp "lab_contact" $lab_contact "scalar") (serialize-qp "substrains" $substrains "scalar") (serialize-qp "city" $city "scalar") (serialize-qp "strain_name" $strain_name "scalar") (serialize-qp "collection_date" $collection_date "scalar") (serialize-qp "collection_month" $collection_month "scalar") (serialize-qp "reldate" $reldate "scalar") (serialize-qp "continent" $continent "scalar") (serialize-qp "source_details" $source_details "scalar") (serialize-qp "version" $version "scalar") (serialize-qp "latitude" $latitude "scalar") (serialize-qp "assembly_barcode" $assembly_barcode "scalar") (serialize-qp "source_niche" $source_niche "scalar") (serialize-qp "barcode" $barcode "multi") (serialize-qp "uberstrain" $uberstrain "scalar") (serialize-qp "sortorder" $sortorder "scalar") (serialize-qp "offset" $offset "scalar") (serialize-qp "collection_year" $collection_year "scalar") (serialize-qp "orderby" $orderby "scalar") (serialize-qp "return_all" $return_all "scalar") (serialize-qp "source_type" $source_type "scalar") (serialize-qp "country" $country "scalar") (serialize-qp "region" $region "scalar") (serialize-qp "longitude" $longitude "scalar") (serialize-qp "sample_accession" $sample_accession "scalar") (serialize-qp "limit" $limit "scalar") (serialize-qp "collection_time" $collection_time "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({database: (encode-path-segment $database)} | format pattern "/api/v2.0/{database}/strains") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"comment": $comment, "secondary_sample_accession": $secondary_sample_accession, "antigenic_formulas": $antigenic_formulas, "my_strains": $my_strains, "serotype": $serotype, "county": $county, "only_fields": $only_fields, "postcode": $postcode, "lab_contact": $lab_contact, "substrains": $substrains, "city": $city, "strain_name": $strain_name, "collection_date": $collection_date, "collection_month": $collection_month, "reldate": $reldate, "continent": $continent, "source_details": $source_details, "version": $version, "latitude": $latitude, "assembly_barcode": $assembly_barcode, "source_niche": $source_niche, "barcode": $barcode, "uberstrain": $uberstrain, "sortorder": $sortorder, "offset": $offset, "collection_year": $collection_year, "orderby": $orderby, "return_all": $return_all, "source_type": $source_type, "country": $country, "region": $region, "longitude": $longitude, "sample_accession": $sample_accession, "limit": $limit, "collection_time": $collection_time} | compact), body: null}
 }
 
 # Strain metadata
@@ -702,12 +742,14 @@ export def "v2-0-strains get" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
+  if ($database | is-empty) { error make --unspanned { msg: "path parameter 'database' must be non-empty" } }
+  if ($barcode | is-empty) { error make --unspanned { msg: "path parameter 'barcode' must be non-empty" } }
   let full_url = (build-url $base ({database: (encode-path-segment $database), barcode: (encode-path-segment $barcode)} | format pattern "/api/v2.0/{database}/strains/{barcode}"))
   let req_body = {"antigenic_formulas": $antigenic_formulas, "assembly_barcode": $assembly_barcode, "barcode": $body_barcode, "city": $city, "collection_date": $collection_date, "collection_month": $collection_month, "collection_time": $collection_time, "collection_year": $collection_year, "comment": $comment, "continent": $continent, "country": $country, "county": $county, "lab_contact": $lab_contact, "latitude": $latitude, "limit": $limit, "longitude": $longitude, "my_strains": $my_strains, "offset": $offset, "only_fields": $only_fields, "orderby": $orderby, "postcode": $postcode, "region": $region, "reldate": $reldate, "return_all": $return_all, "sample_accession": $sample_accession, "secondary_sample_accession": $secondary_sample_accession, "serotype": $serotype, "sortorder": $sortorder, "source_details": $source_details, "source_niche": $source_niche, "source_type": $source_type, "strain_name": $strain_name, "substrains": $substrains, "uberstrain": $uberstrain, "version": $version} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: {}, body: $req_body}
 }
 
 # Strain metadata
@@ -764,12 +806,14 @@ export def "v2-0-strains create" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
+  if ($database | is-empty) { error make --unspanned { msg: "path parameter 'database' must be non-empty" } }
+  if ($barcode | is-empty) { error make --unspanned { msg: "path parameter 'barcode' must be non-empty" } }
   let full_url = (build-url $base ({database: (encode-path-segment $database), barcode: (encode-path-segment $barcode)} | format pattern "/api/v2.0/{database}/strains/{barcode}"))
   let req_body = {"antigenic_formulas": $antigenic_formulas, "assembly_barcode": $assembly_barcode, "barcode": $body_barcode, "city": $city, "collection_date": $collection_date, "collection_month": $collection_month, "collection_time": $collection_time, "collection_year": $collection_year, "comment": $comment, "continent": $continent, "country": $country, "county": $county, "lab_contact": $lab_contact, "latitude": $latitude, "limit": $limit, "longitude": $longitude, "my_strains": $my_strains, "offset": $offset, "only_fields": $only_fields, "orderby": $orderby, "postcode": $postcode, "region": $region, "reldate": $reldate, "return_all": $return_all, "sample_accession": $sample_accession, "secondary_sample_accession": $secondary_sample_accession, "serotype": $serotype, "sortorder": $sortorder, "source_details": $source_details, "source_niche": $source_niche, "source_type": $source_type, "strain_name": $strain_name, "substrains": $substrains, "uberstrain": $uberstrain, "version": $version} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: {}, body: $req_body}
 }
 
 # Strain metadata
@@ -826,12 +870,14 @@ export def "v2-0-strains update" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
+  if ($database | is-empty) { error make --unspanned { msg: "path parameter 'database' must be non-empty" } }
+  if ($barcode | is-empty) { error make --unspanned { msg: "path parameter 'barcode' must be non-empty" } }
   let full_url = (build-url $base ({database: (encode-path-segment $database), barcode: (encode-path-segment $barcode)} | format pattern "/api/v2.0/{database}/strains/{barcode}"))
   let req_body = {"antigenic_formulas": $antigenic_formulas, "assembly_barcode": $assembly_barcode, "barcode": $body_barcode, "city": $city, "collection_date": $collection_date, "collection_month": $collection_month, "collection_time": $collection_time, "collection_year": $collection_year, "comment": $comment, "continent": $continent, "country": $country, "county": $county, "lab_contact": $lab_contact, "latitude": $latitude, "limit": $limit, "longitude": $longitude, "my_strains": $my_strains, "offset": $offset, "only_fields": $only_fields, "orderby": $orderby, "postcode": $postcode, "region": $region, "reldate": $reldate, "return_all": $return_all, "sample_accession": $sample_accession, "secondary_sample_accession": $secondary_sample_accession, "serotype": $serotype, "sortorder": $sortorder, "source_details": $source_details, "source_niche": $source_niche, "source_type": $source_type, "strain_name": $strain_name, "substrains": $substrains, "uberstrain": $uberstrain, "version": $version} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: {}, body: $req_body}
 }
 
 # Strain previous metadata
@@ -886,11 +932,12 @@ export def "v2-0-strainsversion get" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
+  if ($database | is-empty) { error make --unspanned { msg: "path parameter 'database' must be non-empty" } }
   let qp = [(serialize-qp "comment" $comment "scalar") (serialize-qp "secondary_sample_accession" $secondary_sample_accession "scalar") (serialize-qp "antigenic_formulas" $antigenic_formulas "scalar") (serialize-qp "my_strains" $my_strains "scalar") (serialize-qp "serotype" $serotype "scalar") (serialize-qp "county" $county "scalar") (serialize-qp "only_fields" $only_fields "multi") (serialize-qp "postcode" $postcode "scalar") (serialize-qp "lab_contact" $lab_contact "scalar") (serialize-qp "substrains" $substrains "scalar") (serialize-qp "city" $city "scalar") (serialize-qp "strain_name" $strain_name "scalar") (serialize-qp "collection_date" $collection_date "scalar") (serialize-qp "collection_month" $collection_month "scalar") (serialize-qp "reldate" $reldate "scalar") (serialize-qp "continent" $continent "scalar") (serialize-qp "source_details" $source_details "scalar") (serialize-qp "version" $version "scalar") (serialize-qp "latitude" $latitude "scalar") (serialize-qp "assembly_barcode" $assembly_barcode "scalar") (serialize-qp "source_niche" $source_niche "scalar") (serialize-qp "barcode" $barcode "multi") (serialize-qp "uberstrain" $uberstrain "scalar") (serialize-qp "sortorder" $sortorder "scalar") (serialize-qp "offset" $offset "scalar") (serialize-qp "collection_year" $collection_year "scalar") (serialize-qp "orderby" $orderby "scalar") (serialize-qp "return_all" $return_all "scalar") (serialize-qp "source_type" $source_type "scalar") (serialize-qp "country" $country "scalar") (serialize-qp "region" $region "scalar") (serialize-qp "longitude" $longitude "scalar") (serialize-qp "sample_accession" $sample_accession "scalar") (serialize-qp "limit" $limit "scalar") (serialize-qp "collection_time" $collection_time "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({database: (encode-path-segment $database)} | format pattern "/api/v2.0/{database}/strainsversion") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"comment": $comment, "secondary_sample_accession": $secondary_sample_accession, "antigenic_formulas": $antigenic_formulas, "my_strains": $my_strains, "serotype": $serotype, "county": $county, "only_fields": $only_fields, "postcode": $postcode, "lab_contact": $lab_contact, "substrains": $substrains, "city": $city, "strain_name": $strain_name, "collection_date": $collection_date, "collection_month": $collection_month, "reldate": $reldate, "continent": $continent, "source_details": $source_details, "version": $version, "latitude": $latitude, "assembly_barcode": $assembly_barcode, "source_niche": $source_niche, "barcode": $barcode, "uberstrain": $uberstrain, "sortorder": $sortorder, "offset": $offset, "collection_year": $collection_year, "orderby": $orderby, "return_all": $return_all, "source_type": $source_type, "country": $country, "region": $region, "longitude": $longitude, "sample_accession": $sample_accession, "limit": $limit, "collection_time": $collection_time} | compact), body: null}
 }
 
 # Traces (sequence-reads) metadata
@@ -916,11 +963,12 @@ export def "v2-0-traces list" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
+  if ($database | is-empty) { error make --unspanned { msg: "path parameter 'database' must be non-empty" } }
   let qp = [(serialize-qp "orderby" $orderby "scalar") (serialize-qp "barcode" $barcode "multi") (serialize-qp "only_fields" $only_fields "multi") (serialize-qp "limit" $limit "scalar") (serialize-qp "sortorder" $sortorder "scalar") (serialize-qp "offset" $offset "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({database: (encode-path-segment $database)} | format pattern "/api/v2.0/{database}/traces") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"orderby": $orderby, "barcode": $barcode, "only_fields": $only_fields, "limit": $limit, "sortorder": $sortorder, "offset": $offset} | compact), body: null}
 }
 
 # Traces (sequence-reads) metadata
@@ -948,12 +996,14 @@ export def "v2-0-traces get" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
+  if ($database | is-empty) { error make --unspanned { msg: "path parameter 'database' must be non-empty" } }
+  if ($barcode | is-empty) { error make --unspanned { msg: "path parameter 'barcode' must be non-empty" } }
   let full_url = (build-url $base ({database: (encode-path-segment $database), barcode: (encode-path-segment $barcode)} | format pattern "/api/v2.0/{database}/traces/{barcode}"))
   let req_body = {"barcode": $body_barcode, "limit": $limit, "offset": $offset, "only_fields": $only_fields, "orderby": $orderby, "sortorder": $sortorder} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: {}, body: $req_body}
 }
 
 # Traces (sequence-reads) metadata
@@ -981,12 +1031,14 @@ export def "v2-0-traces create" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
+  if ($database | is-empty) { error make --unspanned { msg: "path parameter 'database' must be non-empty" } }
+  if ($barcode | is-empty) { error make --unspanned { msg: "path parameter 'barcode' must be non-empty" } }
   let full_url = (build-url $base ({database: (encode-path-segment $database), barcode: (encode-path-segment $barcode)} | format pattern "/api/v2.0/{database}/traces/{barcode}"))
   let req_body = {"barcode": $body_barcode, "limit": $limit, "offset": $offset, "only_fields": $only_fields, "orderby": $orderby, "sortorder": $sortorder} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: {}, body: $req_body}
 }
 
 # Traces (sequence-reads) metadata
@@ -1014,12 +1066,14 @@ export def "v2-0-traces update" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
+  if ($database | is-empty) { error make --unspanned { msg: "path parameter 'database' must be non-empty" } }
+  if ($barcode | is-empty) { error make --unspanned { msg: "path parameter 'barcode' must be non-empty" } }
   let full_url = (build-url $base ({database: (encode-path-segment $database), barcode: (encode-path-segment $barcode)} | format pattern "/api/v2.0/{database}/traces/{barcode}"))
   let req_body = {"barcode": $body_barcode, "limit": $limit, "offset": $offset, "only_fields": $only_fields, "orderby": $orderby, "sortorder": $sortorder} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: {}, body: $req_body}
 }
 
 # Alleles data
@@ -1048,11 +1102,13 @@ export def "v2-0-alleles get" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
+  if ($database | is-empty) { error make --unspanned { msg: "path parameter 'database' must be non-empty" } }
+  if ($scheme | is-empty) { error make --unspanned { msg: "path parameter 'scheme' must be non-empty" } }
   let qp = [(serialize-qp "allele_id" $allele_id "scalar") (serialize-qp "seq" $seq "scalar") (serialize-qp "barcode" $barcode "multi") (serialize-qp "reldate" $reldate "scalar") (serialize-qp "locus" $locus "scalar") (serialize-qp "only_fields" $only_fields "multi") (serialize-qp "limit" $limit "scalar") (serialize-qp "offset" $offset "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({database: (encode-path-segment $database), scheme: (encode-path-segment $scheme)} | format pattern "/api/v2.0/{database}/{scheme}/alleles") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"allele_id": $allele_id, "seq": $seq, "barcode": $barcode, "reldate": $reldate, "locus": $locus, "only_fields": $only_fields, "limit": $limit, "offset": $offset} | compact), body: null}
 }
 
 # Loci
@@ -1080,11 +1136,13 @@ export def "v2-0-loci get" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
+  if ($database | is-empty) { error make --unspanned { msg: "path parameter 'database' must be non-empty" } }
+  if ($scheme | is-empty) { error make --unspanned { msg: "path parameter 'scheme' must be non-empty" } }
   let qp = [(serialize-qp "barcode" $barcode "multi") (serialize-qp "locus" $locus "scalar") (serialize-qp "only_fields" $only_fields "multi") (serialize-qp "create_time" $create_time "scalar") (serialize-qp "limit" $limit "scalar") (serialize-qp "offset" $offset "scalar") (serialize-qp "scheme" $scheme "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({database: (encode-path-segment $database), scheme: (encode-path-segment $scheme)} | format pattern "/api/v2.0/{database}/{scheme}/loci") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"barcode": $barcode, "locus": $locus, "only_fields": $only_fields, "create_time": $create_time, "limit": $limit, "offset": $offset, "scheme": $scheme} | compact), body: null}
 }
 
 # ST profile data
@@ -1113,9 +1171,11 @@ export def "v2-0-sts get" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
+  if ($database | is-empty) { error make --unspanned { msg: "path parameter 'database' must be non-empty" } }
+  if ($scheme | is-empty) { error make --unspanned { msg: "path parameter 'scheme' must be non-empty" } }
   let qp = [(serialize-qp "st_id" $st_id "scalar") (serialize-qp "scheme" $scheme "scalar") (serialize-qp "show_alleles" $show_alleles "scalar") (serialize-qp "barcode" $barcode "multi") (serialize-qp "only_fields" $only_fields "multi") (serialize-qp "limit" $limit "scalar") (serialize-qp "reldate" $reldate "scalar") (serialize-qp "offset" $offset "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({database: (encode-path-segment $database), scheme: (encode-path-segment $scheme)} | format pattern "/api/v2.0/{database}/{scheme}/sts") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"st_id": $st_id, "scheme": $scheme, "show_alleles": $show_alleles, "barcode": $barcode, "only_fields": $only_fields, "limit": $limit, "reldate": $reldate, "offset": $offset} | compact), body: null}
 }

@@ -3,17 +3,18 @@
 # Auth: --token flag or $env.CLOUD_STORAGE_JSON_API_TOKEN
 
 const BASE_URL = "https://storage.googleapis.com/storage/v1"
-const DEFAULT_AUTH = "bearer"
 
-# Build auth: returns {headers: record, query: string}
+# Build auth: returns {scheme: string, headers: record, query: string, location: string}.
+# `location` is "header" | "query" | "cookie" | "none" and tells dry-run callers
+# where the token went without inspecting headers/query themselves.
 def build-auth [token?: string, auth_scheme?: string]: nothing -> record {
   let token_val = if ($token != null) and ($token | is-not-empty) { $token } else { $env | get -o CLOUD_STORAGE_JSON_API_TOKEN | default "" }
   let scheme = ($auth_scheme | default "bearer")
-  if ($scheme == "none") or ($token_val | is-empty) { return {headers: {}, query: ""} }
+  if ($scheme == "none") or ($token_val | is-empty) { return {scheme: $scheme, headers: {}, query: "", location: "none"} }
   match $scheme {
-    "bearer" => { {headers: {Authorization: $"Bearer ($token_val)"}, query: ""} }
-    "none" => { {headers: {}, query: ""} }
-    _ => { {headers: {Authorization: $"Bearer ($token_val)"}, query: ""} }
+    "bearer" => { {scheme: $scheme, headers: {Authorization: $"Bearer ($token_val)"}, query: "", location: "header"} }
+    "none" => { {scheme: $scheme, headers: {}, query: "", location: "none"} }
+    _ => { {scheme: $scheme, headers: {Authorization: $"Bearer ($token_val)"}, query: "", location: "header"} }
   }
 }
 
@@ -22,8 +23,9 @@ def build-auth [token?: string, auth_scheme?: string]: nothing -> record {
 # ([A-Za-z0-9-._~]) stay literal; everything else gets %XX.
 def serialize-qp [name: string, value: any, style: string]: nothing -> list<string> {
   if ($value == null) { return [] }
-  let n = (encode-path-segment $name)
   let is_list = ($value | describe | str starts-with "list")
+  if $is_list and ($value | is-empty) { return [] }
+  let n = (encode-path-segment $name)
   if ($value | describe | str starts-with "record") { return ($value | transpose k v | each { $"($n)[(encode-path-segment $in.k)]=(encode-path-segment $in.v)" }) }
   if not $is_list { return [$"($n)=(encode-path-segment $value)"] }
   match $style {
@@ -54,22 +56,42 @@ def build-url [base: string, path: string, query?: string]: nothing -> string {
   if ($query != null) and ($query | is-not-empty) { $result | upsert query $query | url join } else { $result | url join }
 }
 
+# Build the dry-run record returned by --dry-run. Shape:
+#   {dry_run: true, method, url, query: <record>, headers, body, content_type, timeout,
+#    auth: {scheme, location}}
+# `meta` carries logical-form data (the query record by spec name, the pre-serialization
+# body) that do-request itself cannot reconstruct from its wire-format args.
+def build-dry-run-record [method: string, url: string, auth: record, content_type: string, timeout: duration, meta?: record]: nothing -> record {
+  let m = ($meta | default {})
+  {
+    dry_run: true
+    method: $method
+    url: $url
+    query: ($m | get -o query | default {})
+    headers: $auth.headers
+    body: ($m | get -o body)
+    content_type: $content_type
+    timeout: $timeout
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+}
+
 # Execute HTTP request with method dispatch
-def do-request [method: string, url: string, auth: record, insecure: bool, raw: bool, dry_run: bool, max_time?: duration, allow_errors?: bool, full?: bool, content_type?: string, body?: any]: nothing -> any {
+def do-request [method: string, url: string, auth: record, insecure: bool, raw: bool, dry_run: bool, max_time?: duration, allow_errors?: bool, full?: bool, content_type?: string, body?: any, dry_run_meta?: record]: nothing -> any {
   let req_url = if ($auth.query | is-not-empty) { if ($url | str contains "?") { $"($url)&($auth.query)" } else { $"($url)?($auth.query)" } } else { $url }
   let timeout = ($max_time | default 30min)
   let ct = ($content_type | default "application/json")
-  if $dry_run { return {method: $method, url: $req_url, headers: $auth.headers, query_string: $auth.query, content_type: $ct, timeout: $timeout, body: $body} }
+  if $dry_run { return (build-dry-run-record $method $req_url $auth $ct $timeout $dry_run_meta) }
   let resp = match $method {
     "get" => { http get --headers $auth.headers --full --allow-errors --max-time $timeout --insecure=$insecure --raw=$raw $req_url }
-    "head" => { http head --headers $auth.headers --max-time $timeout --insecure=$insecure $req_url }
-    "options" => { http options --headers $auth.headers --max-time $timeout --insecure=$insecure $req_url }
+    "head" => { http head --headers $auth.headers --full --allow-errors --max-time $timeout --insecure=$insecure $req_url }
+    "options" => { http options --headers $auth.headers --full --allow-errors --max-time $timeout --insecure=$insecure $req_url }
     "post" => { if ($body | is-empty) { http post --headers $auth.headers --full --allow-errors --max-time $timeout --insecure=$insecure --raw=$raw $req_url "" } else { http post --headers $auth.headers --content-type $ct --full --allow-errors --max-time $timeout --insecure=$insecure --raw=$raw $req_url $body } }
     "put" => { if ($body | is-empty) { http put --headers $auth.headers --full --allow-errors --max-time $timeout --insecure=$insecure --raw=$raw $req_url "" } else { http put --headers $auth.headers --content-type $ct --full --allow-errors --max-time $timeout --insecure=$insecure --raw=$raw $req_url $body } }
     "patch" => { if ($body | is-empty) { http patch --headers $auth.headers --full --allow-errors --max-time $timeout --insecure=$insecure --raw=$raw $req_url "" } else { http patch --headers $auth.headers --content-type $ct --full --allow-errors --max-time $timeout --insecure=$insecure --raw=$raw $req_url $body } }
     "delete" => { if ($body | is-empty) { http delete --headers $auth.headers --full --allow-errors --max-time $timeout --insecure=$insecure --raw=$raw $req_url } else { http delete --headers $auth.headers --content-type $ct --data $body --full --allow-errors --max-time $timeout --insecure=$insecure --raw=$raw $req_url } }
   }
-  if ($method in ["head" "options"]) { return $resp }
+  if ($method == "head") and (not $full) and (not $allow_errors) and $resp.status < 400 { return $resp.headers }
   if $allow_errors { $resp } else if $resp.status >= 400 { error make --unspanned { msg: $"HTTP ($resp.status): ($resp.body)" } } else if $full { {status: $resp.status, headers: $resp.headers, body: $resp.body} } else if $resp.status == 204 { null } else { $resp.body }
 }
 
@@ -142,7 +164,7 @@ export def "b list" [
   let full_url = (build-url $base "/b" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"alt": $alt, "fields": $fields, "key": $key, "oauth_token": $oauth_token, "prettyPrint": $pretty_print, "quotaUser": $quota_user, "uploadType": $upload_type, "userIp": $user_ip, "project": $project, "maxResults": $max_results, "pageToken": $page_token, "prefix": $prefix, "projection": $projection, "userProject": $user_project} | compact), body: null}
 }
 
 # Creates a new bucket.
@@ -226,7 +248,7 @@ export def "b create" [
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: ({"alt": $alt, "fields": $fields, "key": $key, "oauth_token": $oauth_token, "prettyPrint": $pretty_print, "quotaUser": $quota_user, "uploadType": $upload_type, "userIp": $user_ip, "project": $project, "predefinedAcl": $predefined_acl, "predefinedDefaultObjectAcl": $predefined_default_object_acl, "projection": $projection, "userProject": $user_project} | compact), body: $req_body}
 }
 
 # Permanently deletes an empty bucket.
@@ -258,11 +280,12 @@ export def "b delete" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($bucket | is-empty) { error make --unspanned { msg: "path parameter 'bucket' must be non-empty" } }
   let qp = [(serialize-qp "alt" $alt "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "uploadType" $upload_type "scalar") (serialize-qp "userIp" $user_ip "scalar") (serialize-qp "ifMetagenerationMatch" $if_metageneration_match "scalar") (serialize-qp "ifMetagenerationNotMatch" $if_metageneration_not_match "scalar") (serialize-qp "userProject" $user_project "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({bucket: (encode-path-segment $bucket)} | format pattern "/b/{bucket}") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"alt": $alt, "fields": $fields, "key": $key, "oauth_token": $oauth_token, "prettyPrint": $pretty_print, "quotaUser": $quota_user, "uploadType": $upload_type, "userIp": $user_ip, "ifMetagenerationMatch": $if_metageneration_match, "ifMetagenerationNotMatch": $if_metageneration_not_match, "userProject": $user_project} | compact), body: null}
 }
 
 # Returns metadata for the specified bucket.
@@ -295,11 +318,12 @@ export def "b get" [
 ]: nothing -> record<acl: table<bucket: string, domain: string, email: string, entity: string, entityId: string, etag: string, id: string, kind: string, projectTeam: record, role: string, selfLink: string>, autoclass: record<enabled: bool, toggleTime: string>, billing: record<requesterPays: bool>, cors: table<maxAgeSeconds: int, method: list, origin: list, responseHeader: list>, customPlacementConfig: record<dataLocations: list<string>>, defaultEventBasedHold: bool, defaultObjectAcl: table<bucket: string, domain: string, email: string, entity: string, entityId: string, etag: string, generation: string, id: string, kind: string, object: string, projectTeam: record, role: string, selfLink: string>, encryption: record<defaultKmsKeyName: string>, etag: string, iamConfiguration: record<bucketPolicyOnly: record<enabled: bool, lockedTime: string>, publicAccessPrevention: string, uniformBucketLevelAccess: record<enabled: bool, lockedTime: string>>, id: string, kind: string, labels: record, lifecycle: record<rule: list<record>>, location: string, locationType: string, logging: record<logBucket: string, logObjectPrefix: string>, metageneration: string, name: string, owner: record<entity: string, entityId: string>, projectNumber: string, retentionPolicy: record<effectiveTime: string, isLocked: bool, retentionPeriod: string>, rpo: string, satisfiesPZS: bool, selfLink: string, storageClass: string, timeCreated: string, updated: string, versioning: record<enabled: bool>, website: record<mainPageSuffix: string, notFoundPage: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($bucket | is-empty) { error make --unspanned { msg: "path parameter 'bucket' must be non-empty" } }
   let qp = [(serialize-qp "alt" $alt "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "uploadType" $upload_type "scalar") (serialize-qp "userIp" $user_ip "scalar") (serialize-qp "ifMetagenerationMatch" $if_metageneration_match "scalar") (serialize-qp "ifMetagenerationNotMatch" $if_metageneration_not_match "scalar") (serialize-qp "projection" $projection "scalar") (serialize-qp "userProject" $user_project "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({bucket: (encode-path-segment $bucket)} | format pattern "/b/{bucket}") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"alt": $alt, "fields": $fields, "key": $key, "oauth_token": $oauth_token, "prettyPrint": $pretty_print, "quotaUser": $quota_user, "uploadType": $upload_type, "userIp": $user_ip, "ifMetagenerationMatch": $if_metageneration_match, "ifMetagenerationNotMatch": $if_metageneration_not_match, "projection": $projection, "userProject": $user_project} | compact), body: null}
 }
 
 # Patches a bucket. Changes to the bucket will be readable immediately after writing, but configuration changes may take time to propagate.
@@ -379,13 +403,14 @@ export def "b update-by-bucket" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($bucket | is-empty) { error make --unspanned { msg: "path parameter 'bucket' must be non-empty" } }
   let qp = [(serialize-qp "alt" $alt "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "uploadType" $upload_type "scalar") (serialize-qp "userIp" $user_ip "scalar") (serialize-qp "ifMetagenerationMatch" $if_metageneration_match "scalar") (serialize-qp "ifMetagenerationNotMatch" $if_metageneration_not_match "scalar") (serialize-qp "predefinedAcl" $predefined_acl "scalar") (serialize-qp "predefinedDefaultObjectAcl" $predefined_default_object_acl "scalar") (serialize-qp "projection" $projection "scalar") (serialize-qp "userProject" $user_project "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({bucket: (encode-path-segment $bucket)} | format pattern "/b/{bucket}") $qp)
   let req_body = {"acl": $acl, "autoclass": $autoclass, "billing": $billing, "cors": $cors, "customPlacementConfig": $custom_placement_config, "defaultEventBasedHold": $default_event_based_hold, "defaultObjectAcl": $default_object_acl, "encryption": $encryption, "etag": $etag, "iamConfiguration": $iam_configuration, "id": $id, "kind": $kind, "labels": $labels, "lifecycle": $lifecycle, "location": $location, "locationType": $location_type, "logging": $logging, "metageneration": $metageneration, "name": $name, "owner": $owner, "projectNumber": $project_number, "retentionPolicy": $retention_policy, "rpo": $rpo, "satisfiesPZS": $satisfies_pzs, "selfLink": $self_link, "storageClass": $storage_class, "timeCreated": $time_created, "updated": $updated, "versioning": $versioning, "website": $website} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "patch" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body
+  do-request "patch" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: ({"alt": $alt, "fields": $fields, "key": $key, "oauth_token": $oauth_token, "prettyPrint": $pretty_print, "quotaUser": $quota_user, "uploadType": $upload_type, "userIp": $user_ip, "ifMetagenerationMatch": $if_metageneration_match, "ifMetagenerationNotMatch": $if_metageneration_not_match, "predefinedAcl": $predefined_acl, "predefinedDefaultObjectAcl": $predefined_default_object_acl, "projection": $projection, "userProject": $user_project} | compact), body: $req_body}
 }
 
 # Updates a bucket. Changes to the bucket will be readable immediately after writing, but configuration changes may take time to propagate.
@@ -465,13 +490,14 @@ export def "b update-by-bucket-1" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($bucket | is-empty) { error make --unspanned { msg: "path parameter 'bucket' must be non-empty" } }
   let qp = [(serialize-qp "alt" $alt "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "uploadType" $upload_type "scalar") (serialize-qp "userIp" $user_ip "scalar") (serialize-qp "ifMetagenerationMatch" $if_metageneration_match "scalar") (serialize-qp "ifMetagenerationNotMatch" $if_metageneration_not_match "scalar") (serialize-qp "predefinedAcl" $predefined_acl "scalar") (serialize-qp "predefinedDefaultObjectAcl" $predefined_default_object_acl "scalar") (serialize-qp "projection" $projection "scalar") (serialize-qp "userProject" $user_project "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({bucket: (encode-path-segment $bucket)} | format pattern "/b/{bucket}") $qp)
   let req_body = {"acl": $acl, "autoclass": $autoclass, "billing": $billing, "cors": $cors, "customPlacementConfig": $custom_placement_config, "defaultEventBasedHold": $default_event_based_hold, "defaultObjectAcl": $default_object_acl, "encryption": $encryption, "etag": $etag, "iamConfiguration": $iam_configuration, "id": $id, "kind": $kind, "labels": $labels, "lifecycle": $lifecycle, "location": $location, "locationType": $location_type, "logging": $logging, "metageneration": $metageneration, "name": $name, "owner": $owner, "projectNumber": $project_number, "retentionPolicy": $retention_policy, "rpo": $rpo, "satisfiesPZS": $satisfies_pzs, "selfLink": $self_link, "storageClass": $storage_class, "timeCreated": $time_created, "updated": $updated, "versioning": $versioning, "website": $website} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: ({"alt": $alt, "fields": $fields, "key": $key, "oauth_token": $oauth_token, "prettyPrint": $pretty_print, "quotaUser": $quota_user, "uploadType": $upload_type, "userIp": $user_ip, "ifMetagenerationMatch": $if_metageneration_match, "ifMetagenerationNotMatch": $if_metageneration_not_match, "predefinedAcl": $predefined_acl, "predefinedDefaultObjectAcl": $predefined_default_object_acl, "projection": $projection, "userProject": $user_project} | compact), body: $req_body}
 }
 
 # Retrieves ACL entries on the specified bucket.
@@ -501,11 +527,12 @@ export def "b-acl list" [
 ]: nothing -> record<items: table<bucket: string, domain: string, email: string, entity: string, entityId: string, etag: string, id: string, kind: string, projectTeam: record, role: string, selfLink: string>, kind: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($bucket | is-empty) { error make --unspanned { msg: "path parameter 'bucket' must be non-empty" } }
   let qp = [(serialize-qp "alt" $alt "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "uploadType" $upload_type "scalar") (serialize-qp "userIp" $user_ip "scalar") (serialize-qp "userProject" $user_project "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({bucket: (encode-path-segment $bucket)} | format pattern "/b/{bucket}/acl") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"alt": $alt, "fields": $fields, "key": $key, "oauth_token": $oauth_token, "prettyPrint": $pretty_print, "quotaUser": $quota_user, "uploadType": $upload_type, "userIp": $user_ip, "userProject": $user_project} | compact), body: null}
 }
 
 # Creates a new ACL entry on the specified bucket.
@@ -548,13 +575,14 @@ export def "b-acl create" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($bucket | is-empty) { error make --unspanned { msg: "path parameter 'bucket' must be non-empty" } }
   let qp = [(serialize-qp "alt" $alt "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "uploadType" $upload_type "scalar") (serialize-qp "userIp" $user_ip "scalar") (serialize-qp "userProject" $user_project "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({bucket: (encode-path-segment $bucket)} | format pattern "/b/{bucket}/acl") $qp)
   let req_body = {"bucket": $body_bucket, "domain": $domain, "email": $email, "entity": $entity, "entityId": $entity_id, "etag": $etag, "id": $id, "kind": $kind, "projectTeam": $project_team, "role": $role, "selfLink": $self_link} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: ({"alt": $alt, "fields": $fields, "key": $key, "oauth_token": $oauth_token, "prettyPrint": $pretty_print, "quotaUser": $quota_user, "uploadType": $upload_type, "userIp": $user_ip, "userProject": $user_project} | compact), body: $req_body}
 }
 
 # Permanently deletes the ACL entry for the specified entity on the specified bucket.
@@ -585,11 +613,13 @@ export def "b-acl delete" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($bucket | is-empty) { error make --unspanned { msg: "path parameter 'bucket' must be non-empty" } }
+  if ($entity | is-empty) { error make --unspanned { msg: "path parameter 'entity' must be non-empty" } }
   let qp = [(serialize-qp "alt" $alt "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "uploadType" $upload_type "scalar") (serialize-qp "userIp" $user_ip "scalar") (serialize-qp "userProject" $user_project "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({bucket: (encode-path-segment $bucket), entity: (encode-path-segment $entity)} | format pattern "/b/{bucket}/acl/{entity}") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"alt": $alt, "fields": $fields, "key": $key, "oauth_token": $oauth_token, "prettyPrint": $pretty_print, "quotaUser": $quota_user, "uploadType": $upload_type, "userIp": $user_ip, "userProject": $user_project} | compact), body: null}
 }
 
 # Returns the ACL entry for the specified entity on the specified bucket.
@@ -620,11 +650,13 @@ export def "b-acl get" [
 ]: nothing -> record<bucket: string, domain: string, email: string, entity: string, entityId: string, etag: string, id: string, kind: string, projectTeam: record<projectNumber: string, team: string>, role: string, selfLink: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($bucket | is-empty) { error make --unspanned { msg: "path parameter 'bucket' must be non-empty" } }
+  if ($entity | is-empty) { error make --unspanned { msg: "path parameter 'entity' must be non-empty" } }
   let qp = [(serialize-qp "alt" $alt "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "uploadType" $upload_type "scalar") (serialize-qp "userIp" $user_ip "scalar") (serialize-qp "userProject" $user_project "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({bucket: (encode-path-segment $bucket), entity: (encode-path-segment $entity)} | format pattern "/b/{bucket}/acl/{entity}") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"alt": $alt, "fields": $fields, "key": $key, "oauth_token": $oauth_token, "prettyPrint": $pretty_print, "quotaUser": $quota_user, "uploadType": $upload_type, "userIp": $user_ip, "userProject": $user_project} | compact), body: null}
 }
 
 # Patches an ACL entry on the specified bucket.
@@ -668,13 +700,15 @@ export def "b-acl update-by-bucket-entity" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($bucket | is-empty) { error make --unspanned { msg: "path parameter 'bucket' must be non-empty" } }
+  if ($entity | is-empty) { error make --unspanned { msg: "path parameter 'entity' must be non-empty" } }
   let qp = [(serialize-qp "alt" $alt "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "uploadType" $upload_type "scalar") (serialize-qp "userIp" $user_ip "scalar") (serialize-qp "userProject" $user_project "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({bucket: (encode-path-segment $bucket), entity: (encode-path-segment $entity)} | format pattern "/b/{bucket}/acl/{entity}") $qp)
   let req_body = {"bucket": $body_bucket, "domain": $domain, "email": $email, "entity": $body_entity, "entityId": $entity_id, "etag": $etag, "id": $id, "kind": $kind, "projectTeam": $project_team, "role": $role, "selfLink": $self_link} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "patch" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body
+  do-request "patch" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: ({"alt": $alt, "fields": $fields, "key": $key, "oauth_token": $oauth_token, "prettyPrint": $pretty_print, "quotaUser": $quota_user, "uploadType": $upload_type, "userIp": $user_ip, "userProject": $user_project} | compact), body: $req_body}
 }
 
 # Updates an ACL entry on the specified bucket.
@@ -718,13 +752,15 @@ export def "b-acl update-by-bucket-entity-1" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($bucket | is-empty) { error make --unspanned { msg: "path parameter 'bucket' must be non-empty" } }
+  if ($entity | is-empty) { error make --unspanned { msg: "path parameter 'entity' must be non-empty" } }
   let qp = [(serialize-qp "alt" $alt "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "uploadType" $upload_type "scalar") (serialize-qp "userIp" $user_ip "scalar") (serialize-qp "userProject" $user_project "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({bucket: (encode-path-segment $bucket), entity: (encode-path-segment $entity)} | format pattern "/b/{bucket}/acl/{entity}") $qp)
   let req_body = {"bucket": $body_bucket, "domain": $domain, "email": $email, "entity": $body_entity, "entityId": $entity_id, "etag": $etag, "id": $id, "kind": $kind, "projectTeam": $project_team, "role": $role, "selfLink": $self_link} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: ({"alt": $alt, "fields": $fields, "key": $key, "oauth_token": $oauth_token, "prettyPrint": $pretty_print, "quotaUser": $quota_user, "uploadType": $upload_type, "userIp": $user_ip, "userProject": $user_project} | compact), body: $req_body}
 }
 
 # Retrieves default object ACL entries on the specified bucket.
@@ -756,11 +792,12 @@ export def "b-default-object-acl list" [
 ]: nothing -> record<items: table<bucket: string, domain: string, email: string, entity: string, entityId: string, etag: string, generation: string, id: string, kind: string, object: string, projectTeam: record, role: string, selfLink: string>, kind: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($bucket | is-empty) { error make --unspanned { msg: "path parameter 'bucket' must be non-empty" } }
   let qp = [(serialize-qp "alt" $alt "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "uploadType" $upload_type "scalar") (serialize-qp "userIp" $user_ip "scalar") (serialize-qp "ifMetagenerationMatch" $if_metageneration_match "scalar") (serialize-qp "ifMetagenerationNotMatch" $if_metageneration_not_match "scalar") (serialize-qp "userProject" $user_project "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({bucket: (encode-path-segment $bucket)} | format pattern "/b/{bucket}/defaultObjectAcl") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"alt": $alt, "fields": $fields, "key": $key, "oauth_token": $oauth_token, "prettyPrint": $pretty_print, "quotaUser": $quota_user, "uploadType": $upload_type, "userIp": $user_ip, "ifMetagenerationMatch": $if_metageneration_match, "ifMetagenerationNotMatch": $if_metageneration_not_match, "userProject": $user_project} | compact), body: null}
 }
 
 # Creates a new default object ACL entry on the specified bucket.
@@ -805,13 +842,14 @@ export def "b-default-object-acl create" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($bucket | is-empty) { error make --unspanned { msg: "path parameter 'bucket' must be non-empty" } }
   let qp = [(serialize-qp "alt" $alt "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "uploadType" $upload_type "scalar") (serialize-qp "userIp" $user_ip "scalar") (serialize-qp "userProject" $user_project "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({bucket: (encode-path-segment $bucket)} | format pattern "/b/{bucket}/defaultObjectAcl") $qp)
   let req_body = {"bucket": $body_bucket, "domain": $domain, "email": $email, "entity": $entity, "entityId": $entity_id, "etag": $etag, "generation": $generation, "id": $id, "kind": $kind, "object": $object, "projectTeam": $project_team, "role": $role, "selfLink": $self_link} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: ({"alt": $alt, "fields": $fields, "key": $key, "oauth_token": $oauth_token, "prettyPrint": $pretty_print, "quotaUser": $quota_user, "uploadType": $upload_type, "userIp": $user_ip, "userProject": $user_project} | compact), body: $req_body}
 }
 
 # Permanently deletes the default object ACL entry for the specified entity on the specified bucket.
@@ -842,11 +880,13 @@ export def "b-default-object-acl delete" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($bucket | is-empty) { error make --unspanned { msg: "path parameter 'bucket' must be non-empty" } }
+  if ($entity | is-empty) { error make --unspanned { msg: "path parameter 'entity' must be non-empty" } }
   let qp = [(serialize-qp "alt" $alt "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "uploadType" $upload_type "scalar") (serialize-qp "userIp" $user_ip "scalar") (serialize-qp "userProject" $user_project "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({bucket: (encode-path-segment $bucket), entity: (encode-path-segment $entity)} | format pattern "/b/{bucket}/defaultObjectAcl/{entity}") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"alt": $alt, "fields": $fields, "key": $key, "oauth_token": $oauth_token, "prettyPrint": $pretty_print, "quotaUser": $quota_user, "uploadType": $upload_type, "userIp": $user_ip, "userProject": $user_project} | compact), body: null}
 }
 
 # Returns the default object ACL entry for the specified entity on the specified bucket.
@@ -877,11 +917,13 @@ export def "b-default-object-acl get" [
 ]: nothing -> record<bucket: string, domain: string, email: string, entity: string, entityId: string, etag: string, generation: string, id: string, kind: string, object: string, projectTeam: record<projectNumber: string, team: string>, role: string, selfLink: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($bucket | is-empty) { error make --unspanned { msg: "path parameter 'bucket' must be non-empty" } }
+  if ($entity | is-empty) { error make --unspanned { msg: "path parameter 'entity' must be non-empty" } }
   let qp = [(serialize-qp "alt" $alt "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "uploadType" $upload_type "scalar") (serialize-qp "userIp" $user_ip "scalar") (serialize-qp "userProject" $user_project "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({bucket: (encode-path-segment $bucket), entity: (encode-path-segment $entity)} | format pattern "/b/{bucket}/defaultObjectAcl/{entity}") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"alt": $alt, "fields": $fields, "key": $key, "oauth_token": $oauth_token, "prettyPrint": $pretty_print, "quotaUser": $quota_user, "uploadType": $upload_type, "userIp": $user_ip, "userProject": $user_project} | compact), body: null}
 }
 
 # Patches a default object ACL entry on the specified bucket.
@@ -927,13 +969,15 @@ export def "b-default-object-acl update-by-bucket-entity" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($bucket | is-empty) { error make --unspanned { msg: "path parameter 'bucket' must be non-empty" } }
+  if ($entity | is-empty) { error make --unspanned { msg: "path parameter 'entity' must be non-empty" } }
   let qp = [(serialize-qp "alt" $alt "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "uploadType" $upload_type "scalar") (serialize-qp "userIp" $user_ip "scalar") (serialize-qp "userProject" $user_project "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({bucket: (encode-path-segment $bucket), entity: (encode-path-segment $entity)} | format pattern "/b/{bucket}/defaultObjectAcl/{entity}") $qp)
   let req_body = {"bucket": $body_bucket, "domain": $domain, "email": $email, "entity": $body_entity, "entityId": $entity_id, "etag": $etag, "generation": $generation, "id": $id, "kind": $kind, "object": $object, "projectTeam": $project_team, "role": $role, "selfLink": $self_link} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "patch" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body
+  do-request "patch" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: ({"alt": $alt, "fields": $fields, "key": $key, "oauth_token": $oauth_token, "prettyPrint": $pretty_print, "quotaUser": $quota_user, "uploadType": $upload_type, "userIp": $user_ip, "userProject": $user_project} | compact), body: $req_body}
 }
 
 # Updates a default object ACL entry on the specified bucket.
@@ -979,13 +1023,15 @@ export def "b-default-object-acl update-by-bucket-entity-1" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($bucket | is-empty) { error make --unspanned { msg: "path parameter 'bucket' must be non-empty" } }
+  if ($entity | is-empty) { error make --unspanned { msg: "path parameter 'entity' must be non-empty" } }
   let qp = [(serialize-qp "alt" $alt "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "uploadType" $upload_type "scalar") (serialize-qp "userIp" $user_ip "scalar") (serialize-qp "userProject" $user_project "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({bucket: (encode-path-segment $bucket), entity: (encode-path-segment $entity)} | format pattern "/b/{bucket}/defaultObjectAcl/{entity}") $qp)
   let req_body = {"bucket": $body_bucket, "domain": $domain, "email": $email, "entity": $body_entity, "entityId": $entity_id, "etag": $etag, "generation": $generation, "id": $id, "kind": $kind, "object": $object, "projectTeam": $project_team, "role": $role, "selfLink": $self_link} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: ({"alt": $alt, "fields": $fields, "key": $key, "oauth_token": $oauth_token, "prettyPrint": $pretty_print, "quotaUser": $quota_user, "uploadType": $upload_type, "userIp": $user_ip, "userProject": $user_project} | compact), body: $req_body}
 }
 
 # Returns an IAM policy for the specified bucket.
@@ -1016,11 +1062,12 @@ export def "b-iam get-policy" [
 ]: nothing -> record<bindings: table<condition: record, members: list, role: string>, etag: string, kind: string, resourceId: string, version: int> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($bucket | is-empty) { error make --unspanned { msg: "path parameter 'bucket' must be non-empty" } }
   let qp = [(serialize-qp "alt" $alt "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "uploadType" $upload_type "scalar") (serialize-qp "userIp" $user_ip "scalar") (serialize-qp "optionsRequestedPolicyVersion" $options_requested_policy_version "scalar") (serialize-qp "userProject" $user_project "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({bucket: (encode-path-segment $bucket)} | format pattern "/b/{bucket}/iam") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"alt": $alt, "fields": $fields, "key": $key, "oauth_token": $oauth_token, "prettyPrint": $pretty_print, "quotaUser": $quota_user, "uploadType": $upload_type, "userIp": $user_ip, "optionsRequestedPolicyVersion": $options_requested_policy_version, "userProject": $user_project} | compact), body: null}
 }
 
 # Updates an IAM policy for the specified bucket.
@@ -1057,13 +1104,14 @@ export def "b-iam update-policy" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($bucket | is-empty) { error make --unspanned { msg: "path parameter 'bucket' must be non-empty" } }
   let qp = [(serialize-qp "alt" $alt "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "uploadType" $upload_type "scalar") (serialize-qp "userIp" $user_ip "scalar") (serialize-qp "userProject" $user_project "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({bucket: (encode-path-segment $bucket)} | format pattern "/b/{bucket}/iam") $qp)
   let req_body = {"bindings": $bindings, "etag": $etag, "kind": $kind, "resourceId": $resource_id, "version": $version} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: ({"alt": $alt, "fields": $fields, "key": $key, "oauth_token": $oauth_token, "prettyPrint": $pretty_print, "quotaUser": $quota_user, "uploadType": $upload_type, "userIp": $user_ip, "userProject": $user_project} | compact), body: $req_body}
 }
 
 # Tests a set of permissions on the given bucket to see which, if any, are held by the caller.
@@ -1094,11 +1142,12 @@ export def "b-iam-test-permissions test" [
 ]: nothing -> record<kind: string, permissions: list<string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($bucket | is-empty) { error make --unspanned { msg: "path parameter 'bucket' must be non-empty" } }
   let qp = [(serialize-qp "alt" $alt "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "uploadType" $upload_type "scalar") (serialize-qp "userIp" $user_ip "scalar") (serialize-qp "permissions" $permissions "multi") (serialize-qp "userProject" $user_project "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({bucket: (encode-path-segment $bucket)} | format pattern "/b/{bucket}/iam/testPermissions") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"alt": $alt, "fields": $fields, "key": $key, "oauth_token": $oauth_token, "prettyPrint": $pretty_print, "quotaUser": $quota_user, "uploadType": $upload_type, "userIp": $user_ip, "permissions": $permissions, "userProject": $user_project} | compact), body: null}
 }
 
 # Locks retention policy on a bucket.
@@ -1129,11 +1178,12 @@ export def "b-lock-retention-policy lock" [
 ]: nothing -> record<acl: table<bucket: string, domain: string, email: string, entity: string, entityId: string, etag: string, id: string, kind: string, projectTeam: record, role: string, selfLink: string>, autoclass: record<enabled: bool, toggleTime: string>, billing: record<requesterPays: bool>, cors: table<maxAgeSeconds: int, method: list, origin: list, responseHeader: list>, customPlacementConfig: record<dataLocations: list<string>>, defaultEventBasedHold: bool, defaultObjectAcl: table<bucket: string, domain: string, email: string, entity: string, entityId: string, etag: string, generation: string, id: string, kind: string, object: string, projectTeam: record, role: string, selfLink: string>, encryption: record<defaultKmsKeyName: string>, etag: string, iamConfiguration: record<bucketPolicyOnly: record<enabled: bool, lockedTime: string>, publicAccessPrevention: string, uniformBucketLevelAccess: record<enabled: bool, lockedTime: string>>, id: string, kind: string, labels: record, lifecycle: record<rule: list<record>>, location: string, locationType: string, logging: record<logBucket: string, logObjectPrefix: string>, metageneration: string, name: string, owner: record<entity: string, entityId: string>, projectNumber: string, retentionPolicy: record<effectiveTime: string, isLocked: bool, retentionPeriod: string>, rpo: string, satisfiesPZS: bool, selfLink: string, storageClass: string, timeCreated: string, updated: string, versioning: record<enabled: bool>, website: record<mainPageSuffix: string, notFoundPage: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($bucket | is-empty) { error make --unspanned { msg: "path parameter 'bucket' must be non-empty" } }
   let qp = [(serialize-qp "alt" $alt "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "uploadType" $upload_type "scalar") (serialize-qp "userIp" $user_ip "scalar") (serialize-qp "ifMetagenerationMatch" $if_metageneration_match "scalar") (serialize-qp "userProject" $user_project "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({bucket: (encode-path-segment $bucket)} | format pattern "/b/{bucket}/lockRetentionPolicy") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"alt": $alt, "fields": $fields, "key": $key, "oauth_token": $oauth_token, "prettyPrint": $pretty_print, "quotaUser": $quota_user, "uploadType": $upload_type, "userIp": $user_ip, "ifMetagenerationMatch": $if_metageneration_match, "userProject": $user_project} | compact), body: null}
 }
 
 # Retrieves a list of notification subscriptions for a given bucket.
@@ -1163,11 +1213,12 @@ export def "b-notification-configs list" [
 ]: nothing -> record<items: table<custom_attributes: record, etag: string, event_types: list, id: string, kind: string, object_name_prefix: string, payload_format: string, selfLink: string, topic: string>, kind: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($bucket | is-empty) { error make --unspanned { msg: "path parameter 'bucket' must be non-empty" } }
   let qp = [(serialize-qp "alt" $alt "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "uploadType" $upload_type "scalar") (serialize-qp "userIp" $user_ip "scalar") (serialize-qp "userProject" $user_project "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({bucket: (encode-path-segment $bucket)} | format pattern "/b/{bucket}/notificationConfigs") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"alt": $alt, "fields": $fields, "key": $key, "oauth_token": $oauth_token, "prettyPrint": $pretty_print, "quotaUser": $quota_user, "uploadType": $upload_type, "userIp": $user_ip, "userProject": $user_project} | compact), body: null}
 }
 
 # Creates a notification subscription for a given bucket.
@@ -1207,13 +1258,14 @@ export def "b-notification-configs create" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($bucket | is-empty) { error make --unspanned { msg: "path parameter 'bucket' must be non-empty" } }
   let qp = [(serialize-qp "alt" $alt "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "uploadType" $upload_type "scalar") (serialize-qp "userIp" $user_ip "scalar") (serialize-qp "userProject" $user_project "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({bucket: (encode-path-segment $bucket)} | format pattern "/b/{bucket}/notificationConfigs") $qp)
   let req_body = {"custom_attributes": $custom_attributes, "etag": $etag, "event_types": $event_types, "id": $id, "kind": $kind, "object_name_prefix": $object_name_prefix, "payload_format": $payload_format, "selfLink": $self_link, "topic": $topic} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: ({"alt": $alt, "fields": $fields, "key": $key, "oauth_token": $oauth_token, "prettyPrint": $pretty_print, "quotaUser": $quota_user, "uploadType": $upload_type, "userIp": $user_ip, "userProject": $user_project} | compact), body: $req_body}
 }
 
 # Permanently deletes a notification subscription.
@@ -1244,11 +1296,13 @@ export def "b-notification-configs delete" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($bucket | is-empty) { error make --unspanned { msg: "path parameter 'bucket' must be non-empty" } }
+  if ($notification | is-empty) { error make --unspanned { msg: "path parameter 'notification' must be non-empty" } }
   let qp = [(serialize-qp "alt" $alt "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "uploadType" $upload_type "scalar") (serialize-qp "userIp" $user_ip "scalar") (serialize-qp "userProject" $user_project "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({bucket: (encode-path-segment $bucket), notification: (encode-path-segment $notification)} | format pattern "/b/{bucket}/notificationConfigs/{notification}") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"alt": $alt, "fields": $fields, "key": $key, "oauth_token": $oauth_token, "prettyPrint": $pretty_print, "quotaUser": $quota_user, "uploadType": $upload_type, "userIp": $user_ip, "userProject": $user_project} | compact), body: null}
 }
 
 # View a notification configuration.
@@ -1279,11 +1333,13 @@ export def "b-notification-configs get" [
 ]: nothing -> record<custom_attributes: record, etag: string, event_types: list<string>, id: string, kind: string, object_name_prefix: string, payload_format: string, selfLink: string, topic: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($bucket | is-empty) { error make --unspanned { msg: "path parameter 'bucket' must be non-empty" } }
+  if ($notification | is-empty) { error make --unspanned { msg: "path parameter 'notification' must be non-empty" } }
   let qp = [(serialize-qp "alt" $alt "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "uploadType" $upload_type "scalar") (serialize-qp "userIp" $user_ip "scalar") (serialize-qp "userProject" $user_project "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({bucket: (encode-path-segment $bucket), notification: (encode-path-segment $notification)} | format pattern "/b/{bucket}/notificationConfigs/{notification}") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"alt": $alt, "fields": $fields, "key": $key, "oauth_token": $oauth_token, "prettyPrint": $pretty_print, "quotaUser": $quota_user, "uploadType": $upload_type, "userIp": $user_ip, "userProject": $user_project} | compact), body: null}
 }
 
 # Retrieves a list of objects matching the criteria.
@@ -1323,11 +1379,12 @@ export def "b-o list" [
 ]: nothing -> record<items: table<acl: list, bucket: string, cacheControl: string, componentCount: int, contentDisposition: string, contentEncoding: string, contentLanguage: string, contentType: string, crc32c: string, customTime: string, customerEncryption: record, etag: string, eventBasedHold: bool, generation: string, id: string, kind: string, kmsKeyName: string, md5Hash: string, mediaLink: string, metadata: record, metageneration: string, name: string, owner: record, retentionExpirationTime: string, selfLink: string, size: string, storageClass: string, temporaryHold: bool, timeCreated: string, timeDeleted: string, timeStorageClassUpdated: string, updated: string>, kind: string, nextPageToken: string, prefixes: list<string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($bucket | is-empty) { error make --unspanned { msg: "path parameter 'bucket' must be non-empty" } }
   let qp = [(serialize-qp "alt" $alt "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "uploadType" $upload_type "scalar") (serialize-qp "userIp" $user_ip "scalar") (serialize-qp "delimiter" $delimiter "scalar") (serialize-qp "endOffset" $end_offset "scalar") (serialize-qp "includeTrailingDelimiter" $include_trailing_delimiter "scalar") (serialize-qp "matchGlob" $match_glob "scalar") (serialize-qp "maxResults" $max_results "scalar") (serialize-qp "pageToken" $page_token "scalar") (serialize-qp "prefix" $prefix "scalar") (serialize-qp "projection" $projection "scalar") (serialize-qp "startOffset" $start_offset "scalar") (serialize-qp "userProject" $user_project "scalar") (serialize-qp "versions" $versions "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({bucket: (encode-path-segment $bucket)} | format pattern "/b/{bucket}/o") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"alt": $alt, "fields": $fields, "key": $key, "oauth_token": $oauth_token, "prettyPrint": $pretty_print, "quotaUser": $quota_user, "uploadType": $upload_type, "userIp": $user_ip, "delimiter": $delimiter, "endOffset": $end_offset, "includeTrailingDelimiter": $include_trailing_delimiter, "matchGlob": $match_glob, "maxResults": $max_results, "pageToken": $page_token, "prefix": $prefix, "projection": $projection, "startOffset": $start_offset, "userProject": $user_project, "versions": $versions} | compact), body: null}
 }
 
 # Stores a new object and metadata.
@@ -1368,13 +1425,14 @@ export def "b-o create" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($bucket | is-empty) { error make --unspanned { msg: "path parameter 'bucket' must be non-empty" } }
   let qp = [(serialize-qp "alt" $alt "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "uploadType" $upload_type "scalar") (serialize-qp "userIp" $user_ip "scalar") (serialize-qp "contentEncoding" $content_encoding "scalar") (serialize-qp "ifGenerationMatch" $if_generation_match "scalar") (serialize-qp "ifGenerationNotMatch" $if_generation_not_match "scalar") (serialize-qp "ifMetagenerationMatch" $if_metageneration_match "scalar") (serialize-qp "ifMetagenerationNotMatch" $if_metageneration_not_match "scalar") (serialize-qp "kmsKeyName" $kms_key_name "scalar") (serialize-qp "name" $name "scalar") (serialize-qp "predefinedAcl" $predefined_acl "scalar") (serialize-qp "projection" $projection "scalar") (serialize-qp "userProject" $user_project "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({bucket: (encode-path-segment $bucket)} | format pattern "/b/{bucket}/o") $qp)
   let req_body = $body
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else if (($input | is-not-empty) and ($req_body | is-empty)) { $input } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/octet-stream" $req_body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/octet-stream" $req_body {query: ({"alt": $alt, "fields": $fields, "key": $key, "oauth_token": $oauth_token, "prettyPrint": $pretty_print, "quotaUser": $quota_user, "uploadType": $upload_type, "userIp": $user_ip, "contentEncoding": $content_encoding, "ifGenerationMatch": $if_generation_match, "ifGenerationNotMatch": $if_generation_not_match, "ifMetagenerationMatch": $if_metageneration_match, "ifMetagenerationNotMatch": $if_metageneration_not_match, "kmsKeyName": $kms_key_name, "name": $name, "predefinedAcl": $predefined_acl, "projection": $projection, "userProject": $user_project} | compact), body: $req_body}
 }
 
 # Watch for changes on all objects in a bucket.
@@ -1424,13 +1482,14 @@ export def "b-o-watch list" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($bucket | is-empty) { error make --unspanned { msg: "path parameter 'bucket' must be non-empty" } }
   let qp = [(serialize-qp "alt" $alt "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "uploadType" $upload_type "scalar") (serialize-qp "userIp" $user_ip "scalar") (serialize-qp "delimiter" $delimiter "scalar") (serialize-qp "endOffset" $end_offset "scalar") (serialize-qp "includeTrailingDelimiter" $include_trailing_delimiter "scalar") (serialize-qp "maxResults" $max_results "scalar") (serialize-qp "pageToken" $page_token "scalar") (serialize-qp "prefix" $prefix "scalar") (serialize-qp "projection" $projection "scalar") (serialize-qp "startOffset" $start_offset "scalar") (serialize-qp "userProject" $user_project "scalar") (serialize-qp "versions" $versions "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({bucket: (encode-path-segment $bucket)} | format pattern "/b/{bucket}/o/watch") $qp)
   let req_body = {"address": $address, "expiration": $expiration, "id": $id, "kind": $kind, "params": $params, "payload": $payload, "resourceId": $resource_id, "resourceUri": $resource_uri, "token": $body_token, "type": $type} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: ({"alt": $alt, "fields": $fields, "key": $key, "oauth_token": $oauth_token, "prettyPrint": $pretty_print, "quotaUser": $quota_user, "uploadType": $upload_type, "userIp": $user_ip, "delimiter": $delimiter, "endOffset": $end_offset, "includeTrailingDelimiter": $include_trailing_delimiter, "maxResults": $max_results, "pageToken": $page_token, "prefix": $prefix, "projection": $projection, "startOffset": $start_offset, "userProject": $user_project, "versions": $versions} | compact), body: $req_body}
 }
 
 # Deletes an object and its metadata. Deletions are permanent if versioning is not enabled for the bucket, or if the generation parameter is used.
@@ -1466,11 +1525,13 @@ export def "b-o delete" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($bucket | is-empty) { error make --unspanned { msg: "path parameter 'bucket' must be non-empty" } }
+  if ($object | is-empty) { error make --unspanned { msg: "path parameter 'object' must be non-empty" } }
   let qp = [(serialize-qp "alt" $alt "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "uploadType" $upload_type "scalar") (serialize-qp "userIp" $user_ip "scalar") (serialize-qp "generation" $generation "scalar") (serialize-qp "ifGenerationMatch" $if_generation_match "scalar") (serialize-qp "ifGenerationNotMatch" $if_generation_not_match "scalar") (serialize-qp "ifMetagenerationMatch" $if_metageneration_match "scalar") (serialize-qp "ifMetagenerationNotMatch" $if_metageneration_not_match "scalar") (serialize-qp "userProject" $user_project "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({bucket: (encode-path-segment $bucket), object: (encode-path-segment $object)} | format pattern "/b/{bucket}/o/{object}") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"alt": $alt, "fields": $fields, "key": $key, "oauth_token": $oauth_token, "prettyPrint": $pretty_print, "quotaUser": $quota_user, "uploadType": $upload_type, "userIp": $user_ip, "generation": $generation, "ifGenerationMatch": $if_generation_match, "ifGenerationNotMatch": $if_generation_not_match, "ifMetagenerationMatch": $if_metageneration_match, "ifMetagenerationNotMatch": $if_metageneration_not_match, "userProject": $user_project} | compact), body: null}
 }
 
 # Retrieves an object or its metadata.
@@ -1507,11 +1568,13 @@ export def "b-o get" [
 ]: nothing -> record<acl: table<bucket: string, domain: string, email: string, entity: string, entityId: string, etag: string, generation: string, id: string, kind: string, object: string, projectTeam: record, role: string, selfLink: string>, bucket: string, cacheControl: string, componentCount: int, contentDisposition: string, contentEncoding: string, contentLanguage: string, contentType: string, crc32c: string, customTime: string, customerEncryption: record<encryptionAlgorithm: string, keySha256: string>, etag: string, eventBasedHold: bool, generation: string, id: string, kind: string, kmsKeyName: string, md5Hash: string, mediaLink: string, metadata: record, metageneration: string, name: string, owner: record<entity: string, entityId: string>, retentionExpirationTime: string, selfLink: string, size: string, storageClass: string, temporaryHold: bool, timeCreated: string, timeDeleted: string, timeStorageClassUpdated: string, updated: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($bucket | is-empty) { error make --unspanned { msg: "path parameter 'bucket' must be non-empty" } }
+  if ($object | is-empty) { error make --unspanned { msg: "path parameter 'object' must be non-empty" } }
   let qp = [(serialize-qp "alt" $alt "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "uploadType" $upload_type "scalar") (serialize-qp "userIp" $user_ip "scalar") (serialize-qp "generation" $generation "scalar") (serialize-qp "ifGenerationMatch" $if_generation_match "scalar") (serialize-qp "ifGenerationNotMatch" $if_generation_not_match "scalar") (serialize-qp "ifMetagenerationMatch" $if_metageneration_match "scalar") (serialize-qp "ifMetagenerationNotMatch" $if_metageneration_not_match "scalar") (serialize-qp "projection" $projection "scalar") (serialize-qp "userProject" $user_project "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({bucket: (encode-path-segment $bucket), object: (encode-path-segment $object)} | format pattern "/b/{bucket}/o/{object}") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"alt": $alt, "fields": $fields, "key": $key, "oauth_token": $oauth_token, "prettyPrint": $pretty_print, "quotaUser": $quota_user, "uploadType": $upload_type, "userIp": $user_ip, "generation": $generation, "ifGenerationMatch": $if_generation_match, "ifGenerationNotMatch": $if_generation_not_match, "ifMetagenerationMatch": $if_metageneration_match, "ifMetagenerationNotMatch": $if_metageneration_not_match, "projection": $projection, "userProject": $user_project} | compact), body: null}
 }
 
 # Patches an object's metadata.
@@ -1562,7 +1625,7 @@ export def "b-o update-by-bucket-object" [
   --customer-encryption: record # Metadata of customer-supplied encryption key, if the object is encrypted by such a key. — shape: {encryptionAlgorithm?: string, keySha256?: string}
   --etag: string # HTTP 1.1 Entity tag for the object.
   --event-based-hold: oneof<nothing, bool> # Whether an object is under event-based hold. Event-based hold is a way to retain objects until an event occurs, which is signified by the hold's release (i.e. this value is set to false). After being released (set to false), such objects will be subject to bucket-level retention (if any). One sample use case of this flag is for banks to hold loan documents for at least 3 years after loan is paid in full. Here, bucket-level retention is 3 years and the event is the loan being paid in full. In this example, these objects will be held intact for any number of years until the event has occurred (event-based hold on the object is released) and then 3 more years after that. That means retention duration of the objects begins from the moment event-based hold transitioned from true to false.
-  --generation: string # The content generation of this object. Used for object versioning. (format: int64)
+  --generation-body: string # The content generation of this object. Used for object versioning. (format: int64) (body field)
   --id: string # The ID of the object, including the bucket name, object name, and generation number.
   --kind: string # The kind of item this is. For objects, this is always storage#object. (default: storage#object)
   --kms-key-name: string # Not currently supported. Specifying the parameter causes the request to fail with status code 400 - Bad Request.
@@ -1585,13 +1648,15 @@ export def "b-o update-by-bucket-object" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($bucket | is-empty) { error make --unspanned { msg: "path parameter 'bucket' must be non-empty" } }
+  if ($object | is-empty) { error make --unspanned { msg: "path parameter 'object' must be non-empty" } }
   let qp = [(serialize-qp "alt" $alt "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "uploadType" $upload_type "scalar") (serialize-qp "userIp" $user_ip "scalar") (serialize-qp "generation" $generation "scalar") (serialize-qp "ifGenerationMatch" $if_generation_match "scalar") (serialize-qp "ifGenerationNotMatch" $if_generation_not_match "scalar") (serialize-qp "ifMetagenerationMatch" $if_metageneration_match "scalar") (serialize-qp "ifMetagenerationNotMatch" $if_metageneration_not_match "scalar") (serialize-qp "predefinedAcl" $predefined_acl "scalar") (serialize-qp "projection" $projection "scalar") (serialize-qp "userProject" $user_project "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({bucket: (encode-path-segment $bucket), object: (encode-path-segment $object)} | format pattern "/b/{bucket}/o/{object}") $qp)
-  let req_body = {"acl": $acl, "bucket": $body_bucket, "cacheControl": $cache_control, "componentCount": $component_count, "contentDisposition": $content_disposition, "contentEncoding": $content_encoding, "contentLanguage": $content_language, "contentType": $content_type, "crc32c": $crc32c, "customTime": $custom_time, "customerEncryption": $customer_encryption, "etag": $etag, "eventBasedHold": $event_based_hold, "generation": $generation, "id": $id, "kind": $kind, "kmsKeyName": $kms_key_name, "md5Hash": $md5_hash, "mediaLink": $media_link, "metadata": $metadata, "metageneration": $metageneration, "name": $name, "owner": $owner, "retentionExpirationTime": $retention_expiration_time, "selfLink": $self_link, "size": $size, "storageClass": $storage_class, "temporaryHold": $temporary_hold, "timeCreated": $time_created, "timeDeleted": $time_deleted, "timeStorageClassUpdated": $time_storage_class_updated, "updated": $updated} | compact
+  let req_body = {"acl": $acl, "bucket": $body_bucket, "cacheControl": $cache_control, "componentCount": $component_count, "contentDisposition": $content_disposition, "contentEncoding": $content_encoding, "contentLanguage": $content_language, "contentType": $content_type, "crc32c": $crc32c, "customTime": $custom_time, "customerEncryption": $customer_encryption, "etag": $etag, "eventBasedHold": $event_based_hold, "generation": $generation_body, "id": $id, "kind": $kind, "kmsKeyName": $kms_key_name, "md5Hash": $md5_hash, "mediaLink": $media_link, "metadata": $metadata, "metageneration": $metageneration, "name": $name, "owner": $owner, "retentionExpirationTime": $retention_expiration_time, "selfLink": $self_link, "size": $size, "storageClass": $storage_class, "temporaryHold": $temporary_hold, "timeCreated": $time_created, "timeDeleted": $time_deleted, "timeStorageClassUpdated": $time_storage_class_updated, "updated": $updated} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "patch" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body
+  do-request "patch" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: ({"alt": $alt, "fields": $fields, "key": $key, "oauth_token": $oauth_token, "prettyPrint": $pretty_print, "quotaUser": $quota_user, "uploadType": $upload_type, "userIp": $user_ip, "generation": $generation, "ifGenerationMatch": $if_generation_match, "ifGenerationNotMatch": $if_generation_not_match, "ifMetagenerationMatch": $if_metageneration_match, "ifMetagenerationNotMatch": $if_metageneration_not_match, "predefinedAcl": $predefined_acl, "projection": $projection, "userProject": $user_project} | compact), body: $req_body}
 }
 
 # Updates an object's metadata.
@@ -1642,7 +1707,7 @@ export def "b-o update-by-bucket-object-1" [
   --customer-encryption: record # Metadata of customer-supplied encryption key, if the object is encrypted by such a key. — shape: {encryptionAlgorithm?: string, keySha256?: string}
   --etag: string # HTTP 1.1 Entity tag for the object.
   --event-based-hold: oneof<nothing, bool> # Whether an object is under event-based hold. Event-based hold is a way to retain objects until an event occurs, which is signified by the hold's release (i.e. this value is set to false). After being released (set to false), such objects will be subject to bucket-level retention (if any). One sample use case of this flag is for banks to hold loan documents for at least 3 years after loan is paid in full. Here, bucket-level retention is 3 years and the event is the loan being paid in full. In this example, these objects will be held intact for any number of years until the event has occurred (event-based hold on the object is released) and then 3 more years after that. That means retention duration of the objects begins from the moment event-based hold transitioned from true to false.
-  --generation: string # The content generation of this object. Used for object versioning. (format: int64)
+  --generation-body: string # The content generation of this object. Used for object versioning. (format: int64) (body field)
   --id: string # The ID of the object, including the bucket name, object name, and generation number.
   --kind: string # The kind of item this is. For objects, this is always storage#object. (default: storage#object)
   --kms-key-name: string # Not currently supported. Specifying the parameter causes the request to fail with status code 400 - Bad Request.
@@ -1665,13 +1730,15 @@ export def "b-o update-by-bucket-object-1" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($bucket | is-empty) { error make --unspanned { msg: "path parameter 'bucket' must be non-empty" } }
+  if ($object | is-empty) { error make --unspanned { msg: "path parameter 'object' must be non-empty" } }
   let qp = [(serialize-qp "alt" $alt "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "uploadType" $upload_type "scalar") (serialize-qp "userIp" $user_ip "scalar") (serialize-qp "generation" $generation "scalar") (serialize-qp "ifGenerationMatch" $if_generation_match "scalar") (serialize-qp "ifGenerationNotMatch" $if_generation_not_match "scalar") (serialize-qp "ifMetagenerationMatch" $if_metageneration_match "scalar") (serialize-qp "ifMetagenerationNotMatch" $if_metageneration_not_match "scalar") (serialize-qp "predefinedAcl" $predefined_acl "scalar") (serialize-qp "projection" $projection "scalar") (serialize-qp "userProject" $user_project "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({bucket: (encode-path-segment $bucket), object: (encode-path-segment $object)} | format pattern "/b/{bucket}/o/{object}") $qp)
-  let req_body = {"acl": $acl, "bucket": $body_bucket, "cacheControl": $cache_control, "componentCount": $component_count, "contentDisposition": $content_disposition, "contentEncoding": $content_encoding, "contentLanguage": $content_language, "contentType": $content_type, "crc32c": $crc32c, "customTime": $custom_time, "customerEncryption": $customer_encryption, "etag": $etag, "eventBasedHold": $event_based_hold, "generation": $generation, "id": $id, "kind": $kind, "kmsKeyName": $kms_key_name, "md5Hash": $md5_hash, "mediaLink": $media_link, "metadata": $metadata, "metageneration": $metageneration, "name": $name, "owner": $owner, "retentionExpirationTime": $retention_expiration_time, "selfLink": $self_link, "size": $size, "storageClass": $storage_class, "temporaryHold": $temporary_hold, "timeCreated": $time_created, "timeDeleted": $time_deleted, "timeStorageClassUpdated": $time_storage_class_updated, "updated": $updated} | compact
+  let req_body = {"acl": $acl, "bucket": $body_bucket, "cacheControl": $cache_control, "componentCount": $component_count, "contentDisposition": $content_disposition, "contentEncoding": $content_encoding, "contentLanguage": $content_language, "contentType": $content_type, "crc32c": $crc32c, "customTime": $custom_time, "customerEncryption": $customer_encryption, "etag": $etag, "eventBasedHold": $event_based_hold, "generation": $generation_body, "id": $id, "kind": $kind, "kmsKeyName": $kms_key_name, "md5Hash": $md5_hash, "mediaLink": $media_link, "metadata": $metadata, "metageneration": $metageneration, "name": $name, "owner": $owner, "retentionExpirationTime": $retention_expiration_time, "selfLink": $self_link, "size": $size, "storageClass": $storage_class, "temporaryHold": $temporary_hold, "timeCreated": $time_created, "timeDeleted": $time_deleted, "timeStorageClassUpdated": $time_storage_class_updated, "updated": $updated} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: ({"alt": $alt, "fields": $fields, "key": $key, "oauth_token": $oauth_token, "prettyPrint": $pretty_print, "quotaUser": $quota_user, "uploadType": $upload_type, "userIp": $user_ip, "generation": $generation, "ifGenerationMatch": $if_generation_match, "ifGenerationNotMatch": $if_generation_not_match, "ifMetagenerationMatch": $if_metageneration_match, "ifMetagenerationNotMatch": $if_metageneration_not_match, "predefinedAcl": $predefined_acl, "projection": $projection, "userProject": $user_project} | compact), body: $req_body}
 }
 
 # Retrieves ACL entries on the specified object.
@@ -1703,11 +1770,13 @@ export def "b-o-acl list" [
 ]: nothing -> record<items: table<bucket: string, domain: string, email: string, entity: string, entityId: string, etag: string, generation: string, id: string, kind: string, object: string, projectTeam: record, role: string, selfLink: string>, kind: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($bucket | is-empty) { error make --unspanned { msg: "path parameter 'bucket' must be non-empty" } }
+  if ($object | is-empty) { error make --unspanned { msg: "path parameter 'object' must be non-empty" } }
   let qp = [(serialize-qp "alt" $alt "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "uploadType" $upload_type "scalar") (serialize-qp "userIp" $user_ip "scalar") (serialize-qp "generation" $generation "scalar") (serialize-qp "userProject" $user_project "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({bucket: (encode-path-segment $bucket), object: (encode-path-segment $object)} | format pattern "/b/{bucket}/o/{object}/acl") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"alt": $alt, "fields": $fields, "key": $key, "oauth_token": $oauth_token, "prettyPrint": $pretty_print, "quotaUser": $quota_user, "uploadType": $upload_type, "userIp": $user_ip, "generation": $generation, "userProject": $user_project} | compact), body: null}
 }
 
 # Creates a new ACL entry on the specified object.
@@ -1743,7 +1812,7 @@ export def "b-o-acl create" [
   --entity: string # The entity holding the permission, in one of the following forms: - user-userId - user-email - group-groupId - group-email - domain-domain - project-team-projectId - allUsers - allAuthenticatedUsers Examples: - The user liz@example.com would be user-liz@example.com. - The group example@googlegroups.com would be group-example@googlegroups.com. - To refer to all members of the Google Apps for Business domain example.com, the entity would be domain-example.com.
   --entity-id: string # The ID for the entity, if any.
   --etag: string # HTTP 1.1 Entity tag for the access-control entry.
-  --generation: string # The content generation of the object, if applied to an object. (format: int64)
+  --generation-body: string # The content generation of the object, if applied to an object. (format: int64) (body field)
   --id: string # The ID of the access-control entry.
   --kind: string # The kind of item this is. For object access control entries, this is always storage#objectAccessControl. (default: storage#objectAccessControl)
   --body-object: string # The name of the object, if applied to an object.
@@ -1754,13 +1823,15 @@ export def "b-o-acl create" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($bucket | is-empty) { error make --unspanned { msg: "path parameter 'bucket' must be non-empty" } }
+  if ($object | is-empty) { error make --unspanned { msg: "path parameter 'object' must be non-empty" } }
   let qp = [(serialize-qp "alt" $alt "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "uploadType" $upload_type "scalar") (serialize-qp "userIp" $user_ip "scalar") (serialize-qp "generation" $generation "scalar") (serialize-qp "userProject" $user_project "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({bucket: (encode-path-segment $bucket), object: (encode-path-segment $object)} | format pattern "/b/{bucket}/o/{object}/acl") $qp)
-  let req_body = {"bucket": $body_bucket, "domain": $domain, "email": $email, "entity": $entity, "entityId": $entity_id, "etag": $etag, "generation": $generation, "id": $id, "kind": $kind, "object": $body_object, "projectTeam": $project_team, "role": $role, "selfLink": $self_link} | compact
+  let req_body = {"bucket": $body_bucket, "domain": $domain, "email": $email, "entity": $entity, "entityId": $entity_id, "etag": $etag, "generation": $generation_body, "id": $id, "kind": $kind, "object": $body_object, "projectTeam": $project_team, "role": $role, "selfLink": $self_link} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: ({"alt": $alt, "fields": $fields, "key": $key, "oauth_token": $oauth_token, "prettyPrint": $pretty_print, "quotaUser": $quota_user, "uploadType": $upload_type, "userIp": $user_ip, "generation": $generation, "userProject": $user_project} | compact), body: $req_body}
 }
 
 # Permanently deletes the ACL entry for the specified entity on the specified object.
@@ -1793,11 +1864,14 @@ export def "b-o-acl delete" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($bucket | is-empty) { error make --unspanned { msg: "path parameter 'bucket' must be non-empty" } }
+  if ($object | is-empty) { error make --unspanned { msg: "path parameter 'object' must be non-empty" } }
+  if ($entity | is-empty) { error make --unspanned { msg: "path parameter 'entity' must be non-empty" } }
   let qp = [(serialize-qp "alt" $alt "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "uploadType" $upload_type "scalar") (serialize-qp "userIp" $user_ip "scalar") (serialize-qp "generation" $generation "scalar") (serialize-qp "userProject" $user_project "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({bucket: (encode-path-segment $bucket), object: (encode-path-segment $object), entity: (encode-path-segment $entity)} | format pattern "/b/{bucket}/o/{object}/acl/{entity}") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"alt": $alt, "fields": $fields, "key": $key, "oauth_token": $oauth_token, "prettyPrint": $pretty_print, "quotaUser": $quota_user, "uploadType": $upload_type, "userIp": $user_ip, "generation": $generation, "userProject": $user_project} | compact), body: null}
 }
 
 # Returns the ACL entry for the specified entity on the specified object.
@@ -1830,11 +1904,14 @@ export def "b-o-acl get" [
 ]: nothing -> record<bucket: string, domain: string, email: string, entity: string, entityId: string, etag: string, generation: string, id: string, kind: string, object: string, projectTeam: record<projectNumber: string, team: string>, role: string, selfLink: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($bucket | is-empty) { error make --unspanned { msg: "path parameter 'bucket' must be non-empty" } }
+  if ($object | is-empty) { error make --unspanned { msg: "path parameter 'object' must be non-empty" } }
+  if ($entity | is-empty) { error make --unspanned { msg: "path parameter 'entity' must be non-empty" } }
   let qp = [(serialize-qp "alt" $alt "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "uploadType" $upload_type "scalar") (serialize-qp "userIp" $user_ip "scalar") (serialize-qp "generation" $generation "scalar") (serialize-qp "userProject" $user_project "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({bucket: (encode-path-segment $bucket), object: (encode-path-segment $object), entity: (encode-path-segment $entity)} | format pattern "/b/{bucket}/o/{object}/acl/{entity}") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"alt": $alt, "fields": $fields, "key": $key, "oauth_token": $oauth_token, "prettyPrint": $pretty_print, "quotaUser": $quota_user, "uploadType": $upload_type, "userIp": $user_ip, "generation": $generation, "userProject": $user_project} | compact), body: null}
 }
 
 # Patches an ACL entry on the specified object.
@@ -1871,7 +1948,7 @@ export def "b-o-acl update-by-bucket-object-entity" [
   --body-entity: string # The entity holding the permission, in one of the following forms: - user-userId - user-email - group-groupId - group-email - domain-domain - project-team-projectId - allUsers - allAuthenticatedUsers Examples: - The user liz@example.com would be user-liz@example.com. - The group example@googlegroups.com would be group-example@googlegroups.com. - To refer to all members of the Google Apps for Business domain example.com, the entity would be domain-example.com.
   --entity-id: string # The ID for the entity, if any.
   --etag: string # HTTP 1.1 Entity tag for the access-control entry.
-  --generation: string # The content generation of the object, if applied to an object. (format: int64)
+  --generation-body: string # The content generation of the object, if applied to an object. (format: int64) (body field)
   --id: string # The ID of the access-control entry.
   --kind: string # The kind of item this is. For object access control entries, this is always storage#objectAccessControl. (default: storage#objectAccessControl)
   --body-object: string # The name of the object, if applied to an object.
@@ -1882,13 +1959,16 @@ export def "b-o-acl update-by-bucket-object-entity" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($bucket | is-empty) { error make --unspanned { msg: "path parameter 'bucket' must be non-empty" } }
+  if ($object | is-empty) { error make --unspanned { msg: "path parameter 'object' must be non-empty" } }
+  if ($entity | is-empty) { error make --unspanned { msg: "path parameter 'entity' must be non-empty" } }
   let qp = [(serialize-qp "alt" $alt "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "uploadType" $upload_type "scalar") (serialize-qp "userIp" $user_ip "scalar") (serialize-qp "generation" $generation "scalar") (serialize-qp "userProject" $user_project "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({bucket: (encode-path-segment $bucket), object: (encode-path-segment $object), entity: (encode-path-segment $entity)} | format pattern "/b/{bucket}/o/{object}/acl/{entity}") $qp)
-  let req_body = {"bucket": $body_bucket, "domain": $domain, "email": $email, "entity": $body_entity, "entityId": $entity_id, "etag": $etag, "generation": $generation, "id": $id, "kind": $kind, "object": $body_object, "projectTeam": $project_team, "role": $role, "selfLink": $self_link} | compact
+  let req_body = {"bucket": $body_bucket, "domain": $domain, "email": $email, "entity": $body_entity, "entityId": $entity_id, "etag": $etag, "generation": $generation_body, "id": $id, "kind": $kind, "object": $body_object, "projectTeam": $project_team, "role": $role, "selfLink": $self_link} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "patch" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body
+  do-request "patch" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: ({"alt": $alt, "fields": $fields, "key": $key, "oauth_token": $oauth_token, "prettyPrint": $pretty_print, "quotaUser": $quota_user, "uploadType": $upload_type, "userIp": $user_ip, "generation": $generation, "userProject": $user_project} | compact), body: $req_body}
 }
 
 # Updates an ACL entry on the specified object.
@@ -1925,7 +2005,7 @@ export def "b-o-acl update-by-bucket-object-entity-1" [
   --body-entity: string # The entity holding the permission, in one of the following forms: - user-userId - user-email - group-groupId - group-email - domain-domain - project-team-projectId - allUsers - allAuthenticatedUsers Examples: - The user liz@example.com would be user-liz@example.com. - The group example@googlegroups.com would be group-example@googlegroups.com. - To refer to all members of the Google Apps for Business domain example.com, the entity would be domain-example.com.
   --entity-id: string # The ID for the entity, if any.
   --etag: string # HTTP 1.1 Entity tag for the access-control entry.
-  --generation: string # The content generation of the object, if applied to an object. (format: int64)
+  --generation-body: string # The content generation of the object, if applied to an object. (format: int64) (body field)
   --id: string # The ID of the access-control entry.
   --kind: string # The kind of item this is. For object access control entries, this is always storage#objectAccessControl. (default: storage#objectAccessControl)
   --body-object: string # The name of the object, if applied to an object.
@@ -1936,13 +2016,16 @@ export def "b-o-acl update-by-bucket-object-entity-1" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($bucket | is-empty) { error make --unspanned { msg: "path parameter 'bucket' must be non-empty" } }
+  if ($object | is-empty) { error make --unspanned { msg: "path parameter 'object' must be non-empty" } }
+  if ($entity | is-empty) { error make --unspanned { msg: "path parameter 'entity' must be non-empty" } }
   let qp = [(serialize-qp "alt" $alt "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "uploadType" $upload_type "scalar") (serialize-qp "userIp" $user_ip "scalar") (serialize-qp "generation" $generation "scalar") (serialize-qp "userProject" $user_project "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({bucket: (encode-path-segment $bucket), object: (encode-path-segment $object), entity: (encode-path-segment $entity)} | format pattern "/b/{bucket}/o/{object}/acl/{entity}") $qp)
-  let req_body = {"bucket": $body_bucket, "domain": $domain, "email": $email, "entity": $body_entity, "entityId": $entity_id, "etag": $etag, "generation": $generation, "id": $id, "kind": $kind, "object": $body_object, "projectTeam": $project_team, "role": $role, "selfLink": $self_link} | compact
+  let req_body = {"bucket": $body_bucket, "domain": $domain, "email": $email, "entity": $body_entity, "entityId": $entity_id, "etag": $etag, "generation": $generation_body, "id": $id, "kind": $kind, "object": $body_object, "projectTeam": $project_team, "role": $role, "selfLink": $self_link} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: ({"alt": $alt, "fields": $fields, "key": $key, "oauth_token": $oauth_token, "prettyPrint": $pretty_print, "quotaUser": $quota_user, "uploadType": $upload_type, "userIp": $user_ip, "generation": $generation, "userProject": $user_project} | compact), body: $req_body}
 }
 
 # Returns an IAM policy for the specified object.
@@ -1974,11 +2057,13 @@ export def "b-o-iam get-policy" [
 ]: nothing -> record<bindings: table<condition: record, members: list, role: string>, etag: string, kind: string, resourceId: string, version: int> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($bucket | is-empty) { error make --unspanned { msg: "path parameter 'bucket' must be non-empty" } }
+  if ($object | is-empty) { error make --unspanned { msg: "path parameter 'object' must be non-empty" } }
   let qp = [(serialize-qp "alt" $alt "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "uploadType" $upload_type "scalar") (serialize-qp "userIp" $user_ip "scalar") (serialize-qp "generation" $generation "scalar") (serialize-qp "userProject" $user_project "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({bucket: (encode-path-segment $bucket), object: (encode-path-segment $object)} | format pattern "/b/{bucket}/o/{object}/iam") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"alt": $alt, "fields": $fields, "key": $key, "oauth_token": $oauth_token, "prettyPrint": $pretty_print, "quotaUser": $quota_user, "uploadType": $upload_type, "userIp": $user_ip, "generation": $generation, "userProject": $user_project} | compact), body: null}
 }
 
 # Updates an IAM policy for the specified object.
@@ -2017,13 +2102,15 @@ export def "b-o-iam update-policy" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($bucket | is-empty) { error make --unspanned { msg: "path parameter 'bucket' must be non-empty" } }
+  if ($object | is-empty) { error make --unspanned { msg: "path parameter 'object' must be non-empty" } }
   let qp = [(serialize-qp "alt" $alt "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "uploadType" $upload_type "scalar") (serialize-qp "userIp" $user_ip "scalar") (serialize-qp "generation" $generation "scalar") (serialize-qp "userProject" $user_project "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({bucket: (encode-path-segment $bucket), object: (encode-path-segment $object)} | format pattern "/b/{bucket}/o/{object}/iam") $qp)
   let req_body = {"bindings": $bindings, "etag": $etag, "kind": $kind, "resourceId": $resource_id, "version": $version} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: ({"alt": $alt, "fields": $fields, "key": $key, "oauth_token": $oauth_token, "prettyPrint": $pretty_print, "quotaUser": $quota_user, "uploadType": $upload_type, "userIp": $user_ip, "generation": $generation, "userProject": $user_project} | compact), body: $req_body}
 }
 
 # Tests a set of permissions on the given object to see which, if any, are held by the caller.
@@ -2056,11 +2143,13 @@ export def "b-o-iam-test-permissions test" [
 ]: nothing -> record<kind: string, permissions: list<string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($bucket | is-empty) { error make --unspanned { msg: "path parameter 'bucket' must be non-empty" } }
+  if ($object | is-empty) { error make --unspanned { msg: "path parameter 'object' must be non-empty" } }
   let qp = [(serialize-qp "alt" $alt "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "uploadType" $upload_type "scalar") (serialize-qp "userIp" $user_ip "scalar") (serialize-qp "permissions" $permissions "multi") (serialize-qp "generation" $generation "scalar") (serialize-qp "userProject" $user_project "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({bucket: (encode-path-segment $bucket), object: (encode-path-segment $object)} | format pattern "/b/{bucket}/o/{object}/iam/testPermissions") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"alt": $alt, "fields": $fields, "key": $key, "oauth_token": $oauth_token, "prettyPrint": $pretty_print, "quotaUser": $quota_user, "uploadType": $upload_type, "userIp": $user_ip, "permissions": $permissions, "generation": $generation, "userProject": $user_project} | compact), body: null}
 }
 
 # Concatenates a list of existing objects into a new object in the same bucket.
@@ -2101,13 +2190,15 @@ export def "b-o-compose create" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($destination_bucket | is-empty) { error make --unspanned { msg: "path parameter 'destinationBucket' must be non-empty" } }
+  if ($destination_object | is-empty) { error make --unspanned { msg: "path parameter 'destinationObject' must be non-empty" } }
   let qp = [(serialize-qp "alt" $alt "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "uploadType" $upload_type "scalar") (serialize-qp "userIp" $user_ip "scalar") (serialize-qp "destinationPredefinedAcl" $destination_predefined_acl "scalar") (serialize-qp "ifGenerationMatch" $if_generation_match "scalar") (serialize-qp "ifMetagenerationMatch" $if_metageneration_match "scalar") (serialize-qp "kmsKeyName" $kms_key_name "scalar") (serialize-qp "userProject" $user_project "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({destination_bucket: (encode-path-segment $destination_bucket), destination_object: (encode-path-segment $destination_object)} | format pattern "/b/{destination_bucket}/o/{destination_object}/compose") $qp)
   let req_body = {"destination": $destination, "kind": $kind, "sourceObjects": $source_objects} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: ({"alt": $alt, "fields": $fields, "key": $key, "oauth_token": $oauth_token, "prettyPrint": $pretty_print, "quotaUser": $quota_user, "uploadType": $upload_type, "userIp": $user_ip, "destinationPredefinedAcl": $destination_predefined_acl, "ifGenerationMatch": $if_generation_match, "ifMetagenerationMatch": $if_metageneration_match, "kmsKeyName": $kms_key_name, "userProject": $user_project} | compact), body: $req_body}
 }
 
 # Copies a source object to a destination object. Optionally overrides metadata.
@@ -2188,13 +2279,17 @@ export def "b-o-copy-to-b-o copy" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($source_bucket | is-empty) { error make --unspanned { msg: "path parameter 'sourceBucket' must be non-empty" } }
+  if ($source_object | is-empty) { error make --unspanned { msg: "path parameter 'sourceObject' must be non-empty" } }
+  if ($destination_bucket | is-empty) { error make --unspanned { msg: "path parameter 'destinationBucket' must be non-empty" } }
+  if ($destination_object | is-empty) { error make --unspanned { msg: "path parameter 'destinationObject' must be non-empty" } }
   let qp = [(serialize-qp "alt" $alt "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "uploadType" $upload_type "scalar") (serialize-qp "userIp" $user_ip "scalar") (serialize-qp "destinationKmsKeyName" $destination_kms_key_name "scalar") (serialize-qp "destinationPredefinedAcl" $destination_predefined_acl "scalar") (serialize-qp "ifGenerationMatch" $if_generation_match "scalar") (serialize-qp "ifGenerationNotMatch" $if_generation_not_match "scalar") (serialize-qp "ifMetagenerationMatch" $if_metageneration_match "scalar") (serialize-qp "ifMetagenerationNotMatch" $if_metageneration_not_match "scalar") (serialize-qp "ifSourceGenerationMatch" $if_source_generation_match "scalar") (serialize-qp "ifSourceGenerationNotMatch" $if_source_generation_not_match "scalar") (serialize-qp "ifSourceMetagenerationMatch" $if_source_metageneration_match "scalar") (serialize-qp "ifSourceMetagenerationNotMatch" $if_source_metageneration_not_match "scalar") (serialize-qp "projection" $projection "scalar") (serialize-qp "sourceGeneration" $source_generation "scalar") (serialize-qp "userProject" $user_project "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({source_bucket: (encode-path-segment $source_bucket), source_object: (encode-path-segment $source_object), destination_bucket: (encode-path-segment $destination_bucket), destination_object: (encode-path-segment $destination_object)} | format pattern "/b/{source_bucket}/o/{source_object}/copyTo/b/{destination_bucket}/o/{destination_object}") $qp)
   let req_body = {"acl": $acl, "bucket": $bucket, "cacheControl": $cache_control, "componentCount": $component_count, "contentDisposition": $content_disposition, "contentEncoding": $content_encoding, "contentLanguage": $content_language, "contentType": $content_type, "crc32c": $crc32c, "customTime": $custom_time, "customerEncryption": $customer_encryption, "etag": $etag, "eventBasedHold": $event_based_hold, "generation": $generation, "id": $id, "kind": $kind, "kmsKeyName": $kms_key_name, "md5Hash": $md5_hash, "mediaLink": $media_link, "metadata": $metadata, "metageneration": $metageneration, "name": $name, "owner": $owner, "retentionExpirationTime": $retention_expiration_time, "selfLink": $self_link, "size": $size, "storageClass": $storage_class, "temporaryHold": $temporary_hold, "timeCreated": $time_created, "timeDeleted": $time_deleted, "timeStorageClassUpdated": $time_storage_class_updated, "updated": $updated} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: ({"alt": $alt, "fields": $fields, "key": $key, "oauth_token": $oauth_token, "prettyPrint": $pretty_print, "quotaUser": $quota_user, "uploadType": $upload_type, "userIp": $user_ip, "destinationKmsKeyName": $destination_kms_key_name, "destinationPredefinedAcl": $destination_predefined_acl, "ifGenerationMatch": $if_generation_match, "ifGenerationNotMatch": $if_generation_not_match, "ifMetagenerationMatch": $if_metageneration_match, "ifMetagenerationNotMatch": $if_metageneration_not_match, "ifSourceGenerationMatch": $if_source_generation_match, "ifSourceGenerationNotMatch": $if_source_generation_not_match, "ifSourceMetagenerationMatch": $if_source_metageneration_match, "ifSourceMetagenerationNotMatch": $if_source_metageneration_not_match, "projection": $projection, "sourceGeneration": $source_generation, "userProject": $user_project} | compact), body: $req_body}
 }
 
 # Rewrites a source object to a destination object. Optionally overrides metadata.
@@ -2277,13 +2372,17 @@ export def "b-o-rewrite-to-b-o create" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($source_bucket | is-empty) { error make --unspanned { msg: "path parameter 'sourceBucket' must be non-empty" } }
+  if ($source_object | is-empty) { error make --unspanned { msg: "path parameter 'sourceObject' must be non-empty" } }
+  if ($destination_bucket | is-empty) { error make --unspanned { msg: "path parameter 'destinationBucket' must be non-empty" } }
+  if ($destination_object | is-empty) { error make --unspanned { msg: "path parameter 'destinationObject' must be non-empty" } }
   let qp = [(serialize-qp "alt" $alt "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "uploadType" $upload_type "scalar") (serialize-qp "userIp" $user_ip "scalar") (serialize-qp "destinationKmsKeyName" $destination_kms_key_name "scalar") (serialize-qp "destinationPredefinedAcl" $destination_predefined_acl "scalar") (serialize-qp "ifGenerationMatch" $if_generation_match "scalar") (serialize-qp "ifGenerationNotMatch" $if_generation_not_match "scalar") (serialize-qp "ifMetagenerationMatch" $if_metageneration_match "scalar") (serialize-qp "ifMetagenerationNotMatch" $if_metageneration_not_match "scalar") (serialize-qp "ifSourceGenerationMatch" $if_source_generation_match "scalar") (serialize-qp "ifSourceGenerationNotMatch" $if_source_generation_not_match "scalar") (serialize-qp "ifSourceMetagenerationMatch" $if_source_metageneration_match "scalar") (serialize-qp "ifSourceMetagenerationNotMatch" $if_source_metageneration_not_match "scalar") (serialize-qp "maxBytesRewrittenPerCall" $max_bytes_rewritten_per_call "scalar") (serialize-qp "projection" $projection "scalar") (serialize-qp "rewriteToken" $rewrite_token "scalar") (serialize-qp "sourceGeneration" $source_generation "scalar") (serialize-qp "userProject" $user_project "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({source_bucket: (encode-path-segment $source_bucket), source_object: (encode-path-segment $source_object), destination_bucket: (encode-path-segment $destination_bucket), destination_object: (encode-path-segment $destination_object)} | format pattern "/b/{source_bucket}/o/{source_object}/rewriteTo/b/{destination_bucket}/o/{destination_object}") $qp)
   let req_body = {"acl": $acl, "bucket": $bucket, "cacheControl": $cache_control, "componentCount": $component_count, "contentDisposition": $content_disposition, "contentEncoding": $content_encoding, "contentLanguage": $content_language, "contentType": $content_type, "crc32c": $crc32c, "customTime": $custom_time, "customerEncryption": $customer_encryption, "etag": $etag, "eventBasedHold": $event_based_hold, "generation": $generation, "id": $id, "kind": $kind, "kmsKeyName": $kms_key_name, "md5Hash": $md5_hash, "mediaLink": $media_link, "metadata": $metadata, "metageneration": $metageneration, "name": $name, "owner": $owner, "retentionExpirationTime": $retention_expiration_time, "selfLink": $self_link, "size": $size, "storageClass": $storage_class, "temporaryHold": $temporary_hold, "timeCreated": $time_created, "timeDeleted": $time_deleted, "timeStorageClassUpdated": $time_storage_class_updated, "updated": $updated} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: ({"alt": $alt, "fields": $fields, "key": $key, "oauth_token": $oauth_token, "prettyPrint": $pretty_print, "quotaUser": $quota_user, "uploadType": $upload_type, "userIp": $user_ip, "destinationKmsKeyName": $destination_kms_key_name, "destinationPredefinedAcl": $destination_predefined_acl, "ifGenerationMatch": $if_generation_match, "ifGenerationNotMatch": $if_generation_not_match, "ifMetagenerationMatch": $if_metageneration_match, "ifMetagenerationNotMatch": $if_metageneration_not_match, "ifSourceGenerationMatch": $if_source_generation_match, "ifSourceGenerationNotMatch": $if_source_generation_not_match, "ifSourceMetagenerationMatch": $if_source_metageneration_match, "ifSourceMetagenerationNotMatch": $if_source_metageneration_not_match, "maxBytesRewrittenPerCall": $max_bytes_rewritten_per_call, "projection": $projection, "rewriteToken": $rewrite_token, "sourceGeneration": $source_generation, "userProject": $user_project} | compact), body: $req_body}
 }
 
 # Stop watching resources through this channel
@@ -2328,7 +2427,7 @@ export def "channels-stop stop" [
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: ({"alt": $alt, "fields": $fields, "key": $key, "oauth_token": $oauth_token, "prettyPrint": $pretty_print, "quotaUser": $quota_user, "uploadType": $upload_type, "userIp": $user_ip} | compact), body: $req_body}
 }
 
 # Retrieves a list of HMAC keys matching the criteria.
@@ -2362,11 +2461,12 @@ export def "projects-hmac-keys list" [
 ]: nothing -> record<items: table<accessId: string, etag: string, id: string, kind: string, projectId: string, selfLink: string, serviceAccountEmail: string, state: string, timeCreated: string, updated: string>, kind: string, nextPageToken: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($project_id | is-empty) { error make --unspanned { msg: "path parameter 'projectId' must be non-empty" } }
   let qp = [(serialize-qp "alt" $alt "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "uploadType" $upload_type "scalar") (serialize-qp "userIp" $user_ip "scalar") (serialize-qp "maxResults" $max_results "scalar") (serialize-qp "pageToken" $page_token "scalar") (serialize-qp "serviceAccountEmail" $service_account_email "scalar") (serialize-qp "showDeletedKeys" $show_deleted_keys "scalar") (serialize-qp "userProject" $user_project "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({project_id: (encode-path-segment $project_id)} | format pattern "/projects/{project_id}/hmacKeys") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"alt": $alt, "fields": $fields, "key": $key, "oauth_token": $oauth_token, "prettyPrint": $pretty_print, "quotaUser": $quota_user, "uploadType": $upload_type, "userIp": $user_ip, "maxResults": $max_results, "pageToken": $page_token, "serviceAccountEmail": $service_account_email, "showDeletedKeys": $show_deleted_keys, "userProject": $user_project} | compact), body: null}
 }
 
 # Creates a new HMAC key for the specified service account.
@@ -2397,11 +2497,12 @@ export def "projects-hmac-keys create" [
 ]: nothing -> record<kind: string, metadata: record<accessId: string, etag: string, id: string, kind: string, projectId: string, selfLink: string, serviceAccountEmail: string, state: string, timeCreated: string, updated: string>, secret: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($project_id | is-empty) { error make --unspanned { msg: "path parameter 'projectId' must be non-empty" } }
   let qp = [(serialize-qp "alt" $alt "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "uploadType" $upload_type "scalar") (serialize-qp "userIp" $user_ip "scalar") (serialize-qp "serviceAccountEmail" $service_account_email "scalar") (serialize-qp "userProject" $user_project "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({project_id: (encode-path-segment $project_id)} | format pattern "/projects/{project_id}/hmacKeys") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"alt": $alt, "fields": $fields, "key": $key, "oauth_token": $oauth_token, "prettyPrint": $pretty_print, "quotaUser": $quota_user, "uploadType": $upload_type, "userIp": $user_ip, "serviceAccountEmail": $service_account_email, "userProject": $user_project} | compact), body: null}
 }
 
 # Deletes an HMAC key.
@@ -2432,11 +2533,13 @@ export def "projects-hmac-keys delete" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($project_id | is-empty) { error make --unspanned { msg: "path parameter 'projectId' must be non-empty" } }
+  if ($access_id | is-empty) { error make --unspanned { msg: "path parameter 'accessId' must be non-empty" } }
   let qp = [(serialize-qp "alt" $alt "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "uploadType" $upload_type "scalar") (serialize-qp "userIp" $user_ip "scalar") (serialize-qp "userProject" $user_project "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({project_id: (encode-path-segment $project_id), access_id: (encode-path-segment $access_id)} | format pattern "/projects/{project_id}/hmacKeys/{access_id}") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"alt": $alt, "fields": $fields, "key": $key, "oauth_token": $oauth_token, "prettyPrint": $pretty_print, "quotaUser": $quota_user, "uploadType": $upload_type, "userIp": $user_ip, "userProject": $user_project} | compact), body: null}
 }
 
 # Retrieves an HMAC key's metadata
@@ -2467,11 +2570,13 @@ export def "projects-hmac-keys get" [
 ]: nothing -> record<accessId: string, etag: string, id: string, kind: string, projectId: string, selfLink: string, serviceAccountEmail: string, state: string, timeCreated: string, updated: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($project_id | is-empty) { error make --unspanned { msg: "path parameter 'projectId' must be non-empty" } }
+  if ($access_id | is-empty) { error make --unspanned { msg: "path parameter 'accessId' must be non-empty" } }
   let qp = [(serialize-qp "alt" $alt "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "uploadType" $upload_type "scalar") (serialize-qp "userIp" $user_ip "scalar") (serialize-qp "userProject" $user_project "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({project_id: (encode-path-segment $project_id), access_id: (encode-path-segment $access_id)} | format pattern "/projects/{project_id}/hmacKeys/{access_id}") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"alt": $alt, "fields": $fields, "key": $key, "oauth_token": $oauth_token, "prettyPrint": $pretty_print, "quotaUser": $quota_user, "uploadType": $upload_type, "userIp": $user_ip, "userProject": $user_project} | compact), body: null}
 }
 
 # Updates the state of an HMAC key. See the HMAC Key resource descriptor for valid states.
@@ -2513,13 +2618,15 @@ export def "projects-hmac-keys update" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($project_id | is-empty) { error make --unspanned { msg: "path parameter 'projectId' must be non-empty" } }
+  if ($access_id | is-empty) { error make --unspanned { msg: "path parameter 'accessId' must be non-empty" } }
   let qp = [(serialize-qp "alt" $alt "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "uploadType" $upload_type "scalar") (serialize-qp "userIp" $user_ip "scalar") (serialize-qp "userProject" $user_project "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({project_id: (encode-path-segment $project_id), access_id: (encode-path-segment $access_id)} | format pattern "/projects/{project_id}/hmacKeys/{access_id}") $qp)
   let req_body = {"accessId": $body_access_id, "etag": $etag, "id": $id, "kind": $kind, "projectId": $body_project_id, "selfLink": $self_link, "serviceAccountEmail": $service_account_email, "state": $state, "timeCreated": $time_created, "updated": $updated} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: ({"alt": $alt, "fields": $fields, "key": $key, "oauth_token": $oauth_token, "prettyPrint": $pretty_print, "quotaUser": $quota_user, "uploadType": $upload_type, "userIp": $user_ip, "userProject": $user_project} | compact), body: $req_body}
 }
 
 # Get the email address of this project's Google Cloud Storage service account.
@@ -2549,9 +2656,10 @@ export def "projects-service-account get" [
 ]: nothing -> record<email_address: string, kind: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($project_id | is-empty) { error make --unspanned { msg: "path parameter 'projectId' must be non-empty" } }
   let qp = [(serialize-qp "alt" $alt "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "uploadType" $upload_type "scalar") (serialize-qp "userIp" $user_ip "scalar") (serialize-qp "userProject" $user_project "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({project_id: (encode-path-segment $project_id)} | format pattern "/projects/{project_id}/serviceAccount") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"alt": $alt, "fields": $fields, "key": $key, "oauth_token": $oauth_token, "prettyPrint": $pretty_print, "quotaUser": $quota_user, "uploadType": $upload_type, "userIp": $user_ip, "userProject": $user_project} | compact), body: null}
 }

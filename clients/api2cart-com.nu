@@ -3,18 +3,19 @@
 # Auth: --token flag or $env.SWAGGER_API2CART_TOKEN
 
 const BASE_URL = "https://api.api2cart.com/v1.1"
-const DEFAULT_AUTH = "x-api-key"
 
-# Build auth: returns {headers: record, query: string}
+# Build auth: returns {scheme: string, headers: record, query: string, location: string}.
+# `location` is "header" | "query" | "cookie" | "none" and tells dry-run callers
+# where the token went without inspecting headers/query themselves.
 def build-auth [token?: string, auth_scheme?: string]: nothing -> record {
   let token_val = if ($token != null) and ($token | is-not-empty) { $token } else { $env | get -o SWAGGER_API2CART_TOKEN | default "" }
   let scheme = ($auth_scheme | default "bearer")
-  if ($scheme == "none") or ($token_val | is-empty) { return {headers: {}, query: ""} }
+  if ($scheme == "none") or ($token_val | is-empty) { return {scheme: $scheme, headers: {}, query: "", location: "none"} }
   match $scheme {
-    "x-api-key" => { {headers: {x-api-key: $token_val}, query: ""} }
-    "x-store-key" => { {headers: {x-store-key: $token_val}, query: ""} }
-    "none" => { {headers: {}, query: ""} }
-    _ => { {headers: {Authorization: $"Bearer ($token_val)"}, query: ""} }
+    "x-api-key" => { {scheme: $scheme, headers: {x-api-key: $token_val}, query: "", location: "header"} }
+    "x-store-key" => { {scheme: $scheme, headers: {x-store-key: $token_val}, query: "", location: "header"} }
+    "none" => { {scheme: $scheme, headers: {}, query: "", location: "none"} }
+    _ => { {scheme: $scheme, headers: {Authorization: $"Bearer ($token_val)"}, query: "", location: "header"} }
   }
 }
 
@@ -23,8 +24,9 @@ def build-auth [token?: string, auth_scheme?: string]: nothing -> record {
 # ([A-Za-z0-9-._~]) stay literal; everything else gets %XX.
 def serialize-qp [name: string, value: any, style: string]: nothing -> list<string> {
   if ($value == null) { return [] }
-  let n = (encode-path-segment $name)
   let is_list = ($value | describe | str starts-with "list")
+  if $is_list and ($value | is-empty) { return [] }
+  let n = (encode-path-segment $name)
   if ($value | describe | str starts-with "record") { return ($value | transpose k v | each { $"($n)[(encode-path-segment $in.k)]=(encode-path-segment $in.v)" }) }
   if not $is_list { return [$"($n)=(encode-path-segment $value)"] }
   match $style {
@@ -55,22 +57,42 @@ def build-url [base: string, path: string, query?: string]: nothing -> string {
   if ($query != null) and ($query | is-not-empty) { $result | upsert query $query | url join } else { $result | url join }
 }
 
+# Build the dry-run record returned by --dry-run. Shape:
+#   {dry_run: true, method, url, query: <record>, headers, body, content_type, timeout,
+#    auth: {scheme, location}}
+# `meta` carries logical-form data (the query record by spec name, the pre-serialization
+# body) that do-request itself cannot reconstruct from its wire-format args.
+def build-dry-run-record [method: string, url: string, auth: record, content_type: string, timeout: duration, meta?: record]: nothing -> record {
+  let m = ($meta | default {})
+  {
+    dry_run: true
+    method: $method
+    url: $url
+    query: ($m | get -o query | default {})
+    headers: $auth.headers
+    body: ($m | get -o body)
+    content_type: $content_type
+    timeout: $timeout
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+}
+
 # Execute HTTP request with method dispatch
-def do-request [method: string, url: string, auth: record, insecure: bool, raw: bool, dry_run: bool, max_time?: duration, allow_errors?: bool, full?: bool, content_type?: string, body?: any]: nothing -> any {
+def do-request [method: string, url: string, auth: record, insecure: bool, raw: bool, dry_run: bool, max_time?: duration, allow_errors?: bool, full?: bool, content_type?: string, body?: any, dry_run_meta?: record]: nothing -> any {
   let req_url = if ($auth.query | is-not-empty) { if ($url | str contains "?") { $"($url)&($auth.query)" } else { $"($url)?($auth.query)" } } else { $url }
   let timeout = ($max_time | default 30min)
   let ct = ($content_type | default "application/json")
-  if $dry_run { return {method: $method, url: $req_url, headers: $auth.headers, query_string: $auth.query, content_type: $ct, timeout: $timeout, body: $body} }
+  if $dry_run { return (build-dry-run-record $method $req_url $auth $ct $timeout $dry_run_meta) }
   let resp = match $method {
     "get" => { http get --headers $auth.headers --full --allow-errors --max-time $timeout --insecure=$insecure --raw=$raw $req_url }
-    "head" => { http head --headers $auth.headers --max-time $timeout --insecure=$insecure $req_url }
-    "options" => { http options --headers $auth.headers --max-time $timeout --insecure=$insecure $req_url }
+    "head" => { http head --headers $auth.headers --full --allow-errors --max-time $timeout --insecure=$insecure $req_url }
+    "options" => { http options --headers $auth.headers --full --allow-errors --max-time $timeout --insecure=$insecure $req_url }
     "post" => { if ($body | is-empty) { http post --headers $auth.headers --full --allow-errors --max-time $timeout --insecure=$insecure --raw=$raw $req_url "" } else { http post --headers $auth.headers --content-type $ct --full --allow-errors --max-time $timeout --insecure=$insecure --raw=$raw $req_url $body } }
     "put" => { if ($body | is-empty) { http put --headers $auth.headers --full --allow-errors --max-time $timeout --insecure=$insecure --raw=$raw $req_url "" } else { http put --headers $auth.headers --content-type $ct --full --allow-errors --max-time $timeout --insecure=$insecure --raw=$raw $req_url $body } }
     "patch" => { if ($body | is-empty) { http patch --headers $auth.headers --full --allow-errors --max-time $timeout --insecure=$insecure --raw=$raw $req_url "" } else { http patch --headers $auth.headers --content-type $ct --full --allow-errors --max-time $timeout --insecure=$insecure --raw=$raw $req_url $body } }
     "delete" => { if ($body | is-empty) { http delete --headers $auth.headers --full --allow-errors --max-time $timeout --insecure=$insecure --raw=$raw $req_url } else { http delete --headers $auth.headers --content-type $ct --data $body --full --allow-errors --max-time $timeout --insecure=$insecure --raw=$raw $req_url } }
   }
-  if ($method in ["head" "options"]) { return $resp }
+  if ($method == "head") and (not $full) and (not $allow_errors) and $resp.status < 400 { return $resp.headers }
   if $allow_errors { $resp } else if $resp.status >= 400 { error make --unspanned { msg: $"HTTP ($resp.status): ($resp.body)" } } else if $full { {status: $resp.status, headers: $resp.headers, body: $resp.body} } else if $resp.status == 204 { null } else { $resp.body }
 }
 
@@ -237,7 +259,7 @@ export def "account-cart-add-json create" [
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: {}, body: $req_body}
 }
 
 # Get list of carts.
@@ -267,7 +289,7 @@ export def "account-cart-list-json list" [
   let full_url = (build-url $base "/account.cart.list.json" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"params": $params, "exclude": $exclude, "request_from_date": $request_from_date, "request_to_date": $request_to_date, "store_url": $store_url, "store_key": $store_key} | compact), body: null}
 }
 
 # Update configs in the API2Cart database.
@@ -381,7 +403,7 @@ export def "account-config-update-json update" [
   let full_url = (build-url $base "/account.config.update.json" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"new_store_key": $new_store_key, "bridge_url": $bridge_url, "store_root": $store_root, "db_tables_prefix": $db_tables_prefix, "3dcart_private_key": $3dcart_private_key, "3dcart_access_token": $3dcart_access_token, "3dcartapi_api_key": $3dcartapi_api_key, "amazon_sp_client_id": $amazon_sp_client_id, "amazon_sp_client_secret": $amazon_sp_client_secret, "amazon_sp_aws_user_key_id": $amazon_sp_aws_user_key_id, "amazon_sp_aws_user_secret": $amazon_sp_aws_user_secret, "amazon_sp_aws_region": $amazon_sp_aws_region, "amazon_sp_aws_role_arn": $amazon_sp_aws_role_arn, "amazon_sp_refresh_token": $amazon_sp_refresh_token, "amazon_sp_api_environment": $amazon_sp_api_environment, "amazon_access_token": $amazon_access_token, "amazon_seller_id": $amazon_seller_id, "amazon_marketplaces_ids": $amazon_marketplaces_ids, "amazon_secret_key": $amazon_secret_key, "amazon_access_key_id": $amazon_access_key_id, "aspdotnetstorefront_api_user": $aspdotnetstorefront_api_user, "aspdotnetstorefront_api_pass": $aspdotnetstorefront_api_pass, "bigcommerceapi_admin_account": $bigcommerceapi_admin_account, "bigcommerceapi_api_path": $bigcommerceapi_api_path, "bigcommerceapi_api_key": $bigcommerceapi_api_key, "bigcommerceapi_client_id": $bigcommerceapi_client_id, "bigcommerceapi_access_token": $bigcommerceapi_access_token, "bigcommerceapi_context": $bigcommerceapi_context, "demandware_client_id": $demandware_client_id, "demandware_api_password": $demandware_api_password, "demandware_user_name": $demandware_user_name, "demandware_user_password": $demandware_user_password, "ebay_client_id": $ebay_client_id, "ebay_client_secret": $ebay_client_secret, "ebay_runame": $ebay_runame, "ebay_access_token": $ebay_access_token, "ebay_refresh_token": $ebay_refresh_token, "ebay_environment": $ebay_environment, "ebay_site_id": $ebay_site_id, "ecwid_acess_token": $ecwid_acess_token, "ecwid_store_id": $ecwid_store_id, "etsy_keystring": $etsy_keystring, "etsy_shared_secret": $etsy_shared_secret, "etsy_access_token": $etsy_access_token, "etsy_token_secret": $etsy_token_secret, "etsy_client_id": $etsy_client_id, "etsy_refresh_token": $etsy_refresh_token, "neto_api_key": $neto_api_key, "neto_api_username": $neto_api_username, "shopify_api_key": $shopify_api_key, "shopify_api_password": $shopify_api_password, "shopify_shared_secret": $shopify_shared_secret, "shopify_access_token": $shopify_access_token, "shopware_access_key": $shopware_access_key, "shopware_api_key": $shopware_api_key, "shopware_api_secret": $shopware_api_secret, "volusion_login": $volusion_login, "volusion_password": $volusion_password, "walmart_client_id": $walmart_client_id, "walmart_client_secret": $walmart_client_secret, "walmart_environment": $walmart_environment, "walmart_channel_type": $walmart_channel_type, "squarespace_api_key": $squarespace_api_key, "hybris_client_id": $hybris_client_id, "hybris_client_secret": $hybris_client_secret, "hybris_username": $hybris_username, "hybris_password": $hybris_password, "hybris_websites": $hybris_websites, "lightspeed_api_key": $lightspeed_api_key, "lightspeed_api_secret": $lightspeed_api_secret, "commercehq_api_key": $commercehq_api_key, "commercehq_api_password": $commercehq_api_password, "wc_consumer_key": $wc_consumer_key, "wc_consumer_secret": $wc_consumer_secret, "magento_consumer_key": $magento_consumer_key, "magento_consumer_secret": $magento_consumer_secret, "magento_access_token": $magento_access_token, "magento_token_secret": $magento_token_secret, "prestashop_webservice_key": $prestashop_webservice_key, "wix_app_id": $wix_app_id, "wix_app_secret_key": $wix_app_secret_key, "wix_refresh_token": $wix_refresh_token, "mercado_libre_app_id": $mercado_libre_app_id, "mercado_libre_app_secret_key": $mercado_libre_app_secret_key, "mercado_libre_refresh_token": $mercado_libre_refresh_token, "zid_client_id": $zid_client_id, "zid_client_secret": $zid_client_secret, "zid_access_token": $zid_access_token, "zid_authorization": $zid_authorization, "zid_refresh_token": $zid_refresh_token} | compact), body: null}
 }
 
 # List webhooks that was not delivered to the callback.
@@ -408,7 +430,7 @@ export def "account-failed-webhooks-json get" [
   let full_url = (build-url $base "/account.failed_webhooks.json" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"count": $count, "start": $start, "ids": $ids} | compact), body: null}
 }
 
 # Get list of supported platforms
@@ -431,7 +453,7 @@ export def "account-supported-platforms-json get" [
   let full_url = (build-url $base "/account.supported_platforms.json")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
 }
 
 # Add new attribute
@@ -476,7 +498,7 @@ export def "attribute-add-json create" [
   let full_url = (build-url $base "/attribute.add.json" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"type": $type, "code": $code, "name": $name, "store_id": $store_id, "lang_id": $lang_id, "visible": $visible, "required": $required, "position": $position, "attribute_group_id": $attribute_group_id, "is_global": $is_global, "is_searchable": $is_searchable, "is_filterable": $is_filterable, "is_comparable": $is_comparable, "is_html_allowed_on_front": $is_html_allowed_on_front, "is_filterable_in_search": $is_filterable_in_search, "is_configurable": $is_configurable, "is_visible_in_advanced_search": $is_visible_in_advanced_search, "is_used_for_promo_rules": $is_used_for_promo_rules, "used_in_product_listing": $used_in_product_listing, "used_for_sort_by": $used_for_sort_by, "apply_to": $apply_to} | compact), body: null}
 }
 
 # Assign attribute to the group
@@ -503,7 +525,7 @@ export def "attribute-assign-group-json assign" [
   let full_url = (build-url $base "/attribute.assign.group.json" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"id": $id, "group_id": $group_id, "attribute_set_id": $attribute_set_id} | compact), body: null}
 }
 
 # Assign attribute to the attribute set
@@ -530,7 +552,7 @@ export def "attribute-assign-set-json assign" [
   let full_url = (build-url $base "/attribute.assign.set.json" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"id": $id, "group_id": $group_id, "attribute_set_id": $attribute_set_id} | compact), body: null}
 }
 
 # Get attribute_set list
@@ -559,7 +581,7 @@ export def "attribute-attributeset-list-json list" [
   let full_url = (build-url $base "/attribute.attributeset.list.json" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"start": $start, "count": $count, "params": $params, "exclude": $exclude, "response_fields": $response_fields} | compact), body: null}
 }
 
 # Get attributes count
@@ -589,7 +611,7 @@ export def "attribute-count-json get" [
   let full_url = (build-url $base "/attribute.count.json" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"type": $type, "store_id": $store_id, "lang_id": $lang_id, "visible": $visible, "required": $required, "system": $system} | compact), body: null}
 }
 
 # Delete attribute from store
@@ -615,7 +637,7 @@ export def "attribute-delete-json delete" [
   let full_url = (build-url $base "/attribute.delete.json" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"store_id": $store_id, "id": $id} | compact), body: null}
 }
 
 # Get attribute group list
@@ -646,7 +668,7 @@ export def "attribute-group-list-json list" [
   let full_url = (build-url $base "/attribute.group.list.json" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"start": $start, "count": $count, "lang_id": $lang_id, "params": $params, "exclude": $exclude, "response_fields": $response_fields, "attribute_set_id": $attribute_set_id} | compact), body: null}
 }
 
 # Get attribute info
@@ -676,7 +698,7 @@ export def "attribute-info-json get" [
   let full_url = (build-url $base "/attribute.info.json" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"id": $id, "store_id": $store_id, "lang_id": $lang_id, "params": $params, "exclude": $exclude, "response_fields": $response_fields} | compact), body: null}
 }
 
 # Get attributes list
@@ -712,7 +734,7 @@ export def "attribute-list-json list" [
   let full_url = (build-url $base "/attribute.list.json" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"start": $start, "count": $count, "type": $type, "attribute_ids": $attribute_ids, "store_id": $store_id, "lang_id": $lang_id, "params": $params, "exclude": $exclude, "response_fields": $response_fields, "visible": $visible, "required": $required, "system": $system} | compact), body: null}
 }
 
 # Get list of supported attributes types
@@ -735,7 +757,7 @@ export def "attribute-type-list-json list" [
   let full_url = (build-url $base "/attribute.type.list.json")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
 }
 
 # Unassign attribute from group
@@ -761,7 +783,7 @@ export def "attribute-unassign-group-json create" [
   let full_url = (build-url $base "/attribute.unassign.group.json" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"id": $id, "group_id": $group_id} | compact), body: null}
 }
 
 # Unassign attribute from attribute set
@@ -787,7 +809,7 @@ export def "attribute-unassign-set-json update" [
   let full_url = (build-url $base "/attribute.unassign.set.json" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"id": $id, "attribute_set_id": $attribute_set_id} | compact), body: null}
 }
 
 # Update attribute data
@@ -815,7 +837,7 @@ export def "attribute-update-json update" [
   let full_url = (build-url $base "/attribute.update.json" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"id": $id, "name": $name, "store_id": $store_id, "lang_id": $lang_id} | compact), body: null}
 }
 
 # Retrieve basket information.
@@ -844,7 +866,7 @@ export def "basket-info-json get" [
   let full_url = (build-url $base "/basket.info.json" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"id": $id, "store_id": $store_id, "params": $params, "exclude": $exclude, "response_fields": $response_fields} | compact), body: null}
 }
 
 # Add item to basket
@@ -873,7 +895,7 @@ export def "basket-item-add-json create" [
   let full_url = (build-url $base "/basket.item.add.json" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"customer_id": $customer_id, "product_id": $product_id, "variant_id": $variant_id, "quantity": $quantity, "store_id": $store_id} | compact), body: null}
 }
 
 # Create live shipping rate service. (Beta)
@@ -900,7 +922,7 @@ export def "basket-live-shipping-service-create-json create" [
   let full_url = (build-url $base "/basket.live_shipping_service.create.json" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"store_id": $store_id, "name": $name, "callback": $callback} | compact), body: null}
 }
 
 # Delete live shipping rate service. (Beta)
@@ -925,7 +947,7 @@ export def "basket-live-shipping-service-delete-json delete" [
   let full_url = (build-url $base "/basket.live_shipping_service.delete.json" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"id": $id} | compact), body: null}
 }
 
 # Retrieve a list of live shipping rate services. (Beta)
@@ -952,7 +974,7 @@ export def "basket-live-shipping-service-list-json list" [
   let full_url = (build-url $base "/basket.live_shipping_service.list.json" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"store_id": $store_id, "start": $start, "count": $count} | compact), body: null}
 }
 
 # Delete bridge from the store.
@@ -975,7 +997,7 @@ export def "bridge-delete-json delete" [
   let full_url = (build-url $base "/bridge.delete.json")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
 }
 
 # Download bridge for store
@@ -1000,7 +1022,7 @@ export def "bridge-download-file download" [
   let full_url = (build-url $base "/bridge.download.file" $qp)
   let accept_val = "application/zip"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"whitelabel": $whitelabel} | compact), body: null}
 }
 
 # Update bridge in the store.
@@ -1023,7 +1045,7 @@ export def "bridge-update-json update" [
   let full_url = (build-url $base "/bridge.update.json")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
 }
 
 # Get bridge key and store key
@@ -1046,7 +1068,7 @@ export def "cart-bridge-json get" [
   let full_url = (build-url $base "/cart.bridge.json")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
 }
 
 # Get count of cart catalog price rules discounts.
@@ -1069,7 +1091,7 @@ export def "cart-catalog-price-rules-count-json get" [
   let full_url = (build-url $base "/cart.catalog_price_rules.count.json")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
 }
 
 # Get cart catalog price rules discounts.
@@ -1100,7 +1122,7 @@ export def "cart-catalog-price-rules-list-json list" [
   let full_url = (build-url $base "/cart.catalog_price_rules.list.json" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"page_cursor": $page_cursor, "start": $start, "count": $count, "ids": $ids, "params": $params, "response_fields": $response_fields, "exclude": $exclude} | compact), body: null}
 }
 
 # Clear cache on store.
@@ -1125,7 +1147,7 @@ export def "cart-clear-cache-json create" [
   let full_url = (build-url $base "/cart.clear_cache.json" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"cache_type": $cache_type} | compact), body: null}
 }
 
 # Get list of cart configs
@@ -1151,7 +1173,7 @@ export def "cart-config-json get" [
   let full_url = (build-url $base "/cart.config.json" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"params": $params, "exclude": $exclude} | compact), body: null}
 }
 
 # Use this API method to update custom data in client database.
@@ -1182,7 +1204,7 @@ export def "cart-config-update-json update" [
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: {}, body: $req_body}
 }
 
 # Create new coupon
@@ -1224,7 +1246,7 @@ export def "cart-coupon-add-json create" [
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: {}, body: $req_body}
 }
 
 # Create new coupon condition
@@ -1255,7 +1277,7 @@ export def "cart-coupon-condition-add-json create" [
   let full_url = (build-url $base "/cart.coupon.condition.add.json" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"store_id": $store_id, "coupon_id": $coupon_id, "target": $target, "entity": $entity, "key": $key, "operator": $operator, "value": $value} | compact), body: null}
 }
 
 # Get cart coupons count.
@@ -1285,7 +1307,7 @@ export def "cart-coupon-count-json get" [
   let full_url = (build-url $base "/cart.coupon.count.json" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"store_id": $store_id, "date_start_from": $date_start_from, "date_start_to": $date_start_to, "date_end_from": $date_end_from, "date_end_to": $date_end_to, "avail": $avail} | compact), body: null}
 }
 
 # Delete coupon
@@ -1311,7 +1333,7 @@ export def "cart-coupon-delete-json delete" [
   let full_url = (build-url $base "/cart.coupon.delete.json" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"id": $id, "store_id": $store_id} | compact), body: null}
 }
 
 # Get cart coupon discounts.
@@ -1349,7 +1371,7 @@ export def "cart-coupon-list-json list" [
   let full_url = (build-url $base "/cart.coupon.list.json" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"page_cursor": $page_cursor, "start": $start, "count": $count, "coupons_ids": $coupons_ids, "store_id": $store_id, "date_start_from": $date_start_from, "date_start_to": $date_start_to, "date_end_from": $date_end_from, "date_end_to": $date_end_to, "avail": $avail, "lang_id": $lang_id, "params": $params, "response_fields": $response_fields, "exclude": $exclude} | compact), body: null}
 }
 
 # Add store to the account
@@ -1389,11 +1411,11 @@ export def "cart-create-json create" [
   --client-id: string # Client ID of the requesting app
   --access-token: string # Access token authorizing the app to access resources on behalf of a user
   --context: string # API Path section unique to the store
-  --access-token: string # Access token authorizing the app to access resources on behalf of a user
+  --access-token-2: string # Access token authorizing the app to access resources on behalf of a user (disambiguated-2)
   --api-key-shopify: string # Shopify API Key
   --api-password: string # Shopify API Password
   --access-token-shopify: string # Access token authorizing the app to access resources on behalf of a user
-  --api-key: string # Neto API Key
+  --api-key-2: string # Neto API Key (disambiguated-2)
   --api-username: string # Neto User Name
   --encrypted-password: string # Volusion API Password
   --login: string # It's a Volusion account for which API is enabled
@@ -1465,11 +1487,11 @@ export def "cart-create-json create" [
 ]: nothing -> record<result: record<store_key: string>, return_code: int, return_message: string> {
   let auth = (build-auth $token ($auth_scheme | default "x-api-key"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "cart_id" $cart_id "scalar") (serialize-qp "store_url" $store_url "scalar") (serialize-qp "bridge_url" $bridge_url "scalar") (serialize-qp "store_root" $store_root "scalar") (serialize-qp "store_key" $store_key "scalar") (serialize-qp "shared_secret" $shared_secret "scalar") (serialize-qp "validate_version" $validate_version "scalar") (serialize-qp "verify" $verify "scalar") (serialize-qp "db_tables_prefix" $db_tables_prefix "scalar") (serialize-qp "ftp_host" $ftp_host "scalar") (serialize-qp "ftp_user" $ftp_user "scalar") (serialize-qp "ftp_password" $ftp_password "scalar") (serialize-qp "ftp_port" $ftp_port "scalar") (serialize-qp "ftp_store_dir" $ftp_store_dir "scalar") (serialize-qp "apiKey_3dcart" $api_key_3dcart "scalar") (serialize-qp "AdminAccount" $admin_account "scalar") (serialize-qp "ApiPath" $api_path "scalar") (serialize-qp "ApiKey" $api_key "scalar") (serialize-qp "client_id" $client_id "scalar") (serialize-qp "accessToken" $access_token "scalar") (serialize-qp "context" $context "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "apiKey_shopify" $api_key_shopify "scalar") (serialize-qp "apiPassword" $api_password "scalar") (serialize-qp "accessToken_shopify" $access_token_shopify "scalar") (serialize-qp "apiKey" $api_key "scalar") (serialize-qp "apiUsername" $api_username "scalar") (serialize-qp "EncryptedPassword" $encrypted_password "scalar") (serialize-qp "Login" $login "scalar") (serialize-qp "apiUser_adnsf" $api_user_adnsf "scalar") (serialize-qp "apiPass" $api_pass "scalar") (serialize-qp "accessKey_scelite" $access_key_scelite "scalar") (serialize-qp "apiKey_scelite" $api_key_scelite "scalar") (serialize-qp "apiSecretKey_scelite" $api_secret_key_scelite "scalar") (serialize-qp "privateKey" $private_key "scalar") (serialize-qp "appToken" $app_token "scalar") (serialize-qp "etsy_keystring" $etsy_keystring "scalar") (serialize-qp "etsy_shared_secret" $etsy_shared_secret "scalar") (serialize-qp "tokenSecret" $token_secret "scalar") (serialize-qp "etsy_client_id" $etsy_client_id "scalar") (serialize-qp "etsy_refresh_token" $etsy_refresh_token "scalar") (serialize-qp "ebay_client_id" $ebay_client_id "scalar") (serialize-qp "ebay_client_secret" $ebay_client_secret "scalar") (serialize-qp "ebay_runame" $ebay_runame "scalar") (serialize-qp "ebay_access_token" $ebay_access_token "scalar") (serialize-qp "ebay_refresh_token" $ebay_refresh_token "scalar") (serialize-qp "ebay_environment" $ebay_environment "scalar") (serialize-qp "ebay_site_id" $ebay_site_id "scalar") (serialize-qp "dw_client_id" $dw_client_id "scalar") (serialize-qp "dw_api_pass" $dw_api_pass "scalar") (serialize-qp "demandware_user_name" $demandware_user_name "scalar") (serialize-qp "demandware_user_password" $demandware_user_password "scalar") (serialize-qp "store_id" $store_id "scalar") (serialize-qp "seller_id" $seller_id "scalar") (serialize-qp "amazon_secret_key" $amazon_secret_key "scalar") (serialize-qp "amazon_access_key_id" $amazon_access_key_id "scalar") (serialize-qp "marketplaces_ids" $marketplaces_ids "scalar") (serialize-qp "environment" $environment "scalar") (serialize-qp "hybris_client_id" $hybris_client_id "scalar") (serialize-qp "hybris_client_secret" $hybris_client_secret "scalar") (serialize-qp "hybris_username" $hybris_username "scalar") (serialize-qp "hybris_password" $hybris_password "scalar") (serialize-qp "hybris_websites" $hybris_websites "csv") (serialize-qp "walmart_client_id" $walmart_client_id "scalar") (serialize-qp "walmart_client_secret" $walmart_client_secret "scalar") (serialize-qp "walmart_environment" $walmart_environment "scalar") (serialize-qp "walmart_channel_type" $walmart_channel_type "scalar") (serialize-qp "lightspeed_api_key" $lightspeed_api_key "scalar") (serialize-qp "lightspeed_api_secret" $lightspeed_api_secret "scalar") (serialize-qp "shopware_access_key" $shopware_access_key "scalar") (serialize-qp "shopware_api_key" $shopware_api_key "scalar") (serialize-qp "shopware_api_secret" $shopware_api_secret "scalar") (serialize-qp "commercehq_api_key" $commercehq_api_key "scalar") (serialize-qp "commercehq_api_password" $commercehq_api_password "scalar") (serialize-qp "3dcart_private_key" $3dcart_private_key "scalar") (serialize-qp "3dcart_access_token" $3dcart_access_token "scalar") (serialize-qp "wc_consumer_key" $wc_consumer_key "scalar") (serialize-qp "wc_consumer_secret" $wc_consumer_secret "scalar") (serialize-qp "magento_consumer_key" $magento_consumer_key "scalar") (serialize-qp "magento_consumer_secret" $magento_consumer_secret "scalar") (serialize-qp "magento_access_token" $magento_access_token "scalar") (serialize-qp "magento_token_secret" $magento_token_secret "scalar") (serialize-qp "prestashop_webservice_key" $prestashop_webservice_key "scalar") (serialize-qp "wix_app_id" $wix_app_id "scalar") (serialize-qp "wix_app_secret_key" $wix_app_secret_key "scalar") (serialize-qp "wix_refresh_token" $wix_refresh_token "scalar") (serialize-qp "mercado_libre_app_id" $mercado_libre_app_id "scalar") (serialize-qp "mercado_libre_app_secret_key" $mercado_libre_app_secret_key "scalar") (serialize-qp "mercado_libre_refresh_token" $mercado_libre_refresh_token "scalar") (serialize-qp "zid_client_id" $zid_client_id "scalar") (serialize-qp "zid_client_secret" $zid_client_secret "scalar") (serialize-qp "zid_access_token" $zid_access_token "scalar") (serialize-qp "zid_authorization" $zid_authorization "scalar") (serialize-qp "zid_refresh_token" $zid_refresh_token "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "cart_id" $cart_id "scalar") (serialize-qp "store_url" $store_url "scalar") (serialize-qp "bridge_url" $bridge_url "scalar") (serialize-qp "store_root" $store_root "scalar") (serialize-qp "store_key" $store_key "scalar") (serialize-qp "shared_secret" $shared_secret "scalar") (serialize-qp "validate_version" $validate_version "scalar") (serialize-qp "verify" $verify "scalar") (serialize-qp "db_tables_prefix" $db_tables_prefix "scalar") (serialize-qp "ftp_host" $ftp_host "scalar") (serialize-qp "ftp_user" $ftp_user "scalar") (serialize-qp "ftp_password" $ftp_password "scalar") (serialize-qp "ftp_port" $ftp_port "scalar") (serialize-qp "ftp_store_dir" $ftp_store_dir "scalar") (serialize-qp "apiKey_3dcart" $api_key_3dcart "scalar") (serialize-qp "AdminAccount" $admin_account "scalar") (serialize-qp "ApiPath" $api_path "scalar") (serialize-qp "ApiKey" $api_key "scalar") (serialize-qp "client_id" $client_id "scalar") (serialize-qp "accessToken" $access_token "scalar") (serialize-qp "context" $context "scalar") (serialize-qp "access_token" $access_token_2 "scalar") (serialize-qp "apiKey_shopify" $api_key_shopify "scalar") (serialize-qp "apiPassword" $api_password "scalar") (serialize-qp "accessToken_shopify" $access_token_shopify "scalar") (serialize-qp "apiKey" $api_key_2 "scalar") (serialize-qp "apiUsername" $api_username "scalar") (serialize-qp "EncryptedPassword" $encrypted_password "scalar") (serialize-qp "Login" $login "scalar") (serialize-qp "apiUser_adnsf" $api_user_adnsf "scalar") (serialize-qp "apiPass" $api_pass "scalar") (serialize-qp "accessKey_scelite" $access_key_scelite "scalar") (serialize-qp "apiKey_scelite" $api_key_scelite "scalar") (serialize-qp "apiSecretKey_scelite" $api_secret_key_scelite "scalar") (serialize-qp "privateKey" $private_key "scalar") (serialize-qp "appToken" $app_token "scalar") (serialize-qp "etsy_keystring" $etsy_keystring "scalar") (serialize-qp "etsy_shared_secret" $etsy_shared_secret "scalar") (serialize-qp "tokenSecret" $token_secret "scalar") (serialize-qp "etsy_client_id" $etsy_client_id "scalar") (serialize-qp "etsy_refresh_token" $etsy_refresh_token "scalar") (serialize-qp "ebay_client_id" $ebay_client_id "scalar") (serialize-qp "ebay_client_secret" $ebay_client_secret "scalar") (serialize-qp "ebay_runame" $ebay_runame "scalar") (serialize-qp "ebay_access_token" $ebay_access_token "scalar") (serialize-qp "ebay_refresh_token" $ebay_refresh_token "scalar") (serialize-qp "ebay_environment" $ebay_environment "scalar") (serialize-qp "ebay_site_id" $ebay_site_id "scalar") (serialize-qp "dw_client_id" $dw_client_id "scalar") (serialize-qp "dw_api_pass" $dw_api_pass "scalar") (serialize-qp "demandware_user_name" $demandware_user_name "scalar") (serialize-qp "demandware_user_password" $demandware_user_password "scalar") (serialize-qp "store_id" $store_id "scalar") (serialize-qp "seller_id" $seller_id "scalar") (serialize-qp "amazon_secret_key" $amazon_secret_key "scalar") (serialize-qp "amazon_access_key_id" $amazon_access_key_id "scalar") (serialize-qp "marketplaces_ids" $marketplaces_ids "scalar") (serialize-qp "environment" $environment "scalar") (serialize-qp "hybris_client_id" $hybris_client_id "scalar") (serialize-qp "hybris_client_secret" $hybris_client_secret "scalar") (serialize-qp "hybris_username" $hybris_username "scalar") (serialize-qp "hybris_password" $hybris_password "scalar") (serialize-qp "hybris_websites" $hybris_websites "csv") (serialize-qp "walmart_client_id" $walmart_client_id "scalar") (serialize-qp "walmart_client_secret" $walmart_client_secret "scalar") (serialize-qp "walmart_environment" $walmart_environment "scalar") (serialize-qp "walmart_channel_type" $walmart_channel_type "scalar") (serialize-qp "lightspeed_api_key" $lightspeed_api_key "scalar") (serialize-qp "lightspeed_api_secret" $lightspeed_api_secret "scalar") (serialize-qp "shopware_access_key" $shopware_access_key "scalar") (serialize-qp "shopware_api_key" $shopware_api_key "scalar") (serialize-qp "shopware_api_secret" $shopware_api_secret "scalar") (serialize-qp "commercehq_api_key" $commercehq_api_key "scalar") (serialize-qp "commercehq_api_password" $commercehq_api_password "scalar") (serialize-qp "3dcart_private_key" $3dcart_private_key "scalar") (serialize-qp "3dcart_access_token" $3dcart_access_token "scalar") (serialize-qp "wc_consumer_key" $wc_consumer_key "scalar") (serialize-qp "wc_consumer_secret" $wc_consumer_secret "scalar") (serialize-qp "magento_consumer_key" $magento_consumer_key "scalar") (serialize-qp "magento_consumer_secret" $magento_consumer_secret "scalar") (serialize-qp "magento_access_token" $magento_access_token "scalar") (serialize-qp "magento_token_secret" $magento_token_secret "scalar") (serialize-qp "prestashop_webservice_key" $prestashop_webservice_key "scalar") (serialize-qp "wix_app_id" $wix_app_id "scalar") (serialize-qp "wix_app_secret_key" $wix_app_secret_key "scalar") (serialize-qp "wix_refresh_token" $wix_refresh_token "scalar") (serialize-qp "mercado_libre_app_id" $mercado_libre_app_id "scalar") (serialize-qp "mercado_libre_app_secret_key" $mercado_libre_app_secret_key "scalar") (serialize-qp "mercado_libre_refresh_token" $mercado_libre_refresh_token "scalar") (serialize-qp "zid_client_id" $zid_client_id "scalar") (serialize-qp "zid_client_secret" $zid_client_secret "scalar") (serialize-qp "zid_access_token" $zid_access_token "scalar") (serialize-qp "zid_authorization" $zid_authorization "scalar") (serialize-qp "zid_refresh_token" $zid_refresh_token "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/cart.create.json" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"cart_id": $cart_id, "store_url": $store_url, "bridge_url": $bridge_url, "store_root": $store_root, "store_key": $store_key, "shared_secret": $shared_secret, "validate_version": $validate_version, "verify": $verify, "db_tables_prefix": $db_tables_prefix, "ftp_host": $ftp_host, "ftp_user": $ftp_user, "ftp_password": $ftp_password, "ftp_port": $ftp_port, "ftp_store_dir": $ftp_store_dir, "apiKey_3dcart": $api_key_3dcart, "AdminAccount": $admin_account, "ApiPath": $api_path, "ApiKey": $api_key, "client_id": $client_id, "accessToken": $access_token, "context": $context, "access_token": $access_token_2, "apiKey_shopify": $api_key_shopify, "apiPassword": $api_password, "accessToken_shopify": $access_token_shopify, "apiKey": $api_key_2, "apiUsername": $api_username, "EncryptedPassword": $encrypted_password, "Login": $login, "apiUser_adnsf": $api_user_adnsf, "apiPass": $api_pass, "accessKey_scelite": $access_key_scelite, "apiKey_scelite": $api_key_scelite, "apiSecretKey_scelite": $api_secret_key_scelite, "privateKey": $private_key, "appToken": $app_token, "etsy_keystring": $etsy_keystring, "etsy_shared_secret": $etsy_shared_secret, "tokenSecret": $token_secret, "etsy_client_id": $etsy_client_id, "etsy_refresh_token": $etsy_refresh_token, "ebay_client_id": $ebay_client_id, "ebay_client_secret": $ebay_client_secret, "ebay_runame": $ebay_runame, "ebay_access_token": $ebay_access_token, "ebay_refresh_token": $ebay_refresh_token, "ebay_environment": $ebay_environment, "ebay_site_id": $ebay_site_id, "dw_client_id": $dw_client_id, "dw_api_pass": $dw_api_pass, "demandware_user_name": $demandware_user_name, "demandware_user_password": $demandware_user_password, "store_id": $store_id, "seller_id": $seller_id, "amazon_secret_key": $amazon_secret_key, "amazon_access_key_id": $amazon_access_key_id, "marketplaces_ids": $marketplaces_ids, "environment": $environment, "hybris_client_id": $hybris_client_id, "hybris_client_secret": $hybris_client_secret, "hybris_username": $hybris_username, "hybris_password": $hybris_password, "hybris_websites": $hybris_websites, "walmart_client_id": $walmart_client_id, "walmart_client_secret": $walmart_client_secret, "walmart_environment": $walmart_environment, "walmart_channel_type": $walmart_channel_type, "lightspeed_api_key": $lightspeed_api_key, "lightspeed_api_secret": $lightspeed_api_secret, "shopware_access_key": $shopware_access_key, "shopware_api_key": $shopware_api_key, "shopware_api_secret": $shopware_api_secret, "commercehq_api_key": $commercehq_api_key, "commercehq_api_password": $commercehq_api_password, "3dcart_private_key": $3dcart_private_key, "3dcart_access_token": $3dcart_access_token, "wc_consumer_key": $wc_consumer_key, "wc_consumer_secret": $wc_consumer_secret, "magento_consumer_key": $magento_consumer_key, "magento_consumer_secret": $magento_consumer_secret, "magento_access_token": $magento_access_token, "magento_token_secret": $magento_token_secret, "prestashop_webservice_key": $prestashop_webservice_key, "wix_app_id": $wix_app_id, "wix_app_secret_key": $wix_app_secret_key, "wix_refresh_token": $wix_refresh_token, "mercado_libre_app_id": $mercado_libre_app_id, "mercado_libre_app_secret_key": $mercado_libre_app_secret_key, "mercado_libre_refresh_token": $mercado_libre_refresh_token, "zid_client_id": $zid_client_id, "zid_client_secret": $zid_client_secret, "zid_access_token": $zid_access_token, "zid_authorization": $zid_authorization, "zid_refresh_token": $zid_refresh_token} | compact), body: null}
 }
 
 # Remove store from API2Cart
@@ -1494,7 +1516,7 @@ export def "cart-delete-json delete" [
   let full_url = (build-url $base "/cart.delete.json" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"delete_bridge": $delete_bridge} | compact), body: null}
 }
 
 # Disconnect with the store and clear store session data.
@@ -1521,7 +1543,7 @@ export def "cart-disconnect-json get" [
   let full_url = (build-url $base "/cart.disconnect.json" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"delete_bridge": $delete_bridge} | compact), body: null}
 }
 
 # Create new gift card
@@ -1549,7 +1571,7 @@ export def "cart-giftcard-add-json create" [
   let full_url = (build-url $base "/cart.giftcard.add.json" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"amount": $amount, "code": $code, "owner_email": $owner_email, "recipient_email": $recipient_email} | compact), body: null}
 }
 
 # Get gift cards count.
@@ -1574,7 +1596,7 @@ export def "cart-giftcard-count-json get" [
   let full_url = (build-url $base "/cart.giftcard.count.json" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"store_id": $store_id} | compact), body: null}
 }
 
 # Get gift cards list.
@@ -1605,7 +1627,7 @@ export def "cart-giftcard-list-json list" [
   let full_url = (build-url $base "/cart.giftcard.list.json" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"page_cursor": $page_cursor, "start": $start, "count": $count, "store_id": $store_id, "params": $params, "response_fields": $response_fields, "exclude": $exclude} | compact), body: null}
 }
 
 # Get cart information
@@ -1633,7 +1655,7 @@ export def "cart-info-json get" [
   let full_url = (build-url $base "/cart.info.json" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"params": $params, "response_fields": $response_fields, "exclude": $exclude, "store_id": $store_id} | compact), body: null}
 }
 
 # Get list of supported carts
@@ -1658,7 +1680,7 @@ export def "cart-list-json list" [
   let full_url = (build-url $base "/cart.list.json")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
 }
 
 # Get entity meta data
@@ -1691,7 +1713,7 @@ export def "cart-meta-data-list-json list" [
   let full_url = (build-url $base "/cart.meta_data.list.json" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"entity_id": $entity_id, "entity": $entity, "store_id": $store_id, "key": $key, "count": $count, "page_cursor": $page_cursor, "params": $params, "response_fields": $response_fields, "exclude": $exclude} | compact), body: null}
 }
 
 # Set meta data for a specific entity
@@ -1721,7 +1743,7 @@ export def "cart-meta-data-set-json update" [
   let full_url = (build-url $base "/cart.meta_data.set.json" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"entity_id": $entity_id, "entity": $entity, "store_id": $store_id, "key": $key, "value": $value, "namespace": $namespace} | compact), body: null}
 }
 
 # Unset meta data for a specific entity
@@ -1750,7 +1772,7 @@ export def "cart-meta-data-unset-json delete" [
   let full_url = (build-url $base "/cart.meta_data.unset.json" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"entity_id": $entity_id, "entity": $entity, "store_id": $store_id, "key": $key, "id": $id} | compact), body: null}
 }
 
 # Get list of cart methods
@@ -1773,7 +1795,7 @@ export def "cart-methods-json get" [
   let full_url = (build-url $base "/cart.methods.json")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
 }
 
 # Get list of installed plugins
@@ -1801,7 +1823,7 @@ export def "cart-plugin-list-json list" [
   let full_url = (build-url $base "/cart.plugin.list.json" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"store_key": $store_key, "store_id": $store_id, "start": $start, "count": $count} | compact), body: null}
 }
 
 # Add new script to the storefront
@@ -1832,7 +1854,7 @@ export def "cart-script-add-json create" [
   let full_url = (build-url $base "/cart.script.add.json" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"name": $name, "description": $description, "html": $html, "src": $src, "load_method": $load_method, "scope": $scope, "store_id": $store_id} | compact), body: null}
 }
 
 # Remove script from the storefront
@@ -1858,7 +1880,7 @@ export def "cart-script-delete-json delete" [
   let full_url = (build-url $base "/cart.script.delete.json" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"id": $id, "store_id": $store_id} | compact), body: null}
 }
 
 # Get scripts installed to the storefront
@@ -1894,7 +1916,7 @@ export def "cart-script-list-json list" [
   let full_url = (build-url $base "/cart.script.list.json" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"page_cursor": $page_cursor, "start": $start, "count": $count, "created_from": $created_from, "created_to": $created_to, "modified_from": $modified_from, "modified_to": $modified_to, "script_ids": $script_ids, "store_id": $store_id, "params": $params, "response_fields": $response_fields, "exclude": $exclude} | compact), body: null}
 }
 
 # Get list of shipping zones
@@ -1924,7 +1946,7 @@ export def "cart-shipping-zones-list-json list" [
   let full_url = (build-url $base "/cart.shipping_zones.list.json" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"store_id": $store_id, "start": $start, "count": $count, "params": $params, "response_fields": $response_fields, "exclude": $exclude} | compact), body: null}
 }
 
 # Check store availability, bridge connection for the downloadable carts, identify DB prefix, validate API accesses for API carts.
@@ -1949,7 +1971,7 @@ export def "cart-validate-json validate" [
   let full_url = (build-url $base "/cart.validate.json" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"validate_version": $validate_version} | compact), body: null}
 }
 
 # Add new category in store
@@ -1987,7 +2009,7 @@ export def "category-add-json create" [
   let full_url = (build-url $base "/category.add.json" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"name": $name, "parent_id": $parent_id, "stores_ids": $stores_ids, "store_id": $store_id, "lang_id": $lang_id, "avail": $avail, "sort_order": $sort_order, "created_time": $created_time, "modified_time": $modified_time, "description": $description, "meta_title": $meta_title, "meta_description": $meta_description, "meta_keywords": $meta_keywords, "seo_url": $seo_url} | compact), body: null}
 }
 
 # Assign category to product
@@ -2014,7 +2036,7 @@ export def "category-assign-json assign" [
   let full_url = (build-url $base "/category.assign.json" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"product_id": $product_id, "category_id": $category_id, "store_id": $store_id} | compact), body: null}
 }
 
 # Count categories in store.
@@ -2046,7 +2068,7 @@ export def "category-count-json get" [
   let full_url = (build-url $base "/category.count.json" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"parent_id": $parent_id, "store_id": $store_id, "lang_id": $lang_id, "created_from": $created_from, "created_to": $created_to, "modified_from": $modified_from, "modified_to": $modified_to, "avail": $avail} | compact), body: null}
 }
 
 # Delete category in store
@@ -2071,7 +2093,7 @@ export def "category-delete-json delete" [
   let full_url = (build-url $base "/category.delete.json" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"id": $id} | compact), body: null}
 }
 
 # Search category in store. "Laptop" is specified here by default.
@@ -2100,7 +2122,7 @@ export def "category-find-json find" [
   let full_url = (build-url $base "/category.find.json" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"find_value": $find_value, "find_where": $find_where, "find_params": $find_params, "store_id": $store_id, "lang_id": $lang_id} | compact), body: null}
 }
 
 # Add image to category
@@ -2132,7 +2154,7 @@ export def "category-image-add-json create" [
   let full_url = (build-url $base "/category.image.add.json" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"category_id": $category_id, "image_name": $image_name, "url": $url, "label": $label, "mime": $mime, "type": $type, "position": $position, "store_id": $store_id} | compact), body: null}
 }
 
 # Delete image
@@ -2159,7 +2181,7 @@ export def "category-image-delete-json delete" [
   let full_url = (build-url $base "/category.image.delete.json" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"category_id": $category_id, "image_id": $image_id, "store_id": $store_id} | compact), body: null}
 }
 
 # Get category info about category ID*** or specify other category ID.
@@ -2189,7 +2211,7 @@ export def "category-info-json get" [
   let full_url = (build-url $base "/category.info.json" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"id": $id, "params": $params, "response_fields": $response_fields, "exclude": $exclude, "store_id": $store_id, "lang_id": $lang_id} | compact), body: null}
 }
 
 # Get list of categories from store.
@@ -2227,7 +2249,7 @@ export def "category-list-json list" [
   let full_url = (build-url $base "/category.list.json" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"start": $start, "count": $count, "page_cursor": $page_cursor, "parent_id": $parent_id, "params": $params, "response_fields": $response_fields, "exclude": $exclude, "store_id": $store_id, "lang_id": $lang_id, "created_from": $created_from, "created_to": $created_to, "modified_from": $modified_from, "modified_to": $modified_to, "avail": $avail} | compact), body: null}
 }
 
 # Unassign category to product
@@ -2254,7 +2276,7 @@ export def "category-unassign-json create" [
   let full_url = (build-url $base "/category.unassign.json" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"category_id": $category_id, "product_id": $product_id, "store_id": $store_id} | compact), body: null}
 }
 
 # Update category in store
@@ -2292,7 +2314,7 @@ export def "category-update-json update" [
   let full_url = (build-url $base "/category.update.json" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"id": $id, "name": $name, "parent_id": $parent_id, "stores_ids": $stores_ids, "avail": $avail, "sort_order": $sort_order, "modified_time": $modified_time, "description": $description, "meta_title": $meta_title, "meta_description": $meta_description, "meta_keywords": $meta_keywords, "seo_url": $seo_url, "lang_id": $lang_id, "store_id": $store_id} | compact), body: null}
 }
 
 # Add customer into store.
@@ -2338,7 +2360,7 @@ export def "customer-add-json create" [
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: {}, body: $req_body}
 }
 
 # Get attributes for specific customer
@@ -2370,7 +2392,7 @@ export def "customer-attribute-list-json list" [
   let full_url = (build-url $base "/customer.attribute.list.json" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"count": $count, "page_cursor": $page_cursor, "customer_id": $customer_id, "store_id": $store_id, "lang_id": $lang_id, "params": $params, "exclude": $exclude, "response_fields": $response_fields} | compact), body: null}
 }
 
 # Get number of customers from store.
@@ -2402,7 +2424,7 @@ export def "customer-count-json get" [
   let full_url = (build-url $base "/customer.count.json" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"group_id": $group_id, "created_from": $created_from, "created_to": $created_to, "modified_from": $modified_from, "modified_to": $modified_to, "store_id": $store_id, "customer_list_id": $customer_list_id, "avail": $avail} | compact), body: null}
 }
 
 # Find customers in store.
@@ -2430,7 +2452,7 @@ export def "customer-find-json find" [
   let full_url = (build-url $base "/customer.find.json" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"find_value": $find_value, "find_where": $find_where, "find_params": $find_params, "store_id": $store_id} | compact), body: null}
 }
 
 # Create customer group.
@@ -2457,7 +2479,7 @@ export def "customer-group-add-json create" [
   let full_url = (build-url $base "/customer.group.add.json" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"name": $name, "store_id": $store_id, "stores_ids": $stores_ids} | compact), body: null}
 }
 
 # Get list of customers groups.
@@ -2490,7 +2512,7 @@ export def "customer-group-list-json list" [
   let full_url = (build-url $base "/customer.group.list.json" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"page_cursor": $page_cursor, "start": $start, "count": $count, "store_id": $store_id, "lang_id": $lang_id, "group_ids": $group_ids, "params": $params, "exclude": $exclude, "response_fields": $response_fields} | compact), body: null}
 }
 
 # Get customers' details from store.
@@ -2519,7 +2541,7 @@ export def "customer-info-json get" [
   let full_url = (build-url $base "/customer.info.json" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"id": $id, "params": $params, "response_fields": $response_fields, "exclude": $exclude, "store_id": $store_id} | compact), body: null}
 }
 
 # Get list of customers from store.
@@ -2557,7 +2579,7 @@ export def "customer-list-json list" [
   let full_url = (build-url $base "/customer.list.json" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"page_cursor": $page_cursor, "start": $start, "count": $count, "created_from": $created_from, "created_to": $created_to, "modified_from": $modified_from, "modified_to": $modified_to, "params": $params, "response_fields": $response_fields, "exclude": $exclude, "group_id": $group_id, "store_id": $store_id, "customer_list_id": $customer_list_id, "avail": $avail} | compact), body: null}
 }
 
 # Update information of customer in store.
@@ -2599,7 +2621,7 @@ export def "customer-update-json update" [
   let full_url = (build-url $base "/customer.update.json" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"id": $id, "group_id": $group_id, "group_ids": $group_ids, "first_name": $first_name, "last_name": $last_name, "news_letter_subscription": $news_letter_subscription, "tags": $tags, "address_book_id_{x}": $address_book_id_x, "address_book_first_name_{x}": $address_book_first_name_x, "address_book_last_name_{x}": $address_book_last_name_x, "address_book_company_{x}": $address_book_company_x, "address_book_phone_{x}": $address_book_phone_x, "address_book_address1_{x}": $address_book_address1_x, "address_book_address2_{x}": $address_book_address2_x, "address_book_city_{x}": $address_book_city_x, "address_book_country_{x}": $address_book_country_x, "address_book_state_{x}": $address_book_state_x, "address_book_postcode_{x}": $address_book_postcode_x} | compact), body: null}
 }
 
 # Get list of orders that were left by customers before completing the order.
@@ -2637,7 +2659,7 @@ export def "order-abandoned-list-json list" [
   let full_url = (build-url $base "/order.abandoned.list.json" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"customer_id": $customer_id, "customer_email": $customer_email, "created_to": $created_to, "created_from": $created_from, "modified_to": $modified_to, "modified_from": $modified_from, "skip_empty_email": $skip_empty_email, "store_id": $store_id, "page_cursor": $page_cursor, "count": $count, "start": $start, "params": $params, "response_fields": $response_fields, "exclude": $exclude} | compact), body: null}
 }
 
 # Add a new order to the cart.
@@ -2731,7 +2753,7 @@ export def "order-add-json create" [
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: {}, body: $req_body}
 }
 
 # Count orders in store
@@ -2772,7 +2794,7 @@ export def "order-count-json get" [
   let full_url = (build-url $base "/order.count.json" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"customer_id": $customer_id, "customer_email": $customer_email, "order_status": $order_status, "order_status_ids": $order_status_ids, "created_to": $created_to, "created_from": $created_from, "modified_to": $modified_to, "modified_from": $modified_from, "store_id": $store_id, "ids": $ids, "order_ids": $order_ids, "ebay_order_status": $ebay_order_status, "financial_status": $financial_status, "fulfillment_status": $fulfillment_status, "shipping_method": $shipping_method, "delivery_method": $delivery_method, "ship_node_type": $ship_node_type} | compact), body: null}
 }
 
 # Retrieve list of financial statuses
@@ -2795,7 +2817,7 @@ export def "order-financial-status-list-json list" [
   let full_url = (build-url $base "/order.financial_status.list.json")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
 }
 
 # This method is deprecated and won't be supported in the future. Please use "order.list" instead.
@@ -2833,7 +2855,7 @@ export def "order-find-json find" [
   let full_url = (build-url $base "/order.find.json" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"customer_id": $customer_id, "customer_email": $customer_email, "order_status": $order_status, "start": $start, "count": $count, "params": $params, "exclude": $exclude, "created_to": $created_to, "created_from": $created_from, "modified_to": $modified_to, "modified_from": $modified_from, "financial_status": $financial_status} | compact), body: null}
 }
 
 # Retrieve list of fulfillment statuses
@@ -2856,7 +2878,7 @@ export def "order-fulfillment-status-list-json list" [
   let full_url = (build-url $base "/order.fulfillment_status.list.json")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
 }
 
 # Info about a specific order by ID
@@ -2887,7 +2909,7 @@ export def "order-info-json get" [
   let full_url = (build-url $base "/order.info.json" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"order_id": $order_id, "id": $id, "params": $params, "response_fields": $response_fields, "exclude": $exclude, "store_id": $store_id, "enable_cache": $enable_cache} | compact), body: null}
 }
 
 # Get list of orders from store.
@@ -2944,7 +2966,7 @@ export def "order-list-json list" [
   let full_url = (build-url $base "/order.list.json" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"customer_id": $customer_id, "customer_email": $customer_email, "phone": $phone, "order_status": $order_status, "order_status_ids": $order_status_ids, "start": $start, "count": $count, "page_cursor": $page_cursor, "sort_by": $sort_by, "sort_direction": $sort_direction, "params": $params, "response_fields": $response_fields, "exclude": $exclude, "created_to": $created_to, "created_from": $created_from, "modified_to": $modified_to, "modified_from": $modified_from, "store_id": $store_id, "ids": $ids, "order_ids": $order_ids, "ebay_order_status": $ebay_order_status, "basket_id": $basket_id, "financial_status": $financial_status, "fulfillment_status": $fulfillment_status, "shipping_method": $shipping_method, "skip_order_ids": $skip_order_ids, "since_id": $since_id, "is_deleted": $is_deleted, "shipping_country_iso3": $shipping_country_iso3, "enable_cache": $enable_cache, "delivery_method": $delivery_method, "ship_node_type": $ship_node_type, "currency_id": $currency_id} | compact), body: null}
 }
 
 # Retrieve list of order preestimated shipping methods
@@ -2983,7 +3005,7 @@ export def "order-preestimate-shipping-list-json list" [
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: {}, body: $req_body}
 }
 
 # Add a refund to the order.
@@ -3020,7 +3042,7 @@ export def "order-refund-add-json create" [
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: {}, body: $req_body}
 }
 
 # Add a shipment to the order.
@@ -3060,7 +3082,7 @@ export def "order-shipment-add-json create" [
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: {}, body: $req_body}
 }
 
 # Delete order's shipment.
@@ -3087,7 +3109,7 @@ export def "order-shipment-delete-json delete" [
   let full_url = (build-url $base "/order.shipment.delete.json" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"shipment_id": $shipment_id, "order_id": $order_id, "store_id": $store_id} | compact), body: null}
 }
 
 # Get information of shipment.
@@ -3118,7 +3140,7 @@ export def "order-shipment-info-json get" [
   let full_url = (build-url $base "/order.shipment.info.json" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"id": $id, "order_id": $order_id, "start": $start, "params": $params, "response_fields": $response_fields, "exclude": $exclude, "store_id": $store_id} | compact), body: null}
 }
 
 # Get list of shipments by orders.
@@ -3154,7 +3176,7 @@ export def "order-shipment-list-json list" [
   let full_url = (build-url $base "/order.shipment.list.json" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"order_id": $order_id, "page_cursor": $page_cursor, "start": $start, "count": $count, "params": $params, "response_fields": $response_fields, "exclude": $exclude, "created_from": $created_from, "created_to": $created_to, "modified_from": $modified_from, "modified_to": $modified_to, "store_id": $store_id} | compact), body: null}
 }
 
 # Add order shipment's tracking info.
@@ -3188,7 +3210,7 @@ export def "order-shipment-tracking-add-json create" [
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: {}, body: $req_body}
 }
 
 # Update order's shipment information.
@@ -3222,7 +3244,7 @@ export def "order-shipment-update-json update" [
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: {}, body: $req_body}
 }
 
 # Retrieve list of statuses
@@ -3247,7 +3269,7 @@ export def "order-status-list-json list" [
   let full_url = (build-url $base "/order.status.list.json" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"store_id": $store_id} | compact), body: null}
 }
 
 # Retrieve list of order transaction
@@ -3278,7 +3300,7 @@ export def "order-transaction-list-json list" [
   let full_url = (build-url $base "/order.transaction.list.json" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"count": $count, "order_ids": $order_ids, "store_id": $store_id, "params": $params, "response_fields": $response_fields, "exclude": $exclude, "page_cursor": $page_cursor} | compact), body: null}
 }
 
 # Update existing order.
@@ -3314,7 +3336,7 @@ export def "order-update-json update" [
   let full_url = (build-url $base "/order.update.json" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"order_id": $order_id, "store_id": $store_id, "order_status": $order_status, "comment": $comment, "admin_comment": $admin_comment, "admin_private_comment": $admin_private_comment, "date_modified": $date_modified, "date_finished": $date_finished, "financial_status": $financial_status, "fulfillment_status": $fulfillment_status, "order_payment_method": $order_payment_method, "send_notifications": $send_notifications} | compact), body: null}
 }
 
 # Add new product to store.
@@ -3424,7 +3446,7 @@ export def "product-add-json create" [
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: {}, body: $req_body}
 }
 
 # Get list of attributes and values.
@@ -3463,7 +3485,7 @@ export def "product-attribute-list-json list" [
   let full_url = (build-url $base "/product.attribute.list.json" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"product_id": $product_id, "attribute_id": $attribute_id, "variant_id": $variant_id, "page_cursor": $page_cursor, "start": $start, "count": $count, "attribute_group_id": $attribute_group_id, "set_name": $set_name, "lang_id": $lang_id, "store_id": $store_id, "sort_by": $sort_by, "sort_direction": $sort_direction, "params": $params, "response_fields": $response_fields, "exclude": $exclude} | compact), body: null}
 }
 
 # Set attribute value to product.
@@ -3495,7 +3517,7 @@ export def "product-attribute-value-set-json update" [
   let full_url = (build-url $base "/product.attribute.value.set.json" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"product_id": $product_id, "attribute_id": $attribute_id, "attribute_group_id": $attribute_group_id, "attribute_name": $attribute_name, "value": $value, "value_id": $value_id, "lang_id": $lang_id, "store_id": $store_id} | compact), body: null}
 }
 
 # Removes attribute value for a product.
@@ -3525,7 +3547,7 @@ export def "product-attribute-value-unset-json create" [
   let full_url = (build-url $base "/product.attribute.value.unset.json" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"product_id": $product_id, "attribute_id": $attribute_id, "store_id": $store_id, "include_default": $include_default, "reindex": $reindex, "clear_cache": $clear_cache} | compact), body: null}
 }
 
 # Get list of brands from your store.
@@ -3561,7 +3583,7 @@ export def "product-brand-list-json list" [
   let full_url = (build-url $base "/product.brand.list.json" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"start": $start, "count": $count, "params": $params, "brand_ids": $brand_ids, "exclude": $exclude, "store_id": $store_id, "lang_id": $lang_id, "created_from": $created_from, "created_to": $created_to, "modified_from": $modified_from, "modified_to": $modified_to, "response_fields": $response_fields} | compact), body: null}
 }
 
 # Search product child item (bundled item or configurable product variant) in store catalog.
@@ -3589,7 +3611,7 @@ export def "product-child-item-find-json find" [
   let full_url = (build-url $base "/product.child_item.find.json" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"find_value": $find_value, "find_where": $find_where, "find_params": $find_params, "store_id": $store_id} | compact), body: null}
 }
 
 # Get child for specific product.
@@ -3621,7 +3643,7 @@ export def "product-child-item-info-json get" [
   let full_url = (build-url $base "/product.child_item.info.json" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"params": $params, "response_fields": $response_fields, "exclude": $exclude, "product_id": $product_id, "id": $id, "store_id": $store_id, "lang_id": $lang_id, "currency_id": $currency_id} | compact), body: null}
 }
 
 # Get child items list of specific product(s).
@@ -3663,7 +3685,7 @@ export def "product-child-item-list-json list" [
   let full_url = (build-url $base "/product.child_item.list.json" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"page_cursor": $page_cursor, "start": $start, "count": $count, "params": $params, "response_fields": $response_fields, "exclude": $exclude, "created_from": $created_from, "created_to": $created_to, "modified_from": $modified_from, "modified_to": $modified_to, "product_id": $product_id, "product_ids": $product_ids, "store_id": $store_id, "lang_id": $lang_id, "currency_id": $currency_id, "avail_sale": $avail_sale, "report_request_id": $report_request_id, "disable_report_cache": $disable_report_cache} | compact), body: null}
 }
 
 # Count products in store.
@@ -3703,7 +3725,7 @@ export def "product-count-json get" [
   let full_url = (build-url $base "/product.count.json" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"category_id": $category_id, "created_from": $created_from, "created_to": $created_to, "modified_from": $modified_from, "modified_to": $modified_to, "avail_view": $avail_view, "avail_sale": $avail_sale, "store_id": $store_id, "lang_id": $lang_id, "product_ids": $product_ids, "report_request_id": $report_request_id, "disable_report_cache": $disable_report_cache, "brand_name": $brand_name, "product_attributes": $product_attributes, "status": $status, "type": $type} | compact), body: null}
 }
 
 # Add currency and/or set default in store
@@ -3734,7 +3756,7 @@ export def "product-currency-add-json create" [
   let full_url = (build-url $base "/product.currency.add.json" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"iso3": $iso3, "rate": $rate, "name": $name, "avail": $avail, "symbol_left": $symbol_left, "symbol_right": $symbol_right, "default": $default} | compact), body: null}
 }
 
 # Get list of currencies
@@ -3766,7 +3788,7 @@ export def "product-currency-list-json list" [
   let full_url = (build-url $base "/product.currency.list.json" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"start": $start, "count": $count, "params": $params, "page_cursor": $page_cursor, "exclude": $exclude, "response_fields": $response_fields, "default": $default, "avail": $avail} | compact), body: null}
 }
 
 # Product delete
@@ -3791,7 +3813,7 @@ export def "product-delete-json delete" [
   let full_url = (build-url $base "/product.delete.json" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"id": $id} | compact), body: null}
 }
 
 # Retrieve all available fields for product item in store.
@@ -3814,7 +3836,7 @@ export def "product-fields-json get" [
   let full_url = (build-url $base "/product.fields.json")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
 }
 
 # Search product in store catalog. "Apple" is specified here by default.
@@ -3844,7 +3866,7 @@ export def "product-find-json find" [
   let full_url = (build-url $base "/product.find.json" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"find_value": $find_value, "find_where": $find_where, "find_params": $find_params, "find_what": $find_what, "lang_id": $lang_id, "store_id": $store_id} | compact), body: null}
 }
 
 # Add image to product
@@ -3882,7 +3904,7 @@ export def "product-image-add-json create" [
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: {}, body: $req_body}
 }
 
 # Delete image
@@ -3909,7 +3931,7 @@ export def "product-image-delete-json delete" [
   let full_url = (build-url $base "/product.image.delete.json" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"product_id": $product_id, "id": $id, "store_id": $store_id} | compact), body: null}
 }
 
 # Update details of image
@@ -3942,7 +3964,7 @@ export def "product-image-update-json update" [
   let full_url = (build-url $base "/product.image.update.json" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"product_id": $product_id, "image_name": $image_name, "type": $type, "label": $label, "position": $position, "id": $id, "store_id": $store_id, "lang_id": $lang_id, "hidden": $hidden} | compact), body: null}
 }
 
 # Get product info about product ID *** or specify other product ID.
@@ -3975,7 +3997,7 @@ export def "product-info-json get" [
   let full_url = (build-url $base "/product.info.json" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"id": $id, "params": $params, "response_fields": $response_fields, "exclude": $exclude, "store_id": $store_id, "lang_id": $lang_id, "currency_id": $currency_id, "report_request_id": $report_request_id, "disable_report_cache": $disable_report_cache} | compact), body: null}
 }
 
 # Get list of products from your store. Returns 10 products by default.
@@ -4027,7 +4049,7 @@ export def "product-list-json list" [
   let full_url = (build-url $base "/product.list.json" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"page_cursor": $page_cursor, "start": $start, "count": $count, "params": $params, "response_fields": $response_fields, "exclude": $exclude, "category_id": $category_id, "created_from": $created_from, "created_to": $created_to, "modified_from": $modified_from, "modified_to": $modified_to, "avail_view": $avail_view, "avail_sale": $avail_sale, "store_id": $store_id, "lang_id": $lang_id, "currency_id": $currency_id, "product_ids": $product_ids, "since_id": $since_id, "report_request_id": $report_request_id, "disable_report_cache": $disable_report_cache, "sort_by": $sort_by, "sort_direction": $sort_direction, "sku": $sku, "disable_cache": $disable_cache, "brand_name": $brand_name, "product_attributes": $product_attributes, "status": $status, "type": $type} | compact), body: null}
 }
 
 # Add manufacturer to store and assign to product
@@ -4053,7 +4075,7 @@ export def "product-manufacturer-add-json create" [
   let full_url = (build-url $base "/product.manufacturer.add.json" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"product_id": $product_id, "manufacturer": $manufacturer} | compact), body: null}
 }
 
 # Add product option from store.
@@ -4087,7 +4109,7 @@ export def "product-option-add-json create" [
   let full_url = (build-url $base "/product.option.add.json" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"name": $name, "type": $type, "product_id": $product_id, "default_option_value": $default_option_value, "option_values": $option_values, "description": $description, "avail": $avail, "sort_order": $sort_order, "required": $required, "clear_cache": $clear_cache} | compact), body: null}
 }
 
 # Assign option from product.
@@ -4117,7 +4139,7 @@ export def "product-option-assign-json assign" [
   let full_url = (build-url $base "/product.option.assign.json" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"product_id": $product_id, "option_id": $option_id, "required": $required, "sort_order": $sort_order, "option_values": $option_values, "clear_cache": $clear_cache} | compact), body: null}
 }
 
 # Get list of options.
@@ -4149,7 +4171,7 @@ export def "product-option-list-json list" [
   let full_url = (build-url $base "/product.option.list.json" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"start": $start, "count": $count, "params": $params, "exclude": $exclude, "response_fields": $response_fields, "product_id": $product_id, "lang_id": $lang_id, "store_id": $store_id} | compact), body: null}
 }
 
 # Add product option item from option.
@@ -4178,7 +4200,7 @@ export def "product-option-value-add-json create" [
   let full_url = (build-url $base "/product.option.value.add.json" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"product_id": $product_id, "option_id": $option_id, "option_value": $option_value, "sort_order": $sort_order, "clear_cache": $clear_cache} | compact), body: null}
 }
 
 # Assign product option item from product.
@@ -4205,7 +4227,7 @@ export def "product-option-value-assign-json assign" [
   let full_url = (build-url $base "/product.option.value.assign.json" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"product_option_id": $product_option_id, "option_value_id": $option_value_id, "clear_cache": $clear_cache} | compact), body: null}
 }
 
 # Update product option item from option.
@@ -4236,7 +4258,7 @@ export def "product-option-value-update-json update" [
   let full_url = (build-url $base "/product.option.value.update.json" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"product_id": $product_id, "option_id": $option_id, "option_value_id": $option_value_id, "option_value": $option_value, "price": $price, "quantity": $quantity, "clear_cache": $clear_cache} | compact), body: null}
 }
 
 # Add some prices to the product.
@@ -4265,7 +4287,7 @@ export def "product-price-add-json create" [
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: {}, body: $req_body}
 }
 
 # Delete some prices of the product
@@ -4291,7 +4313,7 @@ export def "product-price-delete-json delete" [
   let full_url = (build-url $base "/product.price.delete.json" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"product_id": $product_id, "group_prices": $group_prices} | compact), body: null}
 }
 
 # Update some prices of the product.
@@ -4320,7 +4342,7 @@ export def "product-price-update-json update" [
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: {}, body: $req_body}
 }
 
 # Get reviews of a specific product.
@@ -4354,7 +4376,7 @@ export def "product-review-list-json list" [
   let full_url = (build-url $base "/product.review.list.json" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"start": $start, "page_cursor": $page_cursor, "count": $count, "product_id": $product_id, "ids": $ids, "store_id": $store_id, "status": $status, "params": $params, "exclude": $exclude, "response_fields": $response_fields} | compact), body: null}
 }
 
 # Assign product to store
@@ -4380,7 +4402,7 @@ export def "product-store-assign-json assign" [
   let full_url = (build-url $base "/product.store.assign.json" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"product_id": $product_id, "store_id": $store_id} | compact), body: null}
 }
 
 # Add tax class and tax rate to store and assign to product.
@@ -4410,7 +4432,7 @@ export def "product-tax-add-json create" [
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: {}, body: $req_body}
 }
 
 # Update price and quantity for a specific product
@@ -4482,7 +4504,7 @@ export def "product-update-json update" [
   let full_url = (build-url $base "/product.update.json" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"id": $id, "model": $model, "old_price": $old_price, "price": $price, "special_price": $special_price, "sprice_create": $sprice_create, "sprice_expire": $sprice_expire, "cost_price": $cost_price, "retail_price": $retail_price, "quantity": $quantity, "weight": $weight, "increase_quantity": $increase_quantity, "reduce_quantity": $reduce_quantity, "warehouse_id": $warehouse_id, "reserve_quantity": $reserve_quantity, "manage_stock": $manage_stock, "backorder_status": $backorder_status, "name": $name, "sku": $sku, "visible": $visible, "manufacturer": $manufacturer, "manufacturer_id": $manufacturer_id, "categories_ids": $categories_ids, "description": $description, "short_description": $short_description, "meta_title": $meta_title, "meta_keywords": $meta_keywords, "meta_description": $meta_description, "store_id": $store_id, "lang_id": $lang_id, "in_stock": $in_stock, "status": $status, "seo_url": $seo_url, "report_request_id": $report_request_id, "disable_report_cache": $disable_report_cache, "reindex": $reindex, "tags": $tags, "clear_cache": $clear_cache, "gtin": $gtin, "taxable": $taxable, "product_class": $product_class, "height": $height, "length": $length, "width": $width, "harmonized_system_code": $harmonized_system_code, "country_of_origin": $country_of_origin, "search_keywords": $search_keywords, "barcode": $barcode} | compact), body: null}
 }
 
 # Add variant to product.
@@ -4546,7 +4568,7 @@ export def "product-variant-add-json create" [
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: {}, body: $req_body}
 }
 
 # Get count variants.
@@ -4577,7 +4599,7 @@ export def "product-variant-count-json get" [
   let full_url = (build-url $base "/product.variant.count.json" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"created_from": $created_from, "created_to": $created_to, "modified_from": $modified_from, "modified_to": $modified_to, "category_id": $category_id, "product_id": $product_id, "store_id": $store_id} | compact), body: null}
 }
 
 # Delete variant.
@@ -4603,7 +4625,7 @@ export def "product-variant-delete-json delete" [
   let full_url = (build-url $base "/product.variant.delete.json" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"id": $id, "product_id": $product_id} | compact), body: null}
 }
 
 # Add image to product
@@ -4640,7 +4662,7 @@ export def "product-variant-image-add-json create" [
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: {}, body: $req_body}
 }
 
 # Delete image to product
@@ -4668,7 +4690,7 @@ export def "product-variant-image-delete-json delete" [
   let full_url = (build-url $base "/product.variant.image.delete.json" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"product_id": $product_id, "product_variant_id": $product_variant_id, "id": $id, "store_id": $store_id} | compact), body: null}
 }
 
 # Get variant info.
@@ -4696,7 +4718,7 @@ export def "product-variant-info-json get" [
   let full_url = (build-url $base "/product.variant.info.json" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"params": $params, "exclude": $exclude, "id": $id, "store_id": $store_id} | compact), body: null}
 }
 
 # Get list variants.
@@ -4731,7 +4753,7 @@ export def "product-variant-list-json list" [
   let full_url = (build-url $base "/product.variant.list.json" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"start": $start, "count": $count, "params": $params, "exclude": $exclude, "created_from": $created_from, "created_to": $created_to, "modified_from": $modified_from, "modified_to": $modified_to, "category_id": $category_id, "product_id": $product_id, "store_id": $store_id} | compact), body: null}
 }
 
 # Add some prices to the product variant.
@@ -4760,7 +4782,7 @@ export def "product-variant-price-add-json create" [
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: {}, body: $req_body}
 }
 
 # Delete some prices of the product variant.
@@ -4786,7 +4808,7 @@ export def "product-variant-price-delete-json delete" [
   let full_url = (build-url $base "/product.variant.price.delete.json" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"id": $id, "group_prices": $group_prices} | compact), body: null}
 }
 
 # Update some prices of the product variant.
@@ -4815,7 +4837,7 @@ export def "product-variant-price-update-json update" [
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: {}, body: $req_body}
 }
 
 # Update variant.
@@ -4881,7 +4903,7 @@ export def "product-variant-update-json update" [
   let full_url = (build-url $base "/product.variant.update.json" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"store_id": $store_id, "id": $id, "product_id": $product_id, "warehouse_id": $warehouse_id, "reserve_quantity": $reserve_quantity, "quantity": $quantity, "increase_quantity": $increase_quantity, "reduce_quantity": $reduce_quantity, "price": $price, "special_price": $special_price, "retail_price": $retail_price, "old_price": $old_price, "cost_price": $cost_price, "sprice_create": $sprice_create, "sprice_expire": $sprice_expire, "manage_stock": $manage_stock, "in_stock": $in_stock, "name": $name, "description": $description, "sku": $sku, "meta_title": $meta_title, "meta_description": $meta_description, "meta_keywords": $meta_keywords, "short_description": $short_description, "visible": $visible, "status": $status, "backorder_status": $backorder_status, "weight": $weight, "barcode": $barcode, "reindex": $reindex, "taxable": $taxable, "options": $options, "harmonized_system_code": $harmonized_system_code, "country_of_origin": $country_of_origin, "width": $width, "height": $height, "length": $length, "gtin": $gtin, "clear_cache": $clear_cache, "lang_id": $lang_id, "model": $model, "available_for_sale": $available_for_sale} | compact), body: null}
 }
 
 # Get subscribers list
@@ -4918,7 +4940,7 @@ export def "subscriber-list-json list" [
   let full_url = (build-url $base "/subscriber.list.json" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"start": $start, "count": $count, "subscribed": $subscribed, "store_id": $store_id, "email": $email, "params": $params, "exclude": $exclude, "created_from": $created_from, "created_to": $created_to, "modified_from": $modified_from, "modified_to": $modified_to, "page_cursor": $page_cursor, "response_fields": $response_fields} | compact), body: null}
 }
 
 # Get info about tax
@@ -4948,7 +4970,7 @@ export def "tax-class-info-json get" [
   let full_url = (build-url $base "/tax.class.info.json" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"tax_class_id": $tax_class_id, "store_id": $store_id, "lang_id": $lang_id, "params": $params, "response_fields": $response_fields, "exclude": $exclude} | compact), body: null}
 }
 
 # Count registered webhooks on the store.
@@ -4975,7 +4997,7 @@ export def "webhook-count-json get" [
   let full_url = (build-url $base "/webhook.count.json" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"entity": $entity, "action": $action, "active": $active} | compact), body: null}
 }
 
 # Create webhook on the store and subscribe to it.
@@ -5006,7 +5028,7 @@ export def "webhook-create-json create" [
   let full_url = (build-url $base "/webhook.create.json" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"entity": $entity, "action": $action, "callback": $callback, "label": $label, "fields": $fields, "active": $active, "store_id": $store_id} | compact), body: null}
 }
 
 # Delete registered webhook on the store.
@@ -5031,7 +5053,7 @@ export def "webhook-delete-json delete" [
   let full_url = (build-url $base "/webhook.delete.json" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"id": $id} | compact), body: null}
 }
 
 # List all Webhooks that are available on this store.
@@ -5054,7 +5076,7 @@ export def "webhook-events-json get" [
   let full_url = (build-url $base "/webhook.events.json")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
 }
 
 # List registered webhook on the store.
@@ -5085,7 +5107,7 @@ export def "webhook-list-json list" [
   let full_url = (build-url $base "/webhook.list.json" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"params": $params, "start": $start, "count": $count, "entity": $entity, "action": $action, "active": $active, "ids": $ids} | compact), body: null}
 }
 
 # Update Webhooks parameters.
@@ -5114,5 +5136,5 @@ export def "webhook-update-json update" [
   let full_url = (build-url $base "/webhook.update.json" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"id": $id, "callback": $callback, "label": $label, "fields": $fields, "active": $active} | compact), body: null}
 }

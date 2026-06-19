@@ -3,17 +3,18 @@
 # Auth: --token flag or $env.FILES_COM_API_TOKEN
 
 const BASE_URL = "http://localhost//app.files.com/api/rest/v1"
-const DEFAULT_AUTH = "x-filesapi-key"
 
-# Build auth: returns {headers: record, query: string}
+# Build auth: returns {scheme: string, headers: record, query: string, location: string}.
+# `location` is "header" | "query" | "cookie" | "none" and tells dry-run callers
+# where the token went without inspecting headers/query themselves.
 def build-auth [token?: string, auth_scheme?: string]: nothing -> record {
   let token_val = if ($token != null) and ($token | is-not-empty) { $token } else { $env | get -o FILES_COM_API_TOKEN | default "" }
   let scheme = ($auth_scheme | default "bearer")
-  if ($scheme == "none") or ($token_val | is-empty) { return {headers: {}, query: ""} }
+  if ($scheme == "none") or ($token_val | is-empty) { return {scheme: $scheme, headers: {}, query: "", location: "none"} }
   match $scheme {
-    "x-filesapi-key" => { {headers: {X-FilesAPI-Key: $token_val}, query: ""} }
-    "none" => { {headers: {}, query: ""} }
-    _ => { {headers: {Authorization: $"Bearer ($token_val)"}, query: ""} }
+    "x-filesapi-key" => { {scheme: $scheme, headers: {X-FilesAPI-Key: $token_val}, query: "", location: "header"} }
+    "none" => { {scheme: $scheme, headers: {}, query: "", location: "none"} }
+    _ => { {scheme: $scheme, headers: {Authorization: $"Bearer ($token_val)"}, query: "", location: "header"} }
   }
 }
 
@@ -22,8 +23,9 @@ def build-auth [token?: string, auth_scheme?: string]: nothing -> record {
 # ([A-Za-z0-9-._~]) stay literal; everything else gets %XX.
 def serialize-qp [name: string, value: any, style: string]: nothing -> list<string> {
   if ($value == null) { return [] }
-  let n = (encode-path-segment $name)
   let is_list = ($value | describe | str starts-with "list")
+  if $is_list and ($value | is-empty) { return [] }
+  let n = (encode-path-segment $name)
   if ($value | describe | str starts-with "record") { return ($value | transpose k v | each { $"($n)[(encode-path-segment $in.k)]=(encode-path-segment $in.v)" }) }
   if not $is_list { return [$"($n)=(encode-path-segment $value)"] }
   match $style {
@@ -54,22 +56,42 @@ def build-url [base: string, path: string, query?: string]: nothing -> string {
   if ($query != null) and ($query | is-not-empty) { $result | upsert query $query | url join } else { $result | url join }
 }
 
+# Build the dry-run record returned by --dry-run. Shape:
+#   {dry_run: true, method, url, query: <record>, headers, body, content_type, timeout,
+#    auth: {scheme, location}}
+# `meta` carries logical-form data (the query record by spec name, the pre-serialization
+# body) that do-request itself cannot reconstruct from its wire-format args.
+def build-dry-run-record [method: string, url: string, auth: record, content_type: string, timeout: duration, meta?: record]: nothing -> record {
+  let m = ($meta | default {})
+  {
+    dry_run: true
+    method: $method
+    url: $url
+    query: ($m | get -o query | default {})
+    headers: $auth.headers
+    body: ($m | get -o body)
+    content_type: $content_type
+    timeout: $timeout
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+}
+
 # Execute HTTP request with method dispatch
-def do-request [method: string, url: string, auth: record, insecure: bool, raw: bool, dry_run: bool, max_time?: duration, allow_errors?: bool, full?: bool, content_type?: string, body?: any]: nothing -> any {
+def do-request [method: string, url: string, auth: record, insecure: bool, raw: bool, dry_run: bool, max_time?: duration, allow_errors?: bool, full?: bool, content_type?: string, body?: any, dry_run_meta?: record]: nothing -> any {
   let req_url = if ($auth.query | is-not-empty) { if ($url | str contains "?") { $"($url)&($auth.query)" } else { $"($url)?($auth.query)" } } else { $url }
   let timeout = ($max_time | default 30min)
   let ct = ($content_type | default "application/json")
-  if $dry_run { return {method: $method, url: $req_url, headers: $auth.headers, query_string: $auth.query, content_type: $ct, timeout: $timeout, body: $body} }
+  if $dry_run { return (build-dry-run-record $method $req_url $auth $ct $timeout $dry_run_meta) }
   let resp = match $method {
     "get" => { http get --headers $auth.headers --full --allow-errors --max-time $timeout --insecure=$insecure --raw=$raw $req_url }
-    "head" => { http head --headers $auth.headers --max-time $timeout --insecure=$insecure $req_url }
-    "options" => { http options --headers $auth.headers --max-time $timeout --insecure=$insecure $req_url }
+    "head" => { http head --headers $auth.headers --full --allow-errors --max-time $timeout --insecure=$insecure $req_url }
+    "options" => { http options --headers $auth.headers --full --allow-errors --max-time $timeout --insecure=$insecure $req_url }
     "post" => { if ($body | is-empty) { http post --headers $auth.headers --full --allow-errors --max-time $timeout --insecure=$insecure --raw=$raw $req_url "" } else { http post --headers $auth.headers --content-type $ct --full --allow-errors --max-time $timeout --insecure=$insecure --raw=$raw $req_url $body } }
     "put" => { if ($body | is-empty) { http put --headers $auth.headers --full --allow-errors --max-time $timeout --insecure=$insecure --raw=$raw $req_url "" } else { http put --headers $auth.headers --content-type $ct --full --allow-errors --max-time $timeout --insecure=$insecure --raw=$raw $req_url $body } }
     "patch" => { if ($body | is-empty) { http patch --headers $auth.headers --full --allow-errors --max-time $timeout --insecure=$insecure --raw=$raw $req_url "" } else { http patch --headers $auth.headers --content-type $ct --full --allow-errors --max-time $timeout --insecure=$insecure --raw=$raw $req_url $body } }
     "delete" => { if ($body | is-empty) { http delete --headers $auth.headers --full --allow-errors --max-time $timeout --insecure=$insecure --raw=$raw $req_url } else { http delete --headers $auth.headers --content-type $ct --data $body --full --allow-errors --max-time $timeout --insecure=$insecure --raw=$raw $req_url } }
   }
-  if ($method in ["head" "options"]) { return $resp }
+  if ($method == "head") and (not $full) and (not $allow_errors) and $resp.status < 400 { return $resp.headers }
   if $allow_errors { $resp } else if $resp.status >= 400 { error make --unspanned { msg: $"HTTP ($resp.status): ($resp.body)" } } else if $full { {status: $resp.status, headers: $resp.headers, body: $resp.body} } else if $resp.status == 204 { null } else { $resp.body }
 }
 
@@ -170,7 +192,7 @@ export def "action-notification-export-results get" [
   let full_url = (build-url $base "/action_notification_export_results" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"user_id": $user_id, "cursor": $cursor, "per_page": $per_page, "action_notification_export_id": $action_notification_export_id} | compact), body: null}
 }
 
 # Create Action Notification Export
@@ -208,7 +230,7 @@ export def "action-notification-exports create" [
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let req_body = if ($req_body | describe | str starts-with "record") { $req_body } else { {} }
   let mp = (build-multipart-body $req_body [] $dry_run)
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full $mp.content_type $mp.body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full $mp.content_type $mp.body {query: {}, body: $req_body}
 }
 
 # Show Action Notification Export
@@ -229,10 +251,11 @@ export def "action-notification-exports get" [
 ]: nothing -> record<end_at: string, export_version: string, id: int, query_folder: string, query_message: string, query_path: string, query_request_method: string, query_request_url: string, query_status: string, query_success: bool, results_url: string, start_at: string, status: string> {
   let auth = (build-auth $token ($auth_scheme | default "x-filesapi-key"))
   let base = ($base_url | default $BASE_URL)
+  if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
   let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/action_notification_exports/{id}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
 }
 
 # retry Action Webhook Failure
@@ -253,10 +276,11 @@ export def "action-webhook-failures-retry create" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "x-filesapi-key"))
   let base = ($base_url | default $BASE_URL)
+  if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
   let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/action_webhook_failures/{id}/retry"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
 }
 
 # Delete current API key. (Requires current API connection to be using an API key.)
@@ -279,7 +303,7 @@ export def "api-key delete-get" [
   let full_url = (build-url $base "/api_key")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
 }
 
 # Show information about current API key. (Requires current API connection to be using an API key.)
@@ -302,7 +326,7 @@ export def "api-key find-get" [
   let full_url = (build-url $base "/api_key")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
 }
 
 # Update current API key. (Requires current API connection to be using an API key.)
@@ -333,7 +357,7 @@ export def "api-key update-get" [
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let req_body = if ($req_body | describe | str starts-with "record") { $req_body } else { {} }
   let mp = (build-multipart-body $req_body [] $dry_run)
-  do-request "patch" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full $mp.content_type $mp.body
+  do-request "patch" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full $mp.content_type $mp.body {query: {}, body: $req_body}
 }
 
 # List Api Keys
@@ -367,7 +391,7 @@ export def "api-keys list" [
   let full_url = (build-url $base "/api_keys" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"user_id": $user_id, "cursor": $cursor, "per_page": $per_page, "sort_by": $sort_by, "filter": $filter, "filter_gt": $filter_gt, "filter_gteq": $filter_gteq, "filter_like": $filter_like, "filter_lt": $filter_lt, "filter_lteq": $filter_lteq} | compact), body: null}
 }
 
 # Create Api Key
@@ -401,7 +425,7 @@ export def "api-keys create" [
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let req_body = if ($req_body | describe | str starts-with "record") { $req_body } else { {} }
   let mp = (build-multipart-body $req_body [] $dry_run)
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full $mp.content_type $mp.body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full $mp.content_type $mp.body {query: {}, body: $req_body}
 }
 
 # Delete Api Key
@@ -422,10 +446,11 @@ export def "api-keys delete" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "x-filesapi-key"))
   let base = ($base_url | default $BASE_URL)
+  if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
   let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/api_keys/{id}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
 }
 
 # Show Api Key
@@ -446,10 +471,11 @@ export def "api-keys get" [
 ]: nothing -> record<created_at: string, description: string, descriptive_label: string, expires_at: string, id: int, key: string, last_use_at: string, name: string, path: string, permission_set: string, platform: string, url: string, user_id: int> {
   let auth = (build-auth $token ($auth_scheme | default "x-filesapi-key"))
   let base = ($base_url | default $BASE_URL)
+  if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
   let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/api_keys/{id}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
 }
 
 # Update Api Key
@@ -475,6 +501,7 @@ export def "api-keys update" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "x-filesapi-key"))
   let base = ($base_url | default $BASE_URL)
+  if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
   let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/api_keys/{id}"))
   let req_body = {"description": $description, "expires_at": $expires_at, "name": $name, "permission_set": $permission_set} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
@@ -482,7 +509,7 @@ export def "api-keys update" [
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let req_body = if ($req_body | describe | str starts-with "record") { $req_body } else { {} }
   let mp = (build-multipart-body $req_body [] $dry_run)
-  do-request "patch" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full $mp.content_type $mp.body
+  do-request "patch" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full $mp.content_type $mp.body {query: {}, body: $req_body}
 }
 
 # List Apps
@@ -515,7 +542,7 @@ export def "apps get" [
   let full_url = (build-url $base "/apps" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"cursor": $cursor, "per_page": $per_page, "sort_by": $sort_by, "filter": $filter, "filter_gt": $filter_gt, "filter_gteq": $filter_gteq, "filter_like": $filter_like, "filter_lt": $filter_lt, "filter_lteq": $filter_lteq} | compact), body: null}
 }
 
 # List As2 Incoming Messages
@@ -549,7 +576,7 @@ export def "as2-incoming-messages get" [
   let full_url = (build-url $base "/as2_incoming_messages" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"cursor": $cursor, "per_page": $per_page, "sort_by": $sort_by, "filter": $filter, "filter_gt": $filter_gt, "filter_gteq": $filter_gteq, "filter_like": $filter_like, "filter_lt": $filter_lt, "filter_lteq": $filter_lteq, "as2_partner_id": $as2_partner_id} | compact), body: null}
 }
 
 # List As2 Outgoing Messages
@@ -583,7 +610,7 @@ export def "as2-outgoing-messages get" [
   let full_url = (build-url $base "/as2_outgoing_messages" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"cursor": $cursor, "per_page": $per_page, "sort_by": $sort_by, "filter": $filter, "filter_gt": $filter_gt, "filter_gteq": $filter_gteq, "filter_like": $filter_like, "filter_lt": $filter_lt, "filter_lteq": $filter_lteq, "as2_partner_id": $as2_partner_id} | compact), body: null}
 }
 
 # List As2 Partners
@@ -609,7 +636,7 @@ export def "as2-partners list" [
   let full_url = (build-url $base "/as2_partners" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"cursor": $cursor, "per_page": $per_page} | compact), body: null}
 }
 
 # Create As2 Partner
@@ -642,7 +669,7 @@ export def "as2-partners create" [
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let req_body = if ($req_body | describe | str starts-with "record") { $req_body } else { {} }
   let mp = (build-multipart-body $req_body [] $dry_run)
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full $mp.content_type $mp.body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full $mp.content_type $mp.body {query: {}, body: $req_body}
 }
 
 # Delete As2 Partner
@@ -663,10 +690,11 @@ export def "as2-partners delete" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "x-filesapi-key"))
   let base = ($base_url | default $BASE_URL)
+  if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
   let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/as2_partners/{id}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
 }
 
 # Show As2 Partner
@@ -687,10 +715,11 @@ export def "as2-partners get" [
 ]: nothing -> record<as2_station_id: int, hex_public_certificate_serial: string, id: int, name: string, public_certificate_issuer: string, public_certificate_md5: string, public_certificate_not_after: string, public_certificate_not_before: string, public_certificate_serial: string, public_certificate_subject: string, server_certificate: string, uri: string> {
   let auth = (build-auth $token ($auth_scheme | default "x-filesapi-key"))
   let base = ($base_url | default $BASE_URL)
+  if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
   let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/as2_partners/{id}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
 }
 
 # Update As2 Partner
@@ -716,6 +745,7 @@ export def "as2-partners update" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "x-filesapi-key"))
   let base = ($base_url | default $BASE_URL)
+  if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
   let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/as2_partners/{id}"))
   let req_body = {"name": $name, "public_certificate": $public_certificate, "server_certificate": $server_certificate, "uri": $uri} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
@@ -723,7 +753,7 @@ export def "as2-partners update" [
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let req_body = if ($req_body | describe | str starts-with "record") { $req_body } else { {} }
   let mp = (build-multipart-body $req_body [] $dry_run)
-  do-request "patch" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full $mp.content_type $mp.body
+  do-request "patch" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full $mp.content_type $mp.body {query: {}, body: $req_body}
 }
 
 # List As2 Stations
@@ -749,7 +779,7 @@ export def "as2-stations list" [
   let full_url = (build-url $base "/as2_stations" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"cursor": $cursor, "per_page": $per_page} | compact), body: null}
 }
 
 # Create As2 Station
@@ -781,7 +811,7 @@ export def "as2-stations create" [
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let req_body = if ($req_body | describe | str starts-with "record") { $req_body } else { {} }
   let mp = (build-multipart-body $req_body [] $dry_run)
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full $mp.content_type $mp.body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full $mp.content_type $mp.body {query: {}, body: $req_body}
 }
 
 # Delete As2 Station
@@ -802,10 +832,11 @@ export def "as2-stations delete" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "x-filesapi-key"))
   let base = ($base_url | default $BASE_URL)
+  if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
   let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/as2_stations/{id}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
 }
 
 # Show As2 Station
@@ -826,10 +857,11 @@ export def "as2-stations get" [
 ]: nothing -> record<domain: string, hex_public_certificate_serial: string, id: int, name: string, private_key_md5: string, private_key_password_md5: string, public_certificate_issuer: string, public_certificate_md5: string, public_certificate_not_after: string, public_certificate_not_before: string, public_certificate_serial: string, public_certificate_subject: string, uri: string> {
   let auth = (build-auth $token ($auth_scheme | default "x-filesapi-key"))
   let base = ($base_url | default $BASE_URL)
+  if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
   let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/as2_stations/{id}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
 }
 
 # Update As2 Station
@@ -855,6 +887,7 @@ export def "as2-stations update" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "x-filesapi-key"))
   let base = ($base_url | default $BASE_URL)
+  if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
   let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/as2_stations/{id}"))
   let req_body = {"name": $name, "private_key": $private_key, "private_key_password": $private_key_password, "public_certificate": $public_certificate} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
@@ -862,7 +895,7 @@ export def "as2-stations update" [
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let req_body = if ($req_body | describe | str starts-with "record") { $req_body } else { {} }
   let mp = (build-multipart-body $req_body [] $dry_run)
-  do-request "patch" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full $mp.content_type $mp.body
+  do-request "patch" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full $mp.content_type $mp.body {query: {}, body: $req_body}
 }
 
 # List Automation Runs
@@ -897,7 +930,7 @@ export def "automation-runs list" [
   let full_url = (build-url $base "/automation_runs" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"user_id": $user_id, "cursor": $cursor, "per_page": $per_page, "sort_by": $sort_by, "filter": $filter, "filter_gt": $filter_gt, "filter_gteq": $filter_gteq, "filter_like": $filter_like, "filter_lt": $filter_lt, "filter_lteq": $filter_lteq, "automation_id": $automation_id} | compact), body: null}
 }
 
 # Show Automation Run
@@ -918,10 +951,11 @@ export def "automation-runs get" [
 ]: nothing -> record<automation_id: int, completed_at: string, created_at: string, id: int, status: string, status_messages_url: string> {
   let auth = (build-auth $token ($auth_scheme | default "x-filesapi-key"))
   let base = ($base_url | default $BASE_URL)
+  if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
   let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/automation_runs/{id}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
 }
 
 # List Automations
@@ -956,7 +990,7 @@ export def "automations list" [
   let full_url = (build-url $base "/automations" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"cursor": $cursor, "per_page": $per_page, "sort_by": $sort_by, "filter": $filter, "filter_gt": $filter_gt, "filter_gteq": $filter_gteq, "filter_like": $filter_like, "filter_lt": $filter_lt, "filter_lteq": $filter_lteq, "with_deleted": $with_deleted, "automation": $automation} | compact), body: null}
 }
 
 # Create Automation
@@ -1002,7 +1036,7 @@ export def "automations create" [
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let req_body = if ($req_body | describe | str starts-with "record") { $req_body } else { {} }
   let mp = (build-multipart-body $req_body [] $dry_run)
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full $mp.content_type $mp.body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full $mp.content_type $mp.body {query: {}, body: $req_body}
 }
 
 # Delete Automation
@@ -1023,10 +1057,11 @@ export def "automations delete" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "x-filesapi-key"))
   let base = ($base_url | default $BASE_URL)
+  if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
   let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/automations/{id}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
 }
 
 # Show Automation
@@ -1047,10 +1082,11 @@ export def "automations get" [
 ]: nothing -> record<automation: string, deleted: bool, description: string, destination_replace_from: string, destination_replace_to: string, destinations: list<string>, disabled: bool, group_ids: list<int>, id: int, interval: string, last_modified_at: string, name: string, path: string, schedule: record, source: string, sync_ids: list<int>, trigger: string, trigger_actions: list<string>, user_id: int, user_ids: list<int>, value: record, webhook_url: string> {
   let auth = (build-auth $token ($auth_scheme | default "x-filesapi-key"))
   let base = ($base_url | default $BASE_URL)
+  if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
   let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/automations/{id}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
 }
 
 # Update Automation
@@ -1090,6 +1126,7 @@ export def "automations update" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "x-filesapi-key"))
   let base = ($base_url | default $BASE_URL)
+  if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
   let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/automations/{id}"))
   let req_body = {"automation": $automation, "description": $description, "destination": $destination, "destination_replace_from": $destination_replace_from, "destination_replace_to": $destination_replace_to, "destinations": $destinations, "disabled": $disabled, "group_ids": $group_ids, "interval": $interval, "name": $name, "path": $path, "schedule": $schedule, "source": $body_source, "sync_ids": $sync_ids, "trigger": $trigger, "trigger_actions": $trigger_actions, "user_ids": $user_ids, "value": $value} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
@@ -1097,7 +1134,7 @@ export def "automations update" [
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let req_body = if ($req_body | describe | str starts-with "record") { $req_body } else { {} }
   let mp = (build-multipart-body $req_body [] $dry_run)
-  do-request "patch" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full $mp.content_type $mp.body
+  do-request "patch" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full $mp.content_type $mp.body {query: {}, body: $req_body}
 }
 
 # List Bandwidth Snapshots
@@ -1130,7 +1167,7 @@ export def "bandwidth-snapshots get" [
   let full_url = (build-url $base "/bandwidth_snapshots" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"cursor": $cursor, "per_page": $per_page, "sort_by": $sort_by, "filter": $filter, "filter_gt": $filter_gt, "filter_gteq": $filter_gteq, "filter_like": $filter_like, "filter_lt": $filter_lt, "filter_lteq": $filter_lteq} | compact), body: null}
 }
 
 # List Behaviors
@@ -1164,7 +1201,7 @@ export def "behaviors list" [
   let full_url = (build-url $base "/behaviors" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"cursor": $cursor, "per_page": $per_page, "sort_by": $sort_by, "filter": $filter, "filter_gt": $filter_gt, "filter_gteq": $filter_gteq, "filter_like": $filter_like, "filter_lt": $filter_lt, "filter_lteq": $filter_lteq, "behavior": $behavior} | compact), body: null}
 }
 
 # Create Behavior
@@ -1198,7 +1235,7 @@ export def "behaviors create" [
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let req_body = if ($req_body | describe | str starts-with "record") { $req_body } else { {} }
   let mp = (build-multipart-body $req_body ["attachment_file"] $dry_run)
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full $mp.content_type $mp.body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full $mp.content_type $mp.body {query: {}, body: $req_body}
 }
 
 # List Behaviors by path
@@ -1230,11 +1267,12 @@ export def "behaviors-folders list" [
 ]: nothing -> table<attachment_url: string, behavior: string, description: string, id: int, name: string, path: string, value: record> {
   let auth = (build-auth $token ($auth_scheme | default "x-filesapi-key"))
   let base = ($base_url | default $BASE_URL)
+  if ($path | is-empty) { error make --unspanned { msg: "path parameter 'path' must be non-empty" } }
   let qp = [(serialize-qp "cursor" $cursor "scalar") (serialize-qp "per_page" $per_page "scalar") (serialize-qp "sort_by" $sort_by "multi") (serialize-qp "filter" $filter "multi") (serialize-qp "filter_gt" $filter_gt "multi") (serialize-qp "filter_gteq" $filter_gteq "multi") (serialize-qp "filter_like" $filter_like "multi") (serialize-qp "filter_lt" $filter_lt "multi") (serialize-qp "filter_lteq" $filter_lteq "multi") (serialize-qp "recursive" $recursive "scalar") (serialize-qp "behavior" $behavior "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({path: (encode-path-segment $path)} | format pattern "/behaviors/folders/{path}") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"cursor": $cursor, "per_page": $per_page, "sort_by": $sort_by, "filter": $filter, "filter_gt": $filter_gt, "filter_gteq": $filter_gteq, "filter_like": $filter_like, "filter_lt": $filter_lt, "filter_lteq": $filter_lteq, "recursive": $recursive, "behavior": $behavior} | compact), body: null}
 }
 
 # Test webhook.
@@ -1268,7 +1306,7 @@ export def "behaviors-webhook-test create" [
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let req_body = if ($req_body | describe | str starts-with "record") { $req_body } else { {} }
   let mp = (build-multipart-body $req_body [] $dry_run)
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full $mp.content_type $mp.body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full $mp.content_type $mp.body {query: {}, body: $req_body}
 }
 
 # Delete Behavior
@@ -1289,10 +1327,11 @@ export def "behaviors delete" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "x-filesapi-key"))
   let base = ($base_url | default $BASE_URL)
+  if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
   let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/behaviors/{id}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
 }
 
 # Show Behavior
@@ -1313,10 +1352,11 @@ export def "behaviors get" [
 ]: nothing -> record<attachment_url: string, behavior: string, description: string, id: int, name: string, path: string, value: record> {
   let auth = (build-auth $token ($auth_scheme | default "x-filesapi-key"))
   let base = ($base_url | default $BASE_URL)
+  if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
   let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/behaviors/{id}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
 }
 
 # Update Behavior
@@ -1345,6 +1385,7 @@ export def "behaviors update" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "x-filesapi-key"))
   let base = ($base_url | default $BASE_URL)
+  if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
   let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/behaviors/{id}"))
   let req_body = {"attachment_delete": $attachment_delete, "attachment_file": $attachment_file, "behavior": $behavior, "description": $description, "name": $name, "path": $path, "value": $value} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
@@ -1352,7 +1393,7 @@ export def "behaviors update" [
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let req_body = if ($req_body | describe | str starts-with "record") { $req_body } else { {} }
   let mp = (build-multipart-body $req_body ["attachment_file"] $dry_run)
-  do-request "patch" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full $mp.content_type $mp.body
+  do-request "patch" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full $mp.content_type $mp.body {query: {}, body: $req_body}
 }
 
 # List Bundle Downloads
@@ -1387,7 +1428,7 @@ export def "bundle-downloads get" [
   let full_url = (build-url $base "/bundle_downloads" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"cursor": $cursor, "per_page": $per_page, "sort_by": $sort_by, "filter": $filter, "filter_gt": $filter_gt, "filter_gteq": $filter_gteq, "filter_like": $filter_like, "filter_lt": $filter_lt, "filter_lteq": $filter_lteq, "bundle_id": $bundle_id, "bundle_registration_id": $bundle_registration_id} | compact), body: null}
 }
 
 # List Bundle Notifications
@@ -1415,7 +1456,7 @@ export def "bundle-notifications list" [
   let full_url = (build-url $base "/bundle_notifications" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"user_id": $user_id, "cursor": $cursor, "per_page": $per_page, "bundle_id": $bundle_id} | compact), body: null}
 }
 
 # Create Bundle Notification
@@ -1447,7 +1488,7 @@ export def "bundle-notifications create" [
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let req_body = if ($req_body | describe | str starts-with "record") { $req_body } else { {} }
   let mp = (build-multipart-body $req_body [] $dry_run)
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full $mp.content_type $mp.body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full $mp.content_type $mp.body {query: {}, body: $req_body}
 }
 
 # Delete Bundle Notification
@@ -1468,10 +1509,11 @@ export def "bundle-notifications delete" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "x-filesapi-key"))
   let base = ($base_url | default $BASE_URL)
+  if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
   let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/bundle_notifications/{id}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
 }
 
 # Show Bundle Notification
@@ -1492,10 +1534,11 @@ export def "bundle-notifications get" [
 ]: nothing -> record<bundle_id: int, id: int, notify_on_registration: bool, notify_on_upload: bool, user_id: int> {
   let auth = (build-auth $token ($auth_scheme | default "x-filesapi-key"))
   let base = ($base_url | default $BASE_URL)
+  if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
   let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/bundle_notifications/{id}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
 }
 
 # Update Bundle Notification
@@ -1519,6 +1562,7 @@ export def "bundle-notifications update" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "x-filesapi-key"))
   let base = ($base_url | default $BASE_URL)
+  if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
   let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/bundle_notifications/{id}"))
   let req_body = {"notify_on_registration": $notify_on_registration, "notify_on_upload": $notify_on_upload} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
@@ -1526,7 +1570,7 @@ export def "bundle-notifications update" [
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let req_body = if ($req_body | describe | str starts-with "record") { $req_body } else { {} }
   let mp = (build-multipart-body $req_body [] $dry_run)
-  do-request "patch" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full $mp.content_type $mp.body
+  do-request "patch" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full $mp.content_type $mp.body {query: {}, body: $req_body}
 }
 
 # List Bundle Recipients
@@ -1561,7 +1605,7 @@ export def "bundle-recipients get" [
   let full_url = (build-url $base "/bundle_recipients" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"user_id": $user_id, "cursor": $cursor, "per_page": $per_page, "sort_by": $sort_by, "filter": $filter, "filter_gt": $filter_gt, "filter_gteq": $filter_gteq, "filter_like": $filter_like, "filter_lt": $filter_lt, "filter_lteq": $filter_lteq, "bundle_id": $bundle_id} | compact), body: null}
 }
 
 # Create Bundle Recipient
@@ -1596,7 +1640,7 @@ export def "bundle-recipients create" [
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let req_body = if ($req_body | describe | str starts-with "record") { $req_body } else { {} }
   let mp = (build-multipart-body $req_body [] $dry_run)
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full $mp.content_type $mp.body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full $mp.content_type $mp.body {query: {}, body: $req_body}
 }
 
 # List Bundle Registrations
@@ -1624,7 +1668,7 @@ export def "bundle-registrations get" [
   let full_url = (build-url $base "/bundle_registrations" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"user_id": $user_id, "cursor": $cursor, "per_page": $per_page, "bundle_id": $bundle_id} | compact), body: null}
 }
 
 # List Bundles
@@ -1658,7 +1702,7 @@ export def "bundles list" [
   let full_url = (build-url $base "/bundles" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"user_id": $user_id, "cursor": $cursor, "per_page": $per_page, "sort_by": $sort_by, "filter": $filter, "filter_gt": $filter_gt, "filter_gteq": $filter_gteq, "filter_like": $filter_like, "filter_lt": $filter_lt, "filter_lteq": $filter_lteq} | compact), body: null}
 }
 
 # Create Bundle
@@ -1708,7 +1752,7 @@ export def "bundles create" [
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let req_body = if ($req_body | describe | str starts-with "record") { $req_body } else { {} }
   let mp = (build-multipart-body $req_body ["watermark_attachment_file"] $dry_run)
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full $mp.content_type $mp.body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full $mp.content_type $mp.body {query: {}, body: $req_body}
 }
 
 # Delete Bundle
@@ -1729,10 +1773,11 @@ export def "bundles delete" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "x-filesapi-key"))
   let base = ($base_url | default $BASE_URL)
+  if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
   let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/bundles/{id}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
 }
 
 # Show Bundle
@@ -1753,10 +1798,11 @@ export def "bundles get" [
 ]: nothing -> record<clickwrap_body: string, clickwrap_id: int, code: string, created_at: string, description: string, dont_separate_submissions_by_folder: bool, expires_at: string, form_field_set: record<form_fields: list<record>, form_layout: list<int>, id: int, skip_company: bool, skip_email: bool, skip_name: bool, title: string>, has_inbox: bool, id: int, inbox_id: int, max_uses: int, note: string, password_protected: bool, path_template: string, paths: list<string>, permissions: string, preview_only: bool, require_registration: bool, require_share_recipient: bool, send_email_receipt_to_uploader: bool, skip_company: bool, skip_email: bool, skip_name: bool, url: string, user_id: int, username: string, watermark_attachment: record<name: string, uri: string>, watermark_value: record> {
   let auth = (build-auth $token ($auth_scheme | default "x-filesapi-key"))
   let base = ($base_url | default $BASE_URL)
+  if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
   let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/bundles/{id}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
 }
 
 # Update Bundle
@@ -1800,6 +1846,7 @@ export def "bundles update" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "x-filesapi-key"))
   let base = ($base_url | default $BASE_URL)
+  if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
   let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/bundles/{id}"))
   let req_body = {"clickwrap_id": $clickwrap_id, "code": $code, "description": $description, "dont_separate_submissions_by_folder": $dont_separate_submissions_by_folder, "expires_at": $expires_at, "form_field_set_id": $form_field_set_id, "inbox_id": $inbox_id, "max_uses": $max_uses, "note": $note, "password": $password, "path_template": $path_template, "paths": $paths, "permissions": $permissions, "preview_only": $preview_only, "require_registration": $require_registration, "require_share_recipient": $require_share_recipient, "send_email_receipt_to_uploader": $send_email_receipt_to_uploader, "skip_company": $skip_company, "skip_email": $skip_email, "skip_name": $skip_name, "watermark_attachment_delete": $watermark_attachment_delete, "watermark_attachment_file": $watermark_attachment_file} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
@@ -1807,7 +1854,7 @@ export def "bundles update" [
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let req_body = if ($req_body | describe | str starts-with "record") { $req_body } else { {} }
   let mp = (build-multipart-body $req_body ["watermark_attachment_file"] $dry_run)
-  do-request "patch" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full $mp.content_type $mp.body
+  do-request "patch" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full $mp.content_type $mp.body {query: {}, body: $req_body}
 }
 
 # Send email(s) with a link to bundle
@@ -1832,6 +1879,7 @@ export def "bundles-share create" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "x-filesapi-key"))
   let base = ($base_url | default $BASE_URL)
+  if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
   let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/bundles/{id}/share"))
   let req_body = {"note": $note, "recipients": $recipients, "to": $body_to} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
@@ -1839,7 +1887,7 @@ export def "bundles-share create" [
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let req_body = if ($req_body | describe | str starts-with "record") { $req_body } else { {} }
   let mp = (build-multipart-body $req_body [] $dry_run)
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full $mp.content_type $mp.body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full $mp.content_type $mp.body {query: {}, body: $req_body}
 }
 
 # List Clickwraps
@@ -1865,7 +1913,7 @@ export def "clickwraps list" [
   let full_url = (build-url $base "/clickwraps" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"cursor": $cursor, "per_page": $per_page} | compact), body: null}
 }
 
 # Create Clickwrap
@@ -1898,7 +1946,7 @@ export def "clickwraps create" [
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let req_body = if ($req_body | describe | str starts-with "record") { $req_body } else { {} }
   let mp = (build-multipart-body $req_body [] $dry_run)
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full $mp.content_type $mp.body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full $mp.content_type $mp.body {query: {}, body: $req_body}
 }
 
 # Delete Clickwrap
@@ -1919,10 +1967,11 @@ export def "clickwraps delete" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "x-filesapi-key"))
   let base = ($base_url | default $BASE_URL)
+  if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
   let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/clickwraps/{id}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
 }
 
 # Show Clickwrap
@@ -1943,10 +1992,11 @@ export def "clickwraps get" [
 ]: nothing -> record<body: string, id: int, name: string, use_with_bundles: string, use_with_inboxes: string, use_with_users: string> {
   let auth = (build-auth $token ($auth_scheme | default "x-filesapi-key"))
   let base = ($base_url | default $BASE_URL)
+  if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
   let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/clickwraps/{id}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
 }
 
 # Update Clickwrap
@@ -1973,6 +2023,7 @@ export def "clickwraps update" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "x-filesapi-key"))
   let base = ($base_url | default $BASE_URL)
+  if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
   let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/clickwraps/{id}"))
   let req_body = {"body": $body, "name": $name, "use_with_bundles": $use_with_bundles, "use_with_inboxes": $use_with_inboxes, "use_with_users": $use_with_users} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
@@ -1980,7 +2031,7 @@ export def "clickwraps update" [
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let req_body = if ($req_body | describe | str starts-with "record") { $req_body } else { {} }
   let mp = (build-multipart-body $req_body [] $dry_run)
-  do-request "patch" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full $mp.content_type $mp.body
+  do-request "patch" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full $mp.content_type $mp.body {query: {}, body: $req_body}
 }
 
 # Show site DNS configuration.
@@ -2006,7 +2057,7 @@ export def "dns-records get" [
   let full_url = (build-url $base "/dns_records" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"cursor": $cursor, "per_page": $per_page} | compact), body: null}
 }
 
 # List External Events
@@ -2039,7 +2090,7 @@ export def "external-events list" [
   let full_url = (build-url $base "/external_events" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"cursor": $cursor, "per_page": $per_page, "sort_by": $sort_by, "filter": $filter, "filter_gt": $filter_gt, "filter_gteq": $filter_gteq, "filter_like": $filter_like, "filter_lt": $filter_lt, "filter_lteq": $filter_lteq} | compact), body: null}
 }
 
 # Create External Event
@@ -2069,7 +2120,7 @@ export def "external-events create" [
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let req_body = if ($req_body | describe | str starts-with "record") { $req_body } else { {} }
   let mp = (build-multipart-body $req_body [] $dry_run)
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full $mp.content_type $mp.body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full $mp.content_type $mp.body {query: {}, body: $req_body}
 }
 
 # Show External Event
@@ -2090,10 +2141,11 @@ export def "external-events get" [
 ]: nothing -> record<body: string, body_url: string, bytes_synced: int, created_at: string, errored_files: int, event_type: string, folder_behavior_id: int, id: int, remote_server_type: string, status: string, successful_files: int> {
   let auth = (build-auth $token ($auth_scheme | default "x-filesapi-key"))
   let base = ($base_url | default $BASE_URL)
+  if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
   let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/external_events/{id}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
 }
 
 # Begin file upload
@@ -2122,6 +2174,7 @@ export def "file-actions-begin-upload upload" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "x-filesapi-key"))
   let base = ($base_url | default $BASE_URL)
+  if ($path | is-empty) { error make --unspanned { msg: "path parameter 'path' must be non-empty" } }
   let full_url = (build-url $base ({path: (encode-path-segment $path)} | format pattern "/file_actions/begin_upload/{path}"))
   let req_body = {"mkdir_parents": $mkdir_parents, "part": $part, "parts": $parts, "ref": $ref, "restart": $restart, "size": $size, "with_rename": $with_rename} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
@@ -2129,7 +2182,7 @@ export def "file-actions-begin-upload upload" [
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let req_body = if ($req_body | describe | str starts-with "record") { $req_body } else { {} }
   let mp = (build-multipart-body $req_body [] $dry_run)
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full $mp.content_type $mp.body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full $mp.content_type $mp.body {query: {}, body: $req_body}
 }
 
 # Copy file/folder
@@ -2153,6 +2206,7 @@ export def "file-actions-copy copy" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "x-filesapi-key"))
   let base = ($base_url | default $BASE_URL)
+  if ($path | is-empty) { error make --unspanned { msg: "path parameter 'path' must be non-empty" } }
   let full_url = (build-url $base ({path: (encode-path-segment $path)} | format pattern "/file_actions/copy/{path}"))
   let req_body = {"destination": $destination, "structure": $structure} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
@@ -2160,7 +2214,7 @@ export def "file-actions-copy copy" [
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let req_body = if ($req_body | describe | str starts-with "record") { $req_body } else { {} }
   let mp = (build-multipart-body $req_body [] $dry_run)
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full $mp.content_type $mp.body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full $mp.content_type $mp.body {query: {}, body: $req_body}
 }
 
 # Find file/folder by path
@@ -2184,11 +2238,12 @@ export def "file-actions-metadata find" [
 ]: nothing -> record<crc32: string, created_at: string, display_name: string, download_uri: string, is_locked: bool, md5: string, mime_type: string, mtime: string, path: string, permissions: string, preview: record<download_uri: string, id: int, size: string, status: string, type: string>, preview_id: int, priority_color: string, provided_mtime: string, region: string, size: int, subfolders_locked_: bool, type: string> {
   let auth = (build-auth $token ($auth_scheme | default "x-filesapi-key"))
   let base = ($base_url | default $BASE_URL)
+  if ($path | is-empty) { error make --unspanned { msg: "path parameter 'path' must be non-empty" } }
   let qp = [(serialize-qp "preview_size" $preview_size "scalar") (serialize-qp "with_previews" $with_previews "scalar") (serialize-qp "with_priority_color" $with_priority_color "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({path: (encode-path-segment $path)} | format pattern "/file_actions/metadata/{path}") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"preview_size": $preview_size, "with_previews": $with_previews, "with_priority_color": $with_priority_color} | compact), body: null}
 }
 
 # Move file/folder
@@ -2211,6 +2266,7 @@ export def "file-actions-move move" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "x-filesapi-key"))
   let base = ($base_url | default $BASE_URL)
+  if ($path | is-empty) { error make --unspanned { msg: "path parameter 'path' must be non-empty" } }
   let full_url = (build-url $base ({path: (encode-path-segment $path)} | format pattern "/file_actions/move/{path}"))
   let req_body = {"destination": $destination} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
@@ -2218,7 +2274,7 @@ export def "file-actions-move move" [
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let req_body = if ($req_body | describe | str starts-with "record") { $req_body } else { {} }
   let mp = (build-multipart-body $req_body [] $dry_run)
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full $mp.content_type $mp.body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full $mp.content_type $mp.body {query: {}, body: $req_body}
 }
 
 # Create File Comment Reaction
@@ -2249,7 +2305,7 @@ export def "file-comment-reactions create" [
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let req_body = if ($req_body | describe | str starts-with "record") { $req_body } else { {} }
   let mp = (build-multipart-body $req_body [] $dry_run)
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full $mp.content_type $mp.body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full $mp.content_type $mp.body {query: {}, body: $req_body}
 }
 
 # Delete File Comment Reaction
@@ -2270,10 +2326,11 @@ export def "file-comment-reactions delete" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "x-filesapi-key"))
   let base = ($base_url | default $BASE_URL)
+  if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
   let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/file_comment_reactions/{id}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
 }
 
 # Create File Comment
@@ -2303,7 +2360,7 @@ export def "file-comments create" [
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let req_body = if ($req_body | describe | str starts-with "record") { $req_body } else { {} }
   let mp = (build-multipart-body $req_body [] $dry_run)
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full $mp.content_type $mp.body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full $mp.content_type $mp.body {query: {}, body: $req_body}
 }
 
 # List File Comments by path
@@ -2326,11 +2383,12 @@ export def "file-comments-files list" [
 ]: nothing -> table<body: string, id: int, reactions: list<record>> {
   let auth = (build-auth $token ($auth_scheme | default "x-filesapi-key"))
   let base = ($base_url | default $BASE_URL)
+  if ($path | is-empty) { error make --unspanned { msg: "path parameter 'path' must be non-empty" } }
   let qp = [(serialize-qp "cursor" $cursor "scalar") (serialize-qp "per_page" $per_page "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({path: (encode-path-segment $path)} | format pattern "/file_comments/files/{path}") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"cursor": $cursor, "per_page": $per_page} | compact), body: null}
 }
 
 # Delete File Comment
@@ -2351,10 +2409,11 @@ export def "file-comments delete" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "x-filesapi-key"))
   let base = ($base_url | default $BASE_URL)
+  if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
   let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/file_comments/{id}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
 }
 
 # Update File Comment
@@ -2377,6 +2436,7 @@ export def "file-comments update" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "x-filesapi-key"))
   let base = ($base_url | default $BASE_URL)
+  if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
   let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/file_comments/{id}"))
   let req_body = {"body": $body} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
@@ -2384,7 +2444,7 @@ export def "file-comments update" [
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let req_body = if ($req_body | describe | str starts-with "record") { $req_body } else { {} }
   let mp = (build-multipart-body $req_body [] $dry_run)
-  do-request "patch" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full $mp.content_type $mp.body
+  do-request "patch" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full $mp.content_type $mp.body {query: {}, body: $req_body}
 }
 
 # Show File Migration
@@ -2405,10 +2465,11 @@ export def "file-migrations get" [
 ]: nothing -> record<dest_path: string, files_moved: int, files_total: int, id: int, log_url: string, operation: string, path: string, region: string, status: string> {
   let auth = (build-auth $token ($auth_scheme | default "x-filesapi-key"))
   let base = ($base_url | default $BASE_URL)
+  if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
   let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/file_migrations/{id}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
 }
 
 # Delete file/folder
@@ -2430,11 +2491,12 @@ export def "files delete" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "x-filesapi-key"))
   let base = ($base_url | default $BASE_URL)
+  if ($path | is-empty) { error make --unspanned { msg: "path parameter 'path' must be non-empty" } }
   let qp = [(serialize-qp "recursive" $recursive "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({path: (encode-path-segment $path)} | format pattern "/files/{path}") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"recursive": $recursive} | compact), body: null}
 }
 
 # Download file
@@ -2459,11 +2521,12 @@ export def "files download" [
 ]: nothing -> record<crc32: string, created_at: string, display_name: string, download_uri: string, is_locked: bool, md5: string, mime_type: string, mtime: string, path: string, permissions: string, preview: record<download_uri: string, id: int, size: string, status: string, type: string>, preview_id: int, priority_color: string, provided_mtime: string, region: string, size: int, subfolders_locked_: bool, type: string> {
   let auth = (build-auth $token ($auth_scheme | default "x-filesapi-key"))
   let base = ($base_url | default $BASE_URL)
+  if ($path | is-empty) { error make --unspanned { msg: "path parameter 'path' must be non-empty" } }
   let qp = [(serialize-qp "action" $action "scalar") (serialize-qp "preview_size" $preview_size "scalar") (serialize-qp "with_previews" $with_previews "scalar") (serialize-qp "with_priority_color" $with_priority_color "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({path: (encode-path-segment $path)} | format pattern "/files/{path}") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"action": $action, "preview_size": $preview_size, "with_previews": $with_previews, "with_priority_color": $with_priority_color} | compact), body: null}
 }
 
 # Update file/folder metadata
@@ -2487,6 +2550,7 @@ export def "files update" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "x-filesapi-key"))
   let base = ($base_url | default $BASE_URL)
+  if ($path | is-empty) { error make --unspanned { msg: "path parameter 'path' must be non-empty" } }
   let full_url = (build-url $base ({path: (encode-path-segment $path)} | format pattern "/files/{path}"))
   let req_body = {"priority_color": $priority_color, "provided_mtime": $provided_mtime} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
@@ -2494,7 +2558,7 @@ export def "files update" [
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let req_body = if ($req_body | describe | str starts-with "record") { $req_body } else { {} }
   let mp = (build-multipart-body $req_body [] $dry_run)
-  do-request "patch" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full $mp.content_type $mp.body
+  do-request "patch" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full $mp.content_type $mp.body {query: {}, body: $req_body}
 }
 
 # Upload file
@@ -2529,6 +2593,7 @@ export def "files create" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "x-filesapi-key"))
   let base = ($base_url | default $BASE_URL)
+  if ($path | is-empty) { error make --unspanned { msg: "path parameter 'path' must be non-empty" } }
   let full_url = (build-url $base ({path: (encode-path-segment $path)} | format pattern "/files/{path}"))
   let req_body = {"action": $action, "etags[etag]": $etags_etag, "etags[part]": $etags_part, "length": $length, "mkdir_parents": $mkdir_parents, "part": $part, "parts": $parts, "provided_mtime": $provided_mtime, "ref": $ref, "restart": $restart, "size": $size, "structure": $structure, "with_rename": $with_rename} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
@@ -2536,7 +2601,7 @@ export def "files create" [
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let req_body = if ($req_body | describe | str starts-with "record") { $req_body } else { {} }
   let mp = (build-multipart-body $req_body [] $dry_run)
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full $mp.content_type $mp.body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full $mp.content_type $mp.body {query: {}, body: $req_body}
 }
 
 # List Folders by path
@@ -2565,11 +2630,12 @@ export def "folders list" [
 ]: nothing -> table<crc32: string, created_at: string, display_name: string, download_uri: string, is_locked: bool, md5: string, mime_type: string, mtime: string, path: string, permissions: string, preview: record<download_uri: string, id: int, size: string, status: string, type: string>, preview_id: int, priority_color: string, provided_mtime: string, region: string, size: int, subfolders_locked_: bool, type: string> {
   let auth = (build-auth $token ($auth_scheme | default "x-filesapi-key"))
   let base = ($base_url | default $BASE_URL)
+  if ($path | is-empty) { error make --unspanned { msg: "path parameter 'path' must be non-empty" } }
   let qp = [(serialize-qp "cursor" $cursor "scalar") (serialize-qp "per_page" $per_page "scalar") (serialize-qp "filter" $filter "scalar") (serialize-qp "preview_size" $preview_size "scalar") (serialize-qp "search" $search "scalar") (serialize-qp "search_all" $search_all "scalar") (serialize-qp "with_previews" $with_previews "scalar") (serialize-qp "with_priority_color" $with_priority_color "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({path: (encode-path-segment $path)} | format pattern "/folders/{path}") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"cursor": $cursor, "per_page": $per_page, "filter": $filter, "preview_size": $preview_size, "search": $search, "search_all": $search_all, "with_previews": $with_previews, "with_priority_color": $with_priority_color} | compact), body: null}
 }
 
 # Create folder
@@ -2593,6 +2659,7 @@ export def "folders create" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "x-filesapi-key"))
   let base = ($base_url | default $BASE_URL)
+  if ($path | is-empty) { error make --unspanned { msg: "path parameter 'path' must be non-empty" } }
   let full_url = (build-url $base ({path: (encode-path-segment $path)} | format pattern "/folders/{path}"))
   let req_body = {"mkdir_parents": $mkdir_parents, "provided_mtime": $provided_mtime} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
@@ -2600,7 +2667,7 @@ export def "folders create" [
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let req_body = if ($req_body | describe | str starts-with "record") { $req_body } else { {} }
   let mp = (build-multipart-body $req_body [] $dry_run)
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full $mp.content_type $mp.body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full $mp.content_type $mp.body {query: {}, body: $req_body}
 }
 
 # List Form Field Sets
@@ -2627,7 +2694,7 @@ export def "form-field-sets list" [
   let full_url = (build-url $base "/form_field_sets" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"user_id": $user_id, "cursor": $cursor, "per_page": $per_page} | compact), body: null}
 }
 
 # Create Form Field Set
@@ -2660,7 +2727,7 @@ export def "form-field-sets create" [
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: {}, body: $req_body}
 }
 
 # Delete Form Field Set
@@ -2681,10 +2748,11 @@ export def "form-field-sets delete" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "x-filesapi-key"))
   let base = ($base_url | default $BASE_URL)
+  if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
   let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/form_field_sets/{id}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
 }
 
 # Show Form Field Set
@@ -2705,10 +2773,11 @@ export def "form-field-sets get" [
 ]: nothing -> record<form_fields: table<default_option: string, field_type: string, form_field_set_id: int, help_text: string, id: int, label: string, options_for_select: list, required: bool>, form_layout: list<int>, id: int, skip_company: bool, skip_email: bool, skip_name: bool, title: string> {
   let auth = (build-auth $token ($auth_scheme | default "x-filesapi-key"))
   let base = ($base_url | default $BASE_URL)
+  if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
   let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/form_field_sets/{id}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
 }
 
 # Update Form Field Set
@@ -2736,12 +2805,13 @@ export def "form-field-sets update" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "x-filesapi-key"))
   let base = ($base_url | default $BASE_URL)
+  if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
   let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/form_field_sets/{id}"))
   let req_body = {"form_fields": $form_fields, "skip_company": $skip_company, "skip_email": $skip_email, "skip_name": $skip_name, "title": $title} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "patch" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body
+  do-request "patch" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: {}, body: $req_body}
 }
 
 # List Group Users
@@ -2769,7 +2839,7 @@ export def "group-users get" [
   let full_url = (build-url $base "/group_users" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"user_id": $user_id, "cursor": $cursor, "per_page": $per_page, "group_id": $group_id} | compact), body: null}
 }
 
 # Create Group User
@@ -2800,7 +2870,7 @@ export def "group-users create" [
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let req_body = if ($req_body | describe | str starts-with "record") { $req_body } else { {} }
   let mp = (build-multipart-body $req_body [] $dry_run)
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full $mp.content_type $mp.body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full $mp.content_type $mp.body {query: {}, body: $req_body}
 }
 
 # Delete Group User
@@ -2823,11 +2893,12 @@ export def "group-users delete" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "x-filesapi-key"))
   let base = ($base_url | default $BASE_URL)
+  if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
   let qp = [(serialize-qp "group_id" $group_id "scalar") (serialize-qp "user_id" $user_id "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/group_users/{id}") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"group_id": $group_id, "user_id": $user_id} | compact), body: null}
 }
 
 # Update Group User
@@ -2852,6 +2923,7 @@ export def "group-users update" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "x-filesapi-key"))
   let base = ($base_url | default $BASE_URL)
+  if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
   let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/group_users/{id}"))
   let req_body = {"admin": $admin, "group_id": $group_id, "user_id": $user_id} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
@@ -2859,7 +2931,7 @@ export def "group-users update" [
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let req_body = if ($req_body | describe | str starts-with "record") { $req_body } else { {} }
   let mp = (build-multipart-body $req_body [] $dry_run)
-  do-request "patch" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full $mp.content_type $mp.body
+  do-request "patch" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full $mp.content_type $mp.body {query: {}, body: $req_body}
 }
 
 # List Groups
@@ -2893,7 +2965,7 @@ export def "groups list" [
   let full_url = (build-url $base "/groups" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"cursor": $cursor, "per_page": $per_page, "sort_by": $sort_by, "filter": $filter, "filter_gt": $filter_gt, "filter_gteq": $filter_gteq, "filter_like": $filter_like, "filter_lt": $filter_lt, "filter_lteq": $filter_lteq, "ids": $ids} | compact), body: null}
 }
 
 # Create Group
@@ -2925,7 +2997,7 @@ export def "groups create" [
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let req_body = if ($req_body | describe | str starts-with "record") { $req_body } else { {} }
   let mp = (build-multipart-body $req_body [] $dry_run)
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full $mp.content_type $mp.body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full $mp.content_type $mp.body {query: {}, body: $req_body}
 }
 
 # Delete Group User
@@ -2947,10 +3019,12 @@ export def "groups-memberships delete" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "x-filesapi-key"))
   let base = ($base_url | default $BASE_URL)
+  if ($group_id | is-empty) { error make --unspanned { msg: "path parameter 'group_id' must be non-empty" } }
+  if ($user_id | is-empty) { error make --unspanned { msg: "path parameter 'user_id' must be non-empty" } }
   let full_url = (build-url $base ({group_id: (encode-path-segment $group_id), user_id: (encode-path-segment $user_id)} | format pattern "/groups/{group_id}/memberships/{user_id}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
 }
 
 # Update Group User
@@ -2974,6 +3048,8 @@ export def "groups-memberships update" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "x-filesapi-key"))
   let base = ($base_url | default $BASE_URL)
+  if ($group_id | is-empty) { error make --unspanned { msg: "path parameter 'group_id' must be non-empty" } }
+  if ($user_id | is-empty) { error make --unspanned { msg: "path parameter 'user_id' must be non-empty" } }
   let full_url = (build-url $base ({group_id: (encode-path-segment $group_id), user_id: (encode-path-segment $user_id)} | format pattern "/groups/{group_id}/memberships/{user_id}"))
   let req_body = {"admin": $admin} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
@@ -2981,7 +3057,7 @@ export def "groups-memberships update" [
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let req_body = if ($req_body | describe | str starts-with "record") { $req_body } else { {} }
   let mp = (build-multipart-body $req_body [] $dry_run)
-  do-request "patch" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full $mp.content_type $mp.body
+  do-request "patch" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full $mp.content_type $mp.body {query: {}, body: $req_body}
 }
 
 # List Permissions
@@ -3014,11 +3090,12 @@ export def "groups-permissions get" [
 ]: nothing -> table<group_id: int, group_name: string, id: int, path: string, permission: string, recursive: bool, user_id: int, username: string> {
   let auth = (build-auth $token ($auth_scheme | default "x-filesapi-key"))
   let base = ($base_url | default $BASE_URL)
+  if ($group_id | is-empty) { error make --unspanned { msg: "path parameter 'group_id' must be non-empty" } }
   let qp = [(serialize-qp "cursor" $cursor "scalar") (serialize-qp "per_page" $per_page "scalar") (serialize-qp "sort_by" $sort_by "multi") (serialize-qp "filter" $filter "multi") (serialize-qp "filter_gt" $filter_gt "multi") (serialize-qp "filter_gteq" $filter_gteq "multi") (serialize-qp "filter_like" $filter_like "multi") (serialize-qp "filter_lt" $filter_lt "multi") (serialize-qp "filter_lteq" $filter_lteq "multi") (serialize-qp "path" $path "scalar") (serialize-qp "user_id" $user_id "scalar") (serialize-qp "include_groups" $include_groups "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({group_id: (encode-path-segment $group_id)} | format pattern "/groups/{group_id}/permissions") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"cursor": $cursor, "per_page": $per_page, "sort_by": $sort_by, "filter": $filter, "filter_gt": $filter_gt, "filter_gteq": $filter_gteq, "filter_like": $filter_like, "filter_lt": $filter_lt, "filter_lteq": $filter_lteq, "path": $path, "user_id": $user_id, "include_groups": $include_groups} | compact), body: null}
 }
 
 # List Group Users
@@ -3042,11 +3119,12 @@ export def "groups-users get" [
 ]: nothing -> table<admin: bool, group_id: int, group_name: string, user_id: int, usernames: list<string>> {
   let auth = (build-auth $token ($auth_scheme | default "x-filesapi-key"))
   let base = ($base_url | default $BASE_URL)
+  if ($group_id | is-empty) { error make --unspanned { msg: "path parameter 'group_id' must be non-empty" } }
   let qp = [(serialize-qp "user_id" $user_id "scalar") (serialize-qp "cursor" $cursor "scalar") (serialize-qp "per_page" $per_page "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({group_id: (encode-path-segment $group_id)} | format pattern "/groups/{group_id}/users") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"user_id": $user_id, "cursor": $cursor, "per_page": $per_page} | compact), body: null}
 }
 
 # Create User
@@ -3111,6 +3189,7 @@ export def "groups-users create" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "x-filesapi-key"))
   let base = ($base_url | default $BASE_URL)
+  if ($group_id | is-empty) { error make --unspanned { msg: "path parameter 'group_id' must be non-empty" } }
   let full_url = (build-url $base ({group_id: (encode-path-segment $group_id)} | format pattern "/groups/{group_id}/users"))
   let req_body = {"allowed_ips": $allowed_ips, "announcements_read": $announcements_read, "attachments_permission": $attachments_permission, "authenticate_until": $authenticate_until, "authentication_method": $authentication_method, "avatar_delete": $avatar_delete, "avatar_file": $avatar_file, "billing_permission": $billing_permission, "bypass_inactive_disable": $bypass_inactive_disable, "bypass_site_allowed_ips": $bypass_site_allowed_ips, "change_password": $change_password, "change_password_confirmation": $change_password_confirmation, "company": $company, "dav_permission": $dav_permission, "disabled": $disabled, "email": $email, "ftp_permission": $ftp_permission, "grant_permission": $grant_permission, "group_ids": $group_ids, "header_text": $header_text, "imported_password_hash": $imported_password_hash, "language": $language, "name": $name, "notes": $notes, "notification_daily_send_time": $notification_daily_send_time, "office_integration_enabled": $office_integration_enabled, "password": $password, "password_confirmation": $password_confirmation, "password_validity_days": $password_validity_days, "receive_admin_alerts": $receive_admin_alerts, "require_2fa": $require_2fa, "require_password_change": $require_password_change, "restapi_permission": $restapi_permission, "self_managed": $self_managed, "sftp_permission": $sftp_permission, "site_admin": $site_admin, "skip_welcome_screen": $skip_welcome_screen, "ssl_required": $ssl_required, "sso_strategy_id": $sso_strategy_id, "subscribe_to_newsletter": $subscribe_to_newsletter, "time_zone": $time_zone, "user_root": $user_root, "username": $username} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
@@ -3118,7 +3197,7 @@ export def "groups-users create" [
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let req_body = if ($req_body | describe | str starts-with "record") { $req_body } else { {} }
   let mp = (build-multipart-body $req_body ["avatar_file"] $dry_run)
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full $mp.content_type $mp.body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full $mp.content_type $mp.body {query: {}, body: $req_body}
 }
 
 # Delete Group
@@ -3139,10 +3218,11 @@ export def "groups delete" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "x-filesapi-key"))
   let base = ($base_url | default $BASE_URL)
+  if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
   let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/groups/{id}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
 }
 
 # Show Group
@@ -3163,10 +3243,11 @@ export def "groups get" [
 ]: nothing -> record<admin_ids: string, id: int, name: string, notes: string, user_ids: string, usernames: string> {
   let auth = (build-auth $token ($auth_scheme | default "x-filesapi-key"))
   let base = ($base_url | default $BASE_URL)
+  if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
   let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/groups/{id}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
 }
 
 # Update Group
@@ -3192,6 +3273,7 @@ export def "groups update" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "x-filesapi-key"))
   let base = ($base_url | default $BASE_URL)
+  if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
   let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/groups/{id}"))
   let req_body = {"admin_ids": $admin_ids, "name": $name, "notes": $notes, "user_ids": $user_ids} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
@@ -3199,7 +3281,7 @@ export def "groups update" [
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let req_body = if ($req_body | describe | str starts-with "record") { $req_body } else { {} }
   let mp = (build-multipart-body $req_body [] $dry_run)
-  do-request "patch" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full $mp.content_type $mp.body
+  do-request "patch" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full $mp.content_type $mp.body {query: {}, body: $req_body}
 }
 
 # List site full action history.
@@ -3235,7 +3317,7 @@ export def "history list" [
   let full_url = (build-url $base "/history" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"start_at": $start_at, "end_at": $end_at, "display": $display, "cursor": $cursor, "per_page": $per_page, "sort_by": $sort_by, "filter": $filter, "filter_gt": $filter_gt, "filter_gteq": $filter_gteq, "filter_like": $filter_like, "filter_lt": $filter_lt, "filter_lteq": $filter_lteq} | compact), body: null}
 }
 
 # List history for specific file.
@@ -3262,11 +3344,12 @@ export def "history-files list" [
 ]: nothing -> table<action: string, destination: string, display: string, failure_type: string, id: int, interface: string, ip: string, path: string, source: string, targets: list<record>, user_id: int, username: string, when: string> {
   let auth = (build-auth $token ($auth_scheme | default "x-filesapi-key"))
   let base = ($base_url | default $BASE_URL)
+  if ($path | is-empty) { error make --unspanned { msg: "path parameter 'path' must be non-empty" } }
   let qp = [(serialize-qp "start_at" $start_at "scalar") (serialize-qp "end_at" $end_at "scalar") (serialize-qp "display" $display "scalar") (serialize-qp "cursor" $cursor "scalar") (serialize-qp "per_page" $per_page "scalar") (serialize-qp "sort_by" $sort_by "multi")] | flatten | str join "&"
   let full_url = (build-url $base ({path: (encode-path-segment $path)} | format pattern "/history/files/{path}") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"start_at": $start_at, "end_at": $end_at, "display": $display, "cursor": $cursor, "per_page": $per_page, "sort_by": $sort_by} | compact), body: null}
 }
 
 # List history for specific folder.
@@ -3293,11 +3376,12 @@ export def "history-folders list" [
 ]: nothing -> table<action: string, destination: string, display: string, failure_type: string, id: int, interface: string, ip: string, path: string, source: string, targets: list<record>, user_id: int, username: string, when: string> {
   let auth = (build-auth $token ($auth_scheme | default "x-filesapi-key"))
   let base = ($base_url | default $BASE_URL)
+  if ($path | is-empty) { error make --unspanned { msg: "path parameter 'path' must be non-empty" } }
   let qp = [(serialize-qp "start_at" $start_at "scalar") (serialize-qp "end_at" $end_at "scalar") (serialize-qp "display" $display "scalar") (serialize-qp "cursor" $cursor "scalar") (serialize-qp "per_page" $per_page "scalar") (serialize-qp "sort_by" $sort_by "multi")] | flatten | str join "&"
   let full_url = (build-url $base ({path: (encode-path-segment $path)} | format pattern "/history/folders/{path}") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"start_at": $start_at, "end_at": $end_at, "display": $display, "cursor": $cursor, "per_page": $per_page, "sort_by": $sort_by} | compact), body: null}
 }
 
 # List site login history.
@@ -3327,7 +3411,7 @@ export def "history-login list" [
   let full_url = (build-url $base "/history/login" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"start_at": $start_at, "end_at": $end_at, "display": $display, "cursor": $cursor, "per_page": $per_page, "sort_by": $sort_by} | compact), body: null}
 }
 
 # List history for specific user.
@@ -3354,11 +3438,12 @@ export def "history-users list" [
 ]: nothing -> table<action: string, destination: string, display: string, failure_type: string, id: int, interface: string, ip: string, path: string, source: string, targets: list<record>, user_id: int, username: string, when: string> {
   let auth = (build-auth $token ($auth_scheme | default "x-filesapi-key"))
   let base = ($base_url | default $BASE_URL)
+  if ($user_id | is-empty) { error make --unspanned { msg: "path parameter 'user_id' must be non-empty" } }
   let qp = [(serialize-qp "start_at" $start_at "scalar") (serialize-qp "end_at" $end_at "scalar") (serialize-qp "display" $display "scalar") (serialize-qp "cursor" $cursor "scalar") (serialize-qp "per_page" $per_page "scalar") (serialize-qp "sort_by" $sort_by "multi")] | flatten | str join "&"
   let full_url = (build-url $base ({user_id: (encode-path-segment $user_id)} | format pattern "/history/users/{user_id}") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"start_at": $start_at, "end_at": $end_at, "display": $display, "cursor": $cursor, "per_page": $per_page, "sort_by": $sort_by} | compact), body: null}
 }
 
 # List History Export Results
@@ -3386,7 +3471,7 @@ export def "history-export-results get" [
   let full_url = (build-url $base "/history_export_results" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"user_id": $user_id, "cursor": $cursor, "per_page": $per_page, "history_export_id": $history_export_id} | compact), body: null}
 }
 
 # Create History Export
@@ -3436,7 +3521,7 @@ export def "history-exports create" [
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let req_body = if ($req_body | describe | str starts-with "record") { $req_body } else { {} }
   let mp = (build-multipart-body $req_body [] $dry_run)
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full $mp.content_type $mp.body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full $mp.content_type $mp.body {query: {}, body: $req_body}
 }
 
 # Show History Export
@@ -3457,10 +3542,11 @@ export def "history-exports get" [
 ]: nothing -> record<end_at: string, history_version: string, id: int, query_action: string, query_destination: string, query_failure_type: string, query_file_id: string, query_folder: string, query_interface: string, query_ip: string, query_parent_id: string, query_path: string, query_src: string, query_target_id: string, query_target_name: string, query_target_permission: string, query_target_permission_set: string, query_target_platform: string, query_target_user_id: string, query_target_username: string, query_user_id: string, query_username: string, results_url: string, start_at: string, status: string> {
   let auth = (build-auth $token ($auth_scheme | default "x-filesapi-key"))
   let base = ($base_url | default $BASE_URL)
+  if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
   let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/history_exports/{id}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
 }
 
 # List Inbox Recipients
@@ -3495,7 +3581,7 @@ export def "inbox-recipients get" [
   let full_url = (build-url $base "/inbox_recipients" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"user_id": $user_id, "cursor": $cursor, "per_page": $per_page, "sort_by": $sort_by, "filter": $filter, "filter_gt": $filter_gt, "filter_gteq": $filter_gteq, "filter_like": $filter_like, "filter_lt": $filter_lt, "filter_lteq": $filter_lteq, "inbox_id": $inbox_id} | compact), body: null}
 }
 
 # Create Inbox Recipient
@@ -3530,7 +3616,7 @@ export def "inbox-recipients create" [
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let req_body = if ($req_body | describe | str starts-with "record") { $req_body } else { {} }
   let mp = (build-multipart-body $req_body [] $dry_run)
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full $mp.content_type $mp.body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full $mp.content_type $mp.body {query: {}, body: $req_body}
 }
 
 # List Inbox Registrations
@@ -3557,7 +3643,7 @@ export def "inbox-registrations get" [
   let full_url = (build-url $base "/inbox_registrations" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"cursor": $cursor, "per_page": $per_page, "folder_behavior_id": $folder_behavior_id} | compact), body: null}
 }
 
 # List Inbox Uploads
@@ -3592,7 +3678,7 @@ export def "inbox-uploads get" [
   let full_url = (build-url $base "/inbox_uploads" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"cursor": $cursor, "per_page": $per_page, "sort_by": $sort_by, "filter": $filter, "filter_gt": $filter_gt, "filter_gteq": $filter_gteq, "filter_like": $filter_like, "filter_lt": $filter_lt, "filter_lteq": $filter_lteq, "inbox_registration_id": $inbox_registration_id, "inbox_id": $inbox_id} | compact), body: null}
 }
 
 # List Invoices
@@ -3618,7 +3704,7 @@ export def "invoices list" [
   let full_url = (build-url $base "/invoices" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"cursor": $cursor, "per_page": $per_page} | compact), body: null}
 }
 
 # Show Invoice
@@ -3639,10 +3725,11 @@ export def "invoices get" [
 ]: nothing -> record<amount: float, balance: float, created_at: string, currency: string, download_uri: string, id: int, invoice_line_items: table<amount: float, created_at: string, description: string, plan: string, service_end_at: string, service_start_at: string, site: string, type: string, updated_at: string>, method: string, payment_line_items: table<amount: float, created_at: string, invoice_id: int, payment_id: int>, payment_reversed_at: string, payment_type: string, site_name: string, type: string, updated_at: string> {
   let auth = (build-auth $token ($auth_scheme | default "x-filesapi-key"))
   let base = ($base_url | default $BASE_URL)
+  if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
   let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/invoices/{id}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
 }
 
 # List IP Addresses associated with the current site
@@ -3668,7 +3755,7 @@ export def "ip-addresses get" [
   let full_url = (build-url $base "/ip_addresses" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"cursor": $cursor, "per_page": $per_page} | compact), body: null}
 }
 
 # List all possible public ExaVault IP addresses
@@ -3694,7 +3781,7 @@ export def "ip-addresses-exavault-reserved get" [
   let full_url = (build-url $base "/ip_addresses/exavault-reserved" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"cursor": $cursor, "per_page": $per_page} | compact), body: null}
 }
 
 # List all possible public IP addresses
@@ -3720,7 +3807,7 @@ export def "ip-addresses-reserved get" [
   let full_url = (build-url $base "/ip_addresses/reserved" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"cursor": $cursor, "per_page": $per_page} | compact), body: null}
 }
 
 # Delete Lock
@@ -3742,11 +3829,12 @@ export def "locks delete" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "x-filesapi-key"))
   let base = ($base_url | default $BASE_URL)
+  if ($path | is-empty) { error make --unspanned { msg: "path parameter 'path' must be non-empty" } }
   let qp = [(serialize-qp "token" $qp_token "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({path: (encode-path-segment $path)} | format pattern "/locks/{path}") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"token": $qp_token} | compact), body: null}
 }
 
 # List Locks by path
@@ -3770,11 +3858,12 @@ export def "locks list" [
 ]: nothing -> table<allow_access_by_any_user: bool, depth: string, exclusive: bool, owner: string, path: string, recursive: bool, scope: string, timeout: int, token: string, type: string, user_id: int, username: string> {
   let auth = (build-auth $token ($auth_scheme | default "x-filesapi-key"))
   let base = ($base_url | default $BASE_URL)
+  if ($path | is-empty) { error make --unspanned { msg: "path parameter 'path' must be non-empty" } }
   let qp = [(serialize-qp "cursor" $cursor "scalar") (serialize-qp "per_page" $per_page "scalar") (serialize-qp "include_children" $include_children "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({path: (encode-path-segment $path)} | format pattern "/locks/{path}") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"cursor": $cursor, "per_page": $per_page, "include_children": $include_children} | compact), body: null}
 }
 
 # Create Lock
@@ -3800,6 +3889,7 @@ export def "locks create" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "x-filesapi-key"))
   let base = ($base_url | default $BASE_URL)
+  if ($path | is-empty) { error make --unspanned { msg: "path parameter 'path' must be non-empty" } }
   let full_url = (build-url $base ({path: (encode-path-segment $path)} | format pattern "/locks/{path}"))
   let req_body = {"allow_access_by_any_user": $allow_access_by_any_user, "exclusive": $exclusive, "recursive": $recursive, "timeout": $timeout} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
@@ -3807,7 +3897,7 @@ export def "locks create" [
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let req_body = if ($req_body | describe | str starts-with "record") { $req_body } else { {} }
   let mp = (build-multipart-body $req_body [] $dry_run)
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full $mp.content_type $mp.body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full $mp.content_type $mp.body {query: {}, body: $req_body}
 }
 
 # List Message Comment Reactions
@@ -3835,7 +3925,7 @@ export def "message-comment-reactions list" [
   let full_url = (build-url $base "/message_comment_reactions" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"user_id": $user_id, "cursor": $cursor, "per_page": $per_page, "message_comment_id": $message_comment_id} | compact), body: null}
 }
 
 # Create Message Comment Reaction
@@ -3865,7 +3955,7 @@ export def "message-comment-reactions create" [
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let req_body = if ($req_body | describe | str starts-with "record") { $req_body } else { {} }
   let mp = (build-multipart-body $req_body [] $dry_run)
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full $mp.content_type $mp.body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full $mp.content_type $mp.body {query: {}, body: $req_body}
 }
 
 # Delete Message Comment Reaction
@@ -3886,10 +3976,11 @@ export def "message-comment-reactions delete" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "x-filesapi-key"))
   let base = ($base_url | default $BASE_URL)
+  if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
   let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/message_comment_reactions/{id}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
 }
 
 # Show Message Comment Reaction
@@ -3910,10 +4001,11 @@ export def "message-comment-reactions get" [
 ]: nothing -> record<emoji: string, id: int> {
   let auth = (build-auth $token ($auth_scheme | default "x-filesapi-key"))
   let base = ($base_url | default $BASE_URL)
+  if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
   let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/message_comment_reactions/{id}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
 }
 
 # List Message Comments
@@ -3941,7 +4033,7 @@ export def "message-comments list" [
   let full_url = (build-url $base "/message_comments" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"user_id": $user_id, "cursor": $cursor, "per_page": $per_page, "message_id": $message_id} | compact), body: null}
 }
 
 # Create Message Comment
@@ -3971,7 +4063,7 @@ export def "message-comments create" [
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let req_body = if ($req_body | describe | str starts-with "record") { $req_body } else { {} }
   let mp = (build-multipart-body $req_body [] $dry_run)
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full $mp.content_type $mp.body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full $mp.content_type $mp.body {query: {}, body: $req_body}
 }
 
 # Delete Message Comment
@@ -3992,10 +4084,11 @@ export def "message-comments delete" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "x-filesapi-key"))
   let base = ($base_url | default $BASE_URL)
+  if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
   let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/message_comments/{id}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
 }
 
 # Show Message Comment
@@ -4016,10 +4109,11 @@ export def "message-comments get" [
 ]: nothing -> record<body: string, id: int, reactions: table<emoji: string, id: int>> {
   let auth = (build-auth $token ($auth_scheme | default "x-filesapi-key"))
   let base = ($base_url | default $BASE_URL)
+  if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
   let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/message_comments/{id}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
 }
 
 # Update Message Comment
@@ -4042,6 +4136,7 @@ export def "message-comments update" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "x-filesapi-key"))
   let base = ($base_url | default $BASE_URL)
+  if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
   let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/message_comments/{id}"))
   let req_body = {"body": $body} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
@@ -4049,7 +4144,7 @@ export def "message-comments update" [
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let req_body = if ($req_body | describe | str starts-with "record") { $req_body } else { {} }
   let mp = (build-multipart-body $req_body [] $dry_run)
-  do-request "patch" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full $mp.content_type $mp.body
+  do-request "patch" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full $mp.content_type $mp.body {query: {}, body: $req_body}
 }
 
 # List Message Reactions
@@ -4077,7 +4172,7 @@ export def "message-reactions list" [
   let full_url = (build-url $base "/message_reactions" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"user_id": $user_id, "cursor": $cursor, "per_page": $per_page, "message_id": $message_id} | compact), body: null}
 }
 
 # Create Message Reaction
@@ -4107,7 +4202,7 @@ export def "message-reactions create" [
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let req_body = if ($req_body | describe | str starts-with "record") { $req_body } else { {} }
   let mp = (build-multipart-body $req_body [] $dry_run)
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full $mp.content_type $mp.body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full $mp.content_type $mp.body {query: {}, body: $req_body}
 }
 
 # Delete Message Reaction
@@ -4128,10 +4223,11 @@ export def "message-reactions delete" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "x-filesapi-key"))
   let base = ($base_url | default $BASE_URL)
+  if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
   let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/message_reactions/{id}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
 }
 
 # Show Message Reaction
@@ -4152,10 +4248,11 @@ export def "message-reactions get" [
 ]: nothing -> record<emoji: string, id: int> {
   let auth = (build-auth $token ($auth_scheme | default "x-filesapi-key"))
   let base = ($base_url | default $BASE_URL)
+  if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
   let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/message_reactions/{id}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
 }
 
 # List Messages
@@ -4183,7 +4280,7 @@ export def "messages list" [
   let full_url = (build-url $base "/messages" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"user_id": $user_id, "cursor": $cursor, "per_page": $per_page, "project_id": $project_id} | compact), body: null}
 }
 
 # Create Message
@@ -4215,7 +4312,7 @@ export def "messages create" [
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let req_body = if ($req_body | describe | str starts-with "record") { $req_body } else { {} }
   let mp = (build-multipart-body $req_body [] $dry_run)
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full $mp.content_type $mp.body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full $mp.content_type $mp.body {query: {}, body: $req_body}
 }
 
 # Delete Message
@@ -4236,10 +4333,11 @@ export def "messages delete" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "x-filesapi-key"))
   let base = ($base_url | default $BASE_URL)
+  if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
   let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/messages/{id}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
 }
 
 # Show Message
@@ -4260,10 +4358,11 @@ export def "messages get" [
 ]: nothing -> record<body: string, comments: table<body: string, id: int, reactions: list>, id: int, subject: string> {
   let auth = (build-auth $token ($auth_scheme | default "x-filesapi-key"))
   let base = ($base_url | default $BASE_URL)
+  if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
   let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/messages/{id}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
 }
 
 # Update Message
@@ -4288,6 +4387,7 @@ export def "messages update" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "x-filesapi-key"))
   let base = ($base_url | default $BASE_URL)
+  if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
   let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/messages/{id}"))
   let req_body = {"body": $body, "project_id": $project_id, "subject": $subject} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
@@ -4295,7 +4395,7 @@ export def "messages update" [
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let req_body = if ($req_body | describe | str starts-with "record") { $req_body } else { {} }
   let mp = (build-multipart-body $req_body [] $dry_run)
-  do-request "patch" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full $mp.content_type $mp.body
+  do-request "patch" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full $mp.content_type $mp.body {query: {}, body: $req_body}
 }
 
 # List Notifications
@@ -4332,7 +4432,7 @@ export def "notifications list" [
   let full_url = (build-url $base "/notifications" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"user_id": $user_id, "cursor": $cursor, "per_page": $per_page, "sort_by": $sort_by, "filter": $filter, "filter_gt": $filter_gt, "filter_gteq": $filter_gteq, "filter_like": $filter_like, "filter_lt": $filter_lt, "filter_lteq": $filter_lteq, "group_id": $group_id, "path": $path, "include_ancestors": $include_ancestors} | compact), body: null}
 }
 
 # Create Notification
@@ -4377,7 +4477,7 @@ export def "notifications create" [
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let req_body = if ($req_body | describe | str starts-with "record") { $req_body } else { {} }
   let mp = (build-multipart-body $req_body [] $dry_run)
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full $mp.content_type $mp.body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full $mp.content_type $mp.body {query: {}, body: $req_body}
 }
 
 # Delete Notification
@@ -4398,10 +4498,11 @@ export def "notifications delete" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "x-filesapi-key"))
   let base = ($base_url | default $BASE_URL)
+  if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
   let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/notifications/{id}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
 }
 
 # Show Notification
@@ -4422,10 +4523,11 @@ export def "notifications get" [
 ]: nothing -> record<group_id: int, group_name: string, id: int, message: string, notify_on_copy: bool, notify_on_delete: bool, notify_on_download: bool, notify_on_move: bool, notify_on_upload: bool, notify_user_actions: bool, path: string, recursive: bool, send_interval: string, suppressed_email: bool, trigger_by_share_recipients: bool, triggering_filenames: list<string>, triggering_group_ids: list<int>, triggering_user_ids: list<int>, unsubscribed: bool, unsubscribed_reason: string, user_id: int, username: string> {
   let auth = (build-auth $token ($auth_scheme | default "x-filesapi-key"))
   let base = ($base_url | default $BASE_URL)
+  if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
   let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/notifications/{id}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
 }
 
 # Update Notification
@@ -4460,6 +4562,7 @@ export def "notifications update" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "x-filesapi-key"))
   let base = ($base_url | default $BASE_URL)
+  if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
   let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/notifications/{id}"))
   let req_body = {"message": $message, "notify_on_copy": $notify_on_copy, "notify_on_delete": $notify_on_delete, "notify_on_download": $notify_on_download, "notify_on_move": $notify_on_move, "notify_on_upload": $notify_on_upload, "notify_user_actions": $notify_user_actions, "recursive": $recursive, "send_interval": $send_interval, "trigger_by_share_recipients": $trigger_by_share_recipients, "triggering_filenames": $triggering_filenames, "triggering_group_ids": $triggering_group_ids, "triggering_user_ids": $triggering_user_ids} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
@@ -4467,7 +4570,7 @@ export def "notifications update" [
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let req_body = if ($req_body | describe | str starts-with "record") { $req_body } else { {} }
   let mp = (build-multipart-body $req_body [] $dry_run)
-  do-request "patch" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full $mp.content_type $mp.body
+  do-request "patch" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full $mp.content_type $mp.body {query: {}, body: $req_body}
 }
 
 # List Payments
@@ -4493,7 +4596,7 @@ export def "payments list" [
   let full_url = (build-url $base "/payments" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"cursor": $cursor, "per_page": $per_page} | compact), body: null}
 }
 
 # Show Payment
@@ -4514,10 +4617,11 @@ export def "payments get" [
 ]: nothing -> record<amount: float, balance: float, created_at: string, currency: string, download_uri: string, id: int, invoice_line_items: table<amount: float, created_at: string, description: string, plan: string, service_end_at: string, service_start_at: string, site: string, type: string, updated_at: string>, method: string, payment_line_items: table<amount: float, created_at: string, invoice_id: int, payment_id: int>, payment_reversed_at: string, payment_type: string, site_name: string, type: string, updated_at: string> {
   let auth = (build-auth $token ($auth_scheme | default "x-filesapi-key"))
   let base = ($base_url | default $BASE_URL)
+  if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
   let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/payments/{id}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
 }
 
 # List Permissions
@@ -4554,7 +4658,7 @@ export def "permissions get" [
   let full_url = (build-url $base "/permissions" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"cursor": $cursor, "per_page": $per_page, "sort_by": $sort_by, "filter": $filter, "filter_gt": $filter_gt, "filter_gteq": $filter_gteq, "filter_like": $filter_like, "filter_lt": $filter_lt, "filter_lteq": $filter_lteq, "path": $path, "group_id": $group_id, "user_id": $user_id, "include_groups": $include_groups} | compact), body: null}
 }
 
 # Create Permission
@@ -4588,7 +4692,7 @@ export def "permissions create" [
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let req_body = if ($req_body | describe | str starts-with "record") { $req_body } else { {} }
   let mp = (build-multipart-body $req_body [] $dry_run)
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full $mp.content_type $mp.body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full $mp.content_type $mp.body {query: {}, body: $req_body}
 }
 
 # Delete Permission
@@ -4609,10 +4713,11 @@ export def "permissions delete" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "x-filesapi-key"))
   let base = ($base_url | default $BASE_URL)
+  if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
   let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/permissions/{id}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
 }
 
 # List Priorities
@@ -4639,7 +4744,7 @@ export def "priorities get" [
   let full_url = (build-url $base "/priorities" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"cursor": $cursor, "per_page": $per_page, "path": $path} | compact), body: null}
 }
 
 # List Projects
@@ -4665,7 +4770,7 @@ export def "projects list" [
   let full_url = (build-url $base "/projects" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"cursor": $cursor, "per_page": $per_page} | compact), body: null}
 }
 
 # Create Project
@@ -4694,7 +4799,7 @@ export def "projects create" [
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let req_body = if ($req_body | describe | str starts-with "record") { $req_body } else { {} }
   let mp = (build-multipart-body $req_body [] $dry_run)
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full $mp.content_type $mp.body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full $mp.content_type $mp.body {query: {}, body: $req_body}
 }
 
 # Delete Project
@@ -4715,10 +4820,11 @@ export def "projects delete" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "x-filesapi-key"))
   let base = ($base_url | default $BASE_URL)
+  if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
   let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/projects/{id}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
 }
 
 # Show Project
@@ -4739,10 +4845,11 @@ export def "projects get" [
 ]: nothing -> record<global_access: string, id: int> {
   let auth = (build-auth $token ($auth_scheme | default "x-filesapi-key"))
   let base = ($base_url | default $BASE_URL)
+  if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
   let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/projects/{id}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
 }
 
 # Update Project
@@ -4765,6 +4872,7 @@ export def "projects update" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "x-filesapi-key"))
   let base = ($base_url | default $BASE_URL)
+  if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
   let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/projects/{id}"))
   let req_body = {"global_access": $global_access} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
@@ -4772,7 +4880,7 @@ export def "projects update" [
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let req_body = if ($req_body | describe | str starts-with "record") { $req_body } else { {} }
   let mp = (build-multipart-body $req_body [] $dry_run)
-  do-request "patch" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full $mp.content_type $mp.body
+  do-request "patch" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full $mp.content_type $mp.body {query: {}, body: $req_body}
 }
 
 # List Public Keys
@@ -4799,7 +4907,7 @@ export def "public-keys list" [
   let full_url = (build-url $base "/public_keys" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"user_id": $user_id, "cursor": $cursor, "per_page": $per_page} | compact), body: null}
 }
 
 # Create Public Key
@@ -4830,7 +4938,7 @@ export def "public-keys create" [
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let req_body = if ($req_body | describe | str starts-with "record") { $req_body } else { {} }
   let mp = (build-multipart-body $req_body [] $dry_run)
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full $mp.content_type $mp.body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full $mp.content_type $mp.body {query: {}, body: $req_body}
 }
 
 # Delete Public Key
@@ -4851,10 +4959,11 @@ export def "public-keys delete" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "x-filesapi-key"))
   let base = ($base_url | default $BASE_URL)
+  if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
   let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/public_keys/{id}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
 }
 
 # Show Public Key
@@ -4875,10 +4984,11 @@ export def "public-keys get" [
 ]: nothing -> record<created_at: string, fingerprint: string, id: int, title: string> {
   let auth = (build-auth $token ($auth_scheme | default "x-filesapi-key"))
   let base = ($base_url | default $BASE_URL)
+  if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
   let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/public_keys/{id}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
 }
 
 # Update Public Key
@@ -4901,6 +5011,7 @@ export def "public-keys update" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "x-filesapi-key"))
   let base = ($base_url | default $BASE_URL)
+  if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
   let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/public_keys/{id}"))
   let req_body = {"title": $title} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
@@ -4908,7 +5019,7 @@ export def "public-keys update" [
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let req_body = if ($req_body | describe | str starts-with "record") { $req_body } else { {} }
   let mp = (build-multipart-body $req_body [] $dry_run)
-  do-request "patch" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full $mp.content_type $mp.body
+  do-request "patch" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full $mp.content_type $mp.body {query: {}, body: $req_body}
 }
 
 # List Remote Bandwidth Snapshots
@@ -4941,7 +5052,7 @@ export def "remote-bandwidth-snapshots get" [
   let full_url = (build-url $base "/remote_bandwidth_snapshots" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"cursor": $cursor, "per_page": $per_page, "sort_by": $sort_by, "filter": $filter, "filter_gt": $filter_gt, "filter_gteq": $filter_gteq, "filter_like": $filter_like, "filter_lt": $filter_lt, "filter_lteq": $filter_lteq} | compact), body: null}
 }
 
 # List Remote Servers
@@ -4967,7 +5078,7 @@ export def "remote-servers list" [
   let full_url = (build-url $base "/remote_servers" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"cursor": $cursor, "per_page": $per_page} | compact), body: null}
 }
 
 # Create Remote Server
@@ -5049,7 +5160,7 @@ export def "remote-servers create" [
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let req_body = if ($req_body | describe | str starts-with "record") { $req_body } else { {} }
   let mp = (build-multipart-body $req_body [] $dry_run)
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full $mp.content_type $mp.body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full $mp.content_type $mp.body {query: {}, body: $req_body}
 }
 
 # Delete Remote Server
@@ -5070,10 +5181,11 @@ export def "remote-servers delete" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "x-filesapi-key"))
   let base = ($base_url | default $BASE_URL)
+  if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
   let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/remote_servers/{id}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
 }
 
 # Show Remote Server
@@ -5094,10 +5206,11 @@ export def "remote-servers get" [
 ]: nothing -> record<auth_account_name: string, auth_setup_link: string, auth_status: string, authentication_method: string, aws_access_key: string, azure_blob_storage_account: string, azure_blob_storage_container: string, azure_blob_storage_sas_token: string, azure_files_storage_account: string, azure_files_storage_sas_token: string, azure_files_storage_share_name: string, backblaze_b2_bucket: string, backblaze_b2_s3_endpoint: string, disabled: bool, enable_dedicated_ips: bool, filebase_access_key: string, filebase_bucket: string, files_agent_api_token: string, files_agent_permission_set: string, files_agent_root: string, google_cloud_storage_bucket: string, google_cloud_storage_project_id: string, hostname: string, id: int, max_connections: int, name: string, one_drive_account_type: string, pin_to_site_region: bool, pinned_region: string, port: int, rackspace_container: string, rackspace_region: string, rackspace_username: string, remote_home_path: string, s3_bucket: string, s3_compatible_access_key: string, s3_compatible_bucket: string, s3_compatible_endpoint: string, s3_compatible_region: string, s3_region: string, server_certificate: string, server_host_key: string, server_type: string, ssl: string, username: string, wasabi_access_key: string, wasabi_bucket: string, wasabi_region: string> {
   let auth = (build-auth $token ($auth_scheme | default "x-filesapi-key"))
   let base = ($base_url | default $BASE_URL)
+  if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
   let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/remote_servers/{id}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
 }
 
 # Update Remote Server
@@ -5173,6 +5286,7 @@ export def "remote-servers update" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "x-filesapi-key"))
   let base = ($base_url | default $BASE_URL)
+  if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
   let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/remote_servers/{id}"))
   let req_body = {"aws_access_key": $aws_access_key, "aws_secret_key": $aws_secret_key, "azure_blob_storage_access_key": $azure_blob_storage_access_key, "azure_blob_storage_account": $azure_blob_storage_account, "azure_blob_storage_container": $azure_blob_storage_container, "azure_blob_storage_sas_token": $azure_blob_storage_sas_token, "azure_files_storage_access_key": $azure_files_storage_access_key, "azure_files_storage_account": $azure_files_storage_account, "azure_files_storage_sas_token": $azure_files_storage_sas_token, "azure_files_storage_share_name": $azure_files_storage_share_name, "backblaze_b2_application_key": $backblaze_b2_application_key, "backblaze_b2_bucket": $backblaze_b2_bucket, "backblaze_b2_key_id": $backblaze_b2_key_id, "backblaze_b2_s3_endpoint": $backblaze_b2_s3_endpoint, "enable_dedicated_ips": $enable_dedicated_ips, "filebase_access_key": $filebase_access_key, "filebase_bucket": $filebase_bucket, "filebase_secret_key": $filebase_secret_key, "files_agent_permission_set": $files_agent_permission_set, "files_agent_root": $files_agent_root, "google_cloud_storage_bucket": $google_cloud_storage_bucket, "google_cloud_storage_credentials_json": $google_cloud_storage_credentials_json, "google_cloud_storage_project_id": $google_cloud_storage_project_id, "hostname": $hostname, "max_connections": $max_connections, "name": $name, "one_drive_account_type": $one_drive_account_type, "password": $password, "pin_to_site_region": $pin_to_site_region, "port": $port, "private_key": $private_key, "private_key_passphrase": $private_key_passphrase, "rackspace_api_key": $rackspace_api_key, "rackspace_container": $rackspace_container, "rackspace_region": $rackspace_region, "rackspace_username": $rackspace_username, "reset_authentication": $reset_authentication, "s3_bucket": $s3_bucket, "s3_compatible_access_key": $s3_compatible_access_key, "s3_compatible_bucket": $s3_compatible_bucket, "s3_compatible_endpoint": $s3_compatible_endpoint, "s3_compatible_region": $s3_compatible_region, "s3_compatible_secret_key": $s3_compatible_secret_key, "s3_region": $s3_region, "server_certificate": $server_certificate, "server_host_key": $server_host_key, "server_type": $server_type, "ssl": $ssl, "ssl_certificate": $ssl_certificate, "username": $username, "wasabi_access_key": $wasabi_access_key, "wasabi_bucket": $wasabi_bucket, "wasabi_region": $wasabi_region, "wasabi_secret_key": $wasabi_secret_key} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
@@ -5180,7 +5294,7 @@ export def "remote-servers update" [
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let req_body = if ($req_body | describe | str starts-with "record") { $req_body } else { {} }
   let mp = (build-multipart-body $req_body [] $dry_run)
-  do-request "patch" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full $mp.content_type $mp.body
+  do-request "patch" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full $mp.content_type $mp.body {query: {}, body: $req_body}
 }
 
 # Download configuration file (required for some Remote Server integrations, such as the Files.com Agent)
@@ -5201,10 +5315,11 @@ export def "remote-servers-configuration-file get" [
 ]: nothing -> record<api_token: string, config_version: string, hostname: string, id: int, permission_set: string, port: int, private_key: string, public_key: string, root: string, server_host_key: string, status: string, subdomain: string> {
   let auth = (build-auth $token ($auth_scheme | default "x-filesapi-key"))
   let base = ($base_url | default $BASE_URL)
+  if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
   let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/remote_servers/{id}/configuration_file"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
 }
 
 # Post local changes, check in, and download configuration file (used by some Remote Server integrations, such as the Files.com Agent)
@@ -5237,6 +5352,7 @@ export def "remote-servers-configuration-file create" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "x-filesapi-key"))
   let base = ($base_url | default $BASE_URL)
+  if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
   let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/remote_servers/{id}/configuration_file"))
   let req_body = {"api_token": $api_token, "config_version": $config_version, "hostname": $hostname, "permission_set": $permission_set, "port": $port, "private_key": $private_key, "public_key": $public_key, "root": $root, "server_host_key": $server_host_key, "status": $status, "subdomain": $subdomain} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
@@ -5244,7 +5360,7 @@ export def "remote-servers-configuration-file create" [
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let req_body = if ($req_body | describe | str starts-with "record") { $req_body } else { {} }
   let mp = (build-multipart-body $req_body [] $dry_run)
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full $mp.content_type $mp.body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full $mp.content_type $mp.body {query: {}, body: $req_body}
 }
 
 # List Requests
@@ -5273,7 +5389,7 @@ export def "requests get" [
   let full_url = (build-url $base "/requests" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"cursor": $cursor, "per_page": $per_page, "sort_by": $sort_by, "mine": $mine, "path": $path} | compact), body: null}
 }
 
 # Create Request
@@ -5305,7 +5421,7 @@ export def "requests create" [
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let req_body = if ($req_body | describe | str starts-with "record") { $req_body } else { {} }
   let mp = (build-multipart-body $req_body [] $dry_run)
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full $mp.content_type $mp.body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full $mp.content_type $mp.body {query: {}, body: $req_body}
 }
 
 # List Requests
@@ -5330,11 +5446,12 @@ export def "requests-folders get" [
 ]: nothing -> table<automation_id: string, destination: string, id: int, path: string, source: string, user_display_name: string> {
   let auth = (build-auth $token ($auth_scheme | default "x-filesapi-key"))
   let base = ($base_url | default $BASE_URL)
+  if ($path | is-empty) { error make --unspanned { msg: "path parameter 'path' must be non-empty" } }
   let qp = [(serialize-qp "cursor" $cursor "scalar") (serialize-qp "per_page" $per_page "scalar") (serialize-qp "sort_by" $sort_by "multi") (serialize-qp "mine" $mine "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({path: (encode-path-segment $path)} | format pattern "/requests/folders/{path}") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"cursor": $cursor, "per_page": $per_page, "sort_by": $sort_by, "mine": $mine} | compact), body: null}
 }
 
 # Delete Request
@@ -5355,10 +5472,11 @@ export def "requests delete" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "x-filesapi-key"))
   let base = ($base_url | default $BASE_URL)
+  if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
   let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/requests/{id}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
 }
 
 # Delete user session (log out)
@@ -5381,7 +5499,7 @@ export def "sessions delete" [
   let full_url = (build-url $base "/sessions")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
 }
 
 # Create user session (log in)
@@ -5413,7 +5531,7 @@ export def "sessions create" [
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let req_body = if ($req_body | describe | str starts-with "record") { $req_body } else { {} }
   let mp = (build-multipart-body $req_body [] $dry_run)
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full $mp.content_type $mp.body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full $mp.content_type $mp.body {query: {}, body: $req_body}
 }
 
 # List Settings Changes
@@ -5446,7 +5564,7 @@ export def "settings-changes get" [
   let full_url = (build-url $base "/settings_changes" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"cursor": $cursor, "per_page": $per_page, "sort_by": $sort_by, "filter": $filter, "filter_gt": $filter_gt, "filter_gteq": $filter_gteq, "filter_like": $filter_like, "filter_lt": $filter_lt, "filter_lteq": $filter_lteq} | compact), body: null}
 }
 
 # List Sftp Host Keys
@@ -5472,7 +5590,7 @@ export def "sftp-host-keys list" [
   let full_url = (build-url $base "/sftp_host_keys" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"cursor": $cursor, "per_page": $per_page} | compact), body: null}
 }
 
 # Create Sftp Host Key
@@ -5502,7 +5620,7 @@ export def "sftp-host-keys create" [
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let req_body = if ($req_body | describe | str starts-with "record") { $req_body } else { {} }
   let mp = (build-multipart-body $req_body [] $dry_run)
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full $mp.content_type $mp.body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full $mp.content_type $mp.body {query: {}, body: $req_body}
 }
 
 # Delete Sftp Host Key
@@ -5523,10 +5641,11 @@ export def "sftp-host-keys delete" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "x-filesapi-key"))
   let base = ($base_url | default $BASE_URL)
+  if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
   let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/sftp_host_keys/{id}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
 }
 
 # Show Sftp Host Key
@@ -5547,10 +5666,11 @@ export def "sftp-host-keys get" [
 ]: nothing -> record<fingerprint_md5: string, fingerprint_sha256: string, id: int, name: string> {
   let auth = (build-auth $token ($auth_scheme | default "x-filesapi-key"))
   let base = ($base_url | default $BASE_URL)
+  if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
   let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/sftp_host_keys/{id}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
 }
 
 # Update Sftp Host Key
@@ -5574,6 +5694,7 @@ export def "sftp-host-keys update" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "x-filesapi-key"))
   let base = ($base_url | default $BASE_URL)
+  if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
   let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/sftp_host_keys/{id}"))
   let req_body = {"name": $name, "private_key": $private_key} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
@@ -5581,7 +5702,7 @@ export def "sftp-host-keys update" [
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let req_body = if ($req_body | describe | str starts-with "record") { $req_body } else { {} }
   let mp = (build-multipart-body $req_body [] $dry_run)
-  do-request "patch" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full $mp.content_type $mp.body
+  do-request "patch" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full $mp.content_type $mp.body {query: {}, body: $req_body}
 }
 
 # Show site settings
@@ -5604,7 +5725,7 @@ export def "site get" [
   let full_url = (build-url $base "/site")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
 }
 
 # Update site settings.
@@ -5766,7 +5887,7 @@ export def "site update" [
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let req_body = if ($req_body | describe | str starts-with "record") { $req_body } else { {} }
   let mp = (build-multipart-body $req_body ["bundle_watermark_attachment_file" "icon128_file" "icon16_file" "icon32_file" "icon48_file" "logo_file"] $dry_run)
-  do-request "patch" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full $mp.content_type $mp.body
+  do-request "patch" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full $mp.content_type $mp.body {query: {}, body: $req_body}
 }
 
 # List Api Keys
@@ -5800,7 +5921,7 @@ export def "site-api-keys get" [
   let full_url = (build-url $base "/site/api_keys" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"user_id": $user_id, "cursor": $cursor, "per_page": $per_page, "sort_by": $sort_by, "filter": $filter, "filter_gt": $filter_gt, "filter_gteq": $filter_gteq, "filter_like": $filter_like, "filter_lt": $filter_lt, "filter_lteq": $filter_lteq} | compact), body: null}
 }
 
 # Create Api Key
@@ -5834,7 +5955,7 @@ export def "site-api-keys create" [
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let req_body = if ($req_body | describe | str starts-with "record") { $req_body } else { {} }
   let mp = (build-multipart-body $req_body [] $dry_run)
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full $mp.content_type $mp.body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full $mp.content_type $mp.body {query: {}, body: $req_body}
 }
 
 # Show site DNS configuration.
@@ -5860,7 +5981,7 @@ export def "site-dns-records get" [
   let full_url = (build-url $base "/site/dns_records" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"cursor": $cursor, "per_page": $per_page} | compact), body: null}
 }
 
 # List IP Addresses associated with the current site
@@ -5886,7 +6007,7 @@ export def "site-ip-addresses get" [
   let full_url = (build-url $base "/site/ip_addresses" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"cursor": $cursor, "per_page": $per_page} | compact), body: null}
 }
 
 # Test webhook.
@@ -5920,7 +6041,7 @@ export def "site-test-webhook create" [
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let req_body = if ($req_body | describe | str starts-with "record") { $req_body } else { {} }
   let mp = (build-multipart-body $req_body [] $dry_run)
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full $mp.content_type $mp.body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full $mp.content_type $mp.body {query: {}, body: $req_body}
 }
 
 # Get the most recent usage snapshot (usage data for billing purposes) for a Site.
@@ -5943,7 +6064,7 @@ export def "site-usage get" [
   let full_url = (build-url $base "/site/usage")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
 }
 
 # List Sso Strategies
@@ -5969,7 +6090,7 @@ export def "sso-strategies list" [
   let full_url = (build-url $base "/sso_strategies" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"cursor": $cursor, "per_page": $per_page} | compact), body: null}
 }
 
 # Show Sso Strategy
@@ -5990,10 +6111,11 @@ export def "sso-strategies get" [
 ]: nothing -> record<deprovision_behavior: string, deprovision_groups: bool, deprovision_users: bool, enabled: bool, id: int, label: string, ldap_base_dn: string, ldap_domain: string, ldap_host: string, ldap_host_2: string, ldap_host_3: string, ldap_port: int, ldap_secure: bool, ldap_username: string, ldap_username_field: string, logo_url: string, protocol: string, provider: string, provision_attachments_permission: bool, provision_company: string, provision_dav_permission: bool, provision_email_signup_groups: string, provision_ftp_permission: bool, provision_group_default: string, provision_group_exclusion: string, provision_group_inclusion: string, provision_group_required: string, provision_groups: bool, provision_sftp_permission: bool, provision_site_admin_groups: string, provision_time_zone: string, provision_users: bool, saml_provider_cert_fingerprint: string, saml_provider_issuer_url: string, saml_provider_metadata_content: string, saml_provider_metadata_url: string, saml_provider_slo_target_url: string, saml_provider_sso_target_url: string, scim_authentication_method: string, scim_oauth_access_token: string, scim_oauth_access_token_expires_at: string, scim_username: string, subdomain: string> {
   let auth = (build-auth $token ($auth_scheme | default "x-filesapi-key"))
   let base = ($base_url | default $BASE_URL)
+  if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
   let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/sso_strategies/{id}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
 }
 
 # Synchronize provisioning data with the SSO remote server.
@@ -6014,10 +6136,11 @@ export def "sso-strategies-sync create" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "x-filesapi-key"))
   let base = ($base_url | default $BASE_URL)
+  if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
   let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/sso_strategies/{id}/sync"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
 }
 
 # Delete Style
@@ -6038,10 +6161,11 @@ export def "styles delete" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "x-filesapi-key"))
   let base = ($base_url | default $BASE_URL)
+  if ($path | is-empty) { error make --unspanned { msg: "path parameter 'path' must be non-empty" } }
   let full_url = (build-url $base ({path: (encode-path-segment $path)} | format pattern "/styles/{path}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
 }
 
 # Show Style
@@ -6062,10 +6186,11 @@ export def "styles get" [
 ]: nothing -> record<id: int, logo: record<name: string, uri: string>, path: string, thumbnail: record<name: string, uri: string>> {
   let auth = (build-auth $token ($auth_scheme | default "x-filesapi-key"))
   let base = ($base_url | default $BASE_URL)
+  if ($path | is-empty) { error make --unspanned { msg: "path parameter 'path' must be non-empty" } }
   let full_url = (build-url $base ({path: (encode-path-segment $path)} | format pattern "/styles/{path}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
 }
 
 # Update Style
@@ -6088,6 +6213,7 @@ export def "styles update" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "x-filesapi-key"))
   let base = ($base_url | default $BASE_URL)
+  if ($path | is-empty) { error make --unspanned { msg: "path parameter 'path' must be non-empty" } }
   let full_url = (build-url $base ({path: (encode-path-segment $path)} | format pattern "/styles/{path}"))
   let req_body = {"file": $file} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
@@ -6095,7 +6221,7 @@ export def "styles update" [
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let req_body = if ($req_body | describe | str starts-with "record") { $req_body } else { {} }
   let mp = (build-multipart-body $req_body ["file"] $dry_run)
-  do-request "patch" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full $mp.content_type $mp.body
+  do-request "patch" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full $mp.content_type $mp.body {query: {}, body: $req_body}
 }
 
 # List Usage Daily Snapshots
@@ -6128,7 +6254,7 @@ export def "usage-daily-snapshots get" [
   let full_url = (build-url $base "/usage_daily_snapshots" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"cursor": $cursor, "per_page": $per_page, "sort_by": $sort_by, "filter": $filter, "filter_gt": $filter_gt, "filter_gteq": $filter_gteq, "filter_like": $filter_like, "filter_lt": $filter_lt, "filter_lteq": $filter_lteq} | compact), body: null}
 }
 
 # List Usage Snapshots
@@ -6154,7 +6280,7 @@ export def "usage-snapshots get" [
   let full_url = (build-url $base "/usage_snapshots" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"cursor": $cursor, "per_page": $per_page} | compact), body: null}
 }
 
 # Update User
@@ -6226,7 +6352,7 @@ export def "user update" [
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let req_body = if ($req_body | describe | str starts-with "record") { $req_body } else { {} }
   let mp = (build-multipart-body $req_body ["avatar_file"] $dry_run)
-  do-request "patch" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full $mp.content_type $mp.body
+  do-request "patch" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full $mp.content_type $mp.body {query: {}, body: $req_body}
 }
 
 # List Api Keys
@@ -6260,7 +6386,7 @@ export def "user-api-keys get" [
   let full_url = (build-url $base "/user/api_keys" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"user_id": $user_id, "cursor": $cursor, "per_page": $per_page, "sort_by": $sort_by, "filter": $filter, "filter_gt": $filter_gt, "filter_gteq": $filter_gteq, "filter_like": $filter_like, "filter_lt": $filter_lt, "filter_lteq": $filter_lteq} | compact), body: null}
 }
 
 # Create Api Key
@@ -6294,7 +6420,7 @@ export def "user-api-keys create" [
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let req_body = if ($req_body | describe | str starts-with "record") { $req_body } else { {} }
   let mp = (build-multipart-body $req_body [] $dry_run)
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full $mp.content_type $mp.body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full $mp.content_type $mp.body {query: {}, body: $req_body}
 }
 
 # List Group Users
@@ -6322,7 +6448,7 @@ export def "user-groups get" [
   let full_url = (build-url $base "/user/groups" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"user_id": $user_id, "cursor": $cursor, "per_page": $per_page, "group_id": $group_id} | compact), body: null}
 }
 
 # List Public Keys
@@ -6349,7 +6475,7 @@ export def "user-public-keys get" [
   let full_url = (build-url $base "/user/public_keys" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"user_id": $user_id, "cursor": $cursor, "per_page": $per_page} | compact), body: null}
 }
 
 # Create Public Key
@@ -6380,7 +6506,7 @@ export def "user-public-keys create" [
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let req_body = if ($req_body | describe | str starts-with "record") { $req_body } else { {} }
   let mp = (build-multipart-body $req_body [] $dry_run)
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full $mp.content_type $mp.body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full $mp.content_type $mp.body {query: {}, body: $req_body}
 }
 
 # List User Cipher Uses
@@ -6407,7 +6533,7 @@ export def "user-cipher-uses get" [
   let full_url = (build-url $base "/user_cipher_uses" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"user_id": $user_id, "cursor": $cursor, "per_page": $per_page} | compact), body: null}
 }
 
 # List User Requests
@@ -6433,7 +6559,7 @@ export def "user-requests list" [
   let full_url = (build-url $base "/user_requests" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"cursor": $cursor, "per_page": $per_page} | compact), body: null}
 }
 
 # Create User Request
@@ -6464,7 +6590,7 @@ export def "user-requests create" [
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let req_body = if ($req_body | describe | str starts-with "record") { $req_body } else { {} }
   let mp = (build-multipart-body $req_body [] $dry_run)
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full $mp.content_type $mp.body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full $mp.content_type $mp.body {query: {}, body: $req_body}
 }
 
 # Delete User Request
@@ -6485,10 +6611,11 @@ export def "user-requests delete" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "x-filesapi-key"))
   let base = ($base_url | default $BASE_URL)
+  if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
   let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/user_requests/{id}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
 }
 
 # Show User Request
@@ -6509,10 +6636,11 @@ export def "user-requests get" [
 ]: nothing -> record<details: string, email: string, id: int, name: string> {
   let auth = (build-auth $token ($auth_scheme | default "x-filesapi-key"))
   let base = ($base_url | default $BASE_URL)
+  if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
   let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/user_requests/{id}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
 }
 
 # List Users
@@ -6554,7 +6682,7 @@ export def "users list" [
   let full_url = (build-url $base "/users" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"cursor": $cursor, "per_page": $per_page, "sort_by": $sort_by, "filter": $filter, "filter_gt": $filter_gt, "filter_gteq": $filter_gteq, "filter_like": $filter_like, "filter_lt": $filter_lt, "filter_lteq": $filter_lteq, "ids": $ids, "q[username]": $q_username, "q[email]": $q_email, "q[notes]": $q_notes, "q[admin]": $q_admin, "q[allowed_ips]": $q_allowed_ips, "q[password_validity_days]": $q_password_validity_days, "q[ssl_required]": $q_ssl_required, "search": $search} | compact), body: null}
 }
 
 # Create User
@@ -6626,7 +6754,7 @@ export def "users create" [
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let req_body = if ($req_body | describe | str starts-with "record") { $req_body } else { {} }
   let mp = (build-multipart-body $req_body ["avatar_file"] $dry_run)
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full $mp.content_type $mp.body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full $mp.content_type $mp.body {query: {}, body: $req_body}
 }
 
 # Delete User
@@ -6647,10 +6775,11 @@ export def "users delete" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "x-filesapi-key"))
   let base = ($base_url | default $BASE_URL)
+  if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
   let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/users/{id}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
 }
 
 # Show User
@@ -6671,10 +6800,11 @@ export def "users get" [
 ]: nothing -> record<active_2fa: bool, admin_group_ids: list<int>, allowed_ips: string, api_keys_count: int, attachments_permission: bool, authenticate_until: string, authentication_method: string, avatar_url: string, billing_permission: bool, bypass_inactive_disable: bool, bypass_site_allowed_ips: bool, company: string, created_at: string, dav_permission: bool, days_remaining_until_password_expire: int, disabled: bool, email: string, externally_managed: bool, first_login_at: string, ftp_permission: bool, group_ids: string, header_text: string, id: int, language: string, last_active_at: string, last_api_use_at: string, last_dav_login_at: string, last_desktop_login_at: string, last_ftp_login_at: string, last_login_at: string, last_protocol_cipher: string, last_restapi_login_at: string, last_sftp_login_at: string, last_web_login_at: string, lockout_expires: string, name: string, notes: string, notification_daily_send_time: int, office_integration_enabled: bool, password_expire_at: string, password_expired: bool, password_set_at: string, password_validity_days: int, public_keys_count: int, receive_admin_alerts: bool, require_2fa: string, require_password_change: bool, restapi_permission: bool, self_managed: bool, sftp_permission: bool, site_admin: bool, skip_welcome_screen: bool, ssl_required: string, sso_strategy_id: int, subscribe_to_newsletter: bool, time_zone: string, type_of_2fa: string, user_root: string, username: string> {
   let auth = (build-auth $token ($auth_scheme | default "x-filesapi-key"))
   let base = ($base_url | default $BASE_URL)
+  if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
   let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/users/{id}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
 }
 
 # Update User
@@ -6740,6 +6870,7 @@ export def "users update" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "x-filesapi-key"))
   let base = ($base_url | default $BASE_URL)
+  if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
   let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/users/{id}"))
   let req_body = {"allowed_ips": $allowed_ips, "announcements_read": $announcements_read, "attachments_permission": $attachments_permission, "authenticate_until": $authenticate_until, "authentication_method": $authentication_method, "avatar_delete": $avatar_delete, "avatar_file": $avatar_file, "billing_permission": $billing_permission, "bypass_inactive_disable": $bypass_inactive_disable, "bypass_site_allowed_ips": $bypass_site_allowed_ips, "change_password": $change_password, "change_password_confirmation": $change_password_confirmation, "company": $company, "dav_permission": $dav_permission, "disabled": $disabled, "email": $email, "ftp_permission": $ftp_permission, "grant_permission": $grant_permission, "group_id": $group_id, "group_ids": $group_ids, "header_text": $header_text, "imported_password_hash": $imported_password_hash, "language": $language, "name": $name, "notes": $notes, "notification_daily_send_time": $notification_daily_send_time, "office_integration_enabled": $office_integration_enabled, "password": $password, "password_confirmation": $password_confirmation, "password_validity_days": $password_validity_days, "receive_admin_alerts": $receive_admin_alerts, "require_2fa": $require_2fa, "require_password_change": $require_password_change, "restapi_permission": $restapi_permission, "self_managed": $self_managed, "sftp_permission": $sftp_permission, "site_admin": $site_admin, "skip_welcome_screen": $skip_welcome_screen, "ssl_required": $ssl_required, "sso_strategy_id": $sso_strategy_id, "subscribe_to_newsletter": $subscribe_to_newsletter, "time_zone": $time_zone, "user_root": $user_root, "username": $username} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
@@ -6747,7 +6878,7 @@ export def "users update" [
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let req_body = if ($req_body | describe | str starts-with "record") { $req_body } else { {} }
   let mp = (build-multipart-body $req_body ["avatar_file"] $dry_run)
-  do-request "patch" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full $mp.content_type $mp.body
+  do-request "patch" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full $mp.content_type $mp.body {query: {}, body: $req_body}
 }
 
 # Trigger 2FA Reset process for user who has lost access to their existing 2FA methods.
@@ -6768,10 +6899,11 @@ export def "users-2fa-reset create-id2fa" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "x-filesapi-key"))
   let base = ($base_url | default $BASE_URL)
+  if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
   let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/users/{id}/2fa/reset"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
 }
 
 # Resend user welcome email
@@ -6792,10 +6924,11 @@ export def "users-resend-welcome-email create" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "x-filesapi-key"))
   let base = ($base_url | default $BASE_URL)
+  if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
   let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/users/{id}/resend_welcome_email"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
 }
 
 # Unlock user who has been locked out due to failed logins.
@@ -6816,10 +6949,11 @@ export def "users-unlock create" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "x-filesapi-key"))
   let base = ($base_url | default $BASE_URL)
+  if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
   let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/users/{id}/unlock"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
 }
 
 # List Api Keys
@@ -6849,11 +6983,12 @@ export def "users-api-keys get" [
 ]: nothing -> table<created_at: string, description: string, descriptive_label: string, expires_at: string, id: int, key: string, last_use_at: string, name: string, path: string, permission_set: string, platform: string, url: string, user_id: int> {
   let auth = (build-auth $token ($auth_scheme | default "x-filesapi-key"))
   let base = ($base_url | default $BASE_URL)
+  if ($user_id | is-empty) { error make --unspanned { msg: "path parameter 'user_id' must be non-empty" } }
   let qp = [(serialize-qp "cursor" $cursor "scalar") (serialize-qp "per_page" $per_page "scalar") (serialize-qp "sort_by" $sort_by "multi") (serialize-qp "filter" $filter "multi") (serialize-qp "filter_gt" $filter_gt "multi") (serialize-qp "filter_gteq" $filter_gteq "multi") (serialize-qp "filter_like" $filter_like "multi") (serialize-qp "filter_lt" $filter_lt "multi") (serialize-qp "filter_lteq" $filter_lteq "multi")] | flatten | str join "&"
   let full_url = (build-url $base ({user_id: (encode-path-segment $user_id)} | format pattern "/users/{user_id}/api_keys") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"cursor": $cursor, "per_page": $per_page, "sort_by": $sort_by, "filter": $filter, "filter_gt": $filter_gt, "filter_gteq": $filter_gteq, "filter_like": $filter_like, "filter_lt": $filter_lt, "filter_lteq": $filter_lteq} | compact), body: null}
 }
 
 # Create Api Key
@@ -6880,6 +7015,7 @@ export def "users-api-keys create" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "x-filesapi-key"))
   let base = ($base_url | default $BASE_URL)
+  if ($user_id | is-empty) { error make --unspanned { msg: "path parameter 'user_id' must be non-empty" } }
   let full_url = (build-url $base ({user_id: (encode-path-segment $user_id)} | format pattern "/users/{user_id}/api_keys"))
   let req_body = {"description": $description, "expires_at": $expires_at, "name": $name, "path": $path, "permission_set": $permission_set} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
@@ -6887,7 +7023,7 @@ export def "users-api-keys create" [
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let req_body = if ($req_body | describe | str starts-with "record") { $req_body } else { {} }
   let mp = (build-multipart-body $req_body [] $dry_run)
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full $mp.content_type $mp.body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full $mp.content_type $mp.body {query: {}, body: $req_body}
 }
 
 # List User Cipher Uses
@@ -6910,11 +7046,12 @@ export def "users-cipher-uses get" [
 ]: nothing -> table<created_at: string, id: int, interface: string, protocol_cipher: string, updated_at: string, user_id: int> {
   let auth = (build-auth $token ($auth_scheme | default "x-filesapi-key"))
   let base = ($base_url | default $BASE_URL)
+  if ($user_id | is-empty) { error make --unspanned { msg: "path parameter 'user_id' must be non-empty" } }
   let qp = [(serialize-qp "cursor" $cursor "scalar") (serialize-qp "per_page" $per_page "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({user_id: (encode-path-segment $user_id)} | format pattern "/users/{user_id}/cipher_uses") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"cursor": $cursor, "per_page": $per_page} | compact), body: null}
 }
 
 # List Group Users
@@ -6938,11 +7075,12 @@ export def "users-groups get" [
 ]: nothing -> table<admin: bool, group_id: int, group_name: string, user_id: int, usernames: list<string>> {
   let auth = (build-auth $token ($auth_scheme | default "x-filesapi-key"))
   let base = ($base_url | default $BASE_URL)
+  if ($user_id | is-empty) { error make --unspanned { msg: "path parameter 'user_id' must be non-empty" } }
   let qp = [(serialize-qp "cursor" $cursor "scalar") (serialize-qp "per_page" $per_page "scalar") (serialize-qp "group_id" $group_id "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({user_id: (encode-path-segment $user_id)} | format pattern "/users/{user_id}/groups") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"cursor": $cursor, "per_page": $per_page, "group_id": $group_id} | compact), body: null}
 }
 
 # List Permissions
@@ -6975,11 +7113,12 @@ export def "users-permissions get" [
 ]: nothing -> table<group_id: int, group_name: string, id: int, path: string, permission: string, recursive: bool, user_id: int, username: string> {
   let auth = (build-auth $token ($auth_scheme | default "x-filesapi-key"))
   let base = ($base_url | default $BASE_URL)
+  if ($user_id | is-empty) { error make --unspanned { msg: "path parameter 'user_id' must be non-empty" } }
   let qp = [(serialize-qp "cursor" $cursor "scalar") (serialize-qp "per_page" $per_page "scalar") (serialize-qp "sort_by" $sort_by "multi") (serialize-qp "filter" $filter "multi") (serialize-qp "filter_gt" $filter_gt "multi") (serialize-qp "filter_gteq" $filter_gteq "multi") (serialize-qp "filter_like" $filter_like "multi") (serialize-qp "filter_lt" $filter_lt "multi") (serialize-qp "filter_lteq" $filter_lteq "multi") (serialize-qp "path" $path "scalar") (serialize-qp "group_id" $group_id "scalar") (serialize-qp "include_groups" $include_groups "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({user_id: (encode-path-segment $user_id)} | format pattern "/users/{user_id}/permissions") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"cursor": $cursor, "per_page": $per_page, "sort_by": $sort_by, "filter": $filter, "filter_gt": $filter_gt, "filter_gteq": $filter_gteq, "filter_like": $filter_like, "filter_lt": $filter_lt, "filter_lteq": $filter_lteq, "path": $path, "group_id": $group_id, "include_groups": $include_groups} | compact), body: null}
 }
 
 # List Public Keys
@@ -7002,11 +7141,12 @@ export def "users-public-keys get" [
 ]: nothing -> table<created_at: string, fingerprint: string, id: int, title: string> {
   let auth = (build-auth $token ($auth_scheme | default "x-filesapi-key"))
   let base = ($base_url | default $BASE_URL)
+  if ($user_id | is-empty) { error make --unspanned { msg: "path parameter 'user_id' must be non-empty" } }
   let qp = [(serialize-qp "cursor" $cursor "scalar") (serialize-qp "per_page" $per_page "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({user_id: (encode-path-segment $user_id)} | format pattern "/users/{user_id}/public_keys") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"cursor": $cursor, "per_page": $per_page} | compact), body: null}
 }
 
 # Create Public Key
@@ -7030,6 +7170,7 @@ export def "users-public-keys create" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "x-filesapi-key"))
   let base = ($base_url | default $BASE_URL)
+  if ($user_id | is-empty) { error make --unspanned { msg: "path parameter 'user_id' must be non-empty" } }
   let full_url = (build-url $base ({user_id: (encode-path-segment $user_id)} | format pattern "/users/{user_id}/public_keys"))
   let req_body = {"public_key": $public_key, "title": $title} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
@@ -7037,7 +7178,7 @@ export def "users-public-keys create" [
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let req_body = if ($req_body | describe | str starts-with "record") { $req_body } else { {} }
   let mp = (build-multipart-body $req_body [] $dry_run)
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full $mp.content_type $mp.body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full $mp.content_type $mp.body {query: {}, body: $req_body}
 }
 
 # Create Webhook Test
@@ -7074,5 +7215,5 @@ export def "webhook-tests create" [
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let req_body = if ($req_body | describe | str starts-with "record") { $req_body } else { {} }
   let mp = (build-multipart-body $req_body [] $dry_run)
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full $mp.content_type $mp.body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full $mp.content_type $mp.body {query: {}, body: $req_body}
 }

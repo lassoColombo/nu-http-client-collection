@@ -3,17 +3,18 @@
 # Auth: --token flag or $env.GOOGLE_PAY_PASSES_API_TOKEN
 
 const BASE_URL = "https://walletobjects.googleapis.com"
-const DEFAULT_AUTH = "bearer"
 
-# Build auth: returns {headers: record, query: string}
+# Build auth: returns {scheme: string, headers: record, query: string, location: string}.
+# `location` is "header" | "query" | "cookie" | "none" and tells dry-run callers
+# where the token went without inspecting headers/query themselves.
 def build-auth [token?: string, auth_scheme?: string]: nothing -> record {
   let token_val = if ($token != null) and ($token | is-not-empty) { $token } else { $env | get -o GOOGLE_PAY_PASSES_API_TOKEN | default "" }
   let scheme = ($auth_scheme | default "bearer")
-  if ($scheme == "none") or ($token_val | is-empty) { return {headers: {}, query: ""} }
+  if ($scheme == "none") or ($token_val | is-empty) { return {scheme: $scheme, headers: {}, query: "", location: "none"} }
   match $scheme {
-    "bearer" => { {headers: {Authorization: $"Bearer ($token_val)"}, query: ""} }
-    "none" => { {headers: {}, query: ""} }
-    _ => { {headers: {Authorization: $"Bearer ($token_val)"}, query: ""} }
+    "bearer" => { {scheme: $scheme, headers: {Authorization: $"Bearer ($token_val)"}, query: "", location: "header"} }
+    "none" => { {scheme: $scheme, headers: {}, query: "", location: "none"} }
+    _ => { {scheme: $scheme, headers: {Authorization: $"Bearer ($token_val)"}, query: "", location: "header"} }
   }
 }
 
@@ -22,8 +23,9 @@ def build-auth [token?: string, auth_scheme?: string]: nothing -> record {
 # ([A-Za-z0-9-._~]) stay literal; everything else gets %XX.
 def serialize-qp [name: string, value: any, style: string]: nothing -> list<string> {
   if ($value == null) { return [] }
-  let n = (encode-path-segment $name)
   let is_list = ($value | describe | str starts-with "list")
+  if $is_list and ($value | is-empty) { return [] }
+  let n = (encode-path-segment $name)
   if ($value | describe | str starts-with "record") { return ($value | transpose k v | each { $"($n)[(encode-path-segment $in.k)]=(encode-path-segment $in.v)" }) }
   if not $is_list { return [$"($n)=(encode-path-segment $value)"] }
   match $style {
@@ -54,22 +56,42 @@ def build-url [base: string, path: string, query?: string]: nothing -> string {
   if ($query != null) and ($query | is-not-empty) { $result | upsert query $query | url join } else { $result | url join }
 }
 
+# Build the dry-run record returned by --dry-run. Shape:
+#   {dry_run: true, method, url, query: <record>, headers, body, content_type, timeout,
+#    auth: {scheme, location}}
+# `meta` carries logical-form data (the query record by spec name, the pre-serialization
+# body) that do-request itself cannot reconstruct from its wire-format args.
+def build-dry-run-record [method: string, url: string, auth: record, content_type: string, timeout: duration, meta?: record]: nothing -> record {
+  let m = ($meta | default {})
+  {
+    dry_run: true
+    method: $method
+    url: $url
+    query: ($m | get -o query | default {})
+    headers: $auth.headers
+    body: ($m | get -o body)
+    content_type: $content_type
+    timeout: $timeout
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+}
+
 # Execute HTTP request with method dispatch
-def do-request [method: string, url: string, auth: record, insecure: bool, raw: bool, dry_run: bool, max_time?: duration, allow_errors?: bool, full?: bool, content_type?: string, body?: any]: nothing -> any {
+def do-request [method: string, url: string, auth: record, insecure: bool, raw: bool, dry_run: bool, max_time?: duration, allow_errors?: bool, full?: bool, content_type?: string, body?: any, dry_run_meta?: record]: nothing -> any {
   let req_url = if ($auth.query | is-not-empty) { if ($url | str contains "?") { $"($url)&($auth.query)" } else { $"($url)?($auth.query)" } } else { $url }
   let timeout = ($max_time | default 30min)
   let ct = ($content_type | default "application/json")
-  if $dry_run { return {method: $method, url: $req_url, headers: $auth.headers, query_string: $auth.query, content_type: $ct, timeout: $timeout, body: $body} }
+  if $dry_run { return (build-dry-run-record $method $req_url $auth $ct $timeout $dry_run_meta) }
   let resp = match $method {
     "get" => { http get --headers $auth.headers --full --allow-errors --max-time $timeout --insecure=$insecure --raw=$raw $req_url }
-    "head" => { http head --headers $auth.headers --max-time $timeout --insecure=$insecure $req_url }
-    "options" => { http options --headers $auth.headers --max-time $timeout --insecure=$insecure $req_url }
+    "head" => { http head --headers $auth.headers --full --allow-errors --max-time $timeout --insecure=$insecure $req_url }
+    "options" => { http options --headers $auth.headers --full --allow-errors --max-time $timeout --insecure=$insecure $req_url }
     "post" => { if ($body | is-empty) { http post --headers $auth.headers --full --allow-errors --max-time $timeout --insecure=$insecure --raw=$raw $req_url "" } else { http post --headers $auth.headers --content-type $ct --full --allow-errors --max-time $timeout --insecure=$insecure --raw=$raw $req_url $body } }
     "put" => { if ($body | is-empty) { http put --headers $auth.headers --full --allow-errors --max-time $timeout --insecure=$insecure --raw=$raw $req_url "" } else { http put --headers $auth.headers --content-type $ct --full --allow-errors --max-time $timeout --insecure=$insecure --raw=$raw $req_url $body } }
     "patch" => { if ($body | is-empty) { http patch --headers $auth.headers --full --allow-errors --max-time $timeout --insecure=$insecure --raw=$raw $req_url "" } else { http patch --headers $auth.headers --content-type $ct --full --allow-errors --max-time $timeout --insecure=$insecure --raw=$raw $req_url $body } }
     "delete" => { if ($body | is-empty) { http delete --headers $auth.headers --full --allow-errors --max-time $timeout --insecure=$insecure --raw=$raw $req_url } else { http delete --headers $auth.headers --content-type $ct --data $body --full --allow-errors --max-time $timeout --insecure=$insecure --raw=$raw $req_url } }
   }
-  if ($method in ["head" "options"]) { return $resp }
+  if ($method == "head") and (not $full) and (not $allow_errors) and $resp.status < 400 { return $resp.headers }
   if $allow_errors { $resp } else if $resp.status >= 400 { error make --unspanned { msg: $"HTTP ($resp.status): ($resp.body)" } } else if $full { {status: $resp.status, headers: $resp.headers, body: $resp.body} } else if $resp.status == 204 { null } else { $resp.body }
 }
 
@@ -155,7 +177,7 @@ export def "walletobjects-event-ticket-class list" [
   let full_url = (build-url $base "/walletobjects/v1/eventTicketClass" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"$.xgafv": $xgafv, "access_token": $access_token, "alt": $alt, "callback": $callback, "fields": $fields, "key": $key, "oauth_token": $oauth_token, "prettyPrint": $pretty_print, "quotaUser": $quota_user, "upload_protocol": $upload_protocol, "uploadType": $upload_type, "issuerId": $issuer_id, "maxResults": $max_results, "token": $qp_token} | compact), body: null}
 }
 
 # Inserts an event ticket class with the given ID and properties.
@@ -259,7 +281,7 @@ export def "walletobjects-event-ticket-class create" [
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: ({"$.xgafv": $xgafv, "access_token": $access_token, "alt": $alt, "callback": $callback, "fields": $fields, "key": $key, "oauth_token": $oauth_token, "prettyPrint": $pretty_print, "quotaUser": $quota_user, "upload_protocol": $upload_protocol, "uploadType": $upload_type} | compact), body: $req_body}
 }
 
 # Returns the event ticket class with the given class ID.
@@ -291,11 +313,12 @@ export def "walletobjects-event-ticket-class get" [
 ]: nothing -> record<allowMultipleUsersPerObject: bool, callbackOptions: record<updateRequestUrl: string, url: string>, classTemplateInfo: record<cardBarcodeSectionDetails: record<firstBottomDetail: record, firstTopDetail: record, secondTopDetail: record>, cardTemplateOverride: record<cardRowTemplateInfos: list>, detailsTemplateOverride: record<detailsItemInfos: list>, listTemplateOverride: record<firstRowOption: record, secondRowOption: record, thirdRowOption: record>>, confirmationCodeLabel: string, countryCode: string, customConfirmationCodeLabel: record<defaultValue: record<kind: string, language: string, value: string>, kind: string, translatedValues: list<record>>, customGateLabel: record<defaultValue: record<kind: string, language: string, value: string>, kind: string, translatedValues: list<record>>, customRowLabel: record<defaultValue: record<kind: string, language: string, value: string>, kind: string, translatedValues: list<record>>, customSeatLabel: record<defaultValue: record<kind: string, language: string, value: string>, kind: string, translatedValues: list<record>>, customSectionLabel: record<defaultValue: record<kind: string, language: string, value: string>, kind: string, translatedValues: list<record>>, dateTime: record<customDoorsOpenLabel: record<defaultValue: record, kind: string, translatedValues: list>, doorsOpen: string, doorsOpenLabel: string, end: string, kind: string, start: string>, enableSmartTap: bool, eventId: string, eventName: record<defaultValue: record<kind: string, language: string, value: string>, kind: string, translatedValues: list<record>>, finePrint: record<defaultValue: record<kind: string, language: string, value: string>, kind: string, translatedValues: list<record>>, gateLabel: string, heroImage: record<contentDescription: record<defaultValue: record, kind: string, translatedValues: list>, kind: string, sourceUri: record<description: string, localizedDescription: record, uri: string>>, hexBackgroundColor: string, homepageUri: record<description: string, id: string, kind: string, localizedDescription: record<defaultValue: record, kind: string, translatedValues: list>, uri: string>, id: string, imageModulesData: table<id: string, mainImage: record>, infoModuleData: record<labelValueRows: list<record>, showLastUpdateTime: bool>, issuerName: string, kind: string, linksModuleData: record<uris: list<record>>, localizedIssuerName: record<defaultValue: record<kind: string, language: string, value: string>, kind: string, translatedValues: list<record>>, locations: table<kind: string, latitude: float, longitude: float>, logo: record<contentDescription: record<defaultValue: record, kind: string, translatedValues: list>, kind: string, sourceUri: record<description: string, localizedDescription: record, uri: string>>, messages: table<body: string, displayInterval: record, header: string, id: string, kind: string, localizedBody: record, localizedHeader: record, messageType: string>, multipleDevicesAndHoldersAllowedStatus: string, redemptionIssuers: list<string>, review: record<comments: string>, reviewStatus: string, rowLabel: string, seatLabel: string, sectionLabel: string, securityAnimation: record<animationType: string>, textModulesData: table<body: string, header: string, id: string, localizedBody: record, localizedHeader: record>, venue: record<address: record<defaultValue: record, kind: string, translatedValues: list>, kind: string, name: record<defaultValue: record, kind: string, translatedValues: list>>, version: string, viewUnlockRequirement: string, wordMark: record<contentDescription: record<defaultValue: record, kind: string, translatedValues: list>, kind: string, sourceUri: record<description: string, localizedDescription: record, uri: string>>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($resource_id | is-empty) { error make --unspanned { msg: "path parameter 'resourceId' must be non-empty" } }
   let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({resource_id: (encode-path-segment $resource_id)} | format pattern "/walletobjects/v1/eventTicketClass/{resource_id}") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"$.xgafv": $xgafv, "access_token": $access_token, "alt": $alt, "callback": $callback, "fields": $fields, "key": $key, "oauth_token": $oauth_token, "prettyPrint": $pretty_print, "quotaUser": $quota_user, "upload_protocol": $upload_protocol, "uploadType": $upload_type} | compact), body: null}
 }
 
 # Updates the event ticket class referenced by the given class ID. This method supports patch semantics.
@@ -326,7 +349,7 @@ export def "walletobjects-event-ticket-class get" [
 # --textModulesData item shape: {body?: string, header?: string, id?: string, localizedBody?: record, localizedHeader?: record}
 # --venue shape: {address?: record, kind?: string, name?: record}
 # --wordMark shape: {contentDescription?: record, kind?: string, sourceUri?: record}
-export def "walletobjects-event-ticket-class update-by-resourceId" [
+export def "walletobjects-event-ticket-class update-by-resource-id" [
   resource_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -394,13 +417,14 @@ export def "walletobjects-event-ticket-class update-by-resourceId" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($resource_id | is-empty) { error make --unspanned { msg: "path parameter 'resourceId' must be non-empty" } }
   let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({resource_id: (encode-path-segment $resource_id)} | format pattern "/walletobjects/v1/eventTicketClass/{resource_id}") $qp)
   let req_body = {"allowMultipleUsersPerObject": $allow_multiple_users_per_object, "callbackOptions": $callback_options, "classTemplateInfo": $class_template_info, "confirmationCodeLabel": $confirmation_code_label, "countryCode": $country_code, "customConfirmationCodeLabel": $custom_confirmation_code_label, "customGateLabel": $custom_gate_label, "customRowLabel": $custom_row_label, "customSeatLabel": $custom_seat_label, "customSectionLabel": $custom_section_label, "dateTime": $date_time, "enableSmartTap": $enable_smart_tap, "eventId": $event_id, "eventName": $event_name, "finePrint": $fine_print, "gateLabel": $gate_label, "heroImage": $hero_image, "hexBackgroundColor": $hex_background_color, "homepageUri": $homepage_uri, "id": $id, "imageModulesData": $image_modules_data, "infoModuleData": $info_module_data, "issuerName": $issuer_name, "kind": $kind, "linksModuleData": $links_module_data, "localizedIssuerName": $localized_issuer_name, "locations": $locations, "logo": $logo, "messages": $messages, "multipleDevicesAndHoldersAllowedStatus": $multiple_devices_and_holders_allowed_status, "redemptionIssuers": $redemption_issuers, "review": $review, "reviewStatus": $review_status, "rowLabel": $row_label, "seatLabel": $seat_label, "sectionLabel": $section_label, "securityAnimation": $security_animation, "textModulesData": $text_modules_data, "venue": $venue, "version": $version, "viewUnlockRequirement": $view_unlock_requirement, "wordMark": $word_mark} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "patch" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body
+  do-request "patch" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: ({"$.xgafv": $xgafv, "access_token": $access_token, "alt": $alt, "callback": $callback, "fields": $fields, "key": $key, "oauth_token": $oauth_token, "prettyPrint": $pretty_print, "quotaUser": $quota_user, "upload_protocol": $upload_protocol, "uploadType": $upload_type} | compact), body: $req_body}
 }
 
 # Updates the event ticket class referenced by the given class ID.
@@ -431,7 +455,7 @@ export def "walletobjects-event-ticket-class update-by-resourceId" [
 # --textModulesData item shape: {body?: string, header?: string, id?: string, localizedBody?: record, localizedHeader?: record}
 # --venue shape: {address?: record, kind?: string, name?: record}
 # --wordMark shape: {contentDescription?: record, kind?: string, sourceUri?: record}
-export def "walletobjects-event-ticket-class update-by-resourceId-1" [
+export def "walletobjects-event-ticket-class update-by-resource-id-1" [
   resource_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -499,13 +523,14 @@ export def "walletobjects-event-ticket-class update-by-resourceId-1" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($resource_id | is-empty) { error make --unspanned { msg: "path parameter 'resourceId' must be non-empty" } }
   let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({resource_id: (encode-path-segment $resource_id)} | format pattern "/walletobjects/v1/eventTicketClass/{resource_id}") $qp)
   let req_body = {"allowMultipleUsersPerObject": $allow_multiple_users_per_object, "callbackOptions": $callback_options, "classTemplateInfo": $class_template_info, "confirmationCodeLabel": $confirmation_code_label, "countryCode": $country_code, "customConfirmationCodeLabel": $custom_confirmation_code_label, "customGateLabel": $custom_gate_label, "customRowLabel": $custom_row_label, "customSeatLabel": $custom_seat_label, "customSectionLabel": $custom_section_label, "dateTime": $date_time, "enableSmartTap": $enable_smart_tap, "eventId": $event_id, "eventName": $event_name, "finePrint": $fine_print, "gateLabel": $gate_label, "heroImage": $hero_image, "hexBackgroundColor": $hex_background_color, "homepageUri": $homepage_uri, "id": $id, "imageModulesData": $image_modules_data, "infoModuleData": $info_module_data, "issuerName": $issuer_name, "kind": $kind, "linksModuleData": $links_module_data, "localizedIssuerName": $localized_issuer_name, "locations": $locations, "logo": $logo, "messages": $messages, "multipleDevicesAndHoldersAllowedStatus": $multiple_devices_and_holders_allowed_status, "redemptionIssuers": $redemption_issuers, "review": $review, "reviewStatus": $review_status, "rowLabel": $row_label, "seatLabel": $seat_label, "sectionLabel": $section_label, "securityAnimation": $security_animation, "textModulesData": $text_modules_data, "venue": $venue, "version": $version, "viewUnlockRequirement": $view_unlock_requirement, "wordMark": $word_mark} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: ({"$.xgafv": $xgafv, "access_token": $access_token, "alt": $alt, "callback": $callback, "fields": $fields, "key": $key, "oauth_token": $oauth_token, "prettyPrint": $pretty_print, "quotaUser": $quota_user, "upload_protocol": $upload_protocol, "uploadType": $upload_type} | compact), body: $req_body}
 }
 
 # Adds a message to the event ticket class referenced by the given class ID.
@@ -540,13 +565,14 @@ export def "walletobjects-event-ticket-class-add-message create-addmessage" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($resource_id | is-empty) { error make --unspanned { msg: "path parameter 'resourceId' must be non-empty" } }
   let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({resource_id: (encode-path-segment $resource_id)} | format pattern "/walletobjects/v1/eventTicketClass/{resource_id}/addMessage") $qp)
   let req_body = {"message": $message} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: ({"$.xgafv": $xgafv, "access_token": $access_token, "alt": $alt, "callback": $callback, "fields": $fields, "key": $key, "oauth_token": $oauth_token, "prettyPrint": $pretty_print, "quotaUser": $quota_user, "upload_protocol": $upload_protocol, "uploadType": $upload_type} | compact), body: $req_body}
 }
 
 # Returns a list of all event ticket objects for a given issuer ID.
@@ -584,7 +610,7 @@ export def "walletobjects-event-ticket-object list" [
   let full_url = (build-url $base "/walletobjects/v1/eventTicketObject" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"$.xgafv": $xgafv, "access_token": $access_token, "alt": $alt, "callback": $callback, "fields": $fields, "key": $key, "oauth_token": $oauth_token, "prettyPrint": $pretty_print, "quotaUser": $quota_user, "upload_protocol": $upload_protocol, "uploadType": $upload_type, "classId": $class_id, "maxResults": $max_results, "token": $qp_token} | compact), body: null}
 }
 
 # Inserts an event ticket object with the given ID and properties.
@@ -671,7 +697,7 @@ export def "walletobjects-event-ticket-object create" [
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: ({"$.xgafv": $xgafv, "access_token": $access_token, "alt": $alt, "callback": $callback, "fields": $fields, "key": $key, "oauth_token": $oauth_token, "prettyPrint": $pretty_print, "quotaUser": $quota_user, "upload_protocol": $upload_protocol, "uploadType": $upload_type} | compact), body: $req_body}
 }
 
 # Returns the event ticket object with the given object ID.
@@ -703,11 +729,12 @@ export def "walletobjects-event-ticket-object get" [
 ]: nothing -> record<appLinkData: record<androidAppLinkInfo: record<appLogoImage: record, appTarget: record, description: record, title: record>, iosAppLinkInfo: record<appLogoImage: record, appTarget: record, description: record, title: record>, webAppLinkInfo: record<appLogoImage: record, appTarget: record, description: record, title: record>>, barcode: record<alternateText: string, kind: string, renderEncoding: string, showCodeText: record<defaultValue: record, kind: string, translatedValues: list>, type: string, value: string>, classId: string, classReference: record<allowMultipleUsersPerObject: bool, callbackOptions: record<updateRequestUrl: string, url: string>, classTemplateInfo: record<cardBarcodeSectionDetails: record, cardTemplateOverride: record, detailsTemplateOverride: record, listTemplateOverride: record>, confirmationCodeLabel: string, countryCode: string, customConfirmationCodeLabel: record<defaultValue: record, kind: string, translatedValues: list>, customGateLabel: record<defaultValue: record, kind: string, translatedValues: list>, customRowLabel: record<defaultValue: record, kind: string, translatedValues: list>, customSeatLabel: record<defaultValue: record, kind: string, translatedValues: list>, customSectionLabel: record<defaultValue: record, kind: string, translatedValues: list>, dateTime: record<customDoorsOpenLabel: record, doorsOpen: string, doorsOpenLabel: string, end: string, kind: string, start: string>, enableSmartTap: bool, eventId: string, eventName: record<defaultValue: record, kind: string, translatedValues: list>, finePrint: record<defaultValue: record, kind: string, translatedValues: list>, gateLabel: string, heroImage: record<contentDescription: record, kind: string, sourceUri: record>, hexBackgroundColor: string, homepageUri: record<description: string, id: string, kind: string, localizedDescription: record, uri: string>, id: string, imageModulesData: list<record>, infoModuleData: record<labelValueRows: list, showLastUpdateTime: bool>, issuerName: string, kind: string, linksModuleData: record<uris: list>, localizedIssuerName: record<defaultValue: record, kind: string, translatedValues: list>, locations: list<record>, logo: record<contentDescription: record, kind: string, sourceUri: record>, messages: list<record>, multipleDevicesAndHoldersAllowedStatus: string, redemptionIssuers: list<string>, review: record<comments: string>, reviewStatus: string, rowLabel: string, seatLabel: string, sectionLabel: string, securityAnimation: record<animationType: string>, textModulesData: list<record>, venue: record<address: record, kind: string, name: record>, version: string, viewUnlockRequirement: string, wordMark: record<contentDescription: record, kind: string, sourceUri: record>>, disableExpirationNotification: bool, faceValue: record<currencyCode: string, kind: string, micros: string>, groupingInfo: record<groupingId: string, sortIndex: int>, hasLinkedDevice: bool, hasUsers: bool, heroImage: record<contentDescription: record<defaultValue: record, kind: string, translatedValues: list>, kind: string, sourceUri: record<description: string, localizedDescription: record, uri: string>>, hexBackgroundColor: string, id: string, imageModulesData: table<id: string, mainImage: record>, infoModuleData: record<labelValueRows: list<record>, showLastUpdateTime: bool>, kind: string, linkedOfferIds: list<string>, linksModuleData: record<uris: list<record>>, locations: table<kind: string, latitude: float, longitude: float>, messages: table<body: string, displayInterval: record, header: string, id: string, kind: string, localizedBody: record, localizedHeader: record, messageType: string>, passConstraints: record<screenshotEligibility: string>, reservationInfo: record<confirmationCode: string, kind: string>, rotatingBarcode: record<alternateText: string, renderEncoding: string, showCodeText: record<defaultValue: record, kind: string, translatedValues: list>, totpDetails: record<algorithm: string, parameters: list, periodMillis: string>, type: string, valuePattern: string>, seatInfo: record<gate: record<defaultValue: record, kind: string, translatedValues: list>, kind: string, row: record<defaultValue: record, kind: string, translatedValues: list>, seat: record<defaultValue: record, kind: string, translatedValues: list>, section: record<defaultValue: record, kind: string, translatedValues: list>>, smartTapRedemptionValue: string, state: string, textModulesData: table<body: string, header: string, id: string, localizedBody: record, localizedHeader: record>, ticketHolderName: string, ticketNumber: string, ticketType: record<defaultValue: record<kind: string, language: string, value: string>, kind: string, translatedValues: list<record>>, validTimeInterval: record<end: record<date: string>, kind: string, start: record<date: string>>, version: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($resource_id | is-empty) { error make --unspanned { msg: "path parameter 'resourceId' must be non-empty" } }
   let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({resource_id: (encode-path-segment $resource_id)} | format pattern "/walletobjects/v1/eventTicketObject/{resource_id}") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"$.xgafv": $xgafv, "access_token": $access_token, "alt": $alt, "callback": $callback, "fields": $fields, "key": $key, "oauth_token": $oauth_token, "prettyPrint": $pretty_print, "quotaUser": $quota_user, "upload_protocol": $upload_protocol, "uploadType": $upload_type} | compact), body: null}
 }
 
 # Updates the event ticket object referenced by the given object ID. This method supports patch semantics.
@@ -732,7 +759,7 @@ export def "walletobjects-event-ticket-object get" [
 # --textModulesData item shape: {body?: string, header?: string, id?: string, localizedBody?: record, localizedHeader?: record}
 # --ticketType shape: {defaultValue?: record, kind?: string, translatedValues?: list}
 # --validTimeInterval shape: {end?: record, kind?: string, start?: record}
-export def "walletobjects-event-ticket-object update-by-resourceId" [
+export def "walletobjects-event-ticket-object update-by-resource-id" [
   resource_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -789,13 +816,14 @@ export def "walletobjects-event-ticket-object update-by-resourceId" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($resource_id | is-empty) { error make --unspanned { msg: "path parameter 'resourceId' must be non-empty" } }
   let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({resource_id: (encode-path-segment $resource_id)} | format pattern "/walletobjects/v1/eventTicketObject/{resource_id}") $qp)
   let req_body = {"appLinkData": $app_link_data, "barcode": $barcode, "classId": $class_id, "classReference": $class_reference, "disableExpirationNotification": $disable_expiration_notification, "faceValue": $face_value, "groupingInfo": $grouping_info, "hasLinkedDevice": $has_linked_device, "hasUsers": $has_users, "heroImage": $hero_image, "hexBackgroundColor": $hex_background_color, "id": $id, "imageModulesData": $image_modules_data, "infoModuleData": $info_module_data, "kind": $kind, "linkedOfferIds": $linked_offer_ids, "linksModuleData": $links_module_data, "locations": $locations, "messages": $messages, "passConstraints": $pass_constraints, "reservationInfo": $reservation_info, "rotatingBarcode": $rotating_barcode, "seatInfo": $seat_info, "smartTapRedemptionValue": $smart_tap_redemption_value, "state": $state, "textModulesData": $text_modules_data, "ticketHolderName": $ticket_holder_name, "ticketNumber": $ticket_number, "ticketType": $ticket_type, "validTimeInterval": $valid_time_interval, "version": $version} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "patch" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body
+  do-request "patch" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: ({"$.xgafv": $xgafv, "access_token": $access_token, "alt": $alt, "callback": $callback, "fields": $fields, "key": $key, "oauth_token": $oauth_token, "prettyPrint": $pretty_print, "quotaUser": $quota_user, "upload_protocol": $upload_protocol, "uploadType": $upload_type} | compact), body: $req_body}
 }
 
 # Updates the event ticket object referenced by the given object ID.
@@ -820,7 +848,7 @@ export def "walletobjects-event-ticket-object update-by-resourceId" [
 # --textModulesData item shape: {body?: string, header?: string, id?: string, localizedBody?: record, localizedHeader?: record}
 # --ticketType shape: {defaultValue?: record, kind?: string, translatedValues?: list}
 # --validTimeInterval shape: {end?: record, kind?: string, start?: record}
-export def "walletobjects-event-ticket-object update-by-resourceId-1" [
+export def "walletobjects-event-ticket-object update-by-resource-id-1" [
   resource_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -877,13 +905,14 @@ export def "walletobjects-event-ticket-object update-by-resourceId-1" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($resource_id | is-empty) { error make --unspanned { msg: "path parameter 'resourceId' must be non-empty" } }
   let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({resource_id: (encode-path-segment $resource_id)} | format pattern "/walletobjects/v1/eventTicketObject/{resource_id}") $qp)
   let req_body = {"appLinkData": $app_link_data, "barcode": $barcode, "classId": $class_id, "classReference": $class_reference, "disableExpirationNotification": $disable_expiration_notification, "faceValue": $face_value, "groupingInfo": $grouping_info, "hasLinkedDevice": $has_linked_device, "hasUsers": $has_users, "heroImage": $hero_image, "hexBackgroundColor": $hex_background_color, "id": $id, "imageModulesData": $image_modules_data, "infoModuleData": $info_module_data, "kind": $kind, "linkedOfferIds": $linked_offer_ids, "linksModuleData": $links_module_data, "locations": $locations, "messages": $messages, "passConstraints": $pass_constraints, "reservationInfo": $reservation_info, "rotatingBarcode": $rotating_barcode, "seatInfo": $seat_info, "smartTapRedemptionValue": $smart_tap_redemption_value, "state": $state, "textModulesData": $text_modules_data, "ticketHolderName": $ticket_holder_name, "ticketNumber": $ticket_number, "ticketType": $ticket_type, "validTimeInterval": $valid_time_interval, "version": $version} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: ({"$.xgafv": $xgafv, "access_token": $access_token, "alt": $alt, "callback": $callback, "fields": $fields, "key": $key, "oauth_token": $oauth_token, "prettyPrint": $pretty_print, "quotaUser": $quota_user, "upload_protocol": $upload_protocol, "uploadType": $upload_type} | compact), body: $req_body}
 }
 
 # Adds a message to the event ticket object referenced by the given object ID.
@@ -918,13 +947,14 @@ export def "walletobjects-event-ticket-object-add-message create-addmessage" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($resource_id | is-empty) { error make --unspanned { msg: "path parameter 'resourceId' must be non-empty" } }
   let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({resource_id: (encode-path-segment $resource_id)} | format pattern "/walletobjects/v1/eventTicketObject/{resource_id}/addMessage") $qp)
   let req_body = {"message": $message} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: ({"$.xgafv": $xgafv, "access_token": $access_token, "alt": $alt, "callback": $callback, "fields": $fields, "key": $key, "oauth_token": $oauth_token, "prettyPrint": $pretty_print, "quotaUser": $quota_user, "upload_protocol": $upload_protocol, "uploadType": $upload_type} | compact), body: $req_body}
 }
 
 # Modifies linked offer objects for the event ticket object with the given ID.
@@ -959,13 +989,14 @@ export def "walletobjects-event-ticket-object-modify-linked-offer-objects create
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($resource_id | is-empty) { error make --unspanned { msg: "path parameter 'resourceId' must be non-empty" } }
   let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({resource_id: (encode-path-segment $resource_id)} | format pattern "/walletobjects/v1/eventTicketObject/{resource_id}/modifyLinkedOfferObjects") $qp)
   let req_body = {"linkedOfferObjectIds": $linked_offer_object_ids} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: ({"$.xgafv": $xgafv, "access_token": $access_token, "alt": $alt, "callback": $callback, "fields": $fields, "key": $key, "oauth_token": $oauth_token, "prettyPrint": $pretty_print, "quotaUser": $quota_user, "upload_protocol": $upload_protocol, "uploadType": $upload_type} | compact), body: $req_body}
 }
 
 # Returns a list of all flight classes for a given issuer ID.
@@ -1003,7 +1034,7 @@ export def "walletobjects-flight-class list" [
   let full_url = (build-url $base "/walletobjects/v1/flightClass" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"$.xgafv": $xgafv, "access_token": $access_token, "alt": $alt, "callback": $callback, "fields": $fields, "key": $key, "oauth_token": $oauth_token, "prettyPrint": $pretty_print, "quotaUser": $quota_user, "upload_protocol": $upload_protocol, "uploadType": $upload_type, "issuerId": $issuer_id, "maxResults": $max_results, "token": $qp_token} | compact), body: null}
 }
 
 # Inserts an flight class with the given ID and properties.
@@ -1097,7 +1128,7 @@ export def "walletobjects-flight-class create" [
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: ({"$.xgafv": $xgafv, "access_token": $access_token, "alt": $alt, "callback": $callback, "fields": $fields, "key": $key, "oauth_token": $oauth_token, "prettyPrint": $pretty_print, "quotaUser": $quota_user, "upload_protocol": $upload_protocol, "uploadType": $upload_type} | compact), body: $req_body}
 }
 
 # Returns the flight class with the given class ID.
@@ -1129,11 +1160,12 @@ export def "walletobjects-flight-class get" [
 ]: nothing -> record<allowMultipleUsersPerObject: bool, boardingAndSeatingPolicy: record<boardingPolicy: string, kind: string, seatClassPolicy: string>, callbackOptions: record<updateRequestUrl: string, url: string>, classTemplateInfo: record<cardBarcodeSectionDetails: record<firstBottomDetail: record, firstTopDetail: record, secondTopDetail: record>, cardTemplateOverride: record<cardRowTemplateInfos: list>, detailsTemplateOverride: record<detailsItemInfos: list>, listTemplateOverride: record<firstRowOption: record, secondRowOption: record, thirdRowOption: record>>, countryCode: string, destination: record<airportIataCode: string, airportNameOverride: record<defaultValue: record, kind: string, translatedValues: list>, gate: string, kind: string, terminal: string>, enableSmartTap: bool, flightHeader: record<carrier: record<airlineAllianceLogo: record, airlineLogo: record, airlineName: record, carrierIataCode: string, carrierIcaoCode: string, kind: string>, flightNumber: string, flightNumberDisplayOverride: string, kind: string, operatingCarrier: record<airlineAllianceLogo: record, airlineLogo: record, airlineName: record, carrierIataCode: string, carrierIcaoCode: string, kind: string>, operatingFlightNumber: string>, flightStatus: string, heroImage: record<contentDescription: record<defaultValue: record, kind: string, translatedValues: list>, kind: string, sourceUri: record<description: string, localizedDescription: record, uri: string>>, hexBackgroundColor: string, homepageUri: record<description: string, id: string, kind: string, localizedDescription: record<defaultValue: record, kind: string, translatedValues: list>, uri: string>, id: string, imageModulesData: table<id: string, mainImage: record>, infoModuleData: record<labelValueRows: list<record>, showLastUpdateTime: bool>, issuerName: string, kind: string, languageOverride: string, linksModuleData: record<uris: list<record>>, localBoardingDateTime: string, localEstimatedOrActualArrivalDateTime: string, localEstimatedOrActualDepartureDateTime: string, localGateClosingDateTime: string, localScheduledArrivalDateTime: string, localScheduledDepartureDateTime: string, localizedIssuerName: record<defaultValue: record<kind: string, language: string, value: string>, kind: string, translatedValues: list<record>>, locations: table<kind: string, latitude: float, longitude: float>, messages: table<body: string, displayInterval: record, header: string, id: string, kind: string, localizedBody: record, localizedHeader: record, messageType: string>, multipleDevicesAndHoldersAllowedStatus: string, origin: record<airportIataCode: string, airportNameOverride: record<defaultValue: record, kind: string, translatedValues: list>, gate: string, kind: string, terminal: string>, redemptionIssuers: list<string>, review: record<comments: string>, reviewStatus: string, securityAnimation: record<animationType: string>, textModulesData: table<body: string, header: string, id: string, localizedBody: record, localizedHeader: record>, version: string, viewUnlockRequirement: string, wordMark: record<contentDescription: record<defaultValue: record, kind: string, translatedValues: list>, kind: string, sourceUri: record<description: string, localizedDescription: record, uri: string>>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($resource_id | is-empty) { error make --unspanned { msg: "path parameter 'resourceId' must be non-empty" } }
   let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({resource_id: (encode-path-segment $resource_id)} | format pattern "/walletobjects/v1/flightClass/{resource_id}") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"$.xgafv": $xgafv, "access_token": $access_token, "alt": $alt, "callback": $callback, "fields": $fields, "key": $key, "oauth_token": $oauth_token, "prettyPrint": $pretty_print, "quotaUser": $quota_user, "upload_protocol": $upload_protocol, "uploadType": $upload_type} | compact), body: null}
 }
 
 # Updates the flight class referenced by the given class ID. This method supports patch semantics.
@@ -1158,7 +1190,7 @@ export def "walletobjects-flight-class get" [
 # --securityAnimation shape: {animationType?: "ANIMATION_UNSPECIFIED"|"FOIL_SHIMMER"|"foilShimmer"}
 # --textModulesData item shape: {body?: string, header?: string, id?: string, localizedBody?: record, localizedHeader?: record}
 # --wordMark shape: {contentDescription?: record, kind?: string, sourceUri?: record}
-export def "walletobjects-flight-class update-by-resourceId" [
+export def "walletobjects-flight-class update-by-resource-id" [
   resource_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1222,13 +1254,14 @@ export def "walletobjects-flight-class update-by-resourceId" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($resource_id | is-empty) { error make --unspanned { msg: "path parameter 'resourceId' must be non-empty" } }
   let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({resource_id: (encode-path-segment $resource_id)} | format pattern "/walletobjects/v1/flightClass/{resource_id}") $qp)
   let req_body = {"allowMultipleUsersPerObject": $allow_multiple_users_per_object, "boardingAndSeatingPolicy": $boarding_and_seating_policy, "callbackOptions": $callback_options, "classTemplateInfo": $class_template_info, "countryCode": $country_code, "destination": $destination, "enableSmartTap": $enable_smart_tap, "flightHeader": $flight_header, "flightStatus": $flight_status, "heroImage": $hero_image, "hexBackgroundColor": $hex_background_color, "homepageUri": $homepage_uri, "id": $id, "imageModulesData": $image_modules_data, "infoModuleData": $info_module_data, "issuerName": $issuer_name, "kind": $kind, "languageOverride": $language_override, "linksModuleData": $links_module_data, "localBoardingDateTime": $local_boarding_date_time, "localEstimatedOrActualArrivalDateTime": $local_estimated_or_actual_arrival_date_time, "localEstimatedOrActualDepartureDateTime": $local_estimated_or_actual_departure_date_time, "localGateClosingDateTime": $local_gate_closing_date_time, "localScheduledArrivalDateTime": $local_scheduled_arrival_date_time, "localScheduledDepartureDateTime": $local_scheduled_departure_date_time, "localizedIssuerName": $localized_issuer_name, "locations": $locations, "messages": $messages, "multipleDevicesAndHoldersAllowedStatus": $multiple_devices_and_holders_allowed_status, "origin": $origin, "redemptionIssuers": $redemption_issuers, "review": $review, "reviewStatus": $review_status, "securityAnimation": $security_animation, "textModulesData": $text_modules_data, "version": $version, "viewUnlockRequirement": $view_unlock_requirement, "wordMark": $word_mark} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "patch" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body
+  do-request "patch" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: ({"$.xgafv": $xgafv, "access_token": $access_token, "alt": $alt, "callback": $callback, "fields": $fields, "key": $key, "oauth_token": $oauth_token, "prettyPrint": $pretty_print, "quotaUser": $quota_user, "upload_protocol": $upload_protocol, "uploadType": $upload_type} | compact), body: $req_body}
 }
 
 # Updates the flight class referenced by the given class ID.
@@ -1253,7 +1286,7 @@ export def "walletobjects-flight-class update-by-resourceId" [
 # --securityAnimation shape: {animationType?: "ANIMATION_UNSPECIFIED"|"FOIL_SHIMMER"|"foilShimmer"}
 # --textModulesData item shape: {body?: string, header?: string, id?: string, localizedBody?: record, localizedHeader?: record}
 # --wordMark shape: {contentDescription?: record, kind?: string, sourceUri?: record}
-export def "walletobjects-flight-class update-by-resourceId-1" [
+export def "walletobjects-flight-class update-by-resource-id-1" [
   resource_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1317,13 +1350,14 @@ export def "walletobjects-flight-class update-by-resourceId-1" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($resource_id | is-empty) { error make --unspanned { msg: "path parameter 'resourceId' must be non-empty" } }
   let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({resource_id: (encode-path-segment $resource_id)} | format pattern "/walletobjects/v1/flightClass/{resource_id}") $qp)
   let req_body = {"allowMultipleUsersPerObject": $allow_multiple_users_per_object, "boardingAndSeatingPolicy": $boarding_and_seating_policy, "callbackOptions": $callback_options, "classTemplateInfo": $class_template_info, "countryCode": $country_code, "destination": $destination, "enableSmartTap": $enable_smart_tap, "flightHeader": $flight_header, "flightStatus": $flight_status, "heroImage": $hero_image, "hexBackgroundColor": $hex_background_color, "homepageUri": $homepage_uri, "id": $id, "imageModulesData": $image_modules_data, "infoModuleData": $info_module_data, "issuerName": $issuer_name, "kind": $kind, "languageOverride": $language_override, "linksModuleData": $links_module_data, "localBoardingDateTime": $local_boarding_date_time, "localEstimatedOrActualArrivalDateTime": $local_estimated_or_actual_arrival_date_time, "localEstimatedOrActualDepartureDateTime": $local_estimated_or_actual_departure_date_time, "localGateClosingDateTime": $local_gate_closing_date_time, "localScheduledArrivalDateTime": $local_scheduled_arrival_date_time, "localScheduledDepartureDateTime": $local_scheduled_departure_date_time, "localizedIssuerName": $localized_issuer_name, "locations": $locations, "messages": $messages, "multipleDevicesAndHoldersAllowedStatus": $multiple_devices_and_holders_allowed_status, "origin": $origin, "redemptionIssuers": $redemption_issuers, "review": $review, "reviewStatus": $review_status, "securityAnimation": $security_animation, "textModulesData": $text_modules_data, "version": $version, "viewUnlockRequirement": $view_unlock_requirement, "wordMark": $word_mark} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: ({"$.xgafv": $xgafv, "access_token": $access_token, "alt": $alt, "callback": $callback, "fields": $fields, "key": $key, "oauth_token": $oauth_token, "prettyPrint": $pretty_print, "quotaUser": $quota_user, "upload_protocol": $upload_protocol, "uploadType": $upload_type} | compact), body: $req_body}
 }
 
 # Adds a message to the flight class referenced by the given class ID.
@@ -1358,13 +1392,14 @@ export def "walletobjects-flight-class-add-message create-addmessage" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($resource_id | is-empty) { error make --unspanned { msg: "path parameter 'resourceId' must be non-empty" } }
   let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({resource_id: (encode-path-segment $resource_id)} | format pattern "/walletobjects/v1/flightClass/{resource_id}/addMessage") $qp)
   let req_body = {"message": $message} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: ({"$.xgafv": $xgafv, "access_token": $access_token, "alt": $alt, "callback": $callback, "fields": $fields, "key": $key, "oauth_token": $oauth_token, "prettyPrint": $pretty_print, "quotaUser": $quota_user, "upload_protocol": $upload_protocol, "uploadType": $upload_type} | compact), body: $req_body}
 }
 
 # Returns a list of all flight objects for a given issuer ID.
@@ -1402,7 +1437,7 @@ export def "walletobjects-flight-object list" [
   let full_url = (build-url $base "/walletobjects/v1/flightObject" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"$.xgafv": $xgafv, "access_token": $access_token, "alt": $alt, "callback": $callback, "fields": $fields, "key": $key, "oauth_token": $oauth_token, "prettyPrint": $pretty_print, "quotaUser": $quota_user, "upload_protocol": $upload_protocol, "uploadType": $upload_type, "classId": $class_id, "maxResults": $max_results, "token": $qp_token} | compact), body: null}
 }
 
 # Inserts an flight object with the given ID and properties.
@@ -1485,7 +1520,7 @@ export def "walletobjects-flight-object create" [
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: ({"$.xgafv": $xgafv, "access_token": $access_token, "alt": $alt, "callback": $callback, "fields": $fields, "key": $key, "oauth_token": $oauth_token, "prettyPrint": $pretty_print, "quotaUser": $quota_user, "upload_protocol": $upload_protocol, "uploadType": $upload_type} | compact), body: $req_body}
 }
 
 # Returns the flight object with the given object ID.
@@ -1517,11 +1552,12 @@ export def "walletobjects-flight-object get" [
 ]: nothing -> record<appLinkData: record<androidAppLinkInfo: record<appLogoImage: record, appTarget: record, description: record, title: record>, iosAppLinkInfo: record<appLogoImage: record, appTarget: record, description: record, title: record>, webAppLinkInfo: record<appLogoImage: record, appTarget: record, description: record, title: record>>, barcode: record<alternateText: string, kind: string, renderEncoding: string, showCodeText: record<defaultValue: record, kind: string, translatedValues: list>, type: string, value: string>, boardingAndSeatingInfo: record<boardingDoor: string, boardingGroup: string, boardingPosition: string, boardingPrivilegeImage: record<contentDescription: record, kind: string, sourceUri: record>, kind: string, seatAssignment: record<defaultValue: record, kind: string, translatedValues: list>, seatClass: string, seatNumber: string, sequenceNumber: string>, classId: string, classReference: record<allowMultipleUsersPerObject: bool, boardingAndSeatingPolicy: record<boardingPolicy: string, kind: string, seatClassPolicy: string>, callbackOptions: record<updateRequestUrl: string, url: string>, classTemplateInfo: record<cardBarcodeSectionDetails: record, cardTemplateOverride: record, detailsTemplateOverride: record, listTemplateOverride: record>, countryCode: string, destination: record<airportIataCode: string, airportNameOverride: record, gate: string, kind: string, terminal: string>, enableSmartTap: bool, flightHeader: record<carrier: record, flightNumber: string, flightNumberDisplayOverride: string, kind: string, operatingCarrier: record, operatingFlightNumber: string>, flightStatus: string, heroImage: record<contentDescription: record, kind: string, sourceUri: record>, hexBackgroundColor: string, homepageUri: record<description: string, id: string, kind: string, localizedDescription: record, uri: string>, id: string, imageModulesData: list<record>, infoModuleData: record<labelValueRows: list, showLastUpdateTime: bool>, issuerName: string, kind: string, languageOverride: string, linksModuleData: record<uris: list>, localBoardingDateTime: string, localEstimatedOrActualArrivalDateTime: string, localEstimatedOrActualDepartureDateTime: string, localGateClosingDateTime: string, localScheduledArrivalDateTime: string, localScheduledDepartureDateTime: string, localizedIssuerName: record<defaultValue: record, kind: string, translatedValues: list>, locations: list<record>, messages: list<record>, multipleDevicesAndHoldersAllowedStatus: string, origin: record<airportIataCode: string, airportNameOverride: record, gate: string, kind: string, terminal: string>, redemptionIssuers: list<string>, review: record<comments: string>, reviewStatus: string, securityAnimation: record<animationType: string>, textModulesData: list<record>, version: string, viewUnlockRequirement: string, wordMark: record<contentDescription: record, kind: string, sourceUri: record>>, disableExpirationNotification: bool, groupingInfo: record<groupingId: string, sortIndex: int>, hasLinkedDevice: bool, hasUsers: bool, heroImage: record<contentDescription: record<defaultValue: record, kind: string, translatedValues: list>, kind: string, sourceUri: record<description: string, localizedDescription: record, uri: string>>, hexBackgroundColor: string, id: string, imageModulesData: table<id: string, mainImage: record>, infoModuleData: record<labelValueRows: list<record>, showLastUpdateTime: bool>, kind: string, linksModuleData: record<uris: list<record>>, locations: table<kind: string, latitude: float, longitude: float>, messages: table<body: string, displayInterval: record, header: string, id: string, kind: string, localizedBody: record, localizedHeader: record, messageType: string>, passConstraints: record<screenshotEligibility: string>, passengerName: string, reservationInfo: record<confirmationCode: string, eticketNumber: string, frequentFlyerInfo: record<frequentFlyerNumber: string, frequentFlyerProgramName: record, kind: string>, kind: string>, rotatingBarcode: record<alternateText: string, renderEncoding: string, showCodeText: record<defaultValue: record, kind: string, translatedValues: list>, totpDetails: record<algorithm: string, parameters: list, periodMillis: string>, type: string, valuePattern: string>, securityProgramLogo: record<contentDescription: record<defaultValue: record, kind: string, translatedValues: list>, kind: string, sourceUri: record<description: string, localizedDescription: record, uri: string>>, smartTapRedemptionValue: string, state: string, textModulesData: table<body: string, header: string, id: string, localizedBody: record, localizedHeader: record>, validTimeInterval: record<end: record<date: string>, kind: string, start: record<date: string>>, version: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($resource_id | is-empty) { error make --unspanned { msg: "path parameter 'resourceId' must be non-empty" } }
   let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({resource_id: (encode-path-segment $resource_id)} | format pattern "/walletobjects/v1/flightObject/{resource_id}") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"$.xgafv": $xgafv, "access_token": $access_token, "alt": $alt, "callback": $callback, "fields": $fields, "key": $key, "oauth_token": $oauth_token, "prettyPrint": $pretty_print, "quotaUser": $quota_user, "upload_protocol": $upload_protocol, "uploadType": $upload_type} | compact), body: null}
 }
 
 # Updates the flight object referenced by the given object ID. This method supports patch semantics.
@@ -1545,7 +1581,7 @@ export def "walletobjects-flight-object get" [
 # --securityProgramLogo shape: {contentDescription?: record, kind?: string, sourceUri?: record}
 # --textModulesData item shape: {body?: string, header?: string, id?: string, localizedBody?: record, localizedHeader?: record}
 # --validTimeInterval shape: {end?: record, kind?: string, start?: record}
-export def "walletobjects-flight-object update-by-resourceId" [
+export def "walletobjects-flight-object update-by-resource-id" [
   resource_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1599,13 +1635,14 @@ export def "walletobjects-flight-object update-by-resourceId" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($resource_id | is-empty) { error make --unspanned { msg: "path parameter 'resourceId' must be non-empty" } }
   let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({resource_id: (encode-path-segment $resource_id)} | format pattern "/walletobjects/v1/flightObject/{resource_id}") $qp)
   let req_body = {"appLinkData": $app_link_data, "barcode": $barcode, "boardingAndSeatingInfo": $boarding_and_seating_info, "classId": $class_id, "classReference": $class_reference, "disableExpirationNotification": $disable_expiration_notification, "groupingInfo": $grouping_info, "hasLinkedDevice": $has_linked_device, "hasUsers": $has_users, "heroImage": $hero_image, "hexBackgroundColor": $hex_background_color, "id": $id, "imageModulesData": $image_modules_data, "infoModuleData": $info_module_data, "kind": $kind, "linksModuleData": $links_module_data, "locations": $locations, "messages": $messages, "passConstraints": $pass_constraints, "passengerName": $passenger_name, "reservationInfo": $reservation_info, "rotatingBarcode": $rotating_barcode, "securityProgramLogo": $security_program_logo, "smartTapRedemptionValue": $smart_tap_redemption_value, "state": $state, "textModulesData": $text_modules_data, "validTimeInterval": $valid_time_interval, "version": $version} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "patch" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body
+  do-request "patch" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: ({"$.xgafv": $xgafv, "access_token": $access_token, "alt": $alt, "callback": $callback, "fields": $fields, "key": $key, "oauth_token": $oauth_token, "prettyPrint": $pretty_print, "quotaUser": $quota_user, "upload_protocol": $upload_protocol, "uploadType": $upload_type} | compact), body: $req_body}
 }
 
 # Updates the flight object referenced by the given object ID.
@@ -1629,7 +1666,7 @@ export def "walletobjects-flight-object update-by-resourceId" [
 # --securityProgramLogo shape: {contentDescription?: record, kind?: string, sourceUri?: record}
 # --textModulesData item shape: {body?: string, header?: string, id?: string, localizedBody?: record, localizedHeader?: record}
 # --validTimeInterval shape: {end?: record, kind?: string, start?: record}
-export def "walletobjects-flight-object update-by-resourceId-1" [
+export def "walletobjects-flight-object update-by-resource-id-1" [
   resource_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1683,13 +1720,14 @@ export def "walletobjects-flight-object update-by-resourceId-1" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($resource_id | is-empty) { error make --unspanned { msg: "path parameter 'resourceId' must be non-empty" } }
   let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({resource_id: (encode-path-segment $resource_id)} | format pattern "/walletobjects/v1/flightObject/{resource_id}") $qp)
   let req_body = {"appLinkData": $app_link_data, "barcode": $barcode, "boardingAndSeatingInfo": $boarding_and_seating_info, "classId": $class_id, "classReference": $class_reference, "disableExpirationNotification": $disable_expiration_notification, "groupingInfo": $grouping_info, "hasLinkedDevice": $has_linked_device, "hasUsers": $has_users, "heroImage": $hero_image, "hexBackgroundColor": $hex_background_color, "id": $id, "imageModulesData": $image_modules_data, "infoModuleData": $info_module_data, "kind": $kind, "linksModuleData": $links_module_data, "locations": $locations, "messages": $messages, "passConstraints": $pass_constraints, "passengerName": $passenger_name, "reservationInfo": $reservation_info, "rotatingBarcode": $rotating_barcode, "securityProgramLogo": $security_program_logo, "smartTapRedemptionValue": $smart_tap_redemption_value, "state": $state, "textModulesData": $text_modules_data, "validTimeInterval": $valid_time_interval, "version": $version} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: ({"$.xgafv": $xgafv, "access_token": $access_token, "alt": $alt, "callback": $callback, "fields": $fields, "key": $key, "oauth_token": $oauth_token, "prettyPrint": $pretty_print, "quotaUser": $quota_user, "upload_protocol": $upload_protocol, "uploadType": $upload_type} | compact), body: $req_body}
 }
 
 # Adds a message to the flight object referenced by the given object ID.
@@ -1724,13 +1762,14 @@ export def "walletobjects-flight-object-add-message create-addmessage" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($resource_id | is-empty) { error make --unspanned { msg: "path parameter 'resourceId' must be non-empty" } }
   let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({resource_id: (encode-path-segment $resource_id)} | format pattern "/walletobjects/v1/flightObject/{resource_id}/addMessage") $qp)
   let req_body = {"message": $message} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: ({"$.xgafv": $xgafv, "access_token": $access_token, "alt": $alt, "callback": $callback, "fields": $fields, "key": $key, "oauth_token": $oauth_token, "prettyPrint": $pretty_print, "quotaUser": $quota_user, "upload_protocol": $upload_protocol, "uploadType": $upload_type} | compact), body: $req_body}
 }
 
 # Returns a list of all generic classes for a given issuer ID.
@@ -1768,7 +1807,7 @@ export def "walletobjects-generic-class list" [
   let full_url = (build-url $base "/walletobjects/v1/genericClass" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"$.xgafv": $xgafv, "access_token": $access_token, "alt": $alt, "callback": $callback, "fields": $fields, "key": $key, "oauth_token": $oauth_token, "prettyPrint": $pretty_print, "quotaUser": $quota_user, "upload_protocol": $upload_protocol, "uploadType": $upload_type, "issuerId": $issuer_id, "maxResults": $max_results, "token": $qp_token} | compact), body: null}
 }
 
 # Inserts a generic class with the given ID and properties.
@@ -1823,7 +1862,7 @@ export def "walletobjects-generic-class create" [
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: ({"$.xgafv": $xgafv, "access_token": $access_token, "alt": $alt, "callback": $callback, "fields": $fields, "key": $key, "oauth_token": $oauth_token, "prettyPrint": $pretty_print, "quotaUser": $quota_user, "upload_protocol": $upload_protocol, "uploadType": $upload_type} | compact), body: $req_body}
 }
 
 # Returns the generic class with the given class ID.
@@ -1855,11 +1894,12 @@ export def "walletobjects-generic-class get" [
 ]: nothing -> record<callbackOptions: record<updateRequestUrl: string, url: string>, classTemplateInfo: record<cardBarcodeSectionDetails: record<firstBottomDetail: record, firstTopDetail: record, secondTopDetail: record>, cardTemplateOverride: record<cardRowTemplateInfos: list>, detailsTemplateOverride: record<detailsItemInfos: list>, listTemplateOverride: record<firstRowOption: record, secondRowOption: record, thirdRowOption: record>>, enableSmartTap: bool, id: string, imageModulesData: table<id: string, mainImage: record>, linksModuleData: record<uris: list<record>>, multipleDevicesAndHoldersAllowedStatus: string, redemptionIssuers: list<string>, securityAnimation: record<animationType: string>, textModulesData: table<body: string, header: string, id: string, localizedBody: record, localizedHeader: record>, viewUnlockRequirement: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($resource_id | is-empty) { error make --unspanned { msg: "path parameter 'resourceId' must be non-empty" } }
   let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({resource_id: (encode-path-segment $resource_id)} | format pattern "/walletobjects/v1/genericClass/{resource_id}") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"$.xgafv": $xgafv, "access_token": $access_token, "alt": $alt, "callback": $callback, "fields": $fields, "key": $key, "oauth_token": $oauth_token, "prettyPrint": $pretty_print, "quotaUser": $quota_user, "upload_protocol": $upload_protocol, "uploadType": $upload_type} | compact), body: null}
 }
 
 # Updates the generic class referenced by the given class ID. This method supports patch semantics.
@@ -1872,7 +1912,7 @@ export def "walletobjects-generic-class get" [
 # --linksModuleData shape: {uris?: list}
 # --securityAnimation shape: {animationType?: "ANIMATION_UNSPECIFIED"|"FOIL_SHIMMER"|"foilShimmer"}
 # --textModulesData item shape: {body?: string, header?: string, id?: string, localizedBody?: record, localizedHeader?: record}
-export def "walletobjects-generic-class update-by-resourceId" [
+export def "walletobjects-generic-class update-by-resource-id" [
   resource_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1909,13 +1949,14 @@ export def "walletobjects-generic-class update-by-resourceId" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($resource_id | is-empty) { error make --unspanned { msg: "path parameter 'resourceId' must be non-empty" } }
   let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({resource_id: (encode-path-segment $resource_id)} | format pattern "/walletobjects/v1/genericClass/{resource_id}") $qp)
   let req_body = {"callbackOptions": $callback_options, "classTemplateInfo": $class_template_info, "enableSmartTap": $enable_smart_tap, "id": $id, "imageModulesData": $image_modules_data, "linksModuleData": $links_module_data, "multipleDevicesAndHoldersAllowedStatus": $multiple_devices_and_holders_allowed_status, "redemptionIssuers": $redemption_issuers, "securityAnimation": $security_animation, "textModulesData": $text_modules_data, "viewUnlockRequirement": $view_unlock_requirement} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "patch" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body
+  do-request "patch" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: ({"$.xgafv": $xgafv, "access_token": $access_token, "alt": $alt, "callback": $callback, "fields": $fields, "key": $key, "oauth_token": $oauth_token, "prettyPrint": $pretty_print, "quotaUser": $quota_user, "upload_protocol": $upload_protocol, "uploadType": $upload_type} | compact), body: $req_body}
 }
 
 # Updates the Generic class referenced by the given class ID.
@@ -1928,7 +1969,7 @@ export def "walletobjects-generic-class update-by-resourceId" [
 # --linksModuleData shape: {uris?: list}
 # --securityAnimation shape: {animationType?: "ANIMATION_UNSPECIFIED"|"FOIL_SHIMMER"|"foilShimmer"}
 # --textModulesData item shape: {body?: string, header?: string, id?: string, localizedBody?: record, localizedHeader?: record}
-export def "walletobjects-generic-class update-by-resourceId-1" [
+export def "walletobjects-generic-class update-by-resource-id-1" [
   resource_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1965,13 +2006,14 @@ export def "walletobjects-generic-class update-by-resourceId-1" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($resource_id | is-empty) { error make --unspanned { msg: "path parameter 'resourceId' must be non-empty" } }
   let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({resource_id: (encode-path-segment $resource_id)} | format pattern "/walletobjects/v1/genericClass/{resource_id}") $qp)
   let req_body = {"callbackOptions": $callback_options, "classTemplateInfo": $class_template_info, "enableSmartTap": $enable_smart_tap, "id": $id, "imageModulesData": $image_modules_data, "linksModuleData": $links_module_data, "multipleDevicesAndHoldersAllowedStatus": $multiple_devices_and_holders_allowed_status, "redemptionIssuers": $redemption_issuers, "securityAnimation": $security_animation, "textModulesData": $text_modules_data, "viewUnlockRequirement": $view_unlock_requirement} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: ({"$.xgafv": $xgafv, "access_token": $access_token, "alt": $alt, "callback": $callback, "fields": $fields, "key": $key, "oauth_token": $oauth_token, "prettyPrint": $pretty_print, "quotaUser": $quota_user, "upload_protocol": $upload_protocol, "uploadType": $upload_type} | compact), body: $req_body}
 }
 
 # Returns a list of all generic objects for a given issuer ID.
@@ -2009,7 +2051,7 @@ export def "walletobjects-generic-object list" [
   let full_url = (build-url $base "/walletobjects/v1/genericObject" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"$.xgafv": $xgafv, "access_token": $access_token, "alt": $alt, "callback": $callback, "fields": $fields, "key": $key, "oauth_token": $oauth_token, "prettyPrint": $pretty_print, "quotaUser": $quota_user, "upload_protocol": $upload_protocol, "uploadType": $upload_type, "classId": $class_id, "maxResults": $max_results, "token": $qp_token} | compact), body: null}
 }
 
 # Inserts a generic object with the given ID and properties.
@@ -2084,7 +2126,7 @@ export def "walletobjects-generic-object create" [
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: ({"$.xgafv": $xgafv, "access_token": $access_token, "alt": $alt, "callback": $callback, "fields": $fields, "key": $key, "oauth_token": $oauth_token, "prettyPrint": $pretty_print, "quotaUser": $quota_user, "upload_protocol": $upload_protocol, "uploadType": $upload_type} | compact), body: $req_body}
 }
 
 # Returns the generic object with the given object ID.
@@ -2116,11 +2158,12 @@ export def "walletobjects-generic-object get" [
 ]: nothing -> record<appLinkData: record<androidAppLinkInfo: record<appLogoImage: record, appTarget: record, description: record, title: record>, iosAppLinkInfo: record<appLogoImage: record, appTarget: record, description: record, title: record>, webAppLinkInfo: record<appLogoImage: record, appTarget: record, description: record, title: record>>, barcode: record<alternateText: string, kind: string, renderEncoding: string, showCodeText: record<defaultValue: record, kind: string, translatedValues: list>, type: string, value: string>, cardTitle: record<defaultValue: record<kind: string, language: string, value: string>, kind: string, translatedValues: list<record>>, classId: string, genericType: string, groupingInfo: record<groupingId: string, sortIndex: int>, hasUsers: bool, header: record<defaultValue: record<kind: string, language: string, value: string>, kind: string, translatedValues: list<record>>, heroImage: record<contentDescription: record<defaultValue: record, kind: string, translatedValues: list>, kind: string, sourceUri: record<description: string, localizedDescription: record, uri: string>>, hexBackgroundColor: string, id: string, imageModulesData: table<id: string, mainImage: record>, linksModuleData: record<uris: list<record>>, logo: record<contentDescription: record<defaultValue: record, kind: string, translatedValues: list>, kind: string, sourceUri: record<description: string, localizedDescription: record, uri: string>>, notifications: record<expiryNotification: record<enableNotification: bool>, upcomingNotification: record<enableNotification: bool>>, passConstraints: record<screenshotEligibility: string>, rotatingBarcode: record<alternateText: string, renderEncoding: string, showCodeText: record<defaultValue: record, kind: string, translatedValues: list>, totpDetails: record<algorithm: string, parameters: list, periodMillis: string>, type: string, valuePattern: string>, smartTapRedemptionValue: string, state: string, subheader: record<defaultValue: record<kind: string, language: string, value: string>, kind: string, translatedValues: list<record>>, textModulesData: table<body: string, header: string, id: string, localizedBody: record, localizedHeader: record>, validTimeInterval: record<end: record<date: string>, kind: string, start: record<date: string>>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($resource_id | is-empty) { error make --unspanned { msg: "path parameter 'resourceId' must be non-empty" } }
   let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({resource_id: (encode-path-segment $resource_id)} | format pattern "/walletobjects/v1/genericObject/{resource_id}") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"$.xgafv": $xgafv, "access_token": $access_token, "alt": $alt, "callback": $callback, "fields": $fields, "key": $key, "oauth_token": $oauth_token, "prettyPrint": $pretty_print, "quotaUser": $quota_user, "upload_protocol": $upload_protocol, "uploadType": $upload_type} | compact), body: null}
 }
 
 # Updates the generic object referenced by the given object ID. This method supports patch semantics.
@@ -2142,7 +2185,7 @@ export def "walletobjects-generic-object get" [
 # --subheader shape: {defaultValue?: record, kind?: string, translatedValues?: list}
 # --textModulesData item shape: {body?: string, header?: string, id?: string, localizedBody?: record, localizedHeader?: record}
 # --validTimeInterval shape: {end?: record, kind?: string, start?: record}
-export def "walletobjects-generic-object update-by-resourceId" [
+export def "walletobjects-generic-object update-by-resource-id" [
   resource_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -2190,13 +2233,14 @@ export def "walletobjects-generic-object update-by-resourceId" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($resource_id | is-empty) { error make --unspanned { msg: "path parameter 'resourceId' must be non-empty" } }
   let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({resource_id: (encode-path-segment $resource_id)} | format pattern "/walletobjects/v1/genericObject/{resource_id}") $qp)
   let req_body = {"appLinkData": $app_link_data, "barcode": $barcode, "cardTitle": $card_title, "classId": $class_id, "genericType": $generic_type, "groupingInfo": $grouping_info, "hasUsers": $has_users, "header": $header, "heroImage": $hero_image, "hexBackgroundColor": $hex_background_color, "id": $id, "imageModulesData": $image_modules_data, "linksModuleData": $links_module_data, "logo": $logo, "notifications": $notifications, "passConstraints": $pass_constraints, "rotatingBarcode": $rotating_barcode, "smartTapRedemptionValue": $smart_tap_redemption_value, "state": $state, "subheader": $subheader, "textModulesData": $text_modules_data, "validTimeInterval": $valid_time_interval} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "patch" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body
+  do-request "patch" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: ({"$.xgafv": $xgafv, "access_token": $access_token, "alt": $alt, "callback": $callback, "fields": $fields, "key": $key, "oauth_token": $oauth_token, "prettyPrint": $pretty_print, "quotaUser": $quota_user, "upload_protocol": $upload_protocol, "uploadType": $upload_type} | compact), body: $req_body}
 }
 
 # Updates the generic object referenced by the given object ID.
@@ -2218,7 +2262,7 @@ export def "walletobjects-generic-object update-by-resourceId" [
 # --subheader shape: {defaultValue?: record, kind?: string, translatedValues?: list}
 # --textModulesData item shape: {body?: string, header?: string, id?: string, localizedBody?: record, localizedHeader?: record}
 # --validTimeInterval shape: {end?: record, kind?: string, start?: record}
-export def "walletobjects-generic-object update-by-resourceId-1" [
+export def "walletobjects-generic-object update-by-resource-id-1" [
   resource_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -2266,13 +2310,14 @@ export def "walletobjects-generic-object update-by-resourceId-1" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($resource_id | is-empty) { error make --unspanned { msg: "path parameter 'resourceId' must be non-empty" } }
   let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({resource_id: (encode-path-segment $resource_id)} | format pattern "/walletobjects/v1/genericObject/{resource_id}") $qp)
   let req_body = {"appLinkData": $app_link_data, "barcode": $barcode, "cardTitle": $card_title, "classId": $class_id, "genericType": $generic_type, "groupingInfo": $grouping_info, "hasUsers": $has_users, "header": $header, "heroImage": $hero_image, "hexBackgroundColor": $hex_background_color, "id": $id, "imageModulesData": $image_modules_data, "linksModuleData": $links_module_data, "logo": $logo, "notifications": $notifications, "passConstraints": $pass_constraints, "rotatingBarcode": $rotating_barcode, "smartTapRedemptionValue": $smart_tap_redemption_value, "state": $state, "subheader": $subheader, "textModulesData": $text_modules_data, "validTimeInterval": $valid_time_interval} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: ({"$.xgafv": $xgafv, "access_token": $access_token, "alt": $alt, "callback": $callback, "fields": $fields, "key": $key, "oauth_token": $oauth_token, "prettyPrint": $pretty_print, "quotaUser": $quota_user, "upload_protocol": $upload_protocol, "uploadType": $upload_type} | compact), body: $req_body}
 }
 
 # Returns a list of all gift card classes for a given issuer ID.
@@ -2310,7 +2355,7 @@ export def "walletobjects-gift-card-class list" [
   let full_url = (build-url $base "/walletobjects/v1/giftCardClass" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"$.xgafv": $xgafv, "access_token": $access_token, "alt": $alt, "callback": $callback, "fields": $fields, "key": $key, "oauth_token": $oauth_token, "prettyPrint": $pretty_print, "quotaUser": $quota_user, "upload_protocol": $upload_protocol, "uploadType": $upload_type, "issuerId": $issuer_id, "maxResults": $max_results, "token": $qp_token} | compact), body: null}
 }
 
 # Inserts an gift card class with the given ID and properties.
@@ -2403,7 +2448,7 @@ export def "walletobjects-gift-card-class create" [
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: ({"$.xgafv": $xgafv, "access_token": $access_token, "alt": $alt, "callback": $callback, "fields": $fields, "key": $key, "oauth_token": $oauth_token, "prettyPrint": $pretty_print, "quotaUser": $quota_user, "upload_protocol": $upload_protocol, "uploadType": $upload_type} | compact), body: $req_body}
 }
 
 # Returns the gift card class with the given class ID.
@@ -2435,11 +2480,12 @@ export def "walletobjects-gift-card-class get" [
 ]: nothing -> record<allowBarcodeRedemption: bool, allowMultipleUsersPerObject: bool, callbackOptions: record<updateRequestUrl: string, url: string>, cardNumberLabel: string, classTemplateInfo: record<cardBarcodeSectionDetails: record<firstBottomDetail: record, firstTopDetail: record, secondTopDetail: record>, cardTemplateOverride: record<cardRowTemplateInfos: list>, detailsTemplateOverride: record<detailsItemInfos: list>, listTemplateOverride: record<firstRowOption: record, secondRowOption: record, thirdRowOption: record>>, countryCode: string, enableSmartTap: bool, eventNumberLabel: string, heroImage: record<contentDescription: record<defaultValue: record, kind: string, translatedValues: list>, kind: string, sourceUri: record<description: string, localizedDescription: record, uri: string>>, hexBackgroundColor: string, homepageUri: record<description: string, id: string, kind: string, localizedDescription: record<defaultValue: record, kind: string, translatedValues: list>, uri: string>, id: string, imageModulesData: table<id: string, mainImage: record>, infoModuleData: record<labelValueRows: list<record>, showLastUpdateTime: bool>, issuerName: string, kind: string, linksModuleData: record<uris: list<record>>, localizedCardNumberLabel: record<defaultValue: record<kind: string, language: string, value: string>, kind: string, translatedValues: list<record>>, localizedEventNumberLabel: record<defaultValue: record<kind: string, language: string, value: string>, kind: string, translatedValues: list<record>>, localizedIssuerName: record<defaultValue: record<kind: string, language: string, value: string>, kind: string, translatedValues: list<record>>, localizedMerchantName: record<defaultValue: record<kind: string, language: string, value: string>, kind: string, translatedValues: list<record>>, localizedPinLabel: record<defaultValue: record<kind: string, language: string, value: string>, kind: string, translatedValues: list<record>>, locations: table<kind: string, latitude: float, longitude: float>, merchantName: string, messages: table<body: string, displayInterval: record, header: string, id: string, kind: string, localizedBody: record, localizedHeader: record, messageType: string>, multipleDevicesAndHoldersAllowedStatus: string, pinLabel: string, programLogo: record<contentDescription: record<defaultValue: record, kind: string, translatedValues: list>, kind: string, sourceUri: record<description: string, localizedDescription: record, uri: string>>, redemptionIssuers: list<string>, review: record<comments: string>, reviewStatus: string, securityAnimation: record<animationType: string>, textModulesData: table<body: string, header: string, id: string, localizedBody: record, localizedHeader: record>, version: string, viewUnlockRequirement: string, wordMark: record<contentDescription: record<defaultValue: record, kind: string, translatedValues: list>, kind: string, sourceUri: record<description: string, localizedDescription: record, uri: string>>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($resource_id | is-empty) { error make --unspanned { msg: "path parameter 'resourceId' must be non-empty" } }
   let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({resource_id: (encode-path-segment $resource_id)} | format pattern "/walletobjects/v1/giftCardClass/{resource_id}") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"$.xgafv": $xgafv, "access_token": $access_token, "alt": $alt, "callback": $callback, "fields": $fields, "key": $key, "oauth_token": $oauth_token, "prettyPrint": $pretty_print, "quotaUser": $quota_user, "upload_protocol": $upload_protocol, "uploadType": $upload_type} | compact), body: null}
 }
 
 # Updates the gift card class referenced by the given class ID. This method supports patch semantics.
@@ -2465,7 +2511,7 @@ export def "walletobjects-gift-card-class get" [
 # --securityAnimation shape: {animationType?: "ANIMATION_UNSPECIFIED"|"FOIL_SHIMMER"|"foilShimmer"}
 # --textModulesData item shape: {body?: string, header?: string, id?: string, localizedBody?: record, localizedHeader?: record}
 # --wordMark shape: {contentDescription?: record, kind?: string, sourceUri?: record}
-export def "walletobjects-gift-card-class update-by-resourceId" [
+export def "walletobjects-gift-card-class update-by-resource-id" [
   resource_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -2527,13 +2573,14 @@ export def "walletobjects-gift-card-class update-by-resourceId" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($resource_id | is-empty) { error make --unspanned { msg: "path parameter 'resourceId' must be non-empty" } }
   let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({resource_id: (encode-path-segment $resource_id)} | format pattern "/walletobjects/v1/giftCardClass/{resource_id}") $qp)
   let req_body = {"allowBarcodeRedemption": $allow_barcode_redemption, "allowMultipleUsersPerObject": $allow_multiple_users_per_object, "callbackOptions": $callback_options, "cardNumberLabel": $card_number_label, "classTemplateInfo": $class_template_info, "countryCode": $country_code, "enableSmartTap": $enable_smart_tap, "eventNumberLabel": $event_number_label, "heroImage": $hero_image, "hexBackgroundColor": $hex_background_color, "homepageUri": $homepage_uri, "id": $id, "imageModulesData": $image_modules_data, "infoModuleData": $info_module_data, "issuerName": $issuer_name, "kind": $kind, "linksModuleData": $links_module_data, "localizedCardNumberLabel": $localized_card_number_label, "localizedEventNumberLabel": $localized_event_number_label, "localizedIssuerName": $localized_issuer_name, "localizedMerchantName": $localized_merchant_name, "localizedPinLabel": $localized_pin_label, "locations": $locations, "merchantName": $merchant_name, "messages": $messages, "multipleDevicesAndHoldersAllowedStatus": $multiple_devices_and_holders_allowed_status, "pinLabel": $pin_label, "programLogo": $program_logo, "redemptionIssuers": $redemption_issuers, "review": $review, "reviewStatus": $review_status, "securityAnimation": $security_animation, "textModulesData": $text_modules_data, "version": $version, "viewUnlockRequirement": $view_unlock_requirement, "wordMark": $word_mark} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "patch" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body
+  do-request "patch" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: ({"$.xgafv": $xgafv, "access_token": $access_token, "alt": $alt, "callback": $callback, "fields": $fields, "key": $key, "oauth_token": $oauth_token, "prettyPrint": $pretty_print, "quotaUser": $quota_user, "upload_protocol": $upload_protocol, "uploadType": $upload_type} | compact), body: $req_body}
 }
 
 # Updates the gift card class referenced by the given class ID.
@@ -2559,7 +2606,7 @@ export def "walletobjects-gift-card-class update-by-resourceId" [
 # --securityAnimation shape: {animationType?: "ANIMATION_UNSPECIFIED"|"FOIL_SHIMMER"|"foilShimmer"}
 # --textModulesData item shape: {body?: string, header?: string, id?: string, localizedBody?: record, localizedHeader?: record}
 # --wordMark shape: {contentDescription?: record, kind?: string, sourceUri?: record}
-export def "walletobjects-gift-card-class update-by-resourceId-1" [
+export def "walletobjects-gift-card-class update-by-resource-id-1" [
   resource_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -2621,13 +2668,14 @@ export def "walletobjects-gift-card-class update-by-resourceId-1" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($resource_id | is-empty) { error make --unspanned { msg: "path parameter 'resourceId' must be non-empty" } }
   let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({resource_id: (encode-path-segment $resource_id)} | format pattern "/walletobjects/v1/giftCardClass/{resource_id}") $qp)
   let req_body = {"allowBarcodeRedemption": $allow_barcode_redemption, "allowMultipleUsersPerObject": $allow_multiple_users_per_object, "callbackOptions": $callback_options, "cardNumberLabel": $card_number_label, "classTemplateInfo": $class_template_info, "countryCode": $country_code, "enableSmartTap": $enable_smart_tap, "eventNumberLabel": $event_number_label, "heroImage": $hero_image, "hexBackgroundColor": $hex_background_color, "homepageUri": $homepage_uri, "id": $id, "imageModulesData": $image_modules_data, "infoModuleData": $info_module_data, "issuerName": $issuer_name, "kind": $kind, "linksModuleData": $links_module_data, "localizedCardNumberLabel": $localized_card_number_label, "localizedEventNumberLabel": $localized_event_number_label, "localizedIssuerName": $localized_issuer_name, "localizedMerchantName": $localized_merchant_name, "localizedPinLabel": $localized_pin_label, "locations": $locations, "merchantName": $merchant_name, "messages": $messages, "multipleDevicesAndHoldersAllowedStatus": $multiple_devices_and_holders_allowed_status, "pinLabel": $pin_label, "programLogo": $program_logo, "redemptionIssuers": $redemption_issuers, "review": $review, "reviewStatus": $review_status, "securityAnimation": $security_animation, "textModulesData": $text_modules_data, "version": $version, "viewUnlockRequirement": $view_unlock_requirement, "wordMark": $word_mark} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: ({"$.xgafv": $xgafv, "access_token": $access_token, "alt": $alt, "callback": $callback, "fields": $fields, "key": $key, "oauth_token": $oauth_token, "prettyPrint": $pretty_print, "quotaUser": $quota_user, "upload_protocol": $upload_protocol, "uploadType": $upload_type} | compact), body: $req_body}
 }
 
 # Adds a message to the gift card class referenced by the given class ID.
@@ -2662,13 +2710,14 @@ export def "walletobjects-gift-card-class-add-message create-addmessage" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($resource_id | is-empty) { error make --unspanned { msg: "path parameter 'resourceId' must be non-empty" } }
   let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({resource_id: (encode-path-segment $resource_id)} | format pattern "/walletobjects/v1/giftCardClass/{resource_id}/addMessage") $qp)
   let req_body = {"message": $message} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: ({"$.xgafv": $xgafv, "access_token": $access_token, "alt": $alt, "callback": $callback, "fields": $fields, "key": $key, "oauth_token": $oauth_token, "prettyPrint": $pretty_print, "quotaUser": $quota_user, "upload_protocol": $upload_protocol, "uploadType": $upload_type} | compact), body: $req_body}
 }
 
 # Returns a list of all gift card objects for a given issuer ID.
@@ -2706,7 +2755,7 @@ export def "walletobjects-gift-card-object list" [
   let full_url = (build-url $base "/walletobjects/v1/giftCardObject" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"$.xgafv": $xgafv, "access_token": $access_token, "alt": $alt, "callback": $callback, "fields": $fields, "key": $key, "oauth_token": $oauth_token, "prettyPrint": $pretty_print, "quotaUser": $quota_user, "upload_protocol": $upload_protocol, "uploadType": $upload_type, "classId": $class_id, "maxResults": $max_results, "token": $qp_token} | compact), body: null}
 }
 
 # Inserts an gift card object with the given ID and properties.
@@ -2788,7 +2837,7 @@ export def "walletobjects-gift-card-object create" [
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: ({"$.xgafv": $xgafv, "access_token": $access_token, "alt": $alt, "callback": $callback, "fields": $fields, "key": $key, "oauth_token": $oauth_token, "prettyPrint": $pretty_print, "quotaUser": $quota_user, "upload_protocol": $upload_protocol, "uploadType": $upload_type} | compact), body: $req_body}
 }
 
 # Returns the gift card object with the given object ID.
@@ -2820,11 +2869,12 @@ export def "walletobjects-gift-card-object get" [
 ]: nothing -> record<appLinkData: record<androidAppLinkInfo: record<appLogoImage: record, appTarget: record, description: record, title: record>, iosAppLinkInfo: record<appLogoImage: record, appTarget: record, description: record, title: record>, webAppLinkInfo: record<appLogoImage: record, appTarget: record, description: record, title: record>>, balance: record<currencyCode: string, kind: string, micros: string>, balanceUpdateTime: record<date: string>, barcode: record<alternateText: string, kind: string, renderEncoding: string, showCodeText: record<defaultValue: record, kind: string, translatedValues: list>, type: string, value: string>, cardNumber: string, classId: string, classReference: record<allowBarcodeRedemption: bool, allowMultipleUsersPerObject: bool, callbackOptions: record<updateRequestUrl: string, url: string>, cardNumberLabel: string, classTemplateInfo: record<cardBarcodeSectionDetails: record, cardTemplateOverride: record, detailsTemplateOverride: record, listTemplateOverride: record>, countryCode: string, enableSmartTap: bool, eventNumberLabel: string, heroImage: record<contentDescription: record, kind: string, sourceUri: record>, hexBackgroundColor: string, homepageUri: record<description: string, id: string, kind: string, localizedDescription: record, uri: string>, id: string, imageModulesData: list<record>, infoModuleData: record<labelValueRows: list, showLastUpdateTime: bool>, issuerName: string, kind: string, linksModuleData: record<uris: list>, localizedCardNumberLabel: record<defaultValue: record, kind: string, translatedValues: list>, localizedEventNumberLabel: record<defaultValue: record, kind: string, translatedValues: list>, localizedIssuerName: record<defaultValue: record, kind: string, translatedValues: list>, localizedMerchantName: record<defaultValue: record, kind: string, translatedValues: list>, localizedPinLabel: record<defaultValue: record, kind: string, translatedValues: list>, locations: list<record>, merchantName: string, messages: list<record>, multipleDevicesAndHoldersAllowedStatus: string, pinLabel: string, programLogo: record<contentDescription: record, kind: string, sourceUri: record>, redemptionIssuers: list<string>, review: record<comments: string>, reviewStatus: string, securityAnimation: record<animationType: string>, textModulesData: list<record>, version: string, viewUnlockRequirement: string, wordMark: record<contentDescription: record, kind: string, sourceUri: record>>, disableExpirationNotification: bool, eventNumber: string, groupingInfo: record<groupingId: string, sortIndex: int>, hasLinkedDevice: bool, hasUsers: bool, heroImage: record<contentDescription: record<defaultValue: record, kind: string, translatedValues: list>, kind: string, sourceUri: record<description: string, localizedDescription: record, uri: string>>, id: string, imageModulesData: table<id: string, mainImage: record>, infoModuleData: record<labelValueRows: list<record>, showLastUpdateTime: bool>, kind: string, linksModuleData: record<uris: list<record>>, locations: table<kind: string, latitude: float, longitude: float>, messages: table<body: string, displayInterval: record, header: string, id: string, kind: string, localizedBody: record, localizedHeader: record, messageType: string>, passConstraints: record<screenshotEligibility: string>, pin: string, rotatingBarcode: record<alternateText: string, renderEncoding: string, showCodeText: record<defaultValue: record, kind: string, translatedValues: list>, totpDetails: record<algorithm: string, parameters: list, periodMillis: string>, type: string, valuePattern: string>, smartTapRedemptionValue: string, state: string, textModulesData: table<body: string, header: string, id: string, localizedBody: record, localizedHeader: record>, validTimeInterval: record<end: record<date: string>, kind: string, start: record<date: string>>, version: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($resource_id | is-empty) { error make --unspanned { msg: "path parameter 'resourceId' must be non-empty" } }
   let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({resource_id: (encode-path-segment $resource_id)} | format pattern "/walletobjects/v1/giftCardObject/{resource_id}") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"$.xgafv": $xgafv, "access_token": $access_token, "alt": $alt, "callback": $callback, "fields": $fields, "key": $key, "oauth_token": $oauth_token, "prettyPrint": $pretty_print, "quotaUser": $quota_user, "upload_protocol": $upload_protocol, "uploadType": $upload_type} | compact), body: null}
 }
 
 # Updates the gift card object referenced by the given object ID. This method supports patch semantics.
@@ -2847,7 +2897,7 @@ export def "walletobjects-gift-card-object get" [
 # --rotatingBarcode shape: {alternateText?: string, renderEncoding?: "RENDER_ENCODING_UNSPECIFIED"|"UTF_8", showCodeText?: record, totpDetails?: record, type?: "BARCODE_TYPE_UNSPECIFIED"|"AZTEC"|"aztec"|"CODE_39"|"code39"|"CODE_128"|"code128"|"CODABAR"|"codabar"|"DATA_MATRIX"|"dataMatrix"|"EAN_8"|"ean8"|"EAN_13"|"ean13"|"EAN13"|"ITF_14"|"itf14"|"PDF_417"|"pdf417"|"PDF417"|"QR_CODE"|"qrCode"|"qrcode"|"UPC_A"|"upcA"|"TEXT_ONLY"|"textOnly", valuePattern?: string}
 # --textModulesData item shape: {body?: string, header?: string, id?: string, localizedBody?: record, localizedHeader?: record}
 # --validTimeInterval shape: {end?: record, kind?: string, start?: record}
-export def "walletobjects-gift-card-object update-by-resourceId" [
+export def "walletobjects-gift-card-object update-by-resource-id" [
   resource_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -2901,13 +2951,14 @@ export def "walletobjects-gift-card-object update-by-resourceId" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($resource_id | is-empty) { error make --unspanned { msg: "path parameter 'resourceId' must be non-empty" } }
   let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({resource_id: (encode-path-segment $resource_id)} | format pattern "/walletobjects/v1/giftCardObject/{resource_id}") $qp)
   let req_body = {"appLinkData": $app_link_data, "balance": $balance, "balanceUpdateTime": $balance_update_time, "barcode": $barcode, "cardNumber": $card_number, "classId": $class_id, "classReference": $class_reference, "disableExpirationNotification": $disable_expiration_notification, "eventNumber": $event_number, "groupingInfo": $grouping_info, "hasLinkedDevice": $has_linked_device, "hasUsers": $has_users, "heroImage": $hero_image, "id": $id, "imageModulesData": $image_modules_data, "infoModuleData": $info_module_data, "kind": $kind, "linksModuleData": $links_module_data, "locations": $locations, "messages": $messages, "passConstraints": $pass_constraints, "pin": $pin, "rotatingBarcode": $rotating_barcode, "smartTapRedemptionValue": $smart_tap_redemption_value, "state": $state, "textModulesData": $text_modules_data, "validTimeInterval": $valid_time_interval, "version": $version} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "patch" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body
+  do-request "patch" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: ({"$.xgafv": $xgafv, "access_token": $access_token, "alt": $alt, "callback": $callback, "fields": $fields, "key": $key, "oauth_token": $oauth_token, "prettyPrint": $pretty_print, "quotaUser": $quota_user, "upload_protocol": $upload_protocol, "uploadType": $upload_type} | compact), body: $req_body}
 }
 
 # Updates the gift card object referenced by the given object ID.
@@ -2930,7 +2981,7 @@ export def "walletobjects-gift-card-object update-by-resourceId" [
 # --rotatingBarcode shape: {alternateText?: string, renderEncoding?: "RENDER_ENCODING_UNSPECIFIED"|"UTF_8", showCodeText?: record, totpDetails?: record, type?: "BARCODE_TYPE_UNSPECIFIED"|"AZTEC"|"aztec"|"CODE_39"|"code39"|"CODE_128"|"code128"|"CODABAR"|"codabar"|"DATA_MATRIX"|"dataMatrix"|"EAN_8"|"ean8"|"EAN_13"|"ean13"|"EAN13"|"ITF_14"|"itf14"|"PDF_417"|"pdf417"|"PDF417"|"QR_CODE"|"qrCode"|"qrcode"|"UPC_A"|"upcA"|"TEXT_ONLY"|"textOnly", valuePattern?: string}
 # --textModulesData item shape: {body?: string, header?: string, id?: string, localizedBody?: record, localizedHeader?: record}
 # --validTimeInterval shape: {end?: record, kind?: string, start?: record}
-export def "walletobjects-gift-card-object update-by-resourceId-1" [
+export def "walletobjects-gift-card-object update-by-resource-id-1" [
   resource_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -2984,13 +3035,14 @@ export def "walletobjects-gift-card-object update-by-resourceId-1" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($resource_id | is-empty) { error make --unspanned { msg: "path parameter 'resourceId' must be non-empty" } }
   let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({resource_id: (encode-path-segment $resource_id)} | format pattern "/walletobjects/v1/giftCardObject/{resource_id}") $qp)
   let req_body = {"appLinkData": $app_link_data, "balance": $balance, "balanceUpdateTime": $balance_update_time, "barcode": $barcode, "cardNumber": $card_number, "classId": $class_id, "classReference": $class_reference, "disableExpirationNotification": $disable_expiration_notification, "eventNumber": $event_number, "groupingInfo": $grouping_info, "hasLinkedDevice": $has_linked_device, "hasUsers": $has_users, "heroImage": $hero_image, "id": $id, "imageModulesData": $image_modules_data, "infoModuleData": $info_module_data, "kind": $kind, "linksModuleData": $links_module_data, "locations": $locations, "messages": $messages, "passConstraints": $pass_constraints, "pin": $pin, "rotatingBarcode": $rotating_barcode, "smartTapRedemptionValue": $smart_tap_redemption_value, "state": $state, "textModulesData": $text_modules_data, "validTimeInterval": $valid_time_interval, "version": $version} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: ({"$.xgafv": $xgafv, "access_token": $access_token, "alt": $alt, "callback": $callback, "fields": $fields, "key": $key, "oauth_token": $oauth_token, "prettyPrint": $pretty_print, "quotaUser": $quota_user, "upload_protocol": $upload_protocol, "uploadType": $upload_type} | compact), body: $req_body}
 }
 
 # Adds a message to the gift card object referenced by the given object ID.
@@ -3025,13 +3077,14 @@ export def "walletobjects-gift-card-object-add-message create-addmessage" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($resource_id | is-empty) { error make --unspanned { msg: "path parameter 'resourceId' must be non-empty" } }
   let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({resource_id: (encode-path-segment $resource_id)} | format pattern "/walletobjects/v1/giftCardObject/{resource_id}/addMessage") $qp)
   let req_body = {"message": $message} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: ({"$.xgafv": $xgafv, "access_token": $access_token, "alt": $alt, "callback": $callback, "fields": $fields, "key": $key, "oauth_token": $oauth_token, "prettyPrint": $pretty_print, "quotaUser": $quota_user, "upload_protocol": $upload_protocol, "uploadType": $upload_type} | compact), body: $req_body}
 }
 
 # Returns a list of all issuers shared to the caller.
@@ -3066,7 +3119,7 @@ export def "walletobjects-issuer list" [
   let full_url = (build-url $base "/walletobjects/v1/issuer" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"$.xgafv": $xgafv, "access_token": $access_token, "alt": $alt, "callback": $callback, "fields": $fields, "key": $key, "oauth_token": $oauth_token, "prettyPrint": $pretty_print, "quotaUser": $quota_user, "upload_protocol": $upload_protocol, "uploadType": $upload_type} | compact), body: null}
 }
 
 # Inserts an issuer with the given ID and properties.
@@ -3111,7 +3164,7 @@ export def "walletobjects-issuer create" [
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: ({"$.xgafv": $xgafv, "access_token": $access_token, "alt": $alt, "callback": $callback, "fields": $fields, "key": $key, "oauth_token": $oauth_token, "prettyPrint": $pretty_print, "quotaUser": $quota_user, "upload_protocol": $upload_protocol, "uploadType": $upload_type} | compact), body: $req_body}
 }
 
 # Returns the issuer with the given issuer ID.
@@ -3143,11 +3196,12 @@ export def "walletobjects-issuer get" [
 ]: nothing -> record<contactInfo: record<alertsEmails: list<string>, email: string, name: string, phone: string>, homepageUrl: string, issuerId: string, name: string, smartTapMerchantData: record<authenticationKeys: list<record>, smartTapMerchantId: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($resource_id | is-empty) { error make --unspanned { msg: "path parameter 'resourceId' must be non-empty" } }
   let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({resource_id: (encode-path-segment $resource_id)} | format pattern "/walletobjects/v1/issuer/{resource_id}") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"$.xgafv": $xgafv, "access_token": $access_token, "alt": $alt, "callback": $callback, "fields": $fields, "key": $key, "oauth_token": $oauth_token, "prettyPrint": $pretty_print, "quotaUser": $quota_user, "upload_protocol": $upload_protocol, "uploadType": $upload_type} | compact), body: null}
 }
 
 # Updates the issuer referenced by the given issuer ID. This method supports patch semantics.
@@ -3156,7 +3210,7 @@ export def "walletobjects-issuer get" [
 # operationId: walletobjects.issuer.patch
 # --contactInfo shape: {alertsEmails?: list<string>, email?: string, name?: string, phone?: string}
 # --smartTapMerchantData shape: {authenticationKeys?: list, smartTapMerchantId?: string}
-export def "walletobjects-issuer update-by-resourceId" [
+export def "walletobjects-issuer update-by-resource-id" [
   resource_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -3187,13 +3241,14 @@ export def "walletobjects-issuer update-by-resourceId" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($resource_id | is-empty) { error make --unspanned { msg: "path parameter 'resourceId' must be non-empty" } }
   let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({resource_id: (encode-path-segment $resource_id)} | format pattern "/walletobjects/v1/issuer/{resource_id}") $qp)
   let req_body = {"contactInfo": $contact_info, "homepageUrl": $homepage_url, "issuerId": $issuer_id, "name": $name, "smartTapMerchantData": $smart_tap_merchant_data} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "patch" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body
+  do-request "patch" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: ({"$.xgafv": $xgafv, "access_token": $access_token, "alt": $alt, "callback": $callback, "fields": $fields, "key": $key, "oauth_token": $oauth_token, "prettyPrint": $pretty_print, "quotaUser": $quota_user, "upload_protocol": $upload_protocol, "uploadType": $upload_type} | compact), body: $req_body}
 }
 
 # Updates the issuer referenced by the given issuer ID.
@@ -3202,7 +3257,7 @@ export def "walletobjects-issuer update-by-resourceId" [
 # operationId: walletobjects.issuer.update
 # --contactInfo shape: {alertsEmails?: list<string>, email?: string, name?: string, phone?: string}
 # --smartTapMerchantData shape: {authenticationKeys?: list, smartTapMerchantId?: string}
-export def "walletobjects-issuer update-by-resourceId-1" [
+export def "walletobjects-issuer update-by-resource-id-1" [
   resource_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -3233,13 +3288,14 @@ export def "walletobjects-issuer update-by-resourceId-1" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($resource_id | is-empty) { error make --unspanned { msg: "path parameter 'resourceId' must be non-empty" } }
   let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({resource_id: (encode-path-segment $resource_id)} | format pattern "/walletobjects/v1/issuer/{resource_id}") $qp)
   let req_body = {"contactInfo": $contact_info, "homepageUrl": $homepage_url, "issuerId": $issuer_id, "name": $name, "smartTapMerchantData": $smart_tap_merchant_data} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: ({"$.xgafv": $xgafv, "access_token": $access_token, "alt": $alt, "callback": $callback, "fields": $fields, "key": $key, "oauth_token": $oauth_token, "prettyPrint": $pretty_print, "quotaUser": $quota_user, "upload_protocol": $upload_protocol, "uploadType": $upload_type} | compact), body: $req_body}
 }
 
 # Inserts the resources in the JWT.
@@ -3278,7 +3334,7 @@ export def "walletobjects-jwt create" [
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: ({"$.xgafv": $xgafv, "access_token": $access_token, "alt": $alt, "callback": $callback, "fields": $fields, "key": $key, "oauth_token": $oauth_token, "prettyPrint": $pretty_print, "quotaUser": $quota_user, "upload_protocol": $upload_protocol, "uploadType": $upload_type} | compact), body: $req_body}
 }
 
 # Returns a list of all loyalty classes for a given issuer ID.
@@ -3316,7 +3372,7 @@ export def "walletobjects-loyalty-class list" [
   let full_url = (build-url $base "/walletobjects/v1/loyaltyClass" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"$.xgafv": $xgafv, "access_token": $access_token, "alt": $alt, "callback": $callback, "fields": $fields, "key": $key, "oauth_token": $oauth_token, "prettyPrint": $pretty_print, "quotaUser": $quota_user, "upload_protocol": $upload_protocol, "uploadType": $upload_type, "issuerId": $issuer_id, "maxResults": $max_results, "token": $qp_token} | compact), body: null}
 }
 
 # Inserts an loyalty class with the given ID and properties.
@@ -3419,7 +3475,7 @@ export def "walletobjects-loyalty-class create" [
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: ({"$.xgafv": $xgafv, "access_token": $access_token, "alt": $alt, "callback": $callback, "fields": $fields, "key": $key, "oauth_token": $oauth_token, "prettyPrint": $pretty_print, "quotaUser": $quota_user, "upload_protocol": $upload_protocol, "uploadType": $upload_type} | compact), body: $req_body}
 }
 
 # Returns the loyalty class with the given class ID.
@@ -3451,11 +3507,12 @@ export def "walletobjects-loyalty-class get" [
 ]: nothing -> record<accountIdLabel: string, accountNameLabel: string, allowMultipleUsersPerObject: bool, callbackOptions: record<updateRequestUrl: string, url: string>, classTemplateInfo: record<cardBarcodeSectionDetails: record<firstBottomDetail: record, firstTopDetail: record, secondTopDetail: record>, cardTemplateOverride: record<cardRowTemplateInfos: list>, detailsTemplateOverride: record<detailsItemInfos: list>, listTemplateOverride: record<firstRowOption: record, secondRowOption: record, thirdRowOption: record>>, countryCode: string, discoverableProgram: record<merchantSigninInfo: record<signinWebsite: record>, merchantSignupInfo: record<signupSharedDatas: list, signupWebsite: record>, state: string>, enableSmartTap: bool, heroImage: record<contentDescription: record<defaultValue: record, kind: string, translatedValues: list>, kind: string, sourceUri: record<description: string, localizedDescription: record, uri: string>>, hexBackgroundColor: string, homepageUri: record<description: string, id: string, kind: string, localizedDescription: record<defaultValue: record, kind: string, translatedValues: list>, uri: string>, id: string, imageModulesData: table<id: string, mainImage: record>, infoModuleData: record<labelValueRows: list<record>, showLastUpdateTime: bool>, issuerName: string, kind: string, linksModuleData: record<uris: list<record>>, localizedAccountIdLabel: record<defaultValue: record<kind: string, language: string, value: string>, kind: string, translatedValues: list<record>>, localizedAccountNameLabel: record<defaultValue: record<kind: string, language: string, value: string>, kind: string, translatedValues: list<record>>, localizedIssuerName: record<defaultValue: record<kind: string, language: string, value: string>, kind: string, translatedValues: list<record>>, localizedProgramName: record<defaultValue: record<kind: string, language: string, value: string>, kind: string, translatedValues: list<record>>, localizedRewardsTier: record<defaultValue: record<kind: string, language: string, value: string>, kind: string, translatedValues: list<record>>, localizedRewardsTierLabel: record<defaultValue: record<kind: string, language: string, value: string>, kind: string, translatedValues: list<record>>, localizedSecondaryRewardsTier: record<defaultValue: record<kind: string, language: string, value: string>, kind: string, translatedValues: list<record>>, localizedSecondaryRewardsTierLabel: record<defaultValue: record<kind: string, language: string, value: string>, kind: string, translatedValues: list<record>>, locations: table<kind: string, latitude: float, longitude: float>, messages: table<body: string, displayInterval: record, header: string, id: string, kind: string, localizedBody: record, localizedHeader: record, messageType: string>, multipleDevicesAndHoldersAllowedStatus: string, programLogo: record<contentDescription: record<defaultValue: record, kind: string, translatedValues: list>, kind: string, sourceUri: record<description: string, localizedDescription: record, uri: string>>, programName: string, redemptionIssuers: list<string>, review: record<comments: string>, reviewStatus: string, rewardsTier: string, rewardsTierLabel: string, secondaryRewardsTier: string, secondaryRewardsTierLabel: string, securityAnimation: record<animationType: string>, textModulesData: table<body: string, header: string, id: string, localizedBody: record, localizedHeader: record>, version: string, viewUnlockRequirement: string, wordMark: record<contentDescription: record<defaultValue: record, kind: string, translatedValues: list>, kind: string, sourceUri: record<description: string, localizedDescription: record, uri: string>>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($resource_id | is-empty) { error make --unspanned { msg: "path parameter 'resourceId' must be non-empty" } }
   let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({resource_id: (encode-path-segment $resource_id)} | format pattern "/walletobjects/v1/loyaltyClass/{resource_id}") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"$.xgafv": $xgafv, "access_token": $access_token, "alt": $alt, "callback": $callback, "fields": $fields, "key": $key, "oauth_token": $oauth_token, "prettyPrint": $pretty_print, "quotaUser": $quota_user, "upload_protocol": $upload_protocol, "uploadType": $upload_type} | compact), body: null}
 }
 
 # Updates the loyalty class referenced by the given class ID. This method supports patch semantics.
@@ -3485,7 +3542,7 @@ export def "walletobjects-loyalty-class get" [
 # --securityAnimation shape: {animationType?: "ANIMATION_UNSPECIFIED"|"FOIL_SHIMMER"|"foilShimmer"}
 # --textModulesData item shape: {body?: string, header?: string, id?: string, localizedBody?: record, localizedHeader?: record}
 # --wordMark shape: {contentDescription?: record, kind?: string, sourceUri?: record}
-export def "walletobjects-loyalty-class update-by-resourceId" [
+export def "walletobjects-loyalty-class update-by-resource-id" [
   resource_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -3553,13 +3610,14 @@ export def "walletobjects-loyalty-class update-by-resourceId" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($resource_id | is-empty) { error make --unspanned { msg: "path parameter 'resourceId' must be non-empty" } }
   let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({resource_id: (encode-path-segment $resource_id)} | format pattern "/walletobjects/v1/loyaltyClass/{resource_id}") $qp)
   let req_body = {"accountIdLabel": $account_id_label, "accountNameLabel": $account_name_label, "allowMultipleUsersPerObject": $allow_multiple_users_per_object, "callbackOptions": $callback_options, "classTemplateInfo": $class_template_info, "countryCode": $country_code, "discoverableProgram": $discoverable_program, "enableSmartTap": $enable_smart_tap, "heroImage": $hero_image, "hexBackgroundColor": $hex_background_color, "homepageUri": $homepage_uri, "id": $id, "imageModulesData": $image_modules_data, "infoModuleData": $info_module_data, "issuerName": $issuer_name, "kind": $kind, "linksModuleData": $links_module_data, "localizedAccountIdLabel": $localized_account_id_label, "localizedAccountNameLabel": $localized_account_name_label, "localizedIssuerName": $localized_issuer_name, "localizedProgramName": $localized_program_name, "localizedRewardsTier": $localized_rewards_tier, "localizedRewardsTierLabel": $localized_rewards_tier_label, "localizedSecondaryRewardsTier": $localized_secondary_rewards_tier, "localizedSecondaryRewardsTierLabel": $localized_secondary_rewards_tier_label, "locations": $locations, "messages": $messages, "multipleDevicesAndHoldersAllowedStatus": $multiple_devices_and_holders_allowed_status, "programLogo": $program_logo, "programName": $program_name, "redemptionIssuers": $redemption_issuers, "review": $review, "reviewStatus": $review_status, "rewardsTier": $rewards_tier, "rewardsTierLabel": $rewards_tier_label, "secondaryRewardsTier": $secondary_rewards_tier, "secondaryRewardsTierLabel": $secondary_rewards_tier_label, "securityAnimation": $security_animation, "textModulesData": $text_modules_data, "version": $version, "viewUnlockRequirement": $view_unlock_requirement, "wordMark": $word_mark} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "patch" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body
+  do-request "patch" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: ({"$.xgafv": $xgafv, "access_token": $access_token, "alt": $alt, "callback": $callback, "fields": $fields, "key": $key, "oauth_token": $oauth_token, "prettyPrint": $pretty_print, "quotaUser": $quota_user, "upload_protocol": $upload_protocol, "uploadType": $upload_type} | compact), body: $req_body}
 }
 
 # Updates the loyalty class referenced by the given class ID.
@@ -3589,7 +3647,7 @@ export def "walletobjects-loyalty-class update-by-resourceId" [
 # --securityAnimation shape: {animationType?: "ANIMATION_UNSPECIFIED"|"FOIL_SHIMMER"|"foilShimmer"}
 # --textModulesData item shape: {body?: string, header?: string, id?: string, localizedBody?: record, localizedHeader?: record}
 # --wordMark shape: {contentDescription?: record, kind?: string, sourceUri?: record}
-export def "walletobjects-loyalty-class update-by-resourceId-1" [
+export def "walletobjects-loyalty-class update-by-resource-id-1" [
   resource_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -3657,13 +3715,14 @@ export def "walletobjects-loyalty-class update-by-resourceId-1" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($resource_id | is-empty) { error make --unspanned { msg: "path parameter 'resourceId' must be non-empty" } }
   let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({resource_id: (encode-path-segment $resource_id)} | format pattern "/walletobjects/v1/loyaltyClass/{resource_id}") $qp)
   let req_body = {"accountIdLabel": $account_id_label, "accountNameLabel": $account_name_label, "allowMultipleUsersPerObject": $allow_multiple_users_per_object, "callbackOptions": $callback_options, "classTemplateInfo": $class_template_info, "countryCode": $country_code, "discoverableProgram": $discoverable_program, "enableSmartTap": $enable_smart_tap, "heroImage": $hero_image, "hexBackgroundColor": $hex_background_color, "homepageUri": $homepage_uri, "id": $id, "imageModulesData": $image_modules_data, "infoModuleData": $info_module_data, "issuerName": $issuer_name, "kind": $kind, "linksModuleData": $links_module_data, "localizedAccountIdLabel": $localized_account_id_label, "localizedAccountNameLabel": $localized_account_name_label, "localizedIssuerName": $localized_issuer_name, "localizedProgramName": $localized_program_name, "localizedRewardsTier": $localized_rewards_tier, "localizedRewardsTierLabel": $localized_rewards_tier_label, "localizedSecondaryRewardsTier": $localized_secondary_rewards_tier, "localizedSecondaryRewardsTierLabel": $localized_secondary_rewards_tier_label, "locations": $locations, "messages": $messages, "multipleDevicesAndHoldersAllowedStatus": $multiple_devices_and_holders_allowed_status, "programLogo": $program_logo, "programName": $program_name, "redemptionIssuers": $redemption_issuers, "review": $review, "reviewStatus": $review_status, "rewardsTier": $rewards_tier, "rewardsTierLabel": $rewards_tier_label, "secondaryRewardsTier": $secondary_rewards_tier, "secondaryRewardsTierLabel": $secondary_rewards_tier_label, "securityAnimation": $security_animation, "textModulesData": $text_modules_data, "version": $version, "viewUnlockRequirement": $view_unlock_requirement, "wordMark": $word_mark} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: ({"$.xgafv": $xgafv, "access_token": $access_token, "alt": $alt, "callback": $callback, "fields": $fields, "key": $key, "oauth_token": $oauth_token, "prettyPrint": $pretty_print, "quotaUser": $quota_user, "upload_protocol": $upload_protocol, "uploadType": $upload_type} | compact), body: $req_body}
 }
 
 # Adds a message to the loyalty class referenced by the given class ID.
@@ -3698,13 +3757,14 @@ export def "walletobjects-loyalty-class-add-message create-addmessage" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($resource_id | is-empty) { error make --unspanned { msg: "path parameter 'resourceId' must be non-empty" } }
   let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({resource_id: (encode-path-segment $resource_id)} | format pattern "/walletobjects/v1/loyaltyClass/{resource_id}/addMessage") $qp)
   let req_body = {"message": $message} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: ({"$.xgafv": $xgafv, "access_token": $access_token, "alt": $alt, "callback": $callback, "fields": $fields, "key": $key, "oauth_token": $oauth_token, "prettyPrint": $pretty_print, "quotaUser": $quota_user, "upload_protocol": $upload_protocol, "uploadType": $upload_type} | compact), body: $req_body}
 }
 
 # Returns a list of all loyalty objects for a given issuer ID.
@@ -3742,7 +3802,7 @@ export def "walletobjects-loyalty-object list" [
   let full_url = (build-url $base "/walletobjects/v1/loyaltyObject" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"$.xgafv": $xgafv, "access_token": $access_token, "alt": $alt, "callback": $callback, "fields": $fields, "key": $key, "oauth_token": $oauth_token, "prettyPrint": $pretty_print, "quotaUser": $quota_user, "upload_protocol": $upload_protocol, "uploadType": $upload_type, "classId": $class_id, "maxResults": $max_results, "token": $qp_token} | compact), body: null}
 }
 
 # Inserts an loyalty object with the given ID and properties.
@@ -3824,7 +3884,7 @@ export def "walletobjects-loyalty-object create" [
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: ({"$.xgafv": $xgafv, "access_token": $access_token, "alt": $alt, "callback": $callback, "fields": $fields, "key": $key, "oauth_token": $oauth_token, "prettyPrint": $pretty_print, "quotaUser": $quota_user, "upload_protocol": $upload_protocol, "uploadType": $upload_type} | compact), body: $req_body}
 }
 
 # Returns the loyalty object with the given object ID.
@@ -3856,11 +3916,12 @@ export def "walletobjects-loyalty-object get" [
 ]: nothing -> record<accountId: string, accountName: string, appLinkData: record<androidAppLinkInfo: record<appLogoImage: record, appTarget: record, description: record, title: record>, iosAppLinkInfo: record<appLogoImage: record, appTarget: record, description: record, title: record>, webAppLinkInfo: record<appLogoImage: record, appTarget: record, description: record, title: record>>, barcode: record<alternateText: string, kind: string, renderEncoding: string, showCodeText: record<defaultValue: record, kind: string, translatedValues: list>, type: string, value: string>, classId: string, classReference: record<accountIdLabel: string, accountNameLabel: string, allowMultipleUsersPerObject: bool, callbackOptions: record<updateRequestUrl: string, url: string>, classTemplateInfo: record<cardBarcodeSectionDetails: record, cardTemplateOverride: record, detailsTemplateOverride: record, listTemplateOverride: record>, countryCode: string, discoverableProgram: record<merchantSigninInfo: record, merchantSignupInfo: record, state: string>, enableSmartTap: bool, heroImage: record<contentDescription: record, kind: string, sourceUri: record>, hexBackgroundColor: string, homepageUri: record<description: string, id: string, kind: string, localizedDescription: record, uri: string>, id: string, imageModulesData: list<record>, infoModuleData: record<labelValueRows: list, showLastUpdateTime: bool>, issuerName: string, kind: string, linksModuleData: record<uris: list>, localizedAccountIdLabel: record<defaultValue: record, kind: string, translatedValues: list>, localizedAccountNameLabel: record<defaultValue: record, kind: string, translatedValues: list>, localizedIssuerName: record<defaultValue: record, kind: string, translatedValues: list>, localizedProgramName: record<defaultValue: record, kind: string, translatedValues: list>, localizedRewardsTier: record<defaultValue: record, kind: string, translatedValues: list>, localizedRewardsTierLabel: record<defaultValue: record, kind: string, translatedValues: list>, localizedSecondaryRewardsTier: record<defaultValue: record, kind: string, translatedValues: list>, localizedSecondaryRewardsTierLabel: record<defaultValue: record, kind: string, translatedValues: list>, locations: list<record>, messages: list<record>, multipleDevicesAndHoldersAllowedStatus: string, programLogo: record<contentDescription: record, kind: string, sourceUri: record>, programName: string, redemptionIssuers: list<string>, review: record<comments: string>, reviewStatus: string, rewardsTier: string, rewardsTierLabel: string, secondaryRewardsTier: string, secondaryRewardsTierLabel: string, securityAnimation: record<animationType: string>, textModulesData: list<record>, version: string, viewUnlockRequirement: string, wordMark: record<contentDescription: record, kind: string, sourceUri: record>>, disableExpirationNotification: bool, groupingInfo: record<groupingId: string, sortIndex: int>, hasLinkedDevice: bool, hasUsers: bool, heroImage: record<contentDescription: record<defaultValue: record, kind: string, translatedValues: list>, kind: string, sourceUri: record<description: string, localizedDescription: record, uri: string>>, id: string, imageModulesData: table<id: string, mainImage: record>, infoModuleData: record<labelValueRows: list<record>, showLastUpdateTime: bool>, kind: string, linkedOfferIds: list<string>, linksModuleData: record<uris: list<record>>, locations: table<kind: string, latitude: float, longitude: float>, loyaltyPoints: record<balance: record<double: float, int: int, money: record, string: string>, label: string, localizedLabel: record<defaultValue: record, kind: string, translatedValues: list>>, messages: table<body: string, displayInterval: record, header: string, id: string, kind: string, localizedBody: record, localizedHeader: record, messageType: string>, passConstraints: record<screenshotEligibility: string>, rotatingBarcode: record<alternateText: string, renderEncoding: string, showCodeText: record<defaultValue: record, kind: string, translatedValues: list>, totpDetails: record<algorithm: string, parameters: list, periodMillis: string>, type: string, valuePattern: string>, secondaryLoyaltyPoints: record<balance: record<double: float, int: int, money: record, string: string>, label: string, localizedLabel: record<defaultValue: record, kind: string, translatedValues: list>>, smartTapRedemptionValue: string, state: string, textModulesData: table<body: string, header: string, id: string, localizedBody: record, localizedHeader: record>, validTimeInterval: record<end: record<date: string>, kind: string, start: record<date: string>>, version: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($resource_id | is-empty) { error make --unspanned { msg: "path parameter 'resourceId' must be non-empty" } }
   let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({resource_id: (encode-path-segment $resource_id)} | format pattern "/walletobjects/v1/loyaltyObject/{resource_id}") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"$.xgafv": $xgafv, "access_token": $access_token, "alt": $alt, "callback": $callback, "fields": $fields, "key": $key, "oauth_token": $oauth_token, "prettyPrint": $pretty_print, "quotaUser": $quota_user, "upload_protocol": $upload_protocol, "uploadType": $upload_type} | compact), body: null}
 }
 
 # Updates the loyalty object referenced by the given object ID. This method supports patch semantics.
@@ -3883,7 +3944,7 @@ export def "walletobjects-loyalty-object get" [
 # --secondaryLoyaltyPoints shape: {balance?: record, label?: string, localizedLabel?: record}
 # --textModulesData item shape: {body?: string, header?: string, id?: string, localizedBody?: record, localizedHeader?: record}
 # --validTimeInterval shape: {end?: record, kind?: string, start?: record}
-export def "walletobjects-loyalty-object update-by-resourceId" [
+export def "walletobjects-loyalty-object update-by-resource-id" [
   resource_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -3937,13 +3998,14 @@ export def "walletobjects-loyalty-object update-by-resourceId" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($resource_id | is-empty) { error make --unspanned { msg: "path parameter 'resourceId' must be non-empty" } }
   let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({resource_id: (encode-path-segment $resource_id)} | format pattern "/walletobjects/v1/loyaltyObject/{resource_id}") $qp)
   let req_body = {"accountId": $account_id, "accountName": $account_name, "appLinkData": $app_link_data, "barcode": $barcode, "classId": $class_id, "classReference": $class_reference, "disableExpirationNotification": $disable_expiration_notification, "groupingInfo": $grouping_info, "hasLinkedDevice": $has_linked_device, "hasUsers": $has_users, "heroImage": $hero_image, "id": $id, "imageModulesData": $image_modules_data, "infoModuleData": $info_module_data, "kind": $kind, "linkedOfferIds": $linked_offer_ids, "linksModuleData": $links_module_data, "locations": $locations, "loyaltyPoints": $loyalty_points, "messages": $messages, "passConstraints": $pass_constraints, "rotatingBarcode": $rotating_barcode, "secondaryLoyaltyPoints": $secondary_loyalty_points, "smartTapRedemptionValue": $smart_tap_redemption_value, "state": $state, "textModulesData": $text_modules_data, "validTimeInterval": $valid_time_interval, "version": $version} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "patch" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body
+  do-request "patch" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: ({"$.xgafv": $xgafv, "access_token": $access_token, "alt": $alt, "callback": $callback, "fields": $fields, "key": $key, "oauth_token": $oauth_token, "prettyPrint": $pretty_print, "quotaUser": $quota_user, "upload_protocol": $upload_protocol, "uploadType": $upload_type} | compact), body: $req_body}
 }
 
 # Updates the loyalty object referenced by the given object ID.
@@ -3966,7 +4028,7 @@ export def "walletobjects-loyalty-object update-by-resourceId" [
 # --secondaryLoyaltyPoints shape: {balance?: record, label?: string, localizedLabel?: record}
 # --textModulesData item shape: {body?: string, header?: string, id?: string, localizedBody?: record, localizedHeader?: record}
 # --validTimeInterval shape: {end?: record, kind?: string, start?: record}
-export def "walletobjects-loyalty-object update-by-resourceId-1" [
+export def "walletobjects-loyalty-object update-by-resource-id-1" [
   resource_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -4020,13 +4082,14 @@ export def "walletobjects-loyalty-object update-by-resourceId-1" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($resource_id | is-empty) { error make --unspanned { msg: "path parameter 'resourceId' must be non-empty" } }
   let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({resource_id: (encode-path-segment $resource_id)} | format pattern "/walletobjects/v1/loyaltyObject/{resource_id}") $qp)
   let req_body = {"accountId": $account_id, "accountName": $account_name, "appLinkData": $app_link_data, "barcode": $barcode, "classId": $class_id, "classReference": $class_reference, "disableExpirationNotification": $disable_expiration_notification, "groupingInfo": $grouping_info, "hasLinkedDevice": $has_linked_device, "hasUsers": $has_users, "heroImage": $hero_image, "id": $id, "imageModulesData": $image_modules_data, "infoModuleData": $info_module_data, "kind": $kind, "linkedOfferIds": $linked_offer_ids, "linksModuleData": $links_module_data, "locations": $locations, "loyaltyPoints": $loyalty_points, "messages": $messages, "passConstraints": $pass_constraints, "rotatingBarcode": $rotating_barcode, "secondaryLoyaltyPoints": $secondary_loyalty_points, "smartTapRedemptionValue": $smart_tap_redemption_value, "state": $state, "textModulesData": $text_modules_data, "validTimeInterval": $valid_time_interval, "version": $version} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: ({"$.xgafv": $xgafv, "access_token": $access_token, "alt": $alt, "callback": $callback, "fields": $fields, "key": $key, "oauth_token": $oauth_token, "prettyPrint": $pretty_print, "quotaUser": $quota_user, "upload_protocol": $upload_protocol, "uploadType": $upload_type} | compact), body: $req_body}
 }
 
 # Adds a message to the loyalty object referenced by the given object ID.
@@ -4061,13 +4124,14 @@ export def "walletobjects-loyalty-object-add-message create-addmessage" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($resource_id | is-empty) { error make --unspanned { msg: "path parameter 'resourceId' must be non-empty" } }
   let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({resource_id: (encode-path-segment $resource_id)} | format pattern "/walletobjects/v1/loyaltyObject/{resource_id}/addMessage") $qp)
   let req_body = {"message": $message} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: ({"$.xgafv": $xgafv, "access_token": $access_token, "alt": $alt, "callback": $callback, "fields": $fields, "key": $key, "oauth_token": $oauth_token, "prettyPrint": $pretty_print, "quotaUser": $quota_user, "upload_protocol": $upload_protocol, "uploadType": $upload_type} | compact), body: $req_body}
 }
 
 # Modifies linked offer objects for the loyalty object with the given ID.
@@ -4102,13 +4166,14 @@ export def "walletobjects-loyalty-object-modify-linked-offer-objects create-modi
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($resource_id | is-empty) { error make --unspanned { msg: "path parameter 'resourceId' must be non-empty" } }
   let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({resource_id: (encode-path-segment $resource_id)} | format pattern "/walletobjects/v1/loyaltyObject/{resource_id}/modifyLinkedOfferObjects") $qp)
   let req_body = {"linkedOfferObjectIds": $linked_offer_object_ids} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: ({"$.xgafv": $xgafv, "access_token": $access_token, "alt": $alt, "callback": $callback, "fields": $fields, "key": $key, "oauth_token": $oauth_token, "prettyPrint": $pretty_print, "quotaUser": $quota_user, "upload_protocol": $upload_protocol, "uploadType": $upload_type} | compact), body: $req_body}
 }
 
 # Returns a list of all offer classes for a given issuer ID.
@@ -4146,7 +4211,7 @@ export def "walletobjects-offer-class list" [
   let full_url = (build-url $base "/walletobjects/v1/offerClass" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"$.xgafv": $xgafv, "access_token": $access_token, "alt": $alt, "callback": $callback, "fields": $fields, "key": $key, "oauth_token": $oauth_token, "prettyPrint": $pretty_print, "quotaUser": $quota_user, "upload_protocol": $upload_protocol, "uploadType": $upload_type, "issuerId": $issuer_id, "maxResults": $max_results, "token": $qp_token} | compact), body: null}
 }
 
 # Inserts an offer class with the given ID and properties.
@@ -4244,7 +4309,7 @@ export def "walletobjects-offer-class create" [
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: ({"$.xgafv": $xgafv, "access_token": $access_token, "alt": $alt, "callback": $callback, "fields": $fields, "key": $key, "oauth_token": $oauth_token, "prettyPrint": $pretty_print, "quotaUser": $quota_user, "upload_protocol": $upload_protocol, "uploadType": $upload_type} | compact), body: $req_body}
 }
 
 # Returns the offer class with the given class ID.
@@ -4276,11 +4341,12 @@ export def "walletobjects-offer-class get" [
 ]: nothing -> record<allowMultipleUsersPerObject: bool, callbackOptions: record<updateRequestUrl: string, url: string>, classTemplateInfo: record<cardBarcodeSectionDetails: record<firstBottomDetail: record, firstTopDetail: record, secondTopDetail: record>, cardTemplateOverride: record<cardRowTemplateInfos: list>, detailsTemplateOverride: record<detailsItemInfos: list>, listTemplateOverride: record<firstRowOption: record, secondRowOption: record, thirdRowOption: record>>, countryCode: string, details: string, enableSmartTap: bool, finePrint: string, helpUri: record<description: string, id: string, kind: string, localizedDescription: record<defaultValue: record, kind: string, translatedValues: list>, uri: string>, heroImage: record<contentDescription: record<defaultValue: record, kind: string, translatedValues: list>, kind: string, sourceUri: record<description: string, localizedDescription: record, uri: string>>, hexBackgroundColor: string, homepageUri: record<description: string, id: string, kind: string, localizedDescription: record<defaultValue: record, kind: string, translatedValues: list>, uri: string>, id: string, imageModulesData: table<id: string, mainImage: record>, infoModuleData: record<labelValueRows: list<record>, showLastUpdateTime: bool>, issuerName: string, kind: string, linksModuleData: record<uris: list<record>>, localizedDetails: record<defaultValue: record<kind: string, language: string, value: string>, kind: string, translatedValues: list<record>>, localizedFinePrint: record<defaultValue: record<kind: string, language: string, value: string>, kind: string, translatedValues: list<record>>, localizedIssuerName: record<defaultValue: record<kind: string, language: string, value: string>, kind: string, translatedValues: list<record>>, localizedProvider: record<defaultValue: record<kind: string, language: string, value: string>, kind: string, translatedValues: list<record>>, localizedShortTitle: record<defaultValue: record<kind: string, language: string, value: string>, kind: string, translatedValues: list<record>>, localizedTitle: record<defaultValue: record<kind: string, language: string, value: string>, kind: string, translatedValues: list<record>>, locations: table<kind: string, latitude: float, longitude: float>, messages: table<body: string, displayInterval: record, header: string, id: string, kind: string, localizedBody: record, localizedHeader: record, messageType: string>, multipleDevicesAndHoldersAllowedStatus: string, provider: string, redemptionChannel: string, redemptionIssuers: list<string>, review: record<comments: string>, reviewStatus: string, securityAnimation: record<animationType: string>, shortTitle: string, textModulesData: table<body: string, header: string, id: string, localizedBody: record, localizedHeader: record>, title: string, titleImage: record<contentDescription: record<defaultValue: record, kind: string, translatedValues: list>, kind: string, sourceUri: record<description: string, localizedDescription: record, uri: string>>, version: string, viewUnlockRequirement: string, wordMark: record<contentDescription: record<defaultValue: record, kind: string, translatedValues: list>, kind: string, sourceUri: record<description: string, localizedDescription: record, uri: string>>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($resource_id | is-empty) { error make --unspanned { msg: "path parameter 'resourceId' must be non-empty" } }
   let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({resource_id: (encode-path-segment $resource_id)} | format pattern "/walletobjects/v1/offerClass/{resource_id}") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"$.xgafv": $xgafv, "access_token": $access_token, "alt": $alt, "callback": $callback, "fields": $fields, "key": $key, "oauth_token": $oauth_token, "prettyPrint": $pretty_print, "quotaUser": $quota_user, "upload_protocol": $upload_protocol, "uploadType": $upload_type} | compact), body: null}
 }
 
 # Updates the offer class referenced by the given class ID. This method supports patch semantics.
@@ -4308,7 +4374,7 @@ export def "walletobjects-offer-class get" [
 # --textModulesData item shape: {body?: string, header?: string, id?: string, localizedBody?: record, localizedHeader?: record}
 # --titleImage shape: {contentDescription?: record, kind?: string, sourceUri?: record}
 # --wordMark shape: {contentDescription?: record, kind?: string, sourceUri?: record}
-export def "walletobjects-offer-class update-by-resourceId" [
+export def "walletobjects-offer-class update-by-resource-id" [
   resource_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -4373,13 +4439,14 @@ export def "walletobjects-offer-class update-by-resourceId" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($resource_id | is-empty) { error make --unspanned { msg: "path parameter 'resourceId' must be non-empty" } }
   let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({resource_id: (encode-path-segment $resource_id)} | format pattern "/walletobjects/v1/offerClass/{resource_id}") $qp)
   let req_body = {"allowMultipleUsersPerObject": $allow_multiple_users_per_object, "callbackOptions": $callback_options, "classTemplateInfo": $class_template_info, "countryCode": $country_code, "details": $details, "enableSmartTap": $enable_smart_tap, "finePrint": $fine_print, "helpUri": $help_uri, "heroImage": $hero_image, "hexBackgroundColor": $hex_background_color, "homepageUri": $homepage_uri, "id": $id, "imageModulesData": $image_modules_data, "infoModuleData": $info_module_data, "issuerName": $issuer_name, "kind": $kind, "linksModuleData": $links_module_data, "localizedDetails": $localized_details, "localizedFinePrint": $localized_fine_print, "localizedIssuerName": $localized_issuer_name, "localizedProvider": $localized_provider, "localizedShortTitle": $localized_short_title, "localizedTitle": $localized_title, "locations": $locations, "messages": $messages, "multipleDevicesAndHoldersAllowedStatus": $multiple_devices_and_holders_allowed_status, "provider": $provider, "redemptionChannel": $redemption_channel, "redemptionIssuers": $redemption_issuers, "review": $review, "reviewStatus": $review_status, "securityAnimation": $security_animation, "shortTitle": $short_title, "textModulesData": $text_modules_data, "title": $title, "titleImage": $title_image, "version": $version, "viewUnlockRequirement": $view_unlock_requirement, "wordMark": $word_mark} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "patch" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body
+  do-request "patch" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: ({"$.xgafv": $xgafv, "access_token": $access_token, "alt": $alt, "callback": $callback, "fields": $fields, "key": $key, "oauth_token": $oauth_token, "prettyPrint": $pretty_print, "quotaUser": $quota_user, "upload_protocol": $upload_protocol, "uploadType": $upload_type} | compact), body: $req_body}
 }
 
 # Updates the offer class referenced by the given class ID.
@@ -4407,7 +4474,7 @@ export def "walletobjects-offer-class update-by-resourceId" [
 # --textModulesData item shape: {body?: string, header?: string, id?: string, localizedBody?: record, localizedHeader?: record}
 # --titleImage shape: {contentDescription?: record, kind?: string, sourceUri?: record}
 # --wordMark shape: {contentDescription?: record, kind?: string, sourceUri?: record}
-export def "walletobjects-offer-class update-by-resourceId-1" [
+export def "walletobjects-offer-class update-by-resource-id-1" [
   resource_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -4472,13 +4539,14 @@ export def "walletobjects-offer-class update-by-resourceId-1" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($resource_id | is-empty) { error make --unspanned { msg: "path parameter 'resourceId' must be non-empty" } }
   let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({resource_id: (encode-path-segment $resource_id)} | format pattern "/walletobjects/v1/offerClass/{resource_id}") $qp)
   let req_body = {"allowMultipleUsersPerObject": $allow_multiple_users_per_object, "callbackOptions": $callback_options, "classTemplateInfo": $class_template_info, "countryCode": $country_code, "details": $details, "enableSmartTap": $enable_smart_tap, "finePrint": $fine_print, "helpUri": $help_uri, "heroImage": $hero_image, "hexBackgroundColor": $hex_background_color, "homepageUri": $homepage_uri, "id": $id, "imageModulesData": $image_modules_data, "infoModuleData": $info_module_data, "issuerName": $issuer_name, "kind": $kind, "linksModuleData": $links_module_data, "localizedDetails": $localized_details, "localizedFinePrint": $localized_fine_print, "localizedIssuerName": $localized_issuer_name, "localizedProvider": $localized_provider, "localizedShortTitle": $localized_short_title, "localizedTitle": $localized_title, "locations": $locations, "messages": $messages, "multipleDevicesAndHoldersAllowedStatus": $multiple_devices_and_holders_allowed_status, "provider": $provider, "redemptionChannel": $redemption_channel, "redemptionIssuers": $redemption_issuers, "review": $review, "reviewStatus": $review_status, "securityAnimation": $security_animation, "shortTitle": $short_title, "textModulesData": $text_modules_data, "title": $title, "titleImage": $title_image, "version": $version, "viewUnlockRequirement": $view_unlock_requirement, "wordMark": $word_mark} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: ({"$.xgafv": $xgafv, "access_token": $access_token, "alt": $alt, "callback": $callback, "fields": $fields, "key": $key, "oauth_token": $oauth_token, "prettyPrint": $pretty_print, "quotaUser": $quota_user, "upload_protocol": $upload_protocol, "uploadType": $upload_type} | compact), body: $req_body}
 }
 
 # Adds a message to the offer class referenced by the given class ID.
@@ -4513,13 +4581,14 @@ export def "walletobjects-offer-class-add-message create-addmessage" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($resource_id | is-empty) { error make --unspanned { msg: "path parameter 'resourceId' must be non-empty" } }
   let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({resource_id: (encode-path-segment $resource_id)} | format pattern "/walletobjects/v1/offerClass/{resource_id}/addMessage") $qp)
   let req_body = {"message": $message} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: ({"$.xgafv": $xgafv, "access_token": $access_token, "alt": $alt, "callback": $callback, "fields": $fields, "key": $key, "oauth_token": $oauth_token, "prettyPrint": $pretty_print, "quotaUser": $quota_user, "upload_protocol": $upload_protocol, "uploadType": $upload_type} | compact), body: $req_body}
 }
 
 # Returns a list of all offer objects for a given issuer ID.
@@ -4557,7 +4626,7 @@ export def "walletobjects-offer-object list" [
   let full_url = (build-url $base "/walletobjects/v1/offerObject" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"$.xgafv": $xgafv, "access_token": $access_token, "alt": $alt, "callback": $callback, "fields": $fields, "key": $key, "oauth_token": $oauth_token, "prettyPrint": $pretty_print, "quotaUser": $quota_user, "upload_protocol": $upload_protocol, "uploadType": $upload_type, "classId": $class_id, "maxResults": $max_results, "token": $qp_token} | compact), body: null}
 }
 
 # Inserts an offer object with the given ID and properties.
@@ -4632,7 +4701,7 @@ export def "walletobjects-offer-object create" [
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: ({"$.xgafv": $xgafv, "access_token": $access_token, "alt": $alt, "callback": $callback, "fields": $fields, "key": $key, "oauth_token": $oauth_token, "prettyPrint": $pretty_print, "quotaUser": $quota_user, "upload_protocol": $upload_protocol, "uploadType": $upload_type} | compact), body: $req_body}
 }
 
 # Returns the offer object with the given object ID.
@@ -4664,11 +4733,12 @@ export def "walletobjects-offer-object get" [
 ]: nothing -> record<appLinkData: record<androidAppLinkInfo: record<appLogoImage: record, appTarget: record, description: record, title: record>, iosAppLinkInfo: record<appLogoImage: record, appTarget: record, description: record, title: record>, webAppLinkInfo: record<appLogoImage: record, appTarget: record, description: record, title: record>>, barcode: record<alternateText: string, kind: string, renderEncoding: string, showCodeText: record<defaultValue: record, kind: string, translatedValues: list>, type: string, value: string>, classId: string, classReference: record<allowMultipleUsersPerObject: bool, callbackOptions: record<updateRequestUrl: string, url: string>, classTemplateInfo: record<cardBarcodeSectionDetails: record, cardTemplateOverride: record, detailsTemplateOverride: record, listTemplateOverride: record>, countryCode: string, details: string, enableSmartTap: bool, finePrint: string, helpUri: record<description: string, id: string, kind: string, localizedDescription: record, uri: string>, heroImage: record<contentDescription: record, kind: string, sourceUri: record>, hexBackgroundColor: string, homepageUri: record<description: string, id: string, kind: string, localizedDescription: record, uri: string>, id: string, imageModulesData: list<record>, infoModuleData: record<labelValueRows: list, showLastUpdateTime: bool>, issuerName: string, kind: string, linksModuleData: record<uris: list>, localizedDetails: record<defaultValue: record, kind: string, translatedValues: list>, localizedFinePrint: record<defaultValue: record, kind: string, translatedValues: list>, localizedIssuerName: record<defaultValue: record, kind: string, translatedValues: list>, localizedProvider: record<defaultValue: record, kind: string, translatedValues: list>, localizedShortTitle: record<defaultValue: record, kind: string, translatedValues: list>, localizedTitle: record<defaultValue: record, kind: string, translatedValues: list>, locations: list<record>, messages: list<record>, multipleDevicesAndHoldersAllowedStatus: string, provider: string, redemptionChannel: string, redemptionIssuers: list<string>, review: record<comments: string>, reviewStatus: string, securityAnimation: record<animationType: string>, shortTitle: string, textModulesData: list<record>, title: string, titleImage: record<contentDescription: record, kind: string, sourceUri: record>, version: string, viewUnlockRequirement: string, wordMark: record<contentDescription: record, kind: string, sourceUri: record>>, disableExpirationNotification: bool, groupingInfo: record<groupingId: string, sortIndex: int>, hasLinkedDevice: bool, hasUsers: bool, heroImage: record<contentDescription: record<defaultValue: record, kind: string, translatedValues: list>, kind: string, sourceUri: record<description: string, localizedDescription: record, uri: string>>, id: string, imageModulesData: table<id: string, mainImage: record>, infoModuleData: record<labelValueRows: list<record>, showLastUpdateTime: bool>, kind: string, linksModuleData: record<uris: list<record>>, locations: table<kind: string, latitude: float, longitude: float>, messages: table<body: string, displayInterval: record, header: string, id: string, kind: string, localizedBody: record, localizedHeader: record, messageType: string>, passConstraints: record<screenshotEligibility: string>, rotatingBarcode: record<alternateText: string, renderEncoding: string, showCodeText: record<defaultValue: record, kind: string, translatedValues: list>, totpDetails: record<algorithm: string, parameters: list, periodMillis: string>, type: string, valuePattern: string>, smartTapRedemptionValue: string, state: string, textModulesData: table<body: string, header: string, id: string, localizedBody: record, localizedHeader: record>, validTimeInterval: record<end: record<date: string>, kind: string, start: record<date: string>>, version: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($resource_id | is-empty) { error make --unspanned { msg: "path parameter 'resourceId' must be non-empty" } }
   let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({resource_id: (encode-path-segment $resource_id)} | format pattern "/walletobjects/v1/offerObject/{resource_id}") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"$.xgafv": $xgafv, "access_token": $access_token, "alt": $alt, "callback": $callback, "fields": $fields, "key": $key, "oauth_token": $oauth_token, "prettyPrint": $pretty_print, "quotaUser": $quota_user, "upload_protocol": $upload_protocol, "uploadType": $upload_type} | compact), body: null}
 }
 
 # Updates the offer object referenced by the given object ID. This method supports patch semantics.
@@ -4689,7 +4759,7 @@ export def "walletobjects-offer-object get" [
 # --rotatingBarcode shape: {alternateText?: string, renderEncoding?: "RENDER_ENCODING_UNSPECIFIED"|"UTF_8", showCodeText?: record, totpDetails?: record, type?: "BARCODE_TYPE_UNSPECIFIED"|"AZTEC"|"aztec"|"CODE_39"|"code39"|"CODE_128"|"code128"|"CODABAR"|"codabar"|"DATA_MATRIX"|"dataMatrix"|"EAN_8"|"ean8"|"EAN_13"|"ean13"|"EAN13"|"ITF_14"|"itf14"|"PDF_417"|"pdf417"|"PDF417"|"QR_CODE"|"qrCode"|"qrcode"|"UPC_A"|"upcA"|"TEXT_ONLY"|"textOnly", valuePattern?: string}
 # --textModulesData item shape: {body?: string, header?: string, id?: string, localizedBody?: record, localizedHeader?: record}
 # --validTimeInterval shape: {end?: record, kind?: string, start?: record}
-export def "walletobjects-offer-object update-by-resourceId" [
+export def "walletobjects-offer-object update-by-resource-id" [
   resource_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -4738,13 +4808,14 @@ export def "walletobjects-offer-object update-by-resourceId" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($resource_id | is-empty) { error make --unspanned { msg: "path parameter 'resourceId' must be non-empty" } }
   let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({resource_id: (encode-path-segment $resource_id)} | format pattern "/walletobjects/v1/offerObject/{resource_id}") $qp)
   let req_body = {"appLinkData": $app_link_data, "barcode": $barcode, "classId": $class_id, "classReference": $class_reference, "disableExpirationNotification": $disable_expiration_notification, "groupingInfo": $grouping_info, "hasLinkedDevice": $has_linked_device, "hasUsers": $has_users, "heroImage": $hero_image, "id": $id, "imageModulesData": $image_modules_data, "infoModuleData": $info_module_data, "kind": $kind, "linksModuleData": $links_module_data, "locations": $locations, "messages": $messages, "passConstraints": $pass_constraints, "rotatingBarcode": $rotating_barcode, "smartTapRedemptionValue": $smart_tap_redemption_value, "state": $state, "textModulesData": $text_modules_data, "validTimeInterval": $valid_time_interval, "version": $version} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "patch" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body
+  do-request "patch" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: ({"$.xgafv": $xgafv, "access_token": $access_token, "alt": $alt, "callback": $callback, "fields": $fields, "key": $key, "oauth_token": $oauth_token, "prettyPrint": $pretty_print, "quotaUser": $quota_user, "upload_protocol": $upload_protocol, "uploadType": $upload_type} | compact), body: $req_body}
 }
 
 # Updates the offer object referenced by the given object ID.
@@ -4765,7 +4836,7 @@ export def "walletobjects-offer-object update-by-resourceId" [
 # --rotatingBarcode shape: {alternateText?: string, renderEncoding?: "RENDER_ENCODING_UNSPECIFIED"|"UTF_8", showCodeText?: record, totpDetails?: record, type?: "BARCODE_TYPE_UNSPECIFIED"|"AZTEC"|"aztec"|"CODE_39"|"code39"|"CODE_128"|"code128"|"CODABAR"|"codabar"|"DATA_MATRIX"|"dataMatrix"|"EAN_8"|"ean8"|"EAN_13"|"ean13"|"EAN13"|"ITF_14"|"itf14"|"PDF_417"|"pdf417"|"PDF417"|"QR_CODE"|"qrCode"|"qrcode"|"UPC_A"|"upcA"|"TEXT_ONLY"|"textOnly", valuePattern?: string}
 # --textModulesData item shape: {body?: string, header?: string, id?: string, localizedBody?: record, localizedHeader?: record}
 # --validTimeInterval shape: {end?: record, kind?: string, start?: record}
-export def "walletobjects-offer-object update-by-resourceId-1" [
+export def "walletobjects-offer-object update-by-resource-id-1" [
   resource_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -4814,13 +4885,14 @@ export def "walletobjects-offer-object update-by-resourceId-1" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($resource_id | is-empty) { error make --unspanned { msg: "path parameter 'resourceId' must be non-empty" } }
   let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({resource_id: (encode-path-segment $resource_id)} | format pattern "/walletobjects/v1/offerObject/{resource_id}") $qp)
   let req_body = {"appLinkData": $app_link_data, "barcode": $barcode, "classId": $class_id, "classReference": $class_reference, "disableExpirationNotification": $disable_expiration_notification, "groupingInfo": $grouping_info, "hasLinkedDevice": $has_linked_device, "hasUsers": $has_users, "heroImage": $hero_image, "id": $id, "imageModulesData": $image_modules_data, "infoModuleData": $info_module_data, "kind": $kind, "linksModuleData": $links_module_data, "locations": $locations, "messages": $messages, "passConstraints": $pass_constraints, "rotatingBarcode": $rotating_barcode, "smartTapRedemptionValue": $smart_tap_redemption_value, "state": $state, "textModulesData": $text_modules_data, "validTimeInterval": $valid_time_interval, "version": $version} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: ({"$.xgafv": $xgafv, "access_token": $access_token, "alt": $alt, "callback": $callback, "fields": $fields, "key": $key, "oauth_token": $oauth_token, "prettyPrint": $pretty_print, "quotaUser": $quota_user, "upload_protocol": $upload_protocol, "uploadType": $upload_type} | compact), body: $req_body}
 }
 
 # Adds a message to the offer object referenced by the given object ID.
@@ -4855,13 +4927,14 @@ export def "walletobjects-offer-object-add-message create-addmessage" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($resource_id | is-empty) { error make --unspanned { msg: "path parameter 'resourceId' must be non-empty" } }
   let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({resource_id: (encode-path-segment $resource_id)} | format pattern "/walletobjects/v1/offerObject/{resource_id}/addMessage") $qp)
   let req_body = {"message": $message} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: ({"$.xgafv": $xgafv, "access_token": $access_token, "alt": $alt, "callback": $callback, "fields": $fields, "key": $key, "oauth_token": $oauth_token, "prettyPrint": $pretty_print, "quotaUser": $quota_user, "upload_protocol": $upload_protocol, "uploadType": $upload_type} | compact), body: $req_body}
 }
 
 # Returns the permissions for the given issuer id.
@@ -4893,11 +4966,12 @@ export def "walletobjects-permissions get" [
 ]: nothing -> record<issuerId: string, permissions: table<emailAddress: string, role: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($resource_id | is-empty) { error make --unspanned { msg: "path parameter 'resourceId' must be non-empty" } }
   let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({resource_id: (encode-path-segment $resource_id)} | format pattern "/walletobjects/v1/permissions/{resource_id}") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"$.xgafv": $xgafv, "access_token": $access_token, "alt": $alt, "callback": $callback, "fields": $fields, "key": $key, "oauth_token": $oauth_token, "prettyPrint": $pretty_print, "quotaUser": $quota_user, "upload_protocol": $upload_protocol, "uploadType": $upload_type} | compact), body: null}
 }
 
 # Updates the permissions for the given issuer.
@@ -4933,13 +5007,14 @@ export def "walletobjects-permissions update" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($resource_id | is-empty) { error make --unspanned { msg: "path parameter 'resourceId' must be non-empty" } }
   let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({resource_id: (encode-path-segment $resource_id)} | format pattern "/walletobjects/v1/permissions/{resource_id}") $qp)
   let req_body = {"issuerId": $issuer_id, "permissions": $permissions} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: ({"$.xgafv": $xgafv, "access_token": $access_token, "alt": $alt, "callback": $callback, "fields": $fields, "key": $key, "oauth_token": $oauth_token, "prettyPrint": $pretty_print, "quotaUser": $quota_user, "upload_protocol": $upload_protocol, "uploadType": $upload_type} | compact), body: $req_body}
 }
 
 # Upload private data (text or URI) and returns an Id to be used in its place.
@@ -4982,7 +5057,7 @@ export def "walletobjects-private-content-upload-private-data upload" [
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: ({"$.xgafv": $xgafv, "access_token": $access_token, "alt": $alt, "callback": $callback, "fields": $fields, "key": $key, "oauth_token": $oauth_token, "prettyPrint": $pretty_print, "quotaUser": $quota_user, "upload_protocol": $upload_protocol, "uploadType": $upload_type} | compact), body: $req_body}
 }
 
 # Uploads a private image and returns an Id to be used in its place.
@@ -5016,13 +5091,14 @@ export def "walletobjects-private-content-upload-private-image upload" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($issuer_id | is-empty) { error make --unspanned { msg: "path parameter 'issuerId' must be non-empty" } }
   let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({issuer_id: (encode-path-segment $issuer_id)} | format pattern "/walletobjects/v1/privateContent/{issuer_id}/uploadPrivateImage") $qp)
   let req_body = $body
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else if (($input | is-not-empty) and ($req_body | is-empty)) { $input } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/octet-stream" $req_body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/octet-stream" $req_body {query: ({"$.xgafv": $xgafv, "access_token": $access_token, "alt": $alt, "callback": $callback, "fields": $fields, "key": $key, "oauth_token": $oauth_token, "prettyPrint": $pretty_print, "quotaUser": $quota_user, "upload_protocol": $upload_protocol, "uploadType": $upload_type} | compact), body: $req_body}
 }
 
 # Inserts the smart tap.
@@ -5065,7 +5141,7 @@ export def "walletobjects-smart-tap create" [
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: ({"$.xgafv": $xgafv, "access_token": $access_token, "alt": $alt, "callback": $callback, "fields": $fields, "key": $key, "oauth_token": $oauth_token, "prettyPrint": $pretty_print, "quotaUser": $quota_user, "upload_protocol": $upload_protocol, "uploadType": $upload_type} | compact), body: $req_body}
 }
 
 # Returns a list of all transit classes for a given issuer ID.
@@ -5103,7 +5179,7 @@ export def "walletobjects-transit-class list" [
   let full_url = (build-url $base "/walletobjects/v1/transitClass" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"$.xgafv": $xgafv, "access_token": $access_token, "alt": $alt, "callback": $callback, "fields": $fields, "key": $key, "oauth_token": $oauth_token, "prettyPrint": $pretty_print, "quotaUser": $quota_user, "upload_protocol": $upload_protocol, "uploadType": $upload_type, "issuerId": $issuer_id, "maxResults": $max_results, "token": $qp_token} | compact), body: null}
 }
 
 # Inserts a transit class with the given ID and properties.
@@ -5229,7 +5305,7 @@ export def "walletobjects-transit-class create" [
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: ({"$.xgafv": $xgafv, "access_token": $access_token, "alt": $alt, "callback": $callback, "fields": $fields, "key": $key, "oauth_token": $oauth_token, "prettyPrint": $pretty_print, "quotaUser": $quota_user, "upload_protocol": $upload_protocol, "uploadType": $upload_type} | compact), body: $req_body}
 }
 
 # Returns the transit class with the given class ID.
@@ -5261,11 +5337,12 @@ export def "walletobjects-transit-class get" [
 ]: nothing -> record<activationOptions: record<activationUrl: string, allowReactivation: bool>, allowMultipleUsersPerObject: bool, callbackOptions: record<updateRequestUrl: string, url: string>, classTemplateInfo: record<cardBarcodeSectionDetails: record<firstBottomDetail: record, firstTopDetail: record, secondTopDetail: record>, cardTemplateOverride: record<cardRowTemplateInfos: list>, detailsTemplateOverride: record<detailsItemInfos: list>, listTemplateOverride: record<firstRowOption: record, secondRowOption: record, thirdRowOption: record>>, countryCode: string, customCarriageLabel: record<defaultValue: record<kind: string, language: string, value: string>, kind: string, translatedValues: list<record>>, customCoachLabel: record<defaultValue: record<kind: string, language: string, value: string>, kind: string, translatedValues: list<record>>, customConcessionCategoryLabel: record<defaultValue: record<kind: string, language: string, value: string>, kind: string, translatedValues: list<record>>, customConfirmationCodeLabel: record<defaultValue: record<kind: string, language: string, value: string>, kind: string, translatedValues: list<record>>, customDiscountMessageLabel: record<defaultValue: record<kind: string, language: string, value: string>, kind: string, translatedValues: list<record>>, customFareClassLabel: record<defaultValue: record<kind: string, language: string, value: string>, kind: string, translatedValues: list<record>>, customFareNameLabel: record<defaultValue: record<kind: string, language: string, value: string>, kind: string, translatedValues: list<record>>, customOtherRestrictionsLabel: record<defaultValue: record<kind: string, language: string, value: string>, kind: string, translatedValues: list<record>>, customPlatformLabel: record<defaultValue: record<kind: string, language: string, value: string>, kind: string, translatedValues: list<record>>, customPurchaseFaceValueLabel: record<defaultValue: record<kind: string, language: string, value: string>, kind: string, translatedValues: list<record>>, customPurchasePriceLabel: record<defaultValue: record<kind: string, language: string, value: string>, kind: string, translatedValues: list<record>>, customPurchaseReceiptNumberLabel: record<defaultValue: record<kind: string, language: string, value: string>, kind: string, translatedValues: list<record>>, customRouteRestrictionsDetailsLabel: record<defaultValue: record<kind: string, language: string, value: string>, kind: string, translatedValues: list<record>>, customRouteRestrictionsLabel: record<defaultValue: record<kind: string, language: string, value: string>, kind: string, translatedValues: list<record>>, customSeatLabel: record<defaultValue: record<kind: string, language: string, value: string>, kind: string, translatedValues: list<record>>, customTicketNumberLabel: record<defaultValue: record<kind: string, language: string, value: string>, kind: string, translatedValues: list<record>>, customTimeRestrictionsLabel: record<defaultValue: record<kind: string, language: string, value: string>, kind: string, translatedValues: list<record>>, customTransitTerminusNameLabel: record<defaultValue: record<kind: string, language: string, value: string>, kind: string, translatedValues: list<record>>, customZoneLabel: record<defaultValue: record<kind: string, language: string, value: string>, kind: string, translatedValues: list<record>>, enableSingleLegItinerary: bool, enableSmartTap: bool, heroImage: record<contentDescription: record<defaultValue: record, kind: string, translatedValues: list>, kind: string, sourceUri: record<description: string, localizedDescription: record, uri: string>>, hexBackgroundColor: string, homepageUri: record<description: string, id: string, kind: string, localizedDescription: record<defaultValue: record, kind: string, translatedValues: list>, uri: string>, id: string, imageModulesData: table<id: string, mainImage: record>, infoModuleData: record<labelValueRows: list<record>, showLastUpdateTime: bool>, issuerName: string, languageOverride: string, linksModuleData: record<uris: list<record>>, localizedIssuerName: record<defaultValue: record<kind: string, language: string, value: string>, kind: string, translatedValues: list<record>>, locations: table<kind: string, latitude: float, longitude: float>, logo: record<contentDescription: record<defaultValue: record, kind: string, translatedValues: list>, kind: string, sourceUri: record<description: string, localizedDescription: record, uri: string>>, messages: table<body: string, displayInterval: record, header: string, id: string, kind: string, localizedBody: record, localizedHeader: record, messageType: string>, multipleDevicesAndHoldersAllowedStatus: string, redemptionIssuers: list<string>, review: record<comments: string>, reviewStatus: string, securityAnimation: record<animationType: string>, textModulesData: table<body: string, header: string, id: string, localizedBody: record, localizedHeader: record>, transitOperatorName: record<defaultValue: record<kind: string, language: string, value: string>, kind: string, translatedValues: list<record>>, transitType: string, version: string, viewUnlockRequirement: string, watermark: record<contentDescription: record<defaultValue: record, kind: string, translatedValues: list>, kind: string, sourceUri: record<description: string, localizedDescription: record, uri: string>>, wordMark: record<contentDescription: record<defaultValue: record, kind: string, translatedValues: list>, kind: string, sourceUri: record<description: string, localizedDescription: record, uri: string>>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($resource_id | is-empty) { error make --unspanned { msg: "path parameter 'resourceId' must be non-empty" } }
   let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({resource_id: (encode-path-segment $resource_id)} | format pattern "/walletobjects/v1/transitClass/{resource_id}") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"$.xgafv": $xgafv, "access_token": $access_token, "alt": $alt, "callback": $callback, "fields": $fields, "key": $key, "oauth_token": $oauth_token, "prettyPrint": $pretty_print, "quotaUser": $quota_user, "upload_protocol": $upload_protocol, "uploadType": $upload_type} | compact), body: null}
 }
 
 # Updates the transit class referenced by the given class ID. This method supports patch semantics.
@@ -5309,7 +5386,7 @@ export def "walletobjects-transit-class get" [
 # --transitOperatorName shape: {defaultValue?: record, kind?: string, translatedValues?: list}
 # --watermark shape: {contentDescription?: record, kind?: string, sourceUri?: record}
 # --wordMark shape: {contentDescription?: record, kind?: string, sourceUri?: record}
-export def "walletobjects-transit-class update-by-resourceId" [
+export def "walletobjects-transit-class update-by-resource-id" [
   resource_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -5386,13 +5463,14 @@ export def "walletobjects-transit-class update-by-resourceId" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($resource_id | is-empty) { error make --unspanned { msg: "path parameter 'resourceId' must be non-empty" } }
   let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({resource_id: (encode-path-segment $resource_id)} | format pattern "/walletobjects/v1/transitClass/{resource_id}") $qp)
   let req_body = {"activationOptions": $activation_options, "allowMultipleUsersPerObject": $allow_multiple_users_per_object, "callbackOptions": $callback_options, "classTemplateInfo": $class_template_info, "countryCode": $country_code, "customCarriageLabel": $custom_carriage_label, "customCoachLabel": $custom_coach_label, "customConcessionCategoryLabel": $custom_concession_category_label, "customConfirmationCodeLabel": $custom_confirmation_code_label, "customDiscountMessageLabel": $custom_discount_message_label, "customFareClassLabel": $custom_fare_class_label, "customFareNameLabel": $custom_fare_name_label, "customOtherRestrictionsLabel": $custom_other_restrictions_label, "customPlatformLabel": $custom_platform_label, "customPurchaseFaceValueLabel": $custom_purchase_face_value_label, "customPurchasePriceLabel": $custom_purchase_price_label, "customPurchaseReceiptNumberLabel": $custom_purchase_receipt_number_label, "customRouteRestrictionsDetailsLabel": $custom_route_restrictions_details_label, "customRouteRestrictionsLabel": $custom_route_restrictions_label, "customSeatLabel": $custom_seat_label, "customTicketNumberLabel": $custom_ticket_number_label, "customTimeRestrictionsLabel": $custom_time_restrictions_label, "customTransitTerminusNameLabel": $custom_transit_terminus_name_label, "customZoneLabel": $custom_zone_label, "enableSingleLegItinerary": $enable_single_leg_itinerary, "enableSmartTap": $enable_smart_tap, "heroImage": $hero_image, "hexBackgroundColor": $hex_background_color, "homepageUri": $homepage_uri, "id": $id, "imageModulesData": $image_modules_data, "infoModuleData": $info_module_data, "issuerName": $issuer_name, "languageOverride": $language_override, "linksModuleData": $links_module_data, "localizedIssuerName": $localized_issuer_name, "locations": $locations, "logo": $logo, "messages": $messages, "multipleDevicesAndHoldersAllowedStatus": $multiple_devices_and_holders_allowed_status, "redemptionIssuers": $redemption_issuers, "review": $review, "reviewStatus": $review_status, "securityAnimation": $security_animation, "textModulesData": $text_modules_data, "transitOperatorName": $transit_operator_name, "transitType": $transit_type, "version": $version, "viewUnlockRequirement": $view_unlock_requirement, "watermark": $watermark, "wordMark": $word_mark} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "patch" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body
+  do-request "patch" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: ({"$.xgafv": $xgafv, "access_token": $access_token, "alt": $alt, "callback": $callback, "fields": $fields, "key": $key, "oauth_token": $oauth_token, "prettyPrint": $pretty_print, "quotaUser": $quota_user, "upload_protocol": $upload_protocol, "uploadType": $upload_type} | compact), body: $req_body}
 }
 
 # Updates the transit class referenced by the given class ID.
@@ -5436,7 +5514,7 @@ export def "walletobjects-transit-class update-by-resourceId" [
 # --transitOperatorName shape: {defaultValue?: record, kind?: string, translatedValues?: list}
 # --watermark shape: {contentDescription?: record, kind?: string, sourceUri?: record}
 # --wordMark shape: {contentDescription?: record, kind?: string, sourceUri?: record}
-export def "walletobjects-transit-class update-by-resourceId-1" [
+export def "walletobjects-transit-class update-by-resource-id-1" [
   resource_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -5513,13 +5591,14 @@ export def "walletobjects-transit-class update-by-resourceId-1" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($resource_id | is-empty) { error make --unspanned { msg: "path parameter 'resourceId' must be non-empty" } }
   let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({resource_id: (encode-path-segment $resource_id)} | format pattern "/walletobjects/v1/transitClass/{resource_id}") $qp)
   let req_body = {"activationOptions": $activation_options, "allowMultipleUsersPerObject": $allow_multiple_users_per_object, "callbackOptions": $callback_options, "classTemplateInfo": $class_template_info, "countryCode": $country_code, "customCarriageLabel": $custom_carriage_label, "customCoachLabel": $custom_coach_label, "customConcessionCategoryLabel": $custom_concession_category_label, "customConfirmationCodeLabel": $custom_confirmation_code_label, "customDiscountMessageLabel": $custom_discount_message_label, "customFareClassLabel": $custom_fare_class_label, "customFareNameLabel": $custom_fare_name_label, "customOtherRestrictionsLabel": $custom_other_restrictions_label, "customPlatformLabel": $custom_platform_label, "customPurchaseFaceValueLabel": $custom_purchase_face_value_label, "customPurchasePriceLabel": $custom_purchase_price_label, "customPurchaseReceiptNumberLabel": $custom_purchase_receipt_number_label, "customRouteRestrictionsDetailsLabel": $custom_route_restrictions_details_label, "customRouteRestrictionsLabel": $custom_route_restrictions_label, "customSeatLabel": $custom_seat_label, "customTicketNumberLabel": $custom_ticket_number_label, "customTimeRestrictionsLabel": $custom_time_restrictions_label, "customTransitTerminusNameLabel": $custom_transit_terminus_name_label, "customZoneLabel": $custom_zone_label, "enableSingleLegItinerary": $enable_single_leg_itinerary, "enableSmartTap": $enable_smart_tap, "heroImage": $hero_image, "hexBackgroundColor": $hex_background_color, "homepageUri": $homepage_uri, "id": $id, "imageModulesData": $image_modules_data, "infoModuleData": $info_module_data, "issuerName": $issuer_name, "languageOverride": $language_override, "linksModuleData": $links_module_data, "localizedIssuerName": $localized_issuer_name, "locations": $locations, "logo": $logo, "messages": $messages, "multipleDevicesAndHoldersAllowedStatus": $multiple_devices_and_holders_allowed_status, "redemptionIssuers": $redemption_issuers, "review": $review, "reviewStatus": $review_status, "securityAnimation": $security_animation, "textModulesData": $text_modules_data, "transitOperatorName": $transit_operator_name, "transitType": $transit_type, "version": $version, "viewUnlockRequirement": $view_unlock_requirement, "watermark": $watermark, "wordMark": $word_mark} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: ({"$.xgafv": $xgafv, "access_token": $access_token, "alt": $alt, "callback": $callback, "fields": $fields, "key": $key, "oauth_token": $oauth_token, "prettyPrint": $pretty_print, "quotaUser": $quota_user, "upload_protocol": $upload_protocol, "uploadType": $upload_type} | compact), body: $req_body}
 }
 
 # Adds a message to the transit class referenced by the given class ID.
@@ -5554,13 +5633,14 @@ export def "walletobjects-transit-class-add-message create-addmessage" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($resource_id | is-empty) { error make --unspanned { msg: "path parameter 'resourceId' must be non-empty" } }
   let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({resource_id: (encode-path-segment $resource_id)} | format pattern "/walletobjects/v1/transitClass/{resource_id}/addMessage") $qp)
   let req_body = {"message": $message} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: ({"$.xgafv": $xgafv, "access_token": $access_token, "alt": $alt, "callback": $callback, "fields": $fields, "key": $key, "oauth_token": $oauth_token, "prettyPrint": $pretty_print, "quotaUser": $quota_user, "upload_protocol": $upload_protocol, "uploadType": $upload_type} | compact), body: $req_body}
 }
 
 # Returns a list of all transit objects for a given issuer ID.
@@ -5598,7 +5678,7 @@ export def "walletobjects-transit-object list" [
   let full_url = (build-url $base "/walletobjects/v1/transitObject" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"$.xgafv": $xgafv, "access_token": $access_token, "alt": $alt, "callback": $callback, "fields": $fields, "key": $key, "oauth_token": $oauth_token, "prettyPrint": $pretty_print, "quotaUser": $quota_user, "upload_protocol": $upload_protocol, "uploadType": $upload_type, "classId": $class_id, "maxResults": $max_results, "token": $qp_token} | compact), body: null}
 }
 
 # Inserts an transit object with the given ID and properties.
@@ -5696,7 +5776,7 @@ export def "walletobjects-transit-object create" [
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: ({"$.xgafv": $xgafv, "access_token": $access_token, "alt": $alt, "callback": $callback, "fields": $fields, "key": $key, "oauth_token": $oauth_token, "prettyPrint": $pretty_print, "quotaUser": $quota_user, "upload_protocol": $upload_protocol, "uploadType": $upload_type} | compact), body: $req_body}
 }
 
 # Returns the transit object with the given object ID.
@@ -5728,11 +5808,12 @@ export def "walletobjects-transit-object get" [
 ]: nothing -> record<activationStatus: record<state: string>, appLinkData: record<androidAppLinkInfo: record<appLogoImage: record, appTarget: record, description: record, title: record>, iosAppLinkInfo: record<appLogoImage: record, appTarget: record, description: record, title: record>, webAppLinkInfo: record<appLogoImage: record, appTarget: record, description: record, title: record>>, barcode: record<alternateText: string, kind: string, renderEncoding: string, showCodeText: record<defaultValue: record, kind: string, translatedValues: list>, type: string, value: string>, classId: string, classReference: record<activationOptions: record<activationUrl: string, allowReactivation: bool>, allowMultipleUsersPerObject: bool, callbackOptions: record<updateRequestUrl: string, url: string>, classTemplateInfo: record<cardBarcodeSectionDetails: record, cardTemplateOverride: record, detailsTemplateOverride: record, listTemplateOverride: record>, countryCode: string, customCarriageLabel: record<defaultValue: record, kind: string, translatedValues: list>, customCoachLabel: record<defaultValue: record, kind: string, translatedValues: list>, customConcessionCategoryLabel: record<defaultValue: record, kind: string, translatedValues: list>, customConfirmationCodeLabel: record<defaultValue: record, kind: string, translatedValues: list>, customDiscountMessageLabel: record<defaultValue: record, kind: string, translatedValues: list>, customFareClassLabel: record<defaultValue: record, kind: string, translatedValues: list>, customFareNameLabel: record<defaultValue: record, kind: string, translatedValues: list>, customOtherRestrictionsLabel: record<defaultValue: record, kind: string, translatedValues: list>, customPlatformLabel: record<defaultValue: record, kind: string, translatedValues: list>, customPurchaseFaceValueLabel: record<defaultValue: record, kind: string, translatedValues: list>, customPurchasePriceLabel: record<defaultValue: record, kind: string, translatedValues: list>, customPurchaseReceiptNumberLabel: record<defaultValue: record, kind: string, translatedValues: list>, customRouteRestrictionsDetailsLabel: record<defaultValue: record, kind: string, translatedValues: list>, customRouteRestrictionsLabel: record<defaultValue: record, kind: string, translatedValues: list>, customSeatLabel: record<defaultValue: record, kind: string, translatedValues: list>, customTicketNumberLabel: record<defaultValue: record, kind: string, translatedValues: list>, customTimeRestrictionsLabel: record<defaultValue: record, kind: string, translatedValues: list>, customTransitTerminusNameLabel: record<defaultValue: record, kind: string, translatedValues: list>, customZoneLabel: record<defaultValue: record, kind: string, translatedValues: list>, enableSingleLegItinerary: bool, enableSmartTap: bool, heroImage: record<contentDescription: record, kind: string, sourceUri: record>, hexBackgroundColor: string, homepageUri: record<description: string, id: string, kind: string, localizedDescription: record, uri: string>, id: string, imageModulesData: list<record>, infoModuleData: record<labelValueRows: list, showLastUpdateTime: bool>, issuerName: string, languageOverride: string, linksModuleData: record<uris: list>, localizedIssuerName: record<defaultValue: record, kind: string, translatedValues: list>, locations: list<record>, logo: record<contentDescription: record, kind: string, sourceUri: record>, messages: list<record>, multipleDevicesAndHoldersAllowedStatus: string, redemptionIssuers: list<string>, review: record<comments: string>, reviewStatus: string, securityAnimation: record<animationType: string>, textModulesData: list<record>, transitOperatorName: record<defaultValue: record, kind: string, translatedValues: list>, transitType: string, version: string, viewUnlockRequirement: string, watermark: record<contentDescription: record, kind: string, sourceUri: record>, wordMark: record<contentDescription: record, kind: string, sourceUri: record>>, concessionCategory: string, customConcessionCategory: record<defaultValue: record<kind: string, language: string, value: string>, kind: string, translatedValues: list<record>>, customTicketStatus: record<defaultValue: record<kind: string, language: string, value: string>, kind: string, translatedValues: list<record>>, deviceContext: record<deviceToken: string>, disableExpirationNotification: bool, groupingInfo: record<groupingId: string, sortIndex: int>, hasLinkedDevice: bool, hasUsers: bool, heroImage: record<contentDescription: record<defaultValue: record, kind: string, translatedValues: list>, kind: string, sourceUri: record<description: string, localizedDescription: record, uri: string>>, hexBackgroundColor: string, id: string, imageModulesData: table<id: string, mainImage: record>, infoModuleData: record<labelValueRows: list<record>, showLastUpdateTime: bool>, linksModuleData: record<uris: list<record>>, locations: table<kind: string, latitude: float, longitude: float>, messages: table<body: string, displayInterval: record, header: string, id: string, kind: string, localizedBody: record, localizedHeader: record, messageType: string>, passConstraints: record<screenshotEligibility: string>, passengerNames: string, passengerType: string, purchaseDetails: record<accountId: string, confirmationCode: string, purchaseDateTime: string, purchaseReceiptNumber: string, ticketCost: record<discountMessage: record, faceValue: record, purchasePrice: record>>, rotatingBarcode: record<alternateText: string, renderEncoding: string, showCodeText: record<defaultValue: record, kind: string, translatedValues: list>, totpDetails: record<algorithm: string, parameters: list, periodMillis: string>, type: string, valuePattern: string>, smartTapRedemptionValue: string, state: string, textModulesData: table<body: string, header: string, id: string, localizedBody: record, localizedHeader: record>, ticketLeg: record<arrivalDateTime: string, carriage: string, departureDateTime: string, destinationName: record<defaultValue: record, kind: string, translatedValues: list>, destinationStationCode: string, fareName: record<defaultValue: record, kind: string, translatedValues: list>, originName: record<defaultValue: record, kind: string, translatedValues: list>, originStationCode: string, platform: string, ticketSeat: record<coach: string, customFareClass: record, fareClass: string, seat: string, seatAssignment: record>, ticketSeats: list<record>, transitOperatorName: record<defaultValue: record, kind: string, translatedValues: list>, transitTerminusName: record<defaultValue: record, kind: string, translatedValues: list>, zone: string>, ticketLegs: table<arrivalDateTime: string, carriage: string, departureDateTime: string, destinationName: record, destinationStationCode: string, fareName: record, originName: record, originStationCode: string, platform: string, ticketSeat: record, ticketSeats: list, transitOperatorName: record, transitTerminusName: record, zone: string>, ticketNumber: string, ticketRestrictions: record<otherRestrictions: record<defaultValue: record, kind: string, translatedValues: list>, routeRestrictions: record<defaultValue: record, kind: string, translatedValues: list>, routeRestrictionsDetails: record<defaultValue: record, kind: string, translatedValues: list>, timeRestrictions: record<defaultValue: record, kind: string, translatedValues: list>>, ticketStatus: string, tripId: string, tripType: string, validTimeInterval: record<end: record<date: string>, kind: string, start: record<date: string>>, version: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($resource_id | is-empty) { error make --unspanned { msg: "path parameter 'resourceId' must be non-empty" } }
   let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({resource_id: (encode-path-segment $resource_id)} | format pattern "/walletobjects/v1/transitObject/{resource_id}") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"$.xgafv": $xgafv, "access_token": $access_token, "alt": $alt, "callback": $callback, "fields": $fields, "key": $key, "oauth_token": $oauth_token, "prettyPrint": $pretty_print, "quotaUser": $quota_user, "upload_protocol": $upload_protocol, "uploadType": $upload_type} | compact), body: null}
 }
 
 # Updates the transit object referenced by the given object ID. This method supports patch semantics.
@@ -5761,7 +5842,7 @@ export def "walletobjects-transit-object get" [
 # --ticketLegs item shape: {arrivalDateTime?: string, carriage?: string, departureDateTime?: string, destinationName?: record, destinationStationCode?: string, fareName?: record, originName?: record, originStationCode?: string, platform?: string, ticketSeat?: record, ticketSeats?: list, transitOperatorName?: record, transitTerminusName?: record, zone?: string}
 # --ticketRestrictions shape: {otherRestrictions?: record, routeRestrictions?: record, routeRestrictionsDetails?: record, timeRestrictions?: record}
 # --validTimeInterval shape: {end?: record, kind?: string, start?: record}
-export def "walletobjects-transit-object update-by-resourceId" [
+export def "walletobjects-transit-object update-by-resource-id" [
   resource_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -5825,13 +5906,14 @@ export def "walletobjects-transit-object update-by-resourceId" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($resource_id | is-empty) { error make --unspanned { msg: "path parameter 'resourceId' must be non-empty" } }
   let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({resource_id: (encode-path-segment $resource_id)} | format pattern "/walletobjects/v1/transitObject/{resource_id}") $qp)
   let req_body = {"activationStatus": $activation_status, "appLinkData": $app_link_data, "barcode": $barcode, "classId": $class_id, "classReference": $class_reference, "concessionCategory": $concession_category, "customConcessionCategory": $custom_concession_category, "customTicketStatus": $custom_ticket_status, "deviceContext": $device_context, "disableExpirationNotification": $disable_expiration_notification, "groupingInfo": $grouping_info, "hasLinkedDevice": $has_linked_device, "hasUsers": $has_users, "heroImage": $hero_image, "hexBackgroundColor": $hex_background_color, "id": $id, "imageModulesData": $image_modules_data, "infoModuleData": $info_module_data, "linksModuleData": $links_module_data, "locations": $locations, "messages": $messages, "passConstraints": $pass_constraints, "passengerNames": $passenger_names, "passengerType": $passenger_type, "purchaseDetails": $purchase_details, "rotatingBarcode": $rotating_barcode, "smartTapRedemptionValue": $smart_tap_redemption_value, "state": $state, "textModulesData": $text_modules_data, "ticketLeg": $ticket_leg, "ticketLegs": $ticket_legs, "ticketNumber": $ticket_number, "ticketRestrictions": $ticket_restrictions, "ticketStatus": $ticket_status, "tripId": $trip_id, "tripType": $trip_type, "validTimeInterval": $valid_time_interval, "version": $version} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "patch" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body
+  do-request "patch" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: ({"$.xgafv": $xgafv, "access_token": $access_token, "alt": $alt, "callback": $callback, "fields": $fields, "key": $key, "oauth_token": $oauth_token, "prettyPrint": $pretty_print, "quotaUser": $quota_user, "upload_protocol": $upload_protocol, "uploadType": $upload_type} | compact), body: $req_body}
 }
 
 # Updates the transit object referenced by the given object ID.
@@ -5860,7 +5942,7 @@ export def "walletobjects-transit-object update-by-resourceId" [
 # --ticketLegs item shape: {arrivalDateTime?: string, carriage?: string, departureDateTime?: string, destinationName?: record, destinationStationCode?: string, fareName?: record, originName?: record, originStationCode?: string, platform?: string, ticketSeat?: record, ticketSeats?: list, transitOperatorName?: record, transitTerminusName?: record, zone?: string}
 # --ticketRestrictions shape: {otherRestrictions?: record, routeRestrictions?: record, routeRestrictionsDetails?: record, timeRestrictions?: record}
 # --validTimeInterval shape: {end?: record, kind?: string, start?: record}
-export def "walletobjects-transit-object update-by-resourceId-1" [
+export def "walletobjects-transit-object update-by-resource-id-1" [
   resource_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -5924,13 +6006,14 @@ export def "walletobjects-transit-object update-by-resourceId-1" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($resource_id | is-empty) { error make --unspanned { msg: "path parameter 'resourceId' must be non-empty" } }
   let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({resource_id: (encode-path-segment $resource_id)} | format pattern "/walletobjects/v1/transitObject/{resource_id}") $qp)
   let req_body = {"activationStatus": $activation_status, "appLinkData": $app_link_data, "barcode": $barcode, "classId": $class_id, "classReference": $class_reference, "concessionCategory": $concession_category, "customConcessionCategory": $custom_concession_category, "customTicketStatus": $custom_ticket_status, "deviceContext": $device_context, "disableExpirationNotification": $disable_expiration_notification, "groupingInfo": $grouping_info, "hasLinkedDevice": $has_linked_device, "hasUsers": $has_users, "heroImage": $hero_image, "hexBackgroundColor": $hex_background_color, "id": $id, "imageModulesData": $image_modules_data, "infoModuleData": $info_module_data, "linksModuleData": $links_module_data, "locations": $locations, "messages": $messages, "passConstraints": $pass_constraints, "passengerNames": $passenger_names, "passengerType": $passenger_type, "purchaseDetails": $purchase_details, "rotatingBarcode": $rotating_barcode, "smartTapRedemptionValue": $smart_tap_redemption_value, "state": $state, "textModulesData": $text_modules_data, "ticketLeg": $ticket_leg, "ticketLegs": $ticket_legs, "ticketNumber": $ticket_number, "ticketRestrictions": $ticket_restrictions, "ticketStatus": $ticket_status, "tripId": $trip_id, "tripType": $trip_type, "validTimeInterval": $valid_time_interval, "version": $version} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: ({"$.xgafv": $xgafv, "access_token": $access_token, "alt": $alt, "callback": $callback, "fields": $fields, "key": $key, "oauth_token": $oauth_token, "prettyPrint": $pretty_print, "quotaUser": $quota_user, "upload_protocol": $upload_protocol, "uploadType": $upload_type} | compact), body: $req_body}
 }
 
 # Adds a message to the transit object referenced by the given object ID.
@@ -5965,11 +6048,12 @@ export def "walletobjects-transit-object-add-message create-addmessage" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($resource_id | is-empty) { error make --unspanned { msg: "path parameter 'resourceId' must be non-empty" } }
   let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({resource_id: (encode-path-segment $resource_id)} | format pattern "/walletobjects/v1/transitObject/{resource_id}/addMessage") $qp)
   let req_body = {"message": $message} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: ({"$.xgafv": $xgafv, "access_token": $access_token, "alt": $alt, "callback": $callback, "fields": $fields, "key": $key, "oauth_token": $oauth_token, "prettyPrint": $pretty_print, "quotaUser": $quota_user, "upload_protocol": $upload_protocol, "uploadType": $upload_type} | compact), body: $req_body}
 }

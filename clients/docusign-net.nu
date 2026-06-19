@@ -3,16 +3,17 @@
 # Auth: --token flag or $env.DOCUSIGN_REST_API_TOKEN
 
 const BASE_URL = "https://www.docusign.net/restapi"
-const DEFAULT_AUTH = "bearer"
 
-# Build auth: returns {headers: record, query: string}
+# Build auth: returns {scheme: string, headers: record, query: string, location: string}.
+# `location` is "header" | "query" | "cookie" | "none" and tells dry-run callers
+# where the token went without inspecting headers/query themselves.
 def build-auth [token?: string, auth_scheme?: string]: nothing -> record {
   let token_val = if ($token != null) and ($token | is-not-empty) { $token } else { $env | get -o DOCUSIGN_REST_API_TOKEN | default "" }
   let scheme = ($auth_scheme | default "bearer")
-  if ($scheme == "none") or ($token_val | is-empty) { return {headers: {}, query: ""} }
+  if ($scheme == "none") or ($token_val | is-empty) { return {scheme: $scheme, headers: {}, query: "", location: "none"} }
   match $scheme {
-    "none" => { {headers: {}, query: ""} }
-    _ => { {headers: {Authorization: $"Bearer ($token_val)"}, query: ""} }
+    "none" => { {scheme: $scheme, headers: {}, query: "", location: "none"} }
+    _ => { {scheme: $scheme, headers: {Authorization: $"Bearer ($token_val)"}, query: "", location: "header"} }
   }
 }
 
@@ -21,8 +22,9 @@ def build-auth [token?: string, auth_scheme?: string]: nothing -> record {
 # ([A-Za-z0-9-._~]) stay literal; everything else gets %XX.
 def serialize-qp [name: string, value: any, style: string]: nothing -> list<string> {
   if ($value == null) { return [] }
-  let n = (encode-path-segment $name)
   let is_list = ($value | describe | str starts-with "list")
+  if $is_list and ($value | is-empty) { return [] }
+  let n = (encode-path-segment $name)
   if ($value | describe | str starts-with "record") { return ($value | transpose k v | each { $"($n)[(encode-path-segment $in.k)]=(encode-path-segment $in.v)" }) }
   if not $is_list { return [$"($n)=(encode-path-segment $value)"] }
   match $style {
@@ -53,22 +55,42 @@ def build-url [base: string, path: string, query?: string]: nothing -> string {
   if ($query != null) and ($query | is-not-empty) { $result | upsert query $query | url join } else { $result | url join }
 }
 
+# Build the dry-run record returned by --dry-run. Shape:
+#   {dry_run: true, method, url, query: <record>, headers, body, content_type, timeout,
+#    auth: {scheme, location}}
+# `meta` carries logical-form data (the query record by spec name, the pre-serialization
+# body) that do-request itself cannot reconstruct from its wire-format args.
+def build-dry-run-record [method: string, url: string, auth: record, content_type: string, timeout: duration, meta?: record]: nothing -> record {
+  let m = ($meta | default {})
+  {
+    dry_run: true
+    method: $method
+    url: $url
+    query: ($m | get -o query | default {})
+    headers: $auth.headers
+    body: ($m | get -o body)
+    content_type: $content_type
+    timeout: $timeout
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+}
+
 # Execute HTTP request with method dispatch
-def do-request [method: string, url: string, auth: record, insecure: bool, raw: bool, dry_run: bool, max_time?: duration, allow_errors?: bool, full?: bool, content_type?: string, body?: any]: nothing -> any {
+def do-request [method: string, url: string, auth: record, insecure: bool, raw: bool, dry_run: bool, max_time?: duration, allow_errors?: bool, full?: bool, content_type?: string, body?: any, dry_run_meta?: record]: nothing -> any {
   let req_url = if ($auth.query | is-not-empty) { if ($url | str contains "?") { $"($url)&($auth.query)" } else { $"($url)?($auth.query)" } } else { $url }
   let timeout = ($max_time | default 30min)
   let ct = ($content_type | default "application/json")
-  if $dry_run { return {method: $method, url: $req_url, headers: $auth.headers, query_string: $auth.query, content_type: $ct, timeout: $timeout, body: $body} }
+  if $dry_run { return (build-dry-run-record $method $req_url $auth $ct $timeout $dry_run_meta) }
   let resp = match $method {
     "get" => { http get --headers $auth.headers --full --allow-errors --max-time $timeout --insecure=$insecure --raw=$raw $req_url }
-    "head" => { http head --headers $auth.headers --max-time $timeout --insecure=$insecure $req_url }
-    "options" => { http options --headers $auth.headers --max-time $timeout --insecure=$insecure $req_url }
+    "head" => { http head --headers $auth.headers --full --allow-errors --max-time $timeout --insecure=$insecure $req_url }
+    "options" => { http options --headers $auth.headers --full --allow-errors --max-time $timeout --insecure=$insecure $req_url }
     "post" => { if ($body | is-empty) { http post --headers $auth.headers --full --allow-errors --max-time $timeout --insecure=$insecure --raw=$raw $req_url "" } else { http post --headers $auth.headers --content-type $ct --full --allow-errors --max-time $timeout --insecure=$insecure --raw=$raw $req_url $body } }
     "put" => { if ($body | is-empty) { http put --headers $auth.headers --full --allow-errors --max-time $timeout --insecure=$insecure --raw=$raw $req_url "" } else { http put --headers $auth.headers --content-type $ct --full --allow-errors --max-time $timeout --insecure=$insecure --raw=$raw $req_url $body } }
     "patch" => { if ($body | is-empty) { http patch --headers $auth.headers --full --allow-errors --max-time $timeout --insecure=$insecure --raw=$raw $req_url "" } else { http patch --headers $auth.headers --content-type $ct --full --allow-errors --max-time $timeout --insecure=$insecure --raw=$raw $req_url $body } }
     "delete" => { if ($body | is-empty) { http delete --headers $auth.headers --full --allow-errors --max-time $timeout --insecure=$insecure --raw=$raw $req_url } else { http delete --headers $auth.headers --content-type $ct --data $body --full --allow-errors --max-time $timeout --insecure=$insecure --raw=$raw $req_url } }
   }
-  if ($method in ["head" "options"]) { return $resp }
+  if ($method == "head") and (not $full) and (not $allow_errors) and $resp.status < 400 { return $resp.headers }
   if $allow_errors { $resp } else if $resp.status >= 400 { error make --unspanned { msg: $"HTTP ($resp.status): ($resp.body)" } } else if $full { {status: $resp.status, headers: $resp.headers, body: $resp.body} } else if $resp.status == 204 { null } else { $resp.body }
 }
 
@@ -147,7 +169,7 @@ export def "service-information get" [
   let full_url = (build-url $base "/service_information")
   let accept_val = "*/*"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
 }
 
 # Lists resources for REST version specified
@@ -170,7 +192,7 @@ export def "v2-1 get-service-information-resource-information" [
   let full_url = (build-url $base "/v2.1")
   let accept_val = "*/*"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
 }
 
 # Creates new accounts.
@@ -223,7 +245,7 @@ export def "v2-1-accounts create" [
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "*/*"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: {}, body: $req_body}
 }
 
 # Retrieves the account provisioning information for the account.
@@ -246,7 +268,7 @@ export def "v2-1-accounts-provisioning get" [
   let full_url = (build-url $base "/v2.1/accounts/provisioning")
   let accept_val = "*/*"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
 }
 
 # Deletes the specified account.
@@ -267,10 +289,11 @@ export def "v2-1-accounts delete" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($account_id | is-empty) { error make --unspanned { msg: "path parameter 'accountId' must be non-empty" } }
   let full_url = (build-url $base ({account_id: (encode-path-segment $account_id)} | format pattern "/v2.1/accounts/{account_id}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
 }
 
 # Retrieves the account information for the specified account.
@@ -292,11 +315,12 @@ export def "v2-1-accounts get" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($account_id | is-empty) { error make --unspanned { msg: "path parameter 'accountId' must be non-empty" } }
   let qp = [(serialize-qp "include_account_settings" $include_account_settings "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({account_id: (encode-path-segment $account_id)} | format pattern "/v2.1/accounts/{account_id}") $qp)
   let accept_val = "*/*"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"include_account_settings": $include_account_settings} | compact), body: null}
 }
 
 # Gets list of recurring and usage charges for the account.
@@ -318,11 +342,12 @@ export def "v2-1-accounts-billing-charges get" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($account_id | is-empty) { error make --unspanned { msg: "path parameter 'accountId' must be non-empty" } }
   let qp = [(serialize-qp "include_charges" $include_charges "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({account_id: (encode-path-segment $account_id)} | format pattern "/v2.1/accounts/{account_id}/billing_charges") $qp)
   let accept_val = "*/*"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"include_charges": $include_charges} | compact), body: null}
 }
 
 # Get a List of Billing Invoices
@@ -345,11 +370,12 @@ export def "v2-1-accounts-billing-invoices list" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($account_id | is-empty) { error make --unspanned { msg: "path parameter 'accountId' must be non-empty" } }
   let qp = [(serialize-qp "from_date" $from_date "scalar") (serialize-qp "to_date" $to_date "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({account_id: (encode-path-segment $account_id)} | format pattern "/v2.1/accounts/{account_id}/billing_invoices") $qp)
   let accept_val = "*/*"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"from_date": $from_date, "to_date": $to_date} | compact), body: null}
 }
 
 # Retrieves a billing invoice.
@@ -371,10 +397,12 @@ export def "v2-1-accounts-billing-invoices get" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($account_id | is-empty) { error make --unspanned { msg: "path parameter 'accountId' must be non-empty" } }
+  if ($invoice_id | is-empty) { error make --unspanned { msg: "path parameter 'invoiceId' must be non-empty" } }
   let full_url = (build-url $base ({account_id: (encode-path-segment $account_id), invoice_id: (encode-path-segment $invoice_id)} | format pattern "/v2.1/accounts/{account_id}/billing_invoices/{invoice_id}"))
   let accept_val = "*/*"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
 }
 
 # Get a list of past due invoices.
@@ -395,10 +423,11 @@ export def "v2-1-accounts-billing-invoices-past-due get" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($account_id | is-empty) { error make --unspanned { msg: "path parameter 'accountId' must be non-empty" } }
   let full_url = (build-url $base ({account_id: (encode-path-segment $account_id)} | format pattern "/v2.1/accounts/{account_id}/billing_invoices_past_due"))
   let accept_val = "*/*"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
 }
 
 # Gets payment information for one or more payments.
@@ -421,11 +450,12 @@ export def "v2-1-accounts-billing-payments get-list" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($account_id | is-empty) { error make --unspanned { msg: "path parameter 'accountId' must be non-empty" } }
   let qp = [(serialize-qp "from_date" $from_date "scalar") (serialize-qp "to_date" $to_date "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({account_id: (encode-path-segment $account_id)} | format pattern "/v2.1/accounts/{account_id}/billing_payments") $qp)
   let accept_val = "*/*"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"from_date": $from_date, "to_date": $to_date} | compact), body: null}
 }
 
 # Posts a payment to a past due invoice.
@@ -448,12 +478,13 @@ export def "v2-1-accounts-billing-payments create" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($account_id | is-empty) { error make --unspanned { msg: "path parameter 'accountId' must be non-empty" } }
   let full_url = (build-url $base ({account_id: (encode-path-segment $account_id)} | format pattern "/v2.1/accounts/{account_id}/billing_payments"))
   let req_body = {"paymentAmount": $payment_amount} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "*/*"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: {}, body: $req_body}
 }
 
 # Gets billing payment information for a specific payment.
@@ -475,10 +506,12 @@ export def "v2-1-accounts-billing-payments get" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($account_id | is-empty) { error make --unspanned { msg: "path parameter 'accountId' must be non-empty" } }
+  if ($payment_id | is-empty) { error make --unspanned { msg: "path parameter 'paymentId' must be non-empty" } }
   let full_url = (build-url $base ({account_id: (encode-path-segment $account_id), payment_id: (encode-path-segment $payment_id)} | format pattern "/v2.1/accounts/{account_id}/billing_payments/{payment_id}"))
   let accept_val = "*/*"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
 }
 
 # Get Account Billing Plan
@@ -504,11 +537,12 @@ export def "v2-1-accounts-billing-plan get" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($account_id | is-empty) { error make --unspanned { msg: "path parameter 'accountId' must be non-empty" } }
   let qp = [(serialize-qp "include_credit_card_information" $include_credit_card_information "scalar") (serialize-qp "include_downgrade_information" $include_downgrade_information "scalar") (serialize-qp "include_metadata" $include_metadata "scalar") (serialize-qp "include_successor_plans" $include_successor_plans "scalar") (serialize-qp "include_tax_exempt_id" $include_tax_exempt_id "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({account_id: (encode-path-segment $account_id)} | format pattern "/v2.1/accounts/{account_id}/billing_plan") $qp)
   let accept_val = "*/*"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"include_credit_card_information": $include_credit_card_information, "include_downgrade_information": $include_downgrade_information, "include_metadata": $include_metadata, "include_successor_plans": $include_successor_plans, "include_tax_exempt_id": $include_tax_exempt_id} | compact), body: null}
 }
 
 # Updates an account billing plan.
@@ -560,20 +594,21 @@ export def "v2-1-accounts-billing-plan update" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($account_id | is-empty) { error make --unspanned { msg: "path parameter 'accountId' must be non-empty" } }
   let qp = [(serialize-qp "preview_billing_plan" $preview_billing_plan "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({account_id: (encode-path-segment $account_id)} | format pattern "/v2.1/accounts/{account_id}/billing_plan") $qp)
   let req_body = {"appStoreReceipt": $app_store_receipt, "billingAddress": $billing_address, "creditCardInformation": $credit_card_information, "directDebitProcessorInformation": $direct_debit_processor_information, "downgradeReason": $downgrade_reason, "enablePreAuth": $enable_pre_auth, "enableSupport": $enable_support, "includedSeats": $included_seats, "incrementalSeats": $incremental_seats, "paymentMethod": $payment_method, "paymentProcessor": $payment_processor, "paymentProcessorInformation": $payment_processor_information, "planInformation": $plan_information, "processPayment": $process_payment, "referralInformation": $referral_information, "renewalStatus": $renewal_status, "saleDiscountAmount": $sale_discount_amount, "saleDiscountFixedAmount": $sale_discount_fixed_amount, "saleDiscountPercent": $sale_discount_percent, "saleDiscountPeriods": $sale_discount_periods, "saleDiscountSeatPriceOverride": $sale_discount_seat_price_override, "taxExemptId": $tax_exempt_id} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "*/*"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: ({"preview_billing_plan": $preview_billing_plan} | compact), body: $req_body}
 }
 
 # Get credit card information
 #
 # GET /v2.1/accounts/{accountId}/billing_plan/credit_card
 # operationId: BillingPlan_GetCreditCardInfo
-export def "v2-1-accounts-billing-plan-credit-card get-get" [
+export def "v2-1-accounts-billing-plan-credit-card get" [
   account_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -587,17 +622,18 @@ export def "v2-1-accounts-billing-plan-credit-card get-get" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($account_id | is-empty) { error make --unspanned { msg: "path parameter 'accountId' must be non-empty" } }
   let full_url = (build-url $base ({account_id: (encode-path-segment $account_id)} | format pattern "/v2.1/accounts/{account_id}/billing_plan/credit_card"))
   let accept_val = "*/*"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
 }
 
 # Returns downgrade plan information for the specified account.
 #
 # GET /v2.1/accounts/{accountId}/billing_plan/downgrade
 # operationId: BillingPlan_GetDowngradeRequestBillingInfo
-export def "v2-1-accounts-billing-plan-downgrade get-request-get" [
+export def "v2-1-accounts-billing-plan-downgrade get-request" [
   account_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -611,10 +647,11 @@ export def "v2-1-accounts-billing-plan-downgrade get-request-get" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($account_id | is-empty) { error make --unspanned { msg: "path parameter 'accountId' must be non-empty" } }
   let full_url = (build-url $base ({account_id: (encode-path-segment $account_id)} | format pattern "/v2.1/accounts/{account_id}/billing_plan/downgrade"))
   let accept_val = "*/*"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
 }
 
 # Queues downgrade billing plan request for an account.
@@ -643,12 +680,13 @@ export def "v2-1-accounts-billing-plan-downgrade update" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($account_id | is-empty) { error make --unspanned { msg: "path parameter 'accountId' must be non-empty" } }
   let full_url = (build-url $base ({account_id: (encode-path-segment $account_id)} | format pattern "/v2.1/accounts/{account_id}/billing_plan/downgrade"))
   let req_body = {"downgradeEventType": $downgrade_event_type, "planInformation": $plan_information, "promoCode": $promo_code, "saleDiscount": $sale_discount, "saleDiscountPeriods": $sale_discount_periods, "saleDiscountType": $sale_discount_type} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "*/*"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: {}, body: $req_body}
 }
 
 # Reserved: Purchase additional envelopes.
@@ -679,12 +717,13 @@ export def "v2-1-accounts-billing-plan-purchased-envelopes update" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($account_id | is-empty) { error make --unspanned { msg: "path parameter 'accountId' must be non-empty" } }
   let full_url = (build-url $base ({account_id: (encode-path-segment $account_id)} | format pattern "/v2.1/accounts/{account_id}/billing_plan/purchased_envelopes"))
   let req_body = {"amount": $amount, "appName": $app_name, "currencyCode": $currency_code, "platform": $platform, "productId": $product_id, "quantity": $quantity, "receiptData": $receipt_data, "storeName": $store_name, "transactionId": $transaction_id} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: {}, body: $req_body}
 }
 
 # Deletes one or more brand profiles.
@@ -692,7 +731,7 @@ export def "v2-1-accounts-billing-plan-purchased-envelopes update" [
 # DELETE /v2.1/accounts/{accountId}/brands
 # operationId: Brands_DeleteBrands
 # --brands item shape: {brandId?: string}
-export def "v2-1-accounts-brands delete-by-accountId" [
+export def "v2-1-accounts-brands delete-by-account-id" [
   account_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -708,12 +747,13 @@ export def "v2-1-accounts-brands delete-by-accountId" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($account_id | is-empty) { error make --unspanned { msg: "path parameter 'accountId' must be non-empty" } }
   let full_url = (build-url $base ({account_id: (encode-path-segment $account_id)} | format pattern "/v2.1/accounts/{account_id}/brands"))
   let req_body = {"brands": $brands} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "*/*"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: {}, body: $req_body}
 }
 
 # Gets a list of brands.
@@ -736,11 +776,12 @@ export def "v2-1-accounts-brands list" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($account_id | is-empty) { error make --unspanned { msg: "path parameter 'accountId' must be non-empty" } }
   let qp = [(serialize-qp "exclude_distributor_brand" $exclude_distributor_brand "scalar") (serialize-qp "include_logos" $include_logos "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({account_id: (encode-path-segment $account_id)} | format pattern "/v2.1/accounts/{account_id}/brands") $qp)
   let accept_val = "*/*"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"exclude_distributor_brand": $exclude_distributor_brand, "include_logos": $include_logos} | compact), body: null}
 }
 
 # Creates one or more brand profiles for an account.
@@ -784,19 +825,20 @@ export def "v2-1-accounts-brands create" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($account_id | is-empty) { error make --unspanned { msg: "path parameter 'accountId' must be non-empty" } }
   let full_url = (build-url $base ({account_id: (encode-path-segment $account_id)} | format pattern "/v2.1/accounts/{account_id}/brands"))
   let req_body = {"brandCompany": $brand_company, "brandId": $brand_id, "brandLanguages": $brand_languages, "brandName": $brand_name, "colors": $colors, "defaultBrandLanguage": $default_brand_language, "emailContent": $email_content, "errorDetails": $error_details, "isOverridingCompanyName": $is_overriding_company_name, "isSendingDefault": $is_sending_default, "isSigningDefault": $is_signing_default, "landingPages": $landing_pages, "links": $links, "logos": $logos, "resources": $resources} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "*/*"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: {}, body: $req_body}
 }
 
 # Deletes a brand.
 #
 # DELETE /v2.1/accounts/{accountId}/brands/{brandId}
 # operationId: Brand_DeleteBrand
-export def "v2-1-accounts-brands delete-by-accountId-brandId" [
+export def "v2-1-accounts-brands delete-by-account-id-brand-id" [
   account_id: string
   brand_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -811,10 +853,12 @@ export def "v2-1-accounts-brands delete-by-accountId-brandId" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($account_id | is-empty) { error make --unspanned { msg: "path parameter 'accountId' must be non-empty" } }
+  if ($brand_id | is-empty) { error make --unspanned { msg: "path parameter 'brandId' must be non-empty" } }
   let full_url = (build-url $base ({account_id: (encode-path-segment $account_id), brand_id: (encode-path-segment $brand_id)} | format pattern "/v2.1/accounts/{account_id}/brands/{brand_id}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
 }
 
 # Gets information about a brand.
@@ -838,11 +882,13 @@ export def "v2-1-accounts-brands get" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($account_id | is-empty) { error make --unspanned { msg: "path parameter 'accountId' must be non-empty" } }
+  if ($brand_id | is-empty) { error make --unspanned { msg: "path parameter 'brandId' must be non-empty" } }
   let qp = [(serialize-qp "include_external_references" $include_external_references "scalar") (serialize-qp "include_logos" $include_logos "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({account_id: (encode-path-segment $account_id), brand_id: (encode-path-segment $brand_id)} | format pattern "/v2.1/accounts/{account_id}/brands/{brand_id}") $qp)
   let accept_val = "*/*"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"include_external_references": $include_external_references, "include_logos": $include_logos} | compact), body: null}
 }
 
 # Updates an existing brand.
@@ -888,20 +934,22 @@ export def "v2-1-accounts-brands update" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($account_id | is-empty) { error make --unspanned { msg: "path parameter 'accountId' must be non-empty" } }
+  if ($brand_id | is-empty) { error make --unspanned { msg: "path parameter 'brandId' must be non-empty" } }
   let qp = [(serialize-qp "replace_brand" $replace_brand "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({account_id: (encode-path-segment $account_id), brand_id: (encode-path-segment $brand_id)} | format pattern "/v2.1/accounts/{account_id}/brands/{brand_id}") $qp)
   let req_body = {"brandCompany": $brand_company, "brandId": $body_brand_id, "brandLanguages": $brand_languages, "brandName": $brand_name, "colors": $colors, "defaultBrandLanguage": $default_brand_language, "emailContent": $email_content, "errorDetails": $error_details, "isOverridingCompanyName": $is_overriding_company_name, "isSendingDefault": $is_sending_default, "isSigningDefault": $is_signing_default, "landingPages": $landing_pages, "links": $links, "logos": $logos, "resources": $resources} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "*/*"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: ({"replace_brand": $replace_brand} | compact), body: $req_body}
 }
 
 # Exports a brand.
 #
 # GET /v2.1/accounts/{accountId}/brands/{brandId}/file
 # operationId: BrandExport_GetBrandExportFile
-export def "v2-1-accounts-brands-file export-get-export" [
+export def "v2-1-accounts-brands-file export-get" [
   account_id: string
   brand_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -916,10 +964,12 @@ export def "v2-1-accounts-brands-file export-get-export" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($account_id | is-empty) { error make --unspanned { msg: "path parameter 'accountId' must be non-empty" } }
+  if ($brand_id | is-empty) { error make --unspanned { msg: "path parameter 'brandId' must be non-empty" } }
   let full_url = (build-url $base ({account_id: (encode-path-segment $account_id), brand_id: (encode-path-segment $brand_id)} | format pattern "/v2.1/accounts/{account_id}/brands/{brand_id}/file"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
 }
 
 # Deletes a brand logo.
@@ -942,10 +992,13 @@ export def "v2-1-accounts-brands-logos delete" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($account_id | is-empty) { error make --unspanned { msg: "path parameter 'accountId' must be non-empty" } }
+  if ($brand_id | is-empty) { error make --unspanned { msg: "path parameter 'brandId' must be non-empty" } }
+  if ($logo_type | is-empty) { error make --unspanned { msg: "path parameter 'logoType' must be non-empty" } }
   let full_url = (build-url $base ({account_id: (encode-path-segment $account_id), brand_id: (encode-path-segment $brand_id), logo_type: (encode-path-segment $logo_type)} | format pattern "/v2.1/accounts/{account_id}/brands/{brand_id}/logos/{logo_type}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
 }
 
 # Gets a brand logo.
@@ -968,10 +1021,13 @@ export def "v2-1-accounts-brands-logos get" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($account_id | is-empty) { error make --unspanned { msg: "path parameter 'accountId' must be non-empty" } }
+  if ($brand_id | is-empty) { error make --unspanned { msg: "path parameter 'brandId' must be non-empty" } }
+  if ($logo_type | is-empty) { error make --unspanned { msg: "path parameter 'logoType' must be non-empty" } }
   let full_url = (build-url $base ({account_id: (encode-path-segment $account_id), brand_id: (encode-path-segment $brand_id), logo_type: (encode-path-segment $logo_type)} | format pattern "/v2.1/accounts/{account_id}/brands/{brand_id}/logos/{logo_type}"))
   let accept_val = "image/png"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
 }
 
 # Updates a brand logo.
@@ -996,12 +1052,15 @@ export def "v2-1-accounts-brands-logos update" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($account_id | is-empty) { error make --unspanned { msg: "path parameter 'accountId' must be non-empty" } }
+  if ($brand_id | is-empty) { error make --unspanned { msg: "path parameter 'brandId' must be non-empty" } }
+  if ($logo_type | is-empty) { error make --unspanned { msg: "path parameter 'logoType' must be non-empty" } }
   let full_url = (build-url $base ({account_id: (encode-path-segment $account_id), brand_id: (encode-path-segment $brand_id), logo_type: (encode-path-segment $logo_type)} | format pattern "/v2.1/accounts/{account_id}/brands/{brand_id}/logos/{logo_type}"))
   let req_body = $body
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else if (($input | is-not-empty) and ($req_body | is-empty)) { $input } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "image/png" $req_body
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "image/png" $req_body {query: {}, body: $req_body}
 }
 
 # Returns metadata about the branding resources for an account.
@@ -1023,10 +1082,12 @@ export def "v2-1-accounts-brands-resources get-list" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($account_id | is-empty) { error make --unspanned { msg: "path parameter 'accountId' must be non-empty" } }
+  if ($brand_id | is-empty) { error make --unspanned { msg: "path parameter 'brandId' must be non-empty" } }
   let full_url = (build-url $base ({account_id: (encode-path-segment $account_id), brand_id: (encode-path-segment $brand_id)} | format pattern "/v2.1/accounts/{account_id}/brands/{brand_id}/resources"))
   let accept_val = "*/*"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
 }
 
 # Returns a branding resource file.
@@ -1051,11 +1112,14 @@ export def "v2-1-accounts-brands-resources get" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($account_id | is-empty) { error make --unspanned { msg: "path parameter 'accountId' must be non-empty" } }
+  if ($brand_id | is-empty) { error make --unspanned { msg: "path parameter 'brandId' must be non-empty" } }
+  if ($resource_content_type | is-empty) { error make --unspanned { msg: "path parameter 'resourceContentType' must be non-empty" } }
   let qp = [(serialize-qp "langcode" $langcode "scalar") (serialize-qp "return_master" $return_master "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({account_id: (encode-path-segment $account_id), brand_id: (encode-path-segment $brand_id), resource_content_type: (encode-path-segment $resource_content_type)} | format pattern "/v2.1/accounts/{account_id}/brands/{brand_id}/resources/{resource_content_type}") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"langcode": $langcode, "return_master": $return_master} | compact), body: null}
 }
 
 # Updates a branding resource file.
@@ -1080,6 +1144,9 @@ export def "v2-1-accounts-brands-resources update" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($account_id | is-empty) { error make --unspanned { msg: "path parameter 'accountId' must be non-empty" } }
+  if ($brand_id | is-empty) { error make --unspanned { msg: "path parameter 'brandId' must be non-empty" } }
+  if ($resource_content_type | is-empty) { error make --unspanned { msg: "path parameter 'resourceContentType' must be non-empty" } }
   let full_url = (build-url $base ({account_id: (encode-path-segment $account_id), brand_id: (encode-path-segment $brand_id), resource_content_type: (encode-path-segment $resource_content_type)} | format pattern "/v2.1/accounts/{account_id}/brands/{brand_id}/resources/{resource_content_type}"))
   let req_body = {"file.xml": $file_xml} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
@@ -1087,7 +1154,7 @@ export def "v2-1-accounts-brands-resources update" [
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let req_body = if ($req_body | describe | str starts-with "record") { $req_body } else { {} }
   let mp = (build-multipart-body $req_body ["file.xml"] $dry_run)
-  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full $mp.content_type $mp.body
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full $mp.content_type $mp.body {query: {}, body: $req_body}
 }
 
 # Returns a list of bulk send batch summaries.
@@ -1116,11 +1183,12 @@ export def "v2-1-accounts-bulk-send-batch get-batches" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($account_id | is-empty) { error make --unspanned { msg: "path parameter 'accountId' must be non-empty" } }
   let qp = [(serialize-qp "batch_ids" $batch_ids "scalar") (serialize-qp "count" $count "scalar") (serialize-qp "from_date" $from_date "scalar") (serialize-qp "search_text" $search_text "scalar") (serialize-qp "start_position" $start_position "scalar") (serialize-qp "status" $status "scalar") (serialize-qp "to_date" $to_date "scalar") (serialize-qp "user_id" $user_id "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({account_id: (encode-path-segment $account_id)} | format pattern "/v2.1/accounts/{account_id}/bulk_send_batch") $qp)
   let accept_val = "*/*"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"batch_ids": $batch_ids, "count": $count, "from_date": $from_date, "search_text": $search_text, "start_position": $start_position, "status": $status, "to_date": $to_date, "user_id": $user_id} | compact), body: null}
 }
 
 # Gets the status of a specific bulk send batch.
@@ -1142,10 +1210,12 @@ export def "v2-1-accounts-bulk-send-batch get-status" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($account_id | is-empty) { error make --unspanned { msg: "path parameter 'accountId' must be non-empty" } }
+  if ($bulk_send_batch_id | is-empty) { error make --unspanned { msg: "path parameter 'bulkSendBatchId' must be non-empty" } }
   let full_url = (build-url $base ({account_id: (encode-path-segment $account_id), bulk_send_batch_id: (encode-path-segment $bulk_send_batch_id)} | format pattern "/v2.1/accounts/{account_id}/bulk_send_batch/{bulk_send_batch_id}"))
   let accept_val = "*/*"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
 }
 
 # Updates the name of a bulk send batch.
@@ -1169,12 +1239,14 @@ export def "v2-1-accounts-bulk-send-batch update-status" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($account_id | is-empty) { error make --unspanned { msg: "path parameter 'accountId' must be non-empty" } }
+  if ($bulk_send_batch_id | is-empty) { error make --unspanned { msg: "path parameter 'bulkSendBatchId' must be non-empty" } }
   let full_url = (build-url $base ({account_id: (encode-path-segment $account_id), bulk_send_batch_id: (encode-path-segment $bulk_send_batch_id)} | format pattern "/v2.1/accounts/{account_id}/bulk_send_batch/{bulk_send_batch_id}"))
   let req_body = {"batchName": $batch_name} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "*/*"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: {}, body: $req_body}
 }
 
 # Gets envelopes from a specific bulk send batch.
@@ -1203,11 +1275,13 @@ export def "v2-1-accounts-bulk-send-batch-envelopes get" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($account_id | is-empty) { error make --unspanned { msg: "path parameter 'accountId' must be non-empty" } }
+  if ($bulk_send_batch_id | is-empty) { error make --unspanned { msg: "path parameter 'bulkSendBatchId' must be non-empty" } }
   let qp = [(serialize-qp "count" $count "scalar") (serialize-qp "include" $include "scalar") (serialize-qp "order" $order "scalar") (serialize-qp "order_by" $order_by "scalar") (serialize-qp "search_text" $search_text "scalar") (serialize-qp "start_position" $start_position "scalar") (serialize-qp "status" $status "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({account_id: (encode-path-segment $account_id), bulk_send_batch_id: (encode-path-segment $bulk_send_batch_id)} | format pattern "/v2.1/accounts/{account_id}/bulk_send_batch/{bulk_send_batch_id}/envelopes") $qp)
   let accept_val = "*/*"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"count": $count, "include": $include, "order": $order, "order_by": $order_by, "search_text": $search_text, "start_position": $start_position, "status": $status} | compact), body: null}
 }
 
 # Applies a bulk action to all envelopes from a specified bulk send.
@@ -1235,12 +1309,15 @@ export def "v2-1-accounts-bulk-send-batch update-action" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($account_id | is-empty) { error make --unspanned { msg: "path parameter 'accountId' must be non-empty" } }
+  if ($bulk_send_batch_id | is-empty) { error make --unspanned { msg: "path parameter 'bulkSendBatchId' must be non-empty" } }
+  if ($bulk_action | is-empty) { error make --unspanned { msg: "path parameter 'bulkAction' must be non-empty" } }
   let full_url = (build-url $base ({account_id: (encode-path-segment $account_id), bulk_send_batch_id: (encode-path-segment $bulk_send_batch_id), bulk_action: (encode-path-segment $bulk_action)} | format pattern "/v2.1/accounts/{account_id}/bulk_send_batch/{bulk_send_batch_id}/{bulk_action}"))
   let req_body = {"action": $action, "notification": $notification, "voidReason": $void_reason} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "*/*"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: {}, body: $req_body}
 }
 
 # Gets bulk send lists.
@@ -1261,10 +1338,11 @@ export def "v2-1-accounts-bulk-send-lists list" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($account_id | is-empty) { error make --unspanned { msg: "path parameter 'accountId' must be non-empty" } }
   let full_url = (build-url $base ({account_id: (encode-path-segment $account_id)} | format pattern "/v2.1/accounts/{account_id}/bulk_send_lists"))
   let accept_val = "*/*"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
 }
 
 # Creates a bulk send list.
@@ -1290,12 +1368,13 @@ export def "v2-1-accounts-bulk-send-lists create-crud" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($account_id | is-empty) { error make --unspanned { msg: "path parameter 'accountId' must be non-empty" } }
   let full_url = (build-url $base ({account_id: (encode-path-segment $account_id)} | format pattern "/v2.1/accounts/{account_id}/bulk_send_lists"))
   let req_body = {"bulkCopies": $bulk_copies, "listId": $list_id, "name": $name} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "*/*"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: {}, body: $req_body}
 }
 
 # Deletes a bulk send list.
@@ -1317,10 +1396,12 @@ export def "v2-1-accounts-bulk-send-lists delete-crud" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($account_id | is-empty) { error make --unspanned { msg: "path parameter 'accountId' must be non-empty" } }
+  if ($bulk_send_list_id | is-empty) { error make --unspanned { msg: "path parameter 'bulkSendListId' must be non-empty" } }
   let full_url = (build-url $base ({account_id: (encode-path-segment $account_id), bulk_send_list_id: (encode-path-segment $bulk_send_list_id)} | format pattern "/v2.1/accounts/{account_id}/bulk_send_lists/{bulk_send_list_id}"))
   let accept_val = "*/*"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
 }
 
 # Gets a specific bulk send list.
@@ -1342,10 +1423,12 @@ export def "v2-1-accounts-bulk-send-lists get-crud" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($account_id | is-empty) { error make --unspanned { msg: "path parameter 'accountId' must be non-empty" } }
+  if ($bulk_send_list_id | is-empty) { error make --unspanned { msg: "path parameter 'bulkSendListId' must be non-empty" } }
   let full_url = (build-url $base ({account_id: (encode-path-segment $account_id), bulk_send_list_id: (encode-path-segment $bulk_send_list_id)} | format pattern "/v2.1/accounts/{account_id}/bulk_send_lists/{bulk_send_list_id}"))
   let accept_val = "*/*"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
 }
 
 # Updates a bulk send list.
@@ -1372,12 +1455,14 @@ export def "v2-1-accounts-bulk-send-lists update-crud" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($account_id | is-empty) { error make --unspanned { msg: "path parameter 'accountId' must be non-empty" } }
+  if ($bulk_send_list_id | is-empty) { error make --unspanned { msg: "path parameter 'bulkSendListId' must be non-empty" } }
   let full_url = (build-url $base ({account_id: (encode-path-segment $account_id), bulk_send_list_id: (encode-path-segment $bulk_send_list_id)} | format pattern "/v2.1/accounts/{account_id}/bulk_send_lists/{bulk_send_list_id}"))
   let req_body = {"bulkCopies": $bulk_copies, "listId": $list_id, "name": $name} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "*/*"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: {}, body: $req_body}
 }
 
 # Creates a bulk send request.
@@ -1402,12 +1487,14 @@ export def "v2-1-accounts-bulk-send-lists-send create-request" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($account_id | is-empty) { error make --unspanned { msg: "path parameter 'accountId' must be non-empty" } }
+  if ($bulk_send_list_id | is-empty) { error make --unspanned { msg: "path parameter 'bulkSendListId' must be non-empty" } }
   let full_url = (build-url $base ({account_id: (encode-path-segment $account_id), bulk_send_list_id: (encode-path-segment $bulk_send_list_id)} | format pattern "/v2.1/accounts/{account_id}/bulk_send_lists/{bulk_send_list_id}/send"))
   let req_body = {"batchName": $batch_name, "envelopeOrTemplateId": $envelope_or_template_id} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "*/*"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: {}, body: $req_body}
 }
 
 # Creates a bulk send test.
@@ -1432,12 +1519,14 @@ export def "v2-1-accounts-bulk-send-lists-test create-request" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($account_id | is-empty) { error make --unspanned { msg: "path parameter 'accountId' must be non-empty" } }
+  if ($bulk_send_list_id | is-empty) { error make --unspanned { msg: "path parameter 'bulkSendListId' must be non-empty" } }
   let full_url = (build-url $base ({account_id: (encode-path-segment $account_id), bulk_send_list_id: (encode-path-segment $bulk_send_list_id)} | format pattern "/v2.1/accounts/{account_id}/bulk_send_lists/{bulk_send_list_id}/test"))
   let req_body = {"batchName": $batch_name, "envelopeOrTemplateId": $envelope_or_template_id} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "*/*"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: {}, body: $req_body}
 }
 
 # Deletes the signature for one or more captive recipient records.
@@ -1462,12 +1551,14 @@ export def "v2-1-accounts-captive-recipients delete-part" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($account_id | is-empty) { error make --unspanned { msg: "path parameter 'accountId' must be non-empty" } }
+  if ($recipient_part | is-empty) { error make --unspanned { msg: "path parameter 'recipientPart' must be non-empty" } }
   let full_url = (build-url $base ({account_id: (encode-path-segment $account_id), recipient_part: (encode-path-segment $recipient_part)} | format pattern "/v2.1/accounts/{account_id}/captive_recipients/{recipient_part}"))
   let req_body = {"captiveRecipients": $captive_recipients} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "*/*"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: {}, body: $req_body}
 }
 
 # Initiate a new chunked upload.
@@ -1491,12 +1582,13 @@ export def "v2-1-accounts-chunked-uploads create" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($account_id | is-empty) { error make --unspanned { msg: "path parameter 'accountId' must be non-empty" } }
   let full_url = (build-url $base ({account_id: (encode-path-segment $account_id)} | format pattern "/v2.1/accounts/{account_id}/chunked_uploads"))
   let req_body = {"chunkedUploadId": $chunked_upload_id, "data": $data} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "*/*"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: {}, body: $req_body}
 }
 
 # Deletes a chunked upload.
@@ -1518,10 +1610,12 @@ export def "v2-1-accounts-chunked-uploads delete" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($account_id | is-empty) { error make --unspanned { msg: "path parameter 'accountId' must be non-empty" } }
+  if ($chunked_upload_id | is-empty) { error make --unspanned { msg: "path parameter 'chunkedUploadId' must be non-empty" } }
   let full_url = (build-url $base ({account_id: (encode-path-segment $account_id), chunked_upload_id: (encode-path-segment $chunked_upload_id)} | format pattern "/v2.1/accounts/{account_id}/chunked_uploads/{chunked_upload_id}"))
   let accept_val = "*/*"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
 }
 
 # Retrieves metadata about a chunked upload.
@@ -1544,11 +1638,13 @@ export def "v2-1-accounts-chunked-uploads get" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($account_id | is-empty) { error make --unspanned { msg: "path parameter 'accountId' must be non-empty" } }
+  if ($chunked_upload_id | is-empty) { error make --unspanned { msg: "path parameter 'chunkedUploadId' must be non-empty" } }
   let qp = [(serialize-qp "include" $include "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({account_id: (encode-path-segment $account_id), chunked_upload_id: (encode-path-segment $chunked_upload_id)} | format pattern "/v2.1/accounts/{account_id}/chunked_uploads/{chunked_upload_id}") $qp)
   let accept_val = "*/*"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"include": $include} | compact), body: null}
 }
 
 # Commit a chunked upload.
@@ -1571,11 +1667,13 @@ export def "v2-1-accounts-chunked-uploads update" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($account_id | is-empty) { error make --unspanned { msg: "path parameter 'accountId' must be non-empty" } }
+  if ($chunked_upload_id | is-empty) { error make --unspanned { msg: "path parameter 'chunkedUploadId' must be non-empty" } }
   let qp = [(serialize-qp "action" $action "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({account_id: (encode-path-segment $account_id), chunked_upload_id: (encode-path-segment $chunked_upload_id)} | format pattern "/v2.1/accounts/{account_id}/chunked_uploads/{chunked_upload_id}") $qp)
   let accept_val = "*/*"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"action": $action} | compact), body: null}
 }
 
 # Add a chunk to an existing chunked upload.
@@ -1601,12 +1699,15 @@ export def "v2-1-accounts-chunked-uploads update-part" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($account_id | is-empty) { error make --unspanned { msg: "path parameter 'accountId' must be non-empty" } }
+  if ($chunked_upload_id | is-empty) { error make --unspanned { msg: "path parameter 'chunkedUploadId' must be non-empty" } }
+  if ($chunked_upload_part_seq | is-empty) { error make --unspanned { msg: "path parameter 'chunkedUploadPartSeq' must be non-empty" } }
   let full_url = (build-url $base ({account_id: (encode-path-segment $account_id), chunked_upload_id: (encode-path-segment $chunked_upload_id), chunked_upload_part_seq: (encode-path-segment $chunked_upload_part_seq)} | format pattern "/v2.1/accounts/{account_id}/chunked_uploads/{chunked_upload_id}/{chunked_upload_part_seq}"))
   let req_body = {"chunkedUploadId": $body_chunked_upload_id, "data": $data} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "*/*"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: {}, body: $req_body}
 }
 
 # Get Connect configuration information.
@@ -1627,10 +1728,11 @@ export def "v2-1-accounts-connect get-configs" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($account_id | is-empty) { error make --unspanned { msg: "path parameter 'accountId' must be non-empty" } }
   let full_url = (build-url $base ({account_id: (encode-path-segment $account_id)} | format pattern "/v2.1/accounts/{account_id}/connect"))
   let accept_val = "*/*"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
 }
 
 # Creates a Connect configuration.
@@ -1697,12 +1799,13 @@ export def "v2-1-accounts-connect create-configuration" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($account_id | is-empty) { error make --unspanned { msg: "path parameter 'accountId' must be non-empty" } }
   let full_url = (build-url $base ({account_id: (encode-path-segment $account_id)} | format pattern "/v2.1/accounts/{account_id}/connect"))
   let req_body = {"allUsers": $all_users, "allUsersExcept": $all_users_except, "allowEnvelopePublish": $allow_envelope_publish, "allowSalesforcePublish": $allow_salesforce_publish, "configurationType": $configuration_type, "connectId": $connect_id, "deliveryMode": $delivery_mode, "disabledBy": $disabled_by, "enableLog": $enable_log, "envelopeEvents": $envelope_events, "eventData": $event_data, "events": $events, "externalFolderId": $external_folder_id, "externalFolderLabel": $external_folder_label, "groupIds": $group_ids, "includeCertSoapHeader": $include_cert_soap_header, "includeCertificateOfCompletion": $include_certificate_of_completion, "includeDocumentFields": $include_document_fields, "includeDocuments": $include_documents, "includeEnvelopeVoidReason": $include_envelope_void_reason, "includeHMAC": $include_hmac, "includeOAuth": $include_o_auth, "includeSenderAccountasCustomField": $include_sender_accountas_custom_field, "includeTimeZoneInformation": $include_time_zone_information, "integratorManaged": $integrator_managed, "name": $name, "password": $password, "recipientEvents": $recipient_events, "requireMutualTls": $require_mutual_tls, "requiresAcknowledgement": $requires_acknowledgement, "salesforceApiVersion": $salesforce_api_version, "salesforceAuthcode": $salesforce_authcode, "salesforceCallBackUrl": $salesforce_call_back_url, "salesforceDocumentsAsContentFiles": $salesforce_documents_as_content_files, "senderOverride": $sender_override, "senderSelectableItems": $sender_selectable_items, "sfObjects": $sf_objects, "signMessageWithX509Certificate": $sign_message_with_x509_certificate, "soapNamespace": $soap_namespace, "urlToPublishTo": $url_to_publish_to, "useSoapInterface": $use_soap_interface, "userIds": $user_ids, "userName": $user_name} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "*/*"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: {}, body: $req_body}
 }
 
 # Updates a specified Connect configuration.
@@ -1769,12 +1872,13 @@ export def "v2-1-accounts-connect update-configuration" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($account_id | is-empty) { error make --unspanned { msg: "path parameter 'accountId' must be non-empty" } }
   let full_url = (build-url $base ({account_id: (encode-path-segment $account_id)} | format pattern "/v2.1/accounts/{account_id}/connect"))
   let req_body = {"allUsers": $all_users, "allUsersExcept": $all_users_except, "allowEnvelopePublish": $allow_envelope_publish, "allowSalesforcePublish": $allow_salesforce_publish, "configurationType": $configuration_type, "connectId": $connect_id, "deliveryMode": $delivery_mode, "disabledBy": $disabled_by, "enableLog": $enable_log, "envelopeEvents": $envelope_events, "eventData": $event_data, "events": $events, "externalFolderId": $external_folder_id, "externalFolderLabel": $external_folder_label, "groupIds": $group_ids, "includeCertSoapHeader": $include_cert_soap_header, "includeCertificateOfCompletion": $include_certificate_of_completion, "includeDocumentFields": $include_document_fields, "includeDocuments": $include_documents, "includeEnvelopeVoidReason": $include_envelope_void_reason, "includeHMAC": $include_hmac, "includeOAuth": $include_o_auth, "includeSenderAccountasCustomField": $include_sender_accountas_custom_field, "includeTimeZoneInformation": $include_time_zone_information, "integratorManaged": $integrator_managed, "name": $name, "password": $password, "recipientEvents": $recipient_events, "requireMutualTls": $require_mutual_tls, "requiresAcknowledgement": $requires_acknowledgement, "salesforceApiVersion": $salesforce_api_version, "salesforceAuthcode": $salesforce_authcode, "salesforceCallBackUrl": $salesforce_call_back_url, "salesforceDocumentsAsContentFiles": $salesforce_documents_as_content_files, "senderOverride": $sender_override, "senderSelectableItems": $sender_selectable_items, "sfObjects": $sf_objects, "signMessageWithX509Certificate": $sign_message_with_x509_certificate, "soapNamespace": $soap_namespace, "urlToPublishTo": $url_to_publish_to, "useSoapInterface": $use_soap_interface, "userIds": $user_ids, "userName": $user_name} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "*/*"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: {}, body: $req_body}
 }
 
 # Submits a batch of historical envelopes for republish to a webhook.
@@ -1799,19 +1903,20 @@ export def "v2-1-accounts-connect-envelopes-publish-historical create-transactio
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($account_id | is-empty) { error make --unspanned { msg: "path parameter 'accountId' must be non-empty" } }
   let full_url = (build-url $base ({account_id: (encode-path-segment $account_id)} | format pattern "/v2.1/accounts/{account_id}/connect/envelopes/publish/historical"))
   let req_body = {"config": $config, "envelopes": $envelopes} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "*/*"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: {}, body: $req_body}
 }
 
 # Republishes Connect information for multiple envelopes.
 #
 # PUT /v2.1/accounts/{accountId}/connect/envelopes/retry_queue
 # operationId: ConnectPublish_PutConnectRetry
-export def "v2-1-accounts-connect-envelopes-retry-queue publish-update-by-accountId" [
+export def "v2-1-accounts-connect-envelopes-retry-queue publish-update-by-account-id" [
   account_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1828,19 +1933,20 @@ export def "v2-1-accounts-connect-envelopes-retry-queue publish-update-by-accoun
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($account_id | is-empty) { error make --unspanned { msg: "path parameter 'accountId' must be non-empty" } }
   let full_url = (build-url $base ({account_id: (encode-path-segment $account_id)} | format pattern "/v2.1/accounts/{account_id}/connect/envelopes/retry_queue"))
   let req_body = {"envelopeIds": $envelope_ids, "synchronous": $synchronous} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "*/*"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: {}, body: $req_body}
 }
 
 # Republishes Connect information for the specified envelope.
 #
 # PUT /v2.1/accounts/{accountId}/connect/envelopes/{envelopeId}/retry_queue
 # operationId: ConnectPublish_PutConnectRetryByEnvelope
-export def "v2-1-accounts-connect-envelopes-retry-queue publish-update-by-accountId-envelopeId" [
+export def "v2-1-accounts-connect-envelopes-retry-queue publish-update-by-account-id-envelope-id" [
   account_id: string
   envelope_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -1855,10 +1961,12 @@ export def "v2-1-accounts-connect-envelopes-retry-queue publish-update-by-accoun
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($account_id | is-empty) { error make --unspanned { msg: "path parameter 'accountId' must be non-empty" } }
+  if ($envelope_id | is-empty) { error make --unspanned { msg: "path parameter 'envelopeId' must be non-empty" } }
   let full_url = (build-url $base ({account_id: (encode-path-segment $account_id), envelope_id: (encode-path-segment $envelope_id)} | format pattern "/v2.1/accounts/{account_id}/connect/envelopes/{envelope_id}/retry_queue"))
   let accept_val = "*/*"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
 }
 
 # Gets the Connect failure log information.
@@ -1881,11 +1989,12 @@ export def "v2-1-accounts-connect-failures get-logs" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($account_id | is-empty) { error make --unspanned { msg: "path parameter 'accountId' must be non-empty" } }
   let qp = [(serialize-qp "from_date" $from_date "scalar") (serialize-qp "to_date" $to_date "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({account_id: (encode-path-segment $account_id)} | format pattern "/v2.1/accounts/{account_id}/connect/failures") $qp)
   let accept_val = "*/*"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"from_date": $from_date, "to_date": $to_date} | compact), body: null}
 }
 
 # Deletes a Connect failure log entry.
@@ -1907,17 +2016,19 @@ export def "v2-1-accounts-connect-failures delete-log" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($account_id | is-empty) { error make --unspanned { msg: "path parameter 'accountId' must be non-empty" } }
+  if ($failure_id | is-empty) { error make --unspanned { msg: "path parameter 'failureId' must be non-empty" } }
   let full_url = (build-url $base ({account_id: (encode-path-segment $account_id), failure_id: (encode-path-segment $failure_id)} | format pattern "/v2.1/accounts/{account_id}/connect/failures/{failure_id}"))
   let accept_val = "*/*"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
 }
 
 # Deletes a list of Connect log entries.
 #
 # DELETE /v2.1/accounts/{accountId}/connect/logs
 # operationId: ConnectLog_DeleteConnectLogs
-export def "v2-1-accounts-connect-logs delete-by-accountId" [
+export def "v2-1-accounts-connect-logs delete-by-account-id" [
   account_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1931,10 +2042,11 @@ export def "v2-1-accounts-connect-logs delete-by-accountId" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($account_id | is-empty) { error make --unspanned { msg: "path parameter 'accountId' must be non-empty" } }
   let full_url = (build-url $base ({account_id: (encode-path-segment $account_id)} | format pattern "/v2.1/accounts/{account_id}/connect/logs"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
 }
 
 # Gets the Connect log.
@@ -1957,18 +2069,19 @@ export def "v2-1-accounts-connect-logs list" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($account_id | is-empty) { error make --unspanned { msg: "path parameter 'accountId' must be non-empty" } }
   let qp = [(serialize-qp "from_date" $from_date "scalar") (serialize-qp "to_date" $to_date "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({account_id: (encode-path-segment $account_id)} | format pattern "/v2.1/accounts/{account_id}/connect/logs") $qp)
   let accept_val = "*/*"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"from_date": $from_date, "to_date": $to_date} | compact), body: null}
 }
 
 # Deletes a specified Connect log entry.
 #
 # DELETE /v2.1/accounts/{accountId}/connect/logs/{logId}
 # operationId: ConnectLog_DeleteConnectLog
-export def "v2-1-accounts-connect-logs delete-by-accountId-logId" [
+export def "v2-1-accounts-connect-logs delete-by-account-id-log-id" [
   account_id: string
   log_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -1983,10 +2096,12 @@ export def "v2-1-accounts-connect-logs delete-by-accountId-logId" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($account_id | is-empty) { error make --unspanned { msg: "path parameter 'accountId' must be non-empty" } }
+  if ($log_id | is-empty) { error make --unspanned { msg: "path parameter 'logId' must be non-empty" } }
   let full_url = (build-url $base ({account_id: (encode-path-segment $account_id), log_id: (encode-path-segment $log_id)} | format pattern "/v2.1/accounts/{account_id}/connect/logs/{log_id}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
 }
 
 # Gets a Connect log entry.
@@ -2009,11 +2124,13 @@ export def "v2-1-accounts-connect-logs get" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($account_id | is-empty) { error make --unspanned { msg: "path parameter 'accountId' must be non-empty" } }
+  if ($log_id | is-empty) { error make --unspanned { msg: "path parameter 'logId' must be non-empty" } }
   let qp = [(serialize-qp "additional_info" $additional_info "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({account_id: (encode-path-segment $account_id), log_id: (encode-path-segment $log_id)} | format pattern "/v2.1/accounts/{account_id}/connect/logs/{log_id}") $qp)
   let accept_val = "*/*"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"additional_info": $additional_info} | compact), body: null}
 }
 
 # Delete the Connect OAuth configuration.
@@ -2034,10 +2151,11 @@ export def "v2-1-accounts-connect-oauth delete-o-auth-config-o-auth-config" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($account_id | is-empty) { error make --unspanned { msg: "path parameter 'accountId' must be non-empty" } }
   let full_url = (build-url $base ({account_id: (encode-path-segment $account_id)} | format pattern "/v2.1/accounts/{account_id}/connect/oauth"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
 }
 
 # Retrieves the Connect OAuth information for the account.
@@ -2058,10 +2176,11 @@ export def "v2-1-accounts-connect-oauth get-o-auth-config-o-auth-config" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($account_id | is-empty) { error make --unspanned { msg: "path parameter 'accountId' must be non-empty" } }
   let full_url = (build-url $base ({account_id: (encode-path-segment $account_id)} | format pattern "/v2.1/accounts/{account_id}/connect/oauth"))
   let accept_val = "*/*"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
 }
 
 # Set up Connect OAuth for the specified account.
@@ -2088,12 +2207,13 @@ export def "v2-1-accounts-connect-oauth create-o-auth-config-o-auth-config" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($account_id | is-empty) { error make --unspanned { msg: "path parameter 'accountId' must be non-empty" } }
   let full_url = (build-url $base ({account_id: (encode-path-segment $account_id)} | format pattern "/v2.1/accounts/{account_id}/connect/oauth"))
   let req_body = {"authorizationServerUrl": $authorization_server_url, "clientId": $client_id, "clientSecret": $client_secret, "customParameters": $custom_parameters, "scope": $scope} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "*/*"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: {}, body: $req_body}
 }
 
 # Updates the existing Connect OAuth configuration for the account.
@@ -2120,12 +2240,13 @@ export def "v2-1-accounts-connect-oauth update-o-auth-config-o-auth-config" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($account_id | is-empty) { error make --unspanned { msg: "path parameter 'accountId' must be non-empty" } }
   let full_url = (build-url $base ({account_id: (encode-path-segment $account_id)} | format pattern "/v2.1/accounts/{account_id}/connect/oauth"))
   let req_body = {"authorizationServerUrl": $authorization_server_url, "clientId": $client_id, "clientSecret": $client_secret, "customParameters": $custom_parameters, "scope": $scope} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "*/*"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: {}, body: $req_body}
 }
 
 # Deletes the specified Connect configuration.
@@ -2147,10 +2268,12 @@ export def "v2-1-accounts-connect delete-config" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($account_id | is-empty) { error make --unspanned { msg: "path parameter 'accountId' must be non-empty" } }
+  if ($connect_id | is-empty) { error make --unspanned { msg: "path parameter 'connectId' must be non-empty" } }
   let full_url = (build-url $base ({account_id: (encode-path-segment $account_id), connect_id: (encode-path-segment $connect_id)} | format pattern "/v2.1/accounts/{account_id}/connect/{connect_id}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
 }
 
 # Gets the details about a Connect configuration.
@@ -2172,10 +2295,12 @@ export def "v2-1-accounts-connect get-config" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($account_id | is-empty) { error make --unspanned { msg: "path parameter 'accountId' must be non-empty" } }
+  if ($connect_id | is-empty) { error make --unspanned { msg: "path parameter 'connectId' must be non-empty" } }
   let full_url = (build-url $base ({account_id: (encode-path-segment $account_id), connect_id: (encode-path-segment $connect_id)} | format pattern "/v2.1/accounts/{account_id}/connect/{connect_id}"))
   let accept_val = "*/*"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
 }
 
 # Returns all users from the configured Connect service.
@@ -2203,11 +2328,13 @@ export def "v2-1-accounts-connect-all-users get" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($account_id | is-empty) { error make --unspanned { msg: "path parameter 'accountId' must be non-empty" } }
+  if ($connect_id | is-empty) { error make --unspanned { msg: "path parameter 'connectId' must be non-empty" } }
   let qp = [(serialize-qp "count" $count "scalar") (serialize-qp "domain_users_only" $domain_users_only "scalar") (serialize-qp "email_substring" $email_substring "scalar") (serialize-qp "start_position" $start_position "scalar") (serialize-qp "status" $status "scalar") (serialize-qp "user_name_substring" $user_name_substring "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({account_id: (encode-path-segment $account_id), connect_id: (encode-path-segment $connect_id)} | format pattern "/v2.1/accounts/{account_id}/connect/{connect_id}/all/users") $qp)
   let accept_val = "*/*"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"count": $count, "domain_users_only": $domain_users_only, "email_substring": $email_substring, "start_position": $start_position, "status": $status, "user_name_substring": $user_name_substring} | compact), body: null}
 }
 
 # Returns users from the configured Connect service.
@@ -2235,11 +2362,13 @@ export def "v2-1-accounts-connect-users get" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($account_id | is-empty) { error make --unspanned { msg: "path parameter 'accountId' must be non-empty" } }
+  if ($connect_id | is-empty) { error make --unspanned { msg: "path parameter 'connectId' must be non-empty" } }
   let qp = [(serialize-qp "count" $count "scalar") (serialize-qp "email_substring" $email_substring "scalar") (serialize-qp "list_included_users" $list_included_users "scalar") (serialize-qp "start_position" $start_position "scalar") (serialize-qp "status" $status "scalar") (serialize-qp "user_name_substring" $user_name_substring "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({account_id: (encode-path-segment $account_id), connect_id: (encode-path-segment $connect_id)} | format pattern "/v2.1/accounts/{account_id}/connect/{connect_id}/users") $qp)
   let accept_val = "*/*"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"count": $count, "email_substring": $email_substring, "list_included_users": $list_included_users, "start_position": $start_position, "status": $status, "user_name_substring": $user_name_substring} | compact), body: null}
 }
 
 # Gets the default Electronic Record and Signature Disclosure for an account.
@@ -2261,11 +2390,12 @@ export def "v2-1-accounts-consumer-disclosure get" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($account_id | is-empty) { error make --unspanned { msg: "path parameter 'accountId' must be non-empty" } }
   let qp = [(serialize-qp "langCode" $lang_code "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({account_id: (encode-path-segment $account_id)} | format pattern "/v2.1/accounts/{account_id}/consumer_disclosure") $qp)
   let accept_val = "*/*"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"langCode": $lang_code} | compact), body: null}
 }
 
 # Gets the Electronic Record and Signature Disclosure for an account.
@@ -2287,10 +2417,12 @@ export def "v2-1-accounts-consumer-disclosure get-lang-code" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($account_id | is-empty) { error make --unspanned { msg: "path parameter 'accountId' must be non-empty" } }
+  if ($lang_code | is-empty) { error make --unspanned { msg: "path parameter 'langCode' must be non-empty" } }
   let full_url = (build-url $base ({account_id: (encode-path-segment $account_id), lang_code: (encode-path-segment $lang_code)} | format pattern "/v2.1/accounts/{account_id}/consumer_disclosure/{lang_code}"))
   let accept_val = "*/*"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
 }
 
 # Updates the Electronic Record and Signature Disclosure for an account.
@@ -2348,13 +2480,15 @@ export def "v2-1-accounts-consumer-disclosure update" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($account_id | is-empty) { error make --unspanned { msg: "path parameter 'accountId' must be non-empty" } }
+  if ($lang_code | is-empty) { error make --unspanned { msg: "path parameter 'langCode' must be non-empty" } }
   let qp = [(serialize-qp "include_metadata" $include_metadata "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({account_id: (encode-path-segment $account_id), lang_code: (encode-path-segment $lang_code)} | format pattern "/v2.1/accounts/{account_id}/consumer_disclosure/{lang_code}") $qp)
   let req_body = {"accountEsignId": $account_esign_id, "allowCDWithdraw": $allow_cd_withdraw, "allowCDWithdrawMetadata": $allow_cd_withdraw_metadata, "changeEmail": $change_email, "changeEmailOther": $change_email_other, "companyName": $company_name, "companyPhone": $company_phone, "copyCostPerPage": $copy_cost_per_page, "copyFeeCollectionMethod": $copy_fee_collection_method, "copyRequestEmail": $copy_request_email, "custom": $custom, "enableEsign": $enable_esign, "esignAgreement": $esign_agreement, "esignText": $esign_text, "languageCode": $language_code, "mustAgreeToEsign": $must_agree_to_esign, "pdfId": $pdf_id, "useBrand": $use_brand, "useConsumerDisclosureWithinAccount": $use_consumer_disclosure_within_account, "useConsumerDisclosureWithinAccountMetadata": $use_consumer_disclosure_within_account_metadata, "withdrawAddressLine1": $withdraw_address_line1, "withdrawAddressLine2": $withdraw_address_line2, "withdrawByEmail": $withdraw_by_email, "withdrawByMail": $withdraw_by_mail, "withdrawByPhone": $withdraw_by_phone, "withdrawCity": $withdraw_city, "withdrawConsequences": $withdraw_consequences, "withdrawEmail": $withdraw_email, "withdrawOther": $withdraw_other, "withdrawPhone": $withdraw_phone, "withdrawPostalCode": $withdraw_postal_code, "withdrawState": $withdraw_state} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "*/*"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: ({"include_metadata": $include_metadata} | compact), body: $req_body}
 }
 
 # Deletes multiple contacts from an account.
@@ -2362,7 +2496,7 @@ export def "v2-1-accounts-consumer-disclosure update" [
 # DELETE /v2.1/accounts/{accountId}/contacts
 # operationId: Contacts_DeleteContacts
 # --contactList item shape: {cloudProvider?: string, cloudProviderContainerId?: string, contactId?: string, contactPhoneNumbers?: list, contactUri?: string, emails?: list<string>, errorDetails?: record, isOwner?: bool, name?: string, notaryContactDetails?: record, organization?: string, roomContactType?: string, shared?: string, signingGroup?: string, signingGroupName?: string}
-export def "v2-1-accounts-contacts delete-by-accountId" [
+export def "v2-1-accounts-contacts delete-by-account-id" [
   account_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -2378,12 +2512,13 @@ export def "v2-1-accounts-contacts delete-by-accountId" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($account_id | is-empty) { error make --unspanned { msg: "path parameter 'accountId' must be non-empty" } }
   let full_url = (build-url $base ({account_id: (encode-path-segment $account_id)} | format pattern "/v2.1/accounts/{account_id}/contacts"))
   let req_body = {"contactList": $contact_list} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "*/*"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: {}, body: $req_body}
 }
 
 # Add contacts to a contacts list.
@@ -2407,12 +2542,13 @@ export def "v2-1-accounts-contacts create" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($account_id | is-empty) { error make --unspanned { msg: "path parameter 'accountId' must be non-empty" } }
   let full_url = (build-url $base ({account_id: (encode-path-segment $account_id)} | format pattern "/v2.1/accounts/{account_id}/contacts"))
   let req_body = {"contactList": $contact_list} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "*/*"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: {}, body: $req_body}
 }
 
 # Updates one or more contacts.
@@ -2436,19 +2572,20 @@ export def "v2-1-accounts-contacts update" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($account_id | is-empty) { error make --unspanned { msg: "path parameter 'accountId' must be non-empty" } }
   let full_url = (build-url $base ({account_id: (encode-path-segment $account_id)} | format pattern "/v2.1/accounts/{account_id}/contacts"))
   let req_body = {"contactList": $contact_list} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "*/*"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: {}, body: $req_body}
 }
 
 # Deletes a contact.
 #
 # DELETE /v2.1/accounts/{accountId}/contacts/{contactId}
 # operationId: Contacts_DeleteContactWithId
-export def "v2-1-accounts-contacts delete-by-accountId-contactId" [
+export def "v2-1-accounts-contacts delete-by-account-id-contact-id" [
   account_id: string
   contact_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -2463,10 +2600,12 @@ export def "v2-1-accounts-contacts delete-by-accountId-contactId" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($account_id | is-empty) { error make --unspanned { msg: "path parameter 'accountId' must be non-empty" } }
+  if ($contact_id | is-empty) { error make --unspanned { msg: "path parameter 'contactId' must be non-empty" } }
   let full_url = (build-url $base ({account_id: (encode-path-segment $account_id), contact_id: (encode-path-segment $contact_id)} | format pattern "/v2.1/accounts/{account_id}/contacts/{contact_id}"))
   let accept_val = "*/*"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
 }
 
 # Gets one or more contacts.
@@ -2489,11 +2628,13 @@ export def "v2-1-accounts-contacts get" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($account_id | is-empty) { error make --unspanned { msg: "path parameter 'accountId' must be non-empty" } }
+  if ($contact_id | is-empty) { error make --unspanned { msg: "path parameter 'contactId' must be non-empty" } }
   let qp = [(serialize-qp "cloud_provider" $cloud_provider "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({account_id: (encode-path-segment $account_id), contact_id: (encode-path-segment $contact_id)} | format pattern "/v2.1/accounts/{account_id}/contacts/{contact_id}") $qp)
   let accept_val = "*/*"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"cloud_provider": $cloud_provider} | compact), body: null}
 }
 
 # Gets a list of custom fields.
@@ -2514,10 +2655,11 @@ export def "v2-1-accounts-custom-fields get" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($account_id | is-empty) { error make --unspanned { msg: "path parameter 'accountId' must be non-empty" } }
   let full_url = (build-url $base ({account_id: (encode-path-segment $account_id)} | format pattern "/v2.1/accounts/{account_id}/custom_fields"))
   let accept_val = "*/*"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
 }
 
 # Creates an account custom field.
@@ -2549,13 +2691,14 @@ export def "v2-1-accounts-custom-fields create" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($account_id | is-empty) { error make --unspanned { msg: "path parameter 'accountId' must be non-empty" } }
   let qp = [(serialize-qp "apply_to_templates" $apply_to_templates "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({account_id: (encode-path-segment $account_id)} | format pattern "/v2.1/accounts/{account_id}/custom_fields") $qp)
   let req_body = {"customFieldType": $custom_field_type, "errorDetails": $error_details, "fieldId": $field_id, "listItems": $list_items, "name": $name, "required": $required, "show": $show, "value": $value} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "*/*"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: ({"apply_to_templates": $apply_to_templates} | compact), body: $req_body}
 }
 
 # Deletes an account custom field.
@@ -2578,11 +2721,13 @@ export def "v2-1-accounts-custom-fields delete" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($account_id | is-empty) { error make --unspanned { msg: "path parameter 'accountId' must be non-empty" } }
+  if ($custom_field_id | is-empty) { error make --unspanned { msg: "path parameter 'customFieldId' must be non-empty" } }
   let qp = [(serialize-qp "apply_to_templates" $apply_to_templates "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({account_id: (encode-path-segment $account_id), custom_field_id: (encode-path-segment $custom_field_id)} | format pattern "/v2.1/accounts/{account_id}/custom_fields/{custom_field_id}") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"apply_to_templates": $apply_to_templates} | compact), body: null}
 }
 
 # Updates an account custom field.
@@ -2615,13 +2760,15 @@ export def "v2-1-accounts-custom-fields update" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($account_id | is-empty) { error make --unspanned { msg: "path parameter 'accountId' must be non-empty" } }
+  if ($custom_field_id | is-empty) { error make --unspanned { msg: "path parameter 'customFieldId' must be non-empty" } }
   let qp = [(serialize-qp "apply_to_templates" $apply_to_templates "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({account_id: (encode-path-segment $account_id), custom_field_id: (encode-path-segment $custom_field_id)} | format pattern "/v2.1/accounts/{account_id}/custom_fields/{custom_field_id}") $qp)
   let req_body = {"customFieldType": $custom_field_type, "errorDetails": $error_details, "fieldId": $field_id, "listItems": $list_items, "name": $name, "required": $required, "show": $show, "value": $value} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "*/*"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: ({"apply_to_templates": $apply_to_templates} | compact), body: $req_body}
 }
 
 # Search for specific sets of envelopes by using search filters.
@@ -2672,11 +2819,12 @@ export def "v2-1-accounts-envelopes list" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($account_id | is-empty) { error make --unspanned { msg: "path parameter 'accountId' must be non-empty" } }
   let qp = [(serialize-qp "ac_status" $ac_status "scalar") (serialize-qp "block" $block "scalar") (serialize-qp "cdse_mode" $cdse_mode "scalar") (serialize-qp "continuation_token" $continuation_token "scalar") (serialize-qp "count" $count "scalar") (serialize-qp "custom_field" $custom_field "scalar") (serialize-qp "email" $email "scalar") (serialize-qp "envelope_ids" $envelope_ids "scalar") (serialize-qp "exclude" $exclude "scalar") (serialize-qp "folder_ids" $folder_ids "scalar") (serialize-qp "folder_types" $folder_types "scalar") (serialize-qp "from_date" $from_date "scalar") (serialize-qp "from_to_status" $from_to_status "scalar") (serialize-qp "include" $include "scalar") (serialize-qp "include_purge_information" $include_purge_information "scalar") (serialize-qp "intersecting_folder_ids" $intersecting_folder_ids "scalar") (serialize-qp "last_queried_date" $last_queried_date "scalar") (serialize-qp "order" $order "scalar") (serialize-qp "order_by" $order_by "scalar") (serialize-qp "powerformids" $powerformids "scalar") (serialize-qp "query_budget" $query_budget "scalar") (serialize-qp "requester_date_format" $requester_date_format "scalar") (serialize-qp "search_text" $search_text "scalar") (serialize-qp "start_position" $start_position "scalar") (serialize-qp "status" $status "scalar") (serialize-qp "to_date" $to_date "scalar") (serialize-qp "transaction_ids" $transaction_ids "scalar") (serialize-qp "user_filter" $user_filter "scalar") (serialize-qp "user_id" $user_id "scalar") (serialize-qp "user_name" $user_name "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({account_id: (encode-path-segment $account_id)} | format pattern "/v2.1/accounts/{account_id}/envelopes") $qp)
   let accept_val = "*/*"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"ac_status": $ac_status, "block": $block, "cdse_mode": $cdse_mode, "continuation_token": $continuation_token, "count": $count, "custom_field": $custom_field, "email": $email, "envelope_ids": $envelope_ids, "exclude": $exclude, "folder_ids": $folder_ids, "folder_types": $folder_types, "from_date": $from_date, "from_to_status": $from_to_status, "include": $include, "include_purge_information": $include_purge_information, "intersecting_folder_ids": $intersecting_folder_ids, "last_queried_date": $last_queried_date, "order": $order, "order_by": $order_by, "powerformids": $powerformids, "query_budget": $query_budget, "requester_date_format": $requester_date_format, "search_text": $search_text, "start_position": $start_position, "status": $status, "to_date": $to_date, "transaction_ids": $transaction_ids, "user_filter": $user_filter, "user_id": $user_id, "user_name": $user_name} | compact), body: null}
 }
 
 # Creates an envelope.
@@ -2810,13 +2958,14 @@ export def "v2-1-accounts-envelopes create" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($account_id | is-empty) { error make --unspanned { msg: "path parameter 'accountId' must be non-empty" } }
   let qp = [(serialize-qp "cdse_mode" $cdse_mode "scalar") (serialize-qp "change_routing_order" $change_routing_order "scalar") (serialize-qp "completed_documents_only" $completed_documents_only "scalar") (serialize-qp "merge_roles_on_draft" $merge_roles_on_draft "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({account_id: (encode-path-segment $account_id)} | format pattern "/v2.1/accounts/{account_id}/envelopes") $qp)
   let req_body = {"accessControlListBase64": $access_control_list_base64, "accessibility": $accessibility, "allowComments": $allow_comments, "allowMarkup": $allow_markup, "allowReassign": $allow_reassign, "allowRecipientRecursion": $allow_recipient_recursion, "allowViewHistory": $allow_view_history, "anySigner": $any_signer, "asynchronous": $asynchronous, "attachments": $attachments, "attachmentsUri": $attachments_uri, "authoritativeCopy": $authoritative_copy, "authoritativeCopyDefault": $authoritative_copy_default, "autoNavigation": $auto_navigation, "brandId": $brand_id, "brandLock": $brand_lock, "burnDefaultTabData": $burn_default_tab_data, "certificateUri": $certificate_uri, "completedDateTime": $completed_date_time, "compositeTemplates": $composite_templates, "copyRecipientData": $copy_recipient_data, "createdDateTime": $created_date_time, "customFields": $custom_fields, "customFieldsUri": $custom_fields_uri, "declinedDateTime": $declined_date_time, "deletedDateTime": $deleted_date_time, "deliveredDateTime": $delivered_date_time, "disableResponsiveDocument": $disable_responsive_document, "documentBase64": $document_base64, "documents": $documents, "documentsCombinedUri": $documents_combined_uri, "documentsUri": $documents_uri, "emailBlurb": $email_blurb, "emailSettings": $email_settings, "emailSubject": $email_subject, "enableWetSign": $enable_wet_sign, "enforceSignerVisibility": $enforce_signer_visibility, "envelopeAttachments": $envelope_attachments, "envelopeCustomMetadata": $envelope_custom_metadata, "envelopeDocuments": $envelope_documents, "envelopeId": $envelope_id, "envelopeIdStamping": $envelope_id_stamping, "envelopeLocation": $envelope_location, "envelopeMetadata": $envelope_metadata, "envelopeUri": $envelope_uri, "eventNotification": $event_notification, "expireAfter": $expire_after, "expireDateTime": $expire_date_time, "expireEnabled": $expire_enabled, "externalEnvelopeId": $external_envelope_id, "folders": $folders, "hasComments": $has_comments, "hasFormDataChanged": $has_form_data_changed, "hasWavFile": $has_wav_file, "holder": $holder, "initialSentDateTime": $initial_sent_date_time, "is21CFRPart11": $is21_cfr_part11, "isDynamicEnvelope": $is_dynamic_envelope, "isSignatureProviderEnvelope": $is_signature_provider_envelope, "lastModifiedDateTime": $last_modified_date_time, "location": $location, "lockInformation": $lock_information, "messageLock": $message_lock, "notification": $notification, "notificationUri": $notification_uri, "password": $password, "powerForm": $power_form, "purgeCompletedDate": $purge_completed_date, "purgeRequestDate": $purge_request_date, "purgeState": $purge_state, "recipientViewRequest": $recipient_view_request, "recipients": $recipients, "recipientsLock": $recipients_lock, "recipientsUri": $recipients_uri, "sender": $sender, "sentDateTime": $sent_date_time, "signerCanSignOnMobile": $signer_can_sign_on_mobile, "signingLocation": $signing_location, "status": $status, "statusChangedDateTime": $status_changed_date_time, "statusDateTime": $status_date_time, "templateId": $template_id, "templateRoles": $template_roles, "templatesUri": $templates_uri, "transactionId": $transaction_id, "useDisclosure": $use_disclosure, "voidedDateTime": $voided_date_time, "voidedReason": $voided_reason, "workflow": $workflow} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "*/*"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: ({"cdse_mode": $cdse_mode, "change_routing_order": $change_routing_order, "completed_documents_only": $completed_documents_only, "merge_roles_on_draft": $merge_roles_on_draft} | compact), body: $req_body}
 }
 
 # Gets envelope statuses for a set of envelopes.
@@ -2846,19 +2995,20 @@ export def "v2-1-accounts-envelopes-status update" [
   --to-date: string # Optional date/time setting that specifies the last date/time or envelope status changes in the result set. The default value is the time that you call the method.
   --transaction-ids: string # The transaction IDs to include in the results. Note that transaction IDs are valid for seven days. The value of this property can be: - A list of comma-separated transaction IDs - The special value `request_body`. In this case, this method uses the transaction IDs in the request body.
   --user-name: string # Limits results to envelopes sent by the account user with this user name. `email` must be given as well, and both `email` and `user_name` must refer to an existing account user.
-  --envelope-ids: list<string> # A comma-separated list of envelope IDs to include in the results.
-  --transaction-ids: list<string> # A comma-separated list of transaction IDs to include in the results. Note that transaction IDs are valid for seven days.
+  --envelope-ids-body: list<string> # A comma-separated list of envelope IDs to include in the results. (body field)
+  --transaction-ids-body: list<string> # A comma-separated list of transaction IDs to include in the results. Note that transaction IDs are valid for seven days. (body field)
 ]: any -> any {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($account_id | is-empty) { error make --unspanned { msg: "path parameter 'accountId' must be non-empty" } }
   let qp = [(serialize-qp "ac_status" $ac_status "scalar") (serialize-qp "block" $block "scalar") (serialize-qp "count" $count "scalar") (serialize-qp "email" $email "scalar") (serialize-qp "envelope_ids" $envelope_ids "scalar") (serialize-qp "from_date" $from_date "scalar") (serialize-qp "from_to_status" $from_to_status "scalar") (serialize-qp "start_position" $start_position "scalar") (serialize-qp "status" $status "scalar") (serialize-qp "to_date" $to_date "scalar") (serialize-qp "transaction_ids" $transaction_ids "scalar") (serialize-qp "user_name" $user_name "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({account_id: (encode-path-segment $account_id)} | format pattern "/v2.1/accounts/{account_id}/envelopes/status") $qp)
-  let req_body = {"envelopeIds": $envelope_ids, "transactionIds": $transaction_ids} | compact
+  let req_body = {"envelopeIds": $envelope_ids_body, "transactionIds": $transaction_ids_body} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "*/*"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: ({"ac_status": $ac_status, "block": $block, "count": $count, "email": $email, "envelope_ids": $envelope_ids, "from_date": $from_date, "from_to_status": $from_to_status, "start_position": $start_position, "status": $status, "to_date": $to_date, "transaction_ids": $transaction_ids, "user_name": $user_name} | compact), body: $req_body}
 }
 
 # Gets envelope transfer rules.
@@ -2881,11 +3031,12 @@ export def "v2-1-accounts-envelopes-transfer-rules get" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($account_id | is-empty) { error make --unspanned { msg: "path parameter 'accountId' must be non-empty" } }
   let qp = [(serialize-qp "count" $count "scalar") (serialize-qp "start_position" $start_position "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({account_id: (encode-path-segment $account_id)} | format pattern "/v2.1/accounts/{account_id}/envelopes/transfer_rules") $qp)
   let accept_val = "*/*"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"count": $count, "start_position": $start_position} | compact), body: null}
 }
 
 # Creates an envelope transfer rule.
@@ -2922,12 +3073,13 @@ export def "v2-1-accounts-envelopes-transfer-rules create" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($account_id | is-empty) { error make --unspanned { msg: "path parameter 'accountId' must be non-empty" } }
   let full_url = (build-url $base ({account_id: (encode-path-segment $account_id)} | format pattern "/v2.1/accounts/{account_id}/envelopes/transfer_rules"))
   let req_body = {"carbonCopyOriginalOwner": $carbon_copy_original_owner, "enabled": $enabled, "envelopeTransferRuleId": $envelope_transfer_rule_id, "eventType": $event_type, "fromGroups": $from_groups, "fromUsers": $from_users, "modifiedDate": $modified_date, "modifiedUser": $modified_user, "toFolder": $to_folder, "toUser": $to_user} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "*/*"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: {}, body: $req_body}
 }
 
 # Changes the status of multiple envelope transfer rules.
@@ -2935,7 +3087,7 @@ export def "v2-1-accounts-envelopes-transfer-rules create" [
 # PUT /v2.1/accounts/{accountId}/envelopes/transfer_rules
 # operationId: EnvelopeTransferRules_PutEnvelopeTransferRules
 # --envelopeTransferRules item shape: {carbonCopyOriginalOwner?: string, enabled?: string, envelopeTransferRuleId?: string, eventType?: string, fromGroup?: record, fromUser?: record, modifiedDate?: string, modifiedUser?: record, toFolder?: record, toUser?: record}
-export def "v2-1-accounts-envelopes-transfer-rules update-by-accountId" [
+export def "v2-1-accounts-envelopes-transfer-rules update-by-account-id" [
   account_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -2957,12 +3109,13 @@ export def "v2-1-accounts-envelopes-transfer-rules update-by-accountId" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($account_id | is-empty) { error make --unspanned { msg: "path parameter 'accountId' must be non-empty" } }
   let full_url = (build-url $base ({account_id: (encode-path-segment $account_id)} | format pattern "/v2.1/accounts/{account_id}/envelopes/transfer_rules"))
   let req_body = {"endPosition": $end_position, "envelopeTransferRules": $envelope_transfer_rules, "nextUri": $next_uri, "previousUri": $previous_uri, "resultSetSize": $result_set_size, "startPosition": $start_position, "totalSetSize": $total_set_size} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "*/*"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: {}, body: $req_body}
 }
 
 # Deletes an envelope transfer rule.
@@ -2984,10 +3137,12 @@ export def "v2-1-accounts-envelopes-transfer-rules delete" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($account_id | is-empty) { error make --unspanned { msg: "path parameter 'accountId' must be non-empty" } }
+  if ($envelope_transfer_rule_id | is-empty) { error make --unspanned { msg: "path parameter 'envelopeTransferRuleId' must be non-empty" } }
   let full_url = (build-url $base ({account_id: (encode-path-segment $account_id), envelope_transfer_rule_id: (encode-path-segment $envelope_transfer_rule_id)} | format pattern "/v2.1/accounts/{account_id}/envelopes/transfer_rules/{envelope_transfer_rule_id}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
 }
 
 # Changes the status of an envelope transfer rule.
@@ -2999,7 +3154,7 @@ export def "v2-1-accounts-envelopes-transfer-rules delete" [
 # --modifiedUser shape: {activationAccessCode?: string, company?: string, connectConfigurations?: list, countryCode?: string, createdDateTime?: string, customSettings?: list, defaultAccountId?: string, email?: string, enableConnectForUser?: string, errorDetails?: record, firstName?: string, forgottenPasswordInfo?: record, groupList?: list, hasRemoteNotary?: bool, homeAddress?: record, initialsImageUri?: string, isAdmin?: string, isAlternateAdmin?: string, isNAREnabled?: string, jobTitle?: string, lastLogin?: string, ... (23 more fields)}
 # --toFolder shape: {errorDetails?: record, filter?: record, folderId?: string, folderItems?: list, folders?: list, hasAccess?: string, hasSubFolders?: string, itemCount?: string, name?: string, owner?: record, parentFolderId?: string, parentFolderUri?: string, subFolderCount?: string, type?: string, uri?: string}
 # --toUser shape: {activationAccessCode?: string, company?: string, connectConfigurations?: list, countryCode?: string, createdDateTime?: string, customSettings?: list, defaultAccountId?: string, email?: string, enableConnectForUser?: string, errorDetails?: record, firstName?: string, forgottenPasswordInfo?: record, groupList?: list, hasRemoteNotary?: bool, homeAddress?: record, initialsImageUri?: string, isAdmin?: string, isAlternateAdmin?: string, isNAREnabled?: string, jobTitle?: string, lastLogin?: string, ... (23 more fields)}
-export def "v2-1-accounts-envelopes-transfer-rules update-by-accountId-envelopeTransferRuleId" [
+export def "v2-1-accounts-envelopes-transfer-rules update-by-account-id-envelope-transfer-rule-id" [
   account_id: string
   envelope_transfer_rule_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -3025,12 +3180,14 @@ export def "v2-1-accounts-envelopes-transfer-rules update-by-accountId-envelopeT
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($account_id | is-empty) { error make --unspanned { msg: "path parameter 'accountId' must be non-empty" } }
+  if ($envelope_transfer_rule_id | is-empty) { error make --unspanned { msg: "path parameter 'envelopeTransferRuleId' must be non-empty" } }
   let full_url = (build-url $base ({account_id: (encode-path-segment $account_id), envelope_transfer_rule_id: (encode-path-segment $envelope_transfer_rule_id)} | format pattern "/v2.1/accounts/{account_id}/envelopes/transfer_rules/{envelope_transfer_rule_id}"))
   let req_body = {"carbonCopyOriginalOwner": $carbon_copy_original_owner, "enabled": $enabled, "envelopeTransferRuleId": $body_envelope_transfer_rule_id, "eventType": $event_type, "fromGroup": $from_group, "fromUser": $from_user, "modifiedDate": $modified_date, "modifiedUser": $modified_user, "toFolder": $to_folder, "toUser": $to_user} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "*/*"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: {}, body: $req_body}
 }
 
 # Gets the status of a single envelope.
@@ -3054,11 +3211,13 @@ export def "v2-1-accounts-envelopes get" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($account_id | is-empty) { error make --unspanned { msg: "path parameter 'accountId' must be non-empty" } }
+  if ($envelope_id | is-empty) { error make --unspanned { msg: "path parameter 'envelopeId' must be non-empty" } }
   let qp = [(serialize-qp "advanced_update" $advanced_update "scalar") (serialize-qp "include" $include "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({account_id: (encode-path-segment $account_id), envelope_id: (encode-path-segment $envelope_id)} | format pattern "/v2.1/accounts/{account_id}/envelopes/{envelope_id}") $qp)
   let accept_val = "*/*"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"advanced_update": $advanced_update, "include": $include} | compact), body: null}
 }
 
 # Send, void, or modify a draft envelope. Purge documents from a completed envelope.
@@ -3175,13 +3334,15 @@ export def "v2-1-accounts-envelopes update" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($account_id | is-empty) { error make --unspanned { msg: "path parameter 'accountId' must be non-empty" } }
+  if ($envelope_id | is-empty) { error make --unspanned { msg: "path parameter 'envelopeId' must be non-empty" } }
   let qp = [(serialize-qp "advanced_update" $advanced_update "scalar") (serialize-qp "resend_envelope" $resend_envelope "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({account_id: (encode-path-segment $account_id), envelope_id: (encode-path-segment $envelope_id)} | format pattern "/v2.1/accounts/{account_id}/envelopes/{envelope_id}") $qp)
   let req_body = {"accessControlListBase64": $access_control_list_base64, "allowComments": $allow_comments, "allowMarkup": $allow_markup, "allowReassign": $allow_reassign, "allowViewHistory": $allow_view_history, "anySigner": $any_signer, "asynchronous": $asynchronous, "attachmentsUri": $attachments_uri, "authoritativeCopy": $authoritative_copy, "authoritativeCopyDefault": $authoritative_copy_default, "autoNavigation": $auto_navigation, "brandId": $brand_id, "brandLock": $brand_lock, "burnDefaultTabData": $burn_default_tab_data, "certificateUri": $certificate_uri, "completedDateTime": $completed_date_time, "copyRecipientData": $copy_recipient_data, "createdDateTime": $created_date_time, "customFields": $custom_fields, "customFieldsUri": $custom_fields_uri, "declinedDateTime": $declined_date_time, "deletedDateTime": $deleted_date_time, "deliveredDateTime": $delivered_date_time, "disableResponsiveDocument": $disable_responsive_document, "documentBase64": $document_base64, "documentsCombinedUri": $documents_combined_uri, "documentsUri": $documents_uri, "emailBlurb": $email_blurb, "emailSettings": $email_settings, "emailSubject": $email_subject, "enableWetSign": $enable_wet_sign, "enforceSignerVisibility": $enforce_signer_visibility, "envelopeAttachments": $envelope_attachments, "envelopeCustomMetadata": $envelope_custom_metadata, "envelopeDocuments": $envelope_documents, "envelopeId": $body_envelope_id, "envelopeIdStamping": $envelope_id_stamping, "envelopeLocation": $envelope_location, "envelopeMetadata": $envelope_metadata, "envelopeUri": $envelope_uri, "expireAfter": $expire_after, "expireDateTime": $expire_date_time, "expireEnabled": $expire_enabled, "externalEnvelopeId": $external_envelope_id, "folders": $folders, "hasComments": $has_comments, "hasFormDataChanged": $has_form_data_changed, "hasWavFile": $has_wav_file, "holder": $holder, "initialSentDateTime": $initial_sent_date_time, "is21CFRPart11": $is21_cfr_part11, "isDynamicEnvelope": $is_dynamic_envelope, "isSignatureProviderEnvelope": $is_signature_provider_envelope, "lastModifiedDateTime": $last_modified_date_time, "location": $location, "lockInformation": $lock_information, "messageLock": $message_lock, "notification": $notification, "notificationUri": $notification_uri, "powerForm": $power_form, "purgeCompletedDate": $purge_completed_date, "purgeRequestDate": $purge_request_date, "purgeState": $purge_state, "recipients": $recipients, "recipientsLock": $recipients_lock, "recipientsUri": $recipients_uri, "sender": $sender, "sentDateTime": $sent_date_time, "signerCanSignOnMobile": $signer_can_sign_on_mobile, "signingLocation": $signing_location, "status": $status, "statusChangedDateTime": $status_changed_date_time, "statusDateTime": $status_date_time, "templatesUri": $templates_uri, "transactionId": $transaction_id, "useDisclosure": $use_disclosure, "voidedDateTime": $voided_date_time, "voidedReason": $voided_reason, "workflow": $workflow} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "*/*"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: ({"advanced_update": $advanced_update, "resend_envelope": $resend_envelope} | compact), body: $req_body}
 }
 
 # Deletes one or more attachments from a draft envelope.
@@ -3206,12 +3367,14 @@ export def "v2-1-accounts-envelopes-attachments delete" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($account_id | is-empty) { error make --unspanned { msg: "path parameter 'accountId' must be non-empty" } }
+  if ($envelope_id | is-empty) { error make --unspanned { msg: "path parameter 'envelopeId' must be non-empty" } }
   let full_url = (build-url $base ({account_id: (encode-path-segment $account_id), envelope_id: (encode-path-segment $envelope_id)} | format pattern "/v2.1/accounts/{account_id}/envelopes/{envelope_id}/attachments"))
   let req_body = {"attachments": $attachments} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "*/*"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: {}, body: $req_body}
 }
 
 # Returns a list of attachments associated with a specified envelope
@@ -3233,10 +3396,12 @@ export def "v2-1-accounts-envelopes-attachments list" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($account_id | is-empty) { error make --unspanned { msg: "path parameter 'accountId' must be non-empty" } }
+  if ($envelope_id | is-empty) { error make --unspanned { msg: "path parameter 'envelopeId' must be non-empty" } }
   let full_url = (build-url $base ({account_id: (encode-path-segment $account_id), envelope_id: (encode-path-segment $envelope_id)} | format pattern "/v2.1/accounts/{account_id}/envelopes/{envelope_id}/attachments"))
   let accept_val = "*/*"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
 }
 
 # Adds one or more attachments to a draft or in-process envelope.
@@ -3244,7 +3409,7 @@ export def "v2-1-accounts-envelopes-attachments list" [
 # PUT /v2.1/accounts/{accountId}/envelopes/{envelopeId}/attachments
 # operationId: Attachments_PutAttachments
 # --attachments item shape: {accessControl?: string, attachmentId?: string, attachmentType?: string, data?: string, label?: string, name?: string, remoteUrl?: string}
-export def "v2-1-accounts-envelopes-attachments update-by-accountId-envelopeId" [
+export def "v2-1-accounts-envelopes-attachments update-by-account-id-envelope-id" [
   account_id: string
   envelope_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -3261,12 +3426,14 @@ export def "v2-1-accounts-envelopes-attachments update-by-accountId-envelopeId" 
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($account_id | is-empty) { error make --unspanned { msg: "path parameter 'accountId' must be non-empty" } }
+  if ($envelope_id | is-empty) { error make --unspanned { msg: "path parameter 'envelopeId' must be non-empty" } }
   let full_url = (build-url $base ({account_id: (encode-path-segment $account_id), envelope_id: (encode-path-segment $envelope_id)} | format pattern "/v2.1/accounts/{account_id}/envelopes/{envelope_id}/attachments"))
   let req_body = {"attachments": $attachments} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "*/*"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: {}, body: $req_body}
 }
 
 # Retrieves an attachment from an envelope.
@@ -3289,17 +3456,20 @@ export def "v2-1-accounts-envelopes-attachments get" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($account_id | is-empty) { error make --unspanned { msg: "path parameter 'accountId' must be non-empty" } }
+  if ($envelope_id | is-empty) { error make --unspanned { msg: "path parameter 'envelopeId' must be non-empty" } }
+  if ($attachment_id | is-empty) { error make --unspanned { msg: "path parameter 'attachmentId' must be non-empty" } }
   let full_url = (build-url $base ({account_id: (encode-path-segment $account_id), envelope_id: (encode-path-segment $envelope_id), attachment_id: (encode-path-segment $attachment_id)} | format pattern "/v2.1/accounts/{account_id}/envelopes/{envelope_id}/attachments/{attachment_id}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
 }
 
 # Adds an attachment to a draft or in-process envelope.
 #
 # PUT /v2.1/accounts/{accountId}/envelopes/{envelopeId}/attachments/{attachmentId}
 # operationId: Attachments_PutAttachment
-export def "v2-1-accounts-envelopes-attachments update-by-accountId-envelopeId-attachmentId" [
+export def "v2-1-accounts-envelopes-attachments update-by-account-id-envelope-id-attachment-id" [
   account_id: string
   envelope_id: string
   attachment_id: string
@@ -3323,12 +3493,15 @@ export def "v2-1-accounts-envelopes-attachments update-by-accountId-envelopeId-a
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($account_id | is-empty) { error make --unspanned { msg: "path parameter 'accountId' must be non-empty" } }
+  if ($envelope_id | is-empty) { error make --unspanned { msg: "path parameter 'envelopeId' must be non-empty" } }
+  if ($attachment_id | is-empty) { error make --unspanned { msg: "path parameter 'attachmentId' must be non-empty" } }
   let full_url = (build-url $base ({account_id: (encode-path-segment $account_id), envelope_id: (encode-path-segment $envelope_id), attachment_id: (encode-path-segment $attachment_id)} | format pattern "/v2.1/accounts/{account_id}/envelopes/{envelope_id}/attachments/{attachment_id}"))
   let req_body = {"accessControl": $access_control, "attachmentId": $body_attachment_id, "attachmentType": $attachment_type, "data": $data, "label": $label, "name": $name, "remoteUrl": $remote_url} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "*/*"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: {}, body: $req_body}
 }
 
 # Gets the envelope audit events for an envelope.
@@ -3350,10 +3523,12 @@ export def "v2-1-accounts-envelopes-audit-events get" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($account_id | is-empty) { error make --unspanned { msg: "path parameter 'accountId' must be non-empty" } }
+  if ($envelope_id | is-empty) { error make --unspanned { msg: "path parameter 'envelopeId' must be non-empty" } }
   let full_url = (build-url $base ({account_id: (encode-path-segment $account_id), envelope_id: (encode-path-segment $envelope_id)} | format pattern "/v2.1/accounts/{account_id}/envelopes/{envelope_id}/audit_events"))
   let accept_val = "*/*"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
 }
 
 # Gets a PDF transcript of all of the comments in an envelope.
@@ -3376,11 +3551,13 @@ export def "v2-1-accounts-envelopes-comments-transcript get" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($account_id | is-empty) { error make --unspanned { msg: "path parameter 'accountId' must be non-empty" } }
+  if ($envelope_id | is-empty) { error make --unspanned { msg: "path parameter 'envelopeId' must be non-empty" } }
   let qp = [(serialize-qp "encoding" $encoding "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({account_id: (encode-path-segment $account_id), envelope_id: (encode-path-segment $envelope_id)} | format pattern "/v2.1/accounts/{account_id}/envelopes/{envelope_id}/comments/transcript") $qp)
   let accept_val = "application/pdf"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"encoding": $encoding} | compact), body: null}
 }
 
 # Deletes envelope custom fields for draft and in-process envelopes.
@@ -3407,12 +3584,14 @@ export def "v2-1-accounts-envelopes-custom-fields delete" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($account_id | is-empty) { error make --unspanned { msg: "path parameter 'accountId' must be non-empty" } }
+  if ($envelope_id | is-empty) { error make --unspanned { msg: "path parameter 'envelopeId' must be non-empty" } }
   let full_url = (build-url $base ({account_id: (encode-path-segment $account_id), envelope_id: (encode-path-segment $envelope_id)} | format pattern "/v2.1/accounts/{account_id}/envelopes/{envelope_id}/custom_fields"))
   let req_body = {"listCustomFields": $list_custom_fields, "textCustomFields": $text_custom_fields} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "*/*"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: {}, body: $req_body}
 }
 
 # Gets the custom field information for the specified envelope.
@@ -3434,10 +3613,12 @@ export def "v2-1-accounts-envelopes-custom-fields get" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($account_id | is-empty) { error make --unspanned { msg: "path parameter 'accountId' must be non-empty" } }
+  if ($envelope_id | is-empty) { error make --unspanned { msg: "path parameter 'envelopeId' must be non-empty" } }
   let full_url = (build-url $base ({account_id: (encode-path-segment $account_id), envelope_id: (encode-path-segment $envelope_id)} | format pattern "/v2.1/accounts/{account_id}/envelopes/{envelope_id}/custom_fields"))
   let accept_val = "*/*"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
 }
 
 # Creates envelope custom fields for an envelope.
@@ -3464,12 +3645,14 @@ export def "v2-1-accounts-envelopes-custom-fields create" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($account_id | is-empty) { error make --unspanned { msg: "path parameter 'accountId' must be non-empty" } }
+  if ($envelope_id | is-empty) { error make --unspanned { msg: "path parameter 'envelopeId' must be non-empty" } }
   let full_url = (build-url $base ({account_id: (encode-path-segment $account_id), envelope_id: (encode-path-segment $envelope_id)} | format pattern "/v2.1/accounts/{account_id}/envelopes/{envelope_id}/custom_fields"))
   let req_body = {"listCustomFields": $list_custom_fields, "textCustomFields": $text_custom_fields} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "*/*"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: {}, body: $req_body}
 }
 
 # Updates envelope custom fields in an envelope.
@@ -3496,12 +3679,14 @@ export def "v2-1-accounts-envelopes-custom-fields update" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($account_id | is-empty) { error make --unspanned { msg: "path parameter 'accountId' must be non-empty" } }
+  if ($envelope_id | is-empty) { error make --unspanned { msg: "path parameter 'envelopeId' must be non-empty" } }
   let full_url = (build-url $base ({account_id: (encode-path-segment $account_id), envelope_id: (encode-path-segment $envelope_id)} | format pattern "/v2.1/accounts/{account_id}/envelopes/{envelope_id}/custom_fields"))
   let req_body = {"listCustomFields": $list_custom_fields, "textCustomFields": $text_custom_fields} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "*/*"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: {}, body: $req_body}
 }
 
 # Deletes documents from a draft envelope.
@@ -3632,12 +3817,14 @@ export def "v2-1-accounts-envelopes-documents delete" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($account_id | is-empty) { error make --unspanned { msg: "path parameter 'accountId' must be non-empty" } }
+  if ($envelope_id | is-empty) { error make --unspanned { msg: "path parameter 'envelopeId' must be non-empty" } }
   let full_url = (build-url $base ({account_id: (encode-path-segment $account_id), envelope_id: (encode-path-segment $envelope_id)} | format pattern "/v2.1/accounts/{account_id}/envelopes/{envelope_id}/documents"))
   let req_body = {"accessControlListBase64": $access_control_list_base64, "accessibility": $accessibility, "allowComments": $allow_comments, "allowMarkup": $allow_markup, "allowReassign": $allow_reassign, "allowRecipientRecursion": $allow_recipient_recursion, "allowViewHistory": $allow_view_history, "anySigner": $any_signer, "asynchronous": $asynchronous, "attachments": $attachments, "attachmentsUri": $attachments_uri, "authoritativeCopy": $authoritative_copy, "authoritativeCopyDefault": $authoritative_copy_default, "autoNavigation": $auto_navigation, "brandId": $brand_id, "brandLock": $brand_lock, "burnDefaultTabData": $burn_default_tab_data, "certificateUri": $certificate_uri, "completedDateTime": $completed_date_time, "compositeTemplates": $composite_templates, "copyRecipientData": $copy_recipient_data, "createdDateTime": $created_date_time, "customFields": $custom_fields, "customFieldsUri": $custom_fields_uri, "declinedDateTime": $declined_date_time, "deletedDateTime": $deleted_date_time, "deliveredDateTime": $delivered_date_time, "disableResponsiveDocument": $disable_responsive_document, "documentBase64": $document_base64, "documents": $documents, "documentsCombinedUri": $documents_combined_uri, "documentsUri": $documents_uri, "emailBlurb": $email_blurb, "emailSettings": $email_settings, "emailSubject": $email_subject, "enableWetSign": $enable_wet_sign, "enforceSignerVisibility": $enforce_signer_visibility, "envelopeAttachments": $envelope_attachments, "envelopeCustomMetadata": $envelope_custom_metadata, "envelopeDocuments": $envelope_documents, "envelopeId": $body_envelope_id, "envelopeIdStamping": $envelope_id_stamping, "envelopeLocation": $envelope_location, "envelopeMetadata": $envelope_metadata, "envelopeUri": $envelope_uri, "eventNotification": $event_notification, "expireAfter": $expire_after, "expireDateTime": $expire_date_time, "expireEnabled": $expire_enabled, "externalEnvelopeId": $external_envelope_id, "folders": $folders, "hasComments": $has_comments, "hasFormDataChanged": $has_form_data_changed, "hasWavFile": $has_wav_file, "holder": $holder, "initialSentDateTime": $initial_sent_date_time, "is21CFRPart11": $is21_cfr_part11, "isDynamicEnvelope": $is_dynamic_envelope, "isSignatureProviderEnvelope": $is_signature_provider_envelope, "lastModifiedDateTime": $last_modified_date_time, "location": $location, "lockInformation": $lock_information, "messageLock": $message_lock, "notification": $notification, "notificationUri": $notification_uri, "password": $password, "powerForm": $power_form, "purgeCompletedDate": $purge_completed_date, "purgeRequestDate": $purge_request_date, "purgeState": $purge_state, "recipientViewRequest": $recipient_view_request, "recipients": $recipients, "recipientsLock": $recipients_lock, "recipientsUri": $recipients_uri, "sender": $sender, "sentDateTime": $sent_date_time, "signerCanSignOnMobile": $signer_can_sign_on_mobile, "signingLocation": $signing_location, "status": $status, "statusChangedDateTime": $status_changed_date_time, "statusDateTime": $status_date_time, "templateId": $template_id, "templateRoles": $template_roles, "templatesUri": $templates_uri, "transactionId": $transaction_id, "useDisclosure": $use_disclosure, "voidedDateTime": $voided_date_time, "voidedReason": $voided_reason, "workflow": $workflow} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "*/*"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: {}, body: $req_body}
 }
 
 # Gets a list of documents in an envelope.
@@ -3665,11 +3852,13 @@ export def "v2-1-accounts-envelopes-documents list" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($account_id | is-empty) { error make --unspanned { msg: "path parameter 'accountId' must be non-empty" } }
+  if ($envelope_id | is-empty) { error make --unspanned { msg: "path parameter 'envelopeId' must be non-empty" } }
   let qp = [(serialize-qp "documents_by_userid" $documents_by_userid "scalar") (serialize-qp "include_docgen_formfields" $include_docgen_formfields "scalar") (serialize-qp "include_metadata" $include_metadata "scalar") (serialize-qp "include_tabs" $include_tabs "scalar") (serialize-qp "recipient_id" $recipient_id "scalar") (serialize-qp "shared_user_id" $shared_user_id "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({account_id: (encode-path-segment $account_id), envelope_id: (encode-path-segment $envelope_id)} | format pattern "/v2.1/accounts/{account_id}/envelopes/{envelope_id}/documents") $qp)
   let accept_val = "*/*"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"documents_by_userid": $documents_by_userid, "include_docgen_formfields": $include_docgen_formfields, "include_metadata": $include_metadata, "include_tabs": $include_tabs, "recipient_id": $recipient_id, "shared_user_id": $shared_user_id} | compact), body: null}
 }
 
 # Adds one or more documents to an existing envelope.
@@ -3695,7 +3884,7 @@ export def "v2-1-accounts-envelopes-documents list" [
 # --sender shape: {accountId?: string, accountName?: string, activationAccessCode?: string, email?: string, errorDetails?: record, loginStatus?: string, membershipId?: string, sendActivationEmail?: string, uri?: string, userId?: string, userName?: string, userStatus?: string, userType?: string}
 # --templateRoles item shape: {accessCode?: string, additionalNotifications?: list, clientUserId?: string, defaultRecipient?: string, deliveryMethod?: string, email?: string, emailNotification?: record, embeddedRecipientStartURL?: string, inPersonSignerName?: string, name?: string, phoneNumber?: record, recipientSignatureProviders?: list, roleName?: string, routingOrder?: string, signingGroupId?: string, tabs?: record}
 # --workflow shape: {currentWorkflowStepId?: string, resumeDate?: string, scheduledSending?: record, workflowStatus?: string, workflowSteps?: list}
-export def "v2-1-accounts-envelopes-documents update-by-accountId-envelopeId" [
+export def "v2-1-accounts-envelopes-documents update-by-account-id-envelope-id" [
   account_id: string
   envelope_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -3800,12 +3989,14 @@ export def "v2-1-accounts-envelopes-documents update-by-accountId-envelopeId" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($account_id | is-empty) { error make --unspanned { msg: "path parameter 'accountId' must be non-empty" } }
+  if ($envelope_id | is-empty) { error make --unspanned { msg: "path parameter 'envelopeId' must be non-empty" } }
   let full_url = (build-url $base ({account_id: (encode-path-segment $account_id), envelope_id: (encode-path-segment $envelope_id)} | format pattern "/v2.1/accounts/{account_id}/envelopes/{envelope_id}/documents"))
   let req_body = {"accessControlListBase64": $access_control_list_base64, "accessibility": $accessibility, "allowComments": $allow_comments, "allowMarkup": $allow_markup, "allowReassign": $allow_reassign, "allowRecipientRecursion": $allow_recipient_recursion, "allowViewHistory": $allow_view_history, "anySigner": $any_signer, "asynchronous": $asynchronous, "attachments": $attachments, "attachmentsUri": $attachments_uri, "authoritativeCopy": $authoritative_copy, "authoritativeCopyDefault": $authoritative_copy_default, "autoNavigation": $auto_navigation, "brandId": $brand_id, "brandLock": $brand_lock, "burnDefaultTabData": $burn_default_tab_data, "certificateUri": $certificate_uri, "completedDateTime": $completed_date_time, "compositeTemplates": $composite_templates, "copyRecipientData": $copy_recipient_data, "createdDateTime": $created_date_time, "customFields": $custom_fields, "customFieldsUri": $custom_fields_uri, "declinedDateTime": $declined_date_time, "deletedDateTime": $deleted_date_time, "deliveredDateTime": $delivered_date_time, "disableResponsiveDocument": $disable_responsive_document, "documentBase64": $document_base64, "documents": $documents, "documentsCombinedUri": $documents_combined_uri, "documentsUri": $documents_uri, "emailBlurb": $email_blurb, "emailSettings": $email_settings, "emailSubject": $email_subject, "enableWetSign": $enable_wet_sign, "enforceSignerVisibility": $enforce_signer_visibility, "envelopeAttachments": $envelope_attachments, "envelopeCustomMetadata": $envelope_custom_metadata, "envelopeDocuments": $envelope_documents, "envelopeId": $body_envelope_id, "envelopeIdStamping": $envelope_id_stamping, "envelopeLocation": $envelope_location, "envelopeMetadata": $envelope_metadata, "envelopeUri": $envelope_uri, "eventNotification": $event_notification, "expireAfter": $expire_after, "expireDateTime": $expire_date_time, "expireEnabled": $expire_enabled, "externalEnvelopeId": $external_envelope_id, "folders": $folders, "hasComments": $has_comments, "hasFormDataChanged": $has_form_data_changed, "hasWavFile": $has_wav_file, "holder": $holder, "initialSentDateTime": $initial_sent_date_time, "is21CFRPart11": $is21_cfr_part11, "isDynamicEnvelope": $is_dynamic_envelope, "isSignatureProviderEnvelope": $is_signature_provider_envelope, "lastModifiedDateTime": $last_modified_date_time, "location": $location, "lockInformation": $lock_information, "messageLock": $message_lock, "notification": $notification, "notificationUri": $notification_uri, "password": $password, "powerForm": $power_form, "purgeCompletedDate": $purge_completed_date, "purgeRequestDate": $purge_request_date, "purgeState": $purge_state, "recipientViewRequest": $recipient_view_request, "recipients": $recipients, "recipientsLock": $recipients_lock, "recipientsUri": $recipients_uri, "sender": $sender, "sentDateTime": $sent_date_time, "signerCanSignOnMobile": $signer_can_sign_on_mobile, "signingLocation": $signing_location, "status": $status, "statusChangedDateTime": $status_changed_date_time, "statusDateTime": $status_date_time, "templateId": $template_id, "templateRoles": $template_roles, "templatesUri": $templates_uri, "transactionId": $transaction_id, "useDisclosure": $use_disclosure, "voidedDateTime": $voided_date_time, "voidedReason": $voided_reason, "workflow": $workflow} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "*/*"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: {}, body: $req_body}
 }
 
 # Retrieves a single document or all documents from an envelope.
@@ -3837,18 +4028,21 @@ export def "v2-1-accounts-envelopes-documents get" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($account_id | is-empty) { error make --unspanned { msg: "path parameter 'accountId' must be non-empty" } }
+  if ($envelope_id | is-empty) { error make --unspanned { msg: "path parameter 'envelopeId' must be non-empty" } }
+  if ($document_id | is-empty) { error make --unspanned { msg: "path parameter 'documentId' must be non-empty" } }
   let qp = [(serialize-qp "certificate" $certificate "scalar") (serialize-qp "documents_by_userid" $documents_by_userid "scalar") (serialize-qp "encoding" $encoding "scalar") (serialize-qp "encrypt" $encrypt "scalar") (serialize-qp "language" $language "scalar") (serialize-qp "recipient_id" $recipient_id "scalar") (serialize-qp "shared_user_id" $shared_user_id "scalar") (serialize-qp "show_changes" $show_changes "scalar") (serialize-qp "watermark" $watermark "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({account_id: (encode-path-segment $account_id), envelope_id: (encode-path-segment $envelope_id), document_id: (encode-path-segment $document_id)} | format pattern "/v2.1/accounts/{account_id}/envelopes/{envelope_id}/documents/{document_id}") $qp)
   let accept_val = "application/pdf"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"certificate": $certificate, "documents_by_userid": $documents_by_userid, "encoding": $encoding, "encrypt": $encrypt, "language": $language, "recipient_id": $recipient_id, "shared_user_id": $shared_user_id, "show_changes": $show_changes, "watermark": $watermark} | compact), body: null}
 }
 
 # Adds or replaces a document in an existing envelope.
 #
 # PUT /v2.1/accounts/{accountId}/envelopes/{envelopeId}/documents/{documentId}
 # operationId: Documents_PutDocument
-export def "v2-1-accounts-envelopes-documents update-by-accountId-envelopeId-documentId" [
+export def "v2-1-accounts-envelopes-documents update-by-account-id-envelope-id-document-id" [
   account_id: string
   envelope_id: string
   document_id: string
@@ -3866,12 +4060,15 @@ export def "v2-1-accounts-envelopes-documents update-by-accountId-envelopeId-doc
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($account_id | is-empty) { error make --unspanned { msg: "path parameter 'accountId' must be non-empty" } }
+  if ($envelope_id | is-empty) { error make --unspanned { msg: "path parameter 'envelopeId' must be non-empty" } }
+  if ($document_id | is-empty) { error make --unspanned { msg: "path parameter 'documentId' must be non-empty" } }
   let full_url = (build-url $base ({account_id: (encode-path-segment $account_id), envelope_id: (encode-path-segment $envelope_id), document_id: (encode-path-segment $document_id)} | format pattern "/v2.1/accounts/{account_id}/envelopes/{envelope_id}/documents/{document_id}"))
   let req_body = $body
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else if (($input | is-not-empty) and ($req_body | is-empty)) { $input } else { $req_body }
   let accept_val = "*/*"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/pdf" $req_body
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/pdf" $req_body {query: {}, body: $req_body}
 }
 
 # Deletes custom document fields from an existing envelope document.
@@ -3897,12 +4094,15 @@ export def "v2-1-accounts-envelopes-documents-fields delete" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($account_id | is-empty) { error make --unspanned { msg: "path parameter 'accountId' must be non-empty" } }
+  if ($envelope_id | is-empty) { error make --unspanned { msg: "path parameter 'envelopeId' must be non-empty" } }
+  if ($document_id | is-empty) { error make --unspanned { msg: "path parameter 'documentId' must be non-empty" } }
   let full_url = (build-url $base ({account_id: (encode-path-segment $account_id), envelope_id: (encode-path-segment $envelope_id), document_id: (encode-path-segment $document_id)} | format pattern "/v2.1/accounts/{account_id}/envelopes/{envelope_id}/documents/{document_id}/fields"))
   let req_body = {"documentFields": $document_fields} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "*/*"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: {}, body: $req_body}
 }
 
 # Gets the custom document fields from an existing envelope document.
@@ -3925,10 +4125,13 @@ export def "v2-1-accounts-envelopes-documents-fields get" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($account_id | is-empty) { error make --unspanned { msg: "path parameter 'accountId' must be non-empty" } }
+  if ($envelope_id | is-empty) { error make --unspanned { msg: "path parameter 'envelopeId' must be non-empty" } }
+  if ($document_id | is-empty) { error make --unspanned { msg: "path parameter 'documentId' must be non-empty" } }
   let full_url = (build-url $base ({account_id: (encode-path-segment $account_id), envelope_id: (encode-path-segment $envelope_id), document_id: (encode-path-segment $document_id)} | format pattern "/v2.1/accounts/{account_id}/envelopes/{envelope_id}/documents/{document_id}/fields"))
   let accept_val = "*/*"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
 }
 
 # Creates custom document fields in an existing envelope document.
@@ -3954,12 +4157,15 @@ export def "v2-1-accounts-envelopes-documents-fields create" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($account_id | is-empty) { error make --unspanned { msg: "path parameter 'accountId' must be non-empty" } }
+  if ($envelope_id | is-empty) { error make --unspanned { msg: "path parameter 'envelopeId' must be non-empty" } }
+  if ($document_id | is-empty) { error make --unspanned { msg: "path parameter 'documentId' must be non-empty" } }
   let full_url = (build-url $base ({account_id: (encode-path-segment $account_id), envelope_id: (encode-path-segment $envelope_id), document_id: (encode-path-segment $document_id)} | format pattern "/v2.1/accounts/{account_id}/envelopes/{envelope_id}/documents/{document_id}/fields"))
   let req_body = {"documentFields": $document_fields} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "*/*"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: {}, body: $req_body}
 }
 
 # Updates existing custom document fields in an existing envelope document.
@@ -3985,12 +4191,15 @@ export def "v2-1-accounts-envelopes-documents-fields update" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($account_id | is-empty) { error make --unspanned { msg: "path parameter 'accountId' must be non-empty" } }
+  if ($envelope_id | is-empty) { error make --unspanned { msg: "path parameter 'envelopeId' must be non-empty" } }
+  if ($document_id | is-empty) { error make --unspanned { msg: "path parameter 'documentId' must be non-empty" } }
   let full_url = (build-url $base ({account_id: (encode-path-segment $account_id), envelope_id: (encode-path-segment $envelope_id), document_id: (encode-path-segment $document_id)} | format pattern "/v2.1/accounts/{account_id}/envelopes/{envelope_id}/documents/{document_id}/fields"))
   let req_body = {"documentFields": $document_fields} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "*/*"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: {}, body: $req_body}
 }
 
 # Retrieves the HTML definition used to generate a dynamically sized responsive document.
@@ -4013,10 +4222,13 @@ export def "v2-1-accounts-envelopes-documents-html-definitions get-responsive" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($account_id | is-empty) { error make --unspanned { msg: "path parameter 'accountId' must be non-empty" } }
+  if ($envelope_id | is-empty) { error make --unspanned { msg: "path parameter 'envelopeId' must be non-empty" } }
+  if ($document_id | is-empty) { error make --unspanned { msg: "path parameter 'documentId' must be non-empty" } }
   let full_url = (build-url $base ({account_id: (encode-path-segment $account_id), envelope_id: (encode-path-segment $envelope_id), document_id: (encode-path-segment $document_id)} | format pattern "/v2.1/accounts/{account_id}/envelopes/{envelope_id}/documents/{document_id}/html_definitions"))
   let accept_val = "*/*"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
 }
 
 # Returns document page images based on input.
@@ -4046,11 +4258,14 @@ export def "v2-1-accounts-envelopes-documents-pages get-images" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($account_id | is-empty) { error make --unspanned { msg: "path parameter 'accountId' must be non-empty" } }
+  if ($envelope_id | is-empty) { error make --unspanned { msg: "path parameter 'envelopeId' must be non-empty" } }
+  if ($document_id | is-empty) { error make --unspanned { msg: "path parameter 'documentId' must be non-empty" } }
   let qp = [(serialize-qp "count" $count "scalar") (serialize-qp "dpi" $dpi "scalar") (serialize-qp "max_height" $max_height "scalar") (serialize-qp "max_width" $max_width "scalar") (serialize-qp "nocache" $nocache "scalar") (serialize-qp "show_changes" $show_changes "scalar") (serialize-qp "start_position" $start_position "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({account_id: (encode-path-segment $account_id), envelope_id: (encode-path-segment $envelope_id), document_id: (encode-path-segment $document_id)} | format pattern "/v2.1/accounts/{account_id}/envelopes/{envelope_id}/documents/{document_id}/pages") $qp)
   let accept_val = "*/*"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"count": $count, "dpi": $dpi, "max_height": $max_height, "max_width": $max_width, "nocache": $nocache, "show_changes": $show_changes, "start_position": $start_position} | compact), body: null}
 }
 
 # Deletes a page from a document in an envelope.
@@ -4074,10 +4289,14 @@ export def "v2-1-accounts-envelopes-documents-pages delete" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($account_id | is-empty) { error make --unspanned { msg: "path parameter 'accountId' must be non-empty" } }
+  if ($envelope_id | is-empty) { error make --unspanned { msg: "path parameter 'envelopeId' must be non-empty" } }
+  if ($document_id | is-empty) { error make --unspanned { msg: "path parameter 'documentId' must be non-empty" } }
+  if ($page_number | is-empty) { error make --unspanned { msg: "path parameter 'pageNumber' must be non-empty" } }
   let full_url = (build-url $base ({account_id: (encode-path-segment $account_id), envelope_id: (encode-path-segment $envelope_id), document_id: (encode-path-segment $document_id), page_number: (encode-path-segment $page_number)} | format pattern "/v2.1/accounts/{account_id}/envelopes/{envelope_id}/documents/{document_id}/pages/{page_number}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
 }
 
 # Gets a page image from an envelope for display.
@@ -4105,11 +4324,15 @@ export def "v2-1-accounts-envelopes-documents-pages-page-image get" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($account_id | is-empty) { error make --unspanned { msg: "path parameter 'accountId' must be non-empty" } }
+  if ($envelope_id | is-empty) { error make --unspanned { msg: "path parameter 'envelopeId' must be non-empty" } }
+  if ($document_id | is-empty) { error make --unspanned { msg: "path parameter 'documentId' must be non-empty" } }
+  if ($page_number | is-empty) { error make --unspanned { msg: "path parameter 'pageNumber' must be non-empty" } }
   let qp = [(serialize-qp "dpi" $dpi "scalar") (serialize-qp "max_height" $max_height "scalar") (serialize-qp "max_width" $max_width "scalar") (serialize-qp "show_changes" $show_changes "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({account_id: (encode-path-segment $account_id), envelope_id: (encode-path-segment $envelope_id), document_id: (encode-path-segment $document_id), page_number: (encode-path-segment $page_number)} | format pattern "/v2.1/accounts/{account_id}/envelopes/{envelope_id}/documents/{document_id}/pages/{page_number}/page_image") $qp)
   let accept_val = "image/png"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"dpi": $dpi, "max_height": $max_height, "max_width": $max_width, "show_changes": $show_changes} | compact), body: null}
 }
 
 # Rotates page image from an envelope for display.
@@ -4136,12 +4359,16 @@ export def "v2-1-accounts-envelopes-documents-pages-page-image update" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($account_id | is-empty) { error make --unspanned { msg: "path parameter 'accountId' must be non-empty" } }
+  if ($envelope_id | is-empty) { error make --unspanned { msg: "path parameter 'envelopeId' must be non-empty" } }
+  if ($document_id | is-empty) { error make --unspanned { msg: "path parameter 'documentId' must be non-empty" } }
+  if ($page_number | is-empty) { error make --unspanned { msg: "path parameter 'pageNumber' must be non-empty" } }
   let full_url = (build-url $base ({account_id: (encode-path-segment $account_id), envelope_id: (encode-path-segment $envelope_id), document_id: (encode-path-segment $document_id), page_number: (encode-path-segment $page_number)} | format pattern "/v2.1/accounts/{account_id}/envelopes/{envelope_id}/documents/{document_id}/pages/{page_number}/page_image"))
   let req_body = {"password": $password, "rotate": $rotate} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: {}, body: $req_body}
 }
 
 # Returns tabs on the specified page.
@@ -4165,10 +4392,14 @@ export def "v2-1-accounts-envelopes-documents-pages-tabs get" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($account_id | is-empty) { error make --unspanned { msg: "path parameter 'accountId' must be non-empty" } }
+  if ($envelope_id | is-empty) { error make --unspanned { msg: "path parameter 'envelopeId' must be non-empty" } }
+  if ($document_id | is-empty) { error make --unspanned { msg: "path parameter 'documentId' must be non-empty" } }
+  if ($page_number | is-empty) { error make --unspanned { msg: "path parameter 'pageNumber' must be non-empty" } }
   let full_url = (build-url $base ({account_id: (encode-path-segment $account_id), envelope_id: (encode-path-segment $envelope_id), document_id: (encode-path-segment $document_id), page_number: (encode-path-segment $page_number)} | format pattern "/v2.1/accounts/{account_id}/envelopes/{envelope_id}/documents/{document_id}/pages/{page_number}/tabs"))
   let accept_val = "*/*"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
 }
 
 # Creates a preview of the responsive version of a document.
@@ -4204,12 +4435,15 @@ export def "v2-1-accounts-envelopes-documents-responsive-html-preview create" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($account_id | is-empty) { error make --unspanned { msg: "path parameter 'accountId' must be non-empty" } }
+  if ($envelope_id | is-empty) { error make --unspanned { msg: "path parameter 'envelopeId' must be non-empty" } }
+  if ($document_id | is-empty) { error make --unspanned { msg: "path parameter 'documentId' must be non-empty" } }
   let full_url = (build-url $base ({account_id: (encode-path-segment $account_id), envelope_id: (encode-path-segment $envelope_id), document_id: (encode-path-segment $document_id)} | format pattern "/v2.1/accounts/{account_id}/envelopes/{envelope_id}/documents/{document_id}/responsive_html_preview"))
   let req_body = {"displayAnchorPrefix": $display_anchor_prefix, "displayAnchors": $display_anchors, "displayOrder": $display_order, "displayPageNumber": $display_page_number, "documentGuid": $document_guid, "documentId": $body_document_id, "headerLabel": $header_label, "maxScreenWidth": $max_screen_width, "removeEmptyTags": $remove_empty_tags, "showMobileOptimizedToggle": $show_mobile_optimized_toggle, "source": $body_source} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "*/*"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: {}, body: $req_body}
 }
 
 # Deletes tabs from a document in an envelope.
@@ -4313,12 +4547,15 @@ export def "v2-1-accounts-envelopes-documents-tabs delete" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($account_id | is-empty) { error make --unspanned { msg: "path parameter 'accountId' must be non-empty" } }
+  if ($envelope_id | is-empty) { error make --unspanned { msg: "path parameter 'envelopeId' must be non-empty" } }
+  if ($document_id | is-empty) { error make --unspanned { msg: "path parameter 'documentId' must be non-empty" } }
   let full_url = (build-url $base ({account_id: (encode-path-segment $account_id), envelope_id: (encode-path-segment $envelope_id), document_id: (encode-path-segment $document_id)} | format pattern "/v2.1/accounts/{account_id}/envelopes/{envelope_id}/documents/{document_id}/tabs"))
   let req_body = {"approveTabs": $approve_tabs, "checkboxTabs": $checkbox_tabs, "commentThreadTabs": $comment_thread_tabs, "commissionCountyTabs": $commission_county_tabs, "commissionExpirationTabs": $commission_expiration_tabs, "commissionNumberTabs": $commission_number_tabs, "commissionStateTabs": $commission_state_tabs, "companyTabs": $company_tabs, "currencyTabs": $currency_tabs, "dateSignedTabs": $date_signed_tabs, "dateTabs": $date_tabs, "declineTabs": $decline_tabs, "drawTabs": $draw_tabs, "emailAddressTabs": $email_address_tabs, "emailTabs": $email_tabs, "envelopeIdTabs": $envelope_id_tabs, "firstNameTabs": $first_name_tabs, "formulaTabs": $formula_tabs, "fullNameTabs": $full_name_tabs, "initialHereTabs": $initial_here_tabs, "lastNameTabs": $last_name_tabs, "listTabs": $list_tabs, "notarizeTabs": $notarize_tabs, "notarySealTabs": $notary_seal_tabs, "noteTabs": $note_tabs, "numberTabs": $number_tabs, "numericalTabs": $numerical_tabs, "phoneNumberTabs": $phone_number_tabs, "polyLineOverlayTabs": $poly_line_overlay_tabs, "prefillTabs": $prefill_tabs, "radioGroupTabs": $radio_group_tabs, "signHereTabs": $sign_here_tabs, "signerAttachmentTabs": $signer_attachment_tabs, "smartSectionTabs": $smart_section_tabs, "ssnTabs": $ssn_tabs, "tabGroups": $tab_groups, "textTabs": $text_tabs, "titleTabs": $title_tabs, "viewTabs": $view_tabs, "zipTabs": $zip_tabs} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "*/*"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: {}, body: $req_body}
 }
 
 # Returns the tabs on a document.
@@ -4343,11 +4580,14 @@ export def "v2-1-accounts-envelopes-documents-tabs get" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($account_id | is-empty) { error make --unspanned { msg: "path parameter 'accountId' must be non-empty" } }
+  if ($envelope_id | is-empty) { error make --unspanned { msg: "path parameter 'envelopeId' must be non-empty" } }
+  if ($document_id | is-empty) { error make --unspanned { msg: "path parameter 'documentId' must be non-empty" } }
   let qp = [(serialize-qp "include_metadata" $include_metadata "scalar") (serialize-qp "page_numbers" $page_numbers "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({account_id: (encode-path-segment $account_id), envelope_id: (encode-path-segment $envelope_id), document_id: (encode-path-segment $document_id)} | format pattern "/v2.1/accounts/{account_id}/envelopes/{envelope_id}/documents/{document_id}/tabs") $qp)
   let accept_val = "*/*"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"include_metadata": $include_metadata, "page_numbers": $page_numbers} | compact), body: null}
 }
 
 # Adds tabs to a document in an envelope.
@@ -4451,12 +4691,15 @@ export def "v2-1-accounts-envelopes-documents-tabs create" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($account_id | is-empty) { error make --unspanned { msg: "path parameter 'accountId' must be non-empty" } }
+  if ($envelope_id | is-empty) { error make --unspanned { msg: "path parameter 'envelopeId' must be non-empty" } }
+  if ($document_id | is-empty) { error make --unspanned { msg: "path parameter 'documentId' must be non-empty" } }
   let full_url = (build-url $base ({account_id: (encode-path-segment $account_id), envelope_id: (encode-path-segment $envelope_id), document_id: (encode-path-segment $document_id)} | format pattern "/v2.1/accounts/{account_id}/envelopes/{envelope_id}/documents/{document_id}/tabs"))
   let req_body = {"approveTabs": $approve_tabs, "checkboxTabs": $checkbox_tabs, "commentThreadTabs": $comment_thread_tabs, "commissionCountyTabs": $commission_county_tabs, "commissionExpirationTabs": $commission_expiration_tabs, "commissionNumberTabs": $commission_number_tabs, "commissionStateTabs": $commission_state_tabs, "companyTabs": $company_tabs, "currencyTabs": $currency_tabs, "dateSignedTabs": $date_signed_tabs, "dateTabs": $date_tabs, "declineTabs": $decline_tabs, "drawTabs": $draw_tabs, "emailAddressTabs": $email_address_tabs, "emailTabs": $email_tabs, "envelopeIdTabs": $envelope_id_tabs, "firstNameTabs": $first_name_tabs, "formulaTabs": $formula_tabs, "fullNameTabs": $full_name_tabs, "initialHereTabs": $initial_here_tabs, "lastNameTabs": $last_name_tabs, "listTabs": $list_tabs, "notarizeTabs": $notarize_tabs, "notarySealTabs": $notary_seal_tabs, "noteTabs": $note_tabs, "numberTabs": $number_tabs, "numericalTabs": $numerical_tabs, "phoneNumberTabs": $phone_number_tabs, "polyLineOverlayTabs": $poly_line_overlay_tabs, "prefillTabs": $prefill_tabs, "radioGroupTabs": $radio_group_tabs, "signHereTabs": $sign_here_tabs, "signerAttachmentTabs": $signer_attachment_tabs, "smartSectionTabs": $smart_section_tabs, "ssnTabs": $ssn_tabs, "tabGroups": $tab_groups, "textTabs": $text_tabs, "titleTabs": $title_tabs, "viewTabs": $view_tabs, "zipTabs": $zip_tabs} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "*/*"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: {}, body: $req_body}
 }
 
 # Updates the tabs for document.
@@ -4560,12 +4803,15 @@ export def "v2-1-accounts-envelopes-documents-tabs update" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($account_id | is-empty) { error make --unspanned { msg: "path parameter 'accountId' must be non-empty" } }
+  if ($envelope_id | is-empty) { error make --unspanned { msg: "path parameter 'envelopeId' must be non-empty" } }
+  if ($document_id | is-empty) { error make --unspanned { msg: "path parameter 'documentId' must be non-empty" } }
   let full_url = (build-url $base ({account_id: (encode-path-segment $account_id), envelope_id: (encode-path-segment $envelope_id), document_id: (encode-path-segment $document_id)} | format pattern "/v2.1/accounts/{account_id}/envelopes/{envelope_id}/documents/{document_id}/tabs"))
   let req_body = {"approveTabs": $approve_tabs, "checkboxTabs": $checkbox_tabs, "commentThreadTabs": $comment_thread_tabs, "commissionCountyTabs": $commission_county_tabs, "commissionExpirationTabs": $commission_expiration_tabs, "commissionNumberTabs": $commission_number_tabs, "commissionStateTabs": $commission_state_tabs, "companyTabs": $company_tabs, "currencyTabs": $currency_tabs, "dateSignedTabs": $date_signed_tabs, "dateTabs": $date_tabs, "declineTabs": $decline_tabs, "drawTabs": $draw_tabs, "emailAddressTabs": $email_address_tabs, "emailTabs": $email_tabs, "envelopeIdTabs": $envelope_id_tabs, "firstNameTabs": $first_name_tabs, "formulaTabs": $formula_tabs, "fullNameTabs": $full_name_tabs, "initialHereTabs": $initial_here_tabs, "lastNameTabs": $last_name_tabs, "listTabs": $list_tabs, "notarizeTabs": $notarize_tabs, "notarySealTabs": $notary_seal_tabs, "noteTabs": $note_tabs, "numberTabs": $number_tabs, "numericalTabs": $numerical_tabs, "phoneNumberTabs": $phone_number_tabs, "polyLineOverlayTabs": $poly_line_overlay_tabs, "prefillTabs": $prefill_tabs, "radioGroupTabs": $radio_group_tabs, "signHereTabs": $sign_here_tabs, "signerAttachmentTabs": $signer_attachment_tabs, "smartSectionTabs": $smart_section_tabs, "ssnTabs": $ssn_tabs, "tabGroups": $tab_groups, "textTabs": $text_tabs, "titleTabs": $title_tabs, "viewTabs": $view_tabs, "zipTabs": $zip_tabs} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "*/*"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: {}, body: $req_body}
 }
 
 # Gets the templates associated with a document in an existing envelope.
@@ -4589,11 +4835,14 @@ export def "v2-1-accounts-envelopes-documents-templates get" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($account_id | is-empty) { error make --unspanned { msg: "path parameter 'accountId' must be non-empty" } }
+  if ($envelope_id | is-empty) { error make --unspanned { msg: "path parameter 'envelopeId' must be non-empty" } }
+  if ($document_id | is-empty) { error make --unspanned { msg: "path parameter 'documentId' must be non-empty" } }
   let qp = [(serialize-qp "include" $include "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({account_id: (encode-path-segment $account_id), envelope_id: (encode-path-segment $envelope_id), document_id: (encode-path-segment $document_id)} | format pattern "/v2.1/accounts/{account_id}/envelopes/{envelope_id}/documents/{document_id}/templates") $qp)
   let accept_val = "*/*"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"include": $include} | compact), body: null}
 }
 
 # Adds templates to a document in an envelope.
@@ -4620,13 +4869,16 @@ export def "v2-1-accounts-envelopes-documents-templates create" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($account_id | is-empty) { error make --unspanned { msg: "path parameter 'accountId' must be non-empty" } }
+  if ($envelope_id | is-empty) { error make --unspanned { msg: "path parameter 'envelopeId' must be non-empty" } }
+  if ($document_id | is-empty) { error make --unspanned { msg: "path parameter 'documentId' must be non-empty" } }
   let qp = [(serialize-qp "preserve_template_recipient" $preserve_template_recipient "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({account_id: (encode-path-segment $account_id), envelope_id: (encode-path-segment $envelope_id), document_id: (encode-path-segment $document_id)} | format pattern "/v2.1/accounts/{account_id}/envelopes/{envelope_id}/documents/{document_id}/templates") $qp)
   let req_body = {"documentTemplates": $document_templates} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "*/*"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: ({"preserve_template_recipient": $preserve_template_recipient} | compact), body: $req_body}
 }
 
 # Deletes a template from a document in an existing envelope.
@@ -4650,10 +4902,14 @@ export def "v2-1-accounts-envelopes-documents-templates delete" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($account_id | is-empty) { error make --unspanned { msg: "path parameter 'accountId' must be non-empty" } }
+  if ($envelope_id | is-empty) { error make --unspanned { msg: "path parameter 'envelopeId' must be non-empty" } }
+  if ($document_id | is-empty) { error make --unspanned { msg: "path parameter 'documentId' must be non-empty" } }
+  if ($template_id | is-empty) { error make --unspanned { msg: "path parameter 'templateId' must be non-empty" } }
   let full_url = (build-url $base ({account_id: (encode-path-segment $account_id), envelope_id: (encode-path-segment $envelope_id), document_id: (encode-path-segment $document_id), template_id: (encode-path-segment $template_id)} | format pattern "/v2.1/accounts/{account_id}/envelopes/{envelope_id}/documents/{document_id}/templates/{template_id}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
 }
 
 # Deletes the email setting overrides for an envelope.
@@ -4675,10 +4931,12 @@ export def "v2-1-accounts-envelopes-email-settings delete" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($account_id | is-empty) { error make --unspanned { msg: "path parameter 'accountId' must be non-empty" } }
+  if ($envelope_id | is-empty) { error make --unspanned { msg: "path parameter 'envelopeId' must be non-empty" } }
   let full_url = (build-url $base ({account_id: (encode-path-segment $account_id), envelope_id: (encode-path-segment $envelope_id)} | format pattern "/v2.1/accounts/{account_id}/envelopes/{envelope_id}/email_settings"))
   let accept_val = "*/*"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
 }
 
 # Gets the email setting overrides for an envelope.
@@ -4700,10 +4958,12 @@ export def "v2-1-accounts-envelopes-email-settings get" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($account_id | is-empty) { error make --unspanned { msg: "path parameter 'accountId' must be non-empty" } }
+  if ($envelope_id | is-empty) { error make --unspanned { msg: "path parameter 'envelopeId' must be non-empty" } }
   let full_url = (build-url $base ({account_id: (encode-path-segment $account_id), envelope_id: (encode-path-segment $envelope_id)} | format pattern "/v2.1/accounts/{account_id}/envelopes/{envelope_id}/email_settings"))
   let accept_val = "*/*"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
 }
 
 # Adds email setting overrides to an envelope.
@@ -4730,12 +4990,14 @@ export def "v2-1-accounts-envelopes-email-settings create" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($account_id | is-empty) { error make --unspanned { msg: "path parameter 'accountId' must be non-empty" } }
+  if ($envelope_id | is-empty) { error make --unspanned { msg: "path parameter 'envelopeId' must be non-empty" } }
   let full_url = (build-url $base ({account_id: (encode-path-segment $account_id), envelope_id: (encode-path-segment $envelope_id)} | format pattern "/v2.1/accounts/{account_id}/envelopes/{envelope_id}/email_settings"))
   let req_body = {"bccEmailAddresses": $bcc_email_addresses, "replyEmailAddressOverride": $reply_email_address_override, "replyEmailNameOverride": $reply_email_name_override} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "*/*"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: {}, body: $req_body}
 }
 
 # Updates the email setting overrides for an envelope.
@@ -4762,12 +5024,14 @@ export def "v2-1-accounts-envelopes-email-settings update" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($account_id | is-empty) { error make --unspanned { msg: "path parameter 'accountId' must be non-empty" } }
+  if ($envelope_id | is-empty) { error make --unspanned { msg: "path parameter 'envelopeId' must be non-empty" } }
   let full_url = (build-url $base ({account_id: (encode-path-segment $account_id), envelope_id: (encode-path-segment $envelope_id)} | format pattern "/v2.1/accounts/{account_id}/envelopes/{envelope_id}/email_settings"))
   let req_body = {"bccEmailAddresses": $bcc_email_addresses, "replyEmailAddressOverride": $reply_email_address_override, "replyEmailNameOverride": $reply_email_name_override} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "*/*"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: {}, body: $req_body}
 }
 
 # Returns envelope tab data for an existing envelope.
@@ -4789,10 +5053,12 @@ export def "v2-1-accounts-envelopes-form-data get" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($account_id | is-empty) { error make --unspanned { msg: "path parameter 'accountId' must be non-empty" } }
+  if ($envelope_id | is-empty) { error make --unspanned { msg: "path parameter 'envelopeId' must be non-empty" } }
   let full_url = (build-url $base ({account_id: (encode-path-segment $account_id), envelope_id: (encode-path-segment $envelope_id)} | format pattern "/v2.1/accounts/{account_id}/envelopes/{envelope_id}/form_data"))
   let accept_val = "*/*"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
 }
 
 # Gets the Original HTML Definition used to generate the Responsive HTML for the envelope.
@@ -4814,10 +5080,12 @@ export def "v2-1-accounts-envelopes-html-definitions get-responsive" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($account_id | is-empty) { error make --unspanned { msg: "path parameter 'accountId' must be non-empty" } }
+  if ($envelope_id | is-empty) { error make --unspanned { msg: "path parameter 'envelopeId' must be non-empty" } }
   let full_url = (build-url $base ({account_id: (encode-path-segment $account_id), envelope_id: (encode-path-segment $envelope_id)} | format pattern "/v2.1/accounts/{account_id}/envelopes/{envelope_id}/html_definitions"))
   let accept_val = "*/*"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
 }
 
 # Deletes an envelope lock.
@@ -4839,10 +5107,12 @@ export def "v2-1-accounts-envelopes-lock delete" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($account_id | is-empty) { error make --unspanned { msg: "path parameter 'accountId' must be non-empty" } }
+  if ($envelope_id | is-empty) { error make --unspanned { msg: "path parameter 'envelopeId' must be non-empty" } }
   let full_url = (build-url $base ({account_id: (encode-path-segment $account_id), envelope_id: (encode-path-segment $envelope_id)} | format pattern "/v2.1/accounts/{account_id}/envelopes/{envelope_id}/lock"))
   let accept_val = "*/*"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
 }
 
 # Gets envelope lock information.
@@ -4864,10 +5134,12 @@ export def "v2-1-accounts-envelopes-lock get" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($account_id | is-empty) { error make --unspanned { msg: "path parameter 'accountId' must be non-empty" } }
+  if ($envelope_id | is-empty) { error make --unspanned { msg: "path parameter 'envelopeId' must be non-empty" } }
   let full_url = (build-url $base ({account_id: (encode-path-segment $account_id), envelope_id: (encode-path-segment $envelope_id)} | format pattern "/v2.1/accounts/{account_id}/envelopes/{envelope_id}/lock"))
   let accept_val = "*/*"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
 }
 
 # Locks an envelope.
@@ -4895,12 +5167,14 @@ export def "v2-1-accounts-envelopes-lock create" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($account_id | is-empty) { error make --unspanned { msg: "path parameter 'accountId' must be non-empty" } }
+  if ($envelope_id | is-empty) { error make --unspanned { msg: "path parameter 'envelopeId' must be non-empty" } }
   let full_url = (build-url $base ({account_id: (encode-path-segment $account_id), envelope_id: (encode-path-segment $envelope_id)} | format pattern "/v2.1/accounts/{account_id}/envelopes/{envelope_id}/lock"))
   let req_body = {"lockDurationInSeconds": $lock_duration_in_seconds, "lockType": $lock_type, "lockedByApp": $locked_by_app, "templatePassword": $template_password, "useScratchPad": $use_scratch_pad} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "*/*"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: {}, body: $req_body}
 }
 
 # Updates an envelope lock.
@@ -4928,12 +5202,14 @@ export def "v2-1-accounts-envelopes-lock update" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($account_id | is-empty) { error make --unspanned { msg: "path parameter 'accountId' must be non-empty" } }
+  if ($envelope_id | is-empty) { error make --unspanned { msg: "path parameter 'envelopeId' must be non-empty" } }
   let full_url = (build-url $base ({account_id: (encode-path-segment $account_id), envelope_id: (encode-path-segment $envelope_id)} | format pattern "/v2.1/accounts/{account_id}/envelopes/{envelope_id}/lock"))
   let req_body = {"lockDurationInSeconds": $lock_duration_in_seconds, "lockType": $lock_type, "lockedByApp": $locked_by_app, "templatePassword": $template_password, "useScratchPad": $use_scratch_pad} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "*/*"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: {}, body: $req_body}
 }
 
 # Gets envelope notification information.
@@ -4955,10 +5231,12 @@ export def "v2-1-accounts-envelopes-notification get" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($account_id | is-empty) { error make --unspanned { msg: "path parameter 'accountId' must be non-empty" } }
+  if ($envelope_id | is-empty) { error make --unspanned { msg: "path parameter 'envelopeId' must be non-empty" } }
   let full_url = (build-url $base ({account_id: (encode-path-segment $account_id), envelope_id: (encode-path-segment $envelope_id)} | format pattern "/v2.1/accounts/{account_id}/envelopes/{envelope_id}/notification"))
   let accept_val = "*/*"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
 }
 
 # Sets envelope notifications for an existing envelope.
@@ -4986,12 +5264,14 @@ export def "v2-1-accounts-envelopes-notification update" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($account_id | is-empty) { error make --unspanned { msg: "path parameter 'accountId' must be non-empty" } }
+  if ($envelope_id | is-empty) { error make --unspanned { msg: "path parameter 'envelopeId' must be non-empty" } }
   let full_url = (build-url $base ({account_id: (encode-path-segment $account_id), envelope_id: (encode-path-segment $envelope_id)} | format pattern "/v2.1/accounts/{account_id}/envelopes/{envelope_id}/notification"))
   let req_body = {"expirations": $expirations, "reminders": $reminders, "useAccountDefaults": $use_account_defaults} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "*/*"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: {}, body: $req_body}
 }
 
 # Deletes recipients from an envelope.
@@ -5010,7 +5290,7 @@ export def "v2-1-accounts-envelopes-notification update" [
 # --seals item shape: {accessCode?: string, accessCodeMetadata?: record, addAccessCodeToEmail?: string, allowSystemOverrideForLockedRecipient?: string, autoRespondedReason?: string, clientUserId?: string, completedCount?: string, customFields?: list<string>, declinedDateTime?: string, declinedReason?: string, deliveredDateTime?: string, deliveryMethod?: string, deliveryMethodMetadata?: record, designatorId?: string, designatorIdGuid?: string, documentVisibility?: list, emailNotification?: record, ... (40 more fields)}
 # --signers item shape: {accessCode?: string, accessCodeMetadata?: record, addAccessCodeToEmail?: string, additionalNotifications?: list, agentCanEditEmail?: string, agentCanEditName?: string, allowSystemOverrideForLockedRecipient?: string, autoNavigation?: string, autoRespondedReason?: string, bulkRecipientsUri?: string, canSignOffline?: string, clientUserId?: string, completedCount?: string, consentDetailsList?: list, creationReason?: string, customFields?: list<string>, declinedDateTime?: string, ... (80 more fields)}
 # --witnesses item shape: {accessCode?: string, accessCodeMetadata?: record, addAccessCodeToEmail?: string, additionalNotifications?: list, agentCanEditEmail?: string, agentCanEditName?: string, allowSystemOverrideForLockedRecipient?: string, autoNavigation?: string, autoRespondedReason?: string, bulkRecipientsUri?: string, canSignOffline?: string, clientUserId?: string, completedCount?: string, consentDetailsList?: list, creationReason?: string, customFields?: list<string>, declinedDateTime?: string, ... (82 more fields)}
-export def "v2-1-accounts-envelopes-recipients delete-by-accountId-envelopeId" [
+export def "v2-1-accounts-envelopes-recipients delete-by-account-id-envelope-id" [
   account_id: string
   envelope_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -5040,12 +5320,14 @@ export def "v2-1-accounts-envelopes-recipients delete-by-accountId-envelopeId" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($account_id | is-empty) { error make --unspanned { msg: "path parameter 'accountId' must be non-empty" } }
+  if ($envelope_id | is-empty) { error make --unspanned { msg: "path parameter 'envelopeId' must be non-empty" } }
   let full_url = (build-url $base ({account_id: (encode-path-segment $account_id), envelope_id: (encode-path-segment $envelope_id)} | format pattern "/v2.1/accounts/{account_id}/envelopes/{envelope_id}/recipients"))
   let req_body = {"agents": $agents, "carbonCopies": $carbon_copies, "certifiedDeliveries": $certified_deliveries, "currentRoutingOrder": $current_routing_order, "editors": $editors, "errorDetails": $error_details, "inPersonSigners": $in_person_signers, "intermediaries": $intermediaries, "notaries": $notaries, "participants": $participants, "recipientCount": $recipient_count, "seals": $seals, "signers": $signers, "witnesses": $witnesses} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "*/*"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: {}, body: $req_body}
 }
 
 # Gets the status of recipients for an envelope.
@@ -5071,11 +5353,13 @@ export def "v2-1-accounts-envelopes-recipients get" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($account_id | is-empty) { error make --unspanned { msg: "path parameter 'accountId' must be non-empty" } }
+  if ($envelope_id | is-empty) { error make --unspanned { msg: "path parameter 'envelopeId' must be non-empty" } }
   let qp = [(serialize-qp "include_anchor_tab_locations" $include_anchor_tab_locations "scalar") (serialize-qp "include_extended" $include_extended "scalar") (serialize-qp "include_metadata" $include_metadata "scalar") (serialize-qp "include_tabs" $include_tabs "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({account_id: (encode-path-segment $account_id), envelope_id: (encode-path-segment $envelope_id)} | format pattern "/v2.1/accounts/{account_id}/envelopes/{envelope_id}/recipients") $qp)
   let accept_val = "*/*"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"include_anchor_tab_locations": $include_anchor_tab_locations, "include_extended": $include_extended, "include_metadata": $include_metadata, "include_tabs": $include_tabs} | compact), body: null}
 }
 
 # Adds one or more recipients to an envelope.
@@ -5125,13 +5409,15 @@ export def "v2-1-accounts-envelopes-recipients create" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($account_id | is-empty) { error make --unspanned { msg: "path parameter 'accountId' must be non-empty" } }
+  if ($envelope_id | is-empty) { error make --unspanned { msg: "path parameter 'envelopeId' must be non-empty" } }
   let qp = [(serialize-qp "resend_envelope" $resend_envelope "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({account_id: (encode-path-segment $account_id), envelope_id: (encode-path-segment $envelope_id)} | format pattern "/v2.1/accounts/{account_id}/envelopes/{envelope_id}/recipients") $qp)
   let req_body = {"agents": $agents, "carbonCopies": $carbon_copies, "certifiedDeliveries": $certified_deliveries, "currentRoutingOrder": $current_routing_order, "editors": $editors, "errorDetails": $error_details, "inPersonSigners": $in_person_signers, "intermediaries": $intermediaries, "notaries": $notaries, "participants": $participants, "recipientCount": $recipient_count, "seals": $seals, "signers": $signers, "witnesses": $witnesses} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "*/*"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: ({"resend_envelope": $resend_envelope} | compact), body: $req_body}
 }
 
 # Updates recipients in a draft envelope or corrects recipient information for an in-process envelope.
@@ -5183,13 +5469,15 @@ export def "v2-1-accounts-envelopes-recipients update" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($account_id | is-empty) { error make --unspanned { msg: "path parameter 'accountId' must be non-empty" } }
+  if ($envelope_id | is-empty) { error make --unspanned { msg: "path parameter 'envelopeId' must be non-empty" } }
   let qp = [(serialize-qp "combine_same_order_recipients" $combine_same_order_recipients "scalar") (serialize-qp "offline_signing" $offline_signing "scalar") (serialize-qp "resend_envelope" $resend_envelope "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({account_id: (encode-path-segment $account_id), envelope_id: (encode-path-segment $envelope_id)} | format pattern "/v2.1/accounts/{account_id}/envelopes/{envelope_id}/recipients") $qp)
   let req_body = {"agents": $agents, "carbonCopies": $carbon_copies, "certifiedDeliveries": $certified_deliveries, "currentRoutingOrder": $current_routing_order, "editors": $editors, "errorDetails": $error_details, "inPersonSigners": $in_person_signers, "intermediaries": $intermediaries, "notaries": $notaries, "participants": $participants, "recipientCount": $recipient_count, "seals": $seals, "signers": $signers, "witnesses": $witnesses} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "*/*"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: ({"combine_same_order_recipients": $combine_same_order_recipients, "offline_signing": $offline_signing, "resend_envelope": $resend_envelope} | compact), body: $req_body}
 }
 
 # Updates document visibility for recipients
@@ -5197,7 +5485,7 @@ export def "v2-1-accounts-envelopes-recipients update" [
 # PUT /v2.1/accounts/{accountId}/envelopes/{envelopeId}/recipients/document_visibility
 # operationId: Recipients_PutRecipientsDocumentVisibility
 # --documentVisibility item shape: {documentId?: string, errorDetails?: record, recipientId?: string, rights?: string, visible?: string}
-export def "v2-1-accounts-envelopes-recipients-document-visibility update-by-accountId-envelopeId" [
+export def "v2-1-accounts-envelopes-recipients-document-visibility update-by-account-id-envelope-id" [
   account_id: string
   envelope_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -5214,19 +5502,21 @@ export def "v2-1-accounts-envelopes-recipients-document-visibility update-by-acc
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($account_id | is-empty) { error make --unspanned { msg: "path parameter 'accountId' must be non-empty" } }
+  if ($envelope_id | is-empty) { error make --unspanned { msg: "path parameter 'envelopeId' must be non-empty" } }
   let full_url = (build-url $base ({account_id: (encode-path-segment $account_id), envelope_id: (encode-path-segment $envelope_id)} | format pattern "/v2.1/accounts/{account_id}/envelopes/{envelope_id}/recipients/document_visibility"))
   let req_body = {"documentVisibility": $document_visibility} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "*/*"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: {}, body: $req_body}
 }
 
 # Deletes a recipient from an envelope.
 #
 # DELETE /v2.1/accounts/{accountId}/envelopes/{envelopeId}/recipients/{recipientId}
 # operationId: Recipients_DeleteRecipient
-export def "v2-1-accounts-envelopes-recipients delete-by-accountId-envelopeId-recipientId" [
+export def "v2-1-accounts-envelopes-recipients delete-by-account-id-envelope-id-recipient-id" [
   account_id: string
   envelope_id: string
   recipient_id: string
@@ -5242,10 +5532,13 @@ export def "v2-1-accounts-envelopes-recipients delete-by-accountId-envelopeId-re
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($account_id | is-empty) { error make --unspanned { msg: "path parameter 'accountId' must be non-empty" } }
+  if ($envelope_id | is-empty) { error make --unspanned { msg: "path parameter 'envelopeId' must be non-empty" } }
+  if ($recipient_id | is-empty) { error make --unspanned { msg: "path parameter 'recipientId' must be non-empty" } }
   let full_url = (build-url $base ({account_id: (encode-path-segment $account_id), envelope_id: (encode-path-segment $envelope_id), recipient_id: (encode-path-segment $recipient_id)} | format pattern "/v2.1/accounts/{account_id}/envelopes/{envelope_id}/recipients/{recipient_id}"))
   let accept_val = "*/*"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
 }
 
 # Gets the default Electronic Record and Signature Disclosure for an envelope.
@@ -5269,11 +5562,14 @@ export def "v2-1-accounts-envelopes-recipients-consumer-disclosure get" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($account_id | is-empty) { error make --unspanned { msg: "path parameter 'accountId' must be non-empty" } }
+  if ($envelope_id | is-empty) { error make --unspanned { msg: "path parameter 'envelopeId' must be non-empty" } }
+  if ($recipient_id | is-empty) { error make --unspanned { msg: "path parameter 'recipientId' must be non-empty" } }
   let qp = [(serialize-qp "langCode" $lang_code "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({account_id: (encode-path-segment $account_id), envelope_id: (encode-path-segment $envelope_id), recipient_id: (encode-path-segment $recipient_id)} | format pattern "/v2.1/accounts/{account_id}/envelopes/{envelope_id}/recipients/{recipient_id}/consumer_disclosure") $qp)
   let accept_val = "*/*"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"langCode": $lang_code} | compact), body: null}
 }
 
 # Gets the Electronic Record and Signature Disclosure for a specific envelope recipient.
@@ -5298,11 +5594,15 @@ export def "v2-1-accounts-envelopes-recipients-consumer-disclosure get-lang-code
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($account_id | is-empty) { error make --unspanned { msg: "path parameter 'accountId' must be non-empty" } }
+  if ($envelope_id | is-empty) { error make --unspanned { msg: "path parameter 'envelopeId' must be non-empty" } }
+  if ($recipient_id | is-empty) { error make --unspanned { msg: "path parameter 'recipientId' must be non-empty" } }
+  if ($lang_code | is-empty) { error make --unspanned { msg: "path parameter 'langCode' must be non-empty" } }
   let qp = [(serialize-qp "langCode" $lang_code "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({account_id: (encode-path-segment $account_id), envelope_id: (encode-path-segment $envelope_id), recipient_id: (encode-path-segment $recipient_id), lang_code: (encode-path-segment $lang_code)} | format pattern "/v2.1/accounts/{account_id}/envelopes/{envelope_id}/recipients/{recipient_id}/consumer_disclosure/{lang_code}") $qp)
   let accept_val = "*/*"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"langCode": $lang_code} | compact), body: null}
 }
 
 # Returns document visibility for a recipient
@@ -5325,10 +5625,13 @@ export def "v2-1-accounts-envelopes-recipients-document-visibility get" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($account_id | is-empty) { error make --unspanned { msg: "path parameter 'accountId' must be non-empty" } }
+  if ($envelope_id | is-empty) { error make --unspanned { msg: "path parameter 'envelopeId' must be non-empty" } }
+  if ($recipient_id | is-empty) { error make --unspanned { msg: "path parameter 'recipientId' must be non-empty" } }
   let full_url = (build-url $base ({account_id: (encode-path-segment $account_id), envelope_id: (encode-path-segment $envelope_id), recipient_id: (encode-path-segment $recipient_id)} | format pattern "/v2.1/accounts/{account_id}/envelopes/{envelope_id}/recipients/{recipient_id}/document_visibility"))
   let accept_val = "*/*"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
 }
 
 # Updates document visibility for a recipient
@@ -5336,7 +5639,7 @@ export def "v2-1-accounts-envelopes-recipients-document-visibility get" [
 # PUT /v2.1/accounts/{accountId}/envelopes/{envelopeId}/recipients/{recipientId}/document_visibility
 # operationId: Recipients_PutRecipientDocumentVisibility
 # --documentVisibility item shape: {documentId?: string, errorDetails?: record, recipientId?: string, rights?: string, visible?: string}
-export def "v2-1-accounts-envelopes-recipients-document-visibility update-by-accountId-envelopeId-recipientId" [
+export def "v2-1-accounts-envelopes-recipients-document-visibility update-by-account-id-envelope-id-recipient-id" [
   account_id: string
   envelope_id: string
   recipient_id: string
@@ -5354,12 +5657,15 @@ export def "v2-1-accounts-envelopes-recipients-document-visibility update-by-acc
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($account_id | is-empty) { error make --unspanned { msg: "path parameter 'accountId' must be non-empty" } }
+  if ($envelope_id | is-empty) { error make --unspanned { msg: "path parameter 'envelopeId' must be non-empty" } }
+  if ($recipient_id | is-empty) { error make --unspanned { msg: "path parameter 'recipientId' must be non-empty" } }
   let full_url = (build-url $base ({account_id: (encode-path-segment $account_id), envelope_id: (encode-path-segment $envelope_id), recipient_id: (encode-path-segment $recipient_id)} | format pattern "/v2.1/accounts/{account_id}/envelopes/{envelope_id}/recipients/{recipient_id}/document_visibility"))
   let req_body = {"documentVisibility": $document_visibility} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "*/*"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: {}, body: $req_body}
 }
 
 # Creates a resource token for a sender to request ID Evidence data.
@@ -5382,10 +5688,13 @@ export def "v2-1-accounts-envelopes-recipients-identity-proof-token create-file-
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($account_id | is-empty) { error make --unspanned { msg: "path parameter 'accountId' must be non-empty" } }
+  if ($envelope_id | is-empty) { error make --unspanned { msg: "path parameter 'envelopeId' must be non-empty" } }
+  if ($recipient_id | is-empty) { error make --unspanned { msg: "path parameter 'recipientId' must be non-empty" } }
   let full_url = (build-url $base ({account_id: (encode-path-segment $account_id), envelope_id: (encode-path-segment $envelope_id), recipient_id: (encode-path-segment $recipient_id)} | format pattern "/v2.1/accounts/{account_id}/envelopes/{envelope_id}/recipients/{recipient_id}/identity_proof_token"))
   let accept_val = "*/*"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
 }
 
 # Gets the initials image for a user.
@@ -5409,11 +5718,14 @@ export def "v2-1-accounts-envelopes-recipients-initials-image get" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($account_id | is-empty) { error make --unspanned { msg: "path parameter 'accountId' must be non-empty" } }
+  if ($envelope_id | is-empty) { error make --unspanned { msg: "path parameter 'envelopeId' must be non-empty" } }
+  if ($recipient_id | is-empty) { error make --unspanned { msg: "path parameter 'recipientId' must be non-empty" } }
   let qp = [(serialize-qp "include_chrome" $include_chrome "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({account_id: (encode-path-segment $account_id), envelope_id: (encode-path-segment $envelope_id), recipient_id: (encode-path-segment $recipient_id)} | format pattern "/v2.1/accounts/{account_id}/envelopes/{envelope_id}/recipients/{recipient_id}/initials_image") $qp)
   let accept_val = "image/gif"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"include_chrome": $include_chrome} | compact), body: null}
 }
 
 # Sets the initials image for an accountless signer.
@@ -5436,10 +5748,13 @@ export def "v2-1-accounts-envelopes-recipients-initials-image update" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($account_id | is-empty) { error make --unspanned { msg: "path parameter 'accountId' must be non-empty" } }
+  if ($envelope_id | is-empty) { error make --unspanned { msg: "path parameter 'envelopeId' must be non-empty" } }
+  if ($recipient_id | is-empty) { error make --unspanned { msg: "path parameter 'recipientId' must be non-empty" } }
   let full_url = (build-url $base ({account_id: (encode-path-segment $account_id), envelope_id: (encode-path-segment $envelope_id), recipient_id: (encode-path-segment $recipient_id)} | format pattern "/v2.1/accounts/{account_id}/envelopes/{envelope_id}/recipients/{recipient_id}/initials_image"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
 }
 
 # Gets signature information for a signer or sign-in-person recipient.
@@ -5462,10 +5777,13 @@ export def "v2-1-accounts-envelopes-recipients-signature get" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($account_id | is-empty) { error make --unspanned { msg: "path parameter 'accountId' must be non-empty" } }
+  if ($envelope_id | is-empty) { error make --unspanned { msg: "path parameter 'envelopeId' must be non-empty" } }
+  if ($recipient_id | is-empty) { error make --unspanned { msg: "path parameter 'recipientId' must be non-empty" } }
   let full_url = (build-url $base ({account_id: (encode-path-segment $account_id), envelope_id: (encode-path-segment $envelope_id), recipient_id: (encode-path-segment $recipient_id)} | format pattern "/v2.1/accounts/{account_id}/envelopes/{envelope_id}/recipients/{recipient_id}/signature"))
   let accept_val = "*/*"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
 }
 
 # Retrieve signature image information for a signer/sign-in-person recipient.
@@ -5489,11 +5807,14 @@ export def "v2-1-accounts-envelopes-recipients-signature-image get" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($account_id | is-empty) { error make --unspanned { msg: "path parameter 'accountId' must be non-empty" } }
+  if ($envelope_id | is-empty) { error make --unspanned { msg: "path parameter 'envelopeId' must be non-empty" } }
+  if ($recipient_id | is-empty) { error make --unspanned { msg: "path parameter 'recipientId' must be non-empty" } }
   let qp = [(serialize-qp "include_chrome" $include_chrome "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({account_id: (encode-path-segment $account_id), envelope_id: (encode-path-segment $envelope_id), recipient_id: (encode-path-segment $recipient_id)} | format pattern "/v2.1/accounts/{account_id}/envelopes/{envelope_id}/recipients/{recipient_id}/signature_image") $qp)
   let accept_val = "image/gif"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"include_chrome": $include_chrome} | compact), body: null}
 }
 
 # Sets the signature image for an accountless signer.
@@ -5516,10 +5837,13 @@ export def "v2-1-accounts-envelopes-recipients-signature-image update" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($account_id | is-empty) { error make --unspanned { msg: "path parameter 'accountId' must be non-empty" } }
+  if ($envelope_id | is-empty) { error make --unspanned { msg: "path parameter 'envelopeId' must be non-empty" } }
+  if ($recipient_id | is-empty) { error make --unspanned { msg: "path parameter 'recipientId' must be non-empty" } }
   let full_url = (build-url $base ({account_id: (encode-path-segment $account_id), envelope_id: (encode-path-segment $envelope_id), recipient_id: (encode-path-segment $recipient_id)} | format pattern "/v2.1/accounts/{account_id}/envelopes/{envelope_id}/recipients/{recipient_id}/signature_image"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
 }
 
 # Deletes the tabs associated with a recipient. **Note:** It is an error to delete a tab that has the `templateLocked` property set to true. This property corresponds to the **Restrict changes** option in the web app.
@@ -5623,12 +5947,15 @@ export def "v2-1-accounts-envelopes-recipients-tabs delete" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($account_id | is-empty) { error make --unspanned { msg: "path parameter 'accountId' must be non-empty" } }
+  if ($envelope_id | is-empty) { error make --unspanned { msg: "path parameter 'envelopeId' must be non-empty" } }
+  if ($recipient_id | is-empty) { error make --unspanned { msg: "path parameter 'recipientId' must be non-empty" } }
   let full_url = (build-url $base ({account_id: (encode-path-segment $account_id), envelope_id: (encode-path-segment $envelope_id), recipient_id: (encode-path-segment $recipient_id)} | format pattern "/v2.1/accounts/{account_id}/envelopes/{envelope_id}/recipients/{recipient_id}/tabs"))
   let req_body = {"approveTabs": $approve_tabs, "checkboxTabs": $checkbox_tabs, "commentThreadTabs": $comment_thread_tabs, "commissionCountyTabs": $commission_county_tabs, "commissionExpirationTabs": $commission_expiration_tabs, "commissionNumberTabs": $commission_number_tabs, "commissionStateTabs": $commission_state_tabs, "companyTabs": $company_tabs, "currencyTabs": $currency_tabs, "dateSignedTabs": $date_signed_tabs, "dateTabs": $date_tabs, "declineTabs": $decline_tabs, "drawTabs": $draw_tabs, "emailAddressTabs": $email_address_tabs, "emailTabs": $email_tabs, "envelopeIdTabs": $envelope_id_tabs, "firstNameTabs": $first_name_tabs, "formulaTabs": $formula_tabs, "fullNameTabs": $full_name_tabs, "initialHereTabs": $initial_here_tabs, "lastNameTabs": $last_name_tabs, "listTabs": $list_tabs, "notarizeTabs": $notarize_tabs, "notarySealTabs": $notary_seal_tabs, "noteTabs": $note_tabs, "numberTabs": $number_tabs, "numericalTabs": $numerical_tabs, "phoneNumberTabs": $phone_number_tabs, "polyLineOverlayTabs": $poly_line_overlay_tabs, "prefillTabs": $prefill_tabs, "radioGroupTabs": $radio_group_tabs, "signHereTabs": $sign_here_tabs, "signerAttachmentTabs": $signer_attachment_tabs, "smartSectionTabs": $smart_section_tabs, "ssnTabs": $ssn_tabs, "tabGroups": $tab_groups, "textTabs": $text_tabs, "titleTabs": $title_tabs, "viewTabs": $view_tabs, "zipTabs": $zip_tabs} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "*/*"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: {}, body: $req_body}
 }
 
 # Gets the tabs information for a signer or sign-in-person recipient in an envelope.
@@ -5653,11 +5980,14 @@ export def "v2-1-accounts-envelopes-recipients-tabs get" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($account_id | is-empty) { error make --unspanned { msg: "path parameter 'accountId' must be non-empty" } }
+  if ($envelope_id | is-empty) { error make --unspanned { msg: "path parameter 'envelopeId' must be non-empty" } }
+  if ($recipient_id | is-empty) { error make --unspanned { msg: "path parameter 'recipientId' must be non-empty" } }
   let qp = [(serialize-qp "include_anchor_tab_locations" $include_anchor_tab_locations "scalar") (serialize-qp "include_metadata" $include_metadata "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({account_id: (encode-path-segment $account_id), envelope_id: (encode-path-segment $envelope_id), recipient_id: (encode-path-segment $recipient_id)} | format pattern "/v2.1/accounts/{account_id}/envelopes/{envelope_id}/recipients/{recipient_id}/tabs") $qp)
   let accept_val = "*/*"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"include_anchor_tab_locations": $include_anchor_tab_locations, "include_metadata": $include_metadata} | compact), body: null}
 }
 
 # Adds tabs for a recipient.
@@ -5761,12 +6091,15 @@ export def "v2-1-accounts-envelopes-recipients-tabs create" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($account_id | is-empty) { error make --unspanned { msg: "path parameter 'accountId' must be non-empty" } }
+  if ($envelope_id | is-empty) { error make --unspanned { msg: "path parameter 'envelopeId' must be non-empty" } }
+  if ($recipient_id | is-empty) { error make --unspanned { msg: "path parameter 'recipientId' must be non-empty" } }
   let full_url = (build-url $base ({account_id: (encode-path-segment $account_id), envelope_id: (encode-path-segment $envelope_id), recipient_id: (encode-path-segment $recipient_id)} | format pattern "/v2.1/accounts/{account_id}/envelopes/{envelope_id}/recipients/{recipient_id}/tabs"))
   let req_body = {"approveTabs": $approve_tabs, "checkboxTabs": $checkbox_tabs, "commentThreadTabs": $comment_thread_tabs, "commissionCountyTabs": $commission_county_tabs, "commissionExpirationTabs": $commission_expiration_tabs, "commissionNumberTabs": $commission_number_tabs, "commissionStateTabs": $commission_state_tabs, "companyTabs": $company_tabs, "currencyTabs": $currency_tabs, "dateSignedTabs": $date_signed_tabs, "dateTabs": $date_tabs, "declineTabs": $decline_tabs, "drawTabs": $draw_tabs, "emailAddressTabs": $email_address_tabs, "emailTabs": $email_tabs, "envelopeIdTabs": $envelope_id_tabs, "firstNameTabs": $first_name_tabs, "formulaTabs": $formula_tabs, "fullNameTabs": $full_name_tabs, "initialHereTabs": $initial_here_tabs, "lastNameTabs": $last_name_tabs, "listTabs": $list_tabs, "notarizeTabs": $notarize_tabs, "notarySealTabs": $notary_seal_tabs, "noteTabs": $note_tabs, "numberTabs": $number_tabs, "numericalTabs": $numerical_tabs, "phoneNumberTabs": $phone_number_tabs, "polyLineOverlayTabs": $poly_line_overlay_tabs, "prefillTabs": $prefill_tabs, "radioGroupTabs": $radio_group_tabs, "signHereTabs": $sign_here_tabs, "signerAttachmentTabs": $signer_attachment_tabs, "smartSectionTabs": $smart_section_tabs, "ssnTabs": $ssn_tabs, "tabGroups": $tab_groups, "textTabs": $text_tabs, "titleTabs": $title_tabs, "viewTabs": $view_tabs, "zipTabs": $zip_tabs} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "*/*"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: {}, body: $req_body}
 }
 
 # Updates the tabs for a recipient.
@@ -5870,12 +6203,15 @@ export def "v2-1-accounts-envelopes-recipients-tabs update" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($account_id | is-empty) { error make --unspanned { msg: "path parameter 'accountId' must be non-empty" } }
+  if ($envelope_id | is-empty) { error make --unspanned { msg: "path parameter 'envelopeId' must be non-empty" } }
+  if ($recipient_id | is-empty) { error make --unspanned { msg: "path parameter 'recipientId' must be non-empty" } }
   let full_url = (build-url $base ({account_id: (encode-path-segment $account_id), envelope_id: (encode-path-segment $envelope_id), recipient_id: (encode-path-segment $recipient_id)} | format pattern "/v2.1/accounts/{account_id}/envelopes/{envelope_id}/recipients/{recipient_id}/tabs"))
   let req_body = {"approveTabs": $approve_tabs, "checkboxTabs": $checkbox_tabs, "commentThreadTabs": $comment_thread_tabs, "commissionCountyTabs": $commission_county_tabs, "commissionExpirationTabs": $commission_expiration_tabs, "commissionNumberTabs": $commission_number_tabs, "commissionStateTabs": $commission_state_tabs, "companyTabs": $company_tabs, "currencyTabs": $currency_tabs, "dateSignedTabs": $date_signed_tabs, "dateTabs": $date_tabs, "declineTabs": $decline_tabs, "drawTabs": $draw_tabs, "emailAddressTabs": $email_address_tabs, "emailTabs": $email_tabs, "envelopeIdTabs": $envelope_id_tabs, "firstNameTabs": $first_name_tabs, "formulaTabs": $formula_tabs, "fullNameTabs": $full_name_tabs, "initialHereTabs": $initial_here_tabs, "lastNameTabs": $last_name_tabs, "listTabs": $list_tabs, "notarizeTabs": $notarize_tabs, "notarySealTabs": $notary_seal_tabs, "noteTabs": $note_tabs, "numberTabs": $number_tabs, "numericalTabs": $numerical_tabs, "phoneNumberTabs": $phone_number_tabs, "polyLineOverlayTabs": $poly_line_overlay_tabs, "prefillTabs": $prefill_tabs, "radioGroupTabs": $radio_group_tabs, "signHereTabs": $sign_here_tabs, "signerAttachmentTabs": $signer_attachment_tabs, "smartSectionTabs": $smart_section_tabs, "ssnTabs": $ssn_tabs, "tabGroups": $tab_groups, "textTabs": $text_tabs, "titleTabs": $title_tabs, "viewTabs": $view_tabs, "zipTabs": $zip_tabs} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "*/*"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: {}, body: $req_body}
 }
 
 # Create the link to the page for manually reviewing IDs.
@@ -5898,10 +6234,13 @@ export def "v2-1-accounts-envelopes-recipients-views-identity-manual-review crea
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($account_id | is-empty) { error make --unspanned { msg: "path parameter 'accountId' must be non-empty" } }
+  if ($envelope_id | is-empty) { error make --unspanned { msg: "path parameter 'envelopeId' must be non-empty" } }
+  if ($recipient_id | is-empty) { error make --unspanned { msg: "path parameter 'recipientId' must be non-empty" } }
   let full_url = (build-url $base ({account_id: (encode-path-segment $account_id), envelope_id: (encode-path-segment $envelope_id), recipient_id: (encode-path-segment $recipient_id)} | format pattern "/v2.1/accounts/{account_id}/envelopes/{envelope_id}/recipients/{recipient_id}/views/identity_manual_review"))
   let accept_val = "*/*"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
 }
 
 # Creates a preview of the responsive versions of all of the documents in an envelope.
@@ -5936,12 +6275,14 @@ export def "v2-1-accounts-envelopes-responsive-html-preview create" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($account_id | is-empty) { error make --unspanned { msg: "path parameter 'accountId' must be non-empty" } }
+  if ($envelope_id | is-empty) { error make --unspanned { msg: "path parameter 'envelopeId' must be non-empty" } }
   let full_url = (build-url $base ({account_id: (encode-path-segment $account_id), envelope_id: (encode-path-segment $envelope_id)} | format pattern "/v2.1/accounts/{account_id}/envelopes/{envelope_id}/responsive_html_preview"))
   let req_body = {"displayAnchorPrefix": $display_anchor_prefix, "displayAnchors": $display_anchors, "displayOrder": $display_order, "displayPageNumber": $display_page_number, "documentGuid": $document_guid, "documentId": $document_id, "headerLabel": $header_label, "maxScreenWidth": $max_screen_width, "removeEmptyTags": $remove_empty_tags, "showMobileOptimizedToggle": $show_mobile_optimized_toggle, "source": $body_source} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "*/*"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: {}, body: $req_body}
 }
 
 # Reserved for DocuSign.
@@ -5963,10 +6304,12 @@ export def "v2-1-accounts-envelopes-tabs-blob get" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($account_id | is-empty) { error make --unspanned { msg: "path parameter 'accountId' must be non-empty" } }
+  if ($envelope_id | is-empty) { error make --unspanned { msg: "path parameter 'envelopeId' must be non-empty" } }
   let full_url = (build-url $base ({account_id: (encode-path-segment $account_id), envelope_id: (encode-path-segment $envelope_id)} | format pattern "/v2.1/accounts/{account_id}/envelopes/{envelope_id}/tabs_blob"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
 }
 
 # Reserved for DocuSign.
@@ -5988,10 +6331,12 @@ export def "v2-1-accounts-envelopes-tabs-blob update" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($account_id | is-empty) { error make --unspanned { msg: "path parameter 'accountId' must be non-empty" } }
+  if ($envelope_id | is-empty) { error make --unspanned { msg: "path parameter 'envelopeId' must be non-empty" } }
   let full_url = (build-url $base ({account_id: (encode-path-segment $account_id), envelope_id: (encode-path-segment $envelope_id)} | format pattern "/v2.1/accounts/{account_id}/envelopes/{envelope_id}/tabs_blob"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
 }
 
 # Get List of Templates used in an Envelope
@@ -6014,11 +6359,13 @@ export def "v2-1-accounts-envelopes-templates get" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($account_id | is-empty) { error make --unspanned { msg: "path parameter 'accountId' must be non-empty" } }
+  if ($envelope_id | is-empty) { error make --unspanned { msg: "path parameter 'envelopeId' must be non-empty" } }
   let qp = [(serialize-qp "include" $include "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({account_id: (encode-path-segment $account_id), envelope_id: (encode-path-segment $envelope_id)} | format pattern "/v2.1/accounts/{account_id}/envelopes/{envelope_id}/templates") $qp)
   let accept_val = "*/*"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"include": $include} | compact), body: null}
 }
 
 # Adds templates to an envelope.
@@ -6044,13 +6391,15 @@ export def "v2-1-accounts-envelopes-templates create" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($account_id | is-empty) { error make --unspanned { msg: "path parameter 'accountId' must be non-empty" } }
+  if ($envelope_id | is-empty) { error make --unspanned { msg: "path parameter 'envelopeId' must be non-empty" } }
   let qp = [(serialize-qp "preserve_template_recipient" $preserve_template_recipient "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({account_id: (encode-path-segment $account_id), envelope_id: (encode-path-segment $envelope_id)} | format pattern "/v2.1/accounts/{account_id}/envelopes/{envelope_id}/templates") $qp)
   let req_body = {"documentTemplates": $document_templates} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "*/*"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: ({"preserve_template_recipient": $preserve_template_recipient} | compact), body: $req_body}
 }
 
 # Revokes the correction view URL to the Envelope UI.
@@ -6077,12 +6426,14 @@ export def "v2-1-accounts-envelopes-views-correct delete" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($account_id | is-empty) { error make --unspanned { msg: "path parameter 'accountId' must be non-empty" } }
+  if ($envelope_id | is-empty) { error make --unspanned { msg: "path parameter 'envelopeId' must be non-empty" } }
   let full_url = (build-url $base ({account_id: (encode-path-segment $account_id), envelope_id: (encode-path-segment $envelope_id)} | format pattern "/v2.1/accounts/{account_id}/envelopes/{envelope_id}/views/correct"))
   let req_body = {"beginOnTagger": $begin_on_tagger, "returnUrl": $return_url, "suppressNavigation": $suppress_navigation, "viewUrl": $view_url} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: {}, body: $req_body}
 }
 
 # Returns a URL to the envelope correction UI.
@@ -6109,12 +6460,14 @@ export def "v2-1-accounts-envelopes-views-correct create" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($account_id | is-empty) { error make --unspanned { msg: "path parameter 'accountId' must be non-empty" } }
+  if ($envelope_id | is-empty) { error make --unspanned { msg: "path parameter 'envelopeId' must be non-empty" } }
   let full_url = (build-url $base ({account_id: (encode-path-segment $account_id), envelope_id: (encode-path-segment $envelope_id)} | format pattern "/v2.1/accounts/{account_id}/envelopes/{envelope_id}/views/correct"))
   let req_body = {"beginOnTagger": $begin_on_tagger, "returnUrl": $return_url, "suppressNavigation": $suppress_navigation, "viewUrl": $view_url} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "*/*"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: {}, body: $req_body}
 }
 
 # Returns a URL to the edit view UI.
@@ -6138,12 +6491,14 @@ export def "v2-1-accounts-envelopes-views-edit create" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($account_id | is-empty) { error make --unspanned { msg: "path parameter 'accountId' must be non-empty" } }
+  if ($envelope_id | is-empty) { error make --unspanned { msg: "path parameter 'envelopeId' must be non-empty" } }
   let full_url = (build-url $base ({account_id: (encode-path-segment $account_id), envelope_id: (encode-path-segment $envelope_id)} | format pattern "/v2.1/accounts/{account_id}/envelopes/{envelope_id}/views/edit"))
   let req_body = {"returnUrl": $return_url} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "*/*"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: {}, body: $req_body}
 }
 
 # Returns a URL to the recipient view UI.
@@ -6184,12 +6539,14 @@ export def "v2-1-accounts-envelopes-views-recipient create" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($account_id | is-empty) { error make --unspanned { msg: "path parameter 'accountId' must be non-empty" } }
+  if ($envelope_id | is-empty) { error make --unspanned { msg: "path parameter 'envelopeId' must be non-empty" } }
   let full_url = (build-url $base ({account_id: (encode-path-segment $account_id), envelope_id: (encode-path-segment $envelope_id)} | format pattern "/v2.1/accounts/{account_id}/envelopes/{envelope_id}/views/recipient"))
   let req_body = {"assertionId": $assertion_id, "authenticationInstant": $authentication_instant, "authenticationMethod": $authentication_method, "clientURLs": $client_ur_ls, "clientUserId": $client_user_id, "email": $email, "frameAncestors": $frame_ancestors, "messageOrigins": $message_origins, "pingFrequency": $ping_frequency, "pingUrl": $ping_url, "recipientId": $recipient_id, "returnUrl": $return_url, "securityDomain": $security_domain, "userId": $user_id, "userName": $user_name, "xFrameOptions": $x_frame_options, "xFrameOptionsAllowFromUrl": $x_frame_options_allow_from_url} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "*/*"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: {}, body: $req_body}
 }
 
 # Creates an envelope recipient preview.
@@ -6224,12 +6581,14 @@ export def "v2-1-accounts-envelopes-views-recipient-preview create" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($account_id | is-empty) { error make --unspanned { msg: "path parameter 'accountId' must be non-empty" } }
+  if ($envelope_id | is-empty) { error make --unspanned { msg: "path parameter 'envelopeId' must be non-empty" } }
   let full_url = (build-url $base ({account_id: (encode-path-segment $account_id), envelope_id: (encode-path-segment $envelope_id)} | format pattern "/v2.1/accounts/{account_id}/envelopes/{envelope_id}/views/recipient_preview"))
   let req_body = {"assertionId": $assertion_id, "authenticationInstant": $authentication_instant, "authenticationMethod": $authentication_method, "clientURLs": $client_ur_ls, "pingFrequency": $ping_frequency, "pingUrl": $ping_url, "recipientId": $recipient_id, "returnUrl": $return_url, "securityDomain": $security_domain, "xFrameOptions": $x_frame_options, "xFrameOptionsAllowFromUrl": $x_frame_options_allow_from_url} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "*/*"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: {}, body: $req_body}
 }
 
 # Returns a URL to the sender view UI.
@@ -6253,12 +6612,14 @@ export def "v2-1-accounts-envelopes-views-sender create" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($account_id | is-empty) { error make --unspanned { msg: "path parameter 'accountId' must be non-empty" } }
+  if ($envelope_id | is-empty) { error make --unspanned { msg: "path parameter 'envelopeId' must be non-empty" } }
   let full_url = (build-url $base ({account_id: (encode-path-segment $account_id), envelope_id: (encode-path-segment $envelope_id)} | format pattern "/v2.1/accounts/{account_id}/envelopes/{envelope_id}/views/sender"))
   let req_body = {"returnUrl": $return_url} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "*/*"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: {}, body: $req_body}
 }
 
 # Returns a URL to the shared recipient view UI for an envelope.
@@ -6299,12 +6660,14 @@ export def "v2-1-accounts-envelopes-views-shared create-recipient" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($account_id | is-empty) { error make --unspanned { msg: "path parameter 'accountId' must be non-empty" } }
+  if ($envelope_id | is-empty) { error make --unspanned { msg: "path parameter 'envelopeId' must be non-empty" } }
   let full_url = (build-url $base ({account_id: (encode-path-segment $account_id), envelope_id: (encode-path-segment $envelope_id)} | format pattern "/v2.1/accounts/{account_id}/envelopes/{envelope_id}/views/shared"))
   let req_body = {"assertionId": $assertion_id, "authenticationInstant": $authentication_instant, "authenticationMethod": $authentication_method, "clientURLs": $client_ur_ls, "clientUserId": $client_user_id, "email": $email, "frameAncestors": $frame_ancestors, "messageOrigins": $message_origins, "pingFrequency": $ping_frequency, "pingUrl": $ping_url, "recipientId": $recipient_id, "returnUrl": $return_url, "securityDomain": $security_domain, "userId": $user_id, "userName": $user_name, "xFrameOptions": $x_frame_options, "xFrameOptionsAllowFromUrl": $x_frame_options_allow_from_url} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "*/*"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: {}, body: $req_body}
 }
 
 # Delete the workflow definition for an envelope.
@@ -6326,10 +6689,12 @@ export def "v2-1-accounts-envelopes-workflow delete-definition-definition" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($account_id | is-empty) { error make --unspanned { msg: "path parameter 'accountId' must be non-empty" } }
+  if ($envelope_id | is-empty) { error make --unspanned { msg: "path parameter 'envelopeId' must be non-empty" } }
   let full_url = (build-url $base ({account_id: (encode-path-segment $account_id), envelope_id: (encode-path-segment $envelope_id)} | format pattern "/v2.1/accounts/{account_id}/envelopes/{envelope_id}/workflow"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
 }
 
 # Returns the workflow definition for an envelope.
@@ -6351,10 +6716,12 @@ export def "v2-1-accounts-envelopes-workflow get-definition-definition" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($account_id | is-empty) { error make --unspanned { msg: "path parameter 'accountId' must be non-empty" } }
+  if ($envelope_id | is-empty) { error make --unspanned { msg: "path parameter 'envelopeId' must be non-empty" } }
   let full_url = (build-url $base ({account_id: (encode-path-segment $account_id), envelope_id: (encode-path-segment $envelope_id)} | format pattern "/v2.1/accounts/{account_id}/envelopes/{envelope_id}/workflow"))
   let accept_val = "*/*"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
 }
 
 # Updates the workflow definition for an envelope.
@@ -6384,12 +6751,14 @@ export def "v2-1-accounts-envelopes-workflow update-definition-definition" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($account_id | is-empty) { error make --unspanned { msg: "path parameter 'accountId' must be non-empty" } }
+  if ($envelope_id | is-empty) { error make --unspanned { msg: "path parameter 'envelopeId' must be non-empty" } }
   let full_url = (build-url $base ({account_id: (encode-path-segment $account_id), envelope_id: (encode-path-segment $envelope_id)} | format pattern "/v2.1/accounts/{account_id}/envelopes/{envelope_id}/workflow"))
   let req_body = {"currentWorkflowStepId": $current_workflow_step_id, "resumeDate": $resume_date, "scheduledSending": $scheduled_sending, "workflowStatus": $workflow_status, "workflowSteps": $workflow_steps} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "*/*"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: {}, body: $req_body}
 }
 
 # Deletes the scheduled sending rules for the envelope's workflow.
@@ -6411,10 +6780,12 @@ export def "v2-1-accounts-envelopes-workflow-scheduled-sending delete-definition
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($account_id | is-empty) { error make --unspanned { msg: "path parameter 'accountId' must be non-empty" } }
+  if ($envelope_id | is-empty) { error make --unspanned { msg: "path parameter 'envelopeId' must be non-empty" } }
   let full_url = (build-url $base ({account_id: (encode-path-segment $account_id), envelope_id: (encode-path-segment $envelope_id)} | format pattern "/v2.1/accounts/{account_id}/envelopes/{envelope_id}/workflow/scheduledSending"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
 }
 
 # Returns the scheduled sending rules for an envelope's workflow definition.
@@ -6436,10 +6807,12 @@ export def "v2-1-accounts-envelopes-workflow-scheduled-sending get-definition" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($account_id | is-empty) { error make --unspanned { msg: "path parameter 'accountId' must be non-empty" } }
+  if ($envelope_id | is-empty) { error make --unspanned { msg: "path parameter 'envelopeId' must be non-empty" } }
   let full_url = (build-url $base ({account_id: (encode-path-segment $account_id), envelope_id: (encode-path-segment $envelope_id)} | format pattern "/v2.1/accounts/{account_id}/envelopes/{envelope_id}/workflow/scheduledSending"))
   let accept_val = "*/*"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
 }
 
 # Updates the scheduled sending rules for an envelope's workflow.
@@ -6467,12 +6840,14 @@ export def "v2-1-accounts-envelopes-workflow-scheduled-sending update-definition
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($account_id | is-empty) { error make --unspanned { msg: "path parameter 'accountId' must be non-empty" } }
+  if ($envelope_id | is-empty) { error make --unspanned { msg: "path parameter 'envelopeId' must be non-empty" } }
   let full_url = (build-url $base ({account_id: (encode-path-segment $account_id), envelope_id: (encode-path-segment $envelope_id)} | format pattern "/v2.1/accounts/{account_id}/envelopes/{envelope_id}/workflow/scheduledSending"))
   let req_body = {"bulkListId": $bulk_list_id, "resumeDate": $resume_date, "rules": $rules, "status": $status} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "*/*"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: {}, body: $req_body}
 }
 
 # Adds a new step to an envelope's workflow.
@@ -6506,12 +6881,14 @@ export def "v2-1-accounts-envelopes-workflow-steps create-definition" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($account_id | is-empty) { error make --unspanned { msg: "path parameter 'accountId' must be non-empty" } }
+  if ($envelope_id | is-empty) { error make --unspanned { msg: "path parameter 'envelopeId' must be non-empty" } }
   let full_url = (build-url $base ({account_id: (encode-path-segment $account_id), envelope_id: (encode-path-segment $envelope_id)} | format pattern "/v2.1/accounts/{account_id}/envelopes/{envelope_id}/workflow/steps"))
   let req_body = {"action": $action, "completedDate": $completed_date, "delayedRouting": $delayed_routing, "itemId": $item_id, "recipientRouting": $recipient_routing, "status": $status, "triggerOnItem": $trigger_on_item, "triggeredDate": $triggered_date, "workflowStepId": $workflow_step_id} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "*/*"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: {}, body: $req_body}
 }
 
 # Deletes a workflow step from an envelope's workflow definition.
@@ -6534,10 +6911,13 @@ export def "v2-1-accounts-envelopes-workflow-steps delete-definition" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($account_id | is-empty) { error make --unspanned { msg: "path parameter 'accountId' must be non-empty" } }
+  if ($envelope_id | is-empty) { error make --unspanned { msg: "path parameter 'envelopeId' must be non-empty" } }
+  if ($workflow_step_id | is-empty) { error make --unspanned { msg: "path parameter 'workflowStepId' must be non-empty" } }
   let full_url = (build-url $base ({account_id: (encode-path-segment $account_id), envelope_id: (encode-path-segment $envelope_id), workflow_step_id: (encode-path-segment $workflow_step_id)} | format pattern "/v2.1/accounts/{account_id}/envelopes/{envelope_id}/workflow/steps/{workflow_step_id}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
 }
 
 # Returns a specified workflow step for a specified template.
@@ -6560,10 +6940,13 @@ export def "v2-1-accounts-envelopes-workflow-steps get-definition" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($account_id | is-empty) { error make --unspanned { msg: "path parameter 'accountId' must be non-empty" } }
+  if ($envelope_id | is-empty) { error make --unspanned { msg: "path parameter 'envelopeId' must be non-empty" } }
+  if ($workflow_step_id | is-empty) { error make --unspanned { msg: "path parameter 'workflowStepId' must be non-empty" } }
   let full_url = (build-url $base ({account_id: (encode-path-segment $account_id), envelope_id: (encode-path-segment $envelope_id), workflow_step_id: (encode-path-segment $workflow_step_id)} | format pattern "/v2.1/accounts/{account_id}/envelopes/{envelope_id}/workflow/steps/{workflow_step_id}"))
   let accept_val = "*/*"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
 }
 
 # Updates the specified workflow step for an envelope.
@@ -6598,12 +6981,15 @@ export def "v2-1-accounts-envelopes-workflow-steps update-definition" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($account_id | is-empty) { error make --unspanned { msg: "path parameter 'accountId' must be non-empty" } }
+  if ($envelope_id | is-empty) { error make --unspanned { msg: "path parameter 'envelopeId' must be non-empty" } }
+  if ($workflow_step_id | is-empty) { error make --unspanned { msg: "path parameter 'workflowStepId' must be non-empty" } }
   let full_url = (build-url $base ({account_id: (encode-path-segment $account_id), envelope_id: (encode-path-segment $envelope_id), workflow_step_id: (encode-path-segment $workflow_step_id)} | format pattern "/v2.1/accounts/{account_id}/envelopes/{envelope_id}/workflow/steps/{workflow_step_id}"))
   let req_body = {"action": $action, "completedDate": $completed_date, "delayedRouting": $delayed_routing, "itemId": $item_id, "recipientRouting": $recipient_routing, "status": $status, "triggerOnItem": $trigger_on_item, "triggeredDate": $triggered_date, "workflowStepId": $body_workflow_step_id} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "*/*"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: {}, body: $req_body}
 }
 
 # Deletes the delayed routing rules for the specified envelope workflow step.
@@ -6626,10 +7012,13 @@ export def "v2-1-accounts-envelopes-workflow-steps-delayed-routing delete-defini
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($account_id | is-empty) { error make --unspanned { msg: "path parameter 'accountId' must be non-empty" } }
+  if ($envelope_id | is-empty) { error make --unspanned { msg: "path parameter 'envelopeId' must be non-empty" } }
+  if ($workflow_step_id | is-empty) { error make --unspanned { msg: "path parameter 'workflowStepId' must be non-empty" } }
   let full_url = (build-url $base ({account_id: (encode-path-segment $account_id), envelope_id: (encode-path-segment $envelope_id), workflow_step_id: (encode-path-segment $workflow_step_id)} | format pattern "/v2.1/accounts/{account_id}/envelopes/{envelope_id}/workflow/steps/{workflow_step_id}/delayedRouting"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
 }
 
 # Returns the delayed routing rules for an envelope's workflow step definition.
@@ -6652,10 +7041,13 @@ export def "v2-1-accounts-envelopes-workflow-steps-delayed-routing get-definitio
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($account_id | is-empty) { error make --unspanned { msg: "path parameter 'accountId' must be non-empty" } }
+  if ($envelope_id | is-empty) { error make --unspanned { msg: "path parameter 'envelopeId' must be non-empty" } }
+  if ($workflow_step_id | is-empty) { error make --unspanned { msg: "path parameter 'workflowStepId' must be non-empty" } }
   let full_url = (build-url $base ({account_id: (encode-path-segment $account_id), envelope_id: (encode-path-segment $envelope_id), workflow_step_id: (encode-path-segment $workflow_step_id)} | format pattern "/v2.1/accounts/{account_id}/envelopes/{envelope_id}/workflow/steps/{workflow_step_id}/delayedRouting"))
   let accept_val = "*/*"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
 }
 
 # Updates the delayed routing rules for an envelope's workflow step definition.
@@ -6683,12 +7075,15 @@ export def "v2-1-accounts-envelopes-workflow-steps-delayed-routing update-defini
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($account_id | is-empty) { error make --unspanned { msg: "path parameter 'accountId' must be non-empty" } }
+  if ($envelope_id | is-empty) { error make --unspanned { msg: "path parameter 'envelopeId' must be non-empty" } }
+  if ($workflow_step_id | is-empty) { error make --unspanned { msg: "path parameter 'workflowStepId' must be non-empty" } }
   let full_url = (build-url $base ({account_id: (encode-path-segment $account_id), envelope_id: (encode-path-segment $envelope_id), workflow_step_id: (encode-path-segment $workflow_step_id)} | format pattern "/v2.1/accounts/{account_id}/envelopes/{envelope_id}/workflow/steps/{workflow_step_id}/delayedRouting"))
   let req_body = {"resumeDate": $resume_date, "rules": $rules, "status": $status} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "*/*"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: {}, body: $req_body}
 }
 
 # Remove one or more templates from the account favorites.
@@ -6715,12 +7110,13 @@ export def "v2-1-accounts-favorite-templates delete-un" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($account_id | is-empty) { error make --unspanned { msg: "path parameter 'accountId' must be non-empty" } }
   let full_url = (build-url $base ({account_id: (encode-path-segment $account_id)} | format pattern "/v2.1/accounts/{account_id}/favorite_templates"))
   let req_body = {"errorDetails": $error_details, "favoriteTemplates": $favorite_templates, "templatesUpdatedCount": $templates_updated_count} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "*/*"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: {}, body: $req_body}
 }
 
 # Retrieves the list of favorite templates for the account.
@@ -6741,10 +7137,11 @@ export def "v2-1-accounts-favorite-templates get" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($account_id | is-empty) { error make --unspanned { msg: "path parameter 'accountId' must be non-empty" } }
   let full_url = (build-url $base ({account_id: (encode-path-segment $account_id)} | format pattern "/v2.1/accounts/{account_id}/favorite_templates"))
   let accept_val = "*/*"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
 }
 
 # Set one or more templates as account favorites.
@@ -6771,12 +7168,13 @@ export def "v2-1-accounts-favorite-templates update" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($account_id | is-empty) { error make --unspanned { msg: "path parameter 'accountId' must be non-empty" } }
   let full_url = (build-url $base ({account_id: (encode-path-segment $account_id)} | format pattern "/v2.1/accounts/{account_id}/favorite_templates"))
   let req_body = {"errorDetails": $error_details, "favoriteTemplates": $favorite_templates, "templatesUpdatedCount": $templates_updated_count} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "*/*"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: {}, body: $req_body}
 }
 
 # Gets a list of the folders for the account.
@@ -6804,11 +7202,12 @@ export def "v2-1-accounts-folders get" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($account_id | is-empty) { error make --unspanned { msg: "path parameter 'accountId' must be non-empty" } }
   let qp = [(serialize-qp "count" $count "scalar") (serialize-qp "include" $include "scalar") (serialize-qp "include_items" $include_items "scalar") (serialize-qp "start_position" $start_position "scalar") (serialize-qp "sub_folder_depth" $sub_folder_depth "scalar") (serialize-qp "template" $template "scalar") (serialize-qp "user_filter" $user_filter "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({account_id: (encode-path-segment $account_id)} | format pattern "/v2.1/accounts/{account_id}/folders") $qp)
   let accept_val = "*/*"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"count": $count, "include": $include, "include_items": $include_items, "start_position": $start_position, "sub_folder_depth": $sub_folder_depth, "template": $template, "user_filter": $user_filter} | compact), body: null}
 }
 
 # Gets information about the specified folder.
@@ -6838,11 +7237,13 @@ export def "v2-1-accounts-folders get-items" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($account_id | is-empty) { error make --unspanned { msg: "path parameter 'accountId' must be non-empty" } }
+  if ($folder_id | is-empty) { error make --unspanned { msg: "path parameter 'folderId' must be non-empty" } }
   let qp = [(serialize-qp "from_date" $from_date "scalar") (serialize-qp "include_items" $include_items "scalar") (serialize-qp "owner_email" $owner_email "scalar") (serialize-qp "owner_name" $owner_name "scalar") (serialize-qp "search_text" $search_text "scalar") (serialize-qp "start_position" $start_position "scalar") (serialize-qp "status" $status "scalar") (serialize-qp "to_date" $to_date "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({account_id: (encode-path-segment $account_id), folder_id: (encode-path-segment $folder_id)} | format pattern "/v2.1/accounts/{account_id}/folders/{folder_id}") $qp)
   let accept_val = "*/*"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"from_date": $from_date, "include_items": $include_items, "owner_email": $owner_email, "owner_name": $owner_name, "search_text": $search_text, "start_position": $start_position, "status": $status, "to_date": $to_date} | compact), body: null}
 }
 
 # Moves an envelope from its current folder to the specified folder.
@@ -6869,12 +7270,14 @@ export def "v2-1-accounts-folders update" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($account_id | is-empty) { error make --unspanned { msg: "path parameter 'accountId' must be non-empty" } }
+  if ($folder_id | is-empty) { error make --unspanned { msg: "path parameter 'folderId' must be non-empty" } }
   let full_url = (build-url $base ({account_id: (encode-path-segment $account_id), folder_id: (encode-path-segment $folder_id)} | format pattern "/v2.1/accounts/{account_id}/folders/{folder_id}"))
   let req_body = {"envelopeIds": $envelope_ids, "folders": $folders, "fromFolderId": $from_folder_id} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "*/*"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: {}, body: $req_body}
 }
 
 # Deletes an existing user group.
@@ -6904,12 +7307,13 @@ export def "v2-1-accounts-groups delete" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($account_id | is-empty) { error make --unspanned { msg: "path parameter 'accountId' must be non-empty" } }
   let full_url = (build-url $base ({account_id: (encode-path-segment $account_id)} | format pattern "/v2.1/accounts/{account_id}/groups"))
   let req_body = {"endPosition": $end_position, "groups": $groups, "nextUri": $next_uri, "previousUri": $previous_uri, "resultSetSize": $result_set_size, "startPosition": $start_position, "totalSetSize": $total_set_size} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "*/*"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: {}, body: $req_body}
 }
 
 # Gets information about groups associated with the account.
@@ -6935,11 +7339,12 @@ export def "v2-1-accounts-groups get" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($account_id | is-empty) { error make --unspanned { msg: "path parameter 'accountId' must be non-empty" } }
   let qp = [(serialize-qp "count" $count "scalar") (serialize-qp "group_type" $group_type "scalar") (serialize-qp "include_usercount" $include_usercount "scalar") (serialize-qp "search_text" $search_text "scalar") (serialize-qp "start_position" $start_position "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({account_id: (encode-path-segment $account_id)} | format pattern "/v2.1/accounts/{account_id}/groups") $qp)
   let accept_val = "*/*"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"count": $count, "group_type": $group_type, "include_usercount": $include_usercount, "search_text": $search_text, "start_position": $start_position} | compact), body: null}
 }
 
 # Creates one or more groups for the account.
@@ -6969,12 +7374,13 @@ export def "v2-1-accounts-groups create" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($account_id | is-empty) { error make --unspanned { msg: "path parameter 'accountId' must be non-empty" } }
   let full_url = (build-url $base ({account_id: (encode-path-segment $account_id)} | format pattern "/v2.1/accounts/{account_id}/groups"))
   let req_body = {"endPosition": $end_position, "groups": $groups, "nextUri": $next_uri, "previousUri": $previous_uri, "resultSetSize": $result_set_size, "startPosition": $start_position, "totalSetSize": $total_set_size} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "*/*"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: {}, body: $req_body}
 }
 
 # Updates the group information for a group.
@@ -7004,12 +7410,13 @@ export def "v2-1-accounts-groups update" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($account_id | is-empty) { error make --unspanned { msg: "path parameter 'accountId' must be non-empty" } }
   let full_url = (build-url $base ({account_id: (encode-path-segment $account_id)} | format pattern "/v2.1/accounts/{account_id}/groups"))
   let req_body = {"endPosition": $end_position, "groups": $groups, "nextUri": $next_uri, "previousUri": $previous_uri, "resultSetSize": $result_set_size, "startPosition": $start_position, "totalSetSize": $total_set_size} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "*/*"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: {}, body: $req_body}
 }
 
 # Deletes brand information from a group.
@@ -7034,12 +7441,14 @@ export def "v2-1-accounts-groups-brands delete" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($account_id | is-empty) { error make --unspanned { msg: "path parameter 'accountId' must be non-empty" } }
+  if ($group_id | is-empty) { error make --unspanned { msg: "path parameter 'groupId' must be non-empty" } }
   let full_url = (build-url $base ({account_id: (encode-path-segment $account_id), group_id: (encode-path-segment $group_id)} | format pattern "/v2.1/accounts/{account_id}/groups/{group_id}/brands"))
   let req_body = {"brands": $brands} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "*/*"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: {}, body: $req_body}
 }
 
 # Gets the brand information for a group.
@@ -7061,10 +7470,12 @@ export def "v2-1-accounts-groups-brands get" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($account_id | is-empty) { error make --unspanned { msg: "path parameter 'accountId' must be non-empty" } }
+  if ($group_id | is-empty) { error make --unspanned { msg: "path parameter 'groupId' must be non-empty" } }
   let full_url = (build-url $base ({account_id: (encode-path-segment $account_id), group_id: (encode-path-segment $group_id)} | format pattern "/v2.1/accounts/{account_id}/groups/{group_id}/brands"))
   let accept_val = "*/*"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
 }
 
 # Adds an existing brand to a group.
@@ -7089,12 +7500,14 @@ export def "v2-1-accounts-groups-brands update" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($account_id | is-empty) { error make --unspanned { msg: "path parameter 'accountId' must be non-empty" } }
+  if ($group_id | is-empty) { error make --unspanned { msg: "path parameter 'groupId' must be non-empty" } }
   let full_url = (build-url $base ({account_id: (encode-path-segment $account_id), group_id: (encode-path-segment $group_id)} | format pattern "/v2.1/accounts/{account_id}/groups/{group_id}/brands"))
   let req_body = {"brands": $brands} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "*/*"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: {}, body: $req_body}
 }
 
 # Deletes one or more users from a group
@@ -7119,12 +7532,14 @@ export def "v2-1-accounts-groups-users delete" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($account_id | is-empty) { error make --unspanned { msg: "path parameter 'accountId' must be non-empty" } }
+  if ($group_id | is-empty) { error make --unspanned { msg: "path parameter 'groupId' must be non-empty" } }
   let full_url = (build-url $base ({account_id: (encode-path-segment $account_id), group_id: (encode-path-segment $group_id)} | format pattern "/v2.1/accounts/{account_id}/groups/{group_id}/users"))
   let req_body = {"users": $users} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "*/*"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: {}, body: $req_body}
 }
 
 # Gets a list of users in a group.
@@ -7148,11 +7563,13 @@ export def "v2-1-accounts-groups-users get" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($account_id | is-empty) { error make --unspanned { msg: "path parameter 'accountId' must be non-empty" } }
+  if ($group_id | is-empty) { error make --unspanned { msg: "path parameter 'groupId' must be non-empty" } }
   let qp = [(serialize-qp "count" $count "scalar") (serialize-qp "start_position" $start_position "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({account_id: (encode-path-segment $account_id), group_id: (encode-path-segment $group_id)} | format pattern "/v2.1/accounts/{account_id}/groups/{group_id}/users") $qp)
   let accept_val = "*/*"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"count": $count, "start_position": $start_position} | compact), body: null}
 }
 
 # Adds one or more users to an existing group.
@@ -7177,12 +7594,14 @@ export def "v2-1-accounts-groups-users update" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($account_id | is-empty) { error make --unspanned { msg: "path parameter 'accountId' must be non-empty" } }
+  if ($group_id | is-empty) { error make --unspanned { msg: "path parameter 'groupId' must be non-empty" } }
   let full_url = (build-url $base ({account_id: (encode-path-segment $account_id), group_id: (encode-path-segment $group_id)} | format pattern "/v2.1/accounts/{account_id}/groups/{group_id}/users"))
   let req_body = {"users": $users} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "*/*"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: {}, body: $req_body}
 }
 
 # Retrieves the Identity Verification workflows available to an account.
@@ -7203,10 +7622,11 @@ export def "v2-1-accounts-identity-verification get" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($account_id | is-empty) { error make --unspanned { msg: "path parameter 'accountId' must be non-empty" } }
   let full_url = (build-url $base ({account_id: (encode-path-segment $account_id)} | format pattern "/v2.1/accounts/{account_id}/identity_verification"))
   let accept_val = "*/*"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
 }
 
 # List payment gateway accounts
@@ -7227,10 +7647,11 @@ export def "v2-1-accounts-payment-gateway-accounts get-list" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($account_id | is-empty) { error make --unspanned { msg: "path parameter 'accountId' must be non-empty" } }
   let full_url = (build-url $base ({account_id: (encode-path-segment $account_id)} | format pattern "/v2.1/accounts/{account_id}/payment_gateway_accounts"))
   let accept_val = "*/*"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
 }
 
 # Gets a list of permission profiles.
@@ -7252,11 +7673,12 @@ export def "v2-1-accounts-permission-profiles list" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($account_id | is-empty) { error make --unspanned { msg: "path parameter 'accountId' must be non-empty" } }
   let qp = [(serialize-qp "include" $include "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({account_id: (encode-path-segment $account_id)} | format pattern "/v2.1/accounts/{account_id}/permission_profiles") $qp)
   let accept_val = "*/*"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"include": $include} | compact), body: null}
 }
 
 # Creates a new permission profile for an account.
@@ -7288,13 +7710,14 @@ export def "v2-1-accounts-permission-profiles create" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($account_id | is-empty) { error make --unspanned { msg: "path parameter 'accountId' must be non-empty" } }
   let qp = [(serialize-qp "include" $include "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({account_id: (encode-path-segment $account_id)} | format pattern "/v2.1/accounts/{account_id}/permission_profiles") $qp)
   let req_body = {"modifiedByUsername": $modified_by_username, "modifiedDateTime": $modified_date_time, "permissionProfileId": $permission_profile_id, "permissionProfileName": $permission_profile_name, "settings": $settings, "userCount": $user_count, "users": $users} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "*/*"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: ({"include": $include} | compact), body: $req_body}
 }
 
 # Deletes a permission profile from an account.
@@ -7317,11 +7740,13 @@ export def "v2-1-accounts-permission-profiles delete" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($account_id | is-empty) { error make --unspanned { msg: "path parameter 'accountId' must be non-empty" } }
+  if ($permission_profile_id | is-empty) { error make --unspanned { msg: "path parameter 'permissionProfileId' must be non-empty" } }
   let qp = [(serialize-qp "move_users_to" $move_users_to "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({account_id: (encode-path-segment $account_id), permission_profile_id: (encode-path-segment $permission_profile_id)} | format pattern "/v2.1/accounts/{account_id}/permission_profiles/{permission_profile_id}") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"move_users_to": $move_users_to} | compact), body: null}
 }
 
 # Returns a permission profile for an account.
@@ -7344,11 +7769,13 @@ export def "v2-1-accounts-permission-profiles get" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($account_id | is-empty) { error make --unspanned { msg: "path parameter 'accountId' must be non-empty" } }
+  if ($permission_profile_id | is-empty) { error make --unspanned { msg: "path parameter 'permissionProfileId' must be non-empty" } }
   let qp = [(serialize-qp "include" $include "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({account_id: (encode-path-segment $account_id), permission_profile_id: (encode-path-segment $permission_profile_id)} | format pattern "/v2.1/accounts/{account_id}/permission_profiles/{permission_profile_id}") $qp)
   let accept_val = "*/*"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"include": $include} | compact), body: null}
 }
 
 # Updates a permission profile.
@@ -7381,13 +7808,15 @@ export def "v2-1-accounts-permission-profiles update" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($account_id | is-empty) { error make --unspanned { msg: "path parameter 'accountId' must be non-empty" } }
+  if ($permission_profile_id | is-empty) { error make --unspanned { msg: "path parameter 'permissionProfileId' must be non-empty" } }
   let qp = [(serialize-qp "include" $include "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({account_id: (encode-path-segment $account_id), permission_profile_id: (encode-path-segment $permission_profile_id)} | format pattern "/v2.1/accounts/{account_id}/permission_profiles/{permission_profile_id}") $qp)
   let req_body = {"modifiedByUsername": $modified_by_username, "modifiedDateTime": $modified_date_time, "permissionProfileId": $body_permission_profile_id, "permissionProfileName": $permission_profile_name, "settings": $settings, "userCount": $user_count, "users": $users} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "*/*"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: ({"include": $include} | compact), body: $req_body}
 }
 
 # Deletes one or more PowerForms.
@@ -7411,12 +7840,13 @@ export def "v2-1-accounts-powerforms delete-power-forms-power-forms-list" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($account_id | is-empty) { error make --unspanned { msg: "path parameter 'accountId' must be non-empty" } }
   let full_url = (build-url $base ({account_id: (encode-path-segment $account_id)} | format pattern "/v2.1/accounts/{account_id}/powerforms"))
   let req_body = {"powerForms": $power_forms} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "*/*"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: {}, body: $req_body}
 }
 
 # Returns a list of PowerForms.
@@ -7443,11 +7873,12 @@ export def "v2-1-accounts-powerforms get-power-forms-power-forms-list" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($account_id | is-empty) { error make --unspanned { msg: "path parameter 'accountId' must be non-empty" } }
   let qp = [(serialize-qp "from_date" $from_date "scalar") (serialize-qp "order" $order "scalar") (serialize-qp "order_by" $order_by "scalar") (serialize-qp "search_fields" $search_fields "scalar") (serialize-qp "search_text" $search_text "scalar") (serialize-qp "to_date" $to_date "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({account_id: (encode-path-segment $account_id)} | format pattern "/v2.1/accounts/{account_id}/powerforms") $qp)
   let accept_val = "*/*"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"from_date": $from_date, "order": $order, "order_by": $order_by, "search_fields": $search_fields, "search_text": $search_text, "to_date": $to_date} | compact), body: null}
 }
 
 # Creates a new PowerForm
@@ -7497,12 +7928,13 @@ export def "v2-1-accounts-powerforms create-power-forms-power-form" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($account_id | is-empty) { error make --unspanned { msg: "path parameter 'accountId' must be non-empty" } }
   let full_url = (build-url $base ({account_id: (encode-path-segment $account_id)} | format pattern "/v2.1/accounts/{account_id}/powerforms"))
   let req_body = {"createdBy": $created_by, "createdDateTime": $created_date_time, "emailBody": $email_body, "emailSubject": $email_subject, "envelopes": $envelopes, "errorDetails": $error_details, "instructions": $instructions, "isActive": $is_active, "lastUsed": $last_used, "limitUseInterval": $limit_use_interval, "limitUseIntervalEnabled": $limit_use_interval_enabled, "limitUseIntervalUnits": $limit_use_interval_units, "maxUseEnabled": $max_use_enabled, "name": $name, "powerFormId": $power_form_id, "powerFormUrl": $power_form_url, "recipients": $recipients, "senderName": $sender_name, "senderUserId": $sender_user_id, "signingMode": $signing_mode, "templateId": $template_id, "templateName": $template_name, "timesUsed": $times_used, "uri": $uri, "usesRemaining": $uses_remaining} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "*/*"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: {}, body: $req_body}
 }
 
 # Gets PowerForm senders.
@@ -7524,11 +7956,12 @@ export def "v2-1-accounts-powerforms-senders get-power-forms-power-forms" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($account_id | is-empty) { error make --unspanned { msg: "path parameter 'accountId' must be non-empty" } }
   let qp = [(serialize-qp "start_position" $start_position "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({account_id: (encode-path-segment $account_id)} | format pattern "/v2.1/accounts/{account_id}/powerforms/senders") $qp)
   let accept_val = "*/*"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"start_position": $start_position} | compact), body: null}
 }
 
 # Deletes a PowerForm.
@@ -7550,10 +7983,12 @@ export def "v2-1-accounts-powerforms delete-power-forms-power-form" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($account_id | is-empty) { error make --unspanned { msg: "path parameter 'accountId' must be non-empty" } }
+  if ($power_form_id | is-empty) { error make --unspanned { msg: "path parameter 'powerFormId' must be non-empty" } }
   let full_url = (build-url $base ({account_id: (encode-path-segment $account_id), power_form_id: (encode-path-segment $power_form_id)} | format pattern "/v2.1/accounts/{account_id}/powerforms/{power_form_id}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
 }
 
 # Returns a single PowerForm.
@@ -7575,10 +8010,12 @@ export def "v2-1-accounts-powerforms get-power-forms-power-form" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($account_id | is-empty) { error make --unspanned { msg: "path parameter 'accountId' must be non-empty" } }
+  if ($power_form_id | is-empty) { error make --unspanned { msg: "path parameter 'powerFormId' must be non-empty" } }
   let full_url = (build-url $base ({account_id: (encode-path-segment $account_id), power_form_id: (encode-path-segment $power_form_id)} | format pattern "/v2.1/accounts/{account_id}/powerforms/{power_form_id}"))
   let accept_val = "*/*"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
 }
 
 # Updates an existing PowerForm.
@@ -7629,12 +8066,14 @@ export def "v2-1-accounts-powerforms update-power-forms-power-form" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($account_id | is-empty) { error make --unspanned { msg: "path parameter 'accountId' must be non-empty" } }
+  if ($power_form_id | is-empty) { error make --unspanned { msg: "path parameter 'powerFormId' must be non-empty" } }
   let full_url = (build-url $base ({account_id: (encode-path-segment $account_id), power_form_id: (encode-path-segment $power_form_id)} | format pattern "/v2.1/accounts/{account_id}/powerforms/{power_form_id}"))
   let req_body = {"createdBy": $created_by, "createdDateTime": $created_date_time, "emailBody": $email_body, "emailSubject": $email_subject, "envelopes": $envelopes, "errorDetails": $error_details, "instructions": $instructions, "isActive": $is_active, "lastUsed": $last_used, "limitUseInterval": $limit_use_interval, "limitUseIntervalEnabled": $limit_use_interval_enabled, "limitUseIntervalUnits": $limit_use_interval_units, "maxUseEnabled": $max_use_enabled, "name": $name, "powerFormId": $body_power_form_id, "powerFormUrl": $power_form_url, "recipients": $recipients, "senderName": $sender_name, "senderUserId": $sender_user_id, "signingMode": $signing_mode, "templateId": $template_id, "templateName": $template_name, "timesUsed": $times_used, "uri": $uri, "usesRemaining": $uses_remaining} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "*/*"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: {}, body: $req_body}
 }
 
 # Returns the data that users entered in a PowerForm.
@@ -7659,11 +8098,13 @@ export def "v2-1-accounts-powerforms-form-data get-power-power" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($account_id | is-empty) { error make --unspanned { msg: "path parameter 'accountId' must be non-empty" } }
+  if ($power_form_id | is-empty) { error make --unspanned { msg: "path parameter 'powerFormId' must be non-empty" } }
   let qp = [(serialize-qp "data_layout" $data_layout "scalar") (serialize-qp "from_date" $from_date "scalar") (serialize-qp "to_date" $to_date "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({account_id: (encode-path-segment $account_id), power_form_id: (encode-path-segment $power_form_id)} | format pattern "/v2.1/accounts/{account_id}/powerforms/{power_form_id}/form_data") $qp)
   let accept_val = "*/*"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"data_layout": $data_layout, "from_date": $from_date, "to_date": $to_date} | compact), body: null}
 }
 
 # Gets the recipient names associated with an email address.
@@ -7685,11 +8126,12 @@ export def "v2-1-accounts-recipient-names get" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($account_id | is-empty) { error make --unspanned { msg: "path parameter 'accountId' must be non-empty" } }
   let qp = [(serialize-qp "email" $email "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({account_id: (encode-path-segment $account_id)} | format pattern "/v2.1/accounts/{account_id}/recipient_names") $qp)
   let accept_val = "*/*"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"email": $email} | compact), body: null}
 }
 
 # Returns available seals for specified account.
@@ -7710,10 +8152,11 @@ export def "v2-1-accounts-seals get-signature-providers-providers" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($account_id | is-empty) { error make --unspanned { msg: "path parameter 'accountId' must be non-empty" } }
   let full_url = (build-url $base ({account_id: (encode-path-segment $account_id)} | format pattern "/v2.1/accounts/{account_id}/seals"))
   let accept_val = "*/*"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
 }
 
 # Gets a list of envelopes in folders matching the specified criteria.
@@ -7743,11 +8186,13 @@ export def "v2-1-accounts-search-folders get-contents" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($account_id | is-empty) { error make --unspanned { msg: "path parameter 'accountId' must be non-empty" } }
+  if ($search_folder_id | is-empty) { error make --unspanned { msg: "path parameter 'searchFolderId' must be non-empty" } }
   let qp = [(serialize-qp "all" $all "scalar") (serialize-qp "count" $count "scalar") (serialize-qp "from_date" $from_date "scalar") (serialize-qp "include_recipients" $include_recipients "scalar") (serialize-qp "order" $order "scalar") (serialize-qp "order_by" $order_by "scalar") (serialize-qp "start_position" $start_position "scalar") (serialize-qp "to_date" $to_date "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({account_id: (encode-path-segment $account_id), search_folder_id: (encode-path-segment $search_folder_id)} | format pattern "/v2.1/accounts/{account_id}/search_folders/{search_folder_id}") $qp)
   let accept_val = "*/*"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"all": $all, "count": $count, "from_date": $from_date, "include_recipients": $include_recipients, "order": $order, "order_by": $order_by, "start_position": $start_position, "to_date": $to_date} | compact), body: null}
 }
 
 # Gets account settings information.
@@ -7768,10 +8213,11 @@ export def "v2-1-accounts-settings get" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($account_id | is-empty) { error make --unspanned { msg: "path parameter 'accountId' must be non-empty" } }
   let full_url = (build-url $base ({account_id: (encode-path-segment $account_id)} | format pattern "/v2.1/accounts/{account_id}/settings"))
   let accept_val = "*/*"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
 }
 
 # Updates the account settings for an account.
@@ -8792,12 +9238,13 @@ export def "v2-1-accounts-settings update" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($account_id | is-empty) { error make --unspanned { msg: "path parameter 'accountId' must be non-empty" } }
   let full_url = (build-url $base ({account_id: (encode-path-segment $account_id)} | format pattern "/v2.1/accounts/{account_id}/settings"))
   let req_body = {"accessCodeFormat": $access_code_format, "accountDateTimeFormat": $account_date_time_format, "accountDateTimeFormatMetadata": $account_date_time_format_metadata, "accountDefaultLanguage": $account_default_language, "accountDefaultLanguageMetadata": $account_default_language_metadata, "accountName": $account_name, "accountNameMetadata": $account_name_metadata, "accountNotification": $account_notification, "accountUISettings": $account_ui_settings, "adoptSigConfig": $adopt_sig_config, "adoptSigConfigMetadata": $adopt_sig_config_metadata, "advancedCorrect": $advanced_correct, "advancedCorrectMetadata": $advanced_correct_metadata, "allowAccessCodeFormat": $allow_access_code_format, "allowAccessCodeFormatMetadata": $allow_access_code_format_metadata, "allowAccountManagementGranular": $allow_account_management_granular, "allowAccountManagementGranularMetadata": $allow_account_management_granular_metadata, "allowAccountMemberNameChange": $allow_account_member_name_change, "allowAccountMemberNameChangeMetadata": $allow_account_member_name_change_metadata, "allowAdvancedRecipientRoutingConditional": $allow_advanced_recipient_routing_conditional, "allowAdvancedRecipientRoutingConditionalMetadata": $allow_advanced_recipient_routing_conditional_metadata, "allowAgentNameEmailEdit": $allow_agent_name_email_edit, "allowAgentNameEmailEditMetadata": $allow_agent_name_email_edit_metadata, "allowAgreementActions": $allow_agreement_actions, "allowAgreementActionsMetadata": $allow_agreement_actions_metadata, "allowAgreementOrchestrationWorkflows": $allow_agreement_orchestration_workflows, "allowAgreementOrchestrationWorkflowsMetadata": $allow_agreement_orchestration_workflows_metadata, "allowAutoNavSettings": $allow_auto_nav_settings, "allowAutoNavSettingsMetadata": $allow_auto_nav_settings_metadata, "allowAutoTagging": $allow_auto_tagging, "allowAutoTaggingMetadata": $allow_auto_tagging_metadata, "allowBulkSend": $allow_bulk_send, "allowBulkSendMetadata": $allow_bulk_send_metadata, "allowCDWithdraw": $allow_cd_withdraw, "allowCDWithdrawMetadata": $allow_cd_withdraw_metadata, "allowConnectHttpListenerConfigs": $allow_connect_http_listener_configs, "allowConnectOAuthUI": $allow_connect_o_auth_ui, "allowConnectSendFinishLater": $allow_connect_send_finish_later, "allowConnectSendFinishLaterMetadata": $allow_connect_send_finish_later_metadata, "allowConnectUnifiedPayloadUI": $allow_connect_unified_payload_ui, "allowConsumerDisclosureOverride": $allow_consumer_disclosure_override, "allowConsumerDisclosureOverrideMetadata": $allow_consumer_disclosure_override_metadata, "allowDataDownload": $allow_data_download, "allowDataDownloadMetadata": $allow_data_download_metadata, "allowDelayedRouting": $allow_delayed_routing, "allowDelayedRoutingMetadata": $allow_delayed_routing_metadata, "allowDelegatedSigning": $allow_delegated_signing, "allowDelegatedSigningMetadata": $allow_delegated_signing_metadata, "allowDocGenDocuments": $allow_doc_gen_documents, "allowDocGenDocumentsMetadata": $allow_doc_gen_documents_metadata, "allowDocumentDisclosures": $allow_document_disclosures, "allowDocumentDisclosuresMetadata": $allow_document_disclosures_metadata, "allowDocumentVisibility": $allow_document_visibility, "allowDocumentVisibilityMetadata": $allow_document_visibility_metadata, "allowDocumentsOnSignedEnvelopes": $allow_documents_on_signed_envelopes, "allowDocumentsOnSignedEnvelopesMetadata": $allow_documents_on_signed_envelopes_metadata, "allowEHankoStamps": $allow_e_hanko_stamps, "allowEHankoStampsMetadata": $allow_e_hanko_stamps_metadata, "allowENoteEOriginal": $allow_e_note_e_original, "allowENoteEOriginalMetadata": $allow_e_note_e_original_metadata, "allowEnvelopeCorrect": $allow_envelope_correct, "allowEnvelopeCorrectMetadata": $allow_envelope_correct_metadata, "allowEnvelopeCustodyTransfer": $allow_envelope_custody_transfer, "allowEnvelopeCustodyTransferMetadata": $allow_envelope_custody_transfer_metadata, "allowEnvelopeCustomFields": $allow_envelope_custom_fields, "allowEnvelopeCustomFieldsMetadata": $allow_envelope_custom_fields_metadata, "allowEnvelopePublishReporting": $allow_envelope_publish_reporting, "allowEnvelopePublishReportingMetadata": $allow_envelope_publish_reporting_metadata, "allowEnvelopeReporting": $allow_envelope_reporting, "allowEnvelopeReportingMetadata": $allow_envelope_reporting_metadata, "allowExpressSignerCertificate": $allow_express_signer_certificate, "allowExpressSignerCertificateMetadata": $allow_express_signer_certificate_metadata, "allowExpression": $allow_expression, "allowExpressionMetadata": $allow_expression_metadata, "allowExtendedSendingResourceFile": $allow_extended_sending_resource_file, "allowExtendedSendingResourceFileMetadata": $allow_extended_sending_resource_file_metadata, "allowExternalLinkedAccounts": $allow_external_linked_accounts, "allowExternalLinkedAccountsMetadata": $allow_external_linked_accounts_metadata, "allowExternalSignaturePad": $allow_external_signature_pad, "allowExternalSignaturePadMetadata": $allow_external_signature_pad_metadata, "allowIDVForEUQualifiedSignatures": $allow_idv_for_eu_qualified_signatures, "allowIDVForEUQualifiedSignaturesMetadata": $allow_idv_for_eu_qualified_signatures_metadata, "allowIDVLevel1": $allow_idv_level1, "allowIDVLevel1Metadata": $allow_idv_level1_metadata, "allowIDVLevel2": $allow_idv_level2, "allowIDVLevel2Metadata": $allow_idv_level2_metadata, "allowIDVLevel3": $allow_idv_level3, "allowIDVLevel3Metadata": $allow_idv_level3_metadata, "allowIDVPlatform": $allow_idv_platform, "allowIDVPlatformMetadata": $allow_idv_platform_metadata, "allowInPerson": $allow_in_person, "allowInPersonElectronicNotary": $allow_in_person_electronic_notary, "allowInPersonElectronicNotaryMetadata": $allow_in_person_electronic_notary_metadata, "allowInPersonMetadata": $allow_in_person_metadata, "allowManagedStamps": $allow_managed_stamps, "allowManagedStampsMetadata": $allow_managed_stamps_metadata, "allowManagingEnvelopesOnBehalfOfOthers": $allow_managing_envelopes_on_behalf_of_others, "allowManagingEnvelopesOnBehalfOfOthersMetadata": $allow_managing_envelopes_on_behalf_of_others_metadata, "allowMarkup": $allow_markup, "allowMarkupMetadata": $allow_markup_metadata, "allowMemberTimeZone": $allow_member_time_zone, "allowMemberTimeZoneMetadata": $allow_member_time_zone_metadata, "allowMergeFields": $allow_merge_fields, "allowMergeFieldsMetadata": $allow_merge_fields_metadata, "allowMultipleBrandProfiles": $allow_multiple_brand_profiles, "allowMultipleBrandProfilesMetadata": $allow_multiple_brand_profiles_metadata, "allowMultipleSignerAttachments": $allow_multiple_signer_attachments, "allowMultipleSignerAttachmentsMetadata": $allow_multiple_signer_attachments_metadata, "allowNonUSPhoneAuth": $allow_non_us_phone_auth, "allowNonUSPhoneAuthMetadata": $allow_non_us_phone_auth_metadata, "allowOcrOfEnvelopeDocuments": $allow_ocr_of_envelope_documents, "allowOcrOfEnvelopeDocumentsMetadata": $allow_ocr_of_envelope_documents_metadata, "allowOfflineSigning": $allow_offline_signing, "allowOfflineSigningMetadata": $allow_offline_signing_metadata, "allowOpenTrustSignerCertificate": $allow_open_trust_signer_certificate, "allowOpenTrustSignerCertificateMetadata": $allow_open_trust_signer_certificate_metadata, "allowOrganizationDocusignMonitor": $allow_organization_docusign_monitor, "allowOrganizationDocusignMonitorMetadata": $allow_organization_docusign_monitor_metadata, "allowOrganizationDomainUserManagement": $allow_organization_domain_user_management, "allowOrganizationDomainUserManagementMetadata": $allow_organization_domain_user_management_metadata, "allowOrganizationSsoManagement": $allow_organization_sso_management, "allowOrganizationSsoManagementMetadata": $allow_organization_sso_management_metadata, "allowOrganizationToUseInPersonElectronicNotary": $allow_organization_to_use_in_person_electronic_notary, "allowOrganizationToUseInPersonElectronicNotaryMetadata": $allow_organization_to_use_in_person_electronic_notary_metadata, "allowOrganizationToUseRemoteNotary": $allow_organization_to_use_remote_notary, "allowOrganizationToUseRemoteNotaryMetadata": $allow_organization_to_use_remote_notary_metadata, "allowOrganizationToUseThirdPartyElectronicNotary": $allow_organization_to_use_third_party_electronic_notary, "allowOrganizationToUseThirdPartyElectronicNotaryMetadata": $allow_organization_to_use_third_party_electronic_notary_metadata, "allowOrganizations": $allow_organizations, "allowOrganizationsMetadata": $allow_organizations_metadata, "allowParticipantRecipientType": $allow_participant_recipient_type, "allowParticipantRecipientTypeMetadata": $allow_participant_recipient_type_metadata, "allowPaymentProcessing": $allow_payment_processing, "allowPaymentProcessingMetadata": $allow_payment_processing_metadata, "allowPerformanceAnalytics": $allow_performance_analytics, "allowPerformanceAnalyticsMetadata": $allow_performance_analytics_metadata, "allowPhoneAuthOverride": $allow_phone_auth_override, "allowPhoneAuthOverrideMetadata": $allow_phone_auth_override_metadata, "allowPhoneAuthentication": $allow_phone_authentication, "allowPhoneAuthenticationMetadata": $allow_phone_authentication_metadata, "allowPrivateSigningGroups": $allow_private_signing_groups, "allowPrivateSigningGroupsMetadata": $allow_private_signing_groups_metadata, "allowRecipientConnect": $allow_recipient_connect, "allowRecipientConnectMetadata": $allow_recipient_connect_metadata, "allowReminders": $allow_reminders, "allowRemindersMetadata": $allow_reminders_metadata, "allowRemoteNotary": $allow_remote_notary, "allowRemoteNotaryMetadata": $allow_remote_notary_metadata, "allowResourceFileBranding": $allow_resource_file_branding, "allowResourceFileBrandingMetadata": $allow_resource_file_branding_metadata, "allowSMSDelivery": $allow_sms_delivery, "allowSMSDeliveryMetadata": $allow_sms_delivery_metadata, "allowSafeBioPharmaSignerCertificate": $allow_safe_bio_pharma_signer_certificate, "allowSafeBioPharmaSignerCertificateMetadata": $allow_safe_bio_pharma_signer_certificate_metadata, "allowScheduledSending": $allow_scheduled_sending, "allowScheduledSendingMetadata": $allow_scheduled_sending_metadata, "allowSecurityAppliance": $allow_security_appliance, "allowSecurityApplianceMetadata": $allow_security_appliance_metadata, "allowSendToCertifiedDelivery": $allow_send_to_certified_delivery, "allowSendToCertifiedDeliveryMetadata": $allow_send_to_certified_delivery_metadata, "allowSendToIntermediary": $allow_send_to_intermediary, "allowSendToIntermediaryMetadata": $allow_send_to_intermediary_metadata, "allowSendingEnvelopesOnBehalfOfOthers": $allow_sending_envelopes_on_behalf_of_others, "allowSendingEnvelopesOnBehalfOfOthersMetadata": $allow_sending_envelopes_on_behalf_of_others_metadata, "allowServerTemplates": $allow_server_templates, "allowServerTemplatesMetadata": $allow_server_templates_metadata, "allowSetEmbeddedRecipientStartURL": $allow_set_embedded_recipient_start_url, "allowSetEmbeddedRecipientStartURLMetadata": $allow_set_embedded_recipient_start_url_metadata, "allowSharedTabs": $allow_shared_tabs, "allowSharedTabsMetadata": $allow_shared_tabs_metadata, "allowSignDocumentFromHomePage": $allow_sign_document_from_home_page, "allowSignDocumentFromHomePageMetadata": $allow_sign_document_from_home_page_metadata, "allowSignNow": $allow_sign_now, "allowSignNowMetadata": $allow_sign_now_metadata, "allowSignatureStamps": $allow_signature_stamps, "allowSignatureStampsMetadata": $allow_signature_stamps_metadata, "allowSignerReassign": $allow_signer_reassign, "allowSignerReassignMetadata": $allow_signer_reassign_metadata, "allowSignerReassignOverride": $allow_signer_reassign_override, "allowSignerReassignOverrideMetadata": $allow_signer_reassign_override_metadata, "allowSigningExtensions": $allow_signing_extensions, "allowSigningExtensionsMetadata": $allow_signing_extensions_metadata, "allowSigningGroups": $allow_signing_groups, "allowSigningGroupsMetadata": $allow_signing_groups_metadata, "allowSigningInsights": $allow_signing_insights, "allowSigningInsightsMetadata": $allow_signing_insights_metadata, "allowSigningRadioDeselect": $allow_signing_radio_deselect, "allowSigningRadioDeselectMetadata": $allow_signing_radio_deselect_metadata, "allowSocialIdLogin": $allow_social_id_login, "allowSocialIdLoginMetadata": $allow_social_id_login_metadata, "allowSupplementalDocuments": $allow_supplemental_documents, "allowSupplementalDocumentsMetadata": $allow_supplemental_documents_metadata, "allowThirdPartyElectronicNotary": $allow_third_party_electronic_notary, "allowThirdPartyElectronicNotaryMetadata": $allow_third_party_electronic_notary_metadata, "allowTransactionsWorkspace": $allow_transactions_workspace, "allowTransactionsWorkspaceMetadata": $allow_transactions_workspace_metadata, "allowUsersToAccessDirectory": $allow_users_to_access_directory, "allowUsersToAccessDirectoryMetadata": $allow_users_to_access_directory_metadata, "allowValueInsights": $allow_value_insights, "allowValueInsightsMetadata": $allow_value_insights_metadata, "allowWebForms": $allow_web_forms, "allowWebFormsMetadata": $allow_web_forms_metadata, "allowWhatsAppDelivery": $allow_whats_app_delivery, "allowWhatsAppDeliveryMetadata": $allow_whats_app_delivery_metadata, "anchorPopulationScope": $anchor_population_scope, "anchorPopulationScopeMetadata": $anchor_population_scope_metadata, "anchorTagVersionedPlacementEnabled": $anchor_tag_versioned_placement_enabled, "anchorTagVersionedPlacementMetadataEnabled": $anchor_tag_versioned_placement_metadata_enabled, "attachCompletedEnvelope": $attach_completed_envelope, "attachCompletedEnvelopeMetadata": $attach_completed_envelope_metadata, "authenticationCheck": $authentication_check, "authenticationCheckMetadata": $authentication_check_metadata, "autoNavRule": $auto_nav_rule, "autoNavRuleMetadata": $auto_nav_rule_metadata, "autoProvisionSignerAccount": $auto_provision_signer_account, "autoProvisionSignerAccountMetadata": $auto_provision_signer_account_metadata, "bccEmailArchive": $bcc_email_archive, "bccEmailArchiveMetadata": $bcc_email_archive_metadata, "betaSwitchConfiguration": $beta_switch_configuration, "betaSwitchConfigurationMetadata": $beta_switch_configuration_metadata, "billingAddress": $billing_address, "billingAddressMetadata": $billing_address_metadata, "bulkSend": $bulk_send, "bulkSendActionResendLimit": $bulk_send_action_resend_limit, "bulkSendMaxCopiesInBatch": $bulk_send_max_copies_in_batch, "bulkSendMaxUnprocessedEnvelopesCount": $bulk_send_max_unprocessed_envelopes_count, "bulkSendMetadata": $bulk_send_metadata, "canSelfBrandSend": $can_self_brand_send, "canSelfBrandSendMetadata": $can_self_brand_send_metadata, "canSelfBrandSign": $can_self_brand_sign, "canSelfBrandSignMetadata": $can_self_brand_sign_metadata, "canUseSalesforceOAuth": $can_use_salesforce_o_auth, "canUseSalesforceOAuthMetadata": $can_use_salesforce_o_auth_metadata, "captureVoiceRecording": $capture_voice_recording, "captureVoiceRecordingMetadata": $capture_voice_recording_metadata, "cfr21SimplifiedSigningEnabled": $cfr21_simplified_signing_enabled, "cfr21SimplifiedSigningEnabledMetadata": $cfr21_simplified_signing_enabled_metadata, "cfrUseWideImage": $cfr_use_wide_image, "cfrUseWideImageMetadata": $cfr_use_wide_image_metadata, "checkForMultipleAdminsOnAccount": $check_for_multiple_admins_on_account, "checkForMultipleAdminsOnAccountMetadata": $check_for_multiple_admins_on_account_metadata, "chromeSignatureEnabled": $chrome_signature_enabled, "chromeSignatureEnabledMetadata": $chrome_signature_enabled_metadata, "commentEmailShowMessageText": $comment_email_show_message_text, "commentEmailShowMessageTextMetadata": $comment_email_show_message_text_metadata, "commentsAllowEnvelopeOverride": $comments_allow_envelope_override, "commentsAllowEnvelopeOverrideMetadata": $comments_allow_envelope_override_metadata, "conditionalFieldsEnabled": $conditional_fields_enabled, "conditionalFieldsEnabledMetadata": $conditional_fields_enabled_metadata, "consumerDisclosureFrequency": $consumer_disclosure_frequency, "consumerDisclosureFrequencyMetadata": $consumer_disclosure_frequency_metadata, "convertPdfFields": $convert_pdf_fields, "convertPdfFieldsMetadata": $convert_pdf_fields_metadata, "dataPopulationScope": $data_population_scope, "dataPopulationScopeMetadata": $data_population_scope_metadata, "disableAutoTemplateMatching": $disable_auto_template_matching, "disableAutoTemplateMatchingMetadata": $disable_auto_template_matching_metadata, "disableMobileApp": $disable_mobile_app, "disableMobileAppMetadata": $disable_mobile_app_metadata, "disableMobilePushNotifications": $disable_mobile_push_notifications, "disableMobilePushNotificationsMetadata": $disable_mobile_push_notifications_metadata, "disableMobileSending": $disable_mobile_sending, "disableMobileSendingMetadata": $disable_mobile_sending_metadata, "disableMultipleSessions": $disable_multiple_sessions, "disableMultipleSessionsMetadata": $disable_multiple_sessions_metadata, "disablePurgeNotificationsForSenderMetadata": $disable_purge_notifications_for_sender_metadata, "disableSignerCertView": $disable_signer_cert_view, "disableSignerCertViewMetadata": $disable_signer_cert_view_metadata, "disableSignerHistoryView": $disable_signer_history_view, "disableSignerHistoryViewMetadata": $disable_signer_history_view_metadata, "disableStyleSignature": $disable_style_signature, "disableStyleSignatureMetadata": $disable_style_signature_metadata, "disableUploadSignature": $disable_upload_signature, "disableUploadSignatureMetadata": $disable_upload_signature_metadata, "disableUserSharing": $disable_user_sharing, "disableUserSharingMetadata": $disable_user_sharing_metadata, "displayBetaSwitch": $display_beta_switch, "displayBetaSwitchMetadata": $display_beta_switch_metadata, "documentConversionRestrictions": $document_conversion_restrictions, "documentConversionRestrictionsMetadata": $document_conversion_restrictions_metadata, "documentRetention": $document_retention, "documentRetentionMetadata": $document_retention_metadata, "documentRetentionPurgeTabs": $document_retention_purge_tabs, "documentVisibility": $document_visibility, "documentVisibilityMetadata": $document_visibility_metadata, "dss_SIGN_28411_EnableLeavePagePrompt_RadminOption": $dss_sign_28411_enable_leave_page_prompt_radmin_option, "dss_SIGN_29182_SlideUpBar_RadminOption": $dss_sign_29182_slide_up_bar_radmin_option, "emailTemplateVersion": $email_template_version, "emailTemplateVersionMetadata": $email_template_version_metadata, "enableAccessCodeGenerator": $enable_access_code_generator, "enableAccessCodeGeneratorMetadata": $enable_access_code_generator_metadata, "enableAdmHealthcare": $enable_adm_healthcare, "enableAdmHealthcareMetadata": $enable_adm_healthcare_metadata, "enableAdvancedPayments": $enable_advanced_payments, "enableAdvancedPaymentsMetadata": $enable_advanced_payments_metadata, "enableAdvancedPowerForms": $enable_advanced_power_forms, "enableAdvancedPowerFormsMetadata": $enable_advanced_power_forms_metadata, "enableAgreementActionsForCLM": $enable_agreement_actions_for_clm, "enableAgreementActionsForCLMMetadata": $enable_agreement_actions_for_clm_metadata, "enableAgreementActionsForESign": $enable_agreement_actions_for_e_sign, "enableAgreementActionsForESignMetadata": $enable_agreement_actions_for_e_sign_metadata, "enableAutoNav": $enable_auto_nav, "enableAutoNavMetadata": $enable_auto_nav_metadata, "enableBccDummyLink": $enable_bcc_dummy_link, "enableBccDummyLinkMetadata": $enable_bcc_dummy_link_metadata, "enableCalculatedFields": $enable_calculated_fields, "enableCalculatedFieldsMetadata": $enable_calculated_fields_metadata, "enableClickPlus": $enable_click_plus, "enableClickPlusConditionalContent": $enable_click_plus_conditional_content, "enableClickPlusConditionalContentMetaData": $enable_click_plus_conditional_content_meta_data, "enableClickPlusCustomFields": $enable_click_plus_custom_fields, "enableClickPlusCustomFieldsMetaData": $enable_click_plus_custom_fields_meta_data, "enableClickPlusCustomStyle": $enable_click_plus_custom_style, "enableClickPlusCustomStyleMetaData": $enable_click_plus_custom_style_meta_data, "enableClickPlusDynamicContent": $enable_click_plus_dynamic_content, "enableClickPlusDynamicContentMetaData": $enable_click_plus_dynamic_content_meta_data, "enableClickPlusMetaData": $enable_click_plus_meta_data, "enableClickwraps": $enable_clickwraps, "enableClickwrapsMetadata": $enable_clickwraps_metadata, "enableCombinedPDFDownloadForSBS": $enable_combined_pdf_download_for_sbs, "enableCommentsHistoryDownloadInSigning": $enable_comments_history_download_in_signing, "enableCommentsHistoryDownloadInSigningMetadata": $enable_comments_history_download_in_signing_metadata, "enableContactSuggestions": $enable_contact_suggestions, "enableContactSuggestionsMetadata": $enable_contact_suggestions_metadata, "enableCustomerSatisfactionMetricTracking": $enable_customer_satisfaction_metric_tracking, "enableCustomerSatisfactionMetricTrackingMetadata": $enable_customer_satisfaction_metric_tracking_metadata, "enableDSPro": $enable_ds_pro, "enableDSProMetadata": $enable_ds_pro_metadata, "enableESignAPIHourlyLimitManagement": $enable_e_sign_api_hourly_limit_management, "enableESignAPIHourlyLimitManagementMetadata": $enable_e_sign_api_hourly_limit_management_metadata, "enableEnforceTlsEmailsSettingMetadata": $enable_enforce_tls_emails_setting_metadata, "enableEnvelopeStampingByAccountAdmin": $enable_envelope_stamping_by_account_admin, "enableEnvelopeStampingByAccountAdminMetadata": $enable_envelope_stamping_by_account_admin_metadata, "enableEnvelopeStampingByDSAdmin": $enable_envelope_stamping_by_ds_admin, "enableEnvelopeStampingByDSAdminMetadata": $enable_envelope_stamping_by_ds_admin_metadata, "enableEsignCommunities": $enable_esign_communities, "enableEsignCommunitiesMetadata": $enable_esign_communities_metadata, "enableIDFxAccountlessSMSAuthForPart11": $enable_id_fx_accountless_sms_auth_for_part11, "enableIDFxAccountlessSMSAuthForPart11Metadata": $enable_id_fx_accountless_sms_auth_for_part11_metadata, "enableIDFxIntuitKBA": $enable_id_fx_intuit_kba, "enableIDFxIntuitKBAMetadata": $enable_id_fx_intuit_kba_metadata, "enableIDFxPhoneAuthentication": $enable_id_fx_phone_authentication, "enableIDFxPhoneAuthenticationMetadata": $enable_id_fx_phone_authentication_metadata, "enableIdfxPhoneAuthSignatureAuthStatus": $enable_idfx_phone_auth_signature_auth_status, "enableIdfxPhoneAuthSignatureAuthStatusMetadata": $enable_idfx_phone_auth_signature_auth_status_metadata, "enableInBrowserEditor": $enable_in_browser_editor, "enableInBrowserEditorMetadata": $enable_in_browser_editor_metadata, "enableKeyTermsSuggestionsByDocumentType": $enable_key_terms_suggestions_by_document_type, "enableKeyTermsSuggestionsByDocumentTypeMetadata": $enable_key_terms_suggestions_by_document_type_metadata, "enablePDFAConversion": $enable_pdfa_conversion, "enablePDFAConversionMetadata": $enable_pdfa_conversion_metadata, "enableParticipantRecipientSettingMetadata": $enable_participant_recipient_setting_metadata, "enablePaymentProcessing": $enable_payment_processing, "enablePaymentProcessingMetadata": $enable_payment_processing_metadata, "enablePowerForm": $enable_power_form, "enablePowerFormDirect": $enable_power_form_direct, "enablePowerFormDirectMetadata": $enable_power_form_direct_metadata, "enablePowerFormMetadata": $enable_power_form_metadata, "enableRecipientDomainValidation": $enable_recipient_domain_validation, "enableRecipientDomainValidationMetadata": $enable_recipient_domain_validation_metadata, "enableRecipientMayProvidePhoneNumber": $enable_recipient_may_provide_phone_number, "enableRecipientMayProvidePhoneNumberMetadata": $enable_recipient_may_provide_phone_number_metadata, "enableReportLinks": $enable_report_links, "enableReportLinksMetadata": $enable_report_links_metadata, "enableRequireSignOnPaper": $enable_require_sign_on_paper, "enableRequireSignOnPaperMetadata": $enable_require_sign_on_paper_metadata, "enableReservedDomain": $enable_reserved_domain, "enableReservedDomainMetadata": $enable_reserved_domain_metadata, "enableResponsiveSigning": $enable_responsive_signing, "enableResponsiveSigningMetadata": $enable_responsive_signing_metadata, "enableSMSAuthentication": $enable_sms_authentication, "enableSMSAuthenticationMetadata": $enable_sms_authentication_metadata, "enableSMSDeliveryAdditionalNotification": $enable_sms_delivery_additional_notification, "enableSMSDeliveryAdditionalNotificationMetadata": $enable_sms_delivery_additional_notification_metadata, "enableSMSDeliveryPrimary": $enable_sms_delivery_primary, "enableScheduledRelease": $enable_scheduled_release, "enableScheduledReleaseMetadata": $enable_scheduled_release_metadata, "enableSearch": $enable_search, "enableSearchMetadata": $enable_search_metadata, "enableSearchSiteSpecificApi": $enable_search_site_specific_api, "enableSearchSiteSpecificApiMetadata": $enable_search_site_specific_api_metadata, "enableSearchUI": $enable_search_ui, "enableSearchUIMetadata": $enable_search_ui_metadata, "enableSendToAgent": $enable_send_to_agent, "enableSendToAgentMetadata": $enable_send_to_agent_metadata, "enableSendToIntermediary": $enable_send_to_intermediary, "enableSendToIntermediaryMetadata": $enable_send_to_intermediary_metadata, "enableSendToManage": $enable_send_to_manage, "enableSendToManageMetadata": $enable_send_to_manage_metadata, "enableSendingTagsFontSettings": $enable_sending_tags_font_settings, "enableSendingTagsFontSettingsMetadata": $enable_sending_tags_font_settings_metadata, "enableSequentialSigningAPI": $enable_sequential_signing_api, "enableSequentialSigningAPIMetadata": $enable_sequential_signing_api_metadata, "enableSequentialSigningUI": $enable_sequential_signing_ui, "enableSequentialSigningUIMetadata": $enable_sequential_signing_ui_metadata, "enableSignOnPaper": $enable_sign_on_paper, "enableSignOnPaperMetadata": $enable_sign_on_paper_metadata, "enableSignOnPaperOverride": $enable_sign_on_paper_override, "enableSignOnPaperOverrideMetadata": $enable_sign_on_paper_override_metadata, "enableSignWithNotary": $enable_sign_with_notary, "enableSignWithNotaryMetadata": $enable_sign_with_notary_metadata, "enableSignerAttachments": $enable_signer_attachments, "enableSignerAttachmentsMetadata": $enable_signer_attachments_metadata, "enableSigningExtensionComments": $enable_signing_extension_comments, "enableSigningExtensionCommentsMetadata": $enable_signing_extension_comments_metadata, "enableSigningExtensionConversations": $enable_signing_extension_conversations, "enableSigningExtensionConversationsMetadata": $enable_signing_extension_conversations_metadata, "enableSigningOrderSettingsForAccount": $enable_signing_order_settings_for_account, "enableSigningOrderSettingsForAccountMetadata": $enable_signing_order_settings_for_account_metadata, "enableSmartContracts": $enable_smart_contracts, "enableSmartContractsMetadata": $enable_smart_contracts_metadata, "enableSocialIdLogin": $enable_social_id_login, "enableSocialIdLoginMetadata": $enable_social_id_login_metadata, "enableStrikeThrough": $enable_strike_through, "enableStrikeThroughMetadata": $enable_strike_through_metadata, "enableTransactionPoint": $enable_transaction_point, "enableTransactionPointMetadata": $enable_transaction_point_metadata, "enableVaulting": $enable_vaulting, "enableVaultingMetadata": $enable_vaulting_metadata, "enableWitnessing": $enable_witnessing, "enableWitnessingMetadata": $enable_witnessing_metadata, "enforceTemplateNameUniqueness": $enforce_template_name_uniqueness, "enforceTemplateNameUniquenessMetadata": $enforce_template_name_uniqueness_metadata, "enforceTlsEmails": $enforce_tls_emails, "enforceTlsEmailsMetadata": $enforce_tls_emails_metadata, "envelopeIntegrationAllowed": $envelope_integration_allowed, "envelopeIntegrationAllowedMetadata": $envelope_integration_allowed_metadata, "envelopeIntegrationEnabled": $envelope_integration_enabled, "envelopeIntegrationEnabledMetadata": $envelope_integration_enabled_metadata, "envelopeLimitsTotalDocumentSizeAllowedInMB": $envelope_limits_total_document_size_allowed_in_mb, "envelopeLimitsTotalDocumentSizeAllowedInMBEnabled": $envelope_limits_total_document_size_allowed_in_mb_enabled, "envelopeLimitsTotalDocumentSizeAllowedInMBEnabledMetadata": $envelope_limits_total_document_size_allowed_in_mb_enabled_metadata, "envelopeLimitsTotalDocumentSizeAllowedInMBMetadata": $envelope_limits_total_document_size_allowed_in_mb_metadata, "envelopeSearchMode": $envelope_search_mode, "envelopeSearchModeMetadata": $envelope_search_mode_metadata, "envelopeStampingDefaultValue": $envelope_stamping_default_value, "envelopeStampingDefaultValueMetadata": $envelope_stamping_default_value_metadata, "exitPrompt": $exit_prompt, "exitPromptMetadata": $exit_prompt_metadata, "expressSend": $express_send, "expressSendAllowTabs": $express_send_allow_tabs, "expressSendAllowTabsMetadata": $express_send_allow_tabs_metadata, "expressSendMetadata": $express_send_metadata, "externalDocumentSources": $external_document_sources, "externalSignaturePadType": $external_signature_pad_type, "externalSignaturePadTypeMetadata": $external_signature_pad_type_metadata, "faxOutEnabled": $fax_out_enabled, "faxOutEnabledMetadata": $fax_out_enabled_metadata, "finishReminder": $finish_reminder, "finishReminderMetadata": $finish_reminder_metadata, "guidedFormsHtmlAllowed": $guided_forms_html_allowed, "guidedFormsHtmlAllowedMetadata": $guided_forms_html_allowed_metadata, "guidedFormsHtmlConversionPolicy": $guided_forms_html_conversion_policy, "guidedFormsHtmlConversionPolicyMetadata": $guided_forms_html_conversion_policy_metadata, "hasRecipientConnectClaimedDomain": $has_recipient_connect_claimed_domain, "hideAccountAddressInCoC": $hide_account_address_in_co_c, "hideAccountAddressInCoCMetadata": $hide_account_address_in_co_c_metadata, "hidePricing": $hide_pricing, "hidePricingMetadata": $hide_pricing_metadata, "idCheckConfigurations": $id_check_configurations, "idCheckExpire": $id_check_expire, "idCheckExpireDays": $id_check_expire_days, "idCheckExpireDaysMetadata": $id_check_expire_days_metadata, "idCheckExpireMetadata": $id_check_expire_metadata, "idCheckExpireMinutes": $id_check_expire_minutes, "idCheckExpireMinutesMetadata": $id_check_expire_minutes_metadata, "idCheckRequired": $id_check_required, "idCheckRequiredMetadata": $id_check_required_metadata, "identityVerification": $identity_verification, "identityVerificationMetadata": $identity_verification_metadata, "idfxKBAAuthenticationOverride": $idfx_kba_authentication_override, "idfxKBAAuthenticationOverrideMetadata": $idfx_kba_authentication_override_metadata, "idfxPhoneAuthenticationOverride": $idfx_phone_authentication_override, "idfxPhoneAuthenticationOverrideMetadata": $idfx_phone_authentication_override_metadata, "ignoreErrorIfAnchorTabNotFound": $ignore_error_if_anchor_tab_not_found, "ignoreErrorIfAnchorTabNotFoundMetadataEnabled": $ignore_error_if_anchor_tab_not_found_metadata_enabled, "inPersonIDCheckQuestion": $in_person_id_check_question, "inPersonIDCheckQuestionMetadata": $in_person_id_check_question_metadata, "inPersonSigningEnabled": $in_person_signing_enabled, "inPersonSigningEnabledMetadata": $in_person_signing_enabled_metadata, "inSessionEnabled": $in_session_enabled, "inSessionEnabledMetadata": $in_session_enabled_metadata, "inSessionSuppressEmails": $in_session_suppress_emails, "inSessionSuppressEmailsMetadata": $in_session_suppress_emails_metadata, "linkedExternalPrimaryAccounts": $linked_external_primary_accounts, "maxNumberOfCustomStamps": $max_number_of_custom_stamps, "maximumSigningGroups": $maximum_signing_groups, "maximumSigningGroupsMetadata": $maximum_signing_groups_metadata, "maximumUsersPerSigningGroup": $maximum_users_per_signing_group, "maximumUsersPerSigningGroupMetadata": $maximum_users_per_signing_group_metadata, "mergeMixedModeResults": $merge_mixed_mode_results, "mergeMixedModeResultsMetadata": $merge_mixed_mode_results_metadata, "mobileSessionTimeout": $mobile_session_timeout, "mobileSessionTimeoutMetadata": $mobile_session_timeout_metadata, "numberOfActiveCustomStamps": $number_of_active_custom_stamps, "optInMobileSigningV02": $opt_in_mobile_signing_v02, "optInMobileSigningV02Metadata": $opt_in_mobile_signing_v02_metadata, "optOutAutoNavTextAndTabColorUpdates": $opt_out_auto_nav_text_and_tab_color_updates, "optOutAutoNavTextAndTabColorUpdatesMetadata": $opt_out_auto_nav_text_and_tab_color_updates_metadata, "optOutNewPlatformSeal": $opt_out_new_platform_seal, "optOutNewPlatformSealPlatformMetadata": $opt_out_new_platform_seal_platform_metadata, "pdfMaxChunkedUploadPartSize": $pdf_max_chunked_upload_part_size, "pdfMaxChunkedUploadPartSizeMetadata": $pdf_max_chunked_upload_part_size_metadata, "pdfMaxChunkedUploadTotalSize": $pdf_max_chunked_upload_total_size, "pdfMaxChunkedUploadTotalSizeMetadata": $pdf_max_chunked_upload_total_size_metadata, "pdfMaxIndividualUploadSize": $pdf_max_individual_upload_size, "pdfMaxIndividualUploadSizeMetadata": $pdf_max_individual_upload_size_metadata, "phoneAuthRecipientMayProvidePhoneNumber": $phone_auth_recipient_may_provide_phone_number, "phoneAuthRecipientMayProvidePhoneNumberMetadata": $phone_auth_recipient_may_provide_phone_number_metadata, "pkiSignDownloadedPDFDocs": $pki_sign_downloaded_pdf_docs, "pkiSignDownloadedPDFDocsMetadata": $pki_sign_downloaded_pdf_docs_metadata, "readOnlyMode": $read_only_mode, "readOnlyModeMetadata": $read_only_mode_metadata, "recipientSigningAutoNavigationControl": $recipient_signing_auto_navigation_control, "recipientSigningAutoNavigationControlMetadata": $recipient_signing_auto_navigation_control_metadata, "recipientsCanSignOffline": $recipients_can_sign_offline, "recipientsCanSignOfflineMetadata": $recipients_can_sign_offline_metadata, "require21CFRpt11Compliance": $require21_cf_rpt11_compliance, "require21CFRpt11ComplianceMetadata": $require21_cf_rpt11_compliance_metadata, "requireDeclineReason": $require_decline_reason, "requireDeclineReasonMetadata": $require_decline_reason_metadata, "requireExternalUserManagement": $require_external_user_management, "requireExternalUserManagementMetadata": $require_external_user_management_metadata, "requireSignerCertificateType": $require_signer_certificate_type, "requireSignerCertificateTypeMetadata": $require_signer_certificate_type_metadata, "rsaVeridAccountName": $rsa_verid_account_name, "rsaVeridPassword": $rsa_verid_password, "rsaVeridRuleset": $rsa_verid_ruleset, "rsaVeridUserId": $rsa_verid_user_id, "sbsTransactionLevel": $sbs_transaction_level, "selfSignedRecipientEmailDocument": $self_signed_recipient_email_document, "selfSignedRecipientEmailDocumentMetadata": $self_signed_recipient_email_document_metadata, "selfSignedRecipientEmailDocumentUserOverride": $self_signed_recipient_email_document_user_override, "selfSignedRecipientEmailDocumentUserOverrideMetadata": $self_signed_recipient_email_document_user_override_metadata, "sendLockoutRecipientNotification": $send_lockout_recipient_notification, "sendLockoutRecipientNotificationMetadata": $send_lockout_recipient_notification_metadata, "sendToCertifiedDeliveryEnabled": $send_to_certified_delivery_enabled, "sendToCertifiedDeliveryEnabledMetadata": $send_to_certified_delivery_enabled_metadata, "senderCanSignInEachLocation": $sender_can_sign_in_each_location, "senderCanSignInEachLocationMetadata": $sender_can_sign_in_each_location_metadata, "senderMustAuthenticateSigning": $sender_must_authenticate_signing, "senderMustAuthenticateSigningMetadata": $sender_must_authenticate_signing_metadata, "sendingTagsFontColor": $sending_tags_font_color, "sendingTagsFontColorMetadata": $sending_tags_font_color_metadata, "sendingTagsFontName": $sending_tags_font_name, "sendingTagsFontNameMetadata": $sending_tags_font_name_metadata, "sendingTagsFontSize": $sending_tags_font_size, "sendingTagsFontSizeMetadata": $sending_tags_font_size_metadata, "sessionTimeout": $session_timeout, "sessionTimeoutMetadata": $session_timeout_metadata, "setRecipEmailLang": $set_recip_email_lang, "setRecipEmailLangMetadata": $set_recip_email_lang_metadata, "setRecipSignLang": $set_recip_sign_lang, "setRecipSignLangMetadata": $set_recip_sign_lang_metadata, "sharedTemplateFolders": $shared_template_folders, "sharedTemplateFoldersMetadata": $shared_template_folders_metadata, "showCompleteDialogInEmbeddedSession": $show_complete_dialog_in_embedded_session, "showCompleteDialogInEmbeddedSessionMetadata": $show_complete_dialog_in_embedded_session_metadata, "showConditionalRoutingOnSend": $show_conditional_routing_on_send, "showConditionalRoutingOnSendMetadata": $show_conditional_routing_on_send_metadata, "showInitialConditionalFields": $show_initial_conditional_fields, "showInitialConditionalFieldsMetadata": $show_initial_conditional_fields_metadata, "showLocalizedWatermarks": $show_localized_watermarks, "showLocalizedWatermarksMetadata": $show_localized_watermarks_metadata, "showMaskedFieldsWhenDownloadingDocumentAsSender": $show_masked_fields_when_downloading_document_as_sender, "showMaskedFieldsWhenDownloadingDocumentAsSenderMetadata": $show_masked_fields_when_downloading_document_as_sender_metadata, "showTutorials": $show_tutorials, "showTutorialsMetadata": $show_tutorials_metadata, "signDateFormat": $sign_date_format, "signDateFormatMetadata": $sign_date_format_metadata, "signDateTimeAccountLanguageOverride": $sign_date_time_account_language_override, "signDateTimeAccountLanguageOverrideMetadata": $sign_date_time_account_language_override_metadata, "signDateTimeAccountTimezoneOverride": $sign_date_time_account_timezone_override, "signDateTimeAccountTimezoneOverrideMetadata": $sign_date_time_account_timezone_override_metadata, "signTimeFormat": $sign_time_format, "signTimeFormatMetadata": $sign_time_format_metadata, "signTimeShowAmPm": $sign_time_show_am_pm, "signTimeShowAmPmMetadata": $sign_time_show_am_pm_metadata, "signatureProviders": $signature_providers, "signatureProvidersMetadata": $signature_providers_metadata, "signerAttachCertificateToEnvelopePDF": $signer_attach_certificate_to_envelope_pdf, "signerAttachCertificateToEnvelopePDFMetadata": $signer_attach_certificate_to_envelope_pdf_metadata, "signerAttachConcat": $signer_attach_concat, "signerAttachConcatMetadata": $signer_attach_concat_metadata, "signerCanCreateAccount": $signer_can_create_account, "signerCanCreateAccountMetadata": $signer_can_create_account_metadata, "signerCanSignOnMobile": $signer_can_sign_on_mobile, "signerCanSignOnMobileMetadata": $signer_can_sign_on_mobile_metadata, "signerInSessionUseEnvelopeCompleteEmail": $signer_in_session_use_envelope_complete_email, "signerInSessionUseEnvelopeCompleteEmailMetadata": $signer_in_session_use_envelope_complete_email_metadata, "signerLoginRequirements": $signer_login_requirements, "signerLoginRequirementsMetadata": $signer_login_requirements_metadata, "signerMustHaveAccount": $signer_must_have_account, "signerMustHaveAccountMetadata": $signer_must_have_account_metadata, "signerMustLoginToSign": $signer_must_login_to_sign, "signerMustLoginToSignMetadata": $signer_must_login_to_sign_metadata, "signerShowSecureFieldInitialValues": $signer_show_secure_field_initial_values, "signerShowSecureFieldInitialValuesMetadata": $signer_show_secure_field_initial_values_metadata, "signingSessionTimeout": $signing_session_timeout, "signingSessionTimeoutMetadata": $signing_session_timeout_metadata, "signingUiVersion": $signing_ui_version, "signingUiVersionMetadata": $signing_ui_version_metadata, "simplifiedSendingEnabled": $simplified_sending_enabled, "simplifiedSendingEnabledMetadata": $simplified_sending_enabled_metadata, "singleSignOnEnabled": $single_sign_on_enabled, "singleSignOnEnabledMetadata": $single_sign_on_enabled_metadata, "skipAuthCompletedEnvelopes": $skip_auth_completed_envelopes, "skipAuthCompletedEnvelopesMetadata": $skip_auth_completed_envelopes_metadata, "socialIdRecipAuth": $social_id_recip_auth, "socialIdRecipAuthMetadata": $social_id_recip_auth_metadata, "specifyDocumentVisibility": $specify_document_visibility, "specifyDocumentVisibilityMetadata": $specify_document_visibility_metadata, "startInAdvancedCorrect": $start_in_advanced_correct, "startInAdvancedCorrectMetadata": $start_in_advanced_correct_metadata, "supplementalDocumentsMustAccept": $supplemental_documents_must_accept, "supplementalDocumentsMustAcceptMetadata": $supplemental_documents_must_accept_metadata, "supplementalDocumentsMustRead": $supplemental_documents_must_read, "supplementalDocumentsMustReadMetadata": $supplemental_documents_must_read_metadata, "supplementalDocumentsMustView": $supplemental_documents_must_view, "supplementalDocumentsMustViewMetadata": $supplemental_documents_must_view_metadata, "suppressCertificateEnforcement": $suppress_certificate_enforcement, "suppressCertificateEnforcementMetadata": $suppress_certificate_enforcement_metadata, "tabAccountSettings": $tab_account_settings, "timezoneOffsetAPI": $timezone_offset_api, "timezoneOffsetAPIMetadata": $timezone_offset_api_metadata, "timezoneOffsetUI": $timezone_offset_ui, "timezoneOffsetUIMetadata": $timezone_offset_ui_metadata, "universalSignatureOptIn": $universal_signature_opt_in, "useAccountLevelEmail": $use_account_level_email, "useAccountLevelEmailMetadata": $use_account_level_email_metadata, "useConsumerDisclosure": $use_consumer_disclosure, "useConsumerDisclosureMetadata": $use_consumer_disclosure_metadata, "useConsumerDisclosureWithinAccount": $use_consumer_disclosure_within_account, "useConsumerDisclosureWithinAccountMetadata": $use_consumer_disclosure_within_account_metadata, "useDerivedKeys": $use_derived_keys, "useDerivedKeysMetadata": $use_derived_keys_metadata, "useDocuSignExpressSignerCertificate": $use_docu_sign_express_signer_certificate, "useDocuSignExpressSignerCertificateMetadata": $use_docu_sign_express_signer_certificate_metadata, "useEnvelopeSearchMixedMode": $use_envelope_search_mixed_mode, "useEnvelopeSearchMixedModeMetadata": $use_envelope_search_mixed_mode_metadata, "useMultiAppGroupsData": $use_multi_app_groups_data, "useMultiAppGroupsDataMetadata": $use_multi_app_groups_data_metadata, "useNewBlobForPdf": $use_new_blob_for_pdf, "useNewBlobForPdfMetadata": $use_new_blob_for_pdf_metadata, "useNewEnvelopeSearch": $use_new_envelope_search, "useNewEnvelopeSearchMetadata": $use_new_envelope_search_metadata, "useSAFESignerCertificates": $use_safe_signer_certificates, "useSAFESignerCertificatesMetadata": $use_safe_signer_certificates_metadata, "useSignatureProviderPlatform": $use_signature_provider_platform, "useSignatureProviderPlatformMetadata": $use_signature_provider_platform_metadata, "useSmartContractsV1": $use_smart_contracts_v1, "usesAPI": $uses_api, "usesAPIMetadata": $uses_api_metadata, "validationsAllowed": $validations_allowed, "validationsAllowedMetadata": $validations_allowed_metadata, "validationsBrand": $validations_brand, "validationsBrandMetadata": $validations_brand_metadata, "validationsCadence": $validations_cadence, "validationsCadenceMetadata": $validations_cadence_metadata, "validationsEnabled": $validations_enabled, "validationsEnabledMetadata": $validations_enabled_metadata, "validationsReport": $validations_report, "validationsReportMetadata": $validations_report_metadata, "waterMarkEnabled": $water_mark_enabled, "waterMarkEnabledMetadata": $water_mark_enabled_metadata, "writeReminderToEnvelopeHistory": $write_reminder_to_envelope_history, "writeReminderToEnvelopeHistoryMetadata": $write_reminder_to_envelope_history_metadata, "wurflMinAllowableScreenSize": $wurfl_min_allowable_screen_size, "wurflMinAllowableScreenSizeMetadata": $wurfl_min_allowable_screen_size_metadata} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: {}, body: $req_body}
 }
 
 # Gets the BCC email archive configurations for an account.
@@ -8820,11 +9267,12 @@ export def "v2-1-accounts-settings-bcc-email-archives get-list" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($account_id | is-empty) { error make --unspanned { msg: "path parameter 'accountId' must be non-empty" } }
   let qp = [(serialize-qp "count" $count "scalar") (serialize-qp "start_position" $start_position "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({account_id: (encode-path-segment $account_id)} | format pattern "/v2.1/accounts/{account_id}/settings/bcc_email_archives") $qp)
   let accept_val = "*/*"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"count": $count, "start_position": $start_position} | compact), body: null}
 }
 
 # Creates a BCC email archive configuration.
@@ -8858,12 +9306,13 @@ export def "v2-1-accounts-settings-bcc-email-archives create" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($account_id | is-empty) { error make --unspanned { msg: "path parameter 'accountId' must be non-empty" } }
   let full_url = (build-url $base ({account_id: (encode-path-segment $account_id)} | format pattern "/v2.1/accounts/{account_id}/settings/bcc_email_archives"))
   let req_body = {"accountId": $body_account_id, "bccEmailArchiveId": $bcc_email_archive_id, "created": $created, "createdBy": $created_by, "email": $email, "emailNotificationId": $email_notification_id, "modified": $modified, "modifiedBy": $modified_by, "status": $status, "uri": $uri} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "*/*"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: {}, body: $req_body}
 }
 
 # Deletes a BCC email archive configuration.
@@ -8885,10 +9334,12 @@ export def "v2-1-accounts-settings-bcc-email-archives delete" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($account_id | is-empty) { error make --unspanned { msg: "path parameter 'accountId' must be non-empty" } }
+  if ($bcc_email_archive_id | is-empty) { error make --unspanned { msg: "path parameter 'bccEmailArchiveId' must be non-empty" } }
   let full_url = (build-url $base ({account_id: (encode-path-segment $account_id), bcc_email_archive_id: (encode-path-segment $bcc_email_archive_id)} | format pattern "/v2.1/accounts/{account_id}/settings/bcc_email_archives/{bcc_email_archive_id}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
 }
 
 # Gets a BCC email archive configuration and its history.
@@ -8912,11 +9363,13 @@ export def "v2-1-accounts-settings-bcc-email-archives get-history-list" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($account_id | is-empty) { error make --unspanned { msg: "path parameter 'accountId' must be non-empty" } }
+  if ($bcc_email_archive_id | is-empty) { error make --unspanned { msg: "path parameter 'bccEmailArchiveId' must be non-empty" } }
   let qp = [(serialize-qp "count" $count "scalar") (serialize-qp "start_position" $start_position "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({account_id: (encode-path-segment $account_id), bcc_email_archive_id: (encode-path-segment $bcc_email_archive_id)} | format pattern "/v2.1/accounts/{account_id}/settings/bcc_email_archives/{bcc_email_archive_id}") $qp)
   let accept_val = "*/*"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"count": $count, "start_position": $start_position} | compact), body: null}
 }
 
 # Deletes configuration information for the eNote eOriginal integration.
@@ -8937,10 +9390,11 @@ export def "v2-1-accounts-settings-enote-configuration delete-e-note-e-note" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($account_id | is-empty) { error make --unspanned { msg: "path parameter 'accountId' must be non-empty" } }
   let full_url = (build-url $base ({account_id: (encode-path-segment $account_id)} | format pattern "/v2.1/accounts/{account_id}/settings/enote_configuration"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
 }
 
 # Returns the configuration information for the eNote eOriginal integration.
@@ -8961,10 +9415,11 @@ export def "v2-1-accounts-settings-enote-configuration get-e-note-e-note" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($account_id | is-empty) { error make --unspanned { msg: "path parameter 'accountId' must be non-empty" } }
   let full_url = (build-url $base ({account_id: (encode-path-segment $account_id)} | format pattern "/v2.1/accounts/{account_id}/settings/enote_configuration"))
   let accept_val = "*/*"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
 }
 
 # Updates configuration information for the eNote eOriginal integration.
@@ -8992,12 +9447,13 @@ export def "v2-1-accounts-settings-enote-configuration update-e-note-e-note" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($account_id | is-empty) { error make --unspanned { msg: "path parameter 'accountId' must be non-empty" } }
   let full_url = (build-url $base ({account_id: (encode-path-segment $account_id)} | format pattern "/v2.1/accounts/{account_id}/settings/enote_configuration"))
   let req_body = {"apiKey": $api_key, "connectConfigured": $connect_configured, "eNoteConfigured": $e_note_configured, "organization": $organization, "password": $password, "userName": $user_name} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "*/*"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: {}, body: $req_body}
 }
 
 # Gets the envelope purge configuration for an account.
@@ -9018,10 +9474,11 @@ export def "v2-1-accounts-settings-envelope-purge-configuration get" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($account_id | is-empty) { error make --unspanned { msg: "path parameter 'accountId' must be non-empty" } }
   let full_url = (build-url $base ({account_id: (encode-path-segment $account_id)} | format pattern "/v2.1/accounts/{account_id}/settings/envelope_purge_configuration"))
   let accept_val = "*/*"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
 }
 
 # Sets the envelope purge configuration for an account.
@@ -9047,12 +9504,13 @@ export def "v2-1-accounts-settings-envelope-purge-configuration update" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($account_id | is-empty) { error make --unspanned { msg: "path parameter 'accountId' must be non-empty" } }
   let full_url = (build-url $base ({account_id: (encode-path-segment $account_id)} | format pattern "/v2.1/accounts/{account_id}/settings/envelope_purge_configuration"))
   let req_body = {"purgeEnvelopes": $purge_envelopes, "redactPII": $redact_pii, "removeTabsAndEnvelopeAttachments": $remove_tabs_and_envelope_attachments, "retentionDays": $retention_days} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "*/*"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: {}, body: $req_body}
 }
 
 # Gets envelope notification defaults.
@@ -9073,10 +9531,11 @@ export def "v2-1-accounts-settings-notification-defaults get" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($account_id | is-empty) { error make --unspanned { msg: "path parameter 'accountId' must be non-empty" } }
   let full_url = (build-url $base ({account_id: (encode-path-segment $account_id)} | format pattern "/v2.1/accounts/{account_id}/settings/notification_defaults"))
   let accept_val = "*/*"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
 }
 
 # Updates envelope notification default settings.
@@ -9102,12 +9561,13 @@ export def "v2-1-accounts-settings-notification-defaults update" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($account_id | is-empty) { error make --unspanned { msg: "path parameter 'accountId' must be non-empty" } }
   let full_url = (build-url $base ({account_id: (encode-path-segment $account_id)} | format pattern "/v2.1/accounts/{account_id}/settings/notification_defaults"))
   let req_body = {"apiEmailNotifications": $api_email_notifications, "emailNotifications": $email_notifications} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "*/*"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: {}, body: $req_body}
 }
 
 # Gets the password rules for an account.
@@ -9128,10 +9588,11 @@ export def "v2-1-accounts-settings-password-rules get" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($account_id | is-empty) { error make --unspanned { msg: "path parameter 'accountId' must be non-empty" } }
   let full_url = (build-url $base ({account_id: (encode-path-segment $account_id)} | format pattern "/v2.1/accounts/{account_id}/settings/password_rules"))
   let accept_val = "*/*"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
 }
 
 # Updates the password rules for an account.
@@ -9180,12 +9641,13 @@ export def "v2-1-accounts-settings-password-rules update" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($account_id | is-empty) { error make --unspanned { msg: "path parameter 'accountId' must be non-empty" } }
   let full_url = (build-url $base ({account_id: (encode-path-segment $account_id)} | format pattern "/v2.1/accounts/{account_id}/settings/password_rules"))
   let req_body = {"expirePassword": $expire_password, "expirePasswordDays": $expire_password_days, "expirePasswordDaysMetadata": $expire_password_days_metadata, "lockoutDurationMinutes": $lockout_duration_minutes, "lockoutDurationMinutesMetadata": $lockout_duration_minutes_metadata, "lockoutDurationType": $lockout_duration_type, "lockoutDurationTypeMetadata": $lockout_duration_type_metadata, "minimumPasswordAgeDays": $minimum_password_age_days, "minimumPasswordAgeDaysMetadata": $minimum_password_age_days_metadata, "minimumPasswordLength": $minimum_password_length, "minimumPasswordLengthMetadata": $minimum_password_length_metadata, "passwordIncludeDigit": $password_include_digit, "passwordIncludeDigitOrSpecialCharacter": $password_include_digit_or_special_character, "passwordIncludeLowerCase": $password_include_lower_case, "passwordIncludeSpecialCharacter": $password_include_special_character, "passwordIncludeUpperCase": $password_include_upper_case, "passwordStrengthType": $password_strength_type, "passwordStrengthTypeMetadata": $password_strength_type_metadata, "questionsRequired": $questions_required, "questionsRequiredMetadata": $questions_required_metadata} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "*/*"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: {}, body: $req_body}
 }
 
 # Returns tab settings list for specified account
@@ -9206,10 +9668,11 @@ export def "v2-1-accounts-settings-tabs get" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($account_id | is-empty) { error make --unspanned { msg: "path parameter 'accountId' must be non-empty" } }
   let full_url = (build-url $base ({account_id: (encode-path-segment $account_id)} | format pattern "/v2.1/accounts/{account_id}/settings/tabs"))
   let accept_val = "*/*"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
 }
 
 # Modifies tab settings for specified account
@@ -9297,12 +9760,13 @@ export def "v2-1-accounts-settings-tabs update" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($account_id | is-empty) { error make --unspanned { msg: "path parameter 'accountId' must be non-empty" } }
   let full_url = (build-url $base ({account_id: (encode-path-segment $account_id)} | format pattern "/v2.1/accounts/{account_id}/settings/tabs"))
   let req_body = {"allowTabOrder": $allow_tab_order, "allowTabOrderMetadata": $allow_tab_order_metadata, "approveDeclineTabsEnabled": $approve_decline_tabs_enabled, "approveDeclineTabsMetadata": $approve_decline_tabs_metadata, "calculatedFieldsEnabled": $calculated_fields_enabled, "calculatedFieldsMetadata": $calculated_fields_metadata, "checkBoxTabsMetadata": $check_box_tabs_metadata, "checkboxTabsEnabled": $checkbox_tabs_enabled, "currencyTabsEnabled": $currency_tabs_enabled, "currencyTabsMetadata": $currency_tabs_metadata, "dataFieldRegexEnabled": $data_field_regex_enabled, "dataFieldRegexMetadata": $data_field_regex_metadata, "dataFieldSizeEnabled": $data_field_size_enabled, "dataFieldSizeMetadata": $data_field_size_metadata, "drawTabsEnabled": $draw_tabs_enabled, "drawTabsMetadata": $draw_tabs_metadata, "firstLastEmailTabsEnabled": $first_last_email_tabs_enabled, "firstLastEmailTabsMetadata": $first_last_email_tabs_metadata, "listTabsEnabled": $list_tabs_enabled, "listTabsMetadata": $list_tabs_metadata, "noteTabsEnabled": $note_tabs_enabled, "noteTabsMetadata": $note_tabs_metadata, "prefillTabsEnabled": $prefill_tabs_enabled, "prefillTabsMetadata": $prefill_tabs_metadata, "radioTabsEnabled": $radio_tabs_enabled, "radioTabsMetadata": $radio_tabs_metadata, "savingCustomTabsEnabled": $saving_custom_tabs_enabled, "savingCustomTabsMetadata": $saving_custom_tabs_metadata, "senderToChangeTabAssignmentsEnabled": $sender_to_change_tab_assignments_enabled, "senderToChangeTabAssignmentsMetadata": $sender_to_change_tab_assignments_metadata, "sharedCustomTabsEnabled": $shared_custom_tabs_enabled, "sharedCustomTabsMetadata": $shared_custom_tabs_metadata, "tabDataLabelEnabled": $tab_data_label_enabled, "tabDataLabelMetadata": $tab_data_label_metadata, "tabLocationEnabled": $tab_location_enabled, "tabLocationMetadata": $tab_location_metadata, "tabLockingEnabled": $tab_locking_enabled, "tabLockingMetadata": $tab_locking_metadata, "tabScaleEnabled": $tab_scale_enabled, "tabScaleMetadata": $tab_scale_metadata, "tabTextFormattingEnabled": $tab_text_formatting_enabled, "tabTextFormattingMetadata": $tab_text_formatting_metadata, "textTabsEnabled": $text_tabs_enabled, "textTabsMetadata": $text_tabs_metadata} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "*/*"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: {}, body: $req_body}
 }
 
 # Reserved: Gets the shared item status for one or more users.
@@ -9331,11 +9795,12 @@ export def "v2-1-accounts-shared-access get" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($account_id | is-empty) { error make --unspanned { msg: "path parameter 'accountId' must be non-empty" } }
   let qp = [(serialize-qp "count" $count "scalar") (serialize-qp "envelopes_not_shared_user_status" $envelopes_not_shared_user_status "scalar") (serialize-qp "folder_ids" $folder_ids "scalar") (serialize-qp "item_type" $item_type "scalar") (serialize-qp "search_text" $search_text "scalar") (serialize-qp "shared" $shared "scalar") (serialize-qp "start_position" $start_position "scalar") (serialize-qp "user_ids" $user_ids "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({account_id: (encode-path-segment $account_id)} | format pattern "/v2.1/accounts/{account_id}/shared_access") $qp)
   let accept_val = "*/*"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"count": $count, "envelopes_not_shared_user_status": $envelopes_not_shared_user_status, "folder_ids": $folder_ids, "item_type": $item_type, "search_text": $search_text, "shared": $shared, "start_position": $start_position, "user_ids": $user_ids} | compact), body: null}
 }
 
 # Reserved: Sets the shared access information for users.
@@ -9371,13 +9836,14 @@ export def "v2-1-accounts-shared-access update" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($account_id | is-empty) { error make --unspanned { msg: "path parameter 'accountId' must be non-empty" } }
   let qp = [(serialize-qp "item_type" $item_type "scalar") (serialize-qp "preserve_existing_shared_access" $preserve_existing_shared_access "scalar") (serialize-qp "user_ids" $user_ids "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({account_id: (encode-path-segment $account_id)} | format pattern "/v2.1/accounts/{account_id}/shared_access") $qp)
   let req_body = {"accountId": $body_account_id, "endPosition": $end_position, "errorDetails": $error_details, "nextUri": $next_uri, "previousUri": $previous_uri, "resultSetSize": $result_set_size, "sharedAccess": $shared_access, "startPosition": $start_position, "totalSetSize": $total_set_size} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "*/*"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: ({"item_type": $item_type, "preserve_existing_shared_access": $preserve_existing_shared_access, "user_ids": $user_ids} | compact), body: $req_body}
 }
 
 # Gets the available signature providers for an account.
@@ -9398,10 +9864,11 @@ export def "v2-1-accounts-signature-providers get" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($account_id | is-empty) { error make --unspanned { msg: "path parameter 'accountId' must be non-empty" } }
   let full_url = (build-url $base ({account_id: (encode-path-segment $account_id)} | format pattern "/v2.1/accounts/{account_id}/signatureProviders"))
   let accept_val = "*/*"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
 }
 
 # Returns a list of stamps available in the account.
@@ -9425,11 +9892,12 @@ export def "v2-1-accounts-signatures list" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($account_id | is-empty) { error make --unspanned { msg: "path parameter 'accountId' must be non-empty" } }
   let qp = [(serialize-qp "stamp_format" $stamp_format "scalar") (serialize-qp "stamp_name" $stamp_name "scalar") (serialize-qp "stamp_type" $stamp_type "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({account_id: (encode-path-segment $account_id)} | format pattern "/v2.1/accounts/{account_id}/signatures") $qp)
   let accept_val = "*/*"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"stamp_format": $stamp_format, "stamp_name": $stamp_name, "stamp_type": $stamp_type} | compact), body: null}
 }
 
 # Adds or updates one or more account stamps.
@@ -9454,13 +9922,14 @@ export def "v2-1-accounts-signatures create" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($account_id | is-empty) { error make --unspanned { msg: "path parameter 'accountId' must be non-empty" } }
   let qp = [(serialize-qp "decode_only" $decode_only "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({account_id: (encode-path-segment $account_id)} | format pattern "/v2.1/accounts/{account_id}/signatures") $qp)
   let req_body = {"accountSignatures": $account_signatures} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "*/*"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: ({"decode_only": $decode_only} | compact), body: $req_body}
 }
 
 # Updates an account stamp.
@@ -9468,7 +9937,7 @@ export def "v2-1-accounts-signatures create" [
 # PUT /v2.1/accounts/{accountId}/signatures
 # operationId: AccountSignatures_PutAccountSignature
 # --accountSignatures item shape: {adoptedDateTime?: string, createdDateTime?: string, customField?: string, dateStampProperties?: record, disallowUserResizeStamp?: string, errorDetails?: record, externalID?: string, imageBase64?: string, imageType?: string, initials150ImageId?: string, initialsImageUri?: string, isDefault?: string, lastModifiedDateTime?: string, nrdsId?: string, nrdsLastName?: string, nrdsStatus?: string, phoneticName?: string, signature150ImageId?: string, signatureFont?: string, signatureGroups?: list, ... (12 more fields)}
-export def "v2-1-accounts-signatures update-by-accountId" [
+export def "v2-1-accounts-signatures update-by-account-id" [
   account_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -9484,12 +9953,13 @@ export def "v2-1-accounts-signatures update-by-accountId" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($account_id | is-empty) { error make --unspanned { msg: "path parameter 'accountId' must be non-empty" } }
   let full_url = (build-url $base ({account_id: (encode-path-segment $account_id)} | format pattern "/v2.1/accounts/{account_id}/signatures"))
   let req_body = {"accountSignatures": $account_signatures} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "*/*"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: {}, body: $req_body}
 }
 
 # Deletes an account stamp.
@@ -9511,10 +9981,12 @@ export def "v2-1-accounts-signatures delete" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($account_id | is-empty) { error make --unspanned { msg: "path parameter 'accountId' must be non-empty" } }
+  if ($signature_id | is-empty) { error make --unspanned { msg: "path parameter 'signatureId' must be non-empty" } }
   let full_url = (build-url $base ({account_id: (encode-path-segment $account_id), signature_id: (encode-path-segment $signature_id)} | format pattern "/v2.1/accounts/{account_id}/signatures/{signature_id}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
 }
 
 # Returns information about the specified stamp.
@@ -9536,10 +10008,12 @@ export def "v2-1-accounts-signatures get" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($account_id | is-empty) { error make --unspanned { msg: "path parameter 'accountId' must be non-empty" } }
+  if ($signature_id | is-empty) { error make --unspanned { msg: "path parameter 'signatureId' must be non-empty" } }
   let full_url = (build-url $base ({account_id: (encode-path-segment $account_id), signature_id: (encode-path-segment $signature_id)} | format pattern "/v2.1/accounts/{account_id}/signatures/{signature_id}"))
   let accept_val = "*/*"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
 }
 
 # Updates an account stamp by ID.
@@ -9549,7 +10023,7 @@ export def "v2-1-accounts-signatures get" [
 # --dateStampProperties shape: {dateAreaHeight?: string, dateAreaWidth?: string, dateAreaX?: string, dateAreaY?: string}
 # --signatureGroups item shape: {groupId?: string, rights?: string}
 # --signatureUsers item shape: {isDefault?: string, rights?: string, userId?: string}
-export def "v2-1-accounts-signatures update-by-accountId-signatureId" [
+export def "v2-1-accounts-signatures update-by-account-id-signature-id" [
   account_id: string
   signature_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -9583,13 +10057,15 @@ export def "v2-1-accounts-signatures update-by-accountId-signatureId" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($account_id | is-empty) { error make --unspanned { msg: "path parameter 'accountId' must be non-empty" } }
+  if ($signature_id | is-empty) { error make --unspanned { msg: "path parameter 'signatureId' must be non-empty" } }
   let qp = [(serialize-qp "close_existing_signature" $close_existing_signature "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({account_id: (encode-path-segment $account_id), signature_id: (encode-path-segment $signature_id)} | format pattern "/v2.1/accounts/{account_id}/signatures/{signature_id}") $qp)
   let req_body = {"dateStampProperties": $date_stamp_properties, "disallowUserResizeStamp": $disallow_user_resize_stamp, "externalID": $external_id, "imageType": $image_type, "isDefault": $is_default, "nrdsId": $nrds_id, "nrdsLastName": $nrds_last_name, "phoneticName": $phonetic_name, "signatureFont": $signature_font, "signatureGroups": $signature_groups, "signatureId": $body_signature_id, "signatureInitials": $signature_initials, "signatureName": $signature_name, "signatureType": $signature_type, "signatureUsers": $signature_users, "stampFormat": $stamp_format, "stampSizeMM": $stamp_size_mm} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "*/*"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: ({"close_existing_signature": $close_existing_signature} | compact), body: $req_body}
 }
 
 # Deletes the image for a stamp.
@@ -9612,10 +10088,13 @@ export def "v2-1-accounts-signatures delete-image" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($account_id | is-empty) { error make --unspanned { msg: "path parameter 'accountId' must be non-empty" } }
+  if ($signature_id | is-empty) { error make --unspanned { msg: "path parameter 'signatureId' must be non-empty" } }
+  if ($image_type | is-empty) { error make --unspanned { msg: "path parameter 'imageType' must be non-empty" } }
   let full_url = (build-url $base ({account_id: (encode-path-segment $account_id), signature_id: (encode-path-segment $signature_id), image_type: (encode-path-segment $image_type)} | format pattern "/v2.1/accounts/{account_id}/signatures/{signature_id}/{image_type}"))
   let accept_val = "*/*"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
 }
 
 # Returns the image for an account stamp.
@@ -9639,11 +10118,14 @@ export def "v2-1-accounts-signatures get-image" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($account_id | is-empty) { error make --unspanned { msg: "path parameter 'accountId' must be non-empty" } }
+  if ($signature_id | is-empty) { error make --unspanned { msg: "path parameter 'signatureId' must be non-empty" } }
+  if ($image_type | is-empty) { error make --unspanned { msg: "path parameter 'imageType' must be non-empty" } }
   let qp = [(serialize-qp "include_chrome" $include_chrome "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({account_id: (encode-path-segment $account_id), signature_id: (encode-path-segment $signature_id), image_type: (encode-path-segment $image_type)} | format pattern "/v2.1/accounts/{account_id}/signatures/{signature_id}/{image_type}") $qp)
   let accept_val = "image/gif"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"include_chrome": $include_chrome} | compact), body: null}
 }
 
 # Sets a signature image, initials, or stamp.
@@ -9667,11 +10149,14 @@ export def "v2-1-accounts-signatures update-image" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($account_id | is-empty) { error make --unspanned { msg: "path parameter 'accountId' must be non-empty" } }
+  if ($signature_id | is-empty) { error make --unspanned { msg: "path parameter 'signatureId' must be non-empty" } }
+  if ($image_type | is-empty) { error make --unspanned { msg: "path parameter 'imageType' must be non-empty" } }
   let qp = [(serialize-qp "transparent_png" $transparent_png "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({account_id: (encode-path-segment $account_id), signature_id: (encode-path-segment $signature_id), image_type: (encode-path-segment $image_type)} | format pattern "/v2.1/accounts/{account_id}/signatures/{signature_id}/{image_type}") $qp)
   let accept_val = "*/*"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"transparent_png": $transparent_png} | compact), body: null}
 }
 
 # Deletes one or more signing groups.
@@ -9695,12 +10180,13 @@ export def "v2-1-accounts-signing-groups delete" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($account_id | is-empty) { error make --unspanned { msg: "path parameter 'accountId' must be non-empty" } }
   let full_url = (build-url $base ({account_id: (encode-path-segment $account_id)} | format pattern "/v2.1/accounts/{account_id}/signing_groups"))
   let req_body = {"groups": $groups} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "*/*"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: {}, body: $req_body}
 }
 
 # Gets a list of the Signing Groups in an account.
@@ -9723,11 +10209,12 @@ export def "v2-1-accounts-signing-groups list" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($account_id | is-empty) { error make --unspanned { msg: "path parameter 'accountId' must be non-empty" } }
   let qp = [(serialize-qp "group_type" $group_type "scalar") (serialize-qp "include_users" $include_users "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({account_id: (encode-path-segment $account_id)} | format pattern "/v2.1/accounts/{account_id}/signing_groups") $qp)
   let accept_val = "*/*"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"group_type": $group_type, "include_users": $include_users} | compact), body: null}
 }
 
 # Creates a signing group.
@@ -9751,12 +10238,13 @@ export def "v2-1-accounts-signing-groups create" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($account_id | is-empty) { error make --unspanned { msg: "path parameter 'accountId' must be non-empty" } }
   let full_url = (build-url $base ({account_id: (encode-path-segment $account_id)} | format pattern "/v2.1/accounts/{account_id}/signing_groups"))
   let req_body = {"groups": $groups} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "*/*"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: {}, body: $req_body}
 }
 
 # Updates signing group names.
@@ -9764,7 +10252,7 @@ export def "v2-1-accounts-signing-groups create" [
 # PUT /v2.1/accounts/{accountId}/signing_groups
 # operationId: SigningGroups_PutSigningGroups
 # --groups item shape: {created?: string, createdBy?: string, errorDetails?: record, groupEmail?: string, groupName?: string, groupType?: string, modified?: string, modifiedBy?: string, signingGroupId?: string, users?: list}
-export def "v2-1-accounts-signing-groups update-by-accountId" [
+export def "v2-1-accounts-signing-groups update-by-account-id" [
   account_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -9780,12 +10268,13 @@ export def "v2-1-accounts-signing-groups update-by-accountId" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($account_id | is-empty) { error make --unspanned { msg: "path parameter 'accountId' must be non-empty" } }
   let full_url = (build-url $base ({account_id: (encode-path-segment $account_id)} | format pattern "/v2.1/accounts/{account_id}/signing_groups"))
   let req_body = {"groups": $groups} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "*/*"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: {}, body: $req_body}
 }
 
 # Gets information about a signing group.
@@ -9807,10 +10296,12 @@ export def "v2-1-accounts-signing-groups get" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($account_id | is-empty) { error make --unspanned { msg: "path parameter 'accountId' must be non-empty" } }
+  if ($signing_group_id | is-empty) { error make --unspanned { msg: "path parameter 'signingGroupId' must be non-empty" } }
   let full_url = (build-url $base ({account_id: (encode-path-segment $account_id), signing_group_id: (encode-path-segment $signing_group_id)} | format pattern "/v2.1/accounts/{account_id}/signing_groups/{signing_group_id}"))
   let accept_val = "*/*"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
 }
 
 # Updates a signing group.
@@ -9819,7 +10310,7 @@ export def "v2-1-accounts-signing-groups get" [
 # operationId: SigningGroups_PutSigningGroup
 # --errorDetails shape: {errorCode?: string, message?: string}
 # --users item shape: {email?: string, errorDetails?: record, userName?: string}
-export def "v2-1-accounts-signing-groups update-by-accountId-signingGroupId" [
+export def "v2-1-accounts-signing-groups update-by-account-id-signing-group-id" [
   account_id: string
   signing_group_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -9845,12 +10336,14 @@ export def "v2-1-accounts-signing-groups update-by-accountId-signingGroupId" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($account_id | is-empty) { error make --unspanned { msg: "path parameter 'accountId' must be non-empty" } }
+  if ($signing_group_id | is-empty) { error make --unspanned { msg: "path parameter 'signingGroupId' must be non-empty" } }
   let full_url = (build-url $base ({account_id: (encode-path-segment $account_id), signing_group_id: (encode-path-segment $signing_group_id)} | format pattern "/v2.1/accounts/{account_id}/signing_groups/{signing_group_id}"))
   let req_body = {"created": $created, "createdBy": $created_by, "errorDetails": $error_details, "groupEmail": $group_email, "groupName": $group_name, "groupType": $group_type, "modified": $modified, "modifiedBy": $modified_by, "signingGroupId": $body_signing_group_id, "users": $users} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "*/*"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: {}, body: $req_body}
 }
 
 # Deletes one or more members from a signing group.
@@ -9875,12 +10368,14 @@ export def "v2-1-accounts-signing-groups-users delete" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($account_id | is-empty) { error make --unspanned { msg: "path parameter 'accountId' must be non-empty" } }
+  if ($signing_group_id | is-empty) { error make --unspanned { msg: "path parameter 'signingGroupId' must be non-empty" } }
   let full_url = (build-url $base ({account_id: (encode-path-segment $account_id), signing_group_id: (encode-path-segment $signing_group_id)} | format pattern "/v2.1/accounts/{account_id}/signing_groups/{signing_group_id}/users"))
   let req_body = {"users": $users} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "*/*"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: {}, body: $req_body}
 }
 
 # Gets a list of members in a Signing Group.
@@ -9902,10 +10397,12 @@ export def "v2-1-accounts-signing-groups-users get" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($account_id | is-empty) { error make --unspanned { msg: "path parameter 'accountId' must be non-empty" } }
+  if ($signing_group_id | is-empty) { error make --unspanned { msg: "path parameter 'signingGroupId' must be non-empty" } }
   let full_url = (build-url $base ({account_id: (encode-path-segment $account_id), signing_group_id: (encode-path-segment $signing_group_id)} | format pattern "/v2.1/accounts/{account_id}/signing_groups/{signing_group_id}/users"))
   let accept_val = "*/*"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
 }
 
 # Adds members to a signing group.
@@ -9930,12 +10427,14 @@ export def "v2-1-accounts-signing-groups-users update" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($account_id | is-empty) { error make --unspanned { msg: "path parameter 'accountId' must be non-empty" } }
+  if ($signing_group_id | is-empty) { error make --unspanned { msg: "path parameter 'signingGroupId' must be non-empty" } }
   let full_url = (build-url $base ({account_id: (encode-path-segment $account_id), signing_group_id: (encode-path-segment $signing_group_id)} | format pattern "/v2.1/accounts/{account_id}/signing_groups/{signing_group_id}/users"))
   let req_body = {"users": $users} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "*/*"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: {}, body: $req_body}
 }
 
 # Gets the supported languages for envelope recipients.
@@ -9956,10 +10455,11 @@ export def "v2-1-accounts-supported-languages get" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($account_id | is-empty) { error make --unspanned { msg: "path parameter 'accountId' must be non-empty" } }
   let full_url = (build-url $base ({account_id: (encode-path-segment $account_id)} | format pattern "/v2.1/accounts/{account_id}/supported_languages"))
   let accept_val = "*/*"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
 }
 
 # Gets a list of all account tabs.
@@ -9981,11 +10481,12 @@ export def "v2-1-accounts-tab-definitions get" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($account_id | is-empty) { error make --unspanned { msg: "path parameter 'accountId' must be non-empty" } }
   let qp = [(serialize-qp "custom_tab_only" $custom_tab_only "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({account_id: (encode-path-segment $account_id)} | format pattern "/v2.1/accounts/{account_id}/tab_definitions") $qp)
   let accept_val = "*/*"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"custom_tab_only": $custom_tab_only} | compact), body: null}
 }
 
 # Creates a custom tab.
@@ -10064,12 +10565,13 @@ export def "v2-1-accounts-tab-definitions create" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($account_id | is-empty) { error make --unspanned { msg: "path parameter 'accountId' must be non-empty" } }
   let full_url = (build-url $base ({account_id: (encode-path-segment $account_id)} | format pattern "/v2.1/accounts/{account_id}/tab_definitions"))
   let req_body = {"anchor": $anchor, "anchorCaseSensitive": $anchor_case_sensitive, "anchorHorizontalAlignment": $anchor_horizontal_alignment, "anchorIgnoreIfNotPresent": $anchor_ignore_if_not_present, "anchorMatchWholeWord": $anchor_match_whole_word, "anchorUnits": $anchor_units, "anchorXOffset": $anchor_x_offset, "anchorYOffset": $anchor_y_offset, "bold": $bold, "collaborative": $collaborative, "concealValueOnDocument": $conceal_value_on_document, "createdByDisplayName": $created_by_display_name, "createdByUserId": $created_by_user_id, "customTabId": $custom_tab_id, "disableAutoSize": $disable_auto_size, "editable": $editable, "font": $font, "fontColor": $font_color, "fontSize": $font_size, "height": $height, "includedInEmail": $included_in_email, "initialValue": $initial_value, "italic": $italic, "items": $items, "lastModified": $last_modified, "lastModifiedByDisplayName": $last_modified_by_display_name, "lastModifiedByUserId": $last_modified_by_user_id, "localePolicy": $locale_policy, "locked": $locked, "maxNumericalValue": $max_numerical_value, "maximumLength": $maximum_length, "mergeField": $merge_field, "minNumericalValue": $min_numerical_value, "name": $name, "numericalValue": $numerical_value, "paymentItemCode": $payment_item_code, "paymentItemDescription": $payment_item_description, "paymentItemName": $payment_item_name, "requireAll": $require_all, "requireInitialOnSharedChange": $require_initial_on_shared_change, "required": $required, "scaleValue": $scale_value, "selected": $selected, "shared": $shared, "signatureProviderId": $signature_provider_id, "stampType": $stamp_type, "stampTypeMetadata": $stamp_type_metadata, "tabLabel": $tab_label, "type": $type, "underline": $underline, "validationMessage": $validation_message, "validationPattern": $validation_pattern, "validationType": $validation_type, "width": $width} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "*/*"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: {}, body: $req_body}
 }
 
 # Deletes custom tab information.
@@ -10091,10 +10593,12 @@ export def "v2-1-accounts-tab-definitions delete-custom" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($account_id | is-empty) { error make --unspanned { msg: "path parameter 'accountId' must be non-empty" } }
+  if ($custom_tab_id | is-empty) { error make --unspanned { msg: "path parameter 'customTabId' must be non-empty" } }
   let full_url = (build-url $base ({account_id: (encode-path-segment $account_id), custom_tab_id: (encode-path-segment $custom_tab_id)} | format pattern "/v2.1/accounts/{account_id}/tab_definitions/{custom_tab_id}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
 }
 
 # Gets custom tab information.
@@ -10116,10 +10620,12 @@ export def "v2-1-accounts-tab-definitions get-custom" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($account_id | is-empty) { error make --unspanned { msg: "path parameter 'accountId' must be non-empty" } }
+  if ($custom_tab_id | is-empty) { error make --unspanned { msg: "path parameter 'customTabId' must be non-empty" } }
   let full_url = (build-url $base ({account_id: (encode-path-segment $account_id), custom_tab_id: (encode-path-segment $custom_tab_id)} | format pattern "/v2.1/accounts/{account_id}/tab_definitions/{custom_tab_id}"))
   let accept_val = "*/*"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
 }
 
 # Updates custom tab information.
@@ -10199,12 +10705,14 @@ export def "v2-1-accounts-tab-definitions update-custom" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($account_id | is-empty) { error make --unspanned { msg: "path parameter 'accountId' must be non-empty" } }
+  if ($custom_tab_id | is-empty) { error make --unspanned { msg: "path parameter 'customTabId' must be non-empty" } }
   let full_url = (build-url $base ({account_id: (encode-path-segment $account_id), custom_tab_id: (encode-path-segment $custom_tab_id)} | format pattern "/v2.1/accounts/{account_id}/tab_definitions/{custom_tab_id}"))
   let req_body = {"anchor": $anchor, "anchorCaseSensitive": $anchor_case_sensitive, "anchorHorizontalAlignment": $anchor_horizontal_alignment, "anchorIgnoreIfNotPresent": $anchor_ignore_if_not_present, "anchorMatchWholeWord": $anchor_match_whole_word, "anchorUnits": $anchor_units, "anchorXOffset": $anchor_x_offset, "anchorYOffset": $anchor_y_offset, "bold": $bold, "collaborative": $collaborative, "concealValueOnDocument": $conceal_value_on_document, "createdByDisplayName": $created_by_display_name, "createdByUserId": $created_by_user_id, "customTabId": $body_custom_tab_id, "disableAutoSize": $disable_auto_size, "editable": $editable, "font": $font, "fontColor": $font_color, "fontSize": $font_size, "height": $height, "includedInEmail": $included_in_email, "initialValue": $initial_value, "italic": $italic, "items": $items, "lastModified": $last_modified, "lastModifiedByDisplayName": $last_modified_by_display_name, "lastModifiedByUserId": $last_modified_by_user_id, "localePolicy": $locale_policy, "locked": $locked, "maxNumericalValue": $max_numerical_value, "maximumLength": $maximum_length, "mergeField": $merge_field, "minNumericalValue": $min_numerical_value, "name": $name, "numericalValue": $numerical_value, "paymentItemCode": $payment_item_code, "paymentItemDescription": $payment_item_description, "paymentItemName": $payment_item_name, "requireAll": $require_all, "requireInitialOnSharedChange": $require_initial_on_shared_change, "required": $required, "scaleValue": $scale_value, "selected": $selected, "shared": $shared, "signatureProviderId": $signature_provider_id, "stampType": $stamp_type, "stampTypeMetadata": $stamp_type_metadata, "tabLabel": $tab_label, "type": $type, "underline": $underline, "validationMessage": $validation_message, "validationPattern": $validation_pattern, "validationType": $validation_type, "width": $width} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "*/*"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: {}, body: $req_body}
 }
 
 # Gets the list of templates.
@@ -10248,11 +10756,12 @@ export def "v2-1-accounts-templates list" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($account_id | is-empty) { error make --unspanned { msg: "path parameter 'accountId' must be non-empty" } }
   let qp = [(serialize-qp "count" $count "scalar") (serialize-qp "created_from_date" $created_from_date "scalar") (serialize-qp "created_to_date" $created_to_date "scalar") (serialize-qp "folder_ids" $folder_ids "scalar") (serialize-qp "folder_types" $folder_types "scalar") (serialize-qp "from_date" $from_date "scalar") (serialize-qp "include" $include "scalar") (serialize-qp "is_deleted_template_only" $is_deleted_template_only "scalar") (serialize-qp "is_download" $is_download "scalar") (serialize-qp "modified_from_date" $modified_from_date "scalar") (serialize-qp "modified_to_date" $modified_to_date "scalar") (serialize-qp "order" $order "scalar") (serialize-qp "order_by" $order_by "scalar") (serialize-qp "search_fields" $search_fields "scalar") (serialize-qp "search_text" $search_text "scalar") (serialize-qp "shared_by_me" $shared_by_me "scalar") (serialize-qp "start_position" $start_position "scalar") (serialize-qp "template_ids" $template_ids "scalar") (serialize-qp "to_date" $to_date "scalar") (serialize-qp "used_from_date" $used_from_date "scalar") (serialize-qp "used_to_date" $used_to_date "scalar") (serialize-qp "user_filter" $user_filter "scalar") (serialize-qp "user_id" $user_id "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({account_id: (encode-path-segment $account_id)} | format pattern "/v2.1/accounts/{account_id}/templates") $qp)
   let accept_val = "*/*"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"count": $count, "created_from_date": $created_from_date, "created_to_date": $created_to_date, "folder_ids": $folder_ids, "folder_types": $folder_types, "from_date": $from_date, "include": $include, "is_deleted_template_only": $is_deleted_template_only, "is_download": $is_download, "modified_from_date": $modified_from_date, "modified_to_date": $modified_to_date, "order": $order, "order_by": $order_by, "search_fields": $search_fields, "search_text": $search_text, "shared_by_me": $shared_by_me, "start_position": $start_position, "template_ids": $template_ids, "to_date": $to_date, "used_from_date": $used_from_date, "used_to_date": $used_to_date, "user_filter": $user_filter, "user_id": $user_id} | compact), body: null}
 }
 
 # Creates one or more templates.
@@ -10393,12 +10902,13 @@ export def "v2-1-accounts-templates create" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($account_id | is-empty) { error make --unspanned { msg: "path parameter 'accountId' must be non-empty" } }
   let full_url = (build-url $base ({account_id: (encode-path-segment $account_id)} | format pattern "/v2.1/accounts/{account_id}/templates"))
   let req_body = {"accessControlListBase64": $access_control_list_base64, "allowComments": $allow_comments, "allowMarkup": $allow_markup, "allowReassign": $allow_reassign, "allowViewHistory": $allow_view_history, "anySigner": $any_signer, "asynchronous": $asynchronous, "attachmentsUri": $attachments_uri, "authoritativeCopy": $authoritative_copy, "authoritativeCopyDefault": $authoritative_copy_default, "autoMatch": $auto_match, "autoMatchSpecifiedByUser": $auto_match_specified_by_user, "autoNavigation": $auto_navigation, "brandId": $brand_id, "brandLock": $brand_lock, "burnDefaultTabData": $burn_default_tab_data, "certificateUri": $certificate_uri, "completedDateTime": $completed_date_time, "copyRecipientData": $copy_recipient_data, "created": $created, "createdDateTime": $created_date_time, "customFields": $custom_fields, "customFieldsUri": $custom_fields_uri, "declinedDateTime": $declined_date_time, "deletedDateTime": $deleted_date_time, "deliveredDateTime": $delivered_date_time, "description": $description, "disableResponsiveDocument": $disable_responsive_document, "documentBase64": $document_base64, "documents": $documents, "documentsCombinedUri": $documents_combined_uri, "documentsUri": $documents_uri, "emailBlurb": $email_blurb, "emailSettings": $email_settings, "emailSubject": $email_subject, "enableWetSign": $enable_wet_sign, "enforceSignerVisibility": $enforce_signer_visibility, "envelopeAttachments": $envelope_attachments, "envelopeCustomMetadata": $envelope_custom_metadata, "envelopeDocuments": $envelope_documents, "envelopeId": $envelope_id, "envelopeIdStamping": $envelope_id_stamping, "envelopeLocation": $envelope_location, "envelopeMetadata": $envelope_metadata, "envelopeUri": $envelope_uri, "expireAfter": $expire_after, "expireDateTime": $expire_date_time, "expireEnabled": $expire_enabled, "externalEnvelopeId": $external_envelope_id, "favoritedByMe": $favorited_by_me, "folderId": $folder_id, "folderIds": $folder_ids, "folderName": $folder_name, "folders": $folders, "hasComments": $has_comments, "hasFormDataChanged": $has_form_data_changed, "hasWavFile": $has_wav_file, "holder": $holder, "initialSentDateTime": $initial_sent_date_time, "is21CFRPart11": $is21_cfr_part11, "isDocGenTemplate": $is_doc_gen_template, "isDynamicEnvelope": $is_dynamic_envelope, "isSignatureProviderEnvelope": $is_signature_provider_envelope, "lastModified": $last_modified, "lastModifiedBy": $last_modified_by, "lastModifiedDateTime": $last_modified_date_time, "lastUsed": $last_used, "location": $location, "lockInformation": $lock_information, "messageLock": $message_lock, "name": $name, "newPassword": $new_password, "notification": $notification, "notificationUri": $notification_uri, "owner": $owner, "pageCount": $page_count, "password": $password, "passwordProtected": $password_protected, "powerForm": $power_form, "powerForms": $power_forms, "purgeCompletedDate": $purge_completed_date, "purgeRequestDate": $purge_request_date, "purgeState": $purge_state, "recipients": $recipients, "recipientsLock": $recipients_lock, "recipientsUri": $recipients_uri, "sender": $sender, "sentDateTime": $sent_date_time, "shared": $shared, "signerCanSignOnMobile": $signer_can_sign_on_mobile, "signingLocation": $signing_location, "status": $status, "statusChangedDateTime": $status_changed_date_time, "statusDateTime": $status_date_time, "templateId": $template_id, "templatesUri": $templates_uri, "transactionId": $transaction_id, "uri": $uri, "useDisclosure": $use_disclosure, "voidedDateTime": $voided_date_time, "voidedReason": $voided_reason, "workflow": $workflow} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "*/*"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: {}, body: $req_body}
 }
 
 # Gets a specific template associated with a specified account.
@@ -10421,11 +10931,13 @@ export def "v2-1-accounts-templates get" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($account_id | is-empty) { error make --unspanned { msg: "path parameter 'accountId' must be non-empty" } }
+  if ($template_id | is-empty) { error make --unspanned { msg: "path parameter 'templateId' must be non-empty" } }
   let qp = [(serialize-qp "include" $include "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({account_id: (encode-path-segment $account_id), template_id: (encode-path-segment $template_id)} | format pattern "/v2.1/accounts/{account_id}/templates/{template_id}") $qp)
   let accept_val = "*/*"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"include": $include} | compact), body: null}
 }
 
 # Updates an existing template.
@@ -10567,12 +11079,14 @@ export def "v2-1-accounts-templates update" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($account_id | is-empty) { error make --unspanned { msg: "path parameter 'accountId' must be non-empty" } }
+  if ($template_id | is-empty) { error make --unspanned { msg: "path parameter 'templateId' must be non-empty" } }
   let full_url = (build-url $base ({account_id: (encode-path-segment $account_id), template_id: (encode-path-segment $template_id)} | format pattern "/v2.1/accounts/{account_id}/templates/{template_id}"))
   let req_body = {"accessControlListBase64": $access_control_list_base64, "allowComments": $allow_comments, "allowMarkup": $allow_markup, "allowReassign": $allow_reassign, "allowViewHistory": $allow_view_history, "anySigner": $any_signer, "asynchronous": $asynchronous, "attachmentsUri": $attachments_uri, "authoritativeCopy": $authoritative_copy, "authoritativeCopyDefault": $authoritative_copy_default, "autoMatch": $auto_match, "autoMatchSpecifiedByUser": $auto_match_specified_by_user, "autoNavigation": $auto_navigation, "brandId": $brand_id, "brandLock": $brand_lock, "burnDefaultTabData": $burn_default_tab_data, "certificateUri": $certificate_uri, "completedDateTime": $completed_date_time, "copyRecipientData": $copy_recipient_data, "created": $created, "createdDateTime": $created_date_time, "customFields": $custom_fields, "customFieldsUri": $custom_fields_uri, "declinedDateTime": $declined_date_time, "deletedDateTime": $deleted_date_time, "deliveredDateTime": $delivered_date_time, "description": $description, "disableResponsiveDocument": $disable_responsive_document, "documentBase64": $document_base64, "documents": $documents, "documentsCombinedUri": $documents_combined_uri, "documentsUri": $documents_uri, "emailBlurb": $email_blurb, "emailSettings": $email_settings, "emailSubject": $email_subject, "enableWetSign": $enable_wet_sign, "enforceSignerVisibility": $enforce_signer_visibility, "envelopeAttachments": $envelope_attachments, "envelopeCustomMetadata": $envelope_custom_metadata, "envelopeDocuments": $envelope_documents, "envelopeId": $envelope_id, "envelopeIdStamping": $envelope_id_stamping, "envelopeLocation": $envelope_location, "envelopeMetadata": $envelope_metadata, "envelopeUri": $envelope_uri, "expireAfter": $expire_after, "expireDateTime": $expire_date_time, "expireEnabled": $expire_enabled, "externalEnvelopeId": $external_envelope_id, "favoritedByMe": $favorited_by_me, "folderId": $folder_id, "folderIds": $folder_ids, "folderName": $folder_name, "folders": $folders, "hasComments": $has_comments, "hasFormDataChanged": $has_form_data_changed, "hasWavFile": $has_wav_file, "holder": $holder, "initialSentDateTime": $initial_sent_date_time, "is21CFRPart11": $is21_cfr_part11, "isDocGenTemplate": $is_doc_gen_template, "isDynamicEnvelope": $is_dynamic_envelope, "isSignatureProviderEnvelope": $is_signature_provider_envelope, "lastModified": $last_modified, "lastModifiedBy": $last_modified_by, "lastModifiedDateTime": $last_modified_date_time, "lastUsed": $last_used, "location": $location, "lockInformation": $lock_information, "messageLock": $message_lock, "name": $name, "newPassword": $new_password, "notification": $notification, "notificationUri": $notification_uri, "owner": $owner, "pageCount": $page_count, "password": $password, "passwordProtected": $password_protected, "powerForm": $power_form, "powerForms": $power_forms, "purgeCompletedDate": $purge_completed_date, "purgeRequestDate": $purge_request_date, "purgeState": $purge_state, "recipients": $recipients, "recipientsLock": $recipients_lock, "recipientsUri": $recipients_uri, "sender": $sender, "sentDateTime": $sent_date_time, "shared": $shared, "signerCanSignOnMobile": $signer_can_sign_on_mobile, "signingLocation": $signing_location, "status": $status, "statusChangedDateTime": $status_changed_date_time, "statusDateTime": $status_date_time, "templateId": $body_template_id, "templatesUri": $templates_uri, "transactionId": $transaction_id, "uri": $uri, "useDisclosure": $use_disclosure, "voidedDateTime": $voided_date_time, "voidedReason": $voided_reason, "workflow": $workflow} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "*/*"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: {}, body: $req_body}
 }
 
 # Deletes envelope custom fields in a template.
@@ -10599,12 +11113,14 @@ export def "v2-1-accounts-templates-custom-fields delete" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($account_id | is-empty) { error make --unspanned { msg: "path parameter 'accountId' must be non-empty" } }
+  if ($template_id | is-empty) { error make --unspanned { msg: "path parameter 'templateId' must be non-empty" } }
   let full_url = (build-url $base ({account_id: (encode-path-segment $account_id), template_id: (encode-path-segment $template_id)} | format pattern "/v2.1/accounts/{account_id}/templates/{template_id}/custom_fields"))
   let req_body = {"listCustomFields": $list_custom_fields, "textCustomFields": $text_custom_fields} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "*/*"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: {}, body: $req_body}
 }
 
 # Gets the custom document fields from a template.
@@ -10626,10 +11142,12 @@ export def "v2-1-accounts-templates-custom-fields get" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($account_id | is-empty) { error make --unspanned { msg: "path parameter 'accountId' must be non-empty" } }
+  if ($template_id | is-empty) { error make --unspanned { msg: "path parameter 'templateId' must be non-empty" } }
   let full_url = (build-url $base ({account_id: (encode-path-segment $account_id), template_id: (encode-path-segment $template_id)} | format pattern "/v2.1/accounts/{account_id}/templates/{template_id}/custom_fields"))
   let accept_val = "*/*"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
 }
 
 # Creates custom document fields in an existing template document.
@@ -10656,12 +11174,14 @@ export def "v2-1-accounts-templates-custom-fields create" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($account_id | is-empty) { error make --unspanned { msg: "path parameter 'accountId' must be non-empty" } }
+  if ($template_id | is-empty) { error make --unspanned { msg: "path parameter 'templateId' must be non-empty" } }
   let full_url = (build-url $base ({account_id: (encode-path-segment $account_id), template_id: (encode-path-segment $template_id)} | format pattern "/v2.1/accounts/{account_id}/templates/{template_id}/custom_fields"))
   let req_body = {"listCustomFields": $list_custom_fields, "textCustomFields": $text_custom_fields} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "*/*"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: {}, body: $req_body}
 }
 
 # Updates envelope custom fields in a template.
@@ -10688,12 +11208,14 @@ export def "v2-1-accounts-templates-custom-fields update" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($account_id | is-empty) { error make --unspanned { msg: "path parameter 'accountId' must be non-empty" } }
+  if ($template_id | is-empty) { error make --unspanned { msg: "path parameter 'templateId' must be non-empty" } }
   let full_url = (build-url $base ({account_id: (encode-path-segment $account_id), template_id: (encode-path-segment $template_id)} | format pattern "/v2.1/accounts/{account_id}/templates/{template_id}/custom_fields"))
   let req_body = {"listCustomFields": $list_custom_fields, "textCustomFields": $text_custom_fields} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "*/*"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: {}, body: $req_body}
 }
 
 # Deletes documents from a template.
@@ -10824,12 +11346,14 @@ export def "v2-1-accounts-templates-documents delete" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($account_id | is-empty) { error make --unspanned { msg: "path parameter 'accountId' must be non-empty" } }
+  if ($template_id | is-empty) { error make --unspanned { msg: "path parameter 'templateId' must be non-empty" } }
   let full_url = (build-url $base ({account_id: (encode-path-segment $account_id), template_id: (encode-path-segment $template_id)} | format pattern "/v2.1/accounts/{account_id}/templates/{template_id}/documents"))
   let req_body = {"accessControlListBase64": $access_control_list_base64, "accessibility": $accessibility, "allowComments": $allow_comments, "allowMarkup": $allow_markup, "allowReassign": $allow_reassign, "allowRecipientRecursion": $allow_recipient_recursion, "allowViewHistory": $allow_view_history, "anySigner": $any_signer, "asynchronous": $asynchronous, "attachments": $attachments, "attachmentsUri": $attachments_uri, "authoritativeCopy": $authoritative_copy, "authoritativeCopyDefault": $authoritative_copy_default, "autoNavigation": $auto_navigation, "brandId": $brand_id, "brandLock": $brand_lock, "burnDefaultTabData": $burn_default_tab_data, "certificateUri": $certificate_uri, "completedDateTime": $completed_date_time, "compositeTemplates": $composite_templates, "copyRecipientData": $copy_recipient_data, "createdDateTime": $created_date_time, "customFields": $custom_fields, "customFieldsUri": $custom_fields_uri, "declinedDateTime": $declined_date_time, "deletedDateTime": $deleted_date_time, "deliveredDateTime": $delivered_date_time, "disableResponsiveDocument": $disable_responsive_document, "documentBase64": $document_base64, "documents": $documents, "documentsCombinedUri": $documents_combined_uri, "documentsUri": $documents_uri, "emailBlurb": $email_blurb, "emailSettings": $email_settings, "emailSubject": $email_subject, "enableWetSign": $enable_wet_sign, "enforceSignerVisibility": $enforce_signer_visibility, "envelopeAttachments": $envelope_attachments, "envelopeCustomMetadata": $envelope_custom_metadata, "envelopeDocuments": $envelope_documents, "envelopeId": $envelope_id, "envelopeIdStamping": $envelope_id_stamping, "envelopeLocation": $envelope_location, "envelopeMetadata": $envelope_metadata, "envelopeUri": $envelope_uri, "eventNotification": $event_notification, "expireAfter": $expire_after, "expireDateTime": $expire_date_time, "expireEnabled": $expire_enabled, "externalEnvelopeId": $external_envelope_id, "folders": $folders, "hasComments": $has_comments, "hasFormDataChanged": $has_form_data_changed, "hasWavFile": $has_wav_file, "holder": $holder, "initialSentDateTime": $initial_sent_date_time, "is21CFRPart11": $is21_cfr_part11, "isDynamicEnvelope": $is_dynamic_envelope, "isSignatureProviderEnvelope": $is_signature_provider_envelope, "lastModifiedDateTime": $last_modified_date_time, "location": $location, "lockInformation": $lock_information, "messageLock": $message_lock, "notification": $notification, "notificationUri": $notification_uri, "password": $password, "powerForm": $power_form, "purgeCompletedDate": $purge_completed_date, "purgeRequestDate": $purge_request_date, "purgeState": $purge_state, "recipientViewRequest": $recipient_view_request, "recipients": $recipients, "recipientsLock": $recipients_lock, "recipientsUri": $recipients_uri, "sender": $sender, "sentDateTime": $sent_date_time, "signerCanSignOnMobile": $signer_can_sign_on_mobile, "signingLocation": $signing_location, "status": $status, "statusChangedDateTime": $status_changed_date_time, "statusDateTime": $status_date_time, "templateId": $body_template_id, "templateRoles": $template_roles, "templatesUri": $templates_uri, "transactionId": $transaction_id, "useDisclosure": $use_disclosure, "voidedDateTime": $voided_date_time, "voidedReason": $voided_reason, "workflow": $workflow} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "*/*"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: {}, body: $req_body}
 }
 
 # Gets a list of documents associated with a template.
@@ -10852,11 +11376,13 @@ export def "v2-1-accounts-templates-documents list" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($account_id | is-empty) { error make --unspanned { msg: "path parameter 'accountId' must be non-empty" } }
+  if ($template_id | is-empty) { error make --unspanned { msg: "path parameter 'templateId' must be non-empty" } }
   let qp = [(serialize-qp "include_tabs" $include_tabs "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({account_id: (encode-path-segment $account_id), template_id: (encode-path-segment $template_id)} | format pattern "/v2.1/accounts/{account_id}/templates/{template_id}/documents") $qp)
   let accept_val = "*/*"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"include_tabs": $include_tabs} | compact), body: null}
 }
 
 # Adds documents to a template document.
@@ -10882,7 +11408,7 @@ export def "v2-1-accounts-templates-documents list" [
 # --sender shape: {accountId?: string, accountName?: string, activationAccessCode?: string, email?: string, errorDetails?: record, loginStatus?: string, membershipId?: string, sendActivationEmail?: string, uri?: string, userId?: string, userName?: string, userStatus?: string, userType?: string}
 # --templateRoles item shape: {accessCode?: string, additionalNotifications?: list, clientUserId?: string, defaultRecipient?: string, deliveryMethod?: string, email?: string, emailNotification?: record, embeddedRecipientStartURL?: string, inPersonSignerName?: string, name?: string, phoneNumber?: record, recipientSignatureProviders?: list, roleName?: string, routingOrder?: string, signingGroupId?: string, tabs?: record}
 # --workflow shape: {currentWorkflowStepId?: string, resumeDate?: string, scheduledSending?: record, workflowStatus?: string, workflowSteps?: list}
-export def "v2-1-accounts-templates-documents update-by-accountId-templateId" [
+export def "v2-1-accounts-templates-documents update-by-account-id-template-id" [
   account_id: string
   template_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -10987,12 +11513,14 @@ export def "v2-1-accounts-templates-documents update-by-accountId-templateId" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($account_id | is-empty) { error make --unspanned { msg: "path parameter 'accountId' must be non-empty" } }
+  if ($template_id | is-empty) { error make --unspanned { msg: "path parameter 'templateId' must be non-empty" } }
   let full_url = (build-url $base ({account_id: (encode-path-segment $account_id), template_id: (encode-path-segment $template_id)} | format pattern "/v2.1/accounts/{account_id}/templates/{template_id}/documents"))
   let req_body = {"accessControlListBase64": $access_control_list_base64, "accessibility": $accessibility, "allowComments": $allow_comments, "allowMarkup": $allow_markup, "allowReassign": $allow_reassign, "allowRecipientRecursion": $allow_recipient_recursion, "allowViewHistory": $allow_view_history, "anySigner": $any_signer, "asynchronous": $asynchronous, "attachments": $attachments, "attachmentsUri": $attachments_uri, "authoritativeCopy": $authoritative_copy, "authoritativeCopyDefault": $authoritative_copy_default, "autoNavigation": $auto_navigation, "brandId": $brand_id, "brandLock": $brand_lock, "burnDefaultTabData": $burn_default_tab_data, "certificateUri": $certificate_uri, "completedDateTime": $completed_date_time, "compositeTemplates": $composite_templates, "copyRecipientData": $copy_recipient_data, "createdDateTime": $created_date_time, "customFields": $custom_fields, "customFieldsUri": $custom_fields_uri, "declinedDateTime": $declined_date_time, "deletedDateTime": $deleted_date_time, "deliveredDateTime": $delivered_date_time, "disableResponsiveDocument": $disable_responsive_document, "documentBase64": $document_base64, "documents": $documents, "documentsCombinedUri": $documents_combined_uri, "documentsUri": $documents_uri, "emailBlurb": $email_blurb, "emailSettings": $email_settings, "emailSubject": $email_subject, "enableWetSign": $enable_wet_sign, "enforceSignerVisibility": $enforce_signer_visibility, "envelopeAttachments": $envelope_attachments, "envelopeCustomMetadata": $envelope_custom_metadata, "envelopeDocuments": $envelope_documents, "envelopeId": $envelope_id, "envelopeIdStamping": $envelope_id_stamping, "envelopeLocation": $envelope_location, "envelopeMetadata": $envelope_metadata, "envelopeUri": $envelope_uri, "eventNotification": $event_notification, "expireAfter": $expire_after, "expireDateTime": $expire_date_time, "expireEnabled": $expire_enabled, "externalEnvelopeId": $external_envelope_id, "folders": $folders, "hasComments": $has_comments, "hasFormDataChanged": $has_form_data_changed, "hasWavFile": $has_wav_file, "holder": $holder, "initialSentDateTime": $initial_sent_date_time, "is21CFRPart11": $is21_cfr_part11, "isDynamicEnvelope": $is_dynamic_envelope, "isSignatureProviderEnvelope": $is_signature_provider_envelope, "lastModifiedDateTime": $last_modified_date_time, "location": $location, "lockInformation": $lock_information, "messageLock": $message_lock, "notification": $notification, "notificationUri": $notification_uri, "password": $password, "powerForm": $power_form, "purgeCompletedDate": $purge_completed_date, "purgeRequestDate": $purge_request_date, "purgeState": $purge_state, "recipientViewRequest": $recipient_view_request, "recipients": $recipients, "recipientsLock": $recipients_lock, "recipientsUri": $recipients_uri, "sender": $sender, "sentDateTime": $sent_date_time, "signerCanSignOnMobile": $signer_can_sign_on_mobile, "signingLocation": $signing_location, "status": $status, "statusChangedDateTime": $status_changed_date_time, "statusDateTime": $status_date_time, "templateId": $body_template_id, "templateRoles": $template_roles, "templatesUri": $templates_uri, "transactionId": $transaction_id, "useDisclosure": $use_disclosure, "voidedDateTime": $voided_date_time, "voidedReason": $voided_reason, "workflow": $workflow} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "*/*"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: {}, body: $req_body}
 }
 
 # Gets PDF documents from a template.
@@ -11017,11 +11545,14 @@ export def "v2-1-accounts-templates-documents get" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($account_id | is-empty) { error make --unspanned { msg: "path parameter 'accountId' must be non-empty" } }
+  if ($template_id | is-empty) { error make --unspanned { msg: "path parameter 'templateId' must be non-empty" } }
+  if ($document_id | is-empty) { error make --unspanned { msg: "path parameter 'documentId' must be non-empty" } }
   let qp = [(serialize-qp "encrypt" $encrypt "scalar") (serialize-qp "show_changes" $show_changes "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({account_id: (encode-path-segment $account_id), template_id: (encode-path-segment $template_id), document_id: (encode-path-segment $document_id)} | format pattern "/v2.1/accounts/{account_id}/templates/{template_id}/documents/{document_id}") $qp)
   let accept_val = "application/pdf"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"encrypt": $encrypt, "show_changes": $show_changes} | compact), body: null}
 }
 
 # Updates a template document.
@@ -11047,7 +11578,7 @@ export def "v2-1-accounts-templates-documents get" [
 # --sender shape: {accountId?: string, accountName?: string, activationAccessCode?: string, email?: string, errorDetails?: record, loginStatus?: string, membershipId?: string, sendActivationEmail?: string, uri?: string, userId?: string, userName?: string, userStatus?: string, userType?: string}
 # --templateRoles item shape: {accessCode?: string, additionalNotifications?: list, clientUserId?: string, defaultRecipient?: string, deliveryMethod?: string, email?: string, emailNotification?: record, embeddedRecipientStartURL?: string, inPersonSignerName?: string, name?: string, phoneNumber?: record, recipientSignatureProviders?: list, roleName?: string, routingOrder?: string, signingGroupId?: string, tabs?: record}
 # --workflow shape: {currentWorkflowStepId?: string, resumeDate?: string, scheduledSending?: record, workflowStatus?: string, workflowSteps?: list}
-export def "v2-1-accounts-templates-documents update-by-accountId-templateId-documentId" [
+export def "v2-1-accounts-templates-documents update-by-account-id-template-id-document-id" [
   account_id: string
   template_id: string
   document_id: string
@@ -11154,13 +11685,16 @@ export def "v2-1-accounts-templates-documents update-by-accountId-templateId-doc
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($account_id | is-empty) { error make --unspanned { msg: "path parameter 'accountId' must be non-empty" } }
+  if ($template_id | is-empty) { error make --unspanned { msg: "path parameter 'templateId' must be non-empty" } }
+  if ($document_id | is-empty) { error make --unspanned { msg: "path parameter 'documentId' must be non-empty" } }
   let qp = [(serialize-qp "is_envelope_definition" $is_envelope_definition "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({account_id: (encode-path-segment $account_id), template_id: (encode-path-segment $template_id), document_id: (encode-path-segment $document_id)} | format pattern "/v2.1/accounts/{account_id}/templates/{template_id}/documents/{document_id}") $qp)
   let req_body = {"accessControlListBase64": $access_control_list_base64, "accessibility": $accessibility, "allowComments": $allow_comments, "allowMarkup": $allow_markup, "allowReassign": $allow_reassign, "allowRecipientRecursion": $allow_recipient_recursion, "allowViewHistory": $allow_view_history, "anySigner": $any_signer, "asynchronous": $asynchronous, "attachments": $attachments, "attachmentsUri": $attachments_uri, "authoritativeCopy": $authoritative_copy, "authoritativeCopyDefault": $authoritative_copy_default, "autoNavigation": $auto_navigation, "brandId": $brand_id, "brandLock": $brand_lock, "burnDefaultTabData": $burn_default_tab_data, "certificateUri": $certificate_uri, "completedDateTime": $completed_date_time, "compositeTemplates": $composite_templates, "copyRecipientData": $copy_recipient_data, "createdDateTime": $created_date_time, "customFields": $custom_fields, "customFieldsUri": $custom_fields_uri, "declinedDateTime": $declined_date_time, "deletedDateTime": $deleted_date_time, "deliveredDateTime": $delivered_date_time, "disableResponsiveDocument": $disable_responsive_document, "documentBase64": $document_base64, "documents": $documents, "documentsCombinedUri": $documents_combined_uri, "documentsUri": $documents_uri, "emailBlurb": $email_blurb, "emailSettings": $email_settings, "emailSubject": $email_subject, "enableWetSign": $enable_wet_sign, "enforceSignerVisibility": $enforce_signer_visibility, "envelopeAttachments": $envelope_attachments, "envelopeCustomMetadata": $envelope_custom_metadata, "envelopeDocuments": $envelope_documents, "envelopeId": $envelope_id, "envelopeIdStamping": $envelope_id_stamping, "envelopeLocation": $envelope_location, "envelopeMetadata": $envelope_metadata, "envelopeUri": $envelope_uri, "eventNotification": $event_notification, "expireAfter": $expire_after, "expireDateTime": $expire_date_time, "expireEnabled": $expire_enabled, "externalEnvelopeId": $external_envelope_id, "folders": $folders, "hasComments": $has_comments, "hasFormDataChanged": $has_form_data_changed, "hasWavFile": $has_wav_file, "holder": $holder, "initialSentDateTime": $initial_sent_date_time, "is21CFRPart11": $is21_cfr_part11, "isDynamicEnvelope": $is_dynamic_envelope, "isSignatureProviderEnvelope": $is_signature_provider_envelope, "lastModifiedDateTime": $last_modified_date_time, "location": $location, "lockInformation": $lock_information, "messageLock": $message_lock, "notification": $notification, "notificationUri": $notification_uri, "password": $password, "powerForm": $power_form, "purgeCompletedDate": $purge_completed_date, "purgeRequestDate": $purge_request_date, "purgeState": $purge_state, "recipientViewRequest": $recipient_view_request, "recipients": $recipients, "recipientsLock": $recipients_lock, "recipientsUri": $recipients_uri, "sender": $sender, "sentDateTime": $sent_date_time, "signerCanSignOnMobile": $signer_can_sign_on_mobile, "signingLocation": $signing_location, "status": $status, "statusChangedDateTime": $status_changed_date_time, "statusDateTime": $status_date_time, "templateId": $body_template_id, "templateRoles": $template_roles, "templatesUri": $templates_uri, "transactionId": $transaction_id, "useDisclosure": $use_disclosure, "voidedDateTime": $voided_date_time, "voidedReason": $voided_reason, "workflow": $workflow} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "*/*"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: ({"is_envelope_definition": $is_envelope_definition} | compact), body: $req_body}
 }
 
 # Deletes custom document fields from an existing template document.
@@ -11186,12 +11720,15 @@ export def "v2-1-accounts-templates-documents-fields delete" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($account_id | is-empty) { error make --unspanned { msg: "path parameter 'accountId' must be non-empty" } }
+  if ($template_id | is-empty) { error make --unspanned { msg: "path parameter 'templateId' must be non-empty" } }
+  if ($document_id | is-empty) { error make --unspanned { msg: "path parameter 'documentId' must be non-empty" } }
   let full_url = (build-url $base ({account_id: (encode-path-segment $account_id), template_id: (encode-path-segment $template_id), document_id: (encode-path-segment $document_id)} | format pattern "/v2.1/accounts/{account_id}/templates/{template_id}/documents/{document_id}/fields"))
   let req_body = {"documentFields": $document_fields} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "*/*"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: {}, body: $req_body}
 }
 
 # Gets the custom document fields for a an existing template document.
@@ -11214,10 +11751,13 @@ export def "v2-1-accounts-templates-documents-fields get" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($account_id | is-empty) { error make --unspanned { msg: "path parameter 'accountId' must be non-empty" } }
+  if ($template_id | is-empty) { error make --unspanned { msg: "path parameter 'templateId' must be non-empty" } }
+  if ($document_id | is-empty) { error make --unspanned { msg: "path parameter 'documentId' must be non-empty" } }
   let full_url = (build-url $base ({account_id: (encode-path-segment $account_id), template_id: (encode-path-segment $template_id), document_id: (encode-path-segment $document_id)} | format pattern "/v2.1/accounts/{account_id}/templates/{template_id}/documents/{document_id}/fields"))
   let accept_val = "*/*"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
 }
 
 # Creates custom document fields in an existing template document.
@@ -11243,12 +11783,15 @@ export def "v2-1-accounts-templates-documents-fields create" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($account_id | is-empty) { error make --unspanned { msg: "path parameter 'accountId' must be non-empty" } }
+  if ($template_id | is-empty) { error make --unspanned { msg: "path parameter 'templateId' must be non-empty" } }
+  if ($document_id | is-empty) { error make --unspanned { msg: "path parameter 'documentId' must be non-empty" } }
   let full_url = (build-url $base ({account_id: (encode-path-segment $account_id), template_id: (encode-path-segment $template_id), document_id: (encode-path-segment $document_id)} | format pattern "/v2.1/accounts/{account_id}/templates/{template_id}/documents/{document_id}/fields"))
   let req_body = {"documentFields": $document_fields} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "*/*"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: {}, body: $req_body}
 }
 
 # Updates existing custom document fields in an existing template document.
@@ -11274,12 +11817,15 @@ export def "v2-1-accounts-templates-documents-fields update" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($account_id | is-empty) { error make --unspanned { msg: "path parameter 'accountId' must be non-empty" } }
+  if ($template_id | is-empty) { error make --unspanned { msg: "path parameter 'templateId' must be non-empty" } }
+  if ($document_id | is-empty) { error make --unspanned { msg: "path parameter 'documentId' must be non-empty" } }
   let full_url = (build-url $base ({account_id: (encode-path-segment $account_id), template_id: (encode-path-segment $template_id), document_id: (encode-path-segment $document_id)} | format pattern "/v2.1/accounts/{account_id}/templates/{template_id}/documents/{document_id}/fields"))
   let req_body = {"documentFields": $document_fields} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "*/*"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: {}, body: $req_body}
 }
 
 # Gets the Original HTML Definition used to generate the Responsive HTML for a given document in a template.
@@ -11302,10 +11848,13 @@ export def "v2-1-accounts-templates-documents-html-definitions get-responsive" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($account_id | is-empty) { error make --unspanned { msg: "path parameter 'accountId' must be non-empty" } }
+  if ($template_id | is-empty) { error make --unspanned { msg: "path parameter 'templateId' must be non-empty" } }
+  if ($document_id | is-empty) { error make --unspanned { msg: "path parameter 'documentId' must be non-empty" } }
   let full_url = (build-url $base ({account_id: (encode-path-segment $account_id), template_id: (encode-path-segment $template_id), document_id: (encode-path-segment $document_id)} | format pattern "/v2.1/accounts/{account_id}/templates/{template_id}/documents/{document_id}/html_definitions"))
   let accept_val = "*/*"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
 }
 
 # Returns document page images based on input.
@@ -11335,11 +11884,14 @@ export def "v2-1-accounts-templates-documents-pages get-images" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($account_id | is-empty) { error make --unspanned { msg: "path parameter 'accountId' must be non-empty" } }
+  if ($template_id | is-empty) { error make --unspanned { msg: "path parameter 'templateId' must be non-empty" } }
+  if ($document_id | is-empty) { error make --unspanned { msg: "path parameter 'documentId' must be non-empty" } }
   let qp = [(serialize-qp "count" $count "scalar") (serialize-qp "dpi" $dpi "scalar") (serialize-qp "max_height" $max_height "scalar") (serialize-qp "max_width" $max_width "scalar") (serialize-qp "nocache" $nocache "scalar") (serialize-qp "show_changes" $show_changes "scalar") (serialize-qp "start_position" $start_position "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({account_id: (encode-path-segment $account_id), template_id: (encode-path-segment $template_id), document_id: (encode-path-segment $document_id)} | format pattern "/v2.1/accounts/{account_id}/templates/{template_id}/documents/{document_id}/pages") $qp)
   let accept_val = "*/*"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"count": $count, "dpi": $dpi, "max_height": $max_height, "max_width": $max_width, "nocache": $nocache, "show_changes": $show_changes, "start_position": $start_position} | compact), body: null}
 }
 
 # Deletes a page from a document in an template.
@@ -11366,12 +11918,16 @@ export def "v2-1-accounts-templates-documents-pages delete" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($account_id | is-empty) { error make --unspanned { msg: "path parameter 'accountId' must be non-empty" } }
+  if ($template_id | is-empty) { error make --unspanned { msg: "path parameter 'templateId' must be non-empty" } }
+  if ($document_id | is-empty) { error make --unspanned { msg: "path parameter 'documentId' must be non-empty" } }
+  if ($page_number | is-empty) { error make --unspanned { msg: "path parameter 'pageNumber' must be non-empty" } }
   let full_url = (build-url $base ({account_id: (encode-path-segment $account_id), template_id: (encode-path-segment $template_id), document_id: (encode-path-segment $document_id), page_number: (encode-path-segment $page_number)} | format pattern "/v2.1/accounts/{account_id}/templates/{template_id}/documents/{document_id}/pages/{page_number}"))
   let req_body = {"password": $password, "rotate": $rotate} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: {}, body: $req_body}
 }
 
 # Gets a page image from a template for display.
@@ -11399,11 +11955,15 @@ export def "v2-1-accounts-templates-documents-pages-page-image get" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($account_id | is-empty) { error make --unspanned { msg: "path parameter 'accountId' must be non-empty" } }
+  if ($template_id | is-empty) { error make --unspanned { msg: "path parameter 'templateId' must be non-empty" } }
+  if ($document_id | is-empty) { error make --unspanned { msg: "path parameter 'documentId' must be non-empty" } }
+  if ($page_number | is-empty) { error make --unspanned { msg: "path parameter 'pageNumber' must be non-empty" } }
   let qp = [(serialize-qp "dpi" $dpi "scalar") (serialize-qp "max_height" $max_height "scalar") (serialize-qp "max_width" $max_width "scalar") (serialize-qp "show_changes" $show_changes "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({account_id: (encode-path-segment $account_id), template_id: (encode-path-segment $template_id), document_id: (encode-path-segment $document_id), page_number: (encode-path-segment $page_number)} | format pattern "/v2.1/accounts/{account_id}/templates/{template_id}/documents/{document_id}/pages/{page_number}/page_image") $qp)
   let accept_val = "image/png"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"dpi": $dpi, "max_height": $max_height, "max_width": $max_width, "show_changes": $show_changes} | compact), body: null}
 }
 
 # Rotates page image from a template for display.
@@ -11430,12 +11990,16 @@ export def "v2-1-accounts-templates-documents-pages-page-image update" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($account_id | is-empty) { error make --unspanned { msg: "path parameter 'accountId' must be non-empty" } }
+  if ($template_id | is-empty) { error make --unspanned { msg: "path parameter 'templateId' must be non-empty" } }
+  if ($document_id | is-empty) { error make --unspanned { msg: "path parameter 'documentId' must be non-empty" } }
+  if ($page_number | is-empty) { error make --unspanned { msg: "path parameter 'pageNumber' must be non-empty" } }
   let full_url = (build-url $base ({account_id: (encode-path-segment $account_id), template_id: (encode-path-segment $template_id), document_id: (encode-path-segment $document_id), page_number: (encode-path-segment $page_number)} | format pattern "/v2.1/accounts/{account_id}/templates/{template_id}/documents/{document_id}/pages/{page_number}/page_image"))
   let req_body = {"password": $password, "rotate": $rotate} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: {}, body: $req_body}
 }
 
 # Returns tabs on the specified page.
@@ -11459,10 +12023,14 @@ export def "v2-1-accounts-templates-documents-pages-tabs get" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($account_id | is-empty) { error make --unspanned { msg: "path parameter 'accountId' must be non-empty" } }
+  if ($template_id | is-empty) { error make --unspanned { msg: "path parameter 'templateId' must be non-empty" } }
+  if ($document_id | is-empty) { error make --unspanned { msg: "path parameter 'documentId' must be non-empty" } }
+  if ($page_number | is-empty) { error make --unspanned { msg: "path parameter 'pageNumber' must be non-empty" } }
   let full_url = (build-url $base ({account_id: (encode-path-segment $account_id), template_id: (encode-path-segment $template_id), document_id: (encode-path-segment $document_id), page_number: (encode-path-segment $page_number)} | format pattern "/v2.1/accounts/{account_id}/templates/{template_id}/documents/{document_id}/pages/{page_number}/tabs"))
   let accept_val = "*/*"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
 }
 
 # Creates a preview of the responsive version of a template document.
@@ -11498,12 +12066,15 @@ export def "v2-1-accounts-templates-documents-responsive-html-preview create" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($account_id | is-empty) { error make --unspanned { msg: "path parameter 'accountId' must be non-empty" } }
+  if ($template_id | is-empty) { error make --unspanned { msg: "path parameter 'templateId' must be non-empty" } }
+  if ($document_id | is-empty) { error make --unspanned { msg: "path parameter 'documentId' must be non-empty" } }
   let full_url = (build-url $base ({account_id: (encode-path-segment $account_id), template_id: (encode-path-segment $template_id), document_id: (encode-path-segment $document_id)} | format pattern "/v2.1/accounts/{account_id}/templates/{template_id}/documents/{document_id}/responsive_html_preview"))
   let req_body = {"displayAnchorPrefix": $display_anchor_prefix, "displayAnchors": $display_anchors, "displayOrder": $display_order, "displayPageNumber": $display_page_number, "documentGuid": $document_guid, "documentId": $body_document_id, "headerLabel": $header_label, "maxScreenWidth": $max_screen_width, "removeEmptyTags": $remove_empty_tags, "showMobileOptimizedToggle": $show_mobile_optimized_toggle, "source": $body_source} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "*/*"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: {}, body: $req_body}
 }
 
 # Deletes tabs from a template.
@@ -11607,12 +12178,15 @@ export def "v2-1-accounts-templates-documents-tabs delete" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($account_id | is-empty) { error make --unspanned { msg: "path parameter 'accountId' must be non-empty" } }
+  if ($template_id | is-empty) { error make --unspanned { msg: "path parameter 'templateId' must be non-empty" } }
+  if ($document_id | is-empty) { error make --unspanned { msg: "path parameter 'documentId' must be non-empty" } }
   let full_url = (build-url $base ({account_id: (encode-path-segment $account_id), template_id: (encode-path-segment $template_id), document_id: (encode-path-segment $document_id)} | format pattern "/v2.1/accounts/{account_id}/templates/{template_id}/documents/{document_id}/tabs"))
   let req_body = {"approveTabs": $approve_tabs, "checkboxTabs": $checkbox_tabs, "commentThreadTabs": $comment_thread_tabs, "commissionCountyTabs": $commission_county_tabs, "commissionExpirationTabs": $commission_expiration_tabs, "commissionNumberTabs": $commission_number_tabs, "commissionStateTabs": $commission_state_tabs, "companyTabs": $company_tabs, "currencyTabs": $currency_tabs, "dateSignedTabs": $date_signed_tabs, "dateTabs": $date_tabs, "declineTabs": $decline_tabs, "drawTabs": $draw_tabs, "emailAddressTabs": $email_address_tabs, "emailTabs": $email_tabs, "envelopeIdTabs": $envelope_id_tabs, "firstNameTabs": $first_name_tabs, "formulaTabs": $formula_tabs, "fullNameTabs": $full_name_tabs, "initialHereTabs": $initial_here_tabs, "lastNameTabs": $last_name_tabs, "listTabs": $list_tabs, "notarizeTabs": $notarize_tabs, "notarySealTabs": $notary_seal_tabs, "noteTabs": $note_tabs, "numberTabs": $number_tabs, "numericalTabs": $numerical_tabs, "phoneNumberTabs": $phone_number_tabs, "polyLineOverlayTabs": $poly_line_overlay_tabs, "prefillTabs": $prefill_tabs, "radioGroupTabs": $radio_group_tabs, "signHereTabs": $sign_here_tabs, "signerAttachmentTabs": $signer_attachment_tabs, "smartSectionTabs": $smart_section_tabs, "ssnTabs": $ssn_tabs, "tabGroups": $tab_groups, "textTabs": $text_tabs, "titleTabs": $title_tabs, "viewTabs": $view_tabs, "zipTabs": $zip_tabs} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "*/*"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: {}, body: $req_body}
 }
 
 # Returns tabs on a template.
@@ -11636,11 +12210,14 @@ export def "v2-1-accounts-templates-documents-tabs get" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($account_id | is-empty) { error make --unspanned { msg: "path parameter 'accountId' must be non-empty" } }
+  if ($template_id | is-empty) { error make --unspanned { msg: "path parameter 'templateId' must be non-empty" } }
+  if ($document_id | is-empty) { error make --unspanned { msg: "path parameter 'documentId' must be non-empty" } }
   let qp = [(serialize-qp "page_numbers" $page_numbers "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({account_id: (encode-path-segment $account_id), template_id: (encode-path-segment $template_id), document_id: (encode-path-segment $document_id)} | format pattern "/v2.1/accounts/{account_id}/templates/{template_id}/documents/{document_id}/tabs") $qp)
   let accept_val = "*/*"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"page_numbers": $page_numbers} | compact), body: null}
 }
 
 # Adds tabs to a document in a template.
@@ -11744,12 +12321,15 @@ export def "v2-1-accounts-templates-documents-tabs create" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($account_id | is-empty) { error make --unspanned { msg: "path parameter 'accountId' must be non-empty" } }
+  if ($template_id | is-empty) { error make --unspanned { msg: "path parameter 'templateId' must be non-empty" } }
+  if ($document_id | is-empty) { error make --unspanned { msg: "path parameter 'documentId' must be non-empty" } }
   let full_url = (build-url $base ({account_id: (encode-path-segment $account_id), template_id: (encode-path-segment $template_id), document_id: (encode-path-segment $document_id)} | format pattern "/v2.1/accounts/{account_id}/templates/{template_id}/documents/{document_id}/tabs"))
   let req_body = {"approveTabs": $approve_tabs, "checkboxTabs": $checkbox_tabs, "commentThreadTabs": $comment_thread_tabs, "commissionCountyTabs": $commission_county_tabs, "commissionExpirationTabs": $commission_expiration_tabs, "commissionNumberTabs": $commission_number_tabs, "commissionStateTabs": $commission_state_tabs, "companyTabs": $company_tabs, "currencyTabs": $currency_tabs, "dateSignedTabs": $date_signed_tabs, "dateTabs": $date_tabs, "declineTabs": $decline_tabs, "drawTabs": $draw_tabs, "emailAddressTabs": $email_address_tabs, "emailTabs": $email_tabs, "envelopeIdTabs": $envelope_id_tabs, "firstNameTabs": $first_name_tabs, "formulaTabs": $formula_tabs, "fullNameTabs": $full_name_tabs, "initialHereTabs": $initial_here_tabs, "lastNameTabs": $last_name_tabs, "listTabs": $list_tabs, "notarizeTabs": $notarize_tabs, "notarySealTabs": $notary_seal_tabs, "noteTabs": $note_tabs, "numberTabs": $number_tabs, "numericalTabs": $numerical_tabs, "phoneNumberTabs": $phone_number_tabs, "polyLineOverlayTabs": $poly_line_overlay_tabs, "prefillTabs": $prefill_tabs, "radioGroupTabs": $radio_group_tabs, "signHereTabs": $sign_here_tabs, "signerAttachmentTabs": $signer_attachment_tabs, "smartSectionTabs": $smart_section_tabs, "ssnTabs": $ssn_tabs, "tabGroups": $tab_groups, "textTabs": $text_tabs, "titleTabs": $title_tabs, "viewTabs": $view_tabs, "zipTabs": $zip_tabs} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "*/*"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: {}, body: $req_body}
 }
 
 # Updates the tabs for a template.
@@ -11853,12 +12433,15 @@ export def "v2-1-accounts-templates-documents-tabs update" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($account_id | is-empty) { error make --unspanned { msg: "path parameter 'accountId' must be non-empty" } }
+  if ($template_id | is-empty) { error make --unspanned { msg: "path parameter 'templateId' must be non-empty" } }
+  if ($document_id | is-empty) { error make --unspanned { msg: "path parameter 'documentId' must be non-empty" } }
   let full_url = (build-url $base ({account_id: (encode-path-segment $account_id), template_id: (encode-path-segment $template_id), document_id: (encode-path-segment $document_id)} | format pattern "/v2.1/accounts/{account_id}/templates/{template_id}/documents/{document_id}/tabs"))
   let req_body = {"approveTabs": $approve_tabs, "checkboxTabs": $checkbox_tabs, "commentThreadTabs": $comment_thread_tabs, "commissionCountyTabs": $commission_county_tabs, "commissionExpirationTabs": $commission_expiration_tabs, "commissionNumberTabs": $commission_number_tabs, "commissionStateTabs": $commission_state_tabs, "companyTabs": $company_tabs, "currencyTabs": $currency_tabs, "dateSignedTabs": $date_signed_tabs, "dateTabs": $date_tabs, "declineTabs": $decline_tabs, "drawTabs": $draw_tabs, "emailAddressTabs": $email_address_tabs, "emailTabs": $email_tabs, "envelopeIdTabs": $envelope_id_tabs, "firstNameTabs": $first_name_tabs, "formulaTabs": $formula_tabs, "fullNameTabs": $full_name_tabs, "initialHereTabs": $initial_here_tabs, "lastNameTabs": $last_name_tabs, "listTabs": $list_tabs, "notarizeTabs": $notarize_tabs, "notarySealTabs": $notary_seal_tabs, "noteTabs": $note_tabs, "numberTabs": $number_tabs, "numericalTabs": $numerical_tabs, "phoneNumberTabs": $phone_number_tabs, "polyLineOverlayTabs": $poly_line_overlay_tabs, "prefillTabs": $prefill_tabs, "radioGroupTabs": $radio_group_tabs, "signHereTabs": $sign_here_tabs, "signerAttachmentTabs": $signer_attachment_tabs, "smartSectionTabs": $smart_section_tabs, "ssnTabs": $ssn_tabs, "tabGroups": $tab_groups, "textTabs": $text_tabs, "titleTabs": $title_tabs, "viewTabs": $view_tabs, "zipTabs": $zip_tabs} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "*/*"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: {}, body: $req_body}
 }
 
 # Gets the Original HTML Definition used to generate the Responsive HTML for the template.
@@ -11880,10 +12463,12 @@ export def "v2-1-accounts-templates-html-definitions get-responsive" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($account_id | is-empty) { error make --unspanned { msg: "path parameter 'accountId' must be non-empty" } }
+  if ($template_id | is-empty) { error make --unspanned { msg: "path parameter 'templateId' must be non-empty" } }
   let full_url = (build-url $base ({account_id: (encode-path-segment $account_id), template_id: (encode-path-segment $template_id)} | format pattern "/v2.1/accounts/{account_id}/templates/{template_id}/html_definitions"))
   let accept_val = "*/*"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
 }
 
 # Deletes a template lock.
@@ -11911,12 +12496,14 @@ export def "v2-1-accounts-templates-lock delete" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($account_id | is-empty) { error make --unspanned { msg: "path parameter 'accountId' must be non-empty" } }
+  if ($template_id | is-empty) { error make --unspanned { msg: "path parameter 'templateId' must be non-empty" } }
   let full_url = (build-url $base ({account_id: (encode-path-segment $account_id), template_id: (encode-path-segment $template_id)} | format pattern "/v2.1/accounts/{account_id}/templates/{template_id}/lock"))
   let req_body = {"lockDurationInSeconds": $lock_duration_in_seconds, "lockType": $lock_type, "lockedByApp": $locked_by_app, "templatePassword": $template_password, "useScratchPad": $use_scratch_pad} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "*/*"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: {}, body: $req_body}
 }
 
 # Gets template lock information.
@@ -11938,10 +12525,12 @@ export def "v2-1-accounts-templates-lock get" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($account_id | is-empty) { error make --unspanned { msg: "path parameter 'accountId' must be non-empty" } }
+  if ($template_id | is-empty) { error make --unspanned { msg: "path parameter 'templateId' must be non-empty" } }
   let full_url = (build-url $base ({account_id: (encode-path-segment $account_id), template_id: (encode-path-segment $template_id)} | format pattern "/v2.1/accounts/{account_id}/templates/{template_id}/lock"))
   let accept_val = "*/*"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
 }
 
 # Locks a template.
@@ -11969,12 +12558,14 @@ export def "v2-1-accounts-templates-lock create" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($account_id | is-empty) { error make --unspanned { msg: "path parameter 'accountId' must be non-empty" } }
+  if ($template_id | is-empty) { error make --unspanned { msg: "path parameter 'templateId' must be non-empty" } }
   let full_url = (build-url $base ({account_id: (encode-path-segment $account_id), template_id: (encode-path-segment $template_id)} | format pattern "/v2.1/accounts/{account_id}/templates/{template_id}/lock"))
   let req_body = {"lockDurationInSeconds": $lock_duration_in_seconds, "lockType": $lock_type, "lockedByApp": $locked_by_app, "templatePassword": $template_password, "useScratchPad": $use_scratch_pad} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "*/*"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: {}, body: $req_body}
 }
 
 # Updates a template lock.
@@ -12002,12 +12593,14 @@ export def "v2-1-accounts-templates-lock update" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($account_id | is-empty) { error make --unspanned { msg: "path parameter 'accountId' must be non-empty" } }
+  if ($template_id | is-empty) { error make --unspanned { msg: "path parameter 'templateId' must be non-empty" } }
   let full_url = (build-url $base ({account_id: (encode-path-segment $account_id), template_id: (encode-path-segment $template_id)} | format pattern "/v2.1/accounts/{account_id}/templates/{template_id}/lock"))
   let req_body = {"lockDurationInSeconds": $lock_duration_in_seconds, "lockType": $lock_type, "lockedByApp": $locked_by_app, "templatePassword": $template_password, "useScratchPad": $use_scratch_pad} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "*/*"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: {}, body: $req_body}
 }
 
 # Gets template notification information.
@@ -12029,10 +12622,12 @@ export def "v2-1-accounts-templates-notification get" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($account_id | is-empty) { error make --unspanned { msg: "path parameter 'accountId' must be non-empty" } }
+  if ($template_id | is-empty) { error make --unspanned { msg: "path parameter 'templateId' must be non-empty" } }
   let full_url = (build-url $base ({account_id: (encode-path-segment $account_id), template_id: (encode-path-segment $template_id)} | format pattern "/v2.1/accounts/{account_id}/templates/{template_id}/notification"))
   let accept_val = "*/*"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
 }
 
 # Updates the notification structure for an existing template.
@@ -12061,12 +12656,14 @@ export def "v2-1-accounts-templates-notification update" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($account_id | is-empty) { error make --unspanned { msg: "path parameter 'accountId' must be non-empty" } }
+  if ($template_id | is-empty) { error make --unspanned { msg: "path parameter 'templateId' must be non-empty" } }
   let full_url = (build-url $base ({account_id: (encode-path-segment $account_id), template_id: (encode-path-segment $template_id)} | format pattern "/v2.1/accounts/{account_id}/templates/{template_id}/notification"))
   let req_body = {"expirations": $expirations, "password": $password, "reminders": $reminders, "useAccountDefaults": $use_account_defaults} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "*/*"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: {}, body: $req_body}
 }
 
 # Deletes recipients from a template.
@@ -12085,7 +12682,7 @@ export def "v2-1-accounts-templates-notification update" [
 # --seals item shape: {accessCode?: string, accessCodeMetadata?: record, addAccessCodeToEmail?: string, allowSystemOverrideForLockedRecipient?: string, autoRespondedReason?: string, clientUserId?: string, completedCount?: string, customFields?: list<string>, declinedDateTime?: string, declinedReason?: string, deliveredDateTime?: string, deliveryMethod?: string, deliveryMethodMetadata?: record, designatorId?: string, designatorIdGuid?: string, documentVisibility?: list, emailNotification?: record, ... (40 more fields)}
 # --signers item shape: {accessCode?: string, accessCodeMetadata?: record, addAccessCodeToEmail?: string, additionalNotifications?: list, agentCanEditEmail?: string, agentCanEditName?: string, allowSystemOverrideForLockedRecipient?: string, autoNavigation?: string, autoRespondedReason?: string, bulkRecipientsUri?: string, canSignOffline?: string, clientUserId?: string, completedCount?: string, consentDetailsList?: list, creationReason?: string, customFields?: list<string>, declinedDateTime?: string, ... (80 more fields)}
 # --witnesses item shape: {accessCode?: string, accessCodeMetadata?: record, addAccessCodeToEmail?: string, additionalNotifications?: list, agentCanEditEmail?: string, agentCanEditName?: string, allowSystemOverrideForLockedRecipient?: string, autoNavigation?: string, autoRespondedReason?: string, bulkRecipientsUri?: string, canSignOffline?: string, clientUserId?: string, completedCount?: string, consentDetailsList?: list, creationReason?: string, customFields?: list<string>, declinedDateTime?: string, ... (82 more fields)}
-export def "v2-1-accounts-templates-recipients delete-by-accountId-templateId" [
+export def "v2-1-accounts-templates-recipients delete-by-account-id-template-id" [
   account_id: string
   template_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -12115,12 +12712,14 @@ export def "v2-1-accounts-templates-recipients delete-by-accountId-templateId" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($account_id | is-empty) { error make --unspanned { msg: "path parameter 'accountId' must be non-empty" } }
+  if ($template_id | is-empty) { error make --unspanned { msg: "path parameter 'templateId' must be non-empty" } }
   let full_url = (build-url $base ({account_id: (encode-path-segment $account_id), template_id: (encode-path-segment $template_id)} | format pattern "/v2.1/accounts/{account_id}/templates/{template_id}/recipients"))
   let req_body = {"agents": $agents, "carbonCopies": $carbon_copies, "certifiedDeliveries": $certified_deliveries, "currentRoutingOrder": $current_routing_order, "editors": $editors, "errorDetails": $error_details, "inPersonSigners": $in_person_signers, "intermediaries": $intermediaries, "notaries": $notaries, "participants": $participants, "recipientCount": $recipient_count, "seals": $seals, "signers": $signers, "witnesses": $witnesses} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "*/*"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: {}, body: $req_body}
 }
 
 # Gets recipient information from a template.
@@ -12145,11 +12744,13 @@ export def "v2-1-accounts-templates-recipients get" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($account_id | is-empty) { error make --unspanned { msg: "path parameter 'accountId' must be non-empty" } }
+  if ($template_id | is-empty) { error make --unspanned { msg: "path parameter 'templateId' must be non-empty" } }
   let qp = [(serialize-qp "include_anchor_tab_locations" $include_anchor_tab_locations "scalar") (serialize-qp "include_extended" $include_extended "scalar") (serialize-qp "include_tabs" $include_tabs "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({account_id: (encode-path-segment $account_id), template_id: (encode-path-segment $template_id)} | format pattern "/v2.1/accounts/{account_id}/templates/{template_id}/recipients") $qp)
   let accept_val = "*/*"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"include_anchor_tab_locations": $include_anchor_tab_locations, "include_extended": $include_extended, "include_tabs": $include_tabs} | compact), body: null}
 }
 
 # Adds tabs for a recipient.
@@ -12199,13 +12800,15 @@ export def "v2-1-accounts-templates-recipients create" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($account_id | is-empty) { error make --unspanned { msg: "path parameter 'accountId' must be non-empty" } }
+  if ($template_id | is-empty) { error make --unspanned { msg: "path parameter 'templateId' must be non-empty" } }
   let qp = [(serialize-qp "resend_envelope" $resend_envelope "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({account_id: (encode-path-segment $account_id), template_id: (encode-path-segment $template_id)} | format pattern "/v2.1/accounts/{account_id}/templates/{template_id}/recipients") $qp)
   let req_body = {"agents": $agents, "carbonCopies": $carbon_copies, "certifiedDeliveries": $certified_deliveries, "currentRoutingOrder": $current_routing_order, "editors": $editors, "errorDetails": $error_details, "inPersonSigners": $in_person_signers, "intermediaries": $intermediaries, "notaries": $notaries, "participants": $participants, "recipientCount": $recipient_count, "seals": $seals, "signers": $signers, "witnesses": $witnesses} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "*/*"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: ({"resend_envelope": $resend_envelope} | compact), body: $req_body}
 }
 
 # Updates recipients in a template.
@@ -12255,13 +12858,15 @@ export def "v2-1-accounts-templates-recipients update" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($account_id | is-empty) { error make --unspanned { msg: "path parameter 'accountId' must be non-empty" } }
+  if ($template_id | is-empty) { error make --unspanned { msg: "path parameter 'templateId' must be non-empty" } }
   let qp = [(serialize-qp "resend_envelope" $resend_envelope "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({account_id: (encode-path-segment $account_id), template_id: (encode-path-segment $template_id)} | format pattern "/v2.1/accounts/{account_id}/templates/{template_id}/recipients") $qp)
   let req_body = {"agents": $agents, "carbonCopies": $carbon_copies, "certifiedDeliveries": $certified_deliveries, "currentRoutingOrder": $current_routing_order, "editors": $editors, "errorDetails": $error_details, "inPersonSigners": $in_person_signers, "intermediaries": $intermediaries, "notaries": $notaries, "participants": $participants, "recipientCount": $recipient_count, "seals": $seals, "signers": $signers, "witnesses": $witnesses} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "*/*"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: ({"resend_envelope": $resend_envelope} | compact), body: $req_body}
 }
 
 # Updates document visibility for template recipients
@@ -12269,7 +12874,7 @@ export def "v2-1-accounts-templates-recipients update" [
 # PUT /v2.1/accounts/{accountId}/templates/{templateId}/recipients/document_visibility
 # operationId: Recipients_PutTemplateRecipientsDocumentVisibility
 # --documentVisibility item shape: {documentId?: string, errorDetails?: record, recipientId?: string, rights?: string, visible?: string}
-export def "v2-1-accounts-templates-recipients-document-visibility update-by-accountId-templateId" [
+export def "v2-1-accounts-templates-recipients-document-visibility update-by-account-id-template-id" [
   account_id: string
   template_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -12286,12 +12891,14 @@ export def "v2-1-accounts-templates-recipients-document-visibility update-by-acc
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($account_id | is-empty) { error make --unspanned { msg: "path parameter 'accountId' must be non-empty" } }
+  if ($template_id | is-empty) { error make --unspanned { msg: "path parameter 'templateId' must be non-empty" } }
   let full_url = (build-url $base ({account_id: (encode-path-segment $account_id), template_id: (encode-path-segment $template_id)} | format pattern "/v2.1/accounts/{account_id}/templates/{template_id}/recipients/document_visibility"))
   let req_body = {"documentVisibility": $document_visibility} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "*/*"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: {}, body: $req_body}
 }
 
 # Deletes the specified recipient file from a template.
@@ -12310,7 +12917,7 @@ export def "v2-1-accounts-templates-recipients-document-visibility update-by-acc
 # --seals item shape: {accessCode?: string, accessCodeMetadata?: record, addAccessCodeToEmail?: string, allowSystemOverrideForLockedRecipient?: string, autoRespondedReason?: string, clientUserId?: string, completedCount?: string, customFields?: list<string>, declinedDateTime?: string, declinedReason?: string, deliveredDateTime?: string, deliveryMethod?: string, deliveryMethodMetadata?: record, designatorId?: string, designatorIdGuid?: string, documentVisibility?: list, emailNotification?: record, ... (40 more fields)}
 # --signers item shape: {accessCode?: string, accessCodeMetadata?: record, addAccessCodeToEmail?: string, additionalNotifications?: list, agentCanEditEmail?: string, agentCanEditName?: string, allowSystemOverrideForLockedRecipient?: string, autoNavigation?: string, autoRespondedReason?: string, bulkRecipientsUri?: string, canSignOffline?: string, clientUserId?: string, completedCount?: string, consentDetailsList?: list, creationReason?: string, customFields?: list<string>, declinedDateTime?: string, ... (80 more fields)}
 # --witnesses item shape: {accessCode?: string, accessCodeMetadata?: record, addAccessCodeToEmail?: string, additionalNotifications?: list, agentCanEditEmail?: string, agentCanEditName?: string, allowSystemOverrideForLockedRecipient?: string, autoNavigation?: string, autoRespondedReason?: string, bulkRecipientsUri?: string, canSignOffline?: string, clientUserId?: string, completedCount?: string, consentDetailsList?: list, creationReason?: string, customFields?: list<string>, declinedDateTime?: string, ... (82 more fields)}
-export def "v2-1-accounts-templates-recipients delete-by-accountId-templateId-recipientId" [
+export def "v2-1-accounts-templates-recipients delete-by-account-id-template-id-recipient-id" [
   account_id: string
   template_id: string
   recipient_id: string
@@ -12341,12 +12948,15 @@ export def "v2-1-accounts-templates-recipients delete-by-accountId-templateId-re
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($account_id | is-empty) { error make --unspanned { msg: "path parameter 'accountId' must be non-empty" } }
+  if ($template_id | is-empty) { error make --unspanned { msg: "path parameter 'templateId' must be non-empty" } }
+  if ($recipient_id | is-empty) { error make --unspanned { msg: "path parameter 'recipientId' must be non-empty" } }
   let full_url = (build-url $base ({account_id: (encode-path-segment $account_id), template_id: (encode-path-segment $template_id), recipient_id: (encode-path-segment $recipient_id)} | format pattern "/v2.1/accounts/{account_id}/templates/{template_id}/recipients/{recipient_id}"))
   let req_body = {"agents": $agents, "carbonCopies": $carbon_copies, "certifiedDeliveries": $certified_deliveries, "currentRoutingOrder": $current_routing_order, "editors": $editors, "errorDetails": $error_details, "inPersonSigners": $in_person_signers, "intermediaries": $intermediaries, "notaries": $notaries, "participants": $participants, "recipientCount": $recipient_count, "seals": $seals, "signers": $signers, "witnesses": $witnesses} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "*/*"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: {}, body: $req_body}
 }
 
 # Deletes the bulk recipient list on a template.
@@ -12369,10 +12979,13 @@ export def "v2-1-accounts-templates-recipients-bulk-recipients delete-file" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($account_id | is-empty) { error make --unspanned { msg: "path parameter 'accountId' must be non-empty" } }
+  if ($template_id | is-empty) { error make --unspanned { msg: "path parameter 'templateId' must be non-empty" } }
+  if ($recipient_id | is-empty) { error make --unspanned { msg: "path parameter 'recipientId' must be non-empty" } }
   let full_url = (build-url $base ({account_id: (encode-path-segment $account_id), template_id: (encode-path-segment $template_id), recipient_id: (encode-path-segment $recipient_id)} | format pattern "/v2.1/accounts/{account_id}/templates/{template_id}/recipients/{recipient_id}/bulk_recipients"))
   let accept_val = "*/*"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
 }
 
 # Returns document visibility for a template recipient
@@ -12395,10 +13008,13 @@ export def "v2-1-accounts-templates-recipients-document-visibility get" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($account_id | is-empty) { error make --unspanned { msg: "path parameter 'accountId' must be non-empty" } }
+  if ($template_id | is-empty) { error make --unspanned { msg: "path parameter 'templateId' must be non-empty" } }
+  if ($recipient_id | is-empty) { error make --unspanned { msg: "path parameter 'recipientId' must be non-empty" } }
   let full_url = (build-url $base ({account_id: (encode-path-segment $account_id), template_id: (encode-path-segment $template_id), recipient_id: (encode-path-segment $recipient_id)} | format pattern "/v2.1/accounts/{account_id}/templates/{template_id}/recipients/{recipient_id}/document_visibility"))
   let accept_val = "*/*"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
 }
 
 # Updates document visibility for a template recipient
@@ -12406,7 +13022,7 @@ export def "v2-1-accounts-templates-recipients-document-visibility get" [
 # PUT /v2.1/accounts/{accountId}/templates/{templateId}/recipients/{recipientId}/document_visibility
 # operationId: Recipients_PutTemplateRecipientDocumentVisibility
 # --documentVisibility item shape: {documentId?: string, errorDetails?: record, recipientId?: string, rights?: string, visible?: string}
-export def "v2-1-accounts-templates-recipients-document-visibility update-by-accountId-templateId-recipientId" [
+export def "v2-1-accounts-templates-recipients-document-visibility update-by-account-id-template-id-recipient-id" [
   account_id: string
   template_id: string
   recipient_id: string
@@ -12424,12 +13040,15 @@ export def "v2-1-accounts-templates-recipients-document-visibility update-by-acc
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($account_id | is-empty) { error make --unspanned { msg: "path parameter 'accountId' must be non-empty" } }
+  if ($template_id | is-empty) { error make --unspanned { msg: "path parameter 'templateId' must be non-empty" } }
+  if ($recipient_id | is-empty) { error make --unspanned { msg: "path parameter 'recipientId' must be non-empty" } }
   let full_url = (build-url $base ({account_id: (encode-path-segment $account_id), template_id: (encode-path-segment $template_id), recipient_id: (encode-path-segment $recipient_id)} | format pattern "/v2.1/accounts/{account_id}/templates/{template_id}/recipients/{recipient_id}/document_visibility"))
   let req_body = {"documentVisibility": $document_visibility} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "*/*"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: {}, body: $req_body}
 }
 
 # Deletes the tabs associated with a recipient in a template.
@@ -12533,12 +13152,15 @@ export def "v2-1-accounts-templates-recipients-tabs delete" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($account_id | is-empty) { error make --unspanned { msg: "path parameter 'accountId' must be non-empty" } }
+  if ($template_id | is-empty) { error make --unspanned { msg: "path parameter 'templateId' must be non-empty" } }
+  if ($recipient_id | is-empty) { error make --unspanned { msg: "path parameter 'recipientId' must be non-empty" } }
   let full_url = (build-url $base ({account_id: (encode-path-segment $account_id), template_id: (encode-path-segment $template_id), recipient_id: (encode-path-segment $recipient_id)} | format pattern "/v2.1/accounts/{account_id}/templates/{template_id}/recipients/{recipient_id}/tabs"))
   let req_body = {"approveTabs": $approve_tabs, "checkboxTabs": $checkbox_tabs, "commentThreadTabs": $comment_thread_tabs, "commissionCountyTabs": $commission_county_tabs, "commissionExpirationTabs": $commission_expiration_tabs, "commissionNumberTabs": $commission_number_tabs, "commissionStateTabs": $commission_state_tabs, "companyTabs": $company_tabs, "currencyTabs": $currency_tabs, "dateSignedTabs": $date_signed_tabs, "dateTabs": $date_tabs, "declineTabs": $decline_tabs, "drawTabs": $draw_tabs, "emailAddressTabs": $email_address_tabs, "emailTabs": $email_tabs, "envelopeIdTabs": $envelope_id_tabs, "firstNameTabs": $first_name_tabs, "formulaTabs": $formula_tabs, "fullNameTabs": $full_name_tabs, "initialHereTabs": $initial_here_tabs, "lastNameTabs": $last_name_tabs, "listTabs": $list_tabs, "notarizeTabs": $notarize_tabs, "notarySealTabs": $notary_seal_tabs, "noteTabs": $note_tabs, "numberTabs": $number_tabs, "numericalTabs": $numerical_tabs, "phoneNumberTabs": $phone_number_tabs, "polyLineOverlayTabs": $poly_line_overlay_tabs, "prefillTabs": $prefill_tabs, "radioGroupTabs": $radio_group_tabs, "signHereTabs": $sign_here_tabs, "signerAttachmentTabs": $signer_attachment_tabs, "smartSectionTabs": $smart_section_tabs, "ssnTabs": $ssn_tabs, "tabGroups": $tab_groups, "textTabs": $text_tabs, "titleTabs": $title_tabs, "viewTabs": $view_tabs, "zipTabs": $zip_tabs} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "*/*"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: {}, body: $req_body}
 }
 
 # Gets the tabs information for a signer or sign-in-person recipient in a template.
@@ -12563,11 +13185,14 @@ export def "v2-1-accounts-templates-recipients-tabs get" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($account_id | is-empty) { error make --unspanned { msg: "path parameter 'accountId' must be non-empty" } }
+  if ($template_id | is-empty) { error make --unspanned { msg: "path parameter 'templateId' must be non-empty" } }
+  if ($recipient_id | is-empty) { error make --unspanned { msg: "path parameter 'recipientId' must be non-empty" } }
   let qp = [(serialize-qp "include_anchor_tab_locations" $include_anchor_tab_locations "scalar") (serialize-qp "include_metadata" $include_metadata "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({account_id: (encode-path-segment $account_id), template_id: (encode-path-segment $template_id), recipient_id: (encode-path-segment $recipient_id)} | format pattern "/v2.1/accounts/{account_id}/templates/{template_id}/recipients/{recipient_id}/tabs") $qp)
   let accept_val = "*/*"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"include_anchor_tab_locations": $include_anchor_tab_locations, "include_metadata": $include_metadata} | compact), body: null}
 }
 
 # Adds tabs for a recipient.
@@ -12671,12 +13296,15 @@ export def "v2-1-accounts-templates-recipients-tabs create" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($account_id | is-empty) { error make --unspanned { msg: "path parameter 'accountId' must be non-empty" } }
+  if ($template_id | is-empty) { error make --unspanned { msg: "path parameter 'templateId' must be non-empty" } }
+  if ($recipient_id | is-empty) { error make --unspanned { msg: "path parameter 'recipientId' must be non-empty" } }
   let full_url = (build-url $base ({account_id: (encode-path-segment $account_id), template_id: (encode-path-segment $template_id), recipient_id: (encode-path-segment $recipient_id)} | format pattern "/v2.1/accounts/{account_id}/templates/{template_id}/recipients/{recipient_id}/tabs"))
   let req_body = {"approveTabs": $approve_tabs, "checkboxTabs": $checkbox_tabs, "commentThreadTabs": $comment_thread_tabs, "commissionCountyTabs": $commission_county_tabs, "commissionExpirationTabs": $commission_expiration_tabs, "commissionNumberTabs": $commission_number_tabs, "commissionStateTabs": $commission_state_tabs, "companyTabs": $company_tabs, "currencyTabs": $currency_tabs, "dateSignedTabs": $date_signed_tabs, "dateTabs": $date_tabs, "declineTabs": $decline_tabs, "drawTabs": $draw_tabs, "emailAddressTabs": $email_address_tabs, "emailTabs": $email_tabs, "envelopeIdTabs": $envelope_id_tabs, "firstNameTabs": $first_name_tabs, "formulaTabs": $formula_tabs, "fullNameTabs": $full_name_tabs, "initialHereTabs": $initial_here_tabs, "lastNameTabs": $last_name_tabs, "listTabs": $list_tabs, "notarizeTabs": $notarize_tabs, "notarySealTabs": $notary_seal_tabs, "noteTabs": $note_tabs, "numberTabs": $number_tabs, "numericalTabs": $numerical_tabs, "phoneNumberTabs": $phone_number_tabs, "polyLineOverlayTabs": $poly_line_overlay_tabs, "prefillTabs": $prefill_tabs, "radioGroupTabs": $radio_group_tabs, "signHereTabs": $sign_here_tabs, "signerAttachmentTabs": $signer_attachment_tabs, "smartSectionTabs": $smart_section_tabs, "ssnTabs": $ssn_tabs, "tabGroups": $tab_groups, "textTabs": $text_tabs, "titleTabs": $title_tabs, "viewTabs": $view_tabs, "zipTabs": $zip_tabs} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "*/*"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: {}, body: $req_body}
 }
 
 # Updates the tabs for a recipient.
@@ -12780,12 +13408,15 @@ export def "v2-1-accounts-templates-recipients-tabs update" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($account_id | is-empty) { error make --unspanned { msg: "path parameter 'accountId' must be non-empty" } }
+  if ($template_id | is-empty) { error make --unspanned { msg: "path parameter 'templateId' must be non-empty" } }
+  if ($recipient_id | is-empty) { error make --unspanned { msg: "path parameter 'recipientId' must be non-empty" } }
   let full_url = (build-url $base ({account_id: (encode-path-segment $account_id), template_id: (encode-path-segment $template_id), recipient_id: (encode-path-segment $recipient_id)} | format pattern "/v2.1/accounts/{account_id}/templates/{template_id}/recipients/{recipient_id}/tabs"))
   let req_body = {"approveTabs": $approve_tabs, "checkboxTabs": $checkbox_tabs, "commentThreadTabs": $comment_thread_tabs, "commissionCountyTabs": $commission_county_tabs, "commissionExpirationTabs": $commission_expiration_tabs, "commissionNumberTabs": $commission_number_tabs, "commissionStateTabs": $commission_state_tabs, "companyTabs": $company_tabs, "currencyTabs": $currency_tabs, "dateSignedTabs": $date_signed_tabs, "dateTabs": $date_tabs, "declineTabs": $decline_tabs, "drawTabs": $draw_tabs, "emailAddressTabs": $email_address_tabs, "emailTabs": $email_tabs, "envelopeIdTabs": $envelope_id_tabs, "firstNameTabs": $first_name_tabs, "formulaTabs": $formula_tabs, "fullNameTabs": $full_name_tabs, "initialHereTabs": $initial_here_tabs, "lastNameTabs": $last_name_tabs, "listTabs": $list_tabs, "notarizeTabs": $notarize_tabs, "notarySealTabs": $notary_seal_tabs, "noteTabs": $note_tabs, "numberTabs": $number_tabs, "numericalTabs": $numerical_tabs, "phoneNumberTabs": $phone_number_tabs, "polyLineOverlayTabs": $poly_line_overlay_tabs, "prefillTabs": $prefill_tabs, "radioGroupTabs": $radio_group_tabs, "signHereTabs": $sign_here_tabs, "signerAttachmentTabs": $signer_attachment_tabs, "smartSectionTabs": $smart_section_tabs, "ssnTabs": $ssn_tabs, "tabGroups": $tab_groups, "textTabs": $text_tabs, "titleTabs": $title_tabs, "viewTabs": $view_tabs, "zipTabs": $zip_tabs} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "*/*"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: {}, body: $req_body}
 }
 
 # Creates a preview of the responsive versions of all of the documents associated with a template.
@@ -12820,12 +13451,14 @@ export def "v2-1-accounts-templates-responsive-html-preview create" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($account_id | is-empty) { error make --unspanned { msg: "path parameter 'accountId' must be non-empty" } }
+  if ($template_id | is-empty) { error make --unspanned { msg: "path parameter 'templateId' must be non-empty" } }
   let full_url = (build-url $base ({account_id: (encode-path-segment $account_id), template_id: (encode-path-segment $template_id)} | format pattern "/v2.1/accounts/{account_id}/templates/{template_id}/responsive_html_preview"))
   let req_body = {"displayAnchorPrefix": $display_anchor_prefix, "displayAnchors": $display_anchors, "displayOrder": $display_order, "displayPageNumber": $display_page_number, "documentGuid": $document_guid, "documentId": $document_id, "headerLabel": $header_label, "maxScreenWidth": $max_screen_width, "removeEmptyTags": $remove_empty_tags, "showMobileOptimizedToggle": $show_mobile_optimized_toggle, "source": $body_source} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "*/*"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: {}, body: $req_body}
 }
 
 # Gets a URL for a template edit view.
@@ -12849,12 +13482,14 @@ export def "v2-1-accounts-templates-views-edit create" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($account_id | is-empty) { error make --unspanned { msg: "path parameter 'accountId' must be non-empty" } }
+  if ($template_id | is-empty) { error make --unspanned { msg: "path parameter 'templateId' must be non-empty" } }
   let full_url = (build-url $base ({account_id: (encode-path-segment $account_id), template_id: (encode-path-segment $template_id)} | format pattern "/v2.1/accounts/{account_id}/templates/{template_id}/views/edit"))
   let req_body = {"returnUrl": $return_url} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "*/*"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: {}, body: $req_body}
 }
 
 # Creates a template recipient preview.
@@ -12889,12 +13524,14 @@ export def "v2-1-accounts-templates-views-recipient-preview create" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($account_id | is-empty) { error make --unspanned { msg: "path parameter 'accountId' must be non-empty" } }
+  if ($template_id | is-empty) { error make --unspanned { msg: "path parameter 'templateId' must be non-empty" } }
   let full_url = (build-url $base ({account_id: (encode-path-segment $account_id), template_id: (encode-path-segment $template_id)} | format pattern "/v2.1/accounts/{account_id}/templates/{template_id}/views/recipient_preview"))
   let req_body = {"assertionId": $assertion_id, "authenticationInstant": $authentication_instant, "authenticationMethod": $authentication_method, "clientURLs": $client_ur_ls, "pingFrequency": $ping_frequency, "pingUrl": $ping_url, "recipientId": $recipient_id, "returnUrl": $return_url, "securityDomain": $security_domain, "xFrameOptions": $x_frame_options, "xFrameOptionsAllowFromUrl": $x_frame_options_allow_from_url} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "*/*"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: {}, body: $req_body}
 }
 
 # Delete the workflow definition for a template.
@@ -12916,10 +13553,12 @@ export def "v2-1-accounts-templates-workflow delete-definition-definition" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($account_id | is-empty) { error make --unspanned { msg: "path parameter 'accountId' must be non-empty" } }
+  if ($template_id | is-empty) { error make --unspanned { msg: "path parameter 'templateId' must be non-empty" } }
   let full_url = (build-url $base ({account_id: (encode-path-segment $account_id), template_id: (encode-path-segment $template_id)} | format pattern "/v2.1/accounts/{account_id}/templates/{template_id}/workflow"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
 }
 
 # Returns the workflow definition for a template.
@@ -12941,10 +13580,12 @@ export def "v2-1-accounts-templates-workflow get-definition-definition" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($account_id | is-empty) { error make --unspanned { msg: "path parameter 'accountId' must be non-empty" } }
+  if ($template_id | is-empty) { error make --unspanned { msg: "path parameter 'templateId' must be non-empty" } }
   let full_url = (build-url $base ({account_id: (encode-path-segment $account_id), template_id: (encode-path-segment $template_id)} | format pattern "/v2.1/accounts/{account_id}/templates/{template_id}/workflow"))
   let accept_val = "*/*"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
 }
 
 # Updates the workflow definition for a template.
@@ -12974,12 +13615,14 @@ export def "v2-1-accounts-templates-workflow update-definition-definition" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($account_id | is-empty) { error make --unspanned { msg: "path parameter 'accountId' must be non-empty" } }
+  if ($template_id | is-empty) { error make --unspanned { msg: "path parameter 'templateId' must be non-empty" } }
   let full_url = (build-url $base ({account_id: (encode-path-segment $account_id), template_id: (encode-path-segment $template_id)} | format pattern "/v2.1/accounts/{account_id}/templates/{template_id}/workflow"))
   let req_body = {"currentWorkflowStepId": $current_workflow_step_id, "resumeDate": $resume_date, "scheduledSending": $scheduled_sending, "workflowStatus": $workflow_status, "workflowSteps": $workflow_steps} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "*/*"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: {}, body: $req_body}
 }
 
 # Deletes the scheduled sending rules for the template's workflow.
@@ -13001,10 +13644,12 @@ export def "v2-1-accounts-templates-workflow-scheduled-sending delete-definition
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($account_id | is-empty) { error make --unspanned { msg: "path parameter 'accountId' must be non-empty" } }
+  if ($template_id | is-empty) { error make --unspanned { msg: "path parameter 'templateId' must be non-empty" } }
   let full_url = (build-url $base ({account_id: (encode-path-segment $account_id), template_id: (encode-path-segment $template_id)} | format pattern "/v2.1/accounts/{account_id}/templates/{template_id}/workflow/scheduledSending"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
 }
 
 # Returns the scheduled sending rules for a template's workflow definition.
@@ -13026,10 +13671,12 @@ export def "v2-1-accounts-templates-workflow-scheduled-sending get-definition" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($account_id | is-empty) { error make --unspanned { msg: "path parameter 'accountId' must be non-empty" } }
+  if ($template_id | is-empty) { error make --unspanned { msg: "path parameter 'templateId' must be non-empty" } }
   let full_url = (build-url $base ({account_id: (encode-path-segment $account_id), template_id: (encode-path-segment $template_id)} | format pattern "/v2.1/accounts/{account_id}/templates/{template_id}/workflow/scheduledSending"))
   let accept_val = "*/*"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
 }
 
 # Updates the scheduled sending rules for a template's workflow definition.
@@ -13057,12 +13704,14 @@ export def "v2-1-accounts-templates-workflow-scheduled-sending update-definition
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($account_id | is-empty) { error make --unspanned { msg: "path parameter 'accountId' must be non-empty" } }
+  if ($template_id | is-empty) { error make --unspanned { msg: "path parameter 'templateId' must be non-empty" } }
   let full_url = (build-url $base ({account_id: (encode-path-segment $account_id), template_id: (encode-path-segment $template_id)} | format pattern "/v2.1/accounts/{account_id}/templates/{template_id}/workflow/scheduledSending"))
   let req_body = {"bulkListId": $bulk_list_id, "resumeDate": $resume_date, "rules": $rules, "status": $status} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "*/*"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: {}, body: $req_body}
 }
 
 # Adds a new step to a template's workflow.
@@ -13096,12 +13745,14 @@ export def "v2-1-accounts-templates-workflow-steps create-definition" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($account_id | is-empty) { error make --unspanned { msg: "path parameter 'accountId' must be non-empty" } }
+  if ($template_id | is-empty) { error make --unspanned { msg: "path parameter 'templateId' must be non-empty" } }
   let full_url = (build-url $base ({account_id: (encode-path-segment $account_id), template_id: (encode-path-segment $template_id)} | format pattern "/v2.1/accounts/{account_id}/templates/{template_id}/workflow/steps"))
   let req_body = {"action": $action, "completedDate": $completed_date, "delayedRouting": $delayed_routing, "itemId": $item_id, "recipientRouting": $recipient_routing, "status": $status, "triggerOnItem": $trigger_on_item, "triggeredDate": $triggered_date, "workflowStepId": $workflow_step_id} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "*/*"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: {}, body: $req_body}
 }
 
 # Deletes a workflow step from an template's workflow definition.
@@ -13124,10 +13775,13 @@ export def "v2-1-accounts-templates-workflow-steps delete-definition" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($account_id | is-empty) { error make --unspanned { msg: "path parameter 'accountId' must be non-empty" } }
+  if ($template_id | is-empty) { error make --unspanned { msg: "path parameter 'templateId' must be non-empty" } }
+  if ($workflow_step_id | is-empty) { error make --unspanned { msg: "path parameter 'workflowStepId' must be non-empty" } }
   let full_url = (build-url $base ({account_id: (encode-path-segment $account_id), template_id: (encode-path-segment $template_id), workflow_step_id: (encode-path-segment $workflow_step_id)} | format pattern "/v2.1/accounts/{account_id}/templates/{template_id}/workflow/steps/{workflow_step_id}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
 }
 
 # Returns a specified workflow step for a specified envelope.
@@ -13150,10 +13804,13 @@ export def "v2-1-accounts-templates-workflow-steps get-definition" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($account_id | is-empty) { error make --unspanned { msg: "path parameter 'accountId' must be non-empty" } }
+  if ($template_id | is-empty) { error make --unspanned { msg: "path parameter 'templateId' must be non-empty" } }
+  if ($workflow_step_id | is-empty) { error make --unspanned { msg: "path parameter 'workflowStepId' must be non-empty" } }
   let full_url = (build-url $base ({account_id: (encode-path-segment $account_id), template_id: (encode-path-segment $template_id), workflow_step_id: (encode-path-segment $workflow_step_id)} | format pattern "/v2.1/accounts/{account_id}/templates/{template_id}/workflow/steps/{workflow_step_id}"))
   let accept_val = "*/*"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
 }
 
 # Updates a specified workflow step for a template.
@@ -13188,12 +13845,15 @@ export def "v2-1-accounts-templates-workflow-steps update-definition" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($account_id | is-empty) { error make --unspanned { msg: "path parameter 'accountId' must be non-empty" } }
+  if ($template_id | is-empty) { error make --unspanned { msg: "path parameter 'templateId' must be non-empty" } }
+  if ($workflow_step_id | is-empty) { error make --unspanned { msg: "path parameter 'workflowStepId' must be non-empty" } }
   let full_url = (build-url $base ({account_id: (encode-path-segment $account_id), template_id: (encode-path-segment $template_id), workflow_step_id: (encode-path-segment $workflow_step_id)} | format pattern "/v2.1/accounts/{account_id}/templates/{template_id}/workflow/steps/{workflow_step_id}"))
   let req_body = {"action": $action, "completedDate": $completed_date, "delayedRouting": $delayed_routing, "itemId": $item_id, "recipientRouting": $recipient_routing, "status": $status, "triggerOnItem": $trigger_on_item, "triggeredDate": $triggered_date, "workflowStepId": $body_workflow_step_id} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "*/*"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: {}, body: $req_body}
 }
 
 # Deletes the delayed routing rules for the specified template workflow step.
@@ -13216,10 +13876,13 @@ export def "v2-1-accounts-templates-workflow-steps-delayed-routing delete-defini
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($account_id | is-empty) { error make --unspanned { msg: "path parameter 'accountId' must be non-empty" } }
+  if ($template_id | is-empty) { error make --unspanned { msg: "path parameter 'templateId' must be non-empty" } }
+  if ($workflow_step_id | is-empty) { error make --unspanned { msg: "path parameter 'workflowStepId' must be non-empty" } }
   let full_url = (build-url $base ({account_id: (encode-path-segment $account_id), template_id: (encode-path-segment $template_id), workflow_step_id: (encode-path-segment $workflow_step_id)} | format pattern "/v2.1/accounts/{account_id}/templates/{template_id}/workflow/steps/{workflow_step_id}/delayedRouting"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
 }
 
 # Returns the delayed routing rules for a template's workflow step definition.
@@ -13242,10 +13905,13 @@ export def "v2-1-accounts-templates-workflow-steps-delayed-routing get-definitio
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($account_id | is-empty) { error make --unspanned { msg: "path parameter 'accountId' must be non-empty" } }
+  if ($template_id | is-empty) { error make --unspanned { msg: "path parameter 'templateId' must be non-empty" } }
+  if ($workflow_step_id | is-empty) { error make --unspanned { msg: "path parameter 'workflowStepId' must be non-empty" } }
   let full_url = (build-url $base ({account_id: (encode-path-segment $account_id), template_id: (encode-path-segment $template_id), workflow_step_id: (encode-path-segment $workflow_step_id)} | format pattern "/v2.1/accounts/{account_id}/templates/{template_id}/workflow/steps/{workflow_step_id}/delayedRouting"))
   let accept_val = "*/*"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
 }
 
 # Updates the delayed routing rules for a template's workflow step.
@@ -13273,12 +13939,15 @@ export def "v2-1-accounts-templates-workflow-steps-delayed-routing update-defini
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($account_id | is-empty) { error make --unspanned { msg: "path parameter 'accountId' must be non-empty" } }
+  if ($template_id | is-empty) { error make --unspanned { msg: "path parameter 'templateId' must be non-empty" } }
+  if ($workflow_step_id | is-empty) { error make --unspanned { msg: "path parameter 'workflowStepId' must be non-empty" } }
   let full_url = (build-url $base ({account_id: (encode-path-segment $account_id), template_id: (encode-path-segment $template_id), workflow_step_id: (encode-path-segment $workflow_step_id)} | format pattern "/v2.1/accounts/{account_id}/templates/{template_id}/workflow/steps/{workflow_step_id}/delayedRouting"))
   let req_body = {"resumeDate": $resume_date, "rules": $rules, "status": $status} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "*/*"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: {}, body: $req_body}
 }
 
 # Removes a member group's sharing permissions for a template.
@@ -13310,12 +13979,15 @@ export def "v2-1-accounts-templates delete-part" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($account_id | is-empty) { error make --unspanned { msg: "path parameter 'accountId' must be non-empty" } }
+  if ($template_id | is-empty) { error make --unspanned { msg: "path parameter 'templateId' must be non-empty" } }
+  if ($template_part | is-empty) { error make --unspanned { msg: "path parameter 'templatePart' must be non-empty" } }
   let full_url = (build-url $base ({account_id: (encode-path-segment $account_id), template_id: (encode-path-segment $template_id), template_part: (encode-path-segment $template_part)} | format pattern "/v2.1/accounts/{account_id}/templates/{template_id}/{template_part}"))
   let req_body = {"endPosition": $end_position, "groups": $groups, "nextUri": $next_uri, "previousUri": $previous_uri, "resultSetSize": $result_set_size, "startPosition": $start_position, "totalSetSize": $total_set_size} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "*/*"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: {}, body: $req_body}
 }
 
 # Shares a template with a group.
@@ -13347,12 +14019,15 @@ export def "v2-1-accounts-templates update-part" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($account_id | is-empty) { error make --unspanned { msg: "path parameter 'accountId' must be non-empty" } }
+  if ($template_id | is-empty) { error make --unspanned { msg: "path parameter 'templateId' must be non-empty" } }
+  if ($template_part | is-empty) { error make --unspanned { msg: "path parameter 'templatePart' must be non-empty" } }
   let full_url = (build-url $base ({account_id: (encode-path-segment $account_id), template_id: (encode-path-segment $template_id), template_part: (encode-path-segment $template_part)} | format pattern "/v2.1/accounts/{account_id}/templates/{template_id}/{template_part}"))
   let req_body = {"endPosition": $end_position, "groups": $groups, "nextUri": $next_uri, "previousUri": $previous_uri, "resultSetSize": $result_set_size, "startPosition": $start_position, "totalSetSize": $total_set_size} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "*/*"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: {}, body: $req_body}
 }
 
 # Gets a list of unsupported file types.
@@ -13373,10 +14048,11 @@ export def "v2-1-accounts-unsupported-file-types get" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($account_id | is-empty) { error make --unspanned { msg: "path parameter 'accountId' must be non-empty" } }
   let full_url = (build-url $base ({account_id: (encode-path-segment $account_id)} | format pattern "/v2.1/accounts/{account_id}/unsupported_file_types"))
   let accept_val = "*/*"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
 }
 
 # Closes one or more users in the account.
@@ -13401,13 +14077,14 @@ export def "v2-1-accounts-users delete" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($account_id | is-empty) { error make --unspanned { msg: "path parameter 'accountId' must be non-empty" } }
   let qp = [(serialize-qp "delete" $delete "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({account_id: (encode-path-segment $account_id)} | format pattern "/v2.1/accounts/{account_id}/users") $qp)
   let req_body = {"users": $users} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "*/*"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: ({"delete": $delete} | compact), body: $req_body}
 }
 
 # Retrieves the list of users for the specified account.
@@ -13441,11 +14118,12 @@ export def "v2-1-accounts-users list" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($account_id | is-empty) { error make --unspanned { msg: "path parameter 'accountId' must be non-empty" } }
   let qp = [(serialize-qp "additional_info" $additional_info "scalar") (serialize-qp "alternate_admins_only" $alternate_admins_only "scalar") (serialize-qp "count" $count "scalar") (serialize-qp "domain_users_only" $domain_users_only "scalar") (serialize-qp "email" $email "scalar") (serialize-qp "email_substring" $email_substring "scalar") (serialize-qp "group_id" $group_id "scalar") (serialize-qp "include_usersettings_for_csv" $include_usersettings_for_csv "scalar") (serialize-qp "login_status" $login_status "scalar") (serialize-qp "not_group_id" $not_group_id "scalar") (serialize-qp "start_position" $start_position "scalar") (serialize-qp "status" $status "scalar") (serialize-qp "user_name_substring" $user_name_substring "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({account_id: (encode-path-segment $account_id)} | format pattern "/v2.1/accounts/{account_id}/users") $qp)
   let accept_val = "*/*"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"additional_info": $additional_info, "alternate_admins_only": $alternate_admins_only, "count": $count, "domain_users_only": $domain_users_only, "email": $email, "email_substring": $email_substring, "group_id": $group_id, "include_usersettings_for_csv": $include_usersettings_for_csv, "login_status": $login_status, "not_group_id": $not_group_id, "start_position": $start_position, "status": $status, "user_name_substring": $user_name_substring} | compact), body: null}
 }
 
 # Adds new users to the specified account.
@@ -13469,12 +14147,13 @@ export def "v2-1-accounts-users create" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($account_id | is-empty) { error make --unspanned { msg: "path parameter 'accountId' must be non-empty" } }
   let full_url = (build-url $base ({account_id: (encode-path-segment $account_id)} | format pattern "/v2.1/accounts/{account_id}/users"))
   let req_body = {"newUsers": $new_users} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "*/*"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: {}, body: $req_body}
 }
 
 # Changes one or more users in the specified account.
@@ -13482,7 +14161,7 @@ export def "v2-1-accounts-users create" [
 # PUT /v2.1/accounts/{accountId}/users
 # operationId: Users_PutUsers
 # --users item shape: {activationAccessCode?: string, company?: string, connectConfigurations?: list, countryCode?: string, createdDateTime?: string, customSettings?: list, defaultAccountId?: string, email?: string, enableConnectForUser?: string, errorDetails?: record, firstName?: string, forgottenPasswordInfo?: record, groupList?: list, hasRemoteNotary?: bool, homeAddress?: record, initialsImageUri?: string, isAdmin?: string, isAlternateAdmin?: string, isNAREnabled?: string, jobTitle?: string, lastLogin?: string, ... (23 more fields)}
-export def "v2-1-accounts-users update-by-accountId" [
+export def "v2-1-accounts-users update-by-account-id" [
   account_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -13505,13 +14184,14 @@ export def "v2-1-accounts-users update-by-accountId" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($account_id | is-empty) { error make --unspanned { msg: "path parameter 'accountId' must be non-empty" } }
   let qp = [(serialize-qp "allow_all_languages" $allow_all_languages "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({account_id: (encode-path-segment $account_id)} | format pattern "/v2.1/accounts/{account_id}/users") $qp)
   let req_body = {"endPosition": $end_position, "nextUri": $next_uri, "previousUri": $previous_uri, "resultSetSize": $result_set_size, "startPosition": $start_position, "totalSetSize": $total_set_size, "users": $users} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "*/*"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: ({"allow_all_languages": $allow_all_languages} | compact), body: $req_body}
 }
 
 # Gets the user information for a specified user.
@@ -13535,11 +14215,13 @@ export def "v2-1-accounts-users get" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($account_id | is-empty) { error make --unspanned { msg: "path parameter 'accountId' must be non-empty" } }
+  if ($user_id | is-empty) { error make --unspanned { msg: "path parameter 'userId' must be non-empty" } }
   let qp = [(serialize-qp "additional_info" $additional_info "scalar") (serialize-qp "email" $email "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({account_id: (encode-path-segment $account_id), user_id: (encode-path-segment $user_id)} | format pattern "/v2.1/accounts/{account_id}/users/{user_id}") $qp)
   let accept_val = "*/*"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"additional_info": $additional_info, "email": $email} | compact), body: null}
 }
 
 # Updates user information for the specified user.
@@ -13554,7 +14236,7 @@ export def "v2-1-accounts-users get" [
 # --homeAddress shape: {address1?: string, address2?: string, city?: string, country?: string, fax?: string, phone?: string, postalCode?: string, stateOrProvince?: string, zipPlus4?: string}
 # --userSettings shape: {accountManagementGranular?: record, adminOnly?: string, adminOnlyMetadata?: record, allowAutoTagging?: string, allowEnvelopeTransferTo?: string, allowEnvelopeTransferToMetadata?: record, allowEsealRecipients?: string, allowEsealRecipientsMetadata?: record, allowPowerFormsAdminToAccessAllPowerFormEnvelope?: string, allowPowerFormsAdminToAccessAllPowerFormEnvelopeMetadata?: record, allowRecipientLanguageSelection?: string, allowRecipientLanguageSelectionMetadata?: record, ... (113 more fields)}
 # --workAddress shape: {address1?: string, address2?: string, city?: string, country?: string, fax?: string, phone?: string, postalCode?: string, stateOrProvince?: string, zipPlus4?: string}
-export def "v2-1-accounts-users update-by-accountId-userId" [
+export def "v2-1-accounts-users update-by-account-id-user-id" [
   account_id: string
   user_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -13615,13 +14297,15 @@ export def "v2-1-accounts-users update-by-accountId-userId" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($account_id | is-empty) { error make --unspanned { msg: "path parameter 'accountId' must be non-empty" } }
+  if ($user_id | is-empty) { error make --unspanned { msg: "path parameter 'userId' must be non-empty" } }
   let qp = [(serialize-qp "allow_all_languages" $allow_all_languages "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({account_id: (encode-path-segment $account_id), user_id: (encode-path-segment $user_id)} | format pattern "/v2.1/accounts/{account_id}/users/{user_id}") $qp)
   let req_body = {"activationAccessCode": $activation_access_code, "company": $company, "connectConfigurations": $connect_configurations, "countryCode": $country_code, "createdDateTime": $created_date_time, "customSettings": $custom_settings, "defaultAccountId": $default_account_id, "email": $email, "enableConnectForUser": $enable_connect_for_user, "errorDetails": $error_details, "firstName": $first_name, "forgottenPasswordInfo": $forgotten_password_info, "groupList": $group_list, "hasRemoteNotary": $has_remote_notary, "homeAddress": $home_address, "initialsImageUri": $initials_image_uri, "isAdmin": $is_admin, "isAlternateAdmin": $is_alternate_admin, "isNAREnabled": $is_nar_enabled, "jobTitle": $job_title, "lastLogin": $last_login, "lastName": $last_name, "loginStatus": $login_status, "middleName": $middle_name, "password": $password, "passwordExpiration": $password_expiration, "permissionProfileId": $permission_profile_id, "permissionProfileName": $permission_profile_name, "profileImageUri": $profile_image_uri, "sendActivationEmail": $send_activation_email, "sendActivationOnInvalidLogin": $send_activation_on_invalid_login, "signatureImageUri": $signature_image_uri, "subscribe": $subscribe, "suffixName": $suffix_name, "title": $title, "uri": $uri, "userAddedToAccountDateTime": $user_added_to_account_date_time, "userId": $body_user_id, "userName": $user_name, "userProfileLastModifiedDate": $user_profile_last_modified_date, "userSettings": $user_settings, "userStatus": $user_status, "userType": $user_type, "workAddress": $work_address} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "*/*"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: ({"allow_all_languages": $allow_all_languages} | compact), body: $req_body}
 }
 
 # Deletes the user authentication information for one or more cloud storage providers.
@@ -13646,12 +14330,14 @@ export def "v2-1-accounts-users-cloud-storage delete-providers" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($account_id | is-empty) { error make --unspanned { msg: "path parameter 'accountId' must be non-empty" } }
+  if ($user_id | is-empty) { error make --unspanned { msg: "path parameter 'userId' must be non-empty" } }
   let full_url = (build-url $base ({account_id: (encode-path-segment $account_id), user_id: (encode-path-segment $user_id)} | format pattern "/v2.1/accounts/{account_id}/users/{user_id}/cloud_storage"))
   let req_body = {"storageProviders": $storage_providers} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "*/*"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: {}, body: $req_body}
 }
 
 # Get the Cloud Storage Provider configuration for the specified user.
@@ -13674,11 +14360,13 @@ export def "v2-1-accounts-users-cloud-storage get-providers" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($account_id | is-empty) { error make --unspanned { msg: "path parameter 'accountId' must be non-empty" } }
+  if ($user_id | is-empty) { error make --unspanned { msg: "path parameter 'userId' must be non-empty" } }
   let qp = [(serialize-qp "redirectUrl" $redirect_url "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({account_id: (encode-path-segment $account_id), user_id: (encode-path-segment $user_id)} | format pattern "/v2.1/accounts/{account_id}/users/{user_id}/cloud_storage") $qp)
   let accept_val = "*/*"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"redirectUrl": $redirect_url} | compact), body: null}
 }
 
 # Configures the redirect URL information for one or more cloud storage providers for the specified user.
@@ -13703,12 +14391,14 @@ export def "v2-1-accounts-users-cloud-storage create" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($account_id | is-empty) { error make --unspanned { msg: "path parameter 'accountId' must be non-empty" } }
+  if ($user_id | is-empty) { error make --unspanned { msg: "path parameter 'userId' must be non-empty" } }
   let full_url = (build-url $base ({account_id: (encode-path-segment $account_id), user_id: (encode-path-segment $user_id)} | format pattern "/v2.1/accounts/{account_id}/users/{user_id}/cloud_storage"))
   let req_body = {"storageProviders": $storage_providers} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "*/*"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: {}, body: $req_body}
 }
 
 # Deletes the user authentication information for the specified cloud storage provider.
@@ -13731,10 +14421,13 @@ export def "v2-1-accounts-users-cloud-storage delete" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($account_id | is-empty) { error make --unspanned { msg: "path parameter 'accountId' must be non-empty" } }
+  if ($user_id | is-empty) { error make --unspanned { msg: "path parameter 'userId' must be non-empty" } }
+  if ($service_id | is-empty) { error make --unspanned { msg: "path parameter 'serviceId' must be non-empty" } }
   let full_url = (build-url $base ({account_id: (encode-path-segment $account_id), user_id: (encode-path-segment $user_id), service_id: (encode-path-segment $service_id)} | format pattern "/v2.1/accounts/{account_id}/users/{user_id}/cloud_storage/{service_id}"))
   let accept_val = "*/*"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
 }
 
 # Gets the specified Cloud Storage Provider configuration for the User.
@@ -13758,11 +14451,14 @@ export def "v2-1-accounts-users-cloud-storage get" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($account_id | is-empty) { error make --unspanned { msg: "path parameter 'accountId' must be non-empty" } }
+  if ($user_id | is-empty) { error make --unspanned { msg: "path parameter 'userId' must be non-empty" } }
+  if ($service_id | is-empty) { error make --unspanned { msg: "path parameter 'serviceId' must be non-empty" } }
   let qp = [(serialize-qp "redirectUrl" $redirect_url "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({account_id: (encode-path-segment $account_id), user_id: (encode-path-segment $user_id), service_id: (encode-path-segment $service_id)} | format pattern "/v2.1/accounts/{account_id}/users/{user_id}/cloud_storage/{service_id}") $qp)
   let accept_val = "*/*"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"redirectUrl": $redirect_url} | compact), body: null}
 }
 
 # Retrieves a list of all the items in a specified folder from the specified cloud storage provider.
@@ -13791,11 +14487,14 @@ export def "v2-1-accounts-users-cloud-storage-folders get-list" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($account_id | is-empty) { error make --unspanned { msg: "path parameter 'accountId' must be non-empty" } }
+  if ($user_id | is-empty) { error make --unspanned { msg: "path parameter 'userId' must be non-empty" } }
+  if ($service_id | is-empty) { error make --unspanned { msg: "path parameter 'serviceId' must be non-empty" } }
   let qp = [(serialize-qp "cloud_storage_folder_path" $cloud_storage_folder_path "scalar") (serialize-qp "count" $count "scalar") (serialize-qp "order" $order "scalar") (serialize-qp "order_by" $order_by "scalar") (serialize-qp "search_text" $search_text "scalar") (serialize-qp "start_position" $start_position "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({account_id: (encode-path-segment $account_id), user_id: (encode-path-segment $user_id), service_id: (encode-path-segment $service_id)} | format pattern "/v2.1/accounts/{account_id}/users/{user_id}/cloud_storage/{service_id}/folders") $qp)
   let accept_val = "*/*"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"cloud_storage_folder_path": $cloud_storage_folder_path, "count": $count, "order": $order, "order_by": $order_by, "search_text": $search_text, "start_position": $start_position} | compact), body: null}
 }
 
 # Gets a list of items from a cloud storage provider.
@@ -13826,11 +14525,15 @@ export def "v2-1-accounts-users-cloud-storage-folders get" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($account_id | is-empty) { error make --unspanned { msg: "path parameter 'accountId' must be non-empty" } }
+  if ($user_id | is-empty) { error make --unspanned { msg: "path parameter 'userId' must be non-empty" } }
+  if ($service_id | is-empty) { error make --unspanned { msg: "path parameter 'serviceId' must be non-empty" } }
+  if ($folder_id | is-empty) { error make --unspanned { msg: "path parameter 'folderId' must be non-empty" } }
   let qp = [(serialize-qp "cloud_storage_folder_path" $cloud_storage_folder_path "scalar") (serialize-qp "cloud_storage_folderid_plain" $cloud_storage_folderid_plain "scalar") (serialize-qp "count" $count "scalar") (serialize-qp "order" $order "scalar") (serialize-qp "order_by" $order_by "scalar") (serialize-qp "search_text" $search_text "scalar") (serialize-qp "start_position" $start_position "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({account_id: (encode-path-segment $account_id), user_id: (encode-path-segment $user_id), service_id: (encode-path-segment $service_id), folder_id: (encode-path-segment $folder_id)} | format pattern "/v2.1/accounts/{account_id}/users/{user_id}/cloud_storage/{service_id}/folders/{folder_id}") $qp)
   let accept_val = "*/*"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"cloud_storage_folder_path": $cloud_storage_folder_path, "cloud_storage_folderid_plain": $cloud_storage_folderid_plain, "count": $count, "order": $order, "order_by": $order_by, "search_text": $search_text, "start_position": $start_position} | compact), body: null}
 }
 
 # Deletes custom user settings for a specified user.
@@ -13855,12 +14558,14 @@ export def "v2-1-accounts-users-custom-settings delete" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($account_id | is-empty) { error make --unspanned { msg: "path parameter 'accountId' must be non-empty" } }
+  if ($user_id | is-empty) { error make --unspanned { msg: "path parameter 'userId' must be non-empty" } }
   let full_url = (build-url $base ({account_id: (encode-path-segment $account_id), user_id: (encode-path-segment $user_id)} | format pattern "/v2.1/accounts/{account_id}/users/{user_id}/custom_settings"))
   let req_body = {"customSettings": $custom_settings} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "*/*"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: {}, body: $req_body}
 }
 
 # Retrieves the custom user settings for a specified user.
@@ -13882,10 +14587,12 @@ export def "v2-1-accounts-users-custom-settings get" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($account_id | is-empty) { error make --unspanned { msg: "path parameter 'accountId' must be non-empty" } }
+  if ($user_id | is-empty) { error make --unspanned { msg: "path parameter 'userId' must be non-empty" } }
   let full_url = (build-url $base ({account_id: (encode-path-segment $account_id), user_id: (encode-path-segment $user_id)} | format pattern "/v2.1/accounts/{account_id}/users/{user_id}/custom_settings"))
   let accept_val = "*/*"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
 }
 
 # Adds or updates custom user settings for the specified user.
@@ -13910,12 +14617,14 @@ export def "v2-1-accounts-users-custom-settings update" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($account_id | is-empty) { error make --unspanned { msg: "path parameter 'accountId' must be non-empty" } }
+  if ($user_id | is-empty) { error make --unspanned { msg: "path parameter 'userId' must be non-empty" } }
   let full_url = (build-url $base ({account_id: (encode-path-segment $account_id), user_id: (encode-path-segment $user_id)} | format pattern "/v2.1/accounts/{account_id}/users/{user_id}/custom_settings"))
   let req_body = {"customSettings": $custom_settings} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "*/*"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: {}, body: $req_body}
 }
 
 # Retrieves the user profile for a specified user.
@@ -13937,10 +14646,12 @@ export def "v2-1-accounts-users-profile get" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($account_id | is-empty) { error make --unspanned { msg: "path parameter 'accountId' must be non-empty" } }
+  if ($user_id | is-empty) { error make --unspanned { msg: "path parameter 'userId' must be non-empty" } }
   let full_url = (build-url $base ({account_id: (encode-path-segment $account_id), user_id: (encode-path-segment $user_id)} | format pattern "/v2.1/accounts/{account_id}/users/{user_id}/profile"))
   let accept_val = "*/*"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
 }
 
 # Updates the user profile information for the specified user.
@@ -13979,12 +14690,14 @@ export def "v2-1-accounts-users-profile update" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($account_id | is-empty) { error make --unspanned { msg: "path parameter 'accountId' must be non-empty" } }
+  if ($user_id | is-empty) { error make --unspanned { msg: "path parameter 'userId' must be non-empty" } }
   let full_url = (build-url $base ({account_id: (encode-path-segment $account_id), user_id: (encode-path-segment $user_id)} | format pattern "/v2.1/accounts/{account_id}/users/{user_id}/profile"))
   let req_body = {"address": $address, "authenticationMethods": $authentication_methods, "companyName": $company_name, "displayOrganizationInfo": $display_organization_info, "displayPersonalInfo": $display_personal_info, "displayProfile": $display_profile, "displayUsageHistory": $display_usage_history, "profileImageUri": $profile_image_uri, "title": $title, "usageHistory": $usage_history, "userDetails": $user_details, "userProfileLastModifiedDate": $user_profile_last_modified_date} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: {}, body: $req_body}
 }
 
 # Deletes the user profile image for the specified user.
@@ -14006,10 +14719,12 @@ export def "v2-1-accounts-users-profile-image delete" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($account_id | is-empty) { error make --unspanned { msg: "path parameter 'accountId' must be non-empty" } }
+  if ($user_id | is-empty) { error make --unspanned { msg: "path parameter 'userId' must be non-empty" } }
   let full_url = (build-url $base ({account_id: (encode-path-segment $account_id), user_id: (encode-path-segment $user_id)} | format pattern "/v2.1/accounts/{account_id}/users/{user_id}/profile/image"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
 }
 
 # Retrieves the user profile image for the specified user.
@@ -14032,11 +14747,13 @@ export def "v2-1-accounts-users-profile-image get" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($account_id | is-empty) { error make --unspanned { msg: "path parameter 'accountId' must be non-empty" } }
+  if ($user_id | is-empty) { error make --unspanned { msg: "path parameter 'userId' must be non-empty" } }
   let qp = [(serialize-qp "encoding" $encoding "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({account_id: (encode-path-segment $account_id), user_id: (encode-path-segment $user_id)} | format pattern "/v2.1/accounts/{account_id}/users/{user_id}/profile/image") $qp)
   let accept_val = "image/gif"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"encoding": $encoding} | compact), body: null}
 }
 
 # Updates the user profile image for a specified user.
@@ -14058,10 +14775,12 @@ export def "v2-1-accounts-users-profile-image update" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($account_id | is-empty) { error make --unspanned { msg: "path parameter 'accountId' must be non-empty" } }
+  if ($user_id | is-empty) { error make --unspanned { msg: "path parameter 'userId' must be non-empty" } }
   let full_url = (build-url $base ({account_id: (encode-path-segment $account_id), user_id: (encode-path-segment $user_id)} | format pattern "/v2.1/accounts/{account_id}/users/{user_id}/profile/image"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
 }
 
 # Gets the user account settings for a specified user.
@@ -14083,10 +14802,12 @@ export def "v2-1-accounts-users-settings get" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($account_id | is-empty) { error make --unspanned { msg: "path parameter 'accountId' must be non-empty" } }
+  if ($user_id | is-empty) { error make --unspanned { msg: "path parameter 'userId' must be non-empty" } }
   let full_url = (build-url $base ({account_id: (encode-path-segment $account_id), user_id: (encode-path-segment $user_id)} | format pattern "/v2.1/accounts/{account_id}/users/{user_id}/settings"))
   let accept_val = "*/*"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
 }
 
 # Updates the user account settings for a specified user.
@@ -14298,13 +15019,15 @@ export def "v2-1-accounts-users-settings update" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($account_id | is-empty) { error make --unspanned { msg: "path parameter 'accountId' must be non-empty" } }
+  if ($user_id | is-empty) { error make --unspanned { msg: "path parameter 'userId' must be non-empty" } }
   let qp = [(serialize-qp "allow_all_languages" $allow_all_languages "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({account_id: (encode-path-segment $account_id), user_id: (encode-path-segment $user_id)} | format pattern "/v2.1/accounts/{account_id}/users/{user_id}/settings") $qp)
   let req_body = {"accountManagementGranular": $account_management_granular, "adminOnly": $admin_only, "adminOnlyMetadata": $admin_only_metadata, "allowAutoTagging": $allow_auto_tagging, "allowEnvelopeTransferTo": $allow_envelope_transfer_to, "allowEnvelopeTransferToMetadata": $allow_envelope_transfer_to_metadata, "allowEsealRecipients": $allow_eseal_recipients, "allowEsealRecipientsMetadata": $allow_eseal_recipients_metadata, "allowPowerFormsAdminToAccessAllPowerFormEnvelope": $allow_power_forms_admin_to_access_all_power_form_envelope, "allowPowerFormsAdminToAccessAllPowerFormEnvelopeMetadata": $allow_power_forms_admin_to_access_all_power_form_envelope_metadata, "allowRecipientLanguageSelection": $allow_recipient_language_selection, "allowRecipientLanguageSelectionMetadata": $allow_recipient_language_selection_metadata, "allowSendOnBehalfOf": $allow_send_on_behalf_of, "allowSendOnBehalfOfMetadata": $allow_send_on_behalf_of_metadata, "allowSupplementalDocuments": $allow_supplemental_documents, "allowSupplementalDocumentsMetadata": $allow_supplemental_documents_metadata, "anchorTagVersionedPlacementEnabled": $anchor_tag_versioned_placement_enabled, "apiAccountWideAccess": $api_account_wide_access, "apiAccountWideAccessMetadata": $api_account_wide_access_metadata, "apiCanExportAC": $api_can_export_ac, "apiCanExportACMetadata": $api_can_export_ac_metadata, "bulkSend": $bulk_send, "bulkSendMetadata": $bulk_send_metadata, "canChargeAccount": $can_charge_account, "canChargeAccountMetadata": $can_charge_account_metadata, "canEditSharedAddressbook": $can_edit_shared_addressbook, "canEditSharedAddressbookMetadata": $can_edit_shared_addressbook_metadata, "canLockEnvelopes": $can_lock_envelopes, "canLockEnvelopesMetadata": $can_lock_envelopes_metadata, "canManageAccount": $can_manage_account, "canManageAccountMetadata": $can_manage_account_metadata, "canManageDistributor": $can_manage_distributor, "canManageDistributorMetadata": $can_manage_distributor_metadata, "canManageTemplates": $can_manage_templates, "canManageTemplatesMetadata": $can_manage_templates_metadata, "canSendAPIRequests": $can_send_api_requests, "canSendAPIRequestsMetadata": $can_send_api_requests_metadata, "canSendEnvelope": $can_send_envelope, "canSendEnvelopeMetadata": $can_send_envelope_metadata, "canSendEnvelopesViaSMS": $can_send_envelopes_via_sms, "canSendEnvelopesViaSMSMetadata": $can_send_envelopes_via_sms_metadata, "canSignEnvelope": $can_sign_envelope, "canSignEnvelopeMetadata": $can_sign_envelope_metadata, "canUseScratchpad": $can_use_scratchpad, "canUseScratchpadMetadata": $can_use_scratchpad_metadata, "canUseSmartContracts": $can_use_smart_contracts, "canUseSmartContractsMetadata": $can_use_smart_contracts_metadata, "disableDocumentUpload": $disable_document_upload, "disableDocumentUploadMetadata": $disable_document_upload_metadata, "disableOtherActions": $disable_other_actions, "disableOtherActionsMetadata": $disable_other_actions_metadata, "enableDSPro": $enable_ds_pro, "enableDSProMetadata": $enable_ds_pro_metadata, "enableKeyTermsSuggestionsByDocumentType": $enable_key_terms_suggestions_by_document_type, "enableKeyTermsSuggestionsByDocumentTypeMetadata": $enable_key_terms_suggestions_by_document_type_metadata, "enableSequentialSigningAPI": $enable_sequential_signing_api, "enableSequentialSigningAPIMetadata": $enable_sequential_signing_api_metadata, "enableSequentialSigningUI": $enable_sequential_signing_ui, "enableSequentialSigningUIMetadata": $enable_sequential_signing_ui_metadata, "enableSignOnPaperOverride": $enable_sign_on_paper_override, "enableSignOnPaperOverrideMetadata": $enable_sign_on_paper_override_metadata, "enableSignerAttachments": $enable_signer_attachments, "enableSignerAttachmentsMetadata": $enable_signer_attachments_metadata, "enableTransactionPoint": $enable_transaction_point, "enableTransactionPointMetadata": $enable_transaction_point_metadata, "enableVaulting": $enable_vaulting, "enableVaultingMetadata": $enable_vaulting_metadata, "expressSendOnly": $express_send_only, "locale": $locale, "localeMetadata": $locale_metadata, "localePolicy": $locale_policy, "manageClickwrapsMode": $manage_clickwraps_mode, "manageClickwrapsModeMetadata": $manage_clickwraps_mode_metadata, "modifiedBy": $modified_by, "modifiedByMetadata": $modified_by_metadata, "modifiedDate": $modified_date, "modifiedDateMetadata": $modified_date_metadata, "modifiedPage": $modified_page, "modifiedPageMetadata": $modified_page_metadata, "newSendUI": $new_send_ui, "newSendUIMetadata": $new_send_ui_metadata, "powerFormMode": $power_form_mode, "powerFormModeMetadata": $power_form_mode_metadata, "recipientViewedNotification": $recipient_viewed_notification, "recipientViewedNotificationMetadata": $recipient_viewed_notification_metadata, "sealIdentifiers": $seal_identifiers, "selfSignedRecipientEmailDocument": $self_signed_recipient_email_document, "selfSignedRecipientEmailDocumentMetadata": $self_signed_recipient_email_document_metadata, "senderEmailNotifications": $sender_email_notifications, "signerEmailNotifications": $signer_email_notifications, "supplementalDocumentIncludeInDownload": $supplemental_document_include_in_download, "supplementalDocumentsMustAccept": $supplemental_documents_must_accept, "supplementalDocumentsMustAcceptMetadata": $supplemental_documents_must_accept_metadata, "supplementalDocumentsMustRead": $supplemental_documents_must_read, "supplementalDocumentsMustReadMetadata": $supplemental_documents_must_read_metadata, "supplementalDocumentsMustView": $supplemental_documents_must_view, "supplementalDocumentsMustViewMetadata": $supplemental_documents_must_view_metadata, "templateActiveCreation": $template_active_creation, "templateActiveCreationMetadata": $template_active_creation_metadata, "templateApplyNotify": $template_apply_notify, "templateApplyNotifyMetadata": $template_apply_notify_metadata, "templateAutoMatching": $template_auto_matching, "templateAutoMatchingMetadata": $template_auto_matching_metadata, "templateMatchingSensitivity": $template_matching_sensitivity, "templateMatchingSensitivityMetadata": $template_matching_sensitivity_metadata, "templatePageLevelMatching": $template_page_level_matching, "templatePageLevelMatchingMetadata": $template_page_level_matching_metadata, "timezoneDST": $timezone_dst, "timezoneDSTMetadata": $timezone_dst_metadata, "timezoneMask": $timezone_mask, "timezoneMaskMetadata": $timezone_mask_metadata, "timezoneOffset": $timezone_offset, "timezoneOffsetMetadata": $timezone_offset_metadata, "timezoneSendingPref": $timezone_sending_pref, "timezoneSendingPrefMetadata": $timezone_sending_pref_metadata, "timezoneSigningPref": $timezone_signing_pref, "timezoneSigningPrefMetadata": $timezone_signing_pref_metadata, "transactionPointSiteNameURL": $transaction_point_site_name_url, "transactionPointSiteNameURLMetadata": $transaction_point_site_name_url_metadata, "transactionPointUserName": $transaction_point_user_name, "transactionPointUserNameMetadata": $transaction_point_user_name_metadata, "vaultingMode": $vaulting_mode, "vaultingModeMetadata": $vaulting_mode_metadata, "webForms": $web_forms, "webFormsMetadata": $web_forms_metadata} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: ({"allow_all_languages": $allow_all_languages} | compact), body: $req_body}
 }
 
 # Retrieves a list of signature definitions for a user.
@@ -14327,11 +15050,13 @@ export def "v2-1-accounts-users-signatures list" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($account_id | is-empty) { error make --unspanned { msg: "path parameter 'accountId' must be non-empty" } }
+  if ($user_id | is-empty) { error make --unspanned { msg: "path parameter 'userId' must be non-empty" } }
   let qp = [(serialize-qp "stamp_type" $stamp_type "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({account_id: (encode-path-segment $account_id), user_id: (encode-path-segment $user_id)} | format pattern "/v2.1/accounts/{account_id}/users/{user_id}/signatures") $qp)
   let accept_val = "*/*"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"stamp_type": $stamp_type} | compact), body: null}
 }
 
 # Adds user Signature and initials images to a Signature.
@@ -14356,12 +15081,14 @@ export def "v2-1-accounts-users-signatures create" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($account_id | is-empty) { error make --unspanned { msg: "path parameter 'accountId' must be non-empty" } }
+  if ($user_id | is-empty) { error make --unspanned { msg: "path parameter 'userId' must be non-empty" } }
   let full_url = (build-url $base ({account_id: (encode-path-segment $account_id), user_id: (encode-path-segment $user_id)} | format pattern "/v2.1/accounts/{account_id}/users/{user_id}/signatures"))
   let req_body = {"userSignatures": $user_signatures} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "*/*"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: {}, body: $req_body}
 }
 
 # Adds/updates a user signature.
@@ -14369,7 +15096,7 @@ export def "v2-1-accounts-users-signatures create" [
 # PUT /v2.1/accounts/{accountId}/users/{userId}/signatures
 # operationId: UserSignatures_PutUserSignature
 # --userSignatures item shape: {adoptedDateTime?: string, createdDateTime?: string, customField?: string, dateStampProperties?: record, disallowUserResizeStamp?: string, errorDetails?: record, externalID?: string, imageBase64?: string, imageType?: string, initials150ImageId?: string, initialsImageUri?: string, isDefault?: string, lastModifiedDateTime?: string, nrdsId?: string, nrdsLastName?: string, nrdsStatus?: string, phoneticName?: string, signature150ImageId?: string, signatureFont?: string, signatureId?: string, ... (10 more fields)}
-export def "v2-1-accounts-users-signatures update-by-accountId-userId" [
+export def "v2-1-accounts-users-signatures update-by-account-id-user-id" [
   account_id: string
   user_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -14386,12 +15113,14 @@ export def "v2-1-accounts-users-signatures update-by-accountId-userId" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($account_id | is-empty) { error make --unspanned { msg: "path parameter 'accountId' must be non-empty" } }
+  if ($user_id | is-empty) { error make --unspanned { msg: "path parameter 'userId' must be non-empty" } }
   let full_url = (build-url $base ({account_id: (encode-path-segment $account_id), user_id: (encode-path-segment $user_id)} | format pattern "/v2.1/accounts/{account_id}/users/{user_id}/signatures"))
   let req_body = {"userSignatures": $user_signatures} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "*/*"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: {}, body: $req_body}
 }
 
 # Removes removes signature information for the specified user.
@@ -14414,10 +15143,13 @@ export def "v2-1-accounts-users-signatures delete" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($account_id | is-empty) { error make --unspanned { msg: "path parameter 'accountId' must be non-empty" } }
+  if ($user_id | is-empty) { error make --unspanned { msg: "path parameter 'userId' must be non-empty" } }
+  if ($signature_id | is-empty) { error make --unspanned { msg: "path parameter 'signatureId' must be non-empty" } }
   let full_url = (build-url $base ({account_id: (encode-path-segment $account_id), user_id: (encode-path-segment $user_id), signature_id: (encode-path-segment $signature_id)} | format pattern "/v2.1/accounts/{account_id}/users/{user_id}/signatures/{signature_id}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
 }
 
 # Gets the user signature information for the specified user.
@@ -14440,10 +15172,13 @@ export def "v2-1-accounts-users-signatures get" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($account_id | is-empty) { error make --unspanned { msg: "path parameter 'accountId' must be non-empty" } }
+  if ($user_id | is-empty) { error make --unspanned { msg: "path parameter 'userId' must be non-empty" } }
+  if ($signature_id | is-empty) { error make --unspanned { msg: "path parameter 'signatureId' must be non-empty" } }
   let full_url = (build-url $base ({account_id: (encode-path-segment $account_id), user_id: (encode-path-segment $user_id), signature_id: (encode-path-segment $signature_id)} | format pattern "/v2.1/accounts/{account_id}/users/{user_id}/signatures/{signature_id}"))
   let accept_val = "*/*"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
 }
 
 # Updates the user signature for a specified user.
@@ -14451,7 +15186,7 @@ export def "v2-1-accounts-users-signatures get" [
 # PUT /v2.1/accounts/{accountId}/users/{userId}/signatures/{signatureId}
 # operationId: UserSignatures_PutUserSignatureById
 # --dateStampProperties shape: {dateAreaHeight?: string, dateAreaWidth?: string, dateAreaX?: string, dateAreaY?: string}
-export def "v2-1-accounts-users-signatures update-by-accountId-userId-signatureId" [
+export def "v2-1-accounts-users-signatures update-by-account-id-user-id-signature-id" [
   account_id: string
   user_id: string
   signature_id: string
@@ -14484,13 +15219,16 @@ export def "v2-1-accounts-users-signatures update-by-accountId-userId-signatureI
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($account_id | is-empty) { error make --unspanned { msg: "path parameter 'accountId' must be non-empty" } }
+  if ($user_id | is-empty) { error make --unspanned { msg: "path parameter 'userId' must be non-empty" } }
+  if ($signature_id | is-empty) { error make --unspanned { msg: "path parameter 'signatureId' must be non-empty" } }
   let qp = [(serialize-qp "close_existing_signature" $close_existing_signature "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({account_id: (encode-path-segment $account_id), user_id: (encode-path-segment $user_id), signature_id: (encode-path-segment $signature_id)} | format pattern "/v2.1/accounts/{account_id}/users/{user_id}/signatures/{signature_id}") $qp)
   let req_body = {"dateStampProperties": $date_stamp_properties, "disallowUserResizeStamp": $disallow_user_resize_stamp, "externalID": $external_id, "imageType": $image_type, "isDefault": $is_default, "nrdsId": $nrds_id, "nrdsLastName": $nrds_last_name, "phoneticName": $phonetic_name, "signatureFont": $signature_font, "signatureId": $body_signature_id, "signatureInitials": $signature_initials, "signatureName": $signature_name, "signatureType": $signature_type, "stampFormat": $stamp_format, "stampSizeMM": $stamp_size_mm} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "*/*"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: ({"close_existing_signature": $close_existing_signature} | compact), body: $req_body}
 }
 
 # Deletes the user initials image or the user signature image for the specified user.
@@ -14514,10 +15252,14 @@ export def "v2-1-accounts-users-signatures delete-image" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($account_id | is-empty) { error make --unspanned { msg: "path parameter 'accountId' must be non-empty" } }
+  if ($user_id | is-empty) { error make --unspanned { msg: "path parameter 'userId' must be non-empty" } }
+  if ($signature_id | is-empty) { error make --unspanned { msg: "path parameter 'signatureId' must be non-empty" } }
+  if ($image_type | is-empty) { error make --unspanned { msg: "path parameter 'imageType' must be non-empty" } }
   let full_url = (build-url $base ({account_id: (encode-path-segment $account_id), user_id: (encode-path-segment $user_id), signature_id: (encode-path-segment $signature_id), image_type: (encode-path-segment $image_type)} | format pattern "/v2.1/accounts/{account_id}/users/{user_id}/signatures/{signature_id}/{image_type}"))
   let accept_val = "*/*"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
 }
 
 # Retrieves the user initials image or the user signature image for the specified user.
@@ -14542,11 +15284,15 @@ export def "v2-1-accounts-users-signatures get-image" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($account_id | is-empty) { error make --unspanned { msg: "path parameter 'accountId' must be non-empty" } }
+  if ($user_id | is-empty) { error make --unspanned { msg: "path parameter 'userId' must be non-empty" } }
+  if ($signature_id | is-empty) { error make --unspanned { msg: "path parameter 'signatureId' must be non-empty" } }
+  if ($image_type | is-empty) { error make --unspanned { msg: "path parameter 'imageType' must be non-empty" } }
   let qp = [(serialize-qp "include_chrome" $include_chrome "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({account_id: (encode-path-segment $account_id), user_id: (encode-path-segment $user_id), signature_id: (encode-path-segment $signature_id), image_type: (encode-path-segment $image_type)} | format pattern "/v2.1/accounts/{account_id}/users/{user_id}/signatures/{signature_id}/{image_type}") $qp)
   let accept_val = "image/gif"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"include_chrome": $include_chrome} | compact), body: null}
 }
 
 # Updates the user signature image or user initials image for the specified user.
@@ -14571,11 +15317,15 @@ export def "v2-1-accounts-users-signatures update-image" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($account_id | is-empty) { error make --unspanned { msg: "path parameter 'accountId' must be non-empty" } }
+  if ($user_id | is-empty) { error make --unspanned { msg: "path parameter 'userId' must be non-empty" } }
+  if ($signature_id | is-empty) { error make --unspanned { msg: "path parameter 'signatureId' must be non-empty" } }
+  if ($image_type | is-empty) { error make --unspanned { msg: "path parameter 'imageType' must be non-empty" } }
   let qp = [(serialize-qp "transparent_png" $transparent_png "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({account_id: (encode-path-segment $account_id), user_id: (encode-path-segment $user_id), signature_id: (encode-path-segment $signature_id), image_type: (encode-path-segment $image_type)} | format pattern "/v2.1/accounts/{account_id}/users/{user_id}/signatures/{signature_id}/{image_type}") $qp)
   let accept_val = "*/*"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"transparent_png": $transparent_png} | compact), body: null}
 }
 
 # Returns a URL to the DocuSign UI.
@@ -14599,12 +15349,13 @@ export def "v2-1-accounts-views-console create" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($account_id | is-empty) { error make --unspanned { msg: "path parameter 'accountId' must be non-empty" } }
   let full_url = (build-url $base ({account_id: (encode-path-segment $account_id)} | format pattern "/v2.1/accounts/{account_id}/views/console"))
   let req_body = {"envelopeId": $envelope_id, "returnUrl": $return_url} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "*/*"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: {}, body: $req_body}
 }
 
 # Get watermark information.
@@ -14625,10 +15376,11 @@ export def "v2-1-accounts-watermark get" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($account_id | is-empty) { error make --unspanned { msg: "path parameter 'accountId' must be non-empty" } }
   let full_url = (build-url $base ({account_id: (encode-path-segment $account_id)} | format pattern "/v2.1/accounts/{account_id}/watermark"))
   let accept_val = "*/*"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
 }
 
 # Update watermark information.
@@ -14659,12 +15411,13 @@ export def "v2-1-accounts-watermark update" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($account_id | is-empty) { error make --unspanned { msg: "path parameter 'accountId' must be non-empty" } }
   let full_url = (build-url $base ({account_id: (encode-path-segment $account_id)} | format pattern "/v2.1/accounts/{account_id}/watermark"))
   let req_body = {"displayAngle": $display_angle, "enabled": $enabled, "font": $font, "fontColor": $font_color, "fontSize": $font_size, "id": $id, "imageBase64": $image_base64, "transparency": $transparency, "watermarkText": $watermark_text} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "*/*"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: {}, body: $req_body}
 }
 
 # Get watermark preview.
@@ -14695,12 +15448,13 @@ export def "v2-1-accounts-watermark-preview update" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($account_id | is-empty) { error make --unspanned { msg: "path parameter 'accountId' must be non-empty" } }
   let full_url = (build-url $base ({account_id: (encode-path-segment $account_id)} | format pattern "/v2.1/accounts/{account_id}/watermark/preview"))
   let req_body = {"displayAngle": $display_angle, "enabled": $enabled, "font": $font, "fontColor": $font_color, "fontSize": $font_size, "id": $id, "imageBase64": $image_base64, "transparency": $transparency, "watermarkText": $watermark_text} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "*/*"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: {}, body: $req_body}
 }
 
 # List Workspaces
@@ -14721,10 +15475,11 @@ export def "v2-1-accounts-workspaces list" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($account_id | is-empty) { error make --unspanned { msg: "path parameter 'accountId' must be non-empty" } }
   let full_url = (build-url $base ({account_id: (encode-path-segment $account_id)} | format pattern "/v2.1/accounts/{account_id}/workspaces"))
   let accept_val = "*/*"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
 }
 
 # Create a Workspace
@@ -14763,12 +15518,13 @@ export def "v2-1-accounts-workspaces create" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($account_id | is-empty) { error make --unspanned { msg: "path parameter 'accountId' must be non-empty" } }
   let full_url = (build-url $base ({account_id: (encode-path-segment $account_id)} | format pattern "/v2.1/accounts/{account_id}/workspaces"))
   let req_body = {"billableAccountId": $billable_account_id, "callerInformation": $caller_information, "created": $created, "createdByInformation": $created_by_information, "lastModified": $last_modified, "lastModifiedByInformation": $last_modified_by_information, "settings": $settings, "status": $status, "workspaceBaseUrl": $workspace_base_url, "workspaceDescription": $workspace_description, "workspaceId": $workspace_id, "workspaceName": $workspace_name, "workspaceUri": $workspace_uri} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "*/*"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: {}, body: $req_body}
 }
 
 # Delete Workspace
@@ -14790,10 +15546,12 @@ export def "v2-1-accounts-workspaces delete" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($account_id | is-empty) { error make --unspanned { msg: "path parameter 'accountId' must be non-empty" } }
+  if ($workspace_id | is-empty) { error make --unspanned { msg: "path parameter 'workspaceId' must be non-empty" } }
   let full_url = (build-url $base ({account_id: (encode-path-segment $account_id), workspace_id: (encode-path-segment $workspace_id)} | format pattern "/v2.1/accounts/{account_id}/workspaces/{workspace_id}"))
   let accept_val = "*/*"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
 }
 
 # Get Workspace
@@ -14815,10 +15573,12 @@ export def "v2-1-accounts-workspaces get" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($account_id | is-empty) { error make --unspanned { msg: "path parameter 'accountId' must be non-empty" } }
+  if ($workspace_id | is-empty) { error make --unspanned { msg: "path parameter 'workspaceId' must be non-empty" } }
   let full_url = (build-url $base ({account_id: (encode-path-segment $account_id), workspace_id: (encode-path-segment $workspace_id)} | format pattern "/v2.1/accounts/{account_id}/workspaces/{workspace_id}"))
   let accept_val = "*/*"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
 }
 
 # Update Workspace
@@ -14858,12 +15618,14 @@ export def "v2-1-accounts-workspaces update" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($account_id | is-empty) { error make --unspanned { msg: "path parameter 'accountId' must be non-empty" } }
+  if ($workspace_id | is-empty) { error make --unspanned { msg: "path parameter 'workspaceId' must be non-empty" } }
   let full_url = (build-url $base ({account_id: (encode-path-segment $account_id), workspace_id: (encode-path-segment $workspace_id)} | format pattern "/v2.1/accounts/{account_id}/workspaces/{workspace_id}"))
   let req_body = {"billableAccountId": $billable_account_id, "callerInformation": $caller_information, "created": $created, "createdByInformation": $created_by_information, "lastModified": $last_modified, "lastModifiedByInformation": $last_modified_by_information, "settings": $settings, "status": $status, "workspaceBaseUrl": $workspace_base_url, "workspaceDescription": $workspace_description, "workspaceId": $body_workspace_id, "workspaceName": $workspace_name, "workspaceUri": $workspace_uri} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "*/*"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: {}, body: $req_body}
 }
 
 # Deletes files or sub-folders from a workspace.
@@ -14889,12 +15651,15 @@ export def "v2-1-accounts-workspaces-folders delete-items" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($account_id | is-empty) { error make --unspanned { msg: "path parameter 'accountId' must be non-empty" } }
+  if ($workspace_id | is-empty) { error make --unspanned { msg: "path parameter 'workspaceId' must be non-empty" } }
+  if ($folder_id | is-empty) { error make --unspanned { msg: "path parameter 'folderId' must be non-empty" } }
   let full_url = (build-url $base ({account_id: (encode-path-segment $account_id), workspace_id: (encode-path-segment $workspace_id), folder_id: (encode-path-segment $folder_id)} | format pattern "/v2.1/accounts/{account_id}/workspaces/{workspace_id}/folders/{folder_id}"))
   let req_body = {"items": $items} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: {}, body: $req_body}
 }
 
 # List workspace folder contents
@@ -14924,11 +15689,14 @@ export def "v2-1-accounts-workspaces-folders get" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($account_id | is-empty) { error make --unspanned { msg: "path parameter 'accountId' must be non-empty" } }
+  if ($workspace_id | is-empty) { error make --unspanned { msg: "path parameter 'workspaceId' must be non-empty" } }
+  if ($folder_id | is-empty) { error make --unspanned { msg: "path parameter 'folderId' must be non-empty" } }
   let qp = [(serialize-qp "count" $count "scalar") (serialize-qp "include_files" $include_files "scalar") (serialize-qp "include_sub_folders" $include_sub_folders "scalar") (serialize-qp "include_thumbnails" $include_thumbnails "scalar") (serialize-qp "include_user_detail" $include_user_detail "scalar") (serialize-qp "start_position" $start_position "scalar") (serialize-qp "workspace_user_id" $workspace_user_id "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({account_id: (encode-path-segment $account_id), workspace_id: (encode-path-segment $workspace_id), folder_id: (encode-path-segment $folder_id)} | format pattern "/v2.1/accounts/{account_id}/workspaces/{workspace_id}/folders/{folder_id}") $qp)
   let accept_val = "*/*"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"count": $count, "include_files": $include_files, "include_sub_folders": $include_sub_folders, "include_thumbnails": $include_thumbnails, "include_user_detail": $include_user_detail, "start_position": $start_position, "workspace_user_id": $workspace_user_id} | compact), body: null}
 }
 
 # Creates a workspace file.
@@ -14951,10 +15719,13 @@ export def "v2-1-accounts-workspaces-folders-files create" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($account_id | is-empty) { error make --unspanned { msg: "path parameter 'accountId' must be non-empty" } }
+  if ($workspace_id | is-empty) { error make --unspanned { msg: "path parameter 'workspaceId' must be non-empty" } }
+  if ($folder_id | is-empty) { error make --unspanned { msg: "path parameter 'folderId' must be non-empty" } }
   let full_url = (build-url $base ({account_id: (encode-path-segment $account_id), workspace_id: (encode-path-segment $workspace_id), folder_id: (encode-path-segment $folder_id)} | format pattern "/v2.1/accounts/{account_id}/workspaces/{workspace_id}/folders/{folder_id}/files"))
   let accept_val = "*/*"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
 }
 
 # Gets a workspace file
@@ -14980,11 +15751,15 @@ export def "v2-1-accounts-workspaces-folders-files get" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($account_id | is-empty) { error make --unspanned { msg: "path parameter 'accountId' must be non-empty" } }
+  if ($workspace_id | is-empty) { error make --unspanned { msg: "path parameter 'workspaceId' must be non-empty" } }
+  if ($folder_id | is-empty) { error make --unspanned { msg: "path parameter 'folderId' must be non-empty" } }
+  if ($file_id | is-empty) { error make --unspanned { msg: "path parameter 'fileId' must be non-empty" } }
   let qp = [(serialize-qp "is_download" $is_download "scalar") (serialize-qp "pdf_version" $pdf_version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({account_id: (encode-path-segment $account_id), workspace_id: (encode-path-segment $workspace_id), folder_id: (encode-path-segment $folder_id), file_id: (encode-path-segment $file_id)} | format pattern "/v2.1/accounts/{account_id}/workspaces/{workspace_id}/folders/{folder_id}/files/{file_id}") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"is_download": $is_download, "pdf_version": $pdf_version} | compact), body: null}
 }
 
 # Update workspace file or folder metadata
@@ -15008,10 +15783,14 @@ export def "v2-1-accounts-workspaces-folders-files update" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($account_id | is-empty) { error make --unspanned { msg: "path parameter 'accountId' must be non-empty" } }
+  if ($workspace_id | is-empty) { error make --unspanned { msg: "path parameter 'workspaceId' must be non-empty" } }
+  if ($folder_id | is-empty) { error make --unspanned { msg: "path parameter 'folderId' must be non-empty" } }
+  if ($file_id | is-empty) { error make --unspanned { msg: "path parameter 'fileId' must be non-empty" } }
   let full_url = (build-url $base ({account_id: (encode-path-segment $account_id), workspace_id: (encode-path-segment $workspace_id), folder_id: (encode-path-segment $folder_id), file_id: (encode-path-segment $file_id)} | format pattern "/v2.1/accounts/{account_id}/workspaces/{workspace_id}/folders/{folder_id}/files/{file_id}"))
   let accept_val = "*/*"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
 }
 
 # List File Pages
@@ -15040,11 +15819,15 @@ export def "v2-1-accounts-workspaces-folders-files-pages get" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($account_id | is-empty) { error make --unspanned { msg: "path parameter 'accountId' must be non-empty" } }
+  if ($workspace_id | is-empty) { error make --unspanned { msg: "path parameter 'workspaceId' must be non-empty" } }
+  if ($folder_id | is-empty) { error make --unspanned { msg: "path parameter 'folderId' must be non-empty" } }
+  if ($file_id | is-empty) { error make --unspanned { msg: "path parameter 'fileId' must be non-empty" } }
   let qp = [(serialize-qp "count" $count "scalar") (serialize-qp "dpi" $dpi "scalar") (serialize-qp "max_height" $max_height "scalar") (serialize-qp "max_width" $max_width "scalar") (serialize-qp "start_position" $start_position "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({account_id: (encode-path-segment $account_id), workspace_id: (encode-path-segment $workspace_id), folder_id: (encode-path-segment $folder_id), file_id: (encode-path-segment $file_id)} | format pattern "/v2.1/accounts/{account_id}/workspaces/{workspace_id}/folders/{folder_id}/files/{file_id}/pages") $qp)
   let accept_val = "*/*"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"count": $count, "dpi": $dpi, "max_height": $max_height, "max_width": $max_width, "start_position": $start_position} | compact), body: null}
 }
 
 # Gets a list of available billing plans.
@@ -15067,7 +15850,7 @@ export def "v2-1-billing-plans list" [
   let full_url = (build-url $base "/v2.1/billing_plans")
   let accept_val = "*/*"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
 }
 
 # Gets billing plan details.
@@ -15088,10 +15871,11 @@ export def "v2-1-billing-plans get" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($billing_plan_id | is-empty) { error make --unspanned { msg: "path parameter 'billingPlanId' must be non-empty" } }
   let full_url = (build-url $base ({billing_plan_id: (encode-path-segment $billing_plan_id)} | format pattern "/v2.1/billing_plans/{billing_plan_id}"))
   let accept_val = "*/*"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
 }
 
 # Gets settings for a notary user.
@@ -15116,7 +15900,7 @@ export def "v2-1-current-user-notary get" [
   let full_url = (build-url $base "/v2.1/current_user/notary" $qp)
   let accept_val = "*/*"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"include_jurisdictions": $include_jurisdictions} | compact), body: null}
 }
 
 # Registers the current user as a notary.
@@ -15147,7 +15931,7 @@ export def "v2-1-current-user-notary create" [
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "*/*"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: {}, body: $req_body}
 }
 
 # Updates notary information for the current user.
@@ -15178,7 +15962,7 @@ export def "v2-1-current-user-notary update" [
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "*/*"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: {}, body: $req_body}
 }
 
 # Gets notary jurisdictions for a user.
@@ -15205,7 +15989,7 @@ export def "v2-1-current-user-notary-journals get" [
   let full_url = (build-url $base "/v2.1/current_user/notary/journals" $qp)
   let accept_val = "*/*"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"count": $count, "search_text": $search_text, "start_position": $start_position} | compact), body: null}
 }
 
 # Returns a list of jurisdictions that the notary is registered in.
@@ -15228,7 +16012,7 @@ export def "v2-1-current-user-notary-jurisdictions list" [
   let full_url = (build-url $base "/v2.1/current_user/notary/jurisdictions")
   let accept_val = "*/*"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
 }
 
 # Creates a jurisdiction object.
@@ -15263,7 +16047,7 @@ export def "v2-1-current-user-notary-jurisdictions create" [
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "*/*"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: {}, body: $req_body}
 }
 
 # Deletes the specified jurisdiction.
@@ -15284,10 +16068,11 @@ export def "v2-1-current-user-notary-jurisdictions delete" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($jurisdiction_id | is-empty) { error make --unspanned { msg: "path parameter 'jurisdictionId' must be non-empty" } }
   let full_url = (build-url $base ({jurisdiction_id: (encode-path-segment $jurisdiction_id)} | format pattern "/v2.1/current_user/notary/jurisdictions/{jurisdiction_id}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
 }
 
 # Gets a jurisdiction object for the current user. The user must be a notary.
@@ -15308,10 +16093,11 @@ export def "v2-1-current-user-notary-jurisdictions get" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($jurisdiction_id | is-empty) { error make --unspanned { msg: "path parameter 'jurisdictionId' must be non-empty" } }
   let full_url = (build-url $base ({jurisdiction_id: (encode-path-segment $jurisdiction_id)} | format pattern "/v2.1/current_user/notary/jurisdictions/{jurisdiction_id}"))
   let accept_val = "*/*"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
 }
 
 # Updates the jurisdiction information about a notary.
@@ -15342,12 +16128,13 @@ export def "v2-1-current-user-notary-jurisdictions update" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($jurisdiction_id | is-empty) { error make --unspanned { msg: "path parameter 'jurisdictionId' must be non-empty" } }
   let full_url = (build-url $base ({jurisdiction_id: (encode-path-segment $jurisdiction_id)} | format pattern "/v2.1/current_user/notary/jurisdictions/{jurisdiction_id}"))
   let req_body = {"commissionExpiration": $commission_expiration, "commissionId": $commission_id, "county": $county, "errorDetails": $error_details, "jurisdiction": $jurisdiction, "registeredName": $registered_name, "sealType": $seal_type} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "*/*"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: {}, body: $req_body}
 }
 
 # Gets membership account password rules.
@@ -15370,7 +16157,7 @@ export def "v2-1-current-user-password-rules get" [
   let full_url = (build-url $base "/v2.1/current_user/password_rules")
   let accept_val = "*/*"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
 }
 
 # Deletes the request log files.
@@ -15393,7 +16180,7 @@ export def "v2-1-diagnostics-request-logs delete" [
   let full_url = (build-url $base "/v2.1/diagnostics/request_logs")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
 }
 
 # Gets the API request logging log files.
@@ -15418,7 +16205,7 @@ export def "v2-1-diagnostics-request-logs list" [
   let full_url = (build-url $base "/v2.1/diagnostics/request_logs" $qp)
   let accept_val = "*/*"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"encoding": $encoding} | compact), body: null}
 }
 
 # Gets a request logging log file.
@@ -15439,17 +16226,18 @@ export def "v2-1-diagnostics-request-logs get" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($request_log_id | is-empty) { error make --unspanned { msg: "path parameter 'requestLogId' must be non-empty" } }
   let full_url = (build-url $base ({request_log_id: (encode-path-segment $request_log_id)} | format pattern "/v2.1/diagnostics/request_logs/{request_log_id}"))
   let accept_val = "text/plain"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
 }
 
 # Gets the API request logging settings.
 #
 # GET /v2.1/diagnostics/settings
 # operationId: APIRequestLog_GetRequestLogSettings
-export def "v2-1-diagnostics-settings request-log-get-request-log" [
+export def "v2-1-diagnostics-settings request-log-get-log" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -15465,14 +16253,14 @@ export def "v2-1-diagnostics-settings request-log-get-request-log" [
   let full_url = (build-url $base "/v2.1/diagnostics/settings")
   let accept_val = "*/*"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
 }
 
 # Enables or disables API request logging for troubleshooting.
 #
 # PUT /v2.1/diagnostics/settings
 # operationId: APIRequestLog_PutRequestLogSettings
-export def "v2-1-diagnostics-settings request-log-update-request-log" [
+export def "v2-1-diagnostics-settings request-log-update-log" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -15494,5 +16282,5 @@ export def "v2-1-diagnostics-settings request-log-update-request-log" [
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "*/*"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: {}, body: $req_body}
 }

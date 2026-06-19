@@ -3,17 +3,18 @@
 # Auth: --token flag or $env.ROUTING_TOKEN
 
 const BASE_URL = "https://api.tomtom.com"
-const DEFAULT_AUTH = "query-key"
 
-# Build auth: returns {headers: record, query: string}
+# Build auth: returns {scheme: string, headers: record, query: string, location: string}.
+# `location` is "header" | "query" | "cookie" | "none" and tells dry-run callers
+# where the token went without inspecting headers/query themselves.
 def build-auth [token?: string, auth_scheme?: string]: nothing -> record {
   let token_val = if ($token != null) and ($token | is-not-empty) { $token } else { $env | get -o ROUTING_TOKEN | default "" }
   let scheme = ($auth_scheme | default "bearer")
-  if ($scheme == "none") or ($token_val | is-empty) { return {headers: {}, query: ""} }
+  if ($scheme == "none") or ($token_val | is-empty) { return {scheme: $scheme, headers: {}, query: "", location: "none"} }
   match $scheme {
-    "query-key" => { {headers: {}, query: $"(encode-path-segment "key")=(encode-path-segment $token_val)"} }
-    "none" => { {headers: {}, query: ""} }
-    _ => { {headers: {Authorization: $"Bearer ($token_val)"}, query: ""} }
+    "query-key" => { {scheme: $scheme, headers: {}, query: $"(encode-path-segment "key")=(encode-path-segment $token_val)", location: "query"} }
+    "none" => { {scheme: $scheme, headers: {}, query: "", location: "none"} }
+    _ => { {scheme: $scheme, headers: {Authorization: $"Bearer ($token_val)"}, query: "", location: "header"} }
   }
 }
 
@@ -22,8 +23,9 @@ def build-auth [token?: string, auth_scheme?: string]: nothing -> record {
 # ([A-Za-z0-9-._~]) stay literal; everything else gets %XX.
 def serialize-qp [name: string, value: any, style: string]: nothing -> list<string> {
   if ($value == null) { return [] }
-  let n = (encode-path-segment $name)
   let is_list = ($value | describe | str starts-with "list")
+  if $is_list and ($value | is-empty) { return [] }
+  let n = (encode-path-segment $name)
   if ($value | describe | str starts-with "record") { return ($value | transpose k v | each { $"($n)[(encode-path-segment $in.k)]=(encode-path-segment $in.v)" }) }
   if not $is_list { return [$"($n)=(encode-path-segment $value)"] }
   match $style {
@@ -54,22 +56,42 @@ def build-url [base: string, path: string, query?: string]: nothing -> string {
   if ($query != null) and ($query | is-not-empty) { $result | upsert query $query | url join } else { $result | url join }
 }
 
+# Build the dry-run record returned by --dry-run. Shape:
+#   {dry_run: true, method, url, query: <record>, headers, body, content_type, timeout,
+#    auth: {scheme, location}}
+# `meta` carries logical-form data (the query record by spec name, the pre-serialization
+# body) that do-request itself cannot reconstruct from its wire-format args.
+def build-dry-run-record [method: string, url: string, auth: record, content_type: string, timeout: duration, meta?: record]: nothing -> record {
+  let m = ($meta | default {})
+  {
+    dry_run: true
+    method: $method
+    url: $url
+    query: ($m | get -o query | default {})
+    headers: $auth.headers
+    body: ($m | get -o body)
+    content_type: $content_type
+    timeout: $timeout
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+}
+
 # Execute HTTP request with method dispatch
-def do-request [method: string, url: string, auth: record, insecure: bool, raw: bool, dry_run: bool, max_time?: duration, allow_errors?: bool, full?: bool, content_type?: string, body?: any]: nothing -> any {
+def do-request [method: string, url: string, auth: record, insecure: bool, raw: bool, dry_run: bool, max_time?: duration, allow_errors?: bool, full?: bool, content_type?: string, body?: any, dry_run_meta?: record]: nothing -> any {
   let req_url = if ($auth.query | is-not-empty) { if ($url | str contains "?") { $"($url)&($auth.query)" } else { $"($url)?($auth.query)" } } else { $url }
   let timeout = ($max_time | default 30min)
   let ct = ($content_type | default "application/json")
-  if $dry_run { return {method: $method, url: $req_url, headers: $auth.headers, query_string: $auth.query, content_type: $ct, timeout: $timeout, body: $body} }
+  if $dry_run { return (build-dry-run-record $method $req_url $auth $ct $timeout $dry_run_meta) }
   let resp = match $method {
     "get" => { http get --headers $auth.headers --full --allow-errors --max-time $timeout --insecure=$insecure --raw=$raw $req_url }
-    "head" => { http head --headers $auth.headers --max-time $timeout --insecure=$insecure $req_url }
-    "options" => { http options --headers $auth.headers --max-time $timeout --insecure=$insecure $req_url }
+    "head" => { http head --headers $auth.headers --full --allow-errors --max-time $timeout --insecure=$insecure $req_url }
+    "options" => { http options --headers $auth.headers --full --allow-errors --max-time $timeout --insecure=$insecure $req_url }
     "post" => { if ($body | is-empty) { http post --headers $auth.headers --full --allow-errors --max-time $timeout --insecure=$insecure --raw=$raw $req_url "" } else { http post --headers $auth.headers --content-type $ct --full --allow-errors --max-time $timeout --insecure=$insecure --raw=$raw $req_url $body } }
     "put" => { if ($body | is-empty) { http put --headers $auth.headers --full --allow-errors --max-time $timeout --insecure=$insecure --raw=$raw $req_url "" } else { http put --headers $auth.headers --content-type $ct --full --allow-errors --max-time $timeout --insecure=$insecure --raw=$raw $req_url $body } }
     "patch" => { if ($body | is-empty) { http patch --headers $auth.headers --full --allow-errors --max-time $timeout --insecure=$insecure --raw=$raw $req_url "" } else { http patch --headers $auth.headers --content-type $ct --full --allow-errors --max-time $timeout --insecure=$insecure --raw=$raw $req_url $body } }
     "delete" => { if ($body | is-empty) { http delete --headers $auth.headers --full --allow-errors --max-time $timeout --insecure=$insecure --raw=$raw $req_url } else { http delete --headers $auth.headers --content-type $ct --data $body --full --allow-errors --max-time $timeout --insecure=$insecure --raw=$raw $req_url } }
   }
-  if ($method in ["head" "options"]) { return $resp }
+  if ($method == "head") and (not $full) and (not $allow_errors) and $resp.status < 400 { return $resp.headers }
   if $allow_errors { $resp } else if $resp.status >= 400 { error make --unspanned { msg: $"HTTP ($resp.status): ($resp.body)" } } else if $full { {status: $resp.status, headers: $resp.headers, body: $resp.body} } else if $resp.status == 204 { null } else { $resp.body }
 }
 
@@ -161,11 +183,14 @@ export def "routing-calculate-reachable-range get" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "query-key"))
   let base = ($base_url | default $BASE_URL)
+  if ($version_number | is-empty) { error make --unspanned { msg: "path parameter 'versionNumber' must be non-empty" } }
+  if ($origin | is-empty) { error make --unspanned { msg: "path parameter 'origin' must be non-empty" } }
+  if ($content_type | is-empty) { error make --unspanned { msg: "path parameter 'contentType' must be non-empty" } }
   let qp = [(serialize-qp "fuelBudgetInLiters" $fuel_budget_in_liters "scalar") (serialize-qp "energyBudgetInkWh" $energy_budget_ink_wh "scalar") (serialize-qp "timeBudgetInSec" $time_budget_in_sec "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "report" $report "scalar") (serialize-qp "departAt" $depart_at "scalar") (serialize-qp "arriveAt" $arrive_at "scalar") (serialize-qp "routeType" $route_type "scalar") (serialize-qp "traffic" $traffic "scalar") (serialize-qp "avoid" $avoid "scalar") (serialize-qp "travelMode" $travel_mode "scalar") (serialize-qp "hilliness" $hilliness "scalar") (serialize-qp "windingness" $windingness "scalar") (serialize-qp "vehicleMaxSpeed" $vehicle_max_speed "scalar") (serialize-qp "vehicleWeight" $vehicle_weight "scalar") (serialize-qp "vehicleAxleWeight" $vehicle_axle_weight "scalar") (serialize-qp "vehicleLength" $vehicle_length "scalar") (serialize-qp "vehicleWidth" $vehicle_width "scalar") (serialize-qp "vehicleHeight" $vehicle_height "scalar") (serialize-qp "vehicleCommercial" $vehicle_commercial "scalar") (serialize-qp "vehicleLoadType" $vehicle_load_type "scalar") (serialize-qp "constantSpeedConsumptionInLitersPerHundredkm" $constant_speed_consumption_in_liters_per_hundredkm "scalar") (serialize-qp "currentFuelInLiters" $current_fuel_in_liters "scalar") (serialize-qp "auxiliaryPowerInLitersPerHour" $auxiliary_power_in_liters_per_hour "scalar") (serialize-qp "fuelEnergyDensityInMJoulesPerLiter" $fuel_energy_density_in_m_joules_per_liter "scalar") (serialize-qp "accelerationEfficiency" $acceleration_efficiency "scalar") (serialize-qp "decelerationEfficiency" $deceleration_efficiency "scalar") (serialize-qp "uphillEfficiency" $uphill_efficiency "scalar") (serialize-qp "downhillEfficiency" $downhill_efficiency "scalar") (serialize-qp "vehicleEngineType" $vehicle_engine_type "scalar") (serialize-qp "constantSpeedConsumptionInkWhPerHundredkm" $constant_speed_consumption_ink_wh_per_hundredkm "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({version_number: (encode-path-segment $version_number), origin: (encode-path-segment $origin), content_type: (encode-path-segment $content_type)} | format pattern "/routing/{version_number}/calculateReachableRange/{origin}/{content_type}") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"fuelBudgetInLiters": $fuel_budget_in_liters, "energyBudgetInkWh": $energy_budget_ink_wh, "timeBudgetInSec": $time_budget_in_sec, "callback": $callback, "report": $report, "departAt": $depart_at, "arriveAt": $arrive_at, "routeType": $route_type, "traffic": $traffic, "avoid": $avoid, "travelMode": $travel_mode, "hilliness": $hilliness, "windingness": $windingness, "vehicleMaxSpeed": $vehicle_max_speed, "vehicleWeight": $vehicle_weight, "vehicleAxleWeight": $vehicle_axle_weight, "vehicleLength": $vehicle_length, "vehicleWidth": $vehicle_width, "vehicleHeight": $vehicle_height, "vehicleCommercial": $vehicle_commercial, "vehicleLoadType": $vehicle_load_type, "constantSpeedConsumptionInLitersPerHundredkm": $constant_speed_consumption_in_liters_per_hundredkm, "currentFuelInLiters": $current_fuel_in_liters, "auxiliaryPowerInLitersPerHour": $auxiliary_power_in_liters_per_hour, "fuelEnergyDensityInMJoulesPerLiter": $fuel_energy_density_in_m_joules_per_liter, "accelerationEfficiency": $acceleration_efficiency, "decelerationEfficiency": $deceleration_efficiency, "uphillEfficiency": $uphill_efficiency, "downhillEfficiency": $downhill_efficiency, "vehicleEngineType": $vehicle_engine_type, "constantSpeedConsumptionInkWhPerHundredkm": $constant_speed_consumption_ink_wh_per_hundredkm} | compact), body: null}
 }
 
 # Reachable Range
@@ -223,13 +248,16 @@ export def "routing-calculate-reachable-range create" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "query-key"))
   let base = ($base_url | default $BASE_URL)
+  if ($version_number | is-empty) { error make --unspanned { msg: "path parameter 'versionNumber' must be non-empty" } }
+  if ($origin | is-empty) { error make --unspanned { msg: "path parameter 'origin' must be non-empty" } }
+  if ($content_type | is-empty) { error make --unspanned { msg: "path parameter 'contentType' must be non-empty" } }
   let qp = [(serialize-qp "fuelBudgetInLiters" $fuel_budget_in_liters "scalar") (serialize-qp "energyBudgetInkWh" $energy_budget_ink_wh "scalar") (serialize-qp "timeBudgetInSec" $time_budget_in_sec "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "report" $report "scalar") (serialize-qp "departAt" $depart_at "scalar") (serialize-qp "arriveAt" $arrive_at "scalar") (serialize-qp "routeType" $route_type "scalar") (serialize-qp "traffic" $traffic "scalar") (serialize-qp "avoid" $avoid "scalar") (serialize-qp "travelMode" $travel_mode "scalar") (serialize-qp "hilliness" $hilliness "scalar") (serialize-qp "windingness" $windingness "scalar") (serialize-qp "vehicleMaxSpeed" $vehicle_max_speed "scalar") (serialize-qp "vehicleWeight" $vehicle_weight "scalar") (serialize-qp "vehicleAxleWeight" $vehicle_axle_weight "scalar") (serialize-qp "vehicleLength" $vehicle_length "scalar") (serialize-qp "vehicleWidth" $vehicle_width "scalar") (serialize-qp "vehicleHeight" $vehicle_height "scalar") (serialize-qp "vehicleCommercial" $vehicle_commercial "scalar") (serialize-qp "vehicleLoadType" $vehicle_load_type "scalar") (serialize-qp "constantSpeedConsumptionInLitersPerHundredkm" $constant_speed_consumption_in_liters_per_hundredkm "scalar") (serialize-qp "currentFuelInLiters" $current_fuel_in_liters "scalar") (serialize-qp "auxiliaryPowerInLitersPerHour" $auxiliary_power_in_liters_per_hour "scalar") (serialize-qp "fuelEnergyDensityInMJoulesPerLiter" $fuel_energy_density_in_m_joules_per_liter "scalar") (serialize-qp "accelerationEfficiency" $acceleration_efficiency "scalar") (serialize-qp "decelerationEfficiency" $deceleration_efficiency "scalar") (serialize-qp "uphillEfficiency" $uphill_efficiency "scalar") (serialize-qp "downhillEfficiency" $downhill_efficiency "scalar") (serialize-qp "vehicleEngineType" $vehicle_engine_type "scalar") (serialize-qp "constantSpeedConsumptionInkWhPerHundredkm" $constant_speed_consumption_ink_wh_per_hundredkm "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({version_number: (encode-path-segment $version_number), origin: (encode-path-segment $origin), content_type: (encode-path-segment $content_type)} | format pattern "/routing/{version_number}/calculateReachableRange/{origin}/{content_type}") $qp)
   let req_body = {"allowVignette": $allow_vignette, "avoidAreas": $avoid_areas, "avoidVignette": $avoid_vignette} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: ({"fuelBudgetInLiters": $fuel_budget_in_liters, "energyBudgetInkWh": $energy_budget_ink_wh, "timeBudgetInSec": $time_budget_in_sec, "callback": $callback, "report": $report, "departAt": $depart_at, "arriveAt": $arrive_at, "routeType": $route_type, "traffic": $traffic, "avoid": $avoid, "travelMode": $travel_mode, "hilliness": $hilliness, "windingness": $windingness, "vehicleMaxSpeed": $vehicle_max_speed, "vehicleWeight": $vehicle_weight, "vehicleAxleWeight": $vehicle_axle_weight, "vehicleLength": $vehicle_length, "vehicleWidth": $vehicle_width, "vehicleHeight": $vehicle_height, "vehicleCommercial": $vehicle_commercial, "vehicleLoadType": $vehicle_load_type, "constantSpeedConsumptionInLitersPerHundredkm": $constant_speed_consumption_in_liters_per_hundredkm, "currentFuelInLiters": $current_fuel_in_liters, "auxiliaryPowerInLitersPerHour": $auxiliary_power_in_liters_per_hour, "fuelEnergyDensityInMJoulesPerLiter": $fuel_energy_density_in_m_joules_per_liter, "accelerationEfficiency": $acceleration_efficiency, "decelerationEfficiency": $deceleration_efficiency, "uphillEfficiency": $uphill_efficiency, "downhillEfficiency": $downhill_efficiency, "vehicleEngineType": $vehicle_engine_type, "constantSpeedConsumptionInkWhPerHundredkm": $constant_speed_consumption_ink_wh_per_hundredkm} | compact), body: $req_body}
 }
 
 # Calculate Route
@@ -290,11 +318,14 @@ export def "routing-calculate-route get" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "query-key"))
   let base = ($base_url | default $BASE_URL)
+  if ($version_number | is-empty) { error make --unspanned { msg: "path parameter 'versionNumber' must be non-empty" } }
+  if ($locations | is-empty) { error make --unspanned { msg: "path parameter 'locations' must be non-empty" } }
+  if ($content_type | is-empty) { error make --unspanned { msg: "path parameter 'contentType' must be non-empty" } }
   let qp = [(serialize-qp "maxAlternatives" $max_alternatives "scalar") (serialize-qp "alternativeType" $alternative_type "scalar") (serialize-qp "minDeviationDistance" $min_deviation_distance "scalar") (serialize-qp "minDeviationTime" $min_deviation_time "scalar") (serialize-qp "instructionsType" $instructions_type "scalar") (serialize-qp "language" $language "scalar") (serialize-qp "computeBestOrder" $compute_best_order "scalar") (serialize-qp "routeRepresentation" $route_representation "scalar") (serialize-qp "computeTravelTimeFor" $compute_travel_time_for "scalar") (serialize-qp "vehicleHeading" $vehicle_heading "scalar") (serialize-qp "sectionType" $section_type "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "report" $report "scalar") (serialize-qp "departAt" $depart_at "scalar") (serialize-qp "arriveAt" $arrive_at "scalar") (serialize-qp "routeType" $route_type "scalar") (serialize-qp "traffic" $traffic "scalar") (serialize-qp "avoid" $avoid "scalar") (serialize-qp "travelMode" $travel_mode "scalar") (serialize-qp "hilliness" $hilliness "scalar") (serialize-qp "windingness" $windingness "scalar") (serialize-qp "vehicleMaxSpeed" $vehicle_max_speed "scalar") (serialize-qp "vehicleWeight" $vehicle_weight "scalar") (serialize-qp "vehicleAxleWeight" $vehicle_axle_weight "scalar") (serialize-qp "vehicleLength" $vehicle_length "scalar") (serialize-qp "vehicleWidth" $vehicle_width "scalar") (serialize-qp "vehicleHeight" $vehicle_height "scalar") (serialize-qp "vehicleCommercial" $vehicle_commercial "scalar") (serialize-qp "vehicleLoadType" $vehicle_load_type "scalar") (serialize-qp "vehicleEngineType" $vehicle_engine_type "scalar") (serialize-qp "constantSpeedConsumptionInLitersPerHundredkm" $constant_speed_consumption_in_liters_per_hundredkm "scalar") (serialize-qp "currentFuelInLiters" $current_fuel_in_liters "scalar") (serialize-qp "auxiliaryPowerInLitersPerHour" $auxiliary_power_in_liters_per_hour "scalar") (serialize-qp "fuelEnergyDensityInMJoulesPerLiter" $fuel_energy_density_in_m_joules_per_liter "scalar") (serialize-qp "accelerationEfficiency" $acceleration_efficiency "scalar") (serialize-qp "decelerationEfficiency" $deceleration_efficiency "scalar") (serialize-qp "uphillEfficiency" $uphill_efficiency "scalar") (serialize-qp "downhillEfficiency" $downhill_efficiency "scalar") (serialize-qp "constantSpeedConsumptionInkWhPerHundredkm" $constant_speed_consumption_ink_wh_per_hundredkm "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({version_number: (encode-path-segment $version_number), locations: (encode-path-segment $locations), content_type: (encode-path-segment $content_type)} | format pattern "/routing/{version_number}/calculateRoute/{locations}/{content_type}") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"maxAlternatives": $max_alternatives, "alternativeType": $alternative_type, "minDeviationDistance": $min_deviation_distance, "minDeviationTime": $min_deviation_time, "instructionsType": $instructions_type, "language": $language, "computeBestOrder": $compute_best_order, "routeRepresentation": $route_representation, "computeTravelTimeFor": $compute_travel_time_for, "vehicleHeading": $vehicle_heading, "sectionType": $section_type, "callback": $callback, "report": $report, "departAt": $depart_at, "arriveAt": $arrive_at, "routeType": $route_type, "traffic": $traffic, "avoid": $avoid, "travelMode": $travel_mode, "hilliness": $hilliness, "windingness": $windingness, "vehicleMaxSpeed": $vehicle_max_speed, "vehicleWeight": $vehicle_weight, "vehicleAxleWeight": $vehicle_axle_weight, "vehicleLength": $vehicle_length, "vehicleWidth": $vehicle_width, "vehicleHeight": $vehicle_height, "vehicleCommercial": $vehicle_commercial, "vehicleLoadType": $vehicle_load_type, "vehicleEngineType": $vehicle_engine_type, "constantSpeedConsumptionInLitersPerHundredkm": $constant_speed_consumption_in_liters_per_hundredkm, "currentFuelInLiters": $current_fuel_in_liters, "auxiliaryPowerInLitersPerHour": $auxiliary_power_in_liters_per_hour, "fuelEnergyDensityInMJoulesPerLiter": $fuel_energy_density_in_m_joules_per_liter, "accelerationEfficiency": $acceleration_efficiency, "decelerationEfficiency": $deceleration_efficiency, "uphillEfficiency": $uphill_efficiency, "downhillEfficiency": $downhill_efficiency, "constantSpeedConsumptionInkWhPerHundredkm": $constant_speed_consumption_ink_wh_per_hundredkm} | compact), body: null}
 }
 
 # Calculate Route
@@ -362,11 +393,14 @@ export def "routing-calculate-route create" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "query-key"))
   let base = ($base_url | default $BASE_URL)
+  if ($version_number | is-empty) { error make --unspanned { msg: "path parameter 'versionNumber' must be non-empty" } }
+  if ($locations | is-empty) { error make --unspanned { msg: "path parameter 'locations' must be non-empty" } }
+  if ($content_type | is-empty) { error make --unspanned { msg: "path parameter 'contentType' must be non-empty" } }
   let qp = [(serialize-qp "maxAlternatives" $max_alternatives "scalar") (serialize-qp "alternativeType" $alternative_type "scalar") (serialize-qp "minDeviationDistance" $min_deviation_distance "scalar") (serialize-qp "minDeviationTime" $min_deviation_time "scalar") (serialize-qp "instructionsType" $instructions_type "scalar") (serialize-qp "language" $language "scalar") (serialize-qp "computeBestOrder" $compute_best_order "scalar") (serialize-qp "routeRepresentation" $route_representation "scalar") (serialize-qp "computeTravelTimeFor" $compute_travel_time_for "scalar") (serialize-qp "vehicleHeading" $vehicle_heading "scalar") (serialize-qp "sectionType" $section_type "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "report" $report "scalar") (serialize-qp "departAt" $depart_at "scalar") (serialize-qp "arriveAt" $arrive_at "scalar") (serialize-qp "routeType" $route_type "scalar") (serialize-qp "traffic" $traffic "scalar") (serialize-qp "avoid" $avoid "scalar") (serialize-qp "travelMode" $travel_mode "scalar") (serialize-qp "hilliness" $hilliness "scalar") (serialize-qp "windingness" $windingness "scalar") (serialize-qp "vehicleMaxSpeed" $vehicle_max_speed "scalar") (serialize-qp "vehicleWeight" $vehicle_weight "scalar") (serialize-qp "vehicleAxleWeight" $vehicle_axle_weight "scalar") (serialize-qp "vehicleLength" $vehicle_length "scalar") (serialize-qp "vehicleWidth" $vehicle_width "scalar") (serialize-qp "vehicleHeight" $vehicle_height "scalar") (serialize-qp "vehicleCommercial" $vehicle_commercial "scalar") (serialize-qp "vehicleLoadType" $vehicle_load_type "scalar") (serialize-qp "vehicleEngineType" $vehicle_engine_type "scalar") (serialize-qp "constantSpeedConsumptionInLitersPerHundredkm" $constant_speed_consumption_in_liters_per_hundredkm "scalar") (serialize-qp "currentFuelInLiters" $current_fuel_in_liters "scalar") (serialize-qp "auxiliaryPowerInLitersPerHour" $auxiliary_power_in_liters_per_hour "scalar") (serialize-qp "fuelEnergyDensityInMJoulesPerLiter" $fuel_energy_density_in_m_joules_per_liter "scalar") (serialize-qp "accelerationEfficiency" $acceleration_efficiency "scalar") (serialize-qp "decelerationEfficiency" $deceleration_efficiency "scalar") (serialize-qp "uphillEfficiency" $uphill_efficiency "scalar") (serialize-qp "downhillEfficiency" $downhill_efficiency "scalar") (serialize-qp "constantSpeedConsumptionInkWhPerHundredkm" $constant_speed_consumption_ink_wh_per_hundredkm "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({version_number: (encode-path-segment $version_number), locations: (encode-path-segment $locations), content_type: (encode-path-segment $content_type)} | format pattern "/routing/{version_number}/calculateRoute/{locations}/{content_type}") $qp)
   let req_body = {"allowVignette": $allow_vignette, "avoidAreas": $avoid_areas, "avoidVignette": $avoid_vignette, "supportingPoints": $supporting_points} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: ({"maxAlternatives": $max_alternatives, "alternativeType": $alternative_type, "minDeviationDistance": $min_deviation_distance, "minDeviationTime": $min_deviation_time, "instructionsType": $instructions_type, "language": $language, "computeBestOrder": $compute_best_order, "routeRepresentation": $route_representation, "computeTravelTimeFor": $compute_travel_time_for, "vehicleHeading": $vehicle_heading, "sectionType": $section_type, "callback": $callback, "report": $report, "departAt": $depart_at, "arriveAt": $arrive_at, "routeType": $route_type, "traffic": $traffic, "avoid": $avoid, "travelMode": $travel_mode, "hilliness": $hilliness, "windingness": $windingness, "vehicleMaxSpeed": $vehicle_max_speed, "vehicleWeight": $vehicle_weight, "vehicleAxleWeight": $vehicle_axle_weight, "vehicleLength": $vehicle_length, "vehicleWidth": $vehicle_width, "vehicleHeight": $vehicle_height, "vehicleCommercial": $vehicle_commercial, "vehicleLoadType": $vehicle_load_type, "vehicleEngineType": $vehicle_engine_type, "constantSpeedConsumptionInLitersPerHundredkm": $constant_speed_consumption_in_liters_per_hundredkm, "currentFuelInLiters": $current_fuel_in_liters, "auxiliaryPowerInLitersPerHour": $auxiliary_power_in_liters_per_hour, "fuelEnergyDensityInMJoulesPerLiter": $fuel_energy_density_in_m_joules_per_liter, "accelerationEfficiency": $acceleration_efficiency, "decelerationEfficiency": $deceleration_efficiency, "uphillEfficiency": $uphill_efficiency, "downhillEfficiency": $downhill_efficiency, "constantSpeedConsumptionInkWhPerHundredkm": $constant_speed_consumption_ink_wh_per_hundredkm} | compact), body: $req_body}
 }

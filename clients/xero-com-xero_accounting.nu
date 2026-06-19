@@ -3,17 +3,18 @@
 # Auth: --token flag or $env.XERO_ACCOUNTING_API_TOKEN
 
 const BASE_URL = "https://api.xero.com/api.xro/2.0"
-const DEFAULT_AUTH = "bearer"
 
-# Build auth: returns {headers: record, query: string}
+# Build auth: returns {scheme: string, headers: record, query: string, location: string}.
+# `location` is "header" | "query" | "cookie" | "none" and tells dry-run callers
+# where the token went without inspecting headers/query themselves.
 def build-auth [token?: string, auth_scheme?: string]: nothing -> record {
   let token_val = if ($token != null) and ($token | is-not-empty) { $token } else { $env | get -o XERO_ACCOUNTING_API_TOKEN | default "" }
   let scheme = ($auth_scheme | default "bearer")
-  if ($scheme == "none") or ($token_val | is-empty) { return {headers: {}, query: ""} }
+  if ($scheme == "none") or ($token_val | is-empty) { return {scheme: $scheme, headers: {}, query: "", location: "none"} }
   match $scheme {
-    "bearer" => { {headers: {Authorization: $"Bearer ($token_val)"}, query: ""} }
-    "none" => { {headers: {}, query: ""} }
-    _ => { {headers: {Authorization: $"Bearer ($token_val)"}, query: ""} }
+    "bearer" => { {scheme: $scheme, headers: {Authorization: $"Bearer ($token_val)"}, query: "", location: "header"} }
+    "none" => { {scheme: $scheme, headers: {}, query: "", location: "none"} }
+    _ => { {scheme: $scheme, headers: {Authorization: $"Bearer ($token_val)"}, query: "", location: "header"} }
   }
 }
 
@@ -22,8 +23,9 @@ def build-auth [token?: string, auth_scheme?: string]: nothing -> record {
 # ([A-Za-z0-9-._~]) stay literal; everything else gets %XX.
 def serialize-qp [name: string, value: any, style: string]: nothing -> list<string> {
   if ($value == null) { return [] }
-  let n = (encode-path-segment $name)
   let is_list = ($value | describe | str starts-with "list")
+  if $is_list and ($value | is-empty) { return [] }
+  let n = (encode-path-segment $name)
   if ($value | describe | str starts-with "record") { return ($value | transpose k v | each { $"($n)[(encode-path-segment $in.k)]=(encode-path-segment $in.v)" }) }
   if not $is_list { return [$"($n)=(encode-path-segment $value)"] }
   match $style {
@@ -54,22 +56,42 @@ def build-url [base: string, path: string, query?: string]: nothing -> string {
   if ($query != null) and ($query | is-not-empty) { $result | upsert query $query | url join } else { $result | url join }
 }
 
+# Build the dry-run record returned by --dry-run. Shape:
+#   {dry_run: true, method, url, query: <record>, headers, body, content_type, timeout,
+#    auth: {scheme, location}}
+# `meta` carries logical-form data (the query record by spec name, the pre-serialization
+# body) that do-request itself cannot reconstruct from its wire-format args.
+def build-dry-run-record [method: string, url: string, auth: record, content_type: string, timeout: duration, meta?: record]: nothing -> record {
+  let m = ($meta | default {})
+  {
+    dry_run: true
+    method: $method
+    url: $url
+    query: ($m | get -o query | default {})
+    headers: $auth.headers
+    body: ($m | get -o body)
+    content_type: $content_type
+    timeout: $timeout
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+}
+
 # Execute HTTP request with method dispatch
-def do-request [method: string, url: string, auth: record, insecure: bool, raw: bool, dry_run: bool, max_time?: duration, allow_errors?: bool, full?: bool, content_type?: string, body?: any]: nothing -> any {
+def do-request [method: string, url: string, auth: record, insecure: bool, raw: bool, dry_run: bool, max_time?: duration, allow_errors?: bool, full?: bool, content_type?: string, body?: any, dry_run_meta?: record]: nothing -> any {
   let req_url = if ($auth.query | is-not-empty) { if ($url | str contains "?") { $"($url)&($auth.query)" } else { $"($url)?($auth.query)" } } else { $url }
   let timeout = ($max_time | default 30min)
   let ct = ($content_type | default "application/json")
-  if $dry_run { return {method: $method, url: $req_url, headers: $auth.headers, query_string: $auth.query, content_type: $ct, timeout: $timeout, body: $body} }
+  if $dry_run { return (build-dry-run-record $method $req_url $auth $ct $timeout $dry_run_meta) }
   let resp = match $method {
     "get" => { http get --headers $auth.headers --full --allow-errors --max-time $timeout --insecure=$insecure --raw=$raw $req_url }
-    "head" => { http head --headers $auth.headers --max-time $timeout --insecure=$insecure $req_url }
-    "options" => { http options --headers $auth.headers --max-time $timeout --insecure=$insecure $req_url }
+    "head" => { http head --headers $auth.headers --full --allow-errors --max-time $timeout --insecure=$insecure $req_url }
+    "options" => { http options --headers $auth.headers --full --allow-errors --max-time $timeout --insecure=$insecure $req_url }
     "post" => { if ($body | is-empty) { http post --headers $auth.headers --full --allow-errors --max-time $timeout --insecure=$insecure --raw=$raw $req_url "" } else { http post --headers $auth.headers --content-type $ct --full --allow-errors --max-time $timeout --insecure=$insecure --raw=$raw $req_url $body } }
     "put" => { if ($body | is-empty) { http put --headers $auth.headers --full --allow-errors --max-time $timeout --insecure=$insecure --raw=$raw $req_url "" } else { http put --headers $auth.headers --content-type $ct --full --allow-errors --max-time $timeout --insecure=$insecure --raw=$raw $req_url $body } }
     "patch" => { if ($body | is-empty) { http patch --headers $auth.headers --full --allow-errors --max-time $timeout --insecure=$insecure --raw=$raw $req_url "" } else { http patch --headers $auth.headers --content-type $ct --full --allow-errors --max-time $timeout --insecure=$insecure --raw=$raw $req_url $body } }
     "delete" => { if ($body | is-empty) { http delete --headers $auth.headers --full --allow-errors --max-time $timeout --insecure=$insecure --raw=$raw $req_url } else { http delete --headers $auth.headers --content-type $ct --data $body --full --allow-errors --max-time $timeout --insecure=$insecure --raw=$raw $req_url } }
   }
-  if ($method in ["head" "options"]) { return $resp }
+  if ($method == "head") and (not $full) and (not $allow_errors) and $resp.status < 400 { return $resp.headers }
   if $allow_errors { $resp } else if $resp.status >= 400 { error make --unspanned { msg: $"HTTP ($resp.status): ($resp.body)" } } else if $full { {status: $resp.status, headers: $resp.headers, body: $resp.body} } else if $resp.status == 204 { null } else { $resp.body }
 }
 
@@ -138,7 +160,7 @@ export def "accounts list" [
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"If-Modified-Since": $if_modified_since} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"where": $qp_where, "order": $order} | compact), body: null}
 }
 
 # Creates a new chart of accounts
@@ -183,7 +205,7 @@ export def "accounts create" [
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"xero-tenant-id": $xero_tenant_id} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: {}, body: $req_body}
 }
 
 # Deletes a chart of accounts
@@ -205,12 +227,13 @@ export def "accounts delete" [
 ]: nothing -> record<Accounts: table<AccountID: string, AddToWatchlist: bool, BankAccountNumber: string, BankAccountType: string, Class: string, Code: string, CurrencyCode: string, Description: string, EnablePaymentsToAccount: bool, HasAttachments: bool, Name: string, ReportingCode: string, ReportingCodeName: string, ShowInExpenseClaims: bool, Status: string, SystemAccount: string, TaxType: string, Type: string, UpdatedDateUTC: string, ValidationErrors: list>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($account_id | is-empty) { error make --unspanned { msg: "path parameter 'AccountID' must be non-empty" } }
   let full_url = (build-url $base ({account_id: (encode-path-segment $account_id)} | format pattern "/Accounts/{account_id}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"xero-tenant-id": $xero_tenant_id} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
 }
 
 # Retrieves a single chart of accounts by using a unique account Id
@@ -232,12 +255,13 @@ export def "accounts get" [
 ]: nothing -> record<Accounts: table<AccountID: string, AddToWatchlist: bool, BankAccountNumber: string, BankAccountType: string, Class: string, Code: string, CurrencyCode: string, Description: string, EnablePaymentsToAccount: bool, HasAttachments: bool, Name: string, ReportingCode: string, ReportingCodeName: string, ShowInExpenseClaims: bool, Status: string, SystemAccount: string, TaxType: string, Type: string, UpdatedDateUTC: string, ValidationErrors: list>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($account_id | is-empty) { error make --unspanned { msg: "path parameter 'AccountID' must be non-empty" } }
   let full_url = (build-url $base ({account_id: (encode-path-segment $account_id)} | format pattern "/Accounts/{account_id}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"xero-tenant-id": $xero_tenant_id} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
 }
 
 # Updates a chart of accounts
@@ -262,6 +286,7 @@ export def "accounts update" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($account_id | is-empty) { error make --unspanned { msg: "path parameter 'AccountID' must be non-empty" } }
   let full_url = (build-url $base ({account_id: (encode-path-segment $account_id)} | format pattern "/Accounts/{account_id}"))
   let req_body = {"Accounts": $accounts} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
@@ -269,7 +294,7 @@ export def "accounts update" [
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"xero-tenant-id": $xero_tenant_id} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: {}, body: $req_body}
 }
 
 # Retrieves attachments for a specific accounts by using a unique account Id
@@ -291,12 +316,13 @@ export def "accounts-attachments list" [
 ]: nothing -> record<Attachments: table<AttachmentID: string, ContentLength: int, FileName: string, IncludeOnline: bool, MimeType: string, Url: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($account_id | is-empty) { error make --unspanned { msg: "path parameter 'AccountID' must be non-empty" } }
   let full_url = (build-url $base ({account_id: (encode-path-segment $account_id)} | format pattern "/Accounts/{account_id}/Attachments"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"xero-tenant-id": $xero_tenant_id} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
 }
 
 # Retrieves a specific attachment from a specific account using a unique attachment Id
@@ -320,12 +346,14 @@ export def "accounts-attachments get" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($account_id | is-empty) { error make --unspanned { msg: "path parameter 'AccountID' must be non-empty" } }
+  if ($attachment_id | is-empty) { error make --unspanned { msg: "path parameter 'AttachmentID' must be non-empty" } }
   let full_url = (build-url $base ({account_id: (encode-path-segment $account_id), attachment_id: (encode-path-segment $attachment_id)} | format pattern "/Accounts/{account_id}/Attachments/{attachment_id}"))
   let accept_val = "application/octet-stream"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"xero-tenant-id": $xero_tenant_id, "contentType": $content_type} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
 }
 
 # Retrieves an attachment for a specific account by filename
@@ -349,12 +377,14 @@ export def "accounts-attachments get-by-file-name" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($account_id | is-empty) { error make --unspanned { msg: "path parameter 'AccountID' must be non-empty" } }
+  if ($file_name | is-empty) { error make --unspanned { msg: "path parameter 'FileName' must be non-empty" } }
   let full_url = (build-url $base ({account_id: (encode-path-segment $account_id), file_name: (encode-path-segment $file_name)} | format pattern "/Accounts/{account_id}/Attachments/{file_name}"))
   let accept_val = "application/octet-stream"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"xero-tenant-id": $xero_tenant_id, "contentType": $content_type} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
 }
 
 # Updates attachment on a specific account by filename
@@ -379,6 +409,8 @@ export def "accounts-attachments update-by-file-name" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($account_id | is-empty) { error make --unspanned { msg: "path parameter 'AccountID' must be non-empty" } }
+  if ($file_name | is-empty) { error make --unspanned { msg: "path parameter 'FileName' must be non-empty" } }
   let full_url = (build-url $base ({account_id: (encode-path-segment $account_id), file_name: (encode-path-segment $file_name)} | format pattern "/Accounts/{account_id}/Attachments/{file_name}"))
   let req_body = $body
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else if (($input | is-not-empty) and ($req_body | is-empty)) { $input } else { $req_body }
@@ -386,7 +418,7 @@ export def "accounts-attachments update-by-file-name" [
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"xero-tenant-id": $xero_tenant_id} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/octet-stream" $req_body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/octet-stream" $req_body {query: {}, body: $req_body}
 }
 
 # Creates an attachment on a specific account
@@ -411,6 +443,8 @@ export def "accounts-attachments create-by-file-name" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($account_id | is-empty) { error make --unspanned { msg: "path parameter 'AccountID' must be non-empty" } }
+  if ($file_name | is-empty) { error make --unspanned { msg: "path parameter 'FileName' must be non-empty" } }
   let full_url = (build-url $base ({account_id: (encode-path-segment $account_id), file_name: (encode-path-segment $file_name)} | format pattern "/Accounts/{account_id}/Attachments/{file_name}"))
   let req_body = $body
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else if (($input | is-not-empty) and ($req_body | is-empty)) { $input } else { $req_body }
@@ -418,7 +452,7 @@ export def "accounts-attachments create-by-file-name" [
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"xero-tenant-id": $xero_tenant_id} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/octet-stream" $req_body
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/octet-stream" $req_body {query: {}, body: $req_body}
 }
 
 # Retrieves any spent or received money transactions
@@ -449,7 +483,7 @@ export def "bank-transactions list" [
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"If-Modified-Since": $if_modified_since} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"where": $qp_where, "order": $order, "page": $page, "unitdp": $unitdp} | compact), body: null}
 }
 
 # Updates or creates one or more spent or received money transaction
@@ -480,7 +514,7 @@ export def "bank-transactions update-or-create" [
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: ({"summarizeErrors": $summarize_errors, "unitdp": $unitdp} | compact), body: $req_body}
 }
 
 # Creates one or more spent or received money transaction
@@ -511,7 +545,7 @@ export def "bank-transactions create" [
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: ({"summarizeErrors": $summarize_errors, "unitdp": $unitdp} | compact), body: $req_body}
 }
 
 # Retrieves a single spent or received money transaction by using a unique bank transaction Id
@@ -533,11 +567,12 @@ export def "bank-transactions get" [
 ]: nothing -> record<BankTransactions: table<BankAccount: record, BankTransactionID: string, Contact: record, CurrencyCode: string, CurrencyRate: float, Date: string, HasAttachments: bool, IsReconciled: bool, LineAmountTypes: string, LineItems: list, OverpaymentID: string, PrepaymentID: string, Reference: string, Status: string, StatusAttributeString: string, SubTotal: float, Total: float, TotalTax: float, Type: string, UpdatedDateUTC: string, Url: string, ValidationErrors: list>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($bank_transaction_id | is-empty) { error make --unspanned { msg: "path parameter 'BankTransactionID' must be non-empty" } }
   let qp = [(serialize-qp "unitdp" $unitdp "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({bank_transaction_id: (encode-path-segment $bank_transaction_id)} | format pattern "/BankTransactions/{bank_transaction_id}") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"unitdp": $unitdp} | compact), body: null}
 }
 
 # Updates a single spent or received money transaction
@@ -562,13 +597,14 @@ export def "bank-transactions update" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($bank_transaction_id | is-empty) { error make --unspanned { msg: "path parameter 'BankTransactionID' must be non-empty" } }
   let qp = [(serialize-qp "unitdp" $unitdp "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({bank_transaction_id: (encode-path-segment $bank_transaction_id)} | format pattern "/BankTransactions/{bank_transaction_id}") $qp)
   let req_body = {"BankTransactions": $bank_transactions} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: ({"unitdp": $unitdp} | compact), body: $req_body}
 }
 
 # Retrieves any attachments from a specific bank transactions
@@ -590,12 +626,13 @@ export def "bank-transactions-attachments list" [
 ]: nothing -> record<Attachments: table<AttachmentID: string, ContentLength: int, FileName: string, IncludeOnline: bool, MimeType: string, Url: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($bank_transaction_id | is-empty) { error make --unspanned { msg: "path parameter 'BankTransactionID' must be non-empty" } }
   let full_url = (build-url $base ({bank_transaction_id: (encode-path-segment $bank_transaction_id)} | format pattern "/BankTransactions/{bank_transaction_id}/Attachments"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"xero-tenant-id": $xero_tenant_id} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
 }
 
 # Retrieves specific attachments from a specific BankTransaction using a unique attachment Id
@@ -619,12 +656,14 @@ export def "bank-transactions-attachments get" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($bank_transaction_id | is-empty) { error make --unspanned { msg: "path parameter 'BankTransactionID' must be non-empty" } }
+  if ($attachment_id | is-empty) { error make --unspanned { msg: "path parameter 'AttachmentID' must be non-empty" } }
   let full_url = (build-url $base ({bank_transaction_id: (encode-path-segment $bank_transaction_id), attachment_id: (encode-path-segment $attachment_id)} | format pattern "/BankTransactions/{bank_transaction_id}/Attachments/{attachment_id}"))
   let accept_val = "application/octet-stream"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"xero-tenant-id": $xero_tenant_id, "contentType": $content_type} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
 }
 
 # Retrieves a specific attachment from a specific bank transaction by filename
@@ -648,12 +687,14 @@ export def "bank-transactions-attachments get-by-file-name" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($bank_transaction_id | is-empty) { error make --unspanned { msg: "path parameter 'BankTransactionID' must be non-empty" } }
+  if ($file_name | is-empty) { error make --unspanned { msg: "path parameter 'FileName' must be non-empty" } }
   let full_url = (build-url $base ({bank_transaction_id: (encode-path-segment $bank_transaction_id), file_name: (encode-path-segment $file_name)} | format pattern "/BankTransactions/{bank_transaction_id}/Attachments/{file_name}"))
   let accept_val = "application/octet-stream"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"xero-tenant-id": $xero_tenant_id, "contentType": $content_type} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
 }
 
 # Updates a specific attachment from a specific bank transaction by filename
@@ -678,6 +719,8 @@ export def "bank-transactions-attachments update-by-file-name" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($bank_transaction_id | is-empty) { error make --unspanned { msg: "path parameter 'BankTransactionID' must be non-empty" } }
+  if ($file_name | is-empty) { error make --unspanned { msg: "path parameter 'FileName' must be non-empty" } }
   let full_url = (build-url $base ({bank_transaction_id: (encode-path-segment $bank_transaction_id), file_name: (encode-path-segment $file_name)} | format pattern "/BankTransactions/{bank_transaction_id}/Attachments/{file_name}"))
   let req_body = $body
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else if (($input | is-not-empty) and ($req_body | is-empty)) { $input } else { $req_body }
@@ -685,7 +728,7 @@ export def "bank-transactions-attachments update-by-file-name" [
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"xero-tenant-id": $xero_tenant_id} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/octet-stream" $req_body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/octet-stream" $req_body {query: {}, body: $req_body}
 }
 
 # Creates an attachment for a specific bank transaction by filename
@@ -710,6 +753,8 @@ export def "bank-transactions-attachments create-by-file-name" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($bank_transaction_id | is-empty) { error make --unspanned { msg: "path parameter 'BankTransactionID' must be non-empty" } }
+  if ($file_name | is-empty) { error make --unspanned { msg: "path parameter 'FileName' must be non-empty" } }
   let full_url = (build-url $base ({bank_transaction_id: (encode-path-segment $bank_transaction_id), file_name: (encode-path-segment $file_name)} | format pattern "/BankTransactions/{bank_transaction_id}/Attachments/{file_name}"))
   let req_body = $body
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else if (($input | is-not-empty) and ($req_body | is-empty)) { $input } else { $req_body }
@@ -717,7 +762,7 @@ export def "bank-transactions-attachments create-by-file-name" [
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"xero-tenant-id": $xero_tenant_id} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/octet-stream" $req_body
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/octet-stream" $req_body {query: {}, body: $req_body}
 }
 
 # Retrieves history from a specific bank transaction using a unique bank transaction Id
@@ -739,12 +784,13 @@ export def "bank-transactions-history get" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($bank_transaction_id | is-empty) { error make --unspanned { msg: "path parameter 'BankTransactionID' must be non-empty" } }
   let full_url = (build-url $base ({bank_transaction_id: (encode-path-segment $bank_transaction_id)} | format pattern "/BankTransactions/{bank_transaction_id}/History"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"xero-tenant-id": $xero_tenant_id} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
 }
 
 # Creates a history record for a specific bank transactions
@@ -769,6 +815,7 @@ export def "bank-transactions-history create-record" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($bank_transaction_id | is-empty) { error make --unspanned { msg: "path parameter 'BankTransactionID' must be non-empty" } }
   let full_url = (build-url $base ({bank_transaction_id: (encode-path-segment $bank_transaction_id)} | format pattern "/BankTransactions/{bank_transaction_id}/History"))
   let req_body = {"HistoryRecords": $history_records} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
@@ -776,7 +823,7 @@ export def "bank-transactions-history create-record" [
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"xero-tenant-id": $xero_tenant_id} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: {}, body: $req_body}
 }
 
 # Retrieves all bank transfers
@@ -805,7 +852,7 @@ export def "bank-transfers list" [
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"If-Modified-Since": $if_modified_since} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"where": $qp_where, "order": $order} | compact), body: null}
 }
 
 # Creates a bank transfer
@@ -836,7 +883,7 @@ export def "bank-transfers create" [
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"xero-tenant-id": $xero_tenant_id} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: {}, body: $req_body}
 }
 
 # Retrieves specific bank transfers by using a unique bank transfer Id
@@ -858,12 +905,13 @@ export def "bank-transfers get" [
 ]: nothing -> record<BankTransfers: table<Amount: float, BankTransferID: string, CreatedDateUTC: string, CurrencyRate: float, Date: string, FromBankAccount: record, FromBankTransactionID: string, HasAttachments: bool, ToBankAccount: record, ToBankTransactionID: string, ValidationErrors: list>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($bank_transfer_id | is-empty) { error make --unspanned { msg: "path parameter 'BankTransferID' must be non-empty" } }
   let full_url = (build-url $base ({bank_transfer_id: (encode-path-segment $bank_transfer_id)} | format pattern "/BankTransfers/{bank_transfer_id}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"xero-tenant-id": $xero_tenant_id} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
 }
 
 # Retrieves attachments from a specific bank transfer
@@ -885,12 +933,13 @@ export def "bank-transfers-attachments list" [
 ]: nothing -> record<Attachments: table<AttachmentID: string, ContentLength: int, FileName: string, IncludeOnline: bool, MimeType: string, Url: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($bank_transfer_id | is-empty) { error make --unspanned { msg: "path parameter 'BankTransferID' must be non-empty" } }
   let full_url = (build-url $base ({bank_transfer_id: (encode-path-segment $bank_transfer_id)} | format pattern "/BankTransfers/{bank_transfer_id}/Attachments"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"xero-tenant-id": $xero_tenant_id} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
 }
 
 # Retrieves a specific attachment from a specific bank transfer using a unique attachment ID
@@ -914,12 +963,14 @@ export def "bank-transfers-attachments get" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($bank_transfer_id | is-empty) { error make --unspanned { msg: "path parameter 'BankTransferID' must be non-empty" } }
+  if ($attachment_id | is-empty) { error make --unspanned { msg: "path parameter 'AttachmentID' must be non-empty" } }
   let full_url = (build-url $base ({bank_transfer_id: (encode-path-segment $bank_transfer_id), attachment_id: (encode-path-segment $attachment_id)} | format pattern "/BankTransfers/{bank_transfer_id}/Attachments/{attachment_id}"))
   let accept_val = "application/octet-stream"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"xero-tenant-id": $xero_tenant_id, "contentType": $content_type} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
 }
 
 # Retrieves a specific attachment on a specific bank transfer by file name
@@ -943,12 +994,14 @@ export def "bank-transfers-attachments get-by-file-name" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($bank_transfer_id | is-empty) { error make --unspanned { msg: "path parameter 'BankTransferID' must be non-empty" } }
+  if ($file_name | is-empty) { error make --unspanned { msg: "path parameter 'FileName' must be non-empty" } }
   let full_url = (build-url $base ({bank_transfer_id: (encode-path-segment $bank_transfer_id), file_name: (encode-path-segment $file_name)} | format pattern "/BankTransfers/{bank_transfer_id}/Attachments/{file_name}"))
   let accept_val = "application/octet-stream"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"xero-tenant-id": $xero_tenant_id, "contentType": $content_type} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
 }
 
 # POST /BankTransfers/{BankTransferID}/Attachments/{FileName}
@@ -972,6 +1025,8 @@ export def "bank-transfers-attachments update-by-file-name" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($bank_transfer_id | is-empty) { error make --unspanned { msg: "path parameter 'BankTransferID' must be non-empty" } }
+  if ($file_name | is-empty) { error make --unspanned { msg: "path parameter 'FileName' must be non-empty" } }
   let full_url = (build-url $base ({bank_transfer_id: (encode-path-segment $bank_transfer_id), file_name: (encode-path-segment $file_name)} | format pattern "/BankTransfers/{bank_transfer_id}/Attachments/{file_name}"))
   let req_body = $body
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else if (($input | is-not-empty) and ($req_body | is-empty)) { $input } else { $req_body }
@@ -979,7 +1034,7 @@ export def "bank-transfers-attachments update-by-file-name" [
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"xero-tenant-id": $xero_tenant_id} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/octet-stream" $req_body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/octet-stream" $req_body {query: {}, body: $req_body}
 }
 
 # PUT /BankTransfers/{BankTransferID}/Attachments/{FileName}
@@ -1003,6 +1058,8 @@ export def "bank-transfers-attachments create-by-file-name" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($bank_transfer_id | is-empty) { error make --unspanned { msg: "path parameter 'BankTransferID' must be non-empty" } }
+  if ($file_name | is-empty) { error make --unspanned { msg: "path parameter 'FileName' must be non-empty" } }
   let full_url = (build-url $base ({bank_transfer_id: (encode-path-segment $bank_transfer_id), file_name: (encode-path-segment $file_name)} | format pattern "/BankTransfers/{bank_transfer_id}/Attachments/{file_name}"))
   let req_body = $body
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else if (($input | is-not-empty) and ($req_body | is-empty)) { $input } else { $req_body }
@@ -1010,7 +1067,7 @@ export def "bank-transfers-attachments create-by-file-name" [
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"xero-tenant-id": $xero_tenant_id} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/octet-stream" $req_body
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/octet-stream" $req_body {query: {}, body: $req_body}
 }
 
 # Retrieves history from a specific bank transfer using a unique bank transfer Id
@@ -1032,12 +1089,13 @@ export def "bank-transfers-history get" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($bank_transfer_id | is-empty) { error make --unspanned { msg: "path parameter 'BankTransferID' must be non-empty" } }
   let full_url = (build-url $base ({bank_transfer_id: (encode-path-segment $bank_transfer_id)} | format pattern "/BankTransfers/{bank_transfer_id}/History"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"xero-tenant-id": $xero_tenant_id} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
 }
 
 # Creates a history record for a specific bank transfer
@@ -1062,6 +1120,7 @@ export def "bank-transfers-history create-record" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($bank_transfer_id | is-empty) { error make --unspanned { msg: "path parameter 'BankTransferID' must be non-empty" } }
   let full_url = (build-url $base ({bank_transfer_id: (encode-path-segment $bank_transfer_id)} | format pattern "/BankTransfers/{bank_transfer_id}/History"))
   let req_body = {"HistoryRecords": $history_records} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
@@ -1069,7 +1128,7 @@ export def "bank-transfers-history create-record" [
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"xero-tenant-id": $xero_tenant_id} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: {}, body: $req_body}
 }
 
 # Retrieves either one or many batch payments for invoices
@@ -1098,7 +1157,7 @@ export def "batch-payments get" [
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"If-Modified-Since": $if_modified_since} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"where": $qp_where, "order": $order} | compact), body: null}
 }
 
 # Creates one or many batch payments for invoices
@@ -1128,7 +1187,7 @@ export def "batch-payments create" [
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: ({"summarizeErrors": $summarize_errors} | compact), body: $req_body}
 }
 
 # Retrieves history from a specific batch payment
@@ -1150,12 +1209,13 @@ export def "batch-payments-history get" [
 ]: nothing -> record<HistoryRecords: table<Changes: string, DateUTC: string, Details: string, User: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($batch_payment_id | is-empty) { error make --unspanned { msg: "path parameter 'BatchPaymentID' must be non-empty" } }
   let full_url = (build-url $base ({batch_payment_id: (encode-path-segment $batch_payment_id)} | format pattern "/BatchPayments/{batch_payment_id}/History"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"xero-tenant-id": $xero_tenant_id} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
 }
 
 # Creates a history record for a specific batch payment
@@ -1180,6 +1240,7 @@ export def "batch-payments-history create-record" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($batch_payment_id | is-empty) { error make --unspanned { msg: "path parameter 'BatchPaymentID' must be non-empty" } }
   let full_url = (build-url $base ({batch_payment_id: (encode-path-segment $batch_payment_id)} | format pattern "/BatchPayments/{batch_payment_id}/History"))
   let req_body = {"HistoryRecords": $history_records} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
@@ -1187,7 +1248,7 @@ export def "batch-payments-history create-record" [
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"xero-tenant-id": $xero_tenant_id} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: {}, body: $req_body}
 }
 
 # Retrieves all the branding themes
@@ -1213,7 +1274,7 @@ export def "branding-themes list" [
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"xero-tenant-id": $xero_tenant_id} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
 }
 
 # Retrieves a specific branding theme using a unique branding theme Id
@@ -1235,12 +1296,13 @@ export def "branding-themes get" [
 ]: nothing -> record<BrandingThemes: table<BrandingThemeID: string, CreatedDateUTC: string, LogoUrl: string, Name: string, SortOrder: int, Type: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($branding_theme_id | is-empty) { error make --unspanned { msg: "path parameter 'BrandingThemeID' must be non-empty" } }
   let full_url = (build-url $base ({branding_theme_id: (encode-path-segment $branding_theme_id)} | format pattern "/BrandingThemes/{branding_theme_id}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"xero-tenant-id": $xero_tenant_id} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
 }
 
 # Retrieves the payment services for a specific branding theme
@@ -1262,12 +1324,13 @@ export def "branding-themes-payment-services get" [
 ]: nothing -> record<PaymentServices: table<PayNowText: string, PaymentServiceID: string, PaymentServiceName: string, PaymentServiceType: string, PaymentServiceUrl: string, ValidationErrors: list>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($branding_theme_id | is-empty) { error make --unspanned { msg: "path parameter 'BrandingThemeID' must be non-empty" } }
   let full_url = (build-url $base ({branding_theme_id: (encode-path-segment $branding_theme_id)} | format pattern "/BrandingThemes/{branding_theme_id}/PaymentServices"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"xero-tenant-id": $xero_tenant_id} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
 }
 
 # Creates a new custom payment service for a specific branding theme
@@ -1297,6 +1360,7 @@ export def "branding-themes-payment-services create" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($branding_theme_id | is-empty) { error make --unspanned { msg: "path parameter 'BrandingThemeID' must be non-empty" } }
   let full_url = (build-url $base ({branding_theme_id: (encode-path-segment $branding_theme_id)} | format pattern "/BrandingThemes/{branding_theme_id}/PaymentServices"))
   let req_body = {"PayNowText": $pay_now_text, "PaymentServiceID": $payment_service_id, "PaymentServiceName": $payment_service_name, "PaymentServiceType": $payment_service_type, "PaymentServiceUrl": $payment_service_url, "ValidationErrors": $validation_errors} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
@@ -1304,7 +1368,7 @@ export def "branding-themes-payment-services create" [
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"xero-tenant-id": $xero_tenant_id} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: {}, body: $req_body}
 }
 
 # Retrieves the contact Id and name of all the contacts in a contact group
@@ -1333,7 +1397,7 @@ export def "contact-groups list" [
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"xero-tenant-id": $xero_tenant_id} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"where": $qp_where, "order": $order} | compact), body: null}
 }
 
 # Creates a contact group
@@ -1364,7 +1428,7 @@ export def "contact-groups create" [
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"xero-tenant-id": $xero_tenant_id} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: {}, body: $req_body}
 }
 
 # Retrieves a specific contact group by using a unique contact group Id
@@ -1386,12 +1450,13 @@ export def "contact-groups get" [
 ]: nothing -> record<ContactGroups: table<ContactGroupID: string, Contacts: list, Name: string, Status: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($contact_group_id | is-empty) { error make --unspanned { msg: "path parameter 'ContactGroupID' must be non-empty" } }
   let full_url = (build-url $base ({contact_group_id: (encode-path-segment $contact_group_id)} | format pattern "/ContactGroups/{contact_group_id}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"xero-tenant-id": $xero_tenant_id} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
 }
 
 # Updates a specific contact group
@@ -1416,6 +1481,7 @@ export def "contact-groups update" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($contact_group_id | is-empty) { error make --unspanned { msg: "path parameter 'ContactGroupID' must be non-empty" } }
   let full_url = (build-url $base ({contact_group_id: (encode-path-segment $contact_group_id)} | format pattern "/ContactGroups/{contact_group_id}"))
   let req_body = {"ContactGroups": $contact_groups} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
@@ -1423,14 +1489,14 @@ export def "contact-groups update" [
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"xero-tenant-id": $xero_tenant_id} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: {}, body: $req_body}
 }
 
 # Deletes all contacts from a specific contact group
 #
 # DELETE /ContactGroups/{ContactGroupID}/Contacts
 # operationId: deleteContactGroupContacts
-export def "contact-groups-contacts delete-by-ContactGroupID" [
+export def "contact-groups-contacts delete-by-contact-group-id" [
   contact_group_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1445,12 +1511,13 @@ export def "contact-groups-contacts delete-by-ContactGroupID" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($contact_group_id | is-empty) { error make --unspanned { msg: "path parameter 'ContactGroupID' must be non-empty" } }
   let full_url = (build-url $base ({contact_group_id: (encode-path-segment $contact_group_id)} | format pattern "/ContactGroups/{contact_group_id}/Contacts"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"xero-tenant-id": $xero_tenant_id} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
 }
 
 # Creates contacts to a specific contact group
@@ -1475,6 +1542,7 @@ export def "contact-groups-contacts create" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($contact_group_id | is-empty) { error make --unspanned { msg: "path parameter 'ContactGroupID' must be non-empty" } }
   let full_url = (build-url $base ({contact_group_id: (encode-path-segment $contact_group_id)} | format pattern "/ContactGroups/{contact_group_id}/Contacts"))
   let req_body = {"Contacts": $contacts} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
@@ -1482,14 +1550,14 @@ export def "contact-groups-contacts create" [
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"xero-tenant-id": $xero_tenant_id} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: {}, body: $req_body}
 }
 
 # Deletes a specific contact from a contact group using a unique contact Id
 #
 # DELETE /ContactGroups/{ContactGroupID}/Contacts/{ContactID}
 # operationId: deleteContactGroupContact
-export def "contact-groups-contacts delete-by-ContactGroupID-ContactID" [
+export def "contact-groups-contacts delete-by-contact-group-id-contact-id" [
   contact_group_id: string
   contact_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -1505,12 +1573,14 @@ export def "contact-groups-contacts delete-by-ContactGroupID-ContactID" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($contact_group_id | is-empty) { error make --unspanned { msg: "path parameter 'ContactGroupID' must be non-empty" } }
+  if ($contact_id | is-empty) { error make --unspanned { msg: "path parameter 'ContactID' must be non-empty" } }
   let full_url = (build-url $base ({contact_group_id: (encode-path-segment $contact_group_id), contact_id: (encode-path-segment $contact_id)} | format pattern "/ContactGroups/{contact_group_id}/Contacts/{contact_id}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"xero-tenant-id": $xero_tenant_id} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
 }
 
 # Retrieves all contacts in a Xero organisation
@@ -1542,7 +1612,7 @@ export def "contacts list" [
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"If-Modified-Since": $if_modified_since} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"where": $qp_where, "order": $order, "IDs": $i_ds, "page": $page, "includeArchived": $include_archived} | compact), body: null}
 }
 
 # Updates or creates one or more contacts in a Xero organisation
@@ -1572,7 +1642,7 @@ export def "contacts update-or-create" [
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: ({"summarizeErrors": $summarize_errors} | compact), body: $req_body}
 }
 
 # Creates multiple contacts (bulk) in a Xero organisation
@@ -1602,7 +1672,7 @@ export def "contacts create" [
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: ({"summarizeErrors": $summarize_errors} | compact), body: $req_body}
 }
 
 # Retrieves a specific contacts in a Xero organisation using a unique contact Id
@@ -1624,12 +1694,13 @@ export def "contacts get" [
 ]: nothing -> record<Contacts: table<AccountNumber: string, AccountsPayableTaxType: string, AccountsReceivableTaxType: string, Addresses: list, Attachments: list, Balances: record, BankAccountDetails: string, BatchPayments: record, BrandingTheme: record, ContactGroups: list, ContactID: string, ContactNumber: string, ContactPersons: list, ContactStatus: string, DefaultCurrency: string, Discount: float, EmailAddress: string, FirstName: string, HasAttachments: bool, HasValidationErrors: bool, IsCustomer: bool, IsSupplier: bool, LastName: string, Name: string, PaymentTerms: record, Phones: list, PurchasesDefaultAccountCode: string, PurchasesTrackingCategories: list, SalesDefaultAccountCode: string, SalesTrackingCategories: list, SkypeUserName: string, StatusAttributeString: string, TaxNumber: string, TrackingCategoryName: string, TrackingCategoryOption: string, UpdatedDateUTC: string, ValidationErrors: list, Website: string, XeroNetworkKey: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($contact_id | is-empty) { error make --unspanned { msg: "path parameter 'ContactID' must be non-empty" } }
   let full_url = (build-url $base ({contact_id: (encode-path-segment $contact_id)} | format pattern "/Contacts/{contact_id}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"xero-tenant-id": $xero_tenant_id} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
 }
 
 # Updates a specific contact in a Xero organisation
@@ -1654,6 +1725,7 @@ export def "contacts update" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($contact_id | is-empty) { error make --unspanned { msg: "path parameter 'ContactID' must be non-empty" } }
   let full_url = (build-url $base ({contact_id: (encode-path-segment $contact_id)} | format pattern "/Contacts/{contact_id}"))
   let req_body = {"Contacts": $contacts} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
@@ -1661,7 +1733,7 @@ export def "contacts update" [
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"xero-tenant-id": $xero_tenant_id} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: {}, body: $req_body}
 }
 
 # Retrieves attachments for a specific contact in a Xero organisation
@@ -1683,12 +1755,13 @@ export def "contacts-attachments list" [
 ]: nothing -> record<Attachments: table<AttachmentID: string, ContentLength: int, FileName: string, IncludeOnline: bool, MimeType: string, Url: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($contact_id | is-empty) { error make --unspanned { msg: "path parameter 'ContactID' must be non-empty" } }
   let full_url = (build-url $base ({contact_id: (encode-path-segment $contact_id)} | format pattern "/Contacts/{contact_id}/Attachments"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"xero-tenant-id": $xero_tenant_id} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
 }
 
 # Retrieves a specific attachment from a specific contact using a unique attachment Id
@@ -1712,12 +1785,14 @@ export def "contacts-attachments get" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($contact_id | is-empty) { error make --unspanned { msg: "path parameter 'ContactID' must be non-empty" } }
+  if ($attachment_id | is-empty) { error make --unspanned { msg: "path parameter 'AttachmentID' must be non-empty" } }
   let full_url = (build-url $base ({contact_id: (encode-path-segment $contact_id), attachment_id: (encode-path-segment $attachment_id)} | format pattern "/Contacts/{contact_id}/Attachments/{attachment_id}"))
   let accept_val = "application/octet-stream"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"xero-tenant-id": $xero_tenant_id, "contentType": $content_type} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
 }
 
 # Retrieves a specific attachment from a specific contact by file name
@@ -1741,12 +1816,14 @@ export def "contacts-attachments get-by-file-name" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($contact_id | is-empty) { error make --unspanned { msg: "path parameter 'ContactID' must be non-empty" } }
+  if ($file_name | is-empty) { error make --unspanned { msg: "path parameter 'FileName' must be non-empty" } }
   let full_url = (build-url $base ({contact_id: (encode-path-segment $contact_id), file_name: (encode-path-segment $file_name)} | format pattern "/Contacts/{contact_id}/Attachments/{file_name}"))
   let accept_val = "application/octet-stream"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"xero-tenant-id": $xero_tenant_id, "contentType": $content_type} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
 }
 
 # POST /Contacts/{ContactID}/Attachments/{FileName}
@@ -1770,6 +1847,8 @@ export def "contacts-attachments update-by-file-name" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($contact_id | is-empty) { error make --unspanned { msg: "path parameter 'ContactID' must be non-empty" } }
+  if ($file_name | is-empty) { error make --unspanned { msg: "path parameter 'FileName' must be non-empty" } }
   let full_url = (build-url $base ({contact_id: (encode-path-segment $contact_id), file_name: (encode-path-segment $file_name)} | format pattern "/Contacts/{contact_id}/Attachments/{file_name}"))
   let req_body = $body
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else if (($input | is-not-empty) and ($req_body | is-empty)) { $input } else { $req_body }
@@ -1777,7 +1856,7 @@ export def "contacts-attachments update-by-file-name" [
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"xero-tenant-id": $xero_tenant_id} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/octet-stream" $req_body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/octet-stream" $req_body {query: {}, body: $req_body}
 }
 
 # PUT /Contacts/{ContactID}/Attachments/{FileName}
@@ -1801,6 +1880,8 @@ export def "contacts-attachments create-by-file-name" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($contact_id | is-empty) { error make --unspanned { msg: "path parameter 'ContactID' must be non-empty" } }
+  if ($file_name | is-empty) { error make --unspanned { msg: "path parameter 'FileName' must be non-empty" } }
   let full_url = (build-url $base ({contact_id: (encode-path-segment $contact_id), file_name: (encode-path-segment $file_name)} | format pattern "/Contacts/{contact_id}/Attachments/{file_name}"))
   let req_body = $body
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else if (($input | is-not-empty) and ($req_body | is-empty)) { $input } else { $req_body }
@@ -1808,7 +1889,7 @@ export def "contacts-attachments create-by-file-name" [
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"xero-tenant-id": $xero_tenant_id} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/octet-stream" $req_body
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/octet-stream" $req_body {query: {}, body: $req_body}
 }
 
 # Retrieves CIS settings for a specific contact in a Xero organisation
@@ -1830,12 +1911,13 @@ export def "contacts-cis-settings get" [
 ]: nothing -> record<CISSettings: table<CISEnabled: bool, Rate: float>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($contact_id | is-empty) { error make --unspanned { msg: "path parameter 'ContactID' must be non-empty" } }
   let full_url = (build-url $base ({contact_id: (encode-path-segment $contact_id)} | format pattern "/Contacts/{contact_id}/CISSettings"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"xero-tenant-id": $xero_tenant_id} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
 }
 
 # Retrieves history records for a specific contact
@@ -1857,12 +1939,13 @@ export def "contacts-history get" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($contact_id | is-empty) { error make --unspanned { msg: "path parameter 'ContactID' must be non-empty" } }
   let full_url = (build-url $base ({contact_id: (encode-path-segment $contact_id)} | format pattern "/Contacts/{contact_id}/History"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"xero-tenant-id": $xero_tenant_id} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
 }
 
 # Creates a new history record for a specific contact
@@ -1887,6 +1970,7 @@ export def "contacts-history create" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($contact_id | is-empty) { error make --unspanned { msg: "path parameter 'ContactID' must be non-empty" } }
   let full_url = (build-url $base ({contact_id: (encode-path-segment $contact_id)} | format pattern "/Contacts/{contact_id}/History"))
   let req_body = {"HistoryRecords": $history_records} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
@@ -1894,7 +1978,7 @@ export def "contacts-history create" [
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"xero-tenant-id": $xero_tenant_id} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: {}, body: $req_body}
 }
 
 # Retrieves a specific contact by contact number in a Xero organisation
@@ -1916,12 +2000,13 @@ export def "contacts get-by-number" [
 ]: nothing -> record<Contacts: table<AccountNumber: string, AccountsPayableTaxType: string, AccountsReceivableTaxType: string, Addresses: list, Attachments: list, Balances: record, BankAccountDetails: string, BatchPayments: record, BrandingTheme: record, ContactGroups: list, ContactID: string, ContactNumber: string, ContactPersons: list, ContactStatus: string, DefaultCurrency: string, Discount: float, EmailAddress: string, FirstName: string, HasAttachments: bool, HasValidationErrors: bool, IsCustomer: bool, IsSupplier: bool, LastName: string, Name: string, PaymentTerms: record, Phones: list, PurchasesDefaultAccountCode: string, PurchasesTrackingCategories: list, SalesDefaultAccountCode: string, SalesTrackingCategories: list, SkypeUserName: string, StatusAttributeString: string, TaxNumber: string, TrackingCategoryName: string, TrackingCategoryOption: string, UpdatedDateUTC: string, ValidationErrors: list, Website: string, XeroNetworkKey: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($contact_number | is-empty) { error make --unspanned { msg: "path parameter 'ContactNumber' must be non-empty" } }
   let full_url = (build-url $base ({contact_number: (encode-path-segment $contact_number)} | format pattern "/Contacts/{contact_number}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"xero-tenant-id": $xero_tenant_id} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
 }
 
 # Retrieves any credit notes
@@ -1952,7 +2037,7 @@ export def "credit-notes list" [
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"If-Modified-Since": $if_modified_since} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"where": $qp_where, "order": $order, "page": $page, "unitdp": $unitdp} | compact), body: null}
 }
 
 # Updates or creates one or more credit notes
@@ -1983,7 +2068,7 @@ export def "credit-notes update-or-create" [
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: ({"summarizeErrors": $summarize_errors, "unitdp": $unitdp} | compact), body: $req_body}
 }
 
 # Creates a new credit note
@@ -2014,7 +2099,7 @@ export def "credit-notes create" [
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: ({"summarizeErrors": $summarize_errors, "unitdp": $unitdp} | compact), body: $req_body}
 }
 
 # Retrieves a specific credit note using a unique credit note Id
@@ -2036,11 +2121,12 @@ export def "credit-notes get" [
 ]: nothing -> record<CreditNotes: table<Allocations: list, AppliedAmount: float, BrandingThemeID: string, CISDeduction: float, CISRate: float, Contact: record, CreditNoteID: string, CreditNoteNumber: string, CurrencyCode: string, CurrencyRate: float, Date: string, DueDate: string, FullyPaidOnDate: string, HasAttachments: bool, HasErrors: bool, LineAmountTypes: string, LineItems: list, Payments: list, Reference: string, RemainingCredit: float, SentToContact: bool, Status: string, StatusAttributeString: string, SubTotal: float, Total: float, TotalTax: float, Type: string, UpdatedDateUTC: string, ValidationErrors: list, Warnings: list>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($credit_note_id | is-empty) { error make --unspanned { msg: "path parameter 'CreditNoteID' must be non-empty" } }
   let qp = [(serialize-qp "unitdp" $unitdp "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({credit_note_id: (encode-path-segment $credit_note_id)} | format pattern "/CreditNotes/{credit_note_id}") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"unitdp": $unitdp} | compact), body: null}
 }
 
 # Updates a specific credit note
@@ -2065,13 +2151,14 @@ export def "credit-notes update" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($credit_note_id | is-empty) { error make --unspanned { msg: "path parameter 'CreditNoteID' must be non-empty" } }
   let qp = [(serialize-qp "unitdp" $unitdp "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({credit_note_id: (encode-path-segment $credit_note_id)} | format pattern "/CreditNotes/{credit_note_id}") $qp)
   let req_body = {"CreditNotes": $credit_notes} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: ({"unitdp": $unitdp} | compact), body: $req_body}
 }
 
 # Creates allocation for a specific credit note
@@ -2096,13 +2183,14 @@ export def "credit-notes-allocations create" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($credit_note_id | is-empty) { error make --unspanned { msg: "path parameter 'CreditNoteID' must be non-empty" } }
   let qp = [(serialize-qp "summarizeErrors" $summarize_errors "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({credit_note_id: (encode-path-segment $credit_note_id)} | format pattern "/CreditNotes/{credit_note_id}/Allocations") $qp)
   let req_body = {"Allocations": $allocations} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: ({"summarizeErrors": $summarize_errors} | compact), body: $req_body}
 }
 
 # Retrieves attachments for a specific credit notes
@@ -2124,12 +2212,13 @@ export def "credit-notes-attachments list" [
 ]: nothing -> record<Attachments: table<AttachmentID: string, ContentLength: int, FileName: string, IncludeOnline: bool, MimeType: string, Url: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($credit_note_id | is-empty) { error make --unspanned { msg: "path parameter 'CreditNoteID' must be non-empty" } }
   let full_url = (build-url $base ({credit_note_id: (encode-path-segment $credit_note_id)} | format pattern "/CreditNotes/{credit_note_id}/Attachments"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"xero-tenant-id": $xero_tenant_id} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
 }
 
 # Retrieves a specific attachment from a specific credit note using a unique attachment Id
@@ -2153,12 +2242,14 @@ export def "credit-notes-attachments get" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($credit_note_id | is-empty) { error make --unspanned { msg: "path parameter 'CreditNoteID' must be non-empty" } }
+  if ($attachment_id | is-empty) { error make --unspanned { msg: "path parameter 'AttachmentID' must be non-empty" } }
   let full_url = (build-url $base ({credit_note_id: (encode-path-segment $credit_note_id), attachment_id: (encode-path-segment $attachment_id)} | format pattern "/CreditNotes/{credit_note_id}/Attachments/{attachment_id}"))
   let accept_val = "application/octet-stream"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"xero-tenant-id": $xero_tenant_id, "contentType": $content_type} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
 }
 
 # Retrieves a specific attachment on a specific credit note by file name
@@ -2182,12 +2273,14 @@ export def "credit-notes-attachments get-by-file-name" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($credit_note_id | is-empty) { error make --unspanned { msg: "path parameter 'CreditNoteID' must be non-empty" } }
+  if ($file_name | is-empty) { error make --unspanned { msg: "path parameter 'FileName' must be non-empty" } }
   let full_url = (build-url $base ({credit_note_id: (encode-path-segment $credit_note_id), file_name: (encode-path-segment $file_name)} | format pattern "/CreditNotes/{credit_note_id}/Attachments/{file_name}"))
   let accept_val = "application/octet-stream"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"xero-tenant-id": $xero_tenant_id, "contentType": $content_type} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
 }
 
 # Updates attachments on a specific credit note by file name
@@ -2212,6 +2305,8 @@ export def "credit-notes-attachments update-by-file-name" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($credit_note_id | is-empty) { error make --unspanned { msg: "path parameter 'CreditNoteID' must be non-empty" } }
+  if ($file_name | is-empty) { error make --unspanned { msg: "path parameter 'FileName' must be non-empty" } }
   let full_url = (build-url $base ({credit_note_id: (encode-path-segment $credit_note_id), file_name: (encode-path-segment $file_name)} | format pattern "/CreditNotes/{credit_note_id}/Attachments/{file_name}"))
   let req_body = $body
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else if (($input | is-not-empty) and ($req_body | is-empty)) { $input } else { $req_body }
@@ -2219,7 +2314,7 @@ export def "credit-notes-attachments update-by-file-name" [
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"xero-tenant-id": $xero_tenant_id} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/octet-stream" $req_body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/octet-stream" $req_body {query: {}, body: $req_body}
 }
 
 # Creates an attachment for a specific credit note
@@ -2244,13 +2339,15 @@ export def "credit-notes-attachments create-by-file-name" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($credit_note_id | is-empty) { error make --unspanned { msg: "path parameter 'CreditNoteID' must be non-empty" } }
+  if ($file_name | is-empty) { error make --unspanned { msg: "path parameter 'FileName' must be non-empty" } }
   let qp = [(serialize-qp "IncludeOnline" $include_online "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({credit_note_id: (encode-path-segment $credit_note_id), file_name: (encode-path-segment $file_name)} | format pattern "/CreditNotes/{credit_note_id}/Attachments/{file_name}") $qp)
   let req_body = $body
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else if (($input | is-not-empty) and ($req_body | is-empty)) { $input } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/octet-stream" $req_body
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/octet-stream" $req_body {query: ({"IncludeOnline": $include_online} | compact), body: $req_body}
 }
 
 # Retrieves history records of a specific credit note
@@ -2272,12 +2369,13 @@ export def "credit-notes-history get" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($credit_note_id | is-empty) { error make --unspanned { msg: "path parameter 'CreditNoteID' must be non-empty" } }
   let full_url = (build-url $base ({credit_note_id: (encode-path-segment $credit_note_id)} | format pattern "/CreditNotes/{credit_note_id}/History"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"xero-tenant-id": $xero_tenant_id} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
 }
 
 # Retrieves history records of a specific credit note
@@ -2302,6 +2400,7 @@ export def "credit-notes-history create" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($credit_note_id | is-empty) { error make --unspanned { msg: "path parameter 'CreditNoteID' must be non-empty" } }
   let full_url = (build-url $base ({credit_note_id: (encode-path-segment $credit_note_id)} | format pattern "/CreditNotes/{credit_note_id}/History"))
   let req_body = {"HistoryRecords": $history_records} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
@@ -2309,7 +2408,7 @@ export def "credit-notes-history create" [
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"xero-tenant-id": $xero_tenant_id} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: {}, body: $req_body}
 }
 
 # Retrieves credit notes as PDF files
@@ -2331,12 +2430,13 @@ export def "credit-notes-pdf get" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($credit_note_id | is-empty) { error make --unspanned { msg: "path parameter 'CreditNoteID' must be non-empty" } }
   let full_url = (build-url $base ({credit_note_id: (encode-path-segment $credit_note_id)} | format pattern "/CreditNotes/{credit_note_id}/pdf"))
   let accept_val = "application/pdf"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"xero-tenant-id": $xero_tenant_id} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
 }
 
 # Retrieves currencies for your Xero organisation
@@ -2365,7 +2465,7 @@ export def "currencies get" [
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"xero-tenant-id": $xero_tenant_id} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"where": $qp_where, "order": $order} | compact), body: null}
 }
 
 # Create a new currency for a Xero organisation
@@ -2396,7 +2496,7 @@ export def "currencies create-currency" [
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"xero-tenant-id": $xero_tenant_id} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: {}, body: $req_body}
 }
 
 # Retrieves employees used in Xero payrun
@@ -2425,7 +2525,7 @@ export def "employees list" [
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"If-Modified-Since": $if_modified_since} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"where": $qp_where, "order": $order} | compact), body: null}
 }
 
 # Creates a single new employees used in Xero payrun
@@ -2455,7 +2555,7 @@ export def "employees update-or-create" [
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: ({"summarizeErrors": $summarize_errors} | compact), body: $req_body}
 }
 
 # Creates new employees used in Xero payrun
@@ -2485,7 +2585,7 @@ export def "employees create" [
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: ({"summarizeErrors": $summarize_errors} | compact), body: $req_body}
 }
 
 # Retrieves a specific employee used in Xero payrun using a unique employee Id
@@ -2507,12 +2607,13 @@ export def "employees get" [
 ]: nothing -> record<Employees: table<EmployeeID: string, ExternalLink: record, FirstName: string, LastName: string, Status: string, StatusAttributeString: string, UpdatedDateUTC: string, ValidationErrors: list>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($employee_id | is-empty) { error make --unspanned { msg: "path parameter 'EmployeeID' must be non-empty" } }
   let full_url = (build-url $base ({employee_id: (encode-path-segment $employee_id)} | format pattern "/Employees/{employee_id}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"xero-tenant-id": $xero_tenant_id} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
 }
 
 # Retrieves expense claims
@@ -2541,7 +2642,7 @@ export def "expense-claims list" [
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"If-Modified-Since": $if_modified_since} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"where": $qp_where, "order": $order} | compact), body: null}
 }
 
 # Creates expense claims
@@ -2572,7 +2673,7 @@ export def "expense-claims create" [
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"xero-tenant-id": $xero_tenant_id} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: {}, body: $req_body}
 }
 
 # Retrieves a specific expense claim using a unique expense claim Id
@@ -2594,12 +2695,13 @@ export def "expense-claims get" [
 ]: nothing -> record<ExpenseClaims: table<AmountDue: float, AmountPaid: float, ExpenseClaimID: string, PaymentDueDate: string, Payments: list, ReceiptID: string, Receipts: list, ReportingDate: string, Status: string, Total: float, UpdatedDateUTC: string, User: record>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($expense_claim_id | is-empty) { error make --unspanned { msg: "path parameter 'ExpenseClaimID' must be non-empty" } }
   let full_url = (build-url $base ({expense_claim_id: (encode-path-segment $expense_claim_id)} | format pattern "/ExpenseClaims/{expense_claim_id}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"xero-tenant-id": $xero_tenant_id} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
 }
 
 # Updates a specific expense claims
@@ -2624,6 +2726,7 @@ export def "expense-claims update" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($expense_claim_id | is-empty) { error make --unspanned { msg: "path parameter 'ExpenseClaimID' must be non-empty" } }
   let full_url = (build-url $base ({expense_claim_id: (encode-path-segment $expense_claim_id)} | format pattern "/ExpenseClaims/{expense_claim_id}"))
   let req_body = {"ExpenseClaims": $expense_claims} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
@@ -2631,7 +2734,7 @@ export def "expense-claims update" [
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"xero-tenant-id": $xero_tenant_id} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: {}, body: $req_body}
 }
 
 # Retrieves history records of a specific expense claim
@@ -2653,12 +2756,13 @@ export def "expense-claims-history get" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($expense_claim_id | is-empty) { error make --unspanned { msg: "path parameter 'ExpenseClaimID' must be non-empty" } }
   let full_url = (build-url $base ({expense_claim_id: (encode-path-segment $expense_claim_id)} | format pattern "/ExpenseClaims/{expense_claim_id}/History"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"xero-tenant-id": $xero_tenant_id} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
 }
 
 # Creates a history record for a specific expense claim
@@ -2683,6 +2787,7 @@ export def "expense-claims-history create" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($expense_claim_id | is-empty) { error make --unspanned { msg: "path parameter 'ExpenseClaimID' must be non-empty" } }
   let full_url = (build-url $base ({expense_claim_id: (encode-path-segment $expense_claim_id)} | format pattern "/ExpenseClaims/{expense_claim_id}/History"))
   let req_body = {"HistoryRecords": $history_records} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
@@ -2690,7 +2795,7 @@ export def "expense-claims-history create" [
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"xero-tenant-id": $xero_tenant_id} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: {}, body: $req_body}
 }
 
 # Retrieves invoice reminder settings
@@ -2716,7 +2821,7 @@ export def "invoice-reminders-settings get" [
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"xero-tenant-id": $xero_tenant_id} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
 }
 
 # Retrieves sales invoices or purchase bills
@@ -2753,7 +2858,7 @@ export def "invoices list" [
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"If-Modified-Since": $if_modified_since} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"where": $qp_where, "order": $order, "IDs": $i_ds, "InvoiceNumbers": $invoice_numbers, "ContactIDs": $contact_i_ds, "Statuses": $statuses, "page": $page, "includeArchived": $include_archived, "createdByMyApp": $created_by_my_app, "unitdp": $unitdp} | compact), body: null}
 }
 
 # Updates or creates one or more sales invoices or purchase bills
@@ -2784,7 +2889,7 @@ export def "invoices update-or-create" [
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: ({"summarizeErrors": $summarize_errors, "unitdp": $unitdp} | compact), body: $req_body}
 }
 
 # Creates one or more sales invoices or purchase bills
@@ -2815,7 +2920,7 @@ export def "invoices create" [
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: ({"summarizeErrors": $summarize_errors, "unitdp": $unitdp} | compact), body: $req_body}
 }
 
 # Retrieves a specific sales invoice or purchase bill using a unique invoice Id
@@ -2837,11 +2942,12 @@ export def "invoices get" [
 ]: nothing -> record<Invoices: table<AmountCredited: float, AmountDue: float, AmountPaid: float, Attachments: list, BrandingThemeID: string, CISDeduction: float, CISRate: float, Contact: record, CreditNotes: list, CurrencyCode: string, CurrencyRate: float, Date: string, DueDate: string, ExpectedPaymentDate: string, FullyPaidOnDate: string, HasAttachments: bool, HasErrors: bool, InvoiceID: string, InvoiceNumber: string, IsDiscounted: bool, LineAmountTypes: string, LineItems: list, Overpayments: list, Payments: list, PlannedPaymentDate: string, Prepayments: list, Reference: string, RepeatingInvoiceID: string, SentToContact: bool, Status: string, StatusAttributeString: string, SubTotal: float, Total: float, TotalDiscount: float, TotalTax: float, Type: string, UpdatedDateUTC: string, Url: string, ValidationErrors: list, Warnings: list>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($invoice_id | is-empty) { error make --unspanned { msg: "path parameter 'InvoiceID' must be non-empty" } }
   let qp = [(serialize-qp "unitdp" $unitdp "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({invoice_id: (encode-path-segment $invoice_id)} | format pattern "/Invoices/{invoice_id}") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"unitdp": $unitdp} | compact), body: null}
 }
 
 # Updates a specific sales invoices or purchase bills
@@ -2866,13 +2972,14 @@ export def "invoices update" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($invoice_id | is-empty) { error make --unspanned { msg: "path parameter 'InvoiceID' must be non-empty" } }
   let qp = [(serialize-qp "unitdp" $unitdp "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({invoice_id: (encode-path-segment $invoice_id)} | format pattern "/Invoices/{invoice_id}") $qp)
   let req_body = {"Invoices": $invoices} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: ({"unitdp": $unitdp} | compact), body: $req_body}
 }
 
 # Retrieves attachments for a specific invoice or purchase bill
@@ -2894,12 +3001,13 @@ export def "invoices-attachments list" [
 ]: nothing -> record<Attachments: table<AttachmentID: string, ContentLength: int, FileName: string, IncludeOnline: bool, MimeType: string, Url: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($invoice_id | is-empty) { error make --unspanned { msg: "path parameter 'InvoiceID' must be non-empty" } }
   let full_url = (build-url $base ({invoice_id: (encode-path-segment $invoice_id)} | format pattern "/Invoices/{invoice_id}/Attachments"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"xero-tenant-id": $xero_tenant_id} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
 }
 
 # Retrieves a specific attachment from a specific invoices or purchase bills by using a unique attachment Id
@@ -2923,12 +3031,14 @@ export def "invoices-attachments get" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($invoice_id | is-empty) { error make --unspanned { msg: "path parameter 'InvoiceID' must be non-empty" } }
+  if ($attachment_id | is-empty) { error make --unspanned { msg: "path parameter 'AttachmentID' must be non-empty" } }
   let full_url = (build-url $base ({invoice_id: (encode-path-segment $invoice_id), attachment_id: (encode-path-segment $attachment_id)} | format pattern "/Invoices/{invoice_id}/Attachments/{attachment_id}"))
   let accept_val = "application/octet-stream"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"xero-tenant-id": $xero_tenant_id, "contentType": $content_type} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
 }
 
 # Retrieves an attachment from a specific invoice or purchase bill by filename
@@ -2952,12 +3062,14 @@ export def "invoices-attachments get-by-file-name" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($invoice_id | is-empty) { error make --unspanned { msg: "path parameter 'InvoiceID' must be non-empty" } }
+  if ($file_name | is-empty) { error make --unspanned { msg: "path parameter 'FileName' must be non-empty" } }
   let full_url = (build-url $base ({invoice_id: (encode-path-segment $invoice_id), file_name: (encode-path-segment $file_name)} | format pattern "/Invoices/{invoice_id}/Attachments/{file_name}"))
   let accept_val = "application/octet-stream"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"xero-tenant-id": $xero_tenant_id, "contentType": $content_type} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
 }
 
 # Updates an attachment from a specific invoices or purchase bill by filename
@@ -2982,6 +3094,8 @@ export def "invoices-attachments update-by-file-name" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($invoice_id | is-empty) { error make --unspanned { msg: "path parameter 'InvoiceID' must be non-empty" } }
+  if ($file_name | is-empty) { error make --unspanned { msg: "path parameter 'FileName' must be non-empty" } }
   let full_url = (build-url $base ({invoice_id: (encode-path-segment $invoice_id), file_name: (encode-path-segment $file_name)} | format pattern "/Invoices/{invoice_id}/Attachments/{file_name}"))
   let req_body = $body
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else if (($input | is-not-empty) and ($req_body | is-empty)) { $input } else { $req_body }
@@ -2989,7 +3103,7 @@ export def "invoices-attachments update-by-file-name" [
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"xero-tenant-id": $xero_tenant_id} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/octet-stream" $req_body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/octet-stream" $req_body {query: {}, body: $req_body}
 }
 
 # Creates an attachment for a specific invoice or purchase bill by filename
@@ -3014,13 +3128,15 @@ export def "invoices-attachments create-by-file-name" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($invoice_id | is-empty) { error make --unspanned { msg: "path parameter 'InvoiceID' must be non-empty" } }
+  if ($file_name | is-empty) { error make --unspanned { msg: "path parameter 'FileName' must be non-empty" } }
   let qp = [(serialize-qp "IncludeOnline" $include_online "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({invoice_id: (encode-path-segment $invoice_id), file_name: (encode-path-segment $file_name)} | format pattern "/Invoices/{invoice_id}/Attachments/{file_name}") $qp)
   let req_body = $body
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else if (($input | is-not-empty) and ($req_body | is-empty)) { $input } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/octet-stream" $req_body
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/octet-stream" $req_body {query: ({"IncludeOnline": $include_online} | compact), body: $req_body}
 }
 
 # Sends a copy of a specific invoice to related contact via email
@@ -3044,6 +3160,7 @@ export def "invoices-email create" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($invoice_id | is-empty) { error make --unspanned { msg: "path parameter 'InvoiceID' must be non-empty" } }
   let full_url = (build-url $base ({invoice_id: (encode-path-segment $invoice_id)} | format pattern "/Invoices/{invoice_id}/Email"))
   let req_body = {"Status": $status} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
@@ -3051,7 +3168,7 @@ export def "invoices-email create" [
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"xero-tenant-id": $xero_tenant_id} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: {}, body: $req_body}
 }
 
 # Retrieves history records for a specific invoice
@@ -3073,12 +3190,13 @@ export def "invoices-history get" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($invoice_id | is-empty) { error make --unspanned { msg: "path parameter 'InvoiceID' must be non-empty" } }
   let full_url = (build-url $base ({invoice_id: (encode-path-segment $invoice_id)} | format pattern "/Invoices/{invoice_id}/History"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"xero-tenant-id": $xero_tenant_id} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
 }
 
 # Creates a history record for a specific invoice
@@ -3103,6 +3221,7 @@ export def "invoices-history create" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($invoice_id | is-empty) { error make --unspanned { msg: "path parameter 'InvoiceID' must be non-empty" } }
   let full_url = (build-url $base ({invoice_id: (encode-path-segment $invoice_id)} | format pattern "/Invoices/{invoice_id}/History"))
   let req_body = {"HistoryRecords": $history_records} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
@@ -3110,7 +3229,7 @@ export def "invoices-history create" [
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"xero-tenant-id": $xero_tenant_id} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: {}, body: $req_body}
 }
 
 # Retrieves a URL to an online invoice
@@ -3132,12 +3251,13 @@ export def "invoices-online-invoice get" [
 ]: nothing -> record<OnlineInvoices: table<OnlineInvoiceUrl: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($invoice_id | is-empty) { error make --unspanned { msg: "path parameter 'InvoiceID' must be non-empty" } }
   let full_url = (build-url $base ({invoice_id: (encode-path-segment $invoice_id)} | format pattern "/Invoices/{invoice_id}/OnlineInvoice"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"xero-tenant-id": $xero_tenant_id} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
 }
 
 # Retrieves invoices or purchase bills as PDF files
@@ -3159,12 +3279,13 @@ export def "invoices-pdf get" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($invoice_id | is-empty) { error make --unspanned { msg: "path parameter 'InvoiceID' must be non-empty" } }
   let full_url = (build-url $base ({invoice_id: (encode-path-segment $invoice_id)} | format pattern "/Invoices/{invoice_id}/pdf"))
   let accept_val = "application/pdf"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"xero-tenant-id": $xero_tenant_id} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
 }
 
 # Retrieves items
@@ -3194,7 +3315,7 @@ export def "items list" [
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"If-Modified-Since": $if_modified_since} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"where": $qp_where, "order": $order, "unitdp": $unitdp} | compact), body: null}
 }
 
 # Updates or creates one or more items
@@ -3225,7 +3346,7 @@ export def "items update-or-create" [
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: ({"summarizeErrors": $summarize_errors, "unitdp": $unitdp} | compact), body: $req_body}
 }
 
 # Creates one or more items
@@ -3256,7 +3377,7 @@ export def "items create" [
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: ({"summarizeErrors": $summarize_errors, "unitdp": $unitdp} | compact), body: $req_body}
 }
 
 # Deletes a specific item
@@ -3278,12 +3399,13 @@ export def "items delete" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($item_id | is-empty) { error make --unspanned { msg: "path parameter 'ItemID' must be non-empty" } }
   let full_url = (build-url $base ({item_id: (encode-path-segment $item_id)} | format pattern "/Items/{item_id}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"xero-tenant-id": $xero_tenant_id} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
 }
 
 # Retrieves a specific item using a unique item Id
@@ -3305,11 +3427,12 @@ export def "items get" [
 ]: nothing -> record<Items: table<Code: string, Description: string, InventoryAssetAccountCode: string, IsPurchased: bool, IsSold: bool, IsTrackedAsInventory: bool, ItemID: string, Name: string, PurchaseDescription: string, PurchaseDetails: record, QuantityOnHand: float, SalesDetails: record, StatusAttributeString: string, TotalCostPool: float, UpdatedDateUTC: string, ValidationErrors: list>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($item_id | is-empty) { error make --unspanned { msg: "path parameter 'ItemID' must be non-empty" } }
   let qp = [(serialize-qp "unitdp" $unitdp "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({item_id: (encode-path-segment $item_id)} | format pattern "/Items/{item_id}") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"unitdp": $unitdp} | compact), body: null}
 }
 
 # Updates a specific item
@@ -3334,13 +3457,14 @@ export def "items update" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($item_id | is-empty) { error make --unspanned { msg: "path parameter 'ItemID' must be non-empty" } }
   let qp = [(serialize-qp "unitdp" $unitdp "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({item_id: (encode-path-segment $item_id)} | format pattern "/Items/{item_id}") $qp)
   let req_body = {"Items": $items} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: ({"unitdp": $unitdp} | compact), body: $req_body}
 }
 
 # Retrieves history for a specific item
@@ -3362,12 +3486,13 @@ export def "items-history get" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($item_id | is-empty) { error make --unspanned { msg: "path parameter 'ItemID' must be non-empty" } }
   let full_url = (build-url $base ({item_id: (encode-path-segment $item_id)} | format pattern "/Items/{item_id}/History"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"xero-tenant-id": $xero_tenant_id} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
 }
 
 # Creates a history record for a specific item
@@ -3392,6 +3517,7 @@ export def "items-history create" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($item_id | is-empty) { error make --unspanned { msg: "path parameter 'ItemID' must be non-empty" } }
   let full_url = (build-url $base ({item_id: (encode-path-segment $item_id)} | format pattern "/Items/{item_id}/History"))
   let req_body = {"HistoryRecords": $history_records} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
@@ -3399,7 +3525,7 @@ export def "items-history create" [
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"xero-tenant-id": $xero_tenant_id} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: {}, body: $req_body}
 }
 
 # Retrieves journals
@@ -3428,7 +3554,7 @@ export def "journals list" [
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"If-Modified-Since": $if_modified_since} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"offset": $offset, "paymentsOnly": $payments_only} | compact), body: null}
 }
 
 # Retrieves a specific journal using a unique journal Id.
@@ -3450,12 +3576,13 @@ export def "journals get" [
 ]: nothing -> record<Journals: table<CreatedDateUTC: string, JournalDate: string, JournalID: string, JournalLines: list, JournalNumber: int, Reference: string, SourceID: string, SourceType: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($journal_id | is-empty) { error make --unspanned { msg: "path parameter 'JournalID' must be non-empty" } }
   let full_url = (build-url $base ({journal_id: (encode-path-segment $journal_id)} | format pattern "/Journals/{journal_id}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"xero-tenant-id": $xero_tenant_id} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
 }
 
 # Retrieves linked transactions (billable expenses)
@@ -3488,7 +3615,7 @@ export def "linked-transactions list" [
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"xero-tenant-id": $xero_tenant_id} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"page": $page, "LinkedTransactionID": $linked_transaction_id, "SourceTransactionID": $source_transaction_id, "ContactID": $contact_id, "Status": $status, "TargetTransactionID": $target_transaction_id} | compact), body: null}
 }
 
 # Creates linked transactions (billable expenses)
@@ -3528,7 +3655,7 @@ export def "linked-transactions create" [
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"xero-tenant-id": $xero_tenant_id} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: {}, body: $req_body}
 }
 
 # Deletes a specific linked transactions (billable expenses)
@@ -3550,12 +3677,13 @@ export def "linked-transactions delete" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($linked_transaction_id | is-empty) { error make --unspanned { msg: "path parameter 'LinkedTransactionID' must be non-empty" } }
   let full_url = (build-url $base ({linked_transaction_id: (encode-path-segment $linked_transaction_id)} | format pattern "/LinkedTransactions/{linked_transaction_id}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"xero-tenant-id": $xero_tenant_id} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
 }
 
 # Retrieves a specific linked transaction (billable expenses) using a unique linked transaction Id
@@ -3577,12 +3705,13 @@ export def "linked-transactions get" [
 ]: nothing -> record<LinkedTransactions: table<ContactID: string, LinkedTransactionID: string, SourceLineItemID: string, SourceTransactionID: string, SourceTransactionTypeCode: string, Status: string, TargetLineItemID: string, TargetTransactionID: string, Type: string, UpdatedDateUTC: string, ValidationErrors: list>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($linked_transaction_id | is-empty) { error make --unspanned { msg: "path parameter 'LinkedTransactionID' must be non-empty" } }
   let full_url = (build-url $base ({linked_transaction_id: (encode-path-segment $linked_transaction_id)} | format pattern "/LinkedTransactions/{linked_transaction_id}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"xero-tenant-id": $xero_tenant_id} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
 }
 
 # Updates a specific linked transactions (billable expenses)
@@ -3607,6 +3736,7 @@ export def "linked-transactions update" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($linked_transaction_id | is-empty) { error make --unspanned { msg: "path parameter 'LinkedTransactionID' must be non-empty" } }
   let full_url = (build-url $base ({linked_transaction_id: (encode-path-segment $linked_transaction_id)} | format pattern "/LinkedTransactions/{linked_transaction_id}"))
   let req_body = {"LinkedTransactions": $linked_transactions} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
@@ -3614,7 +3744,7 @@ export def "linked-transactions update" [
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"xero-tenant-id": $xero_tenant_id} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: {}, body: $req_body}
 }
 
 # Retrieves manual journals
@@ -3644,7 +3774,7 @@ export def "manual-journals list" [
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"If-Modified-Since": $if_modified_since} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"where": $qp_where, "order": $order, "page": $page} | compact), body: null}
 }
 
 # Updates or creates a single manual journal
@@ -3674,7 +3804,7 @@ export def "manual-journals update-or-create" [
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: ({"summarizeErrors": $summarize_errors} | compact), body: $req_body}
 }
 
 # Creates one or more manual journals
@@ -3704,7 +3834,7 @@ export def "manual-journals create" [
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: ({"summarizeErrors": $summarize_errors} | compact), body: $req_body}
 }
 
 # Retrieves a specific manual journal
@@ -3726,12 +3856,13 @@ export def "manual-journals get" [
 ]: nothing -> record<ManualJournals: table<Attachments: list, Date: string, HasAttachments: bool, JournalLines: list, LineAmountTypes: string, ManualJournalID: string, Narration: string, ShowOnCashBasisReports: bool, Status: string, StatusAttributeString: string, UpdatedDateUTC: string, Url: string, ValidationErrors: list, Warnings: list>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($manual_journal_id | is-empty) { error make --unspanned { msg: "path parameter 'ManualJournalID' must be non-empty" } }
   let full_url = (build-url $base ({manual_journal_id: (encode-path-segment $manual_journal_id)} | format pattern "/ManualJournals/{manual_journal_id}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"xero-tenant-id": $xero_tenant_id} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
 }
 
 # Updates a specific manual journal
@@ -3756,6 +3887,7 @@ export def "manual-journals update" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($manual_journal_id | is-empty) { error make --unspanned { msg: "path parameter 'ManualJournalID' must be non-empty" } }
   let full_url = (build-url $base ({manual_journal_id: (encode-path-segment $manual_journal_id)} | format pattern "/ManualJournals/{manual_journal_id}"))
   let req_body = {"ManualJournals": $manual_journals} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
@@ -3763,7 +3895,7 @@ export def "manual-journals update" [
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"xero-tenant-id": $xero_tenant_id} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: {}, body: $req_body}
 }
 
 # Retrieves attachment for a specific manual journal
@@ -3785,12 +3917,13 @@ export def "manual-journals-attachments list" [
 ]: nothing -> record<Attachments: table<AttachmentID: string, ContentLength: int, FileName: string, IncludeOnline: bool, MimeType: string, Url: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($manual_journal_id | is-empty) { error make --unspanned { msg: "path parameter 'ManualJournalID' must be non-empty" } }
   let full_url = (build-url $base ({manual_journal_id: (encode-path-segment $manual_journal_id)} | format pattern "/ManualJournals/{manual_journal_id}/Attachments"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"xero-tenant-id": $xero_tenant_id} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
 }
 
 # Allows you to retrieve a specific attachment from a specific manual journal using a unique attachment Id
@@ -3814,12 +3947,14 @@ export def "manual-journals-attachments get" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($manual_journal_id | is-empty) { error make --unspanned { msg: "path parameter 'ManualJournalID' must be non-empty" } }
+  if ($attachment_id | is-empty) { error make --unspanned { msg: "path parameter 'AttachmentID' must be non-empty" } }
   let full_url = (build-url $base ({manual_journal_id: (encode-path-segment $manual_journal_id), attachment_id: (encode-path-segment $attachment_id)} | format pattern "/ManualJournals/{manual_journal_id}/Attachments/{attachment_id}"))
   let accept_val = "application/octet-stream"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"xero-tenant-id": $xero_tenant_id, "contentType": $content_type} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
 }
 
 # Retrieves a specific attachment from a specific manual journal by file name
@@ -3843,12 +3978,14 @@ export def "manual-journals-attachments get-by-file-name" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($manual_journal_id | is-empty) { error make --unspanned { msg: "path parameter 'ManualJournalID' must be non-empty" } }
+  if ($file_name | is-empty) { error make --unspanned { msg: "path parameter 'FileName' must be non-empty" } }
   let full_url = (build-url $base ({manual_journal_id: (encode-path-segment $manual_journal_id), file_name: (encode-path-segment $file_name)} | format pattern "/ManualJournals/{manual_journal_id}/Attachments/{file_name}"))
   let accept_val = "application/octet-stream"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"xero-tenant-id": $xero_tenant_id, "contentType": $content_type} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
 }
 
 # Updates a specific attachment from a specific manual journal by file name
@@ -3873,6 +4010,8 @@ export def "manual-journals-attachments update-by-file-name" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($manual_journal_id | is-empty) { error make --unspanned { msg: "path parameter 'ManualJournalID' must be non-empty" } }
+  if ($file_name | is-empty) { error make --unspanned { msg: "path parameter 'FileName' must be non-empty" } }
   let full_url = (build-url $base ({manual_journal_id: (encode-path-segment $manual_journal_id), file_name: (encode-path-segment $file_name)} | format pattern "/ManualJournals/{manual_journal_id}/Attachments/{file_name}"))
   let req_body = $body
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else if (($input | is-not-empty) and ($req_body | is-empty)) { $input } else { $req_body }
@@ -3880,7 +4019,7 @@ export def "manual-journals-attachments update-by-file-name" [
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"xero-tenant-id": $xero_tenant_id} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/octet-stream" $req_body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/octet-stream" $req_body {query: {}, body: $req_body}
 }
 
 # Creates a specific attachment for a specific manual journal by file name
@@ -3905,6 +4044,8 @@ export def "manual-journals-attachments create-by-file-name" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($manual_journal_id | is-empty) { error make --unspanned { msg: "path parameter 'ManualJournalID' must be non-empty" } }
+  if ($file_name | is-empty) { error make --unspanned { msg: "path parameter 'FileName' must be non-empty" } }
   let full_url = (build-url $base ({manual_journal_id: (encode-path-segment $manual_journal_id), file_name: (encode-path-segment $file_name)} | format pattern "/ManualJournals/{manual_journal_id}/Attachments/{file_name}"))
   let req_body = $body
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else if (($input | is-not-empty) and ($req_body | is-empty)) { $input } else { $req_body }
@@ -3912,7 +4053,7 @@ export def "manual-journals-attachments create-by-file-name" [
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"xero-tenant-id": $xero_tenant_id} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/octet-stream" $req_body
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/octet-stream" $req_body {query: {}, body: $req_body}
 }
 
 # Retrieves history for a specific manual journal
@@ -3934,12 +4075,13 @@ export def "manual-journals-history get" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($manual_journal_id | is-empty) { error make --unspanned { msg: "path parameter 'ManualJournalID' must be non-empty" } }
   let full_url = (build-url $base ({manual_journal_id: (encode-path-segment $manual_journal_id)} | format pattern "/ManualJournals/{manual_journal_id}/History"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"xero-tenant-id": $xero_tenant_id} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
 }
 
 # Creates a history record for a specific manual journal
@@ -3964,6 +4106,7 @@ export def "manual-journals-history create-record" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($manual_journal_id | is-empty) { error make --unspanned { msg: "path parameter 'ManualJournalID' must be non-empty" } }
   let full_url = (build-url $base ({manual_journal_id: (encode-path-segment $manual_journal_id)} | format pattern "/ManualJournals/{manual_journal_id}/History"))
   let req_body = {"HistoryRecords": $history_records} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
@@ -3971,7 +4114,7 @@ export def "manual-journals-history create-record" [
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"xero-tenant-id": $xero_tenant_id} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: {}, body: $req_body}
 }
 
 # Retrieves Xero organisation details
@@ -3997,7 +4140,7 @@ export def "organisation get" [
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"xero-tenant-id": $xero_tenant_id} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
 }
 
 # Retrieves a list of the key actions your app has permission to perform in the connected Xero organisation.
@@ -4023,7 +4166,7 @@ export def "organisation-actions get" [
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"xero-tenant-id": $xero_tenant_id} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
 }
 
 # Retrieves the CIS settings for the Xero organistaion.
@@ -4045,12 +4188,13 @@ export def "organisation-cis-settings get" [
 ]: nothing -> record<CISSettings: table<CISContractorEnabled: bool, CISSubContractorEnabled: bool, Rate: float>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($organisation_id | is-empty) { error make --unspanned { msg: "path parameter 'OrganisationID' must be non-empty" } }
   let full_url = (build-url $base ({organisation_id: (encode-path-segment $organisation_id)} | format pattern "/Organisation/{organisation_id}/CISSettings"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"xero-tenant-id": $xero_tenant_id} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
 }
 
 # Retrieves overpayments
@@ -4081,7 +4225,7 @@ export def "overpayments list" [
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"If-Modified-Since": $if_modified_since} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"where": $qp_where, "order": $order, "page": $page, "unitdp": $unitdp} | compact), body: null}
 }
 
 # Retrieves a specific overpayment using a unique overpayment Id
@@ -4103,12 +4247,13 @@ export def "overpayments get" [
 ]: nothing -> record<Overpayments: table<Allocations: list, AppliedAmount: float, Attachments: list, Contact: record, CurrencyCode: string, CurrencyRate: float, Date: string, HasAttachments: bool, LineAmountTypes: string, LineItems: list, OverpaymentID: string, Payments: list, RemainingCredit: float, Status: string, SubTotal: float, Total: float, TotalTax: float, Type: string, UpdatedDateUTC: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($overpayment_id | is-empty) { error make --unspanned { msg: "path parameter 'OverpaymentID' must be non-empty" } }
   let full_url = (build-url $base ({overpayment_id: (encode-path-segment $overpayment_id)} | format pattern "/Overpayments/{overpayment_id}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"xero-tenant-id": $xero_tenant_id} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
 }
 
 # Creates a single allocation for a specific overpayment
@@ -4133,13 +4278,14 @@ export def "overpayments-allocations create" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($overpayment_id | is-empty) { error make --unspanned { msg: "path parameter 'OverpaymentID' must be non-empty" } }
   let qp = [(serialize-qp "summarizeErrors" $summarize_errors "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({overpayment_id: (encode-path-segment $overpayment_id)} | format pattern "/Overpayments/{overpayment_id}/Allocations") $qp)
   let req_body = {"Allocations": $allocations} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: ({"summarizeErrors": $summarize_errors} | compact), body: $req_body}
 }
 
 # Retrieves history records of a specific overpayment
@@ -4161,12 +4307,13 @@ export def "overpayments-history get" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($overpayment_id | is-empty) { error make --unspanned { msg: "path parameter 'OverpaymentID' must be non-empty" } }
   let full_url = (build-url $base ({overpayment_id: (encode-path-segment $overpayment_id)} | format pattern "/Overpayments/{overpayment_id}/History"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"xero-tenant-id": $xero_tenant_id} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
 }
 
 # Creates a history record for a specific overpayment
@@ -4191,6 +4338,7 @@ export def "overpayments-history create" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($overpayment_id | is-empty) { error make --unspanned { msg: "path parameter 'OverpaymentID' must be non-empty" } }
   let full_url = (build-url $base ({overpayment_id: (encode-path-segment $overpayment_id)} | format pattern "/Overpayments/{overpayment_id}/History"))
   let req_body = {"HistoryRecords": $history_records} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
@@ -4198,7 +4346,7 @@ export def "overpayments-history create" [
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"xero-tenant-id": $xero_tenant_id} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: {}, body: $req_body}
 }
 
 # Retrieves payment services
@@ -4224,7 +4372,7 @@ export def "payment-services get" [
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"xero-tenant-id": $xero_tenant_id} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
 }
 
 # Creates a payment service
@@ -4255,7 +4403,7 @@ export def "payment-services create" [
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"xero-tenant-id": $xero_tenant_id} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: {}, body: $req_body}
 }
 
 # Retrieves payments for invoices and credit notes
@@ -4285,7 +4433,7 @@ export def "payments list" [
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"If-Modified-Since": $if_modified_since} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"where": $qp_where, "order": $order, "page": $page} | compact), body: null}
 }
 
 # Creates a single payment for invoice or credit notes
@@ -4343,7 +4491,7 @@ export def "payments create" [
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"xero-tenant-id": $xero_tenant_id} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: {}, body: $req_body}
 }
 
 # Creates multiple payments for invoices or credit notes
@@ -4373,7 +4521,7 @@ export def "payments create-1" [
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: ({"summarizeErrors": $summarize_errors} | compact), body: $req_body}
 }
 
 # Retrieves a specific payment for invoices and credit notes using a unique payment Id
@@ -4395,12 +4543,13 @@ export def "payments get" [
 ]: nothing -> record<Payments: table<Account: record, Amount: float, BankAccountNumber: string, BatchPaymentID: string, Code: string, CreditNote: record, CreditNoteNumber: string, CurrencyRate: float, Date: string, Details: string, HasAccount: bool, HasValidationErrors: bool, Invoice: record, InvoiceNumber: string, IsReconciled: bool, Overpayment: record, Particulars: string, PaymentID: string, PaymentType: string, Prepayment: record, Reference: string, Status: string, StatusAttributeString: string, UpdatedDateUTC: string, ValidationErrors: list>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($payment_id | is-empty) { error make --unspanned { msg: "path parameter 'PaymentID' must be non-empty" } }
   let full_url = (build-url $base ({payment_id: (encode-path-segment $payment_id)} | format pattern "/Payments/{payment_id}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"xero-tenant-id": $xero_tenant_id} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
 }
 
 # Updates a specific payment for invoices and credit notes
@@ -4424,6 +4573,7 @@ export def "payments delete" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($payment_id | is-empty) { error make --unspanned { msg: "path parameter 'PaymentID' must be non-empty" } }
   let full_url = (build-url $base ({payment_id: (encode-path-segment $payment_id)} | format pattern "/Payments/{payment_id}"))
   let req_body = {"Status": $status} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
@@ -4431,7 +4581,7 @@ export def "payments delete" [
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"xero-tenant-id": $xero_tenant_id} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: {}, body: $req_body}
 }
 
 # Retrieves history records of a specific payment
@@ -4453,12 +4603,13 @@ export def "payments-history get" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($payment_id | is-empty) { error make --unspanned { msg: "path parameter 'PaymentID' must be non-empty" } }
   let full_url = (build-url $base ({payment_id: (encode-path-segment $payment_id)} | format pattern "/Payments/{payment_id}/History"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"xero-tenant-id": $xero_tenant_id} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
 }
 
 # Creates a history record for a specific payment
@@ -4483,6 +4634,7 @@ export def "payments-history create" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($payment_id | is-empty) { error make --unspanned { msg: "path parameter 'PaymentID' must be non-empty" } }
   let full_url = (build-url $base ({payment_id: (encode-path-segment $payment_id)} | format pattern "/Payments/{payment_id}/History"))
   let req_body = {"HistoryRecords": $history_records} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
@@ -4490,7 +4642,7 @@ export def "payments-history create" [
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"xero-tenant-id": $xero_tenant_id} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: {}, body: $req_body}
 }
 
 # Retrieves prepayments
@@ -4521,7 +4673,7 @@ export def "prepayments list" [
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"If-Modified-Since": $if_modified_since} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"where": $qp_where, "order": $order, "page": $page, "unitdp": $unitdp} | compact), body: null}
 }
 
 # Allows you to retrieve a specified prepayments
@@ -4543,12 +4695,13 @@ export def "prepayments get" [
 ]: nothing -> record<Prepayments: table<Allocations: list, AppliedAmount: float, Attachments: list, Contact: record, CurrencyCode: string, CurrencyRate: float, Date: string, HasAttachments: bool, LineAmountTypes: string, LineItems: list, PrepaymentID: string, Reference: string, RemainingCredit: float, Status: string, SubTotal: float, Total: float, TotalTax: float, Type: string, UpdatedDateUTC: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($prepayment_id | is-empty) { error make --unspanned { msg: "path parameter 'PrepaymentID' must be non-empty" } }
   let full_url = (build-url $base ({prepayment_id: (encode-path-segment $prepayment_id)} | format pattern "/Prepayments/{prepayment_id}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"xero-tenant-id": $xero_tenant_id} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
 }
 
 # Allows you to create an Allocation for prepayments
@@ -4573,13 +4726,14 @@ export def "prepayments-allocations create" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($prepayment_id | is-empty) { error make --unspanned { msg: "path parameter 'PrepaymentID' must be non-empty" } }
   let qp = [(serialize-qp "summarizeErrors" $summarize_errors "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({prepayment_id: (encode-path-segment $prepayment_id)} | format pattern "/Prepayments/{prepayment_id}/Allocations") $qp)
   let req_body = {"Allocations": $allocations} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: ({"summarizeErrors": $summarize_errors} | compact), body: $req_body}
 }
 
 # Retrieves history record for a specific prepayment
@@ -4601,12 +4755,13 @@ export def "prepayments-history get" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($prepayment_id | is-empty) { error make --unspanned { msg: "path parameter 'PrepaymentID' must be non-empty" } }
   let full_url = (build-url $base ({prepayment_id: (encode-path-segment $prepayment_id)} | format pattern "/Prepayments/{prepayment_id}/History"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"xero-tenant-id": $xero_tenant_id} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
 }
 
 # Creates a history record for a specific prepayment
@@ -4631,6 +4786,7 @@ export def "prepayments-history create" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($prepayment_id | is-empty) { error make --unspanned { msg: "path parameter 'PrepaymentID' must be non-empty" } }
   let full_url = (build-url $base ({prepayment_id: (encode-path-segment $prepayment_id)} | format pattern "/Prepayments/{prepayment_id}/History"))
   let req_body = {"HistoryRecords": $history_records} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
@@ -4638,7 +4794,7 @@ export def "prepayments-history create" [
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"xero-tenant-id": $xero_tenant_id} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: {}, body: $req_body}
 }
 
 # Retrieves purchase orders
@@ -4670,7 +4826,7 @@ export def "purchase-orders list" [
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"If-Modified-Since": $if_modified_since} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"Status": $status, "DateFrom": $date_from, "DateTo": $date_to, "order": $order, "page": $page} | compact), body: null}
 }
 
 # Updates or creates one or more purchase orders
@@ -4700,7 +4856,7 @@ export def "purchase-orders update-or-create" [
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: ({"summarizeErrors": $summarize_errors} | compact), body: $req_body}
 }
 
 # Creates one or more purchase orders
@@ -4730,7 +4886,7 @@ export def "purchase-orders create" [
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: ({"summarizeErrors": $summarize_errors} | compact), body: $req_body}
 }
 
 # Retrieves a specific purchase order using a unique purchase order Id
@@ -4752,12 +4908,13 @@ export def "purchase-orders get" [
 ]: nothing -> record<PurchaseOrders: table<Attachments: list, AttentionTo: string, BrandingThemeID: string, Contact: record, CurrencyCode: string, CurrencyRate: float, Date: string, DeliveryAddress: string, DeliveryDate: string, DeliveryInstructions: string, ExpectedArrivalDate: string, HasAttachments: bool, LineAmountTypes: string, LineItems: list, PurchaseOrderID: string, PurchaseOrderNumber: string, Reference: string, SentToContact: bool, Status: string, StatusAttributeString: string, SubTotal: float, Telephone: string, Total: float, TotalDiscount: float, TotalTax: float, UpdatedDateUTC: string, ValidationErrors: list, Warnings: list>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($purchase_order_id | is-empty) { error make --unspanned { msg: "path parameter 'PurchaseOrderID' must be non-empty" } }
   let full_url = (build-url $base ({purchase_order_id: (encode-path-segment $purchase_order_id)} | format pattern "/PurchaseOrders/{purchase_order_id}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"xero-tenant-id": $xero_tenant_id} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
 }
 
 # Updates a specific purchase order
@@ -4782,6 +4939,7 @@ export def "purchase-orders update" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($purchase_order_id | is-empty) { error make --unspanned { msg: "path parameter 'PurchaseOrderID' must be non-empty" } }
   let full_url = (build-url $base ({purchase_order_id: (encode-path-segment $purchase_order_id)} | format pattern "/PurchaseOrders/{purchase_order_id}"))
   let req_body = {"PurchaseOrders": $purchase_orders} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
@@ -4789,7 +4947,7 @@ export def "purchase-orders update" [
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"xero-tenant-id": $xero_tenant_id} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: {}, body: $req_body}
 }
 
 # Retrieves attachments for a specific purchase order
@@ -4811,12 +4969,13 @@ export def "purchase-orders-attachments list" [
 ]: nothing -> record<Attachments: table<AttachmentID: string, ContentLength: int, FileName: string, IncludeOnline: bool, MimeType: string, Url: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($purchase_order_id | is-empty) { error make --unspanned { msg: "path parameter 'PurchaseOrderID' must be non-empty" } }
   let full_url = (build-url $base ({purchase_order_id: (encode-path-segment $purchase_order_id)} | format pattern "/PurchaseOrders/{purchase_order_id}/Attachments"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"xero-tenant-id": $xero_tenant_id} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
 }
 
 # Retrieves specific attachment for a specific purchase order using a unique attachment Id
@@ -4840,12 +4999,14 @@ export def "purchase-orders-attachments get" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($purchase_order_id | is-empty) { error make --unspanned { msg: "path parameter 'PurchaseOrderID' must be non-empty" } }
+  if ($attachment_id | is-empty) { error make --unspanned { msg: "path parameter 'AttachmentID' must be non-empty" } }
   let full_url = (build-url $base ({purchase_order_id: (encode-path-segment $purchase_order_id), attachment_id: (encode-path-segment $attachment_id)} | format pattern "/PurchaseOrders/{purchase_order_id}/Attachments/{attachment_id}"))
   let accept_val = "application/octet-stream"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"xero-tenant-id": $xero_tenant_id, "contentType": $content_type} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
 }
 
 # Retrieves a specific attachment for a specific purchase order by filename
@@ -4869,12 +5030,14 @@ export def "purchase-orders-attachments get-order≠attachment-by-file-name" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($purchase_order_id | is-empty) { error make --unspanned { msg: "path parameter 'PurchaseOrderID' must be non-empty" } }
+  if ($file_name | is-empty) { error make --unspanned { msg: "path parameter 'FileName' must be non-empty" } }
   let full_url = (build-url $base ({purchase_order_id: (encode-path-segment $purchase_order_id), file_name: (encode-path-segment $file_name)} | format pattern "/PurchaseOrders/{purchase_order_id}/Attachments/{file_name}"))
   let accept_val = "application/octet-stream"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"xero-tenant-id": $xero_tenant_id, "contentType": $content_type} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
 }
 
 # Updates a specific attachment for a specific purchase order by filename
@@ -4899,6 +5062,8 @@ export def "purchase-orders-attachments update-by-file-name" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($purchase_order_id | is-empty) { error make --unspanned { msg: "path parameter 'PurchaseOrderID' must be non-empty" } }
+  if ($file_name | is-empty) { error make --unspanned { msg: "path parameter 'FileName' must be non-empty" } }
   let full_url = (build-url $base ({purchase_order_id: (encode-path-segment $purchase_order_id), file_name: (encode-path-segment $file_name)} | format pattern "/PurchaseOrders/{purchase_order_id}/Attachments/{file_name}"))
   let req_body = $body
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else if (($input | is-not-empty) and ($req_body | is-empty)) { $input } else { $req_body }
@@ -4906,7 +5071,7 @@ export def "purchase-orders-attachments update-by-file-name" [
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"xero-tenant-id": $xero_tenant_id} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/octet-stream" $req_body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/octet-stream" $req_body {query: {}, body: $req_body}
 }
 
 # Creates attachment for a specific purchase order
@@ -4931,6 +5096,8 @@ export def "purchase-orders-attachments create-by-file-name" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($purchase_order_id | is-empty) { error make --unspanned { msg: "path parameter 'PurchaseOrderID' must be non-empty" } }
+  if ($file_name | is-empty) { error make --unspanned { msg: "path parameter 'FileName' must be non-empty" } }
   let full_url = (build-url $base ({purchase_order_id: (encode-path-segment $purchase_order_id), file_name: (encode-path-segment $file_name)} | format pattern "/PurchaseOrders/{purchase_order_id}/Attachments/{file_name}"))
   let req_body = $body
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else if (($input | is-not-empty) and ($req_body | is-empty)) { $input } else { $req_body }
@@ -4938,7 +5105,7 @@ export def "purchase-orders-attachments create-by-file-name" [
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"xero-tenant-id": $xero_tenant_id} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/octet-stream" $req_body
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/octet-stream" $req_body {query: {}, body: $req_body}
 }
 
 # Retrieves history for a specific purchase order
@@ -4960,12 +5127,13 @@ export def "purchase-orders-history get" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($purchase_order_id | is-empty) { error make --unspanned { msg: "path parameter 'PurchaseOrderID' must be non-empty" } }
   let full_url = (build-url $base ({purchase_order_id: (encode-path-segment $purchase_order_id)} | format pattern "/PurchaseOrders/{purchase_order_id}/History"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"xero-tenant-id": $xero_tenant_id} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
 }
 
 # Creates a history record for a specific purchase orders
@@ -4990,6 +5158,7 @@ export def "purchase-orders-history create" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($purchase_order_id | is-empty) { error make --unspanned { msg: "path parameter 'PurchaseOrderID' must be non-empty" } }
   let full_url = (build-url $base ({purchase_order_id: (encode-path-segment $purchase_order_id)} | format pattern "/PurchaseOrders/{purchase_order_id}/History"))
   let req_body = {"HistoryRecords": $history_records} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
@@ -4997,7 +5166,7 @@ export def "purchase-orders-history create" [
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"xero-tenant-id": $xero_tenant_id} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: {}, body: $req_body}
 }
 
 # Retrieves specific purchase order as PDF files using a unique purchase order Id
@@ -5019,12 +5188,13 @@ export def "purchase-orders-pdf get" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($purchase_order_id | is-empty) { error make --unspanned { msg: "path parameter 'PurchaseOrderID' must be non-empty" } }
   let full_url = (build-url $base ({purchase_order_id: (encode-path-segment $purchase_order_id)} | format pattern "/PurchaseOrders/{purchase_order_id}/pdf"))
   let accept_val = "application/pdf"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"xero-tenant-id": $xero_tenant_id} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
 }
 
 # Retrieves a specific purchase order using purchase order number
@@ -5046,12 +5216,13 @@ export def "purchase-orders get-by-number" [
 ]: nothing -> record<PurchaseOrders: table<Attachments: list, AttentionTo: string, BrandingThemeID: string, Contact: record, CurrencyCode: string, CurrencyRate: float, Date: string, DeliveryAddress: string, DeliveryDate: string, DeliveryInstructions: string, ExpectedArrivalDate: string, HasAttachments: bool, LineAmountTypes: string, LineItems: list, PurchaseOrderID: string, PurchaseOrderNumber: string, Reference: string, SentToContact: bool, Status: string, StatusAttributeString: string, SubTotal: float, Telephone: string, Total: float, TotalDiscount: float, TotalTax: float, UpdatedDateUTC: string, ValidationErrors: list, Warnings: list>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($purchase_order_number | is-empty) { error make --unspanned { msg: "path parameter 'PurchaseOrderNumber' must be non-empty" } }
   let full_url = (build-url $base ({purchase_order_number: (encode-path-segment $purchase_order_number)} | format pattern "/PurchaseOrders/{purchase_order_number}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"xero-tenant-id": $xero_tenant_id} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
 }
 
 # Retrieves sales quotes
@@ -5087,7 +5258,7 @@ export def "quotes list" [
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"If-Modified-Since": $if_modified_since} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"DateFrom": $date_from, "DateTo": $date_to, "ExpiryDateFrom": $expiry_date_from, "ExpiryDateTo": $expiry_date_to, "ContactID": $contact_id, "Status": $status, "page": $page, "order": $order, "QuoteNumber": $quote_number} | compact), body: null}
 }
 
 # Updates or creates one or more quotes
@@ -5117,7 +5288,7 @@ export def "quotes update-or-create" [
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: ({"summarizeErrors": $summarize_errors} | compact), body: $req_body}
 }
 
 # Create one or more quotes
@@ -5147,7 +5318,7 @@ export def "quotes create" [
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: ({"summarizeErrors": $summarize_errors} | compact), body: $req_body}
 }
 
 # Retrieves a specific quote using a unique quote Id
@@ -5169,12 +5340,13 @@ export def "quotes get" [
 ]: nothing -> record<Quotes: table<BrandingThemeID: string, Contact: record, CurrencyCode: string, CurrencyRate: float, Date: string, DateString: string, ExpiryDate: string, ExpiryDateString: string, LineAmountTypes: string, LineItems: list, QuoteID: string, QuoteNumber: string, Reference: string, Status: string, StatusAttributeString: string, SubTotal: float, Summary: string, Terms: string, Title: string, Total: float, TotalDiscount: float, TotalTax: float, UpdatedDateUTC: string, ValidationErrors: list>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($quote_id | is-empty) { error make --unspanned { msg: "path parameter 'QuoteID' must be non-empty" } }
   let full_url = (build-url $base ({quote_id: (encode-path-segment $quote_id)} | format pattern "/Quotes/{quote_id}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"xero-tenant-id": $xero_tenant_id} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
 }
 
 # Updates a specific quote
@@ -5199,6 +5371,7 @@ export def "quotes update" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($quote_id | is-empty) { error make --unspanned { msg: "path parameter 'QuoteID' must be non-empty" } }
   let full_url = (build-url $base ({quote_id: (encode-path-segment $quote_id)} | format pattern "/Quotes/{quote_id}"))
   let req_body = {"Quotes": $quotes} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
@@ -5206,7 +5379,7 @@ export def "quotes update" [
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"xero-tenant-id": $xero_tenant_id} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: {}, body: $req_body}
 }
 
 # Retrieves attachments for a specific quote
@@ -5228,12 +5401,13 @@ export def "quotes-attachments list" [
 ]: nothing -> record<Attachments: table<AttachmentID: string, ContentLength: int, FileName: string, IncludeOnline: bool, MimeType: string, Url: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($quote_id | is-empty) { error make --unspanned { msg: "path parameter 'QuoteID' must be non-empty" } }
   let full_url = (build-url $base ({quote_id: (encode-path-segment $quote_id)} | format pattern "/Quotes/{quote_id}/Attachments"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"xero-tenant-id": $xero_tenant_id} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
 }
 
 # Retrieves a specific attachment from a specific quote using a unique attachment Id
@@ -5257,12 +5431,14 @@ export def "quotes-attachments get" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($quote_id | is-empty) { error make --unspanned { msg: "path parameter 'QuoteID' must be non-empty" } }
+  if ($attachment_id | is-empty) { error make --unspanned { msg: "path parameter 'AttachmentID' must be non-empty" } }
   let full_url = (build-url $base ({quote_id: (encode-path-segment $quote_id), attachment_id: (encode-path-segment $attachment_id)} | format pattern "/Quotes/{quote_id}/Attachments/{attachment_id}"))
   let accept_val = "application/octet-stream"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"xero-tenant-id": $xero_tenant_id, "contentType": $content_type} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
 }
 
 # Retrieves a specific attachment from a specific quote by filename
@@ -5286,12 +5462,14 @@ export def "quotes-attachments get-by-file-name" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($quote_id | is-empty) { error make --unspanned { msg: "path parameter 'QuoteID' must be non-empty" } }
+  if ($file_name | is-empty) { error make --unspanned { msg: "path parameter 'FileName' must be non-empty" } }
   let full_url = (build-url $base ({quote_id: (encode-path-segment $quote_id), file_name: (encode-path-segment $file_name)} | format pattern "/Quotes/{quote_id}/Attachments/{file_name}"))
   let accept_val = "application/octet-stream"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"xero-tenant-id": $xero_tenant_id, "contentType": $content_type} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
 }
 
 # Updates a specific attachment from a specific quote by filename
@@ -5316,6 +5494,8 @@ export def "quotes-attachments update-by-file-name" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($quote_id | is-empty) { error make --unspanned { msg: "path parameter 'QuoteID' must be non-empty" } }
+  if ($file_name | is-empty) { error make --unspanned { msg: "path parameter 'FileName' must be non-empty" } }
   let full_url = (build-url $base ({quote_id: (encode-path-segment $quote_id), file_name: (encode-path-segment $file_name)} | format pattern "/Quotes/{quote_id}/Attachments/{file_name}"))
   let req_body = $body
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else if (($input | is-not-empty) and ($req_body | is-empty)) { $input } else { $req_body }
@@ -5323,7 +5503,7 @@ export def "quotes-attachments update-by-file-name" [
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"xero-tenant-id": $xero_tenant_id} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/octet-stream" $req_body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/octet-stream" $req_body {query: {}, body: $req_body}
 }
 
 # Creates attachment for a specific quote
@@ -5348,6 +5528,8 @@ export def "quotes-attachments create-by-file-name" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($quote_id | is-empty) { error make --unspanned { msg: "path parameter 'QuoteID' must be non-empty" } }
+  if ($file_name | is-empty) { error make --unspanned { msg: "path parameter 'FileName' must be non-empty" } }
   let full_url = (build-url $base ({quote_id: (encode-path-segment $quote_id), file_name: (encode-path-segment $file_name)} | format pattern "/Quotes/{quote_id}/Attachments/{file_name}"))
   let req_body = $body
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else if (($input | is-not-empty) and ($req_body | is-empty)) { $input } else { $req_body }
@@ -5355,7 +5537,7 @@ export def "quotes-attachments create-by-file-name" [
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"xero-tenant-id": $xero_tenant_id} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/octet-stream" $req_body
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/octet-stream" $req_body {query: {}, body: $req_body}
 }
 
 # Retrieves history records of a specific quote
@@ -5377,12 +5559,13 @@ export def "quotes-history get" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($quote_id | is-empty) { error make --unspanned { msg: "path parameter 'QuoteID' must be non-empty" } }
   let full_url = (build-url $base ({quote_id: (encode-path-segment $quote_id)} | format pattern "/Quotes/{quote_id}/History"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"xero-tenant-id": $xero_tenant_id} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
 }
 
 # Creates a history record for a specific quote
@@ -5407,6 +5590,7 @@ export def "quotes-history create" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($quote_id | is-empty) { error make --unspanned { msg: "path parameter 'QuoteID' must be non-empty" } }
   let full_url = (build-url $base ({quote_id: (encode-path-segment $quote_id)} | format pattern "/Quotes/{quote_id}/History"))
   let req_body = {"HistoryRecords": $history_records} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
@@ -5414,7 +5598,7 @@ export def "quotes-history create" [
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"xero-tenant-id": $xero_tenant_id} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: {}, body: $req_body}
 }
 
 # Retrieves a specific quote as a PDF file using a unique quote Id
@@ -5436,12 +5620,13 @@ export def "quotes-pdf get" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($quote_id | is-empty) { error make --unspanned { msg: "path parameter 'QuoteID' must be non-empty" } }
   let full_url = (build-url $base ({quote_id: (encode-path-segment $quote_id)} | format pattern "/Quotes/{quote_id}/pdf"))
   let accept_val = "application/pdf"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"xero-tenant-id": $xero_tenant_id} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
 }
 
 # Retrieves draft expense claim receipts for any user
@@ -5471,7 +5656,7 @@ export def "receipts list" [
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"If-Modified-Since": $if_modified_since} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"where": $qp_where, "order": $order, "unitdp": $unitdp} | compact), body: null}
 }
 
 # Creates draft expense claim receipts for any user
@@ -5501,7 +5686,7 @@ export def "receipts create" [
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: ({"unitdp": $unitdp} | compact), body: $req_body}
 }
 
 # Retrieves a specific draft expense claim receipt by using a unique receipt Id
@@ -5523,11 +5708,12 @@ export def "receipts get" [
 ]: nothing -> record<Receipts: table<Attachments: list, Contact: record, Date: string, HasAttachments: bool, LineAmountTypes: string, LineItems: list, ReceiptID: string, ReceiptNumber: string, Reference: string, Status: string, SubTotal: float, Total: float, TotalTax: float, UpdatedDateUTC: string, Url: string, User: record, ValidationErrors: list, Warnings: list>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($receipt_id | is-empty) { error make --unspanned { msg: "path parameter 'ReceiptID' must be non-empty" } }
   let qp = [(serialize-qp "unitdp" $unitdp "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({receipt_id: (encode-path-segment $receipt_id)} | format pattern "/Receipts/{receipt_id}") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"unitdp": $unitdp} | compact), body: null}
 }
 
 # Updates a specific draft expense claim receipts
@@ -5552,13 +5738,14 @@ export def "receipts update" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($receipt_id | is-empty) { error make --unspanned { msg: "path parameter 'ReceiptID' must be non-empty" } }
   let qp = [(serialize-qp "unitdp" $unitdp "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({receipt_id: (encode-path-segment $receipt_id)} | format pattern "/Receipts/{receipt_id}") $qp)
   let req_body = {"Receipts": $receipts} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: ({"unitdp": $unitdp} | compact), body: $req_body}
 }
 
 # Retrieves attachments for a specific expense claim receipt
@@ -5580,12 +5767,13 @@ export def "receipts-attachments list" [
 ]: nothing -> record<Attachments: table<AttachmentID: string, ContentLength: int, FileName: string, IncludeOnline: bool, MimeType: string, Url: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($receipt_id | is-empty) { error make --unspanned { msg: "path parameter 'ReceiptID' must be non-empty" } }
   let full_url = (build-url $base ({receipt_id: (encode-path-segment $receipt_id)} | format pattern "/Receipts/{receipt_id}/Attachments"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"xero-tenant-id": $xero_tenant_id} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
 }
 
 # Retrieves a specific attachments from a specific expense claim receipts by using a unique attachment Id
@@ -5609,12 +5797,14 @@ export def "receipts-attachments get" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($receipt_id | is-empty) { error make --unspanned { msg: "path parameter 'ReceiptID' must be non-empty" } }
+  if ($attachment_id | is-empty) { error make --unspanned { msg: "path parameter 'AttachmentID' must be non-empty" } }
   let full_url = (build-url $base ({receipt_id: (encode-path-segment $receipt_id), attachment_id: (encode-path-segment $attachment_id)} | format pattern "/Receipts/{receipt_id}/Attachments/{attachment_id}"))
   let accept_val = "application/octet-stream"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"xero-tenant-id": $xero_tenant_id, "contentType": $content_type} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
 }
 
 # Retrieves a specific attachment from a specific expense claim receipts by file name
@@ -5638,12 +5828,14 @@ export def "receipts-attachments get-by-file-name" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($receipt_id | is-empty) { error make --unspanned { msg: "path parameter 'ReceiptID' must be non-empty" } }
+  if ($file_name | is-empty) { error make --unspanned { msg: "path parameter 'FileName' must be non-empty" } }
   let full_url = (build-url $base ({receipt_id: (encode-path-segment $receipt_id), file_name: (encode-path-segment $file_name)} | format pattern "/Receipts/{receipt_id}/Attachments/{file_name}"))
   let accept_val = "application/octet-stream"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"xero-tenant-id": $xero_tenant_id, "contentType": $content_type} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
 }
 
 # Updates a specific attachment on a specific expense claim receipts by file name
@@ -5668,6 +5860,8 @@ export def "receipts-attachments update-by-file-name" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($receipt_id | is-empty) { error make --unspanned { msg: "path parameter 'ReceiptID' must be non-empty" } }
+  if ($file_name | is-empty) { error make --unspanned { msg: "path parameter 'FileName' must be non-empty" } }
   let full_url = (build-url $base ({receipt_id: (encode-path-segment $receipt_id), file_name: (encode-path-segment $file_name)} | format pattern "/Receipts/{receipt_id}/Attachments/{file_name}"))
   let req_body = $body
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else if (($input | is-not-empty) and ($req_body | is-empty)) { $input } else { $req_body }
@@ -5675,7 +5869,7 @@ export def "receipts-attachments update-by-file-name" [
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"xero-tenant-id": $xero_tenant_id} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/octet-stream" $req_body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/octet-stream" $req_body {query: {}, body: $req_body}
 }
 
 # Creates an attachment on a specific expense claim receipts by file name
@@ -5700,6 +5894,8 @@ export def "receipts-attachments create-by-file-name" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($receipt_id | is-empty) { error make --unspanned { msg: "path parameter 'ReceiptID' must be non-empty" } }
+  if ($file_name | is-empty) { error make --unspanned { msg: "path parameter 'FileName' must be non-empty" } }
   let full_url = (build-url $base ({receipt_id: (encode-path-segment $receipt_id), file_name: (encode-path-segment $file_name)} | format pattern "/Receipts/{receipt_id}/Attachments/{file_name}"))
   let req_body = $body
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else if (($input | is-not-empty) and ($req_body | is-empty)) { $input } else { $req_body }
@@ -5707,7 +5903,7 @@ export def "receipts-attachments create-by-file-name" [
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"xero-tenant-id": $xero_tenant_id} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/octet-stream" $req_body
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/octet-stream" $req_body {query: {}, body: $req_body}
 }
 
 # Retrieves a history record for a specific receipt
@@ -5729,12 +5925,13 @@ export def "receipts-history get" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($receipt_id | is-empty) { error make --unspanned { msg: "path parameter 'ReceiptID' must be non-empty" } }
   let full_url = (build-url $base ({receipt_id: (encode-path-segment $receipt_id)} | format pattern "/Receipts/{receipt_id}/History"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"xero-tenant-id": $xero_tenant_id} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
 }
 
 # Creates a history record for a specific receipt
@@ -5759,6 +5956,7 @@ export def "receipts-history create" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($receipt_id | is-empty) { error make --unspanned { msg: "path parameter 'ReceiptID' must be non-empty" } }
   let full_url = (build-url $base ({receipt_id: (encode-path-segment $receipt_id)} | format pattern "/Receipts/{receipt_id}/History"))
   let req_body = {"HistoryRecords": $history_records} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
@@ -5766,7 +5964,7 @@ export def "receipts-history create" [
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"xero-tenant-id": $xero_tenant_id} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: {}, body: $req_body}
 }
 
 # Retrieves repeating invoices
@@ -5795,7 +5993,7 @@ export def "repeating-invoices list" [
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"xero-tenant-id": $xero_tenant_id} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"where": $qp_where, "order": $order} | compact), body: null}
 }
 
 # Retrieves a specific repeating invoice by using a unique repeating invoice Id
@@ -5817,12 +6015,13 @@ export def "repeating-invoices get" [
 ]: nothing -> record<RepeatingInvoices: table<Attachments: list, BrandingThemeID: string, Contact: record, CurrencyCode: string, HasAttachments: bool, ID: string, LineAmountTypes: string, LineItems: list, Reference: string, RepeatingInvoiceID: string, Schedule: record, Status: string, SubTotal: float, Total: float, TotalTax: float, Type: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($repeating_invoice_id | is-empty) { error make --unspanned { msg: "path parameter 'RepeatingInvoiceID' must be non-empty" } }
   let full_url = (build-url $base ({repeating_invoice_id: (encode-path-segment $repeating_invoice_id)} | format pattern "/RepeatingInvoices/{repeating_invoice_id}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"xero-tenant-id": $xero_tenant_id} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
 }
 
 # Retrieves attachments from a specific repeating invoice
@@ -5844,12 +6043,13 @@ export def "repeating-invoices-attachments list" [
 ]: nothing -> record<Attachments: table<AttachmentID: string, ContentLength: int, FileName: string, IncludeOnline: bool, MimeType: string, Url: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($repeating_invoice_id | is-empty) { error make --unspanned { msg: "path parameter 'RepeatingInvoiceID' must be non-empty" } }
   let full_url = (build-url $base ({repeating_invoice_id: (encode-path-segment $repeating_invoice_id)} | format pattern "/RepeatingInvoices/{repeating_invoice_id}/Attachments"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"xero-tenant-id": $xero_tenant_id} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
 }
 
 # Retrieves a specific attachment from a specific repeating invoice
@@ -5873,12 +6073,14 @@ export def "repeating-invoices-attachments get" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($repeating_invoice_id | is-empty) { error make --unspanned { msg: "path parameter 'RepeatingInvoiceID' must be non-empty" } }
+  if ($attachment_id | is-empty) { error make --unspanned { msg: "path parameter 'AttachmentID' must be non-empty" } }
   let full_url = (build-url $base ({repeating_invoice_id: (encode-path-segment $repeating_invoice_id), attachment_id: (encode-path-segment $attachment_id)} | format pattern "/RepeatingInvoices/{repeating_invoice_id}/Attachments/{attachment_id}"))
   let accept_val = "application/octet-stream"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"xero-tenant-id": $xero_tenant_id, "contentType": $content_type} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
 }
 
 # Retrieves a specific attachment from a specific repeating invoices by file name
@@ -5902,12 +6104,14 @@ export def "repeating-invoices-attachments get-by-file-name" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($repeating_invoice_id | is-empty) { error make --unspanned { msg: "path parameter 'RepeatingInvoiceID' must be non-empty" } }
+  if ($file_name | is-empty) { error make --unspanned { msg: "path parameter 'FileName' must be non-empty" } }
   let full_url = (build-url $base ({repeating_invoice_id: (encode-path-segment $repeating_invoice_id), file_name: (encode-path-segment $file_name)} | format pattern "/RepeatingInvoices/{repeating_invoice_id}/Attachments/{file_name}"))
   let accept_val = "application/octet-stream"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"xero-tenant-id": $xero_tenant_id, "contentType": $content_type} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
 }
 
 # Updates a specific attachment from a specific repeating invoices by file name
@@ -5932,6 +6136,8 @@ export def "repeating-invoices-attachments update-by-file-name" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($repeating_invoice_id | is-empty) { error make --unspanned { msg: "path parameter 'RepeatingInvoiceID' must be non-empty" } }
+  if ($file_name | is-empty) { error make --unspanned { msg: "path parameter 'FileName' must be non-empty" } }
   let full_url = (build-url $base ({repeating_invoice_id: (encode-path-segment $repeating_invoice_id), file_name: (encode-path-segment $file_name)} | format pattern "/RepeatingInvoices/{repeating_invoice_id}/Attachments/{file_name}"))
   let req_body = $body
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else if (($input | is-not-empty) and ($req_body | is-empty)) { $input } else { $req_body }
@@ -5939,7 +6145,7 @@ export def "repeating-invoices-attachments update-by-file-name" [
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"xero-tenant-id": $xero_tenant_id} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/octet-stream" $req_body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/octet-stream" $req_body {query: {}, body: $req_body}
 }
 
 # Creates an attachment from a specific repeating invoices by file name
@@ -5964,6 +6170,8 @@ export def "repeating-invoices-attachments create-by-file-name" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($repeating_invoice_id | is-empty) { error make --unspanned { msg: "path parameter 'RepeatingInvoiceID' must be non-empty" } }
+  if ($file_name | is-empty) { error make --unspanned { msg: "path parameter 'FileName' must be non-empty" } }
   let full_url = (build-url $base ({repeating_invoice_id: (encode-path-segment $repeating_invoice_id), file_name: (encode-path-segment $file_name)} | format pattern "/RepeatingInvoices/{repeating_invoice_id}/Attachments/{file_name}"))
   let req_body = $body
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else if (($input | is-not-empty) and ($req_body | is-empty)) { $input } else { $req_body }
@@ -5971,7 +6179,7 @@ export def "repeating-invoices-attachments create-by-file-name" [
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"xero-tenant-id": $xero_tenant_id} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/octet-stream" $req_body
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/octet-stream" $req_body {query: {}, body: $req_body}
 }
 
 # Retrieves history record for a specific repeating invoice
@@ -5993,12 +6201,13 @@ export def "repeating-invoices-history get" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($repeating_invoice_id | is-empty) { error make --unspanned { msg: "path parameter 'RepeatingInvoiceID' must be non-empty" } }
   let full_url = (build-url $base ({repeating_invoice_id: (encode-path-segment $repeating_invoice_id)} | format pattern "/RepeatingInvoices/{repeating_invoice_id}/History"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"xero-tenant-id": $xero_tenant_id} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
 }
 
 # Creates a history record for a specific repeating invoice
@@ -6023,6 +6232,7 @@ export def "repeating-invoices-history create" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($repeating_invoice_id | is-empty) { error make --unspanned { msg: "path parameter 'RepeatingInvoiceID' must be non-empty" } }
   let full_url = (build-url $base ({repeating_invoice_id: (encode-path-segment $repeating_invoice_id)} | format pattern "/RepeatingInvoices/{repeating_invoice_id}/History"))
   let req_body = {"HistoryRecords": $history_records} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
@@ -6030,7 +6240,7 @@ export def "repeating-invoices-history create" [
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"xero-tenant-id": $xero_tenant_id} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: {}, body: $req_body}
 }
 
 # Retrieves report for BAS (only valid for AU orgs)
@@ -6056,7 +6266,7 @@ export def "reports get-ba-sor-gst-list" [
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"xero-tenant-id": $xero_tenant_id} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
 }
 
 # Retrieves report for aged payables by contact
@@ -6087,7 +6297,7 @@ export def "reports-aged-payables-by-contact get" [
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"xero-tenant-id": $xero_tenant_id} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"contactId": $contact_id, "date": $date, "fromDate": $from_date, "toDate": $to_date} | compact), body: null}
 }
 
 # Retrieves report for aged receivables by contact
@@ -6118,7 +6328,7 @@ export def "reports-aged-receivables-by-contact get" [
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"xero-tenant-id": $xero_tenant_id} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"contactId": $contact_id, "date": $date, "fromDate": $from_date, "toDate": $to_date} | compact), body: null}
 }
 
 # Retrieves report for balancesheet
@@ -6152,7 +6362,7 @@ export def "reports-balance-sheet get" [
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"xero-tenant-id": $xero_tenant_id} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"date": $date, "periods": $periods, "timeframe": $timeframe, "trackingOptionID1": $tracking_option_id1, "trackingOptionID2": $tracking_option_id2, "standardLayout": $standard_layout, "paymentsOnly": $payments_only} | compact), body: null}
 }
 
 # Retrieves report for bank summary
@@ -6181,7 +6391,7 @@ export def "reports-bank-summary get" [
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"xero-tenant-id": $xero_tenant_id} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"fromDate": $from_date, "toDate": $to_date} | compact), body: null}
 }
 
 # Retrieves report for budget summary
@@ -6211,7 +6421,7 @@ export def "reports-budget-summary get" [
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"xero-tenant-id": $xero_tenant_id} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"date": $date, "period": $period, "timeframe": $timeframe} | compact), body: null}
 }
 
 # Retrieves report for executive summary
@@ -6239,7 +6449,7 @@ export def "reports-executive-summary get" [
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"xero-tenant-id": $xero_tenant_id} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"date": $date} | compact), body: null}
 }
 
 # Retrieves report for profit and loss
@@ -6276,7 +6486,7 @@ export def "reports-profit-and-loss get" [
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"xero-tenant-id": $xero_tenant_id} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"fromDate": $from_date, "toDate": $to_date, "periods": $periods, "timeframe": $timeframe, "trackingCategoryID": $tracking_category_id, "trackingCategoryID2": $tracking_category_id2, "trackingOptionID": $tracking_option_id, "trackingOptionID2": $tracking_option_id2, "standardLayout": $standard_layout, "paymentsOnly": $payments_only} | compact), body: null}
 }
 
 # Retrieve reports for 1099
@@ -6304,7 +6514,7 @@ export def "reports-ten-ninety-nine get" [
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"xero-tenant-id": $xero_tenant_id} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"reportYear": $report_year} | compact), body: null}
 }
 
 # Retrieves report for trial balance
@@ -6333,7 +6543,7 @@ export def "reports-trial-balance get" [
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"xero-tenant-id": $xero_tenant_id} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"date": $date, "paymentsOnly": $payments_only} | compact), body: null}
 }
 
 # Retrieves a specific report for BAS using a unique report Id (only valid for AU orgs)
@@ -6355,12 +6565,13 @@ export def "reports get-ba-sor-gst" [
 ]: nothing -> record<Reports: table<Fields: list, ReportDate: string, ReportID: string, ReportName: string, ReportTitle: string, ReportTitles: list, ReportType: string, Rows: list, UpdatedDateUTC: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($report_id | is-empty) { error make --unspanned { msg: "path parameter 'ReportID' must be non-empty" } }
   let full_url = (build-url $base ({report_id: (encode-path-segment $report_id)} | format pattern "/Reports/{report_id}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"xero-tenant-id": $xero_tenant_id} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
 }
 
 # Sets the chart of accounts, the conversion date and conversion balances
@@ -6395,7 +6606,7 @@ export def "setup create" [
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"xero-tenant-id": $xero_tenant_id} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: {}, body: $req_body}
 }
 
 # Retrieves tax rates
@@ -6425,7 +6636,7 @@ export def "tax-rates get" [
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"xero-tenant-id": $xero_tenant_id} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"where": $qp_where, "order": $order, "TaxType": $tax_type} | compact), body: null}
 }
 
 # Updates tax rates
@@ -6456,7 +6667,7 @@ export def "tax-rates update" [
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"xero-tenant-id": $xero_tenant_id} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: {}, body: $req_body}
 }
 
 # Creates one or more tax rates
@@ -6487,7 +6698,7 @@ export def "tax-rates create" [
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"xero-tenant-id": $xero_tenant_id} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: {}, body: $req_body}
 }
 
 # Retrieves tracking categories and options
@@ -6517,7 +6728,7 @@ export def "tracking-categories get" [
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"xero-tenant-id": $xero_tenant_id} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"where": $qp_where, "order": $order, "includeArchived": $include_archived} | compact), body: null}
 }
 
 # Create tracking categories
@@ -6553,7 +6764,7 @@ export def "tracking-categories create-category" [
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"xero-tenant-id": $xero_tenant_id} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: {}, body: $req_body}
 }
 
 # Deletes a specific tracking category
@@ -6575,12 +6786,13 @@ export def "tracking-categories delete-category" [
 ]: nothing -> record<TrackingCategories: table<Name: string, Option: string, Options: list, Status: string, TrackingCategoryID: string, TrackingOptionID: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($tracking_category_id | is-empty) { error make --unspanned { msg: "path parameter 'TrackingCategoryID' must be non-empty" } }
   let full_url = (build-url $base ({tracking_category_id: (encode-path-segment $tracking_category_id)} | format pattern "/TrackingCategories/{tracking_category_id}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"xero-tenant-id": $xero_tenant_id} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
 }
 
 # Retrieves specific tracking categories and options using a unique tracking category Id
@@ -6602,12 +6814,13 @@ export def "tracking-categories get-category" [
 ]: nothing -> record<TrackingCategories: table<Name: string, Option: string, Options: list, Status: string, TrackingCategoryID: string, TrackingOptionID: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($tracking_category_id | is-empty) { error make --unspanned { msg: "path parameter 'TrackingCategoryID' must be non-empty" } }
   let full_url = (build-url $base ({tracking_category_id: (encode-path-segment $tracking_category_id)} | format pattern "/TrackingCategories/{tracking_category_id}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"xero-tenant-id": $xero_tenant_id} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
 }
 
 # Updates a specific tracking category
@@ -6637,6 +6850,7 @@ export def "tracking-categories update-category" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($tracking_category_id | is-empty) { error make --unspanned { msg: "path parameter 'TrackingCategoryID' must be non-empty" } }
   let full_url = (build-url $base ({tracking_category_id: (encode-path-segment $tracking_category_id)} | format pattern "/TrackingCategories/{tracking_category_id}"))
   let req_body = {"Name": $name, "Option": $option, "Options": $options, "Status": $status, "TrackingCategoryID": $body_tracking_category_id, "TrackingOptionID": $tracking_option_id} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
@@ -6644,7 +6858,7 @@ export def "tracking-categories update-category" [
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"xero-tenant-id": $xero_tenant_id} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: {}, body: $req_body}
 }
 
 # Creates options for a specific tracking category
@@ -6671,6 +6885,7 @@ export def "tracking-categories-options create" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($tracking_category_id | is-empty) { error make --unspanned { msg: "path parameter 'TrackingCategoryID' must be non-empty" } }
   let full_url = (build-url $base ({tracking_category_id: (encode-path-segment $tracking_category_id)} | format pattern "/TrackingCategories/{tracking_category_id}/Options"))
   let req_body = {"Name": $name, "Status": $status, "TrackingCategoryID": $body_tracking_category_id, "TrackingOptionID": $tracking_option_id} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
@@ -6678,7 +6893,7 @@ export def "tracking-categories-options create" [
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"xero-tenant-id": $xero_tenant_id} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: {}, body: $req_body}
 }
 
 # Deletes a specific option for a specific tracking category
@@ -6701,12 +6916,14 @@ export def "tracking-categories-options delete" [
 ]: nothing -> record<Options: table<Name: string, Status: string, TrackingCategoryID: string, TrackingOptionID: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($tracking_category_id | is-empty) { error make --unspanned { msg: "path parameter 'TrackingCategoryID' must be non-empty" } }
+  if ($tracking_option_id | is-empty) { error make --unspanned { msg: "path parameter 'TrackingOptionID' must be non-empty" } }
   let full_url = (build-url $base ({tracking_category_id: (encode-path-segment $tracking_category_id), tracking_option_id: (encode-path-segment $tracking_option_id)} | format pattern "/TrackingCategories/{tracking_category_id}/Options/{tracking_option_id}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"xero-tenant-id": $xero_tenant_id} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
 }
 
 # Updates a specific option for a specific tracking category
@@ -6734,6 +6951,8 @@ export def "tracking-categories-options update" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($tracking_category_id | is-empty) { error make --unspanned { msg: "path parameter 'TrackingCategoryID' must be non-empty" } }
+  if ($tracking_option_id | is-empty) { error make --unspanned { msg: "path parameter 'TrackingOptionID' must be non-empty" } }
   let full_url = (build-url $base ({tracking_category_id: (encode-path-segment $tracking_category_id), tracking_option_id: (encode-path-segment $tracking_option_id)} | format pattern "/TrackingCategories/{tracking_category_id}/Options/{tracking_option_id}"))
   let req_body = {"Name": $name, "Status": $status, "TrackingCategoryID": $body_tracking_category_id, "TrackingOptionID": $body_tracking_option_id} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
@@ -6741,7 +6960,7 @@ export def "tracking-categories-options update" [
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"xero-tenant-id": $xero_tenant_id} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: {}, body: $req_body}
 }
 
 # Retrieves users
@@ -6770,7 +6989,7 @@ export def "users list" [
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"If-Modified-Since": $if_modified_since} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"where": $qp_where, "order": $order} | compact), body: null}
 }
 
 # Retrieves a specific user
@@ -6792,10 +7011,11 @@ export def "users get" [
 ]: nothing -> record<Users: table<EmailAddress: string, FirstName: string, IsSubscriber: bool, LastName: string, OrganisationRole: string, UpdatedDateUTC: string, UserID: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($user_id | is-empty) { error make --unspanned { msg: "path parameter 'UserID' must be non-empty" } }
   let full_url = (build-url $base ({user_id: (encode-path-segment $user_id)} | format pattern "/Users/{user_id}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"xero-tenant-id": $xero_tenant_id} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
 }

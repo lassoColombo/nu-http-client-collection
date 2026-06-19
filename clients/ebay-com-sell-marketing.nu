@@ -3,17 +3,18 @@
 # Auth: --token flag or $env.MARKETING_API_TOKEN
 
 const BASE_URL = "https://api.ebay.com/sell/marketing/v1"
-const DEFAULT_AUTH = "bearer"
 
-# Build auth: returns {headers: record, query: string}
+# Build auth: returns {scheme: string, headers: record, query: string, location: string}.
+# `location` is "header" | "query" | "cookie" | "none" and tells dry-run callers
+# where the token went without inspecting headers/query themselves.
 def build-auth [token?: string, auth_scheme?: string]: nothing -> record {
   let token_val = if ($token != null) and ($token | is-not-empty) { $token } else { $env | get -o MARKETING_API_TOKEN | default "" }
   let scheme = ($auth_scheme | default "bearer")
-  if ($scheme == "none") or ($token_val | is-empty) { return {headers: {}, query: ""} }
+  if ($scheme == "none") or ($token_val | is-empty) { return {scheme: $scheme, headers: {}, query: "", location: "none"} }
   match $scheme {
-    "bearer" => { {headers: {Authorization: $"Bearer ($token_val)"}, query: ""} }
-    "none" => { {headers: {}, query: ""} }
-    _ => { {headers: {Authorization: $"Bearer ($token_val)"}, query: ""} }
+    "bearer" => { {scheme: $scheme, headers: {Authorization: $"Bearer ($token_val)"}, query: "", location: "header"} }
+    "none" => { {scheme: $scheme, headers: {}, query: "", location: "none"} }
+    _ => { {scheme: $scheme, headers: {Authorization: $"Bearer ($token_val)"}, query: "", location: "header"} }
   }
 }
 
@@ -22,8 +23,9 @@ def build-auth [token?: string, auth_scheme?: string]: nothing -> record {
 # ([A-Za-z0-9-._~]) stay literal; everything else gets %XX.
 def serialize-qp [name: string, value: any, style: string]: nothing -> list<string> {
   if ($value == null) { return [] }
-  let n = (encode-path-segment $name)
   let is_list = ($value | describe | str starts-with "list")
+  if $is_list and ($value | is-empty) { return [] }
+  let n = (encode-path-segment $name)
   if ($value | describe | str starts-with "record") { return ($value | transpose k v | each { $"($n)[(encode-path-segment $in.k)]=(encode-path-segment $in.v)" }) }
   if not $is_list { return [$"($n)=(encode-path-segment $value)"] }
   match $style {
@@ -54,22 +56,42 @@ def build-url [base: string, path: string, query?: string]: nothing -> string {
   if ($query != null) and ($query | is-not-empty) { $result | upsert query $query | url join } else { $result | url join }
 }
 
+# Build the dry-run record returned by --dry-run. Shape:
+#   {dry_run: true, method, url, query: <record>, headers, body, content_type, timeout,
+#    auth: {scheme, location}}
+# `meta` carries logical-form data (the query record by spec name, the pre-serialization
+# body) that do-request itself cannot reconstruct from its wire-format args.
+def build-dry-run-record [method: string, url: string, auth: record, content_type: string, timeout: duration, meta?: record]: nothing -> record {
+  let m = ($meta | default {})
+  {
+    dry_run: true
+    method: $method
+    url: $url
+    query: ($m | get -o query | default {})
+    headers: $auth.headers
+    body: ($m | get -o body)
+    content_type: $content_type
+    timeout: $timeout
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+}
+
 # Execute HTTP request with method dispatch
-def do-request [method: string, url: string, auth: record, insecure: bool, raw: bool, dry_run: bool, max_time?: duration, allow_errors?: bool, full?: bool, content_type?: string, body?: any]: nothing -> any {
+def do-request [method: string, url: string, auth: record, insecure: bool, raw: bool, dry_run: bool, max_time?: duration, allow_errors?: bool, full?: bool, content_type?: string, body?: any, dry_run_meta?: record]: nothing -> any {
   let req_url = if ($auth.query | is-not-empty) { if ($url | str contains "?") { $"($url)&($auth.query)" } else { $"($url)?($auth.query)" } } else { $url }
   let timeout = ($max_time | default 30min)
   let ct = ($content_type | default "application/json")
-  if $dry_run { return {method: $method, url: $req_url, headers: $auth.headers, query_string: $auth.query, content_type: $ct, timeout: $timeout, body: $body} }
+  if $dry_run { return (build-dry-run-record $method $req_url $auth $ct $timeout $dry_run_meta) }
   let resp = match $method {
     "get" => { http get --headers $auth.headers --full --allow-errors --max-time $timeout --insecure=$insecure --raw=$raw $req_url }
-    "head" => { http head --headers $auth.headers --max-time $timeout --insecure=$insecure $req_url }
-    "options" => { http options --headers $auth.headers --max-time $timeout --insecure=$insecure $req_url }
+    "head" => { http head --headers $auth.headers --full --allow-errors --max-time $timeout --insecure=$insecure $req_url }
+    "options" => { http options --headers $auth.headers --full --allow-errors --max-time $timeout --insecure=$insecure $req_url }
     "post" => { if ($body | is-empty) { http post --headers $auth.headers --full --allow-errors --max-time $timeout --insecure=$insecure --raw=$raw $req_url "" } else { http post --headers $auth.headers --content-type $ct --full --allow-errors --max-time $timeout --insecure=$insecure --raw=$raw $req_url $body } }
     "put" => { if ($body | is-empty) { http put --headers $auth.headers --full --allow-errors --max-time $timeout --insecure=$insecure --raw=$raw $req_url "" } else { http put --headers $auth.headers --content-type $ct --full --allow-errors --max-time $timeout --insecure=$insecure --raw=$raw $req_url $body } }
     "patch" => { if ($body | is-empty) { http patch --headers $auth.headers --full --allow-errors --max-time $timeout --insecure=$insecure --raw=$raw $req_url "" } else { http patch --headers $auth.headers --content-type $ct --full --allow-errors --max-time $timeout --insecure=$insecure --raw=$raw $req_url $body } }
     "delete" => { if ($body | is-empty) { http delete --headers $auth.headers --full --allow-errors --max-time $timeout --insecure=$insecure --raw=$raw $req_url } else { http delete --headers $auth.headers --content-type $ct --data $body --full --allow-errors --max-time $timeout --insecure=$insecure --raw=$raw $req_url } }
   }
-  if ($method in ["head" "options"]) { return $resp }
+  if ($method == "head") and (not $full) and (not $allow_errors) and $resp.status < 400 { return $resp.headers }
   if $allow_errors { $resp } else if $resp.status >= 400 { error make --unspanned { msg: $"HTTP ($resp.status): ($resp.body)" } } else if $full { {status: $resp.status, headers: $resp.headers, body: $resp.body} } else if $resp.status == 204 { null } else { $resp.body }
 }
 
@@ -128,7 +150,7 @@ export def "ad-campaign list" [
   let full_url = (build-url $base "/ad_campaign" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"campaign_name": $campaign_name, "campaign_status": $campaign_status, "end_date_range": $end_date_range, "funding_strategy": $funding_strategy, "limit": $limit, "offset": $offset, "start_date_range": $start_date_range} | compact), body: null}
 }
 
 # This method creates a Promoted Listings ad campaign. A Promoted Listings campaign is the structure into which you place the ads or ad group for the listings you want to promote. Identify the items you want to place into a campaign either by "key" or by "rule" as follows: Rules-based campaigns &ndash; A rules-based campaign adds items to the campaign according to the criteria you specify in your call to createCampaign. You can set the autoSelectFutureInventory request field to true so that after your campaign launches, eBay will regularly assess your new, revised, or newly-eligible listings to determine whether any should be added or removed from your campaign according to the rules you set. If there are, eBay will add or remove them automatically on a daily basis. Key-based campaigns &ndash; Add items to an existing campaign using either listing ID values or Inventory Reference values: Add listingId values to an existing campaign by calling either createAdByListingID or bulkCreateAdsByListingId. Add inventoryReference values to an existing campaign by calling either createAdByInventoryReference or bulkCreateAdsByInventoryReference.Add an ad group to an existing campaign by calling createAdGroup.Note: No matter how you add items to a Promoted Listings campaign, each campaign can contain ads for a maximum of 50,000 items. If a rules-based campaign identifies more than 50,000 items, ads are created for only the first 50,000 items identified by the specified criteria, and ads are not created for the remaining items. Creating a campaign To create a basic campaign, supply: The user-defined campaign name The start date (and optionally the end date) of the campaign The eBay marketplace on which the campaign is hosted Details on the campaign funding model The campaign funding model specifies how the Promoted Listings fee is calculated. Currently, the supported funding models are COST_PER_SALE and COST_PER_CLICK. For complete information on how the fee is calculated and when it applies, see Promoted Listings fees (/api-docs/sell/static/marketing/pl-overview.html#pl-fees). If you populate the campaignCriterion object in your createCampaign request, campaign "ads" are created by "rule" for the listings that meet the criteria you specify, and these ads are associated with the newly created campaign. For details on creating Promoted Listings campaigns and how to select the items to be included in your campaigns, see Promoted Listings campaign creation (/api-docs/sell/static/marketing/pl-create-campaign.html). For recommendations on which listings are prime for a Promoted Listings ad campaign and to get guidance on how to set the bidPercentage field, see Using the Recommendation API to help configure campaigns (/api-docs/sell/static/marketing/pl-reco-api.html). Tip: See Promoted Listings requirements and restrictions (/api-docs/sell/marketing/static/overview.html#PL-requirements) for the details on the marketplaces that support Promoted Listings via the API. See Promoted Listings restrictions (/api-docs/sell/static/marketing/pl-restrictions) for details about campaign limitations and restrictions.
@@ -164,7 +186,7 @@ export def "ad-campaign create" [
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: {}, body: $req_body}
 }
 
 # This method retrieves the campaigns containing the listing that is specified using either a listing ID, or an inventory reference ID and inventory reference type pair. The request accepts either a listing_id, or an inventory_reference_id and inventory_reference_type pair, as used in the Inventory API.eBay listing IDs are generated by either the Trading API (/Devzone/XML/docs/Reference/eBay/index.html) or the Inventory API (/api-docs/sell/inventory/resources/methods) when you create a listing.An inventory reference ID can be either a seller-defined SKU or inventoryItemGroupKey, as specified in the Inventory API.Note: This method only applies to the Cost Per Sale (CPS) funding model; it does not apply to the Cost Per Click (CPC) funding model. See Funding Models (/api-docs/sell/static/marketing/pl-overview.html#funding-model) in the Promoted Listings Playbook for more information.
@@ -191,7 +213,7 @@ export def "ad-campaign-find-campaign-by-ad-reference find" [
   let full_url = (build-url $base "/ad_campaign/find_campaign_by_ad_reference" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"inventory_reference_id": $inventory_reference_id, "inventory_reference_type": $inventory_reference_type, "listing_id": $listing_id} | compact), body: null}
 }
 
 # This method retrieves the details of a single campaign, as specified with the campaign_name query parameter. Note that the campaign name you specify must be an exact, case-sensitive match of the name of the campaign you want to retrieve.Call getCampaigns (/api-docs/sell/marketing/resources/campaign/methods/getCampaigns) to retrieve a list of the seller's campaign names.
@@ -216,7 +238,7 @@ export def "ad-campaign-get-campaign-by-name get" [
   let full_url = (build-url $base "/ad_campaign/get_campaign_by_name" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"campaign_name": $campaign_name} | compact), body: null}
 }
 
 # This method deletes the campaign specified by the campaign_id query parameter.Note: You can only delete campaigns that have ended.Call getCampaigns (/api-docs/sell/marketing/resources/campaign/methods/getCampaigns) to retrieve the campaign_id and the campaign status (RUNNING, PAUSED, ENDED, and so on) for all the seller's campaigns.
@@ -237,10 +259,11 @@ export def "ad-campaign delete" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($campaign_id | is-empty) { error make --unspanned { msg: "path parameter 'campaign_id' must be non-empty" } }
   let full_url = (build-url $base ({campaign_id: (encode-path-segment $campaign_id)} | format pattern "/ad_campaign/{campaign_id}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
 }
 
 # This method retrieves the details of a single campaign, as specified with the campaign_id query parameter. This method returns all the details of a campaign (including the campaign's the selection rules), except the for the listing IDs or inventory reference IDs included in the campaign. These IDs are returned by getAds (/api-docs/sell/marketing/resources/ad/methods/getAds). Call getCampaigns (/api-docs/sell/marketing/resources/campaign/methods/getCampaigns) to retrieve a list of the seller's campaign IDs.
@@ -261,10 +284,11 @@ export def "ad-campaign get" [
 ]: nothing -> record<alerts: table<alertType: string, details: list>, budget: record<daily: record<amount: record, budgetStatus: string>>, campaignCriterion: record<autoSelectFutureInventory: bool, criterionType: string, selectionRules: list<record>>, campaignId: string, campaignName: string, campaignStatus: string, endDate: string, fundingStrategy: record<adRateStrategy: string, bidPercentage: string, dynamicAdRatePreferences: list<record>, fundingModel: string>, marketplaceId: string, startDate: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($campaign_id | is-empty) { error make --unspanned { msg: "path parameter 'campaign_id' must be non-empty" } }
   let full_url = (build-url $base ({campaign_id: (encode-path-segment $campaign_id)} | format pattern "/ad_campaign/{campaign_id}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
 }
 
 # This method retrieves Promoted Listings ads that are associated with listings created with either the Trading API (/Devzone/XML/docs/Reference/eBay/index.html) or the Inventory API (/api-docs/sell/inventory/resources/methods). The method retrieves ads related to the specified campaign. Specify the Promoted Listings campaign to target with the campaign_id path parameter. Because of the large number of possible results, you can use query parameters to paginate the result set by specifying a limit, which dictates how many ads to return on each page of the response. You can also specify how many ads to skip in the result set before returning the first result using the offset path parameter. Call getCampaigns (/api-docs/sell/marketing/resources/campaign/methods/getCampaigns) to retrieve the current campaign IDs for the seller.
@@ -290,11 +314,12 @@ export def "ad-campaign-ad list" [
 ]: nothing -> record<ads: table<adGroupId: string, adId: string, adStatus: string, alerts: list, bidPercentage: string, inventoryReferenceId: string, inventoryReferenceType: string, listingId: string>, href: string, limit: int, next: string, offset: int, prev: string, total: int> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($campaign_id | is-empty) { error make --unspanned { msg: "path parameter 'campaign_id' must be non-empty" } }
   let qp = [(serialize-qp "ad_group_ids" $ad_group_ids "scalar") (serialize-qp "ad_status" $ad_status "scalar") (serialize-qp "limit" $limit "scalar") (serialize-qp "listing_ids" $listing_ids "scalar") (serialize-qp "offset" $offset "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({campaign_id: (encode-path-segment $campaign_id)} | format pattern "/ad_campaign/{campaign_id}/ad") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"ad_group_ids": $ad_group_ids, "ad_status": $ad_status, "limit": $limit, "listing_ids": $listing_ids, "offset": $offset} | compact), body: null}
 }
 
 # This method adds a listing to an existing Promoted Listings campaign using a listingId value generated by the Trading API (/Devzone/XML/docs/Reference/eBay/index.html) or Inventory API (/api-docs/sell/inventory/resources/methods), or using a value generated by an ad group ID. For Promoted Listings Standard (PLS) campaigns using the Cost Per Sale (CPS) funding model, an ad may be directly created for the listing.For the listing ID specified in the request, this method: Creates an ad for the listing. Sets the bid percentage (also known as the ad rate) for the ad. Associates the ad with the specified campaign. To create an ad for a listing, specify its listingId, plus the bidPercentage for the ad in the payload of the request. Specify the campaign to associate the ad with using the campaign_id path parameter. Listing IDs are generated by eBay when a seller creates listings with the Trading API.For Promoted Listings Advanced (PLA) campaigns using the Cost Per Click (CPC) funding model, an ad group must be created first. If no ad group has been created for the campaign, an ad cannot be created.For the ad group specified in the request, this method associates the ad with the specified ad group.To create an ad for an ad group, specify the name of the ad group in the payload of the request. Specify the campaign to associate the ads with using the campaign_id path parameter. Ad groups are generated using the createAdGroup (/api-docs/sell/marketing/resources/adgroup/methods/createAdGroup) method. You can specify one or more ad groups per campaign.Use createCampaign (/api-docs/sell/marketing/resources/campaign/methods/createCampaign) to create a new campaign and use getCampaigns (/api-docs/sell/marketing/resources/campaign/methods/getCampaigns) to get a list of existing campaigns.This call has no response payload. If the ad is successfully created, a 201 Created HTTP status code and the getAd (/api-docs/sell/marketing/resources/ad/methods/getAd) URI of the ad are returned in the location header.
@@ -319,12 +344,13 @@ export def "ad-campaign-ad create-by-listing" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($campaign_id | is-empty) { error make --unspanned { msg: "path parameter 'campaign_id' must be non-empty" } }
   let full_url = (build-url $base ({campaign_id: (encode-path-segment $campaign_id)} | format pattern "/ad_campaign/{campaign_id}/ad"))
   let req_body = {"adGroupId": $ad_group_id, "bidPercentage": $bid_percentage, "listingId": $listing_id} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: {}, body: $req_body}
 }
 
 # This method removes the specified ad from the specified campaign.Pass the ID of the ad to delete with the ID of the campaign associated with the ad as path parameters to the call.Call getCampaigns (/api-docs/sell/marketing/resources/campaign/methods/getCampaigns) to get the current list of the seller's campaign IDs.Note: This method only applies to the Cost Per Sale (CPS) funding model; it does not apply to the Cost Per Click (CPC) funding model. See Funding Models (/api-docs/sell/static/marketing/pl-overview.html#funding-model) in the Promoted Listings Playbook for more information.When using the CPC funding model, use the bulkUpdateAdsStatusByListingId method to change the status of ads to ARCHIVED.
@@ -346,10 +372,12 @@ export def "ad-campaign-ad delete" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($campaign_id | is-empty) { error make --unspanned { msg: "path parameter 'campaign_id' must be non-empty" } }
+  if ($ad_id | is-empty) { error make --unspanned { msg: "path parameter 'ad_id' must be non-empty" } }
   let full_url = (build-url $base ({campaign_id: (encode-path-segment $campaign_id), ad_id: (encode-path-segment $ad_id)} | format pattern "/ad_campaign/{campaign_id}/ad/{ad_id}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
 }
 
 # This method retrieves the specified ad from the specified campaign. In the request, supply the campaign_id and ad_id as path parameters. Call getCampaigns (/api-docs/sell/marketing/resources/campaign/methods/getCampaigns) to retrieve a list of the seller's current campaign IDs and call getAds (/api-docs/sell/marketing/resources/ad/methods/getAds) to retrieve their current ad IDs.
@@ -371,10 +399,12 @@ export def "ad-campaign-ad get" [
 ]: nothing -> record<adGroupId: string, adId: string, adStatus: string, alerts: table<alertType: string, details: list>, bidPercentage: string, inventoryReferenceId: string, inventoryReferenceType: string, listingId: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($campaign_id | is-empty) { error make --unspanned { msg: "path parameter 'campaign_id' must be non-empty" } }
+  if ($ad_id | is-empty) { error make --unspanned { msg: "path parameter 'ad_id' must be non-empty" } }
   let full_url = (build-url $base ({campaign_id: (encode-path-segment $campaign_id), ad_id: (encode-path-segment $ad_id)} | format pattern "/ad_campaign/{campaign_id}/ad/{ad_id}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
 }
 
 # This method updates the bid percentage (also known as the "ad rate") for the specified ad in the specified campaign. In the request, supply the campaign_id and ad_id as path parameters, and supply the new bidPercentage value in the payload of the call. Call getCampaigns (/api-docs/sell/marketing/resources/campaign/methods/getCampaigns) to retrieve a seller's current campaign IDs and call getAds (/api-docs/sell/marketing/resources/ad/methods/getAds) to get their ad IDs.Note: This method only applies to the Cost Per Sale (CPS) funding model; it does not apply to the Cost Per Click (CPC) funding model. See Funding Models (/api-docs/sell/static/marketing/pl-overview.html#funding-model) in the Promoted Listings Playbook for more information.
@@ -398,12 +428,14 @@ export def "ad-campaign-ad-update-bid update" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($campaign_id | is-empty) { error make --unspanned { msg: "path parameter 'campaign_id' must be non-empty" } }
+  if ($ad_id | is-empty) { error make --unspanned { msg: "path parameter 'ad_id' must be non-empty" } }
   let full_url = (build-url $base ({campaign_id: (encode-path-segment $campaign_id), ad_id: (encode-path-segment $ad_id)} | format pattern "/ad_campaign/{campaign_id}/ad/{ad_id}/update_bid"))
   let req_body = {"bidPercentage": $bid_percentage} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: {}, body: $req_body}
 }
 
 # Note: This method is only available for select partners who have been approved for the eBay Promoted Listings Advanced (PLA) program. For information about how to request access to this program, refer to Promoted Listings Advanced Access Requests (/api-docs/sell/static/marketing/pl-verify-eligibility.html#access-requests ) in the Promoted Listings Playbook. To determine if a seller qualifies for PLA, use the getAdvertisingEligibility (/api-docs/sell/account/resources/advertising_eligibility/methods/getAdvertisingEligibility ) method in Account API.This method retrieves ad groups for the specified campaigns.Each campaign can only have one ad group.In the request, supply the campaign_ids as path parameters.Call getCampaigns (/api-docs/sell/marketing/resources/campaign/methods/getCampaigns) to retrieve a list of the current campaign IDs for a seller.
@@ -427,11 +459,12 @@ export def "ad-campaign-ad-group list" [
 ]: nothing -> record<adGroups: table<adGroupId: string, adGroupStatus: string, defaultBid: record, name: string>, href: string, limit: int, next: string, offset: int, prev: string, total: int> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($campaign_id | is-empty) { error make --unspanned { msg: "path parameter 'campaign_id' must be non-empty" } }
   let qp = [(serialize-qp "ad_group_status" $ad_group_status "scalar") (serialize-qp "limit" $limit "scalar") (serialize-qp "offset" $offset "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({campaign_id: (encode-path-segment $campaign_id)} | format pattern "/ad_campaign/{campaign_id}/ad_group") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"ad_group_status": $ad_group_status, "limit": $limit, "offset": $offset} | compact), body: null}
 }
 
 # Note: This method is only available for select partners who have been approved for the eBay Promoted Listings Advanced (PLA) program. For information about how to request access to this program, refer to Promoted Listings Advanced Access Requests (/api-docs/sell/static/marketing/pl-verify-eligibility.html#access-requests ) in the Promoted Listings Playbook. To determine if a seller qualifies for PLA, use the getAdvertisingEligibility (/api-docs/sell/account/resources/advertising_eligibility/methods/getAdvertisingEligibility ) method in Account API.This method adds an ad group to an existing PLA campaign that uses the Cost Per Click (CPC) funding model.To create an ad group for a campaign, specify the defaultBid for the ad group in the payload of the request. Then specify the campaign to which the ad group should be associated using the campaign_id path parameter.Each campaign can have one or more associated ad groups.
@@ -456,12 +489,13 @@ export def "ad-campaign-ad-group create" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($campaign_id | is-empty) { error make --unspanned { msg: "path parameter 'campaign_id' must be non-empty" } }
   let full_url = (build-url $base ({campaign_id: (encode-path-segment $campaign_id)} | format pattern "/ad_campaign/{campaign_id}/ad_group"))
   let req_body = {"defaultBid": $default_bid, "name": $name} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: {}, body: $req_body}
 }
 
 # Note: This method is only available for select partners who have been approved for the eBay Promoted Listings Advanced (PLA) program. For information about how to request access to this program, refer to Promoted Listings Advanced Access Requests (/api-docs/sell/static/marketing/pl-verify-eligibility.html#access-requests ) in the Promoted Listings Playbook. To determine if a seller qualifies for PLA, use the getAdvertisingEligibility (/api-docs/sell/account/resources/advertising_eligibility/methods/getAdvertisingEligibility ) method in Account API.This method retrieves the details of a specified ad group, such as the ad group’s default bid and status.In the request, specify the campaign_id and ad_group_id as path parameters.Call getCampaigns (/api-docs/sell/marketing/resources/campaign/methods/getCampaigns) to retrieve a list of the current campaign IDs for a seller and call getAdGroups (/api-docs/sell/marketing/resources/adgroup/methods/getAdGroups) for the ad group ID of the ad group you wish to retrieve.
@@ -483,10 +517,12 @@ export def "ad-campaign-ad-group get" [
 ]: nothing -> record<adGroupId: string, adGroupStatus: string, defaultBid: record<currency: string, value: string>, name: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($campaign_id | is-empty) { error make --unspanned { msg: "path parameter 'campaign_id' must be non-empty" } }
+  if ($ad_group_id | is-empty) { error make --unspanned { msg: "path parameter 'ad_group_id' must be non-empty" } }
   let full_url = (build-url $base ({campaign_id: (encode-path-segment $campaign_id), ad_group_id: (encode-path-segment $ad_group_id)} | format pattern "/ad_campaign/{campaign_id}/ad_group/{ad_group_id}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
 }
 
 # Note: This method is only available for select partners who have been approved for the eBay Promoted Listings Advanced (PLA) program. For information about how to request access to this program, refer to Promoted Listings Advanced Access Requests (/api-docs/sell/static/marketing/pl-verify-eligibility.html#access-requests ) in the Promoted Listings Playbook. To determine if a seller qualifies for PLA, use the getAdvertisingEligibility (/api-docs/sell/account/resources/advertising_eligibility/methods/getAdvertisingEligibility ) method in Account API.This method updates the ad group associated with a campaign.With this method, you can modify the default bid for the ad group, change the state of the ad group, or change the name of the ad group. Pass the ad_group_id you want to update as a URI parameter, and configure the adGroupStatus and defaultBid in the request payload.Call getAdGroup (/api-docs/sell/marketing/resources/adgroup/methods/getAdGroup) to retrieve the current default bid and status of the ad group that you would like to update.
@@ -513,12 +549,14 @@ export def "ad-campaign-ad-group update" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($campaign_id | is-empty) { error make --unspanned { msg: "path parameter 'campaign_id' must be non-empty" } }
+  if ($ad_group_id | is-empty) { error make --unspanned { msg: "path parameter 'ad_group_id' must be non-empty" } }
   let full_url = (build-url $base ({campaign_id: (encode-path-segment $campaign_id), ad_group_id: (encode-path-segment $ad_group_id)} | format pattern "/ad_campaign/{campaign_id}/ad_group/{ad_group_id}"))
   let req_body = {"adGroupStatus": $ad_group_status, "defaultBid": $default_bid, "name": $name} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: {}, body: $req_body}
 }
 
 # Note: This method is only available for select partners who have been approved for the eBay Promoted Listings Advanced (PLA) program. For information about how to request access to this program, refer to Promoted Listings Advanced Access Requests (/api-docs/sell/static/marketing/pl-verify-eligibility.html#access-requests ) in the Promoted Listings Playbook. To determine if a seller qualifies for PLA, use the getAdvertisingEligibility (/api-docs/sell/account/resources/advertising_eligibility/methods/getAdvertisingEligibility ) method in Account API.This method allows sellers to retrieve the suggested bids for input keywords and match type.
@@ -543,12 +581,14 @@ export def "ad-campaign-ad-group-suggest-bids create" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($campaign_id | is-empty) { error make --unspanned { msg: "path parameter 'campaign_id' must be non-empty" } }
+  if ($ad_group_id | is-empty) { error make --unspanned { msg: "path parameter 'ad_group_id' must be non-empty" } }
   let full_url = (build-url $base ({campaign_id: (encode-path-segment $campaign_id), ad_group_id: (encode-path-segment $ad_group_id)} | format pattern "/ad_campaign/{campaign_id}/ad_group/{ad_group_id}/suggest_bids"))
   let req_body = {"keywords": $keywords} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: {}, body: $req_body}
 }
 
 # Note: This method is only available for select partners who have been approved for the eBay Promoted Listings Advanced (PLA) program. For information about how to request access to this program, refer to Promoted Listings Advanced Access Requests (/api-docs/sell/static/marketing/pl-verify-eligibility.html#access-requests ) in the Promoted Listings Playbook. To determine if a seller qualifies for PLA, use the getAdvertisingEligibility (/api-docs/sell/account/resources/advertising_eligibility/methods/getAdvertisingEligibility ) method in Account API.This method allows sellers to retrieve a list of keyword ideas to be targeted for Promoted Listings campaigns.
@@ -575,12 +615,14 @@ export def "ad-campaign-ad-group-suggest-keywords create" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($campaign_id | is-empty) { error make --unspanned { msg: "path parameter 'campaign_id' must be non-empty" } }
+  if ($ad_group_id | is-empty) { error make --unspanned { msg: "path parameter 'ad_group_id' must be non-empty" } }
   let full_url = (build-url $base ({campaign_id: (encode-path-segment $campaign_id), ad_group_id: (encode-path-segment $ad_group_id)} | format pattern "/ad_campaign/{campaign_id}/ad_group/{ad_group_id}/suggest_keywords"))
   let req_body = {"additionalInfo": $additional_info, "exclusions": $exclusions, "listingIds": $listing_ids, "matchType": $match_type} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: {}, body: $req_body}
 }
 
 # This method adds multiple listings that are managed with the Inventory API (/api-docs/sell/inventory/resources/methods) to an existing Promoted Listings campaign.For Promoted Listings Standard (PLS) campaigns using the Cost Per Sale (CPS) model, bulk ads may be directly created for the listing.For each listing specified in the request, this method:Creates an ad for the listing. Sets the bid percentage (also known as the ad rate) for the ads created. Associates the ads created with the specified campaign.To create ads for a listing, specify their inventoryReferenceId and inventoryReferenceType, plus the bidPercentage for the ad in the payload of the request. Specify the campaign to which you want to associate the ads using the campaign_id path parameter.Note: This method only applies to the Cost Per Sale (CPS) funding model; it does not apply to the Cost Per Click (CPC) funding model. See Funding Models (/api-docs/sell/static/marketing/pl-overview.html#funding-model) in the Promoted Listings Playbook for more information.Use createCampaign (/api-docs/sell/marketing/resources/campaign/methods/createCampaign) to create a new campaign and use getCampaigns (/api-docs/sell/marketing/resources/campaign/methods/getCampaigns) to get a list of existing campaigns.
@@ -604,12 +646,13 @@ export def "ad-campaign-bulk-create-ads-by-inventory-reference create" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($campaign_id | is-empty) { error make --unspanned { msg: "path parameter 'campaign_id' must be non-empty" } }
   let full_url = (build-url $base ({campaign_id: (encode-path-segment $campaign_id)} | format pattern "/ad_campaign/{campaign_id}/bulk_create_ads_by_inventory_reference"))
   let req_body = {"requests": $requests} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: {}, body: $req_body}
 }
 
 # This method adds multiple listings to an existing Promoted Listings campaign using listingId values generated by the Trading API (/Devzone/XML/docs/Reference/eBay/index.html) or Inventory API (/api-docs/sell/inventory/resources/methods), or using values generated by an ad group ID.For Promoted Listings Standard (PLS) campaigns using the Cost Per Sale (CPS) funding model, bulk ads may be directly created for the listing.For each listing ID specified in the request, this method: Creates an ad for the listing. Sets the bid percentage (also known as the ad rate) for the ad. Associates the ad with the specified campaign.To create an ad for a listing, specify its listingId, plus the bidPercentage for the ad in the payload of the request. Specify the campaign to associate the ads with using the campaign_id path parameter. Listing IDs are generated by eBay when a seller creates listings with the Trading API.You can specify a maximum of 500 listings per call and each campaign can have ads for a maximum of 50,000 items. Be aware when using this call that each variation in a multiple-variation listing creates an individual ad.For Promoted Listings Advanced (PLA) campaigns using the Cost Per Click (CPC) funding model, an ad group must be created first. If no ad group has been created for the campaign, ads cannot be created.For the ad group specified in the request, this method associates the ad with the specified ad group.To create an ad for an ad group, specify the name of the ad group plus the defaultBid for the ad in the payload of the request. Specify the campaign to associate the ads with using the campaign_id path parameter. Ad groups are generated using the createAdGroup (/api-docs/sell/marketing/resources/adgroup/methods/createAdGroup) method. You can specify one or more ad groups per campaign.Use createCampaign (/api-docs/sell/marketing/resources/campaign/methods/createCampaign) to create a new campaign and use getCampaigns (/api-docs/sell/marketing/resources/campaign/methods/getCampaigns) to get a list of existing campaigns.
@@ -633,12 +676,13 @@ export def "ad-campaign-bulk-create-ads-by-listing-id create" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($campaign_id | is-empty) { error make --unspanned { msg: "path parameter 'campaign_id' must be non-empty" } }
   let full_url = (build-url $base ({campaign_id: (encode-path-segment $campaign_id)} | format pattern "/ad_campaign/{campaign_id}/bulk_create_ads_by_listing_id"))
   let req_body = {"requests": $requests} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: {}, body: $req_body}
 }
 
 # Note: This method is only available for select partners who have been approved for the eBay Promoted Listings Advanced (PLA) program. For information about how to request access to this program, refer to Promoted Listings Advanced Access Requests (/api-docs/sell/static/marketing/pl-verify-eligibility.html#access-requests ) in the Promoted Listings Playbook. To determine if a seller qualifies for PLA, use the getAdvertisingEligibility (/api-docs/sell/account/resources/advertising_eligibility/methods/getAdvertisingEligibility ) method in Account API.This method adds keywords, in bulk, to an existing PLA ad group in a campaign that uses the Cost Per Click (CPC) funding model.This method also sets the CPC rate for each keyword.In the request, supply the campaign_id as a path parameter.Call the getCampaigns (/api-docs/sell/marketing/resources/campaign/methods/getCampaigns) method to retrieve a list of current campaign IDs for a specified seller.
@@ -662,12 +706,13 @@ export def "ad-campaign-bulk-create-keyword create" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($campaign_id | is-empty) { error make --unspanned { msg: "path parameter 'campaign_id' must be non-empty" } }
   let full_url = (build-url $base ({campaign_id: (encode-path-segment $campaign_id)} | format pattern "/ad_campaign/{campaign_id}/bulk_create_keyword"))
   let req_body = {"requests": $requests} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: {}, body: $req_body}
 }
 
 # This method works with listings created with the Inventory API (/api-docs/sell/inventory/resources/methods).The method deletes a set of ads, as specified by a list of inventory reference IDs, from the specified campaign. Inventory reference IDs are seller-defined IDs that are used with the Inventory API.Pass the campaign_id as a path parameter and populate the payload with a list of inventoryReferenceId and inventoryReferenceType pairs that you want to delete.Get the campaign IDs for a seller by calling getCampaigns (/api-docs/sell/marketing/resources/campaign/methods/getCampaigns) and call getAds (/api-docs/sell/marketing/resources/ad/methods/getAds) to get a list of the seller's inventory reference IDs.Note: This method only applies to the Cost Per Sale (CPS) funding model; it does not apply to the Cost Per Click (CPC) funding model. See Funding Models (/api-docs/sell/static/marketing/pl-overview.html#funding-model) in the Promoted Listings Playbook for more information.
@@ -691,12 +736,13 @@ export def "ad-campaign-bulk-delete-ads-by-inventory-reference delete" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($campaign_id | is-empty) { error make --unspanned { msg: "path parameter 'campaign_id' must be non-empty" } }
   let full_url = (build-url $base ({campaign_id: (encode-path-segment $campaign_id)} | format pattern "/ad_campaign/{campaign_id}/bulk_delete_ads_by_inventory_reference"))
   let req_body = {"requests": $requests} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: {}, body: $req_body}
 }
 
 # This method works with listing IDs created with either the Trading API (/Devzone/XML/docs/Reference/eBay/index.html) or the Inventory API (/api-docs/sell/inventory/resources/methods).The method deletes a set of ads, as specified by a list of listingID values from a Promoted Listings campaign. A listing ID value is generated by eBay when a seller creates a listing with either the Trading API and Inventory API.Pass the campaign_id as a path parameter and populate the payload with the set of listing IDs that you want to delete.Get the campaign IDs for a seller by calling getCampaigns (/api-docs/sell/marketing/resources/campaign/methods/getCampaigns) and call getAds (/api-docs/sell/marketing/resources/ad/methods/getAds) to get a list of the seller's inventory reference IDs.Note: This method only applies to the Cost Per Sale (CPS) funding model; it does not apply to the Cost Per Click (CPC) funding model. See Funding Models (/api-docs/sell/static/marketing/pl-overview.html#funding-model) in the Promoted Listings Playbook for more information.When using the CPC funding model, use the bulkUpdateAdsStatusByListingId (/api-docs/sell/marketing/resources/ad/methods/bulkUpdateAdsStatusByListingId) method to change the status of ads to ARCHIVED.
@@ -720,12 +766,13 @@ export def "ad-campaign-bulk-delete-ads-by-listing-id delete" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($campaign_id | is-empty) { error make --unspanned { msg: "path parameter 'campaign_id' must be non-empty" } }
   let full_url = (build-url $base ({campaign_id: (encode-path-segment $campaign_id)} | format pattern "/ad_campaign/{campaign_id}/bulk_delete_ads_by_listing_id"))
   let req_body = {"requests": $requests} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: {}, body: $req_body}
 }
 
 # This method works with listings created with either the Trading API (/Devzone/XML/docs/Reference/eBay/index.html) or the Inventory API (/api-docs/sell/inventory/resources/methods). The method updates the bidPercentage values for a set of ads associated with the specified campaign. Specify the campaign_id as a path parameter and supply a set of listing IDs with their associated updated bidPercentage values in the request body. An eBay listing ID is generated when a listing is created with the Trading API. Get the campaign IDs for a seller by calling getCampaigns (/api-docs/sell/marketing/resources/campaign/methods/getCampaigns) and call getAds (/api-docs/sell/marketing/resources/ad/methods/getAds) to get a list of the seller's inventory reference IDs.Note: This method only applies to the Cost Per Sale (CPS) funding model; it does not apply to the Cost Per Click (CPC) funding model. See Funding Models (/api-docs/sell/static/marketing/pl-overview.html#funding-model) in the Promoted Listings Playbook for more information.
@@ -749,12 +796,13 @@ export def "ad-campaign-bulk-update-ads-bid-by-inventory-reference update" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($campaign_id | is-empty) { error make --unspanned { msg: "path parameter 'campaign_id' must be non-empty" } }
   let full_url = (build-url $base ({campaign_id: (encode-path-segment $campaign_id)} | format pattern "/ad_campaign/{campaign_id}/bulk_update_ads_bid_by_inventory_reference"))
   let req_body = {"requests": $requests} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: {}, body: $req_body}
 }
 
 # This method works with listings created with either the Trading API (/Devzone/XML/docs/Reference/eBay/index.html) or the Inventory API (/api-docs/sell/inventory/resources/methods). The method updates the bidPercentage values for a set of ads associated with the specified campaign. Specify the campaign_id as a path parameter and supply a set of listing IDs with their associated updated bidPercentage values in the request body. An eBay listing ID is generated when a listing is created with the Trading API. Get the campaign IDs for a seller by calling getCampaigns (/api-docs/sell/marketing/resources/campaign/methods/getCampaigns) and call getAds (/api-docs/sell/marketing/resources/ad/methods/getAds) to get a list of the seller's inventory reference IDs.Note: This method only applies to the Cost Per Sale (CPS) funding model; it does not apply to the Cost Per Click (CPC) funding model. See Funding Models (/api-docs/sell/static/marketing/pl-overview.html#funding-model) in the Promoted Listings Playbook for more information.
@@ -778,12 +826,13 @@ export def "ad-campaign-bulk-update-ads-bid-by-listing-id update" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($campaign_id | is-empty) { error make --unspanned { msg: "path parameter 'campaign_id' must be non-empty" } }
   let full_url = (build-url $base ({campaign_id: (encode-path-segment $campaign_id)} | format pattern "/ad_campaign/{campaign_id}/bulk_update_ads_bid_by_listing_id"))
   let req_body = {"requests": $requests} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: {}, body: $req_body}
 }
 
 # Note: This method is only available for select partners who have been approved for the eBay Promoted Listings Advanced (PLA) program. For information about how to request access to this program, refer to Promoted Listings Advanced Access Requests (/api-docs/sell/static/marketing/pl-verify-eligibility.html#access-requests ) in the Promoted Listings Playbook. To determine if a seller qualifies for PLA, use the getAdvertisingEligibility (/api-docs/sell/account/resources/advertising_eligibility/methods/getAdvertisingEligibility ) method in Account API.This method works with listings created with either the Trading API or the Inventory API (/api-docs/sell/inventory/resources/methods).This method updates the status of ads in bulk.Specify the campaign_id you want to update as a URI parameter, and configure the adGroupStatus in the request payload.
@@ -807,12 +856,13 @@ export def "ad-campaign-bulk-update-ads-status update" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($campaign_id | is-empty) { error make --unspanned { msg: "path parameter 'campaign_id' must be non-empty" } }
   let full_url = (build-url $base ({campaign_id: (encode-path-segment $campaign_id)} | format pattern "/ad_campaign/{campaign_id}/bulk_update_ads_status"))
   let req_body = {"requests": $requests} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: {}, body: $req_body}
 }
 
 # Note: This method is only available for select partners who have been approved for the eBay Promoted Listings Advanced (PLA) program. For information about how to request access to this program, refer to Promoted Listings Advanced Access Requests (/api-docs/sell/static/marketing/pl-verify-eligibility.html#access-requests ) in the Promoted Listings Playbook. To determine if a seller qualifies for PLA, use the getAdvertisingEligibility (/api-docs/sell/account/resources/advertising_eligibility/methods/getAdvertisingEligibility ) method in Account API.This method works with listings created with either the Trading API (/Devzone/XML/docs/Reference/eBay/index.html) or the Inventory API (/api-docs/sell/inventory/resources/methods).The method updates the status of ads in bulk, based on listing ID values.Specify the campaign_id as a path parameter and supply a set of listing IDs with their updated adStatus values in the request body. An eBay listing ID is generated when a listing is created with the Trading API.Get the campaign IDs for a seller by calling getCampaigns (/api-docs/sell/marketing/resources/campaign/methods/getCampaigns) and call getAds (/api-docs/sell/marketing/resources/ad/methods/getAds) to retrieve a list of seller inventory reference IDs.
@@ -836,12 +886,13 @@ export def "ad-campaign-bulk-update-ads-status-by-listing-id update" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($campaign_id | is-empty) { error make --unspanned { msg: "path parameter 'campaign_id' must be non-empty" } }
   let full_url = (build-url $base ({campaign_id: (encode-path-segment $campaign_id)} | format pattern "/ad_campaign/{campaign_id}/bulk_update_ads_status_by_listing_id"))
   let req_body = {"requests": $requests} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: {}, body: $req_body}
 }
 
 # Note: This method is only available for select partners who have been approved for the eBay Promoted Listings Advanced (PLA) program. For information about how to request access to this program, refer to Promoted Listings Advanced Access Requests (/api-docs/sell/static/marketing/pl-verify-eligibility.html#access-requests ) in the Promoted Listings Playbook. To determine if a seller qualifies for PLA, use the getAdvertisingEligibility (/api-docs/sell/account/resources/advertising_eligibility/methods/getAdvertisingEligibility ) method in Account API.This method updates the bids and statuses of keywords, in bulk, for an existing PLA campaign.In the request, supply the campaign_id as a path parameter.Call the getCampaigns (/api-docs/sell/marketing/resources/campaign/methods/getCampaigns) method to retrieve a list of current campaign IDs for a specified seller.
@@ -865,12 +916,13 @@ export def "ad-campaign-bulk-update-keyword update" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($campaign_id | is-empty) { error make --unspanned { msg: "path parameter 'campaign_id' must be non-empty" } }
   let full_url = (build-url $base ({campaign_id: (encode-path-segment $campaign_id)} | format pattern "/ad_campaign/{campaign_id}/bulk_update_keyword"))
   let req_body = {"requests": $requests} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: {}, body: $req_body}
 }
 
 # This method clones (makes a copy of) the specified campaign's campaign criterion. The campaign criterion is a container for the fields that define the criteria for a rule-based campaign.To clone a campaign, supply the campaign_id as a path parameter in your call. There is no request payload. The ID of the newly-cloned campaign is returned in the Location response header.Call getCampaigns (/api-docs/sell/marketing/resources/campaign/methods/getCampaigns) to retrieve a seller's current campaign IDs. Requirement: In order to clone a campaign, the campaignStatus must be ENDED and the campaign must define a set of selection rules (it must be a rules-based campaign).Note: This method only applies to the Cost Per Sale (CPS) funding model; it does not apply to the Cost Per Click (CPC) funding model. See Funding Models (/api-docs/sell/static/marketing/pl-overview.html#funding-model) in the Promoted Listings Playbook for more information.
@@ -897,12 +949,13 @@ export def "ad-campaign-clone clone" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($campaign_id | is-empty) { error make --unspanned { msg: "path parameter 'campaign_id' must be non-empty" } }
   let full_url = (build-url $base ({campaign_id: (encode-path-segment $campaign_id)} | format pattern "/ad_campaign/{campaign_id}/clone"))
   let req_body = {"campaignName": $campaign_name, "endDate": $end_date, "fundingStrategy": $funding_strategy, "startDate": $start_date} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: {}, body: $req_body}
 }
 
 # This method adds a listing that is managed with the Inventory API (/api-docs/sell/inventory/resources/methods) to an existing Promoted Listings campaign.For Promoted Listings Standard (PLS) campaigns using the Cost Per Sale (CPS) funding model, an ad may be directly created for the listing.For each listing specified in the request, this method:Creates an ad for the listing. Sets the bid percentage (also known as the ad rate) for the ads created. Associates the created ad with the specified campaign.To create an ad for a listing, specify its inventoryReferenceId and inventoryReferenceType, plus the bidPercentage for the ad in the payload of the request. Specify the campaign to associate the ad with using the campaign_id path parameter.Note: This method only applies to the Cost Per Sale (CPS) funding model; it does not apply to the Cost Per Click (CPC) funding model. See Funding Models (/api-docs/sell/static/marketing/pl-overview.html#funding-model) in the Promoted Listings Playbook for more information.Use createCampaign (/api-docs/sell/marketing/resources/campaign/methods/createCampaign) to create a new campaign and use getCampaigns (/api-docs/sell/marketing/resources/campaign/methods/getCampaigns) to get a list of existing campaigns.
@@ -928,12 +981,13 @@ export def "ad-campaign-create-ads-by-inventory-reference create" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($campaign_id | is-empty) { error make --unspanned { msg: "path parameter 'campaign_id' must be non-empty" } }
   let full_url = (build-url $base ({campaign_id: (encode-path-segment $campaign_id)} | format pattern "/ad_campaign/{campaign_id}/create_ads_by_inventory_reference"))
   let req_body = {"adGroupId": $ad_group_id, "bidPercentage": $bid_percentage, "inventoryReferenceId": $inventory_reference_id, "inventoryReferenceType": $inventory_reference_type} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: {}, body: $req_body}
 }
 
 # This method works with listings that are managed with the Inventory API (/api-docs/sell/inventory/resources/methods). The method deletes ads using a list of seller-defined inventory reference IDs, used with the Inventory API, that are associated with the specified campaign ID. Specify the campaign ID (as a path parameter) and a list of inventoryReferenceId and inventoryReferenceType pairs to be deleted. Call getCampaigns (/api-docs/sell/marketing/resources/campaign/methods/getCampaigns) to get a list of the seller's current campaign IDs.Note: This method only applies to the Cost Per Sale (CPS) funding model; it does not apply to the Cost Per Click (CPC) funding model. See Funding Models (/api-docs/sell/static/marketing/pl-overview.html#funding-model) in the Promoted Listings Playbook for more information.When using the CPC funding model, use the bulkUpdateAdsStatusByInventoryReference method to change the status of ads to ARCHIVED.
@@ -957,12 +1011,13 @@ export def "ad-campaign-delete-ads-by-inventory-reference delete" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($campaign_id | is-empty) { error make --unspanned { msg: "path parameter 'campaign_id' must be non-empty" } }
   let full_url = (build-url $base ({campaign_id: (encode-path-segment $campaign_id)} | format pattern "/ad_campaign/{campaign_id}/delete_ads_by_inventory_reference"))
   let req_body = {"inventoryReferenceId": $inventory_reference_id, "inventoryReferenceType": $inventory_reference_type} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: {}, body: $req_body}
 }
 
 # This method ends an active (RUNNING) or paused campaign. Specify the campaign you want to end by supplying its campaign ID in a query parameter. Call getCampaigns (/api-docs/sell/marketing/resources/campaign/methods/getCampaigns) to retrieve the campaign_id and the campaign status (RUNNING, PAUSED, ENDED, and so on) for all the seller's campaigns.
@@ -983,10 +1038,11 @@ export def "ad-campaign-end create" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($campaign_id | is-empty) { error make --unspanned { msg: "path parameter 'campaign_id' must be non-empty" } }
   let full_url = (build-url $base ({campaign_id: (encode-path-segment $campaign_id)} | format pattern "/ad_campaign/{campaign_id}/end"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
 }
 
 # This method retrieves Promoted Listings ads associated with listings that are managed with the Inventory API (/api-docs/sell/inventory/resources/methods) from the specified campaign.Supply the campaign_id as a path parameter and use query parameters to specify the inventory_reference_id and inventory_reference_type pairs.In the Inventory API, an inventory reference ID is either a seller-defined SKU value or an inventoryItemGroupKey (a seller-defined ID for an inventory item group, which is an entity that's used in the Inventory API to create a multiple-variation listing). To indicate a listing managed by the Inventory API, you must always specify both an inventory_reference_id and the associated inventory_reference_type.Call getCampaigns (/api-docs/sell/marketing/resources/campaign/methods/getCampaigns) to retrieve all of the seller's the current campaign IDs.Note: This method only applies to the Cost Per Sale (CPS) funding model; it does not apply to the Cost Per Click (CPC) funding model. See Funding Models (/api-docs/sell/static/marketing/pl-overview.html#funding-model) in the Promoted Listings Playbook for more information.
@@ -1009,11 +1065,12 @@ export def "ad-campaign-get-ads-by-inventory-reference get" [
 ]: nothing -> record<ads: table<adGroupId: string, adId: string, adStatus: string, alerts: list, bidPercentage: string, inventoryReferenceId: string, inventoryReferenceType: string, listingId: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($campaign_id | is-empty) { error make --unspanned { msg: "path parameter 'campaign_id' must be non-empty" } }
   let qp = [(serialize-qp "inventory_reference_id" $inventory_reference_id "scalar") (serialize-qp "inventory_reference_type" $inventory_reference_type "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({campaign_id: (encode-path-segment $campaign_id)} | format pattern "/ad_campaign/{campaign_id}/get_ads_by_inventory_reference") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"inventory_reference_id": $inventory_reference_id, "inventory_reference_type": $inventory_reference_type} | compact), body: null}
 }
 
 # Note: This method is only available for select partners who have been approved for the eBay Promoted Listings Advanced (PLA) program. For information about how to request access to this program, refer to Promoted Listings Advanced Access Requests (/api-docs/sell/static/marketing/pl-verify-eligibility.html#access-requests ) in the Promoted Listings Playbook. To determine if a seller qualifies for PLA, use the getAdvertisingEligibility (/api-docs/sell/account/resources/advertising_eligibility/methods/getAdvertisingEligibility ) method in Account API.This method can be used to retrieve all of the keywords for ad groups in PLA campaigns that use the Cost Per Click (CPC) funding model.In the request, specify the campaign_id as a path parameter. If one or more ad_group_ids are passed in the request body, the keywords for those ad groups will be returned. If ad_group_ids are not passed in the response body, the call will return all the keywords in the campaign.Call the getCampaigns (/api-docs/sell/marketing/resources/campaign/methods/getCampaigns) method to retrieve a list of current campaign IDs for a seller.
@@ -1038,11 +1095,12 @@ export def "ad-campaign-keyword list" [
 ]: nothing -> record<href: string, keywords: table<adGroupId: string, bid: record, keywordId: string, keywordStatus: string, keywordText: string, matchType: string>, limit: int, next: string, offset: int, prev: string, total: int> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($campaign_id | is-empty) { error make --unspanned { msg: "path parameter 'campaign_id' must be non-empty" } }
   let qp = [(serialize-qp "ad_group_ids" $ad_group_ids "scalar") (serialize-qp "keyword_status" $keyword_status "scalar") (serialize-qp "limit" $limit "scalar") (serialize-qp "offset" $offset "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({campaign_id: (encode-path-segment $campaign_id)} | format pattern "/ad_campaign/{campaign_id}/keyword") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"ad_group_ids": $ad_group_ids, "keyword_status": $keyword_status, "limit": $limit, "offset": $offset} | compact), body: null}
 }
 
 # Note: This method is only available for select partners who have been approved for the eBay Promoted Listings Advanced (PLA) program. For information about how to request access to this program, refer to Promoted Listings Advanced Access Requests (/api-docs/sell/static/marketing/pl-verify-eligibility.html#access-requests ) in the Promoted Listings Playbook. To determine if a seller qualifies for PLA, use the getAdvertisingEligibility (/api-docs/sell/account/resources/advertising_eligibility/methods/getAdvertisingEligibility ) method in Account API.This method creates keywords using a specified campaign ID for an existing PLA campaign.In the request, supply the campaign_id as a path parameter.Call the suggestKeywords (/api-docs/sell/marketing/resources/campaign/methods/suggestKeywords) method to retrieve a list of keyword ideas to be targeted for PLA campaigns, and call the getCampaigns (/api-docs/sell/marketing/resources/campaign/methods/getCampaigns) method to retrieve a list of current campaign IDs for a seller.
@@ -1069,12 +1127,13 @@ export def "ad-campaign-keyword create" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($campaign_id | is-empty) { error make --unspanned { msg: "path parameter 'campaign_id' must be non-empty" } }
   let full_url = (build-url $base ({campaign_id: (encode-path-segment $campaign_id)} | format pattern "/ad_campaign/{campaign_id}/keyword"))
   let req_body = {"adGroupId": $ad_group_id, "bid": $bid, "keywordText": $keyword_text, "matchType": $match_type} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: {}, body: $req_body}
 }
 
 # Note: This method is only available for select partners who have been approved for the eBay Promoted Listings Advanced (PLA) program. For information about how to request access to this program, refer to Promoted Listings Advanced Access Requests (/api-docs/sell/static/marketing/pl-verify-eligibility.html#access-requests ) in the Promoted Listings Playbook. To determine if a seller qualifies for PLA, use the getAdvertisingEligibility (/api-docs/sell/account/resources/advertising_eligibility/methods/getAdvertisingEligibility ) method in Account API.This method retrieves details on a specific keyword from an ad group within a PLA campaign that uses the Cost Per Click (CPC) funding model.In the request, specify the campaign_id and keyword_id as path parameters.Call the getCampaigns (/api-docs/sell/marketing/resources/campaign/methods/getCampaigns) method to retrieve a list of current campaign IDs for a seller and call the getKeywords (/api-docs/sell/marketing/resources/keyword/methods/getKeywords) method to retrieve their keyword IDs.
@@ -1096,10 +1155,12 @@ export def "ad-campaign-keyword get" [
 ]: nothing -> record<adGroupId: string, bid: record<currency: string, value: string>, keywordId: string, keywordStatus: string, keywordText: string, matchType: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($campaign_id | is-empty) { error make --unspanned { msg: "path parameter 'campaign_id' must be non-empty" } }
+  if ($keyword_id | is-empty) { error make --unspanned { msg: "path parameter 'keyword_id' must be non-empty" } }
   let full_url = (build-url $base ({campaign_id: (encode-path-segment $campaign_id), keyword_id: (encode-path-segment $keyword_id)} | format pattern "/ad_campaign/{campaign_id}/keyword/{keyword_id}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
 }
 
 # Note: This method is only available for select partners who have been approved for the eBay Promoted Listings Advanced (PLA) program. For information about how to request access to this program, refer to Promoted Listings Advanced Access Requests (/api-docs/sell/static/marketing/pl-verify-eligibility.html#access-requests ) in the Promoted Listings Playbook. To determine if a seller qualifies for PLA, use the getAdvertisingEligibility (/api-docs/sell/account/resources/advertising_eligibility/methods/getAdvertisingEligibility ) method in Account API.This method updates keywords using a campaign ID and keyword ID for an existing PLA campaign.In the request, specify the campaign_id and keyword_id as path parameters.Call the getCampaigns (/api-docs/sell/marketing/resources/campaign/methods/getCampaigns) method to retrieve a list of current campaign IDs for a seller and call the getKeywords (/api-docs/sell/marketing/resources/keyword/methods/getKeywords) method to retrieve their keyword IDs.
@@ -1125,12 +1186,14 @@ export def "ad-campaign-keyword update" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($campaign_id | is-empty) { error make --unspanned { msg: "path parameter 'campaign_id' must be non-empty" } }
+  if ($keyword_id | is-empty) { error make --unspanned { msg: "path parameter 'keyword_id' must be non-empty" } }
   let full_url = (build-url $base ({campaign_id: (encode-path-segment $campaign_id), keyword_id: (encode-path-segment $keyword_id)} | format pattern "/ad_campaign/{campaign_id}/keyword/{keyword_id}"))
   let req_body = {"bid": $bid, "keywordStatus": $keyword_status} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: {}, body: $req_body}
 }
 
 # This method pauses an active (RUNNING) campaign. You can restart the campaign by calling resumeCampaign (/api-docs/sell/marketing/resources/campaign/methods/resumeCampaign), as long as the campaign's end date is in the future. Note: The listings associated with a paused campaign cannot be added into another campaign. Call getCampaigns (/api-docs/sell/marketing/resources/campaign/methods/getCampaigns) to retrieve the campaign_id and the campaign status (RUNNING, PAUSED, ENDED, and so on) for all the seller's campaigns.
@@ -1151,10 +1214,11 @@ export def "ad-campaign-pause pause" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($campaign_id | is-empty) { error make --unspanned { msg: "path parameter 'campaign_id' must be non-empty" } }
   let full_url = (build-url $base ({campaign_id: (encode-path-segment $campaign_id)} | format pattern "/ad_campaign/{campaign_id}/pause"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
 }
 
 # This method resumes a paused campaign, as long as its end date is in the future. Supply the campaign_id for the campaign you want to restart as a query parameter in the request. Call getCampaigns (/api-docs/sell/marketing/resources/campaign/methods/getCampaigns) to retrieve the campaign_id and the campaign status (RUNNING, PAUSED, ENDED, and so on) for all the seller's campaigns.
@@ -1175,10 +1239,11 @@ export def "ad-campaign-resume create" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($campaign_id | is-empty) { error make --unspanned { msg: "path parameter 'campaign_id' must be non-empty" } }
   let full_url = (build-url $base ({campaign_id: (encode-path-segment $campaign_id)} | format pattern "/ad_campaign/{campaign_id}/resume"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
 }
 
 # Note: This method is only available for select partners who have been approved for the eBay Promoted Listings Advanced (PLA) program. For information about how to request access to this program, refer to Promoted Listings Advanced Access Requests (/api-docs/sell/static/marketing/pl-verify-eligibility.html#access-requests ) in the Promoted Listings Playbook. To determine if a seller qualifies for PLA, use the getAdvertisingEligibility (/api-docs/sell/account/resources/advertising_eligibility/methods/getAdvertisingEligibility ) method in Account API.This method allows sellers to obtain ideas for listings, which can be targeted for Promoted Listings campaigns.
@@ -1202,11 +1267,12 @@ export def "ad-campaign-suggest-items get" [
 ]: nothing -> record<href: string, limit: int, next: string, offset: int, prev: string, suggestedItems: table<bases: list, listingId: string>, total: int> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($campaign_id | is-empty) { error make --unspanned { msg: "path parameter 'campaign_id' must be non-empty" } }
   let qp = [(serialize-qp "category_ids" $category_ids "scalar") (serialize-qp "limit" $limit "scalar") (serialize-qp "offset" $offset "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({campaign_id: (encode-path-segment $campaign_id)} | format pattern "/ad_campaign/{campaign_id}/suggest_items") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"category_ids": $category_ids, "limit": $limit, "offset": $offset} | compact), body: null}
 }
 
 # This method updates the ad rate strategy for an existing Promoted Listings Standard (PLS) rules-based ad campaign that uses the Cost Per Sale (CPS) funding model.Specify the campaign_id as a path parameter. You can retrieve the campaign IDs for a seller by calling the getCampaigns (/api-docs/sell/marketing/resources/campaign/methods/getCampaigns) method.Note: This method only applies to the CPS funding model; it does not apply to the Cost Per Click (CPC) funding model. See Funding Models (/api-docs/sell/static/marketing/pl-overview.html#funding-model) in the Promoted Listings Playbook for more information.
@@ -1232,12 +1298,13 @@ export def "ad-campaign-update-ad-rate-strategy update" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($campaign_id | is-empty) { error make --unspanned { msg: "path parameter 'campaign_id' must be non-empty" } }
   let full_url = (build-url $base ({campaign_id: (encode-path-segment $campaign_id)} | format pattern "/ad_campaign/{campaign_id}/update_ad_rate_strategy"))
   let req_body = {"adRateStrategy": $ad_rate_strategy, "bidPercentage": $bid_percentage, "dynamicAdRatePreferences": $dynamic_ad_rate_preferences} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: {}, body: $req_body}
 }
 
 # Note: This method is only available for select partners who have been approved for the eBay Promoted Listings Advanced (PLA) program. For information about how to request access to this program, refer to Promoted Listings Advanced Access Requests (/api-docs/sell/static/marketing/pl-verify-eligibility.html#access-requests ) in the Promoted Listings Playbook. To determine if a seller qualifies for PLA, use the getAdvertisingEligibility (/api-docs/sell/account/resources/advertising_eligibility/methods/getAdvertisingEligibility ) method in Account API.This method updates the daily budget for a PLA campaign that uses the Cost Per Click (CPC) funding model.A click occurs when an eBay user finds and clicks on the seller’s listing (within the search results) after using a keyword that the seller has created for the campaign. For each ad in an ad group in the campaign, each click triggers a cost, which gets subtracted from the campaign’s daily budget. If the cost of the clicks exceeds the daily budget, the Promoted Listings campaign will be paused until the next day.Specify the campaign_id as a path parameter. You can retrieve the campaign IDs for a seller by calling the getCampaigns (/api-docs/sell/marketing/resources/campaign/methods/getCampaigns) method.
@@ -1261,12 +1328,13 @@ export def "ad-campaign-update-campaign-budget update" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($campaign_id | is-empty) { error make --unspanned { msg: "path parameter 'campaign_id' must be non-empty" } }
   let full_url = (build-url $base ({campaign_id: (encode-path-segment $campaign_id)} | format pattern "/ad_campaign/{campaign_id}/update_campaign_budget"))
   let req_body = {"daily": $daily} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: {}, body: $req_body}
 }
 
 # This method can be used to change the name of a campaign, as well as modify the start or end dates. Specify the campaign_id you want to update as a URI parameter, and configure the campaignName and startDate in the request payload. If you want to change only the end date of the campaign, specify the current campaign name and set startDate to the current date (you cannot use a start date that is in the past), and set the endDate as desired. Note that if you do not set a new end date in this call, any current endDate value will be set to null. To preserve the currently-set end date, you must specify the value again in your request. Call getCampaigns (/api-docs/sell/marketing/resources/campaign/methods/getCampaigns) to retrieve a seller's campaign details, including the campaign ID, campaign name, and the start and end dates of the campaign.
@@ -1291,12 +1359,13 @@ export def "ad-campaign-update-campaign-identification update" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($campaign_id | is-empty) { error make --unspanned { msg: "path parameter 'campaign_id' must be non-empty" } }
   let full_url = (build-url $base ({campaign_id: (encode-path-segment $campaign_id)} | format pattern "/ad_campaign/{campaign_id}/update_campaign_identification"))
   let req_body = {"campaignName": $campaign_name, "endDate": $end_date, "startDate": $start_date} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: {}, body: $req_body}
 }
 
 # This call downloads the report as specified by the report_id path parameter. Call createReportTask (/api-docs/sell/marketing/resources/ad_report_task/methods/createReportTask) to schedule and generate a Promoted Listings report. All date values are returned in UTC format (yyyy-MM-ddThh:mm:ss.sssZ).Note: The reporting of some data related to sales and ad-fees may require a 72-hour (maximum) adjustment period which is often referred to as the Reconciliation Period. Such adjustment periods should, on average, be minimal. However, at any given time, the payments tab may be used to view those amounts that have actually been charged.
@@ -1317,10 +1386,11 @@ export def "ad-report get" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($report_id | is-empty) { error make --unspanned { msg: "path parameter 'report_id' must be non-empty" } }
   let full_url = (build-url $base ({report_id: (encode-path-segment $report_id)} | format pattern "/ad_report/{report_id}"))
   let accept_val = "text/tab-separated-values"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
 }
 
 # This call retrieves information that details the fields used in each of the Promoted Listings reports. Use the returned information to configure the different types of Promoted Listings reports.The request for this method does not use a payload or any URI parameters.Note: The reporting of some data related to sales and ad-fees may require a 72-hour (maximum) adjustment period which is often referred to as the Reconciliation Period. Such adjustment periods should, on average, be minimal. However, at any given time, the payments tab may be used to view those amounts that have actually been charged.
@@ -1343,7 +1413,7 @@ export def "ad-report-metadata list" [
   let full_url = (build-url $base "/ad_report_metadata")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
 }
 
 # This call retrieves metadata that details the fields used by a specific Promoted Listings report type. Use the report_type path parameter to indicate metadata to retrieve.This method does not use a request payload.Note: The reporting of some data related to sales and ad-fees may require a 72-hour (maximum) adjustment period which is often referred to as the Reconciliation Period. Such adjustment periods should, on average, be minimal. However, at any given time, the payments tab may be used to view those amounts that have actually been charged.
@@ -1364,10 +1434,11 @@ export def "ad-report-metadata get" [
 ]: nothing -> record<dimensionMetadata: table<dataType: string, dimensionKey: string, dimensionKeyAnnotations: list>, maxNumberOfDimensionsToRequest: int, maxNumberOfMetricsToRequest: int, metricMetadata: table<dataType: string, metricKey: string>, reportType: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($report_type | is-empty) { error make --unspanned { msg: "path parameter 'report_type' must be non-empty" } }
   let full_url = (build-url $base ({report_type: (encode-path-segment $report_type)} | format pattern "/ad_report_metadata/{report_type}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
 }
 
 # This method returns information on all the existing report tasks related to a seller. Use the report_task_statuses query parameter to control which reports to return. You can paginate the result set by specifying a limit, which dictates how many report tasks to return on each page of the response. Use the offset parameter to specify how many reports to skip in the result set before returning the first result.
@@ -1394,7 +1465,7 @@ export def "ad-report-task list" [
   let full_url = (build-url $base "/ad_report_task" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"limit": $limit, "offset": $offset, "report_task_statuses": $report_task_statuses} | compact), body: null}
 }
 
 # Note: Using multiple funding models in one report is deprecated. If multiple funding models are used, a Warning will be returned in a header. This functionality will be decommissioned on April 3, 2023. See API Deprecation Status (/develop/apis/api-deprecation-status) for details.This method creates a report task, which generates a Promoted Listings report based on the values specified in the call.The report is generated based on the criteria you specify, including the report type, the report's dimensions and metrics, the report's start and end dates, the listings to include in the report, and more. Metrics are the quantitative measurements in the report while dimensions specify the attributes of the data included in the reports.When creating a report task, you can specify the items you want included in the report. The items you specify, using either listingId or inventoryReference values, must be in a Promoted Listings campaign for them to be included in the report.For details on the required and optional fields for each report type, see Promoted Listings reporting (/api-docs/sell/static/marketing/pl-reports.html).This call returns the URL to the report task in the Location response header, and the URL includes the report-task ID.Reports often take time to generate and it's common for this call to return an HTTP status of 202, which indicates the report is being generated. Call getReportTasks (/api-docs/sell/marketing/resources/ad_report_task/methods/getReportTasks) (or getReportTask (/api-docs/sell/marketing/resources/ad_report_task/methods/getReportTask) with the report-task ID) to determine the status of a Promoted Listings report. When a report is complete, eBay sets its status to SUCCESS and you can download it using the URL returned in the reportHref field of the getReportTask call. Report files are tab-separated value gzip files with a file extension of .tsv.gz.Note: The reporting of some data related to sales and ad-fees may require a 72-hour (maximum) adjustment period which is often referred to as the Reconciliation Period. Such adjustment periods should, on average, be minimal. However, at any given time, the payments tab may be used to view those amounts that have actually been charged.Note: This call fails if you don't submit all the required fields for the specified report type. Fields not supported by the specified report type are ignored. Call getReportMetadata (/api-docs/sell/marketing/resources/ad_report_metadata/methods/getReportMetadata) to retrieve a list of the fields you need to configure for each Promoted Listings report type.
@@ -1434,7 +1505,7 @@ export def "ad-report-task create" [
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: {}, body: $req_body}
 }
 
 # This call deletes the report task specified by the report_task_id path parameter. This method also deletes any reports generated by the report task. Report task IDs are generated by eBay when you call createReportTask (/api-docs/sell/marketing/resources/ad_report_task/methods/createReportTask). Get a complete list of a seller's report-task IDs by calling getReportTasks (/api-docs/sell/marketing/resources/ad_report_task/methods/getReportTasks).
@@ -1455,10 +1526,11 @@ export def "ad-report-task delete" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($report_task_id | is-empty) { error make --unspanned { msg: "path parameter 'report_task_id' must be non-empty" } }
   let full_url = (build-url $base ({report_task_id: (encode-path-segment $report_task_id)} | format pattern "/ad_report_task/{report_task_id}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
 }
 
 # This call returns the details of a specific Promoted Listings report task, as specified by the report_task_id path parameter. The report task includes the report criteria (such as the report dimensions, metrics, and included listing) and the report-generation rules (such as starting and ending dates for the specified report task). Report-task IDs are generated by eBay when you call createReportTask (/api-docs/sell/marketing/resources/ad_report_task/methods/createReportTask). Get a complete list of a seller's report-task IDs by calling getReportTasks (/api-docs/sell/marketing/resources/ad_report_task/methods/getReportTasks).
@@ -1479,10 +1551,11 @@ export def "ad-report-task get" [
 ]: nothing -> record<campaignIds: list<string>, dateFrom: string, dateTo: string, dimensions: table<annotationKeys: list, dimensionKey: string>, fundingModels: list<string>, inventoryReferences: table<inventoryReferenceId: string, inventoryReferenceType: string>, listingIds: list<string>, marketplaceId: string, metricKeys: list<string>, reportExpirationDate: string, reportFormat: string, reportHref: string, reportId: string, reportName: string, reportTaskCompletionDate: string, reportTaskCreationDate: string, reportTaskExpectedCompletionDate: string, reportTaskId: string, reportTaskStatus: string, reportTaskStatusMessage: string, reportType: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($report_task_id | is-empty) { error make --unspanned { msg: "path parameter 'report_task_id' must be non-empty" } }
   let full_url = (build-url $base ({report_task_id: (encode-path-segment $report_task_id)} | format pattern "/ad_report_task/{report_task_id}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
 }
 
 # Note: This method is only available for select partners who have been approved for the eBay Promoted Listings Advanced (PLA) program. For information about how to request access to this program, refer to Promoted Listings Advanced Access Requests (/api-docs/sell/static/marketing/pl-verify-eligibility.html#access-requests ) in the Promoted Listings Playbook. To determine if a seller qualifies for PLA, use the getAdvertisingEligibility (/api-docs/sell/account/resources/advertising_eligibility/methods/getAdvertisingEligibility ) method in Account API.This method adds negative keywords, in bulk, to an existing ad group in a PLA campaign that uses the Cost Per Click (CPC) funding model.Specify the campaignId and adGroupId in the request body, along with the negativeKeywordText and negativeKeywordMatchType.Call the getCampaigns (/api-docs/sell/marketing/resources/campaign/methods/getCampaigns) method to retrieve a list of current campaign IDs for a specified seller.
@@ -1510,7 +1583,7 @@ export def "bulk-create-negative-keyword create" [
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: {}, body: $req_body}
 }
 
 # Note: This method is only available for select partners who have been approved for the eBay Promoted Listings Advanced (PLA) program. For information about how to request access to this program, refer to Promoted Listings Advanced Access Requests (/api-docs/sell/static/marketing/pl-verify-eligibility.html#access-requests ) in the Promoted Listings Playbook. To determine if a seller qualifies for PLA, use the getAdvertisingEligibility (/api-docs/sell/account/resources/advertising_eligibility/methods/getAdvertisingEligibility ) method in Account API.This method updates the statuses of existing negative keywords, in bulk.Specify the negativeKeywordId and negativeKeywordStatus in the request body.
@@ -1538,7 +1611,7 @@ export def "bulk-update-negative-keyword update" [
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: {}, body: $req_body}
 }
 
 # This method creates an item price markdown promotion (know simply as a "markdown promotion") where a discount amount is applied directly to the items included the promotion. Discounts can be specified as either a monetary amount or a percentage off the standard sales price. eBay highlights promoted items by placing teasers for the items throughout the online sales flows. Unlike an item promotion (/api-docs/sell/marketing/resources/item_promotion/methods/createItemPromotion), a markdown promotion does not require the buyer meet a "threshold" before the offer takes effect. With markdown promotions, all the buyer needs to do is purchase the item to receive the promotion benefit. Important: There are some restrictions for which listings are available for price markdown promotions. For details, see Promotions Manager requirements and restrictions (/api-docs/sell/marketing/static/overview.html#PM-requirements). In addition, we recommend you list items at competitive prices before including them in your markdown promotions. For an extensive list of pricing recommendations, see the Growth tab in Seller Hub. There are two ways to add items to markdown promotions: Key-based promotions select items using either the listing IDs or inventory reference IDs of the items you want to promote. Note that if you use inventory reference IDs, you must specify both the inventoryReferenceId and the associated inventoryReferenceType of the item(s) you want to include the promotion. Rule-based promotions select items using a list of eBay category IDs or seller Store category IDs. Rules can further constrain items in a promotion by minimum and maximum prices, brands, and item conditions. New promotions must be created in either a DRAFT or a SCHEDULED state. Use the DRAFT state when you are initially creating a promotion and you want to be sure it's correctly configured before scheduling it to run. When you create a promotion, the promotion ID is returned in the Location response header. Use this ID to reference the promotion in subsequent requests (such as to schedule a promotion that's in a DRAFT state). Tip: Refer to Promotions Manager (/api-docs/sell/static/marketing/promotions-manager.html) in the Selling Integration Guide for details and examples showing how to create and manage seller promotions. Markdown promotions are available on all eBay marketplaces. For more information, see Promotions Manager requirements and restrictions (/api-docs/sell/marketing/static/overview.html#PM-requirements).
@@ -1577,7 +1650,7 @@ export def "item-price-markdown create-promotion" [
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: {}, body: $req_body}
 }
 
 # This method deletes the item price markdown promotion specified by the promotion_id path parameter. Call getPromotions (/api-docs/sell/marketing/resources/promotion/methods/getPromotions) to retrieve the IDs of a seller's promotions. You can delete any promotion with the exception of those that are currently active (RUNNING). To end a running promotion, call updateItemPriceMarkdownPromotion (/api-docs/sell/marketing/resources/item_price_markdown/methods/updateItemPriceMarkdownPromotion) and adjust the endDate field as appropriate.
@@ -1598,10 +1671,11 @@ export def "item-price-markdown delete" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($promotion_id | is-empty) { error make --unspanned { msg: "path parameter 'promotion_id' must be non-empty" } }
   let full_url = (build-url $base ({promotion_id: (encode-path-segment $promotion_id)} | format pattern "/item_price_markdown/{promotion_id}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
 }
 
 # This method returns the complete details of the item price markdown promotion that's indicated by the promotion_id path parameter. Call getPromotions (/api-docs/sell/marketing/resources/promotion/methods/getPromotions) to retrieve the IDs of a seller's promotions.
@@ -1622,10 +1696,11 @@ export def "item-price-markdown get" [
 ]: nothing -> record<applyFreeShipping: bool, autoSelectFutureInventory: bool, blockPriceIncreaseInItemRevision: bool, description: string, endDate: string, marketplaceId: string, name: string, priority: string, promotionImageUrl: string, promotionStatus: string, selectedInventoryDiscounts: table<discountBenefit: record, discountId: string, inventoryCriterion: record, ruleOrder: int>, startDate: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($promotion_id | is-empty) { error make --unspanned { msg: "path parameter 'promotion_id' must be non-empty" } }
   let full_url = (build-url $base ({promotion_id: (encode-path-segment $promotion_id)} | format pattern "/item_price_markdown/{promotion_id}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
 }
 
 # This method updates the specified item price markdown promotion with the new configuration that you supply in the payload of the request. Specify the promotion you want to update using the promotion_id path parameter. Call getPromotions (/api-docs/sell/marketing/resources/promotion/methods/getPromotions) to retrieve the IDs of a seller's promotions. When updating a promotion, supply all the fields that you used to configure the original promotion (and not just the fields you are updating). eBay replaces the specified promotion with the values you supply in the update request and if you don't pass a field that currently has a value, the update request fails. The parameters you are allowed to update with this request depend on the status of the promotion you're updating: DRAFT or SCHEDULED promotions: You can update any of the parameters in these promotions that have not yet started to run, including the discountRules. RUNNING promotions: You can change the endDate and the item's inventory but you cannot change the promotional discount or the promotion's start date. ENDED promotions: Nothing can be changed.
@@ -1660,12 +1735,13 @@ export def "item-price-markdown update" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($promotion_id | is-empty) { error make --unspanned { msg: "path parameter 'promotion_id' must be non-empty" } }
   let full_url = (build-url $base ({promotion_id: (encode-path-segment $promotion_id)} | format pattern "/item_price_markdown/{promotion_id}"))
   let req_body = {"applyFreeShipping": $apply_free_shipping, "autoSelectFutureInventory": $auto_select_future_inventory, "blockPriceIncreaseInItemRevision": $block_price_increase_in_item_revision, "description": $description, "endDate": $end_date, "marketplaceId": $marketplace_id, "name": $name, "priority": $priority, "promotionImageUrl": $promotion_image_url, "promotionStatus": $promotion_status, "selectedInventoryDiscounts": $selected_inventory_discounts, "startDate": $start_date} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: {}, body: $req_body}
 }
 
 # This method creates an item promotion, where the buyer receives a discount when they meet the buying criteria that's set for the promotion. Known here as "threshold promotions", these promotions trigger when a threshold is met. eBay highlights promoted items by placing teasers for the promoted items throughout the online buyer flows. Discounts are specified as either a monetary amount or a percentage off the standard sales price of a listing, letting you offer deals such as "Buy 1 Get 1" and "Buy $50, get 20% off". Volume pricing promotions increase the value of the discount as the buyer increases the quantity they purchase. Coded Coupons provide unique codes that a buyer can use during checkout to receive a discount. The seller can specify the number of times a buyer can use the coupon and the maximum amount across all purchases that can be discounted using the coupon. The coupon code can also be made public (appearing on the seller's Offer page, search pages, the item listing, and the checkout page) or private (only on the seller's Offer page, but the seller can include the code in email and social media). Note: Coded Coupons are currently available in the US, UK, DE, FR, IT, ES, and AU marketplaces.There are two ways to add items to a threshold promotion: Key-based promotions select items using either the listing IDs or inventory reference IDs of the items you want to promote. Note that if you use inventory reference IDs, you must specify both the inventoryReferenceId and the associated inventoryReferenceType of the item(s) you want to include the promotion. Rule-based promotions select items using a list of eBay category IDs or seller Store category IDs. Rules can further constrain items in a promotion by minimum and maximum prices, brands, and item conditions. You must create a new promotion in either a DRAFT or SCHEDULED state. Use the DRAFT state when you are initially creating a promotion and you want to be sure it's correctly configured before scheduling it to run. When you create a promotion, the promotion ID is returned in the Location response header. Use this ID to reference the promotion in subsequent requests. Tip: Refer to the Selling Integration Guide (/api-docs/sell/static/marketing/promotions-manager.html) for details and examples showing how to create and manage threshold promotions using the Promotions Manager. For information on the eBay marketplaces that support item promotions, see Promotions Manager requirements and restrictions (/api-docs/sell/marketing/static/overview.html#PM-requirements).
@@ -1709,7 +1785,7 @@ export def "item-promotion create" [
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: {}, body: $req_body}
 }
 
 # This method deletes the threshold promotion specified by the promotion_id path parameter. Call getPromotions (/api-docs/sell/marketing/resources/promotion/methods/getPromotions) to retrieve the IDs of a seller's promotions. You can delete any promotion with the exception of those that are currently active (RUNNING). To end a running threshold promotion, call updateItemPromotion (/api-docs/sell/marketing/resources/item_promotion/methods/updateItemPromotion) and adjust the endDate field as appropriate.
@@ -1730,10 +1806,11 @@ export def "item-promotion delete" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($promotion_id | is-empty) { error make --unspanned { msg: "path parameter 'promotion_id' must be non-empty" } }
   let full_url = (build-url $base ({promotion_id: (encode-path-segment $promotion_id)} | format pattern "/item_promotion/{promotion_id}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
 }
 
 # This method returns the complete details of the threshold promotion specified by the promotion_id path parameter. Call getPromotions (/api-docs/sell/marketing/resources/promotion/methods/getPromotions) to retrieve the IDs of a seller's promotions.
@@ -1754,10 +1831,11 @@ export def "item-promotion get" [
 ]: nothing -> record<applyDiscountToSingleItemOnly: bool, budget: record<currency: string, value: string>, couponConfiguration: record<couponCode: string, couponType: string, maxCouponRedemptionPerUser: int>, description: string, discountRules: table<discountBenefit: record, discountSpecification: record, maxDiscountAmount: record, ruleOrder: int>, endDate: string, inventoryCriterion: record<inventoryCriterionType: string, inventoryItems: list<record>, listingIds: list<string>, ruleCriteria: record<excludeInventoryItems: list, excludeListingIds: list, markupInventoryItems: list, markupListingIds: list, selectionRules: list>>, marketplaceId: string, name: string, priority: string, promotionId: string, promotionImageUrl: string, promotionStatus: string, promotionType: string, startDate: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($promotion_id | is-empty) { error make --unspanned { msg: "path parameter 'promotion_id' must be non-empty" } }
   let full_url = (build-url $base ({promotion_id: (encode-path-segment $promotion_id)} | format pattern "/item_promotion/{promotion_id}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
 }
 
 # This method updates the specified threshold promotion with the new configuration that you supply in the request. Indicate the promotion you want to update using the promotion_id path parameter. Call getPromotions (/api-docs/sell/marketing/resources/promotion/methods/getPromotions) to retrieve the IDs of a seller's promotions. When updating a promotion, supply all the fields that you used to configure the original promotion (and not just the fields you are updating). eBay replaces the specified promotion with the values you supply in the update request and if you don't pass a field that currently has a value, the update request will fail. The parameters you are allowed to update with this request depend on the status of the promotion you're updating: DRAFT or SCHEDULED promotions: You can update any of the parameters in these promotions that have not yet started to run, including the discountRules. RUNNING or PAUSED promotions: You can change the endDate and the item's inventory but you cannot change the promotional discount or the promotion's start date. ENDED promotions: Nothing can be changed. Tip: When updating a RUNNING or PAUSED promotion, set the status field to SCHEDULED for the update request. When the promotion is updated, the previous status (either RUNNING or PAUSED) is retained.
@@ -1797,12 +1875,13 @@ export def "item-promotion update" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($promotion_id | is-empty) { error make --unspanned { msg: "path parameter 'promotion_id' must be non-empty" } }
   let full_url = (build-url $base ({promotion_id: (encode-path-segment $promotion_id)} | format pattern "/item_promotion/{promotion_id}"))
   let req_body = {"applyDiscountToSingleItemOnly": $apply_discount_to_single_item_only, "budget": $budget, "couponConfiguration": $coupon_configuration, "description": $description, "discountRules": $discount_rules, "endDate": $end_date, "inventoryCriterion": $inventory_criterion, "marketplaceId": $marketplace_id, "name": $name, "priority": $priority, "promotionImageUrl": $promotion_image_url, "promotionStatus": $promotion_status, "promotionType": $promotion_type, "startDate": $start_date} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: {}, body: $req_body}
 }
 
 # Note: This method is only available for select partners who have been approved for the eBay Promoted Listings Advanced (PLA) program. For information about how to request access to this program, refer to Promoted Listings Advanced Access Requests (/api-docs/sell/static/marketing/pl-verify-eligibility.html#access-requests ) in the Promoted Listings Playbook. To determine if a seller qualifies for PLA, use the getAdvertisingEligibility (/api-docs/sell/account/resources/advertising_eligibility/methods/getAdvertisingEligibility ) method in Account API.This method can be used to retrieve all of the negative keywords for ad groups in PLA campaigns that use the Cost Per Click (CPC) funding model.The results can be filtered using the campaign_ids, ad_group_ids, and negative_keyword_status query parameters.Call the getCampaigns (/api-docs/sell/marketing/resources/campaign/methods/getCampaigns) method to retrieve a list of current campaign IDs for a seller.
@@ -1831,7 +1910,7 @@ export def "negative-keyword list" [
   let full_url = (build-url $base "/negative_keyword" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"ad_group_ids": $ad_group_ids, "campaign_ids": $campaign_ids, "limit": $limit, "negative_keyword_status": $negative_keyword_status, "offset": $offset} | compact), body: null}
 }
 
 # Note: This method is only available for select partners who have been approved for the eBay Promoted Listings Advanced (PLA) program. For information about how to request access to this program, refer to Promoted Listings Advanced Access Requests (/api-docs/sell/static/marketing/pl-verify-eligibility.html#access-requests ) in the Promoted Listings Playbook. To determine if a seller qualifies for PLA, use the getAdvertisingEligibility (/api-docs/sell/account/resources/advertising_eligibility/methods/getAdvertisingEligibility ) method in Account API.This method adds a negative keyword to an existing ad group in a PLA campaign that uses the Cost Per Click (CPC) funding model.Specify the campaignId and adGroupId in the request body, along with the negativeKeywordText and negativeKeywordMatchType.Call the getCampaigns (/api-docs/sell/marketing/resources/campaign/methods/getCampaigns) method to retrieve a list of current campaign IDs for a specified seller.
@@ -1861,7 +1940,7 @@ export def "negative-keyword create" [
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: {}, body: $req_body}
 }
 
 # Note: This method is only available for select partners who have been approved for the eBay Promoted Listings Advanced (PLA) program. For information about how to request access to this program, refer to Promoted Listings Advanced Access Requests (/api-docs/sell/static/marketing/pl-verify-eligibility.html#access-requests ) in the Promoted Listings Playbook. To determine if a seller qualifies for PLA, use the getAdvertisingEligibility (/api-docs/sell/account/resources/advertising_eligibility/methods/getAdvertisingEligibility ) method in Account API.This method retrieves details on a specific negative keyword.In the request, specify the negative_keyword_id as a path parameter.
@@ -1882,10 +1961,11 @@ export def "negative-keyword get" [
 ]: nothing -> record<adGroupId: string, campaignId: string, negativeKeywordId: string, negativeKeywordMatchType: string, negativeKeywordStatus: string, negativeKeywordText: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($negative_keyword_id | is-empty) { error make --unspanned { msg: "path parameter 'negative_keyword_id' must be non-empty" } }
   let full_url = (build-url $base ({negative_keyword_id: (encode-path-segment $negative_keyword_id)} | format pattern "/negative_keyword/{negative_keyword_id}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
 }
 
 # Note: This method is only available for select partners who have been approved for the eBay Promoted Listings Advanced (PLA) program. For information about how to request access to this program, refer to Promoted Listings Advanced Access Requests (/api-docs/sell/static/marketing/pl-verify-eligibility.html#access-requests ) in the Promoted Listings Playbook. To determine if a seller qualifies for PLA, use the getAdvertisingEligibility (/api-docs/sell/account/resources/advertising_eligibility/methods/getAdvertisingEligibility ) method in Account API.This method updates the status of an existing negative keyword.Specify the negative_keyword_id as a path parameter, and specify the negativeKeywordStatus in the request body.
@@ -1908,12 +1988,13 @@ export def "negative-keyword update" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($negative_keyword_id | is-empty) { error make --unspanned { msg: "path parameter 'negative_keyword_id' must be non-empty" } }
   let full_url = (build-url $base ({negative_keyword_id: (encode-path-segment $negative_keyword_id)} | format pattern "/negative_keyword/{negative_keyword_id}"))
   let req_body = {"negativeKeywordStatus": $negative_keyword_status} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: {}, body: $req_body}
 }
 
 # This method returns a list of a seller's undeleted promotions. The call returns up to 200 currently-available promotions on the specified marketplace. While the response body does not include the promotion's discountRules or inventoryCriterion containers, it does include the promotionHref (which you can use to retrieve the complete details of the promotion). Use query parameters to sort and filter the results by the number of promotions to return, the promotion state or type, and the eBay marketplace. You can also supply keywords to limit the response to the promotions that contain that keywords in the title of the promotion. Maximum returned: 200
@@ -1944,7 +2025,7 @@ export def "promotion get" [
   let full_url = (build-url $base "/promotion" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"limit": $limit, "marketplace_id": $marketplace_id, "offset": $offset, "promotion_status": $promotion_status, "promotion_type": $promotion_type, "q": $q, "sort": $qp_sort} | compact), body: null}
 }
 
 # This method returns the set of listings associated with the promotion_id specified in the path parameter. Call getPromotions (/api-docs/sell/marketing/resources/promotion/methods/getPromotions) to retrieve the IDs of a seller's promotions. The listing details are returned in a paginated set and you can control and results returned using the following query parameters: limit, offset, q, sort, and status. Maximum associated listings returned: 200 Default number of listings returned: 200
@@ -1970,11 +2051,12 @@ export def "promotion-get-listing-set get" [
 ]: nothing -> record<href: string, limit: int, listings: table<currentPrice: record, freeShipping: bool, inventoryReferenceId: string, inventoryReferenceType: string, listingCategoryId: string, listingCondition: string, listingConditionId: string, listingId: string, listingPromotionStatuses: list, quantity: int, storeCategoryId: string, title: string>, next: string, offset: int, prev: string, total: int, warnings: table<category: string, domain: string, errorId: int, inputRefIds: list, longMessage: string, message: string, outputRefIds: list, parameters: list, subdomain: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($promotion_id | is-empty) { error make --unspanned { msg: "path parameter 'promotion_id' must be non-empty" } }
   let qp = [(serialize-qp "limit" $limit "scalar") (serialize-qp "offset" $offset "scalar") (serialize-qp "q" $q "scalar") (serialize-qp "sort" $qp_sort "scalar") (serialize-qp "status" $status "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({promotion_id: (encode-path-segment $promotion_id)} | format pattern "/promotion/{promotion_id}/get_listing_set") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"limit": $limit, "offset": $offset, "q": $q, "sort": $qp_sort, "status": $status} | compact), body: null}
 }
 
 # This method pauses a currently-active (RUNNING) threshold promotion and changes the state of the promotion from RUNNING to PAUSED. Pausing a promotion makes the promotion temporarily unavailable to buyers and any currently-incomplete transactions will not receive the promotional offer until the promotion is resumed. Also, promotion teasers are not displayed when a promotion is paused. Pass the ID of the promotion you want to pause using the promotion_id path parameter. Call getPromotions (/api-docs/sell/marketing/resources/promotion/methods/getPromotions) to retrieve the IDs of the seller's promotions. Note: You can only pause threshold promotions (you cannot pause markdown promotions).
@@ -1995,10 +2077,11 @@ export def "promotion-pause pause" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($promotion_id | is-empty) { error make --unspanned { msg: "path parameter 'promotion_id' must be non-empty" } }
   let full_url = (build-url $base ({promotion_id: (encode-path-segment $promotion_id)} | format pattern "/promotion/{promotion_id}/pause"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
 }
 
 # This method restarts a threshold promotion that was previously paused and changes the state of the promotion from PAUSED to RUNNING. Only promotions that have been previously paused can be resumed. Resuming a promotion reinstates the promotional teasers and any transactions that were in motion before the promotion was paused will again be eligible for the promotion. Pass the ID of the promotion you want to resume using the promotion_id path parameter. Call getPromotions (/api-docs/sell/marketing/resources/promotion/methods/getPromotions) to retrieve the IDs of the seller's promotions.
@@ -2019,10 +2102,11 @@ export def "promotion-resume create" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($promotion_id | is-empty) { error make --unspanned { msg: "path parameter 'promotion_id' must be non-empty" } }
   let full_url = (build-url $base ({promotion_id: (encode-path-segment $promotion_id)} | format pattern "/promotion/{promotion_id}/resume"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
 }
 
 # This method generates a report that lists the seller's running, paused, and ended promotions for the specified eBay marketplace. The result set can be filtered by the promotion status and the number of results to return. You can also supply keywords to limit the report to promotions that contain the specified keywords. Specify the eBay marketplace for which you want the report run using the marketplace_id query parameter. Supply additional query parameters to control the report as needed.
@@ -2052,7 +2136,7 @@ export def "promotion-report get" [
   let full_url = (build-url $base "/promotion_report" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"limit": $limit, "marketplace_id": $marketplace_id, "offset": $offset, "promotion_status": $promotion_status, "promotion_type": $promotion_type, "q": $q} | compact), body: null}
 }
 
 # This method generates a report that summarizes the seller's promotions for the specified eBay marketplace. The report returns information on RUNNING, PAUSED, and ENDED promotions (deleted reports are not returned) and summarizes the seller's campaign performance for all promotions on a given site. For information about summary reports, see Reading the item promotion Summary report (/api-docs/sell/static/marketing/pm-summary-report.html).
@@ -2077,5 +2161,5 @@ export def "promotion-summary-report get" [
   let full_url = (build-url $base "/promotion_summary_report" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"marketplace_id": $marketplace_id} | compact), body: null}
 }

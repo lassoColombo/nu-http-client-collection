@@ -3,16 +3,17 @@
 # Auth: --token flag or $env.LOKET_NL_API_TOKEN
 
 const BASE_URL = "https://api.loket.nl/v2"
-const DEFAULT_AUTH = "bearer"
 
-# Build auth: returns {headers: record, query: string}
+# Build auth: returns {scheme: string, headers: record, query: string, location: string}.
+# `location` is "header" | "query" | "cookie" | "none" and tells dry-run callers
+# where the token went without inspecting headers/query themselves.
 def build-auth [token?: string, auth_scheme?: string]: nothing -> record {
   let token_val = if ($token != null) and ($token | is-not-empty) { $token } else { $env | get -o LOKET_NL_API_TOKEN | default "" }
   let scheme = ($auth_scheme | default "bearer")
-  if ($scheme == "none") or ($token_val | is-empty) { return {headers: {}, query: ""} }
+  if ($scheme == "none") or ($token_val | is-empty) { return {scheme: $scheme, headers: {}, query: "", location: "none"} }
   match $scheme {
-    "none" => { {headers: {}, query: ""} }
-    _ => { {headers: {Authorization: $"Bearer ($token_val)"}, query: ""} }
+    "none" => { {scheme: $scheme, headers: {}, query: "", location: "none"} }
+    _ => { {scheme: $scheme, headers: {Authorization: $"Bearer ($token_val)"}, query: "", location: "header"} }
   }
 }
 
@@ -21,8 +22,9 @@ def build-auth [token?: string, auth_scheme?: string]: nothing -> record {
 # ([A-Za-z0-9-._~]) stay literal; everything else gets %XX.
 def serialize-qp [name: string, value: any, style: string]: nothing -> list<string> {
   if ($value == null) { return [] }
-  let n = (encode-path-segment $name)
   let is_list = ($value | describe | str starts-with "list")
+  if $is_list and ($value | is-empty) { return [] }
+  let n = (encode-path-segment $name)
   if ($value | describe | str starts-with "record") { return ($value | transpose k v | each { $"($n)[(encode-path-segment $in.k)]=(encode-path-segment $in.v)" }) }
   if not $is_list { return [$"($n)=(encode-path-segment $value)"] }
   match $style {
@@ -53,22 +55,42 @@ def build-url [base: string, path: string, query?: string]: nothing -> string {
   if ($query != null) and ($query | is-not-empty) { $result | upsert query $query | url join } else { $result | url join }
 }
 
+# Build the dry-run record returned by --dry-run. Shape:
+#   {dry_run: true, method, url, query: <record>, headers, body, content_type, timeout,
+#    auth: {scheme, location}}
+# `meta` carries logical-form data (the query record by spec name, the pre-serialization
+# body) that do-request itself cannot reconstruct from its wire-format args.
+def build-dry-run-record [method: string, url: string, auth: record, content_type: string, timeout: duration, meta?: record]: nothing -> record {
+  let m = ($meta | default {})
+  {
+    dry_run: true
+    method: $method
+    url: $url
+    query: ($m | get -o query | default {})
+    headers: $auth.headers
+    body: ($m | get -o body)
+    content_type: $content_type
+    timeout: $timeout
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+}
+
 # Execute HTTP request with method dispatch
-def do-request [method: string, url: string, auth: record, insecure: bool, raw: bool, dry_run: bool, max_time?: duration, allow_errors?: bool, full?: bool, content_type?: string, body?: any]: nothing -> any {
+def do-request [method: string, url: string, auth: record, insecure: bool, raw: bool, dry_run: bool, max_time?: duration, allow_errors?: bool, full?: bool, content_type?: string, body?: any, dry_run_meta?: record]: nothing -> any {
   let req_url = if ($auth.query | is-not-empty) { if ($url | str contains "?") { $"($url)&($auth.query)" } else { $"($url)?($auth.query)" } } else { $url }
   let timeout = ($max_time | default 30min)
   let ct = ($content_type | default "application/json")
-  if $dry_run { return {method: $method, url: $req_url, headers: $auth.headers, query_string: $auth.query, content_type: $ct, timeout: $timeout, body: $body} }
+  if $dry_run { return (build-dry-run-record $method $req_url $auth $ct $timeout $dry_run_meta) }
   let resp = match $method {
     "get" => { http get --headers $auth.headers --full --allow-errors --max-time $timeout --insecure=$insecure --raw=$raw $req_url }
-    "head" => { http head --headers $auth.headers --max-time $timeout --insecure=$insecure $req_url }
-    "options" => { http options --headers $auth.headers --max-time $timeout --insecure=$insecure $req_url }
+    "head" => { http head --headers $auth.headers --full --allow-errors --max-time $timeout --insecure=$insecure $req_url }
+    "options" => { http options --headers $auth.headers --full --allow-errors --max-time $timeout --insecure=$insecure $req_url }
     "post" => { if ($body | is-empty) { http post --headers $auth.headers --full --allow-errors --max-time $timeout --insecure=$insecure --raw=$raw $req_url "" } else { http post --headers $auth.headers --content-type $ct --full --allow-errors --max-time $timeout --insecure=$insecure --raw=$raw $req_url $body } }
     "put" => { if ($body | is-empty) { http put --headers $auth.headers --full --allow-errors --max-time $timeout --insecure=$insecure --raw=$raw $req_url "" } else { http put --headers $auth.headers --content-type $ct --full --allow-errors --max-time $timeout --insecure=$insecure --raw=$raw $req_url $body } }
     "patch" => { if ($body | is-empty) { http patch --headers $auth.headers --full --allow-errors --max-time $timeout --insecure=$insecure --raw=$raw $req_url "" } else { http patch --headers $auth.headers --content-type $ct --full --allow-errors --max-time $timeout --insecure=$insecure --raw=$raw $req_url $body } }
     "delete" => { if ($body | is-empty) { http delete --headers $auth.headers --full --allow-errors --max-time $timeout --insecure=$insecure --raw=$raw $req_url } else { http delete --headers $auth.headers --content-type $ct --data $body --full --allow-errors --max-time $timeout --insecure=$insecure --raw=$raw $req_url } }
   }
-  if ($method in ["head" "options"]) { return $resp }
+  if ($method == "head") and (not $full) and (not $allow_errors) and $resp.status < 400 { return $resp.headers }
   if $allow_errors { $resp } else if $resp.status >= 400 { error make --unspanned { msg: $"HTTP ($resp.status): ($resp.body)" } } else if $full { {status: $resp.status, headers: $resp.headers, body: $resp.body} } else if $resp.status == 204 { null } else { $resp.body }
 }
 
@@ -178,7 +200,7 @@ export def "achmeainsurancecontracts get-achmea-insurance-contracts-by-user" [
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"Authorization": $authorization, "Accept": $hdr_accept} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"filter": $filter, "orderBy": $order_by, "pageNumber": $page_number, "pageSize": $page_size} | compact), body: null}
 }
 
 # list of wage percentages for an insurance contract
@@ -205,13 +227,14 @@ export def "achmeainsurancecontracts-insuredwagecalculationpercentages get-wage-
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($achmea_insurance_contract_id | is-empty) { error make --unspanned { msg: "path parameter 'achmeaInsuranceContractId' must be non-empty" } }
   let qp = [(serialize-qp "filter" $filter "scalar") (serialize-qp "orderBy" $order_by "scalar") (serialize-qp "pageNumber" $page_number "scalar") (serialize-qp "pageSize" $page_size "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({achmea_insurance_contract_id: (encode-path-segment $achmea_insurance_contract_id)} | format pattern "/achmeainsurancecontracts/{achmea_insurance_contract_id}/insuredwagecalculationpercentages") $qp)
   let accept_val = "application/json;version=2018-01-01"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"Authorization": $authorization, "Accept": $hdr_accept} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"filter": $filter, "orderBy": $order_by, "pageNumber": $page_number, "pageSize": $page_size} | compact), body: null}
 }
 
 # Acquire the AOW date
@@ -240,7 +263,7 @@ export def "aow-date get-by-of-birth" [
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"Authorization": $authorization, "Accept": $hdr_accept} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"dateOfBirth": $date_of_birth} | compact), body: null}
 }
 
 # Authorizations for the application
@@ -263,12 +286,13 @@ export def "applications-authorizations get" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($application_id | is-empty) { error make --unspanned { msg: "path parameter 'applicationId' must be non-empty" } }
   let full_url = (build-url $base ({application_id: (encode-path-segment $application_id)} | format pattern "/applications/{application_id}/authorizations"))
   let accept_val = "application/json;version=2018-01-01"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"Authorization": $authorization, "Accept": $hdr_accept} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
 }
 
 # Download the application logo
@@ -292,12 +316,13 @@ export def "applications-logo get" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($application_id | is-empty) { error make --unspanned { msg: "path parameter 'applicationId' must be non-empty" } }
   let full_url = (build-url $base ({application_id: (encode-path-segment $application_id)} | format pattern "/applications/{application_id}/logo"))
   let accept_val = ($accept | default "image/jpeg")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"Authorization": $authorization, "Accept": $hdr_accept} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
 }
 
 # Acquire company information
@@ -320,12 +345,13 @@ export def "chamberofcommerce-companyinformation get-company-information-by-cham
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($chamber_of_commerce_number | is-empty) { error make --unspanned { msg: "path parameter 'chamberOfCommerceNumber' must be non-empty" } }
   let full_url = (build-url $base ({chamber_of_commerce_number: (encode-path-segment $chamber_of_commerce_number)} | format pattern "/chamberofcommerce/{chamber_of_commerce_number}/companyinformation"))
   let accept_val = "application/json;version=2018-01-01"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"Authorization": $authorization, "Accept": $hdr_accept} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
 }
 
 # Get a list of functions
@@ -352,7 +378,7 @@ export def "datanewbusiness-functions get-data-new-business" [
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"Authorization": $authorization, "Accept": $hdr_accept} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
 }
 
 # Get Data New Business token
@@ -379,7 +405,7 @@ export def "datanewbusiness-token get-data-new-business" [
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"Authorization": $authorization, "Accept": $hdr_accept} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
 }
 
 # Acquire the address for a combination of `postalCode` and `houseNumber`
@@ -409,7 +435,7 @@ export def "locationservices-address get-by-postal-code-and-house-number" [
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"Authorization": $authorization, "Accept": $hdr_accept} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"postalCode": $postal_code, "houseNumber": $house_number} | compact), body: null}
 }
 
 # List of providers
@@ -441,7 +467,7 @@ export def "providers get-by-user" [
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"Authorization": $authorization, "Accept": $hdr_accept} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"filter": $filter, "orderBy": $order_by, "pageNumber": $page_number, "pageSize": $page_size} | compact), body: null}
 }
 
 # Delete a specific applicationset
@@ -465,19 +491,20 @@ export def "providers-applicationsets delete-application-update-by-application-u
 ]: nothing -> record<version: record<obsoleteDate: string, resourceVersion: string>, messages: table<code: int, description: string, id: string, properties: list, type: string>, content: record> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($application_set_id | is-empty) { error make --unspanned { msg: "path parameter 'applicationSetId' must be non-empty" } }
   let full_url = (build-url $base ({application_set_id: (encode-path-segment $application_set_id)} | format pattern "/providers/applicationsets/{application_set_id}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"Authorization": $authorization, "Accept": $hdr_accept, "If-Match": $if_match} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
 }
 
 # Edit the details of an applicationset
 #
 # PUT /providers/applicationsets/{applicationSetId}
 # operationId: PutProviderApplicationSetByApplicationSetId
-export def "providers-applicationsets update-application-update-by-application-update" [
+export def "providers-applicationsets update-application-by-application" [
   application_set_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -497,6 +524,7 @@ export def "providers-applicationsets update-application-update-by-application-u
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($application_set_id | is-empty) { error make --unspanned { msg: "path parameter 'applicationSetId' must be non-empty" } }
   let full_url = (build-url $base ({application_set_id: (encode-path-segment $application_set_id)} | format pattern "/providers/applicationsets/{application_set_id}"))
   let req_body = {"data": $data, "name": $name} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
@@ -504,7 +532,7 @@ export def "providers-applicationsets update-application-update-by-application-u
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"Authorization": $authorization, "Accept": $hdr_accept, "If-Match": $if_match} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json;version=2018-01-01" $req_body
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json;version=2018-01-01" $req_body {query: {}, body: $req_body}
 }
 
 # Details of a authorization set
@@ -528,13 +556,14 @@ export def "providers-authorizationsets get-authorization-sets-by-authorization-
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($authorizationsetid | is-empty) { error make --unspanned { msg: "path parameter 'authorizationsetid' must be non-empty" } }
   let qp = [(serialize-qp "authorizationSetId" $authorization_set_id "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({authorizationsetid: (encode-path-segment $authorizationsetid)} | format pattern "/providers/authorizationsets/{authorizationsetid}") $qp)
   let accept_val = "application/json;version=2018-01-01"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"Authorization": $authorization, "Accept": $hdr_accept} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"authorizationSetId": $authorization_set_id} | compact), body: null}
 }
 
 # Delete an EmailIdentity for a provider
@@ -557,12 +586,13 @@ export def "providers-emailidentities delete-email-identity-by-email-identity" [
 ]: nothing -> record<version: record<obsoleteDate: string, resourceVersion: string>, messages: table<code: int, description: string, id: string, properties: list, type: string>, content: record> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($email_identity_id | is-empty) { error make --unspanned { msg: "path parameter 'emailIdentityId' must be non-empty" } }
   let full_url = (build-url $base ({email_identity_id: (encode-path-segment $email_identity_id)} | format pattern "/providers/emailidentities/{email_identity_id}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"Authorization": $authorization, "Accept": $hdr_accept} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
 }
 
 # Provider emailIdentity test email
@@ -587,6 +617,7 @@ export def "providers-emailidentities-sendtestemail create-send-testemail-by-ema
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($email_identity_id | is-empty) { error make --unspanned { msg: "path parameter 'emailIdentityId' must be non-empty" } }
   let full_url = (build-url $base ({email_identity_id: (encode-path-segment $email_identity_id)} | format pattern "/providers/emailidentities/{email_identity_id}/sendtestemail"))
   let req_body = {"to": $body_to} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
@@ -594,7 +625,7 @@ export def "providers-emailidentities-sendtestemail create-send-testemail-by-ema
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"Authorization": $authorization, "Accept": $hdr_accept} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json;version=2018-01-01" $req_body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json;version=2018-01-01" $req_body {query: {}, body: $req_body}
 }
 
 # List of employers
@@ -626,7 +657,7 @@ export def "providers-employers get-by-user" [
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"Authorization": $authorization, "Accept": $hdr_accept} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"filter": $filter, "orderBy": $order_by, "pageNumber": $page_number, "pageSize": $page_size} | compact), body: null}
 }
 
 # Mark one or more announcements as read.
@@ -657,7 +688,7 @@ export def "providers-employers-announcements update" [
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"Authorization": $authorization, "Accept": $hdr_accept} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "patch" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body
+  do-request "patch" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: {}, body: $req_body}
 }
 
 # Delete an benefit in kind type record
@@ -681,12 +712,13 @@ export def "providers-employers-benefitinkindtypes delete-benefit-in-kind-type-b
 ]: nothing -> record<version: record<obsoleteDate: string, resourceVersion: string>, messages: table<code: int, description: string, id: string, properties: list, type: string>, content: record> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($benefit_in_kind_type_id | is-empty) { error make --unspanned { msg: "path parameter 'benefitInKindTypeId' must be non-empty" } }
   let full_url = (build-url $base ({benefit_in_kind_type_id: (encode-path-segment $benefit_in_kind_type_id)} | format pattern "/providers/employers/benefitinkindtypes/{benefit_in_kind_type_id}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"Authorization": $authorization, "Accept": $hdr_accept, "If-Match": $if_match} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
 }
 
 # Details of an benefit in kind type
@@ -713,13 +745,14 @@ export def "providers-employers-benefitinkindtypes get-benefit-in-kind-type-by-b
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($benefit_in_kind_type_id | is-empty) { error make --unspanned { msg: "path parameter 'benefitInKindTypeId' must be non-empty" } }
   let qp = [(serialize-qp "filter" $filter "scalar") (serialize-qp "orderBy" $order_by "scalar") (serialize-qp "pageNumber" $page_number "scalar") (serialize-qp "pageSize" $page_size "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({benefit_in_kind_type_id: (encode-path-segment $benefit_in_kind_type_id)} | format pattern "/providers/employers/benefitinkindtypes/{benefit_in_kind_type_id}") $qp)
   let accept_val = "application/json;version=2018-01-01"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"Authorization": $authorization, "Accept": $hdr_accept} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"filter": $filter, "orderBy": $order_by, "pageNumber": $page_number, "pageSize": $page_size} | compact), body: null}
 }
 
 # Edit an benefit in kind type record
@@ -745,6 +778,7 @@ export def "providers-employers-benefitinkindtypes update-benefit-in-kind-type-b
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($benefit_in_kind_type_id | is-empty) { error make --unspanned { msg: "path parameter 'benefitInKindTypeId' must be non-empty" } }
   let full_url = (build-url $base ({benefit_in_kind_type_id: (encode-path-segment $benefit_in_kind_type_id)} | format pattern "/providers/employers/benefitinkindtypes/{benefit_in_kind_type_id}"))
   let req_body = {"description": $description} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
@@ -752,7 +786,7 @@ export def "providers-employers-benefitinkindtypes update-benefit-in-kind-type-b
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"Authorization": $authorization, "Accept": $hdr_accept, "If-Match": $if_match} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json;version=2018-01-01" $req_body
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json;version=2018-01-01" $req_body {query: {}, body: $req_body}
 }
 
 # Import concept employees via a file
@@ -778,6 +812,7 @@ export def "providers-employers-conceptemployees-import update-concept-employees
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($payroll_administration_id | is-empty) { error make --unspanned { msg: "path parameter 'payrollAdministrationId' must be non-empty" } }
   let qp = [(serialize-qp "conceptEmployeeId" $concept_employee_id "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({payroll_administration_id: (encode-path-segment $payroll_administration_id)} | format pattern "/providers/employers/conceptemployees/import/{payroll_administration_id}") $qp)
   let req_body = $body
@@ -788,7 +823,7 @@ export def "providers-employers-conceptemployees-import update-concept-employees
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let req_body = if ($req_body | describe | str starts-with "record") { $req_body } else { {} }
   let mp = (build-multipart-body $req_body [] $dry_run)
-  do-request "patch" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full $mp.content_type $mp.body
+  do-request "patch" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full $mp.content_type $mp.body {query: ({"conceptEmployeeId": $concept_employee_id} | compact), body: $req_body}
 }
 
 # Paygrade metadata for concept employee
@@ -818,13 +853,16 @@ export def "providers-employers-conceptemployees-metadata-payroll-administration
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($payroll_administration_id | is-empty) { error make --unspanned { msg: "path parameter 'payrollAdministrationId' must be non-empty" } }
+  if ($payscale_key | is-empty) { error make --unspanned { msg: "path parameter 'payscaleKey' must be non-empty" } }
+  if ($paygrade_key | is-empty) { error make --unspanned { msg: "path parameter 'paygradeKey' must be non-empty" } }
   let qp = [(serialize-qp "date" $date "scalar") (serialize-qp "filter" $filter "scalar") (serialize-qp "orderBy" $order_by "scalar") (serialize-qp "pageNumber" $page_number "scalar") (serialize-qp "pageSize" $page_size "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({payroll_administration_id: (encode-path-segment $payroll_administration_id), payscale_key: (encode-path-segment $payscale_key), paygrade_key: (encode-path-segment $paygrade_key)} | format pattern "/providers/employers/conceptemployees/metadata/payrollAdministration/{payroll_administration_id}/payScale/{payscale_key}/paygrade/{paygrade_key}") $qp)
   let accept_val = "application/json;version=2018-01-01"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"Authorization": $authorization, "Accept": $hdr_accept} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"date": $date, "filter": $filter, "orderBy": $order_by, "pageNumber": $page_number, "pageSize": $page_size} | compact), body: null}
 }
 
 # Details of a concept employee with fewer fields.
@@ -847,12 +885,13 @@ export def "providers-employers-conceptemployees-minimized get-concept-employee-
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($concept_employee_id | is-empty) { error make --unspanned { msg: "path parameter 'conceptEmployeeId' must be non-empty" } }
   let full_url = (build-url $base ({concept_employee_id: (encode-path-segment $concept_employee_id)} | format pattern "/providers/employers/conceptemployees/minimized/{concept_employee_id}"))
   let accept_val = "application/json;version=2018-01-01"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"Authorization": $authorization, "Accept": $hdr_accept} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
 }
 
 # Edit the details of a concept employee with fewer fields.
@@ -884,6 +923,7 @@ export def "providers-employers-conceptemployees-minimized update-concept-employ
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($concept_employee_id | is-empty) { error make --unspanned { msg: "path parameter 'conceptEmployeeId' must be non-empty" } }
   let full_url = (build-url $base ({concept_employee_id: (encode-path-segment $concept_employee_id)} | format pattern "/providers/employers/conceptemployees/minimized/{concept_employee_id}"))
   let req_body = {"address": $address, "contactInformation": $contact_information, "iban": $iban, "personalDetails": $personal_details} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
@@ -891,7 +931,7 @@ export def "providers-employers-conceptemployees-minimized update-concept-employ
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"Authorization": $authorization, "Accept": $hdr_accept, "If-Match": $if_match} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json;version=2018-01-01" $req_body
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json;version=2018-01-01" $req_body {query: {}, body: $req_body}
 }
 
 # Delete a concept employee
@@ -915,12 +955,13 @@ export def "providers-employers-conceptemployees delete-concept-employee-by-conc
 ]: nothing -> record<version: record<obsoleteDate: string, resourceVersion: string>, messages: table<code: int, description: string, id: string, properties: list, type: string>, content: record> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($concept_employee_id | is-empty) { error make --unspanned { msg: "path parameter 'conceptEmployeeId' must be non-empty" } }
   let full_url = (build-url $base ({concept_employee_id: (encode-path-segment $concept_employee_id)} | format pattern "/providers/employers/conceptemployees/{concept_employee_id}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"Authorization": $authorization, "Accept": $hdr_accept, "If-Match": $if_match} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
 }
 
 # Details of a concept employee
@@ -943,12 +984,13 @@ export def "providers-employers-conceptemployees get-concept-employee-by-concept
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($concept_employee_id | is-empty) { error make --unspanned { msg: "path parameter 'conceptEmployeeId' must be non-empty" } }
   let full_url = (build-url $base ({concept_employee_id: (encode-path-segment $concept_employee_id)} | format pattern "/providers/employers/conceptemployees/{concept_employee_id}"))
   let accept_val = "application/json;version=2018-01-01"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"Authorization": $authorization, "Accept": $hdr_accept} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
 }
 
 # Edit the details of a concept employee
@@ -990,6 +1032,7 @@ export def "providers-employers-conceptemployees update-concept-employee-by-conc
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($concept_employee_id | is-empty) { error make --unspanned { msg: "path parameter 'conceptEmployeeId' must be non-empty" } }
   let full_url = (build-url $base ({concept_employee_id: (encode-path-segment $concept_employee_id)} | format pattern "/providers/employers/conceptemployees/{concept_employee_id}"))
   let req_body = {"employeeData": $employee_data, "employmentData": $employment_data, "fiscalData": $fiscal_data, "organizationalEntityData": $organizational_entity_data, "otherPayrollVariablesData": $other_payroll_variables_data, "socialSecurityData": $social_security_data, "uniqueName": $unique_name, "wageData": $wage_data, "workingHoursData": $working_hours_data} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
@@ -997,7 +1040,7 @@ export def "providers-employers-conceptemployees update-concept-employee-by-conc
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"Authorization": $authorization, "Accept": $hdr_accept, "If-Match": $if_match} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json;version=2018-01-01" $req_body
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json;version=2018-01-01" $req_body {query: {}, body: $req_body}
 }
 
 # Initiate assessment
@@ -1022,6 +1065,7 @@ export def "providers-employers-conceptemployees-assessment-initiate create-by-c
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($concept_employee_id | is-empty) { error make --unspanned { msg: "path parameter 'conceptEmployeeId' must be non-empty" } }
   let full_url = (build-url $base ({concept_employee_id: (encode-path-segment $concept_employee_id)} | format pattern "/providers/employers/conceptemployees/{concept_employee_id}/assessment/initiate"))
   let req_body = {"withIq": $with_iq} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
@@ -1029,7 +1073,7 @@ export def "providers-employers-conceptemployees-assessment-initiate create-by-c
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"Authorization": $authorization, "Accept": $hdr_accept} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json;version=2018-01-01" $req_body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json;version=2018-01-01" $req_body {query: {}, body: $req_body}
 }
 
 # Citizen service number of a concept employee
@@ -1052,12 +1096,13 @@ export def "providers-employers-conceptemployees-citizenservicenumber get-citize
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($concept_employee_id | is-empty) { error make --unspanned { msg: "path parameter 'conceptEmployeeId' must be non-empty" } }
   let full_url = (build-url $base ({concept_employee_id: (encode-path-segment $concept_employee_id)} | format pattern "/providers/employers/conceptemployees/{concept_employee_id}/citizenservicenumber"))
   let accept_val = "application/json;version=2018-01-01"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"Authorization": $authorization, "Accept": $hdr_accept} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
 }
 
 # Update the citizen service number of a concept employee
@@ -1083,6 +1128,7 @@ export def "providers-employers-conceptemployees-citizenservicenumber update-cit
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($concept_employee_id | is-empty) { error make --unspanned { msg: "path parameter 'conceptEmployeeId' must be non-empty" } }
   let full_url = (build-url $base ({concept_employee_id: (encode-path-segment $concept_employee_id)} | format pattern "/providers/employers/conceptemployees/{concept_employee_id}/citizenservicenumber"))
   let req_body = {"citizenServiceNumber": $citizen_service_number} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
@@ -1090,7 +1136,7 @@ export def "providers-employers-conceptemployees-citizenservicenumber update-cit
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"Authorization": $authorization, "Accept": $hdr_accept, "If-Match": $if_match} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json;version=2018-01-01" $req_body
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json;version=2018-01-01" $req_body {query: {}, body: $req_body}
 }
 
 # Convert a concept employee to an employee
@@ -1115,12 +1161,13 @@ export def "providers-employers-conceptemployees-convert-to-employee update-by-c
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($concept_employee_id | is-empty) { error make --unspanned { msg: "path parameter 'conceptEmployeeId' must be non-empty" } }
   let full_url = (build-url $base ({concept_employee_id: (encode-path-segment $concept_employee_id)} | format pattern "/providers/employers/conceptemployees/{concept_employee_id}/convertToEmployee"))
   let accept_val = "application/json;version=2018-01-01"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"Authorization": $authorization, "Accept": $hdr_accept, "If-Match": $if_match, "X-ValidateOnly": $x_validate_only} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "patch" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "patch" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
 }
 
 # Get a list of concept employee dossier documents
@@ -1147,13 +1194,14 @@ export def "providers-employers-conceptemployees-documents get-by-concept-employ
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($concept_employee_id | is-empty) { error make --unspanned { msg: "path parameter 'conceptEmployeeId' must be non-empty" } }
   let qp = [(serialize-qp "filter" $filter "scalar") (serialize-qp "orderBy" $order_by "scalar") (serialize-qp "pageNumber" $page_number "scalar") (serialize-qp "pageSize" $page_size "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({concept_employee_id: (encode-path-segment $concept_employee_id)} | format pattern "/providers/employers/conceptemployees/{concept_employee_id}/documents") $qp)
   let accept_val = "application/json;version=2018-01-01"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"Authorization": $authorization, "Accept": $hdr_accept} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"filter": $filter, "orderBy": $order_by, "pageNumber": $page_number, "pageSize": $page_size} | compact), body: null}
 }
 
 # Upload a document to the concept employee dossier
@@ -1178,6 +1226,7 @@ export def "providers-employers-conceptemployees-documents create-by-concept-emp
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($concept_employee_id | is-empty) { error make --unspanned { msg: "path parameter 'conceptEmployeeId' must be non-empty" } }
   let full_url = (build-url $base ({concept_employee_id: (encode-path-segment $concept_employee_id)} | format pattern "/providers/employers/conceptemployees/{concept_employee_id}/documents"))
   let req_body = {"file": $file} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
@@ -1185,7 +1234,7 @@ export def "providers-employers-conceptemployees-documents create-by-concept-emp
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"Authorization": $authorization, "Accept": $hdr_accept} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json;version=2018-01-01" $req_body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json;version=2018-01-01" $req_body {query: {}, body: $req_body}
 }
 
 # Delete a document in the concept employee dossier
@@ -1209,12 +1258,14 @@ export def "providers-employers-conceptemployees-documents delete-by-concept-emp
 ]: nothing -> record<version: record<obsoleteDate: string, resourceVersion: string>, messages: table<code: int, description: string, id: string, properties: list, type: string>, content: record> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($concept_employee_id | is-empty) { error make --unspanned { msg: "path parameter 'conceptEmployeeId' must be non-empty" } }
+  if ($document_id | is-empty) { error make --unspanned { msg: "path parameter 'documentId' must be non-empty" } }
   let full_url = (build-url $base ({concept_employee_id: (encode-path-segment $concept_employee_id), document_id: (encode-path-segment $document_id)} | format pattern "/providers/employers/conceptemployees/{concept_employee_id}/documents/{document_id}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"Authorization": $authorization, "Accept": $hdr_accept} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
 }
 
 # Download concept employee dossier document
@@ -1237,12 +1288,14 @@ export def "providers-employers-conceptemployees-documents get-by-concept-employ
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($concept_employee_id | is-empty) { error make --unspanned { msg: "path parameter 'conceptEmployeeId' must be non-empty" } }
+  if ($document_id | is-empty) { error make --unspanned { msg: "path parameter 'documentId' must be non-empty" } }
   let full_url = (build-url $base ({concept_employee_id: (encode-path-segment $concept_employee_id), document_id: (encode-path-segment $document_id)} | format pattern "/providers/employers/conceptemployees/{concept_employee_id}/documents/{document_id}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"Authorization": $authorization} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
 }
 
 # Edit the details of an concept employee dossier document
@@ -1272,6 +1325,8 @@ export def "providers-employers-conceptemployees-documents update-by-concept-emp
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($concept_employee_id | is-empty) { error make --unspanned { msg: "path parameter 'conceptEmployeeId' must be non-empty" } }
+  if ($document_id | is-empty) { error make --unspanned { msg: "path parameter 'documentId' must be non-empty" } }
   let full_url = (build-url $base ({concept_employee_id: (encode-path-segment $concept_employee_id), document_id: (encode-path-segment $document_id)} | format pattern "/providers/employers/conceptemployees/{concept_employee_id}/documents/{document_id}"))
   let req_body = {"attribute": $attribute, "category": $category, "dateOfAlert": $date_of_alert, "description": $description, "year": $year} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
@@ -1279,7 +1334,7 @@ export def "providers-employers-conceptemployees-documents update-by-concept-emp
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"Authorization": $authorization, "Accept": $hdr_accept} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json;version=2018-01-01" $req_body
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json;version=2018-01-01" $req_body {query: {}, body: $req_body}
 }
 
 # Get audittrail for the document in the concept employee dossier
@@ -1307,13 +1362,15 @@ export def "providers-employers-conceptemployees-documents-audittrail get-audit-
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($concept_employee_id | is-empty) { error make --unspanned { msg: "path parameter 'conceptEmployeeId' must be non-empty" } }
+  if ($document_id | is-empty) { error make --unspanned { msg: "path parameter 'documentId' must be non-empty" } }
   let qp = [(serialize-qp "filter" $filter "scalar") (serialize-qp "orderBy" $order_by "scalar") (serialize-qp "pageNumber" $page_number "scalar") (serialize-qp "pageSize" $page_size "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({concept_employee_id: (encode-path-segment $concept_employee_id), document_id: (encode-path-segment $document_id)} | format pattern "/providers/employers/conceptemployees/{concept_employee_id}/documents/{document_id}/audittrail") $qp)
   let accept_val = "application/json;version=2018-01-01"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"Authorization": $authorization, "Accept": $hdr_accept} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"filter": $filter, "orderBy": $order_by, "pageNumber": $page_number, "pageSize": $page_size} | compact), body: null}
 }
 
 # Delete signature - Conceptemployee
@@ -1337,12 +1394,14 @@ export def "providers-employers-conceptemployees-documents-signature delete-by-c
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($concept_employee_id | is-empty) { error make --unspanned { msg: "path parameter 'conceptEmployeeId' must be non-empty" } }
+  if ($document_id | is-empty) { error make --unspanned { msg: "path parameter 'documentId' must be non-empty" } }
   let full_url = (build-url $base ({concept_employee_id: (encode-path-segment $concept_employee_id), document_id: (encode-path-segment $document_id)} | format pattern "/providers/employers/conceptemployees/{concept_employee_id}/documents/{document_id}/signature"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"Authorization": $authorization, "Accept": $hdr_accept} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
 }
 
 # Signature details - Conceptemployee
@@ -1366,12 +1425,14 @@ export def "providers-employers-conceptemployees-documents-signature get-by-conc
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($concept_employee_id | is-empty) { error make --unspanned { msg: "path parameter 'conceptEmployeeId' must be non-empty" } }
+  if ($document_id | is-empty) { error make --unspanned { msg: "path parameter 'documentId' must be non-empty" } }
   let full_url = (build-url $base ({concept_employee_id: (encode-path-segment $concept_employee_id), document_id: (encode-path-segment $document_id)} | format pattern "/providers/employers/conceptemployees/{concept_employee_id}/documents/{document_id}/signature"))
   let accept_val = "application/json;version=2018-01-01"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"Authorization": $authorization, "Accept": $hdr_accept} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
 }
 
 # Initiate signature - Conceptemployee
@@ -1397,6 +1458,8 @@ export def "providers-employers-conceptemployees-documents-signature-initiate cr
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($concept_employee_id | is-empty) { error make --unspanned { msg: "path parameter 'conceptEmployeeId' must be non-empty" } }
+  if ($document_id | is-empty) { error make --unspanned { msg: "path parameter 'documentId' must be non-empty" } }
   let full_url = (build-url $base ({concept_employee_id: (encode-path-segment $concept_employee_id), document_id: (encode-path-segment $document_id)} | format pattern "/providers/employers/conceptemployees/{concept_employee_id}/documents/{document_id}/signature/initiate"))
   let req_body = $body
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else if (($input | is-not-empty) and ($req_body | is-empty)) { $input } else { $req_body }
@@ -1404,7 +1467,7 @@ export def "providers-employers-conceptemployees-documents-signature-initiate cr
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"Authorization": $authorization, "Accept": $hdr_accept} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json;version=2018-01-01" $req_body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json;version=2018-01-01" $req_body {query: {}, body: $req_body}
 }
 
 # Retrieve the report of the signing - Conceptemployee
@@ -1428,12 +1491,14 @@ export def "providers-employers-conceptemployees-documents-signature-report get-
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($concept_employee_id | is-empty) { error make --unspanned { msg: "path parameter 'conceptEmployeeId' must be non-empty" } }
+  if ($document_id | is-empty) { error make --unspanned { msg: "path parameter 'documentId' must be non-empty" } }
   let full_url = (build-url $base ({concept_employee_id: (encode-path-segment $concept_employee_id), document_id: (encode-path-segment $document_id)} | format pattern "/providers/employers/conceptemployees/{concept_employee_id}/documents/{document_id}/signature/report"))
   let accept_val = "application/pdf"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"Authorization": $authorization, "Accept": $hdr_accept} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
 }
 
 # Generate a document for an concept employee
@@ -1465,6 +1530,8 @@ export def "providers-employers-conceptemployees-documenttemplates-generatedocum
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($concept_employee_id | is-empty) { error make --unspanned { msg: "path parameter 'conceptEmployeeId' must be non-empty" } }
+  if ($document_id | is-empty) { error make --unspanned { msg: "path parameter 'documentId' must be non-empty" } }
   let full_url = (build-url $base ({concept_employee_id: (encode-path-segment $concept_employee_id), document_id: (encode-path-segment $document_id)} | format pattern "/providers/employers/conceptemployees/{concept_employee_id}/documenttemplates/{document_id}/generatedocument"))
   let req_body = {"attribute": $attribute, "dateOfAlert": $date_of_alert, "description": $description, "filename": $filename, "referenceDate": $reference_date, "templateEmployerId": $template_employer_id, "year": $year} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
@@ -1472,7 +1539,7 @@ export def "providers-employers-conceptemployees-documenttemplates-generatedocum
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"Authorization": $authorization, "Accept": $hdr_accept} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json;version=2018-01-01" $req_body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json;version=2018-01-01" $req_body {query: {}, body: $req_body}
 }
 
 # Generate a document for an concept employee - preview
@@ -1504,6 +1571,8 @@ export def "providers-employers-conceptemployees-documenttemplates-generatedocum
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($concept_employee_id | is-empty) { error make --unspanned { msg: "path parameter 'conceptEmployeeId' must be non-empty" } }
+  if ($document_id | is-empty) { error make --unspanned { msg: "path parameter 'documentId' must be non-empty" } }
   let full_url = (build-url $base ({concept_employee_id: (encode-path-segment $concept_employee_id), document_id: (encode-path-segment $document_id)} | format pattern "/providers/employers/conceptemployees/{concept_employee_id}/documenttemplates/{document_id}/generatedocument/preview"))
   let req_body = {"attribute": $attribute, "dateOfAlert": $date_of_alert, "description": $description, "filename": $filename, "referenceDate": $reference_date, "templateEmployerId": $template_employer_id, "year": $year} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
@@ -1511,7 +1580,7 @@ export def "providers-employers-conceptemployees-documenttemplates-generatedocum
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"Authorization": $authorization, "Accept": $hdr_accept} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json;version=2018-01-01" $req_body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json;version=2018-01-01" $req_body {query: {}, body: $req_body}
 }
 
 # Delete the complete concept employee dossier
@@ -1534,12 +1603,13 @@ export def "providers-employers-conceptemployees-dossier delete-dossier-by-conce
 ]: nothing -> record<version: record<obsoleteDate: string, resourceVersion: string>, messages: table<code: int, description: string, id: string, properties: list, type: string>, content: record> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($concept_employee_id | is-empty) { error make --unspanned { msg: "path parameter 'conceptEmployeeId' must be non-empty" } }
   let full_url = (build-url $base ({concept_employee_id: (encode-path-segment $concept_employee_id)} | format pattern "/providers/employers/conceptemployees/{concept_employee_id}/dossier\""))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"Authorization": $authorization, "Accept": $hdr_accept} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
 }
 
 # Document count
@@ -1562,12 +1632,13 @@ export def "providers-employers-conceptemployees-dossier get-document-count-by-c
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($concept_employee_id | is-empty) { error make --unspanned { msg: "path parameter 'conceptEmployeeId' must be non-empty" } }
   let full_url = (build-url $base ({concept_employee_id: (encode-path-segment $concept_employee_id)} | format pattern "/providers/employers/conceptemployees/{concept_employee_id}/dossier\""))
   let accept_val = "application/json;version=2018-01-01"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"Authorization": $authorization, "Accept": $hdr_accept} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
 }
 
 # Change status of a preboarding trajectory
@@ -1592,6 +1663,7 @@ export def "providers-employers-conceptemployees-preboardingtrajectory update-pr
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($concept_employee_id | is-empty) { error make --unspanned { msg: "path parameter 'conceptEmployeeId' must be non-empty" } }
   let full_url = (build-url $base ({concept_employee_id: (encode-path-segment $concept_employee_id)} | format pattern "/providers/employers/conceptemployees/{concept_employee_id}/preboardingtrajectory"))
   let req_body = {"action": $action} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
@@ -1599,7 +1671,7 @@ export def "providers-employers-conceptemployees-preboardingtrajectory update-pr
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"Authorization": $authorization, "Accept": $hdr_accept} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "patch" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json;version=2018-01-01" $req_body
+  do-request "patch" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json;version=2018-01-01" $req_body {query: {}, body: $req_body}
 }
 
 # Add a preboarding trajectory
@@ -1624,6 +1696,7 @@ export def "providers-employers-conceptemployees-preboardingtrajectory create-pr
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($concept_employee_id | is-empty) { error make --unspanned { msg: "path parameter 'conceptEmployeeId' must be non-empty" } }
   let full_url = (build-url $base ({concept_employee_id: (encode-path-segment $concept_employee_id)} | format pattern "/providers/employers/conceptemployees/{concept_employee_id}/preboardingtrajectory"))
   let req_body = $body
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
@@ -1631,7 +1704,7 @@ export def "providers-employers-conceptemployees-preboardingtrajectory create-pr
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"Authorization": $authorization, "Accept": $hdr_accept} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json;version=2018-01-01" $req_body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json;version=2018-01-01" $req_body {query: {}, body: $req_body}
 }
 
 # Details of a Concept employee self service portal status
@@ -1659,13 +1732,14 @@ export def "providers-employers-conceptemployees-selfservice get-concept-employe
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($concept_employee_id | is-empty) { error make --unspanned { msg: "path parameter 'conceptEmployeeId' must be non-empty" } }
   let qp = [(serialize-qp "employeeId" $employee_id "scalar") (serialize-qp "filter" $filter "scalar") (serialize-qp "orderBy" $order_by "scalar") (serialize-qp "pageNumber" $page_number "scalar") (serialize-qp "pageSize" $page_size "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({concept_employee_id: (encode-path-segment $concept_employee_id)} | format pattern "/providers/employers/conceptemployees/{concept_employee_id}/selfservice") $qp)
   let accept_val = "application/json;version=2018-01-01"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"Authorization": $authorization, "Accept": $hdr_accept} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"employeeId": $employee_id, "filter": $filter, "orderBy": $order_by, "pageNumber": $page_number, "pageSize": $page_size} | compact), body: null}
 }
 
 # Delete a contract code record
@@ -1689,12 +1763,13 @@ export def "providers-employers-contractcodes delete-contract-code-by-contract-c
 ]: nothing -> record<version: record<obsoleteDate: string, resourceVersion: string>, messages: table<code: int, description: string, id: string, properties: list, type: string>, content: record> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($contract_code_id | is-empty) { error make --unspanned { msg: "path parameter 'contractCodeId' must be non-empty" } }
   let full_url = (build-url $base ({contract_code_id: (encode-path-segment $contract_code_id)} | format pattern "/providers/employers/contractcodes/{contract_code_id}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"Authorization": $authorization, "Accept": $hdr_accept, "If-Match": $if_match} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
 }
 
 # Details of a contract code
@@ -1721,13 +1796,14 @@ export def "providers-employers-contractcodes get-contract-code-by-contract-code
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($contract_code_id | is-empty) { error make --unspanned { msg: "path parameter 'contractCodeId' must be non-empty" } }
   let qp = [(serialize-qp "filter" $filter "scalar") (serialize-qp "orderBy" $order_by "scalar") (serialize-qp "pageNumber" $page_number "scalar") (serialize-qp "pageSize" $page_size "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({contract_code_id: (encode-path-segment $contract_code_id)} | format pattern "/providers/employers/contractcodes/{contract_code_id}") $qp)
   let accept_val = "application/json;version=2018-01-01"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"Authorization": $authorization, "Accept": $hdr_accept} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"filter": $filter, "orderBy": $order_by, "pageNumber": $page_number, "pageSize": $page_size} | compact), body: null}
 }
 
 # Edit a contract code record
@@ -1754,6 +1830,7 @@ export def "providers-employers-contractcodes update-contract-code-by-contract-c
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($contract_code_id | is-empty) { error make --unspanned { msg: "path parameter 'contractCodeId' must be non-empty" } }
   let full_url = (build-url $base ({contract_code_id: (encode-path-segment $contract_code_id)} | format pattern "/providers/employers/contractcodes/{contract_code_id}"))
   let req_body = {"code": $code, "description": $description} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
@@ -1761,7 +1838,7 @@ export def "providers-employers-contractcodes update-contract-code-by-contract-c
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"Authorization": $authorization, "Accept": $hdr_accept, "If-Match": $if_match} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json;version=2018-01-01" $req_body
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json;version=2018-01-01" $req_body {query: {}, body: $req_body}
 }
 
 # Delete a custom field record
@@ -1785,12 +1862,13 @@ export def "providers-employers-customfields delete-custom-field-by-custom-field
 ]: nothing -> record<version: record<obsoleteDate: string, resourceVersion: string>, messages: table<code: int, description: string, id: string, properties: list, type: string>, content: record> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($custom_field_id | is-empty) { error make --unspanned { msg: "path parameter 'customFieldId' must be non-empty" } }
   let full_url = (build-url $base ({custom_field_id: (encode-path-segment $custom_field_id)} | format pattern "/providers/employers/customfields/{custom_field_id}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"Authorization": $authorization, "Accept": $hdr_accept, "If-Match": $if_match} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
 }
 
 # Details of a custom field
@@ -1817,13 +1895,14 @@ export def "providers-employers-customfields get-custom-field-by-custom-field" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($custom_field_id | is-empty) { error make --unspanned { msg: "path parameter 'customFieldId' must be non-empty" } }
   let qp = [(serialize-qp "filter" $filter "scalar") (serialize-qp "orderBy" $order_by "scalar") (serialize-qp "pageNumber" $page_number "scalar") (serialize-qp "pageSize" $page_size "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({custom_field_id: (encode-path-segment $custom_field_id)} | format pattern "/providers/employers/customfields/{custom_field_id}") $qp)
   let accept_val = "application/json;version=2018-01-01"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"Authorization": $authorization, "Accept": $hdr_accept} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"filter": $filter, "orderBy": $order_by, "pageNumber": $page_number, "pageSize": $page_size} | compact), body: null}
 }
 
 # Edit a custom field record
@@ -1849,6 +1928,7 @@ export def "providers-employers-customfields update-custom-field-by-custom-field
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($custom_field_id | is-empty) { error make --unspanned { msg: "path parameter 'customFieldId' must be non-empty" } }
   let full_url = (build-url $base ({custom_field_id: (encode-path-segment $custom_field_id)} | format pattern "/providers/employers/customfields/{custom_field_id}"))
   let req_body = {"description": $description} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
@@ -1856,7 +1936,7 @@ export def "providers-employers-customfields update-custom-field-by-custom-field
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"Authorization": $authorization, "Accept": $hdr_accept, "If-Match": $if_match} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json;version=2018-01-01" $req_body
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json;version=2018-01-01" $req_body {query: {}, body: $req_body}
 }
 
 # Delete a custom holiday record
@@ -1880,12 +1960,13 @@ export def "providers-employers-customholidays delete-custom-holiday-by-custom-h
 ]: nothing -> record<version: record<obsoleteDate: string, resourceVersion: string>, messages: table<code: int, description: string, id: string, properties: list, type: string>, content: record> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($custom_holiday_id | is-empty) { error make --unspanned { msg: "path parameter 'customHolidayId' must be non-empty" } }
   let full_url = (build-url $base ({custom_holiday_id: (encode-path-segment $custom_holiday_id)} | format pattern "/providers/employers/customholidays/{custom_holiday_id}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"Authorization": $authorization, "Accept": $hdr_accept, "If-Match": $if_match} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
 }
 
 # Details of a custom holiday
@@ -1912,13 +1993,14 @@ export def "providers-employers-customholidays get-custom-holiday-by-custom-holi
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($custom_holiday_id | is-empty) { error make --unspanned { msg: "path parameter 'customHolidayId' must be non-empty" } }
   let qp = [(serialize-qp "filter" $filter "scalar") (serialize-qp "orderBy" $order_by "scalar") (serialize-qp "pageNumber" $page_number "scalar") (serialize-qp "pageSize" $page_size "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({custom_holiday_id: (encode-path-segment $custom_holiday_id)} | format pattern "/providers/employers/customholidays/{custom_holiday_id}") $qp)
   let accept_val = "application/json;version=2018-01-01"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"Authorization": $authorization, "Accept": $hdr_accept} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"filter": $filter, "orderBy": $order_by, "pageNumber": $page_number, "pageSize": $page_size} | compact), body: null}
 }
 
 # Edit a custom holiday record
@@ -1945,6 +2027,7 @@ export def "providers-employers-customholidays update-custom-holiday-by-custom-h
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($custom_holiday_id | is-empty) { error make --unspanned { msg: "path parameter 'customHolidayId' must be non-empty" } }
   let full_url = (build-url $base ({custom_holiday_id: (encode-path-segment $custom_holiday_id)} | format pattern "/providers/employers/customholidays/{custom_holiday_id}"))
   let req_body = {"date": $date, "description": $description} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
@@ -1952,14 +2035,14 @@ export def "providers-employers-customholidays update-custom-holiday-by-custom-h
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"Authorization": $authorization, "Accept": $hdr_accept, "If-Match": $if_match} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json;version=2018-01-01" $req_body
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json;version=2018-01-01" $req_body {query: {}, body: $req_body}
 }
 
 # Details of a department
 #
 # GET /providers/employers/departments/{departmentId}
 # operationId: GetDepartmentByDepartmentId
-export def "providers-employers-departments get-by-departmentId" [
+export def "providers-employers-departments get-by-department-id" [
   department_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1975,12 +2058,13 @@ export def "providers-employers-departments get-by-departmentId" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($department_id | is-empty) { error make --unspanned { msg: "path parameter 'departmentId' must be non-empty" } }
   let full_url = (build-url $base ({department_id: (encode-path-segment $department_id)} | format pattern "/providers/employers/departments/{department_id}"))
   let accept_val = "application/json;version=2018-01-01"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"Authorization": $authorization, "Accept": $hdr_accept} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
 }
 
 # Edit the details of a department
@@ -2009,6 +2093,7 @@ export def "providers-employers-departments update" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($department_id | is-empty) { error make --unspanned { msg: "path parameter 'departmentId' must be non-empty" } }
   let full_url = (build-url $base ({department_id: (encode-path-segment $department_id)} | format pattern "/providers/employers/departments/{department_id}"))
   let req_body = {"description": $description, "emailLeaveRequest": $email_leave_request, "subDepartmentOf": $sub_department_of} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
@@ -2016,7 +2101,7 @@ export def "providers-employers-departments update" [
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"Authorization": $authorization, "Accept": $hdr_accept, "If-Match": $if_match} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json;version=2018-01-01" $req_body
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json;version=2018-01-01" $req_body {query: {}, body: $req_body}
 }
 
 # Delete an education further indication record
@@ -2040,12 +2125,13 @@ export def "providers-employers-educationfurtherindications delete-education-fur
 ]: nothing -> record<version: record<obsoleteDate: string, resourceVersion: string>, messages: table<code: int, description: string, id: string, properties: list, type: string>, content: record> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($education_further_indication_id | is-empty) { error make --unspanned { msg: "path parameter 'educationFurtherIndicationId' must be non-empty" } }
   let full_url = (build-url $base ({education_further_indication_id: (encode-path-segment $education_further_indication_id)} | format pattern "/providers/employers/educationfurtherindications/{education_further_indication_id}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"Authorization": $authorization, "Accept": $hdr_accept, "If-Match": $if_match} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
 }
 
 # Details of an education further indication
@@ -2072,13 +2158,14 @@ export def "providers-employers-educationfurtherindications get-education-furthe
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($education_further_indication_id | is-empty) { error make --unspanned { msg: "path parameter 'educationFurtherIndicationId' must be non-empty" } }
   let qp = [(serialize-qp "filter" $filter "scalar") (serialize-qp "orderBy" $order_by "scalar") (serialize-qp "pageNumber" $page_number "scalar") (serialize-qp "pageSize" $page_size "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({education_further_indication_id: (encode-path-segment $education_further_indication_id)} | format pattern "/providers/employers/educationfurtherindications/{education_further_indication_id}") $qp)
   let accept_val = "application/json;version=2018-01-01"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"Authorization": $authorization, "Accept": $hdr_accept} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"filter": $filter, "orderBy": $order_by, "pageNumber": $page_number, "pageSize": $page_size} | compact), body: null}
 }
 
 # Edit an education further indication record
@@ -2105,6 +2192,7 @@ export def "providers-employers-educationfurtherindications update-education-fur
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($education_further_indication_id | is-empty) { error make --unspanned { msg: "path parameter 'educationFurtherIndicationId' must be non-empty" } }
   let full_url = (build-url $base ({education_further_indication_id: (encode-path-segment $education_further_indication_id)} | format pattern "/providers/employers/educationfurtherindications/{education_further_indication_id}"))
   let req_body = {"code": $code, "description": $description} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
@@ -2112,7 +2200,7 @@ export def "providers-employers-educationfurtherindications update-education-fur
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"Authorization": $authorization, "Accept": $hdr_accept, "If-Match": $if_match} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json;version=2018-01-01" $req_body
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json;version=2018-01-01" $req_body {query: {}, body: $req_body}
 }
 
 # Delete an education type record
@@ -2136,12 +2224,13 @@ export def "providers-employers-educationtypes delete-education-type-by-educatio
 ]: nothing -> record<version: record<obsoleteDate: string, resourceVersion: string>, messages: table<code: int, description: string, id: string, properties: list, type: string>, content: record> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($education_type_id | is-empty) { error make --unspanned { msg: "path parameter 'educationTypeId' must be non-empty" } }
   let full_url = (build-url $base ({education_type_id: (encode-path-segment $education_type_id)} | format pattern "/providers/employers/educationtypes/{education_type_id}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"Authorization": $authorization, "Accept": $hdr_accept, "If-Match": $if_match} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
 }
 
 # Details of an education type
@@ -2168,13 +2257,14 @@ export def "providers-employers-educationtypes get-education-type-by-education-t
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($education_type_id | is-empty) { error make --unspanned { msg: "path parameter 'educationTypeId' must be non-empty" } }
   let qp = [(serialize-qp "filter" $filter "scalar") (serialize-qp "orderBy" $order_by "scalar") (serialize-qp "pageNumber" $page_number "scalar") (serialize-qp "pageSize" $page_size "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({education_type_id: (encode-path-segment $education_type_id)} | format pattern "/providers/employers/educationtypes/{education_type_id}") $qp)
   let accept_val = "application/json;version=2018-01-01"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"Authorization": $authorization, "Accept": $hdr_accept} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"filter": $filter, "orderBy": $order_by, "pageNumber": $page_number, "pageSize": $page_size} | compact), body: null}
 }
 
 # Edit an education type record
@@ -2201,6 +2291,7 @@ export def "providers-employers-educationtypes update-education-type-by-educatio
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($education_type_id | is-empty) { error make --unspanned { msg: "path parameter 'educationTypeId' must be non-empty" } }
   let full_url = (build-url $base ({education_type_id: (encode-path-segment $education_type_id)} | format pattern "/providers/employers/educationtypes/{education_type_id}"))
   let req_body = {"code": $code, "description": $description} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
@@ -2208,7 +2299,7 @@ export def "providers-employers-educationtypes update-education-type-by-educatio
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"Authorization": $authorization, "Accept": $hdr_accept, "If-Match": $if_match} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json;version=2018-01-01" $req_body
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json;version=2018-01-01" $req_body {query: {}, body: $req_body}
 }
 
 # Delete an EmailIdentity for an employer
@@ -2230,12 +2321,13 @@ export def "providers-employers-emailidentities delete" [
 ]: nothing -> record<version: record<obsoleteDate: string, resourceVersion: string>, messages: table<code: int, description: string, id: string, properties: list, type: string>, content: record> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($email_identity_id | is-empty) { error make --unspanned { msg: "path parameter 'emailIdentityId' must be non-empty" } }
   let full_url = (build-url $base ({email_identity_id: (encode-path-segment $email_identity_id)} | format pattern "/providers/employers/emailidentities/{email_identity_id}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"Authorization": $authorization, "Accept": $hdr_accept} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
 }
 
 # Employer emailIdentity test email
@@ -2260,6 +2352,7 @@ export def "providers-employers-emailidentities-sendtestemail create-send-testem
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($email_identity_id | is-empty) { error make --unspanned { msg: "path parameter 'emailIdentityId' must be non-empty" } }
   let full_url = (build-url $base ({email_identity_id: (encode-path-segment $email_identity_id)} | format pattern "/providers/employers/emailidentities/{email_identity_id}/sendtestemail"))
   let req_body = {"to": $body_to} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
@@ -2267,7 +2360,7 @@ export def "providers-employers-emailidentities-sendtestemail create-send-testem
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"Authorization": $authorization, "Accept": $hdr_accept} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json;version=2018-01-01" $req_body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json;version=2018-01-01" $req_body {query: {}, body: $req_body}
 }
 
 # Delete a specific record
@@ -2291,12 +2384,13 @@ export def "providers-employers-employees-absences-absencecontact-history delete
 ]: nothing -> record<version: record<obsoleteDate: string, resourceVersion: string>, messages: table<code: int, description: string, id: string, properties: list, type: string>, content: record> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($absencecontact_history_id | is-empty) { error make --unspanned { msg: "path parameter 'absencecontactHistoryId' must be non-empty" } }
   let full_url = (build-url $base ({absencecontact_history_id: (encode-path-segment $absencecontact_history_id)} | format pattern "/providers/employers/employees/absences/absencecontactHistory/{absencecontact_history_id}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"Authorization": $authorization, "Accept": $hdr_accept, "If-Match": $if_match} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
 }
 
 # Details of a contact history
@@ -2319,12 +2413,13 @@ export def "providers-employers-employees-absences-absencecontact-history get-co
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($absencecontact_history_id | is-empty) { error make --unspanned { msg: "path parameter 'absencecontactHistoryId' must be non-empty" } }
   let full_url = (build-url $base ({absencecontact_history_id: (encode-path-segment $absencecontact_history_id)} | format pattern "/providers/employers/employees/absences/absencecontactHistory/{absencecontact_history_id}"))
   let accept_val = "application/json;version=2020-03-16"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"Authorization": $authorization, "Accept": $hdr_accept} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
 }
 
 # Edit the details of a contact history
@@ -2353,6 +2448,7 @@ export def "providers-employers-employees-absences-absencecontact-history update
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($absencecontact_history_id | is-empty) { error make --unspanned { msg: "path parameter 'absencecontactHistoryId' must be non-empty" } }
   let full_url = (build-url $base ({absencecontact_history_id: (encode-path-segment $absencecontact_history_id)} | format pattern "/providers/employers/employees/absences/absencecontactHistory/{absencecontact_history_id}"))
   let req_body = {"contactDate": $contact_date, "contactMethod": $contact_method, "summary": $summary} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
@@ -2360,7 +2456,7 @@ export def "providers-employers-employees-absences-absencecontact-history update
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"Authorization": $authorization, "Accept": $hdr_accept, "If-Match": $if_match} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json;version=2020-03-16" $req_body
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json;version=2020-03-16" $req_body {query: {}, body: $req_body}
 }
 
 # Delete a specific Absence Progress record
@@ -2384,12 +2480,13 @@ export def "providers-employers-employees-absences-absenceprogress delete-progre
 ]: nothing -> record<version: record<obsoleteDate: string, resourceVersion: string>, messages: table<code: int, description: string, id: string, properties: list, type: string>, content: record> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($absence_progress_id | is-empty) { error make --unspanned { msg: "path parameter 'absenceProgressId' must be non-empty" } }
   let full_url = (build-url $base ({absence_progress_id: (encode-path-segment $absence_progress_id)} | format pattern "/providers/employers/employees/absences/absenceprogress/{absence_progress_id}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"Authorization": $authorization, "Accept": $hdr_accept, "If-Match": $if_match} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
 }
 
 # Details of an Absence Progress
@@ -2412,12 +2509,13 @@ export def "providers-employers-employees-absences-absenceprogress get-progress-
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($absence_progress_id | is-empty) { error make --unspanned { msg: "path parameter 'absenceProgressId' must be non-empty" } }
   let full_url = (build-url $base ({absence_progress_id: (encode-path-segment $absence_progress_id)} | format pattern "/providers/employers/employees/absences/absenceprogress/{absence_progress_id}"))
   let accept_val = "application/json;version=2020-03-16"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"Authorization": $authorization, "Accept": $hdr_accept} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
 }
 
 # Edit the details of an absence progress
@@ -2447,6 +2545,7 @@ export def "providers-employers-employees-absences-absenceprogress update-progre
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($absence_progress_id | is-empty) { error make --unspanned { msg: "path parameter 'absenceProgressId' must be non-empty" } }
   let full_url = (build-url $base ({absence_progress_id: (encode-path-segment $absence_progress_id)} | format pattern "/providers/employers/employees/absences/absenceprogress/{absence_progress_id}"))
   let req_body = {"comments": $comments, "incapacityPercentage": $incapacity_percentage, "startDate": $start_date, "typeOfWorkResumption": $type_of_work_resumption} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
@@ -2454,7 +2553,7 @@ export def "providers-employers-employees-absences-absenceprogress update-progre
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"Authorization": $authorization, "Accept": $hdr_accept, "If-Match": $if_match} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json;version=2020-03-16" $req_body
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json;version=2020-03-16" $req_body {query: {}, body: $req_body}
 }
 
 # Delete a specific absence record
@@ -2478,19 +2577,20 @@ export def "providers-employers-employees-absences delete" [
 ]: nothing -> record<version: record<obsoleteDate: string, resourceVersion: string>, messages: table<code: int, description: string, id: string, properties: list, type: string>, content: record> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($absence_id | is-empty) { error make --unspanned { msg: "path parameter 'absenceId' must be non-empty" } }
   let full_url = (build-url $base ({absence_id: (encode-path-segment $absence_id)} | format pattern "/providers/employers/employees/absences/{absence_id}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"Authorization": $authorization, "Accept": $hdr_accept, "If-Match": $if_match} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
 }
 
 # Details of an Absence
 #
 # GET /providers/employers/employees/absences/{absenceId}
 # operationId: GetAbsenceByAbsenceId
-export def "providers-employers-employees-absences get-by-absenceId" [
+export def "providers-employers-employees-absences get-by-absence-id" [
   absence_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -2506,12 +2606,13 @@ export def "providers-employers-employees-absences get-by-absenceId" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($absence_id | is-empty) { error make --unspanned { msg: "path parameter 'absenceId' must be non-empty" } }
   let full_url = (build-url $base ({absence_id: (encode-path-segment $absence_id)} | format pattern "/providers/employers/employees/absences/{absence_id}"))
   let accept_val = "application/json;version=2020-03-16"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"Authorization": $authorization, "Accept": $hdr_accept} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
 }
 
 # Edit the details of a Absence
@@ -2560,6 +2661,7 @@ export def "providers-employers-employees-absences update" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($absence_id | is-empty) { error make --unspanned { msg: "path parameter 'absenceId' must be non-empty" } }
   let full_url = (build-url $base ({absence_id: (encode-path-segment $absence_id)} | format pattern "/providers/employers/employees/absences/{absence_id}"))
   let req_body = {"accidentType": $accident_type, "actionToBeTakenByOccupationalHealthAndSafetyService": $action_to_be_taken_by_occupational_health_and_safety_service, "caseManager": $case_manager, "causeOfAbsence": $cause_of_absence, "comments": $comments, "contactInformation": $contact_information, "expectedDateOfChildbirth": $expected_date_of_childbirth, "expectedDuration": $expected_duration, "expectedEndDateOfMaternityLeave": $expected_end_date_of_maternity_leave, "hasMobilityIssue": $has_mobility_issue, "hoursWorkedOnFirstDayOfAbsence": $hours_worked_on_first_day_of_absence, "isDisruptedEmploymentRelationship": $is_disrupted_employment_relationship, "isHospitalised": $is_hospitalised, "isRecoveredWithinTwoWeeks": $is_recovered_within_two_weeks, "isThirdPartyLiability": $is_third_party_liability, "isWorkRelatedIllness": $is_work_related_illness, "reintegration": $reintegration} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
@@ -2567,7 +2669,7 @@ export def "providers-employers-employees-absences update" [
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"Authorization": $authorization, "Accept": $hdr_accept, "If-Match": $if_match} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json;version=2020-03-16" $req_body
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json;version=2020-03-16" $req_body {query: {}, body: $req_body}
 }
 
 # Contact history for an absence
@@ -2594,13 +2696,14 @@ export def "providers-employers-employees-absences-absencecontact-history get-co
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($absence_id | is-empty) { error make --unspanned { msg: "path parameter 'absenceId' must be non-empty" } }
   let qp = [(serialize-qp "filter" $filter "scalar") (serialize-qp "orderBy" $order_by "scalar") (serialize-qp "pageNumber" $page_number "scalar") (serialize-qp "pageSize" $page_size "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({absence_id: (encode-path-segment $absence_id)} | format pattern "/providers/employers/employees/absences/{absence_id}/absencecontactHistory") $qp)
   let accept_val = "application/json;version=2018-01-01"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"Authorization": $authorization, "Accept": $hdr_accept} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"filter": $filter, "orderBy": $order_by, "pageNumber": $page_number, "pageSize": $page_size} | compact), body: null}
 }
 
 # Create a contact history for an Absence
@@ -2628,6 +2731,7 @@ export def "providers-employers-employees-absences-absencecontact-history create
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($absence_id | is-empty) { error make --unspanned { msg: "path parameter 'absenceId' must be non-empty" } }
   let full_url = (build-url $base ({absence_id: (encode-path-segment $absence_id)} | format pattern "/providers/employers/employees/absences/{absence_id}/absencecontactHistory"))
   let req_body = {"contactDate": $contact_date, "contactMethod": $contact_method, "summary": $summary} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
@@ -2635,7 +2739,7 @@ export def "providers-employers-employees-absences-absencecontact-history create
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"Authorization": $authorization, "Accept": $hdr_accept} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json;version=2018-01-01" $req_body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json;version=2018-01-01" $req_body {query: {}, body: $req_body}
 }
 
 # List of absence progress for an absence
@@ -2662,13 +2766,14 @@ export def "providers-employers-employees-absences-absenceprogress get-progress"
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($absence_id | is-empty) { error make --unspanned { msg: "path parameter 'absenceId' must be non-empty" } }
   let qp = [(serialize-qp "filter" $filter "scalar") (serialize-qp "orderBy" $order_by "scalar") (serialize-qp "pageNumber" $page_number "scalar") (serialize-qp "pageSize" $page_size "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({absence_id: (encode-path-segment $absence_id)} | format pattern "/providers/employers/employees/absences/{absence_id}/absenceprogress") $qp)
   let accept_val = "application/json;version=2020-03-16"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"Authorization": $authorization, "Accept": $hdr_accept} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"filter": $filter, "orderBy": $order_by, "pageNumber": $page_number, "pageSize": $page_size} | compact), body: null}
 }
 
 # Create an Absence Progress for an Absence
@@ -2697,6 +2802,7 @@ export def "providers-employers-employees-absences-absenceprogress create-progre
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($absence_id | is-empty) { error make --unspanned { msg: "path parameter 'absenceId' must be non-empty" } }
   let full_url = (build-url $base ({absence_id: (encode-path-segment $absence_id)} | format pattern "/providers/employers/employees/absences/{absence_id}/absenceprogress"))
   let req_body = {"comments": $comments, "incapacityPercentage": $incapacity_percentage, "startDate": $start_date, "typeOfWorkResumption": $type_of_work_resumption} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
@@ -2704,7 +2810,7 @@ export def "providers-employers-employees-absences-absenceprogress create-progre
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"Authorization": $authorization, "Accept": $hdr_accept} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json;version=2020-03-16" $req_body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json;version=2020-03-16" $req_body {query: {}, body: $req_body}
 }
 
 # Close an absence
@@ -2731,6 +2837,7 @@ export def "providers-employers-employees-absences-closeabsence update-close" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($absence_id | is-empty) { error make --unspanned { msg: "path parameter 'absenceId' must be non-empty" } }
   let full_url = (build-url $base ({absence_id: (encode-path-segment $absence_id)} | format pattern "/providers/employers/employees/absences/{absence_id}/closeabsence"))
   let req_body = {"endOfAbsence": $end_of_absence} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
@@ -2738,7 +2845,7 @@ export def "providers-employers-employees-absences-closeabsence update-close" [
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"Authorization": $authorization, "Accept": $hdr_accept, "If-Match": $if_match} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "patch" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json;version=2020-03-16" $req_body
+  do-request "patch" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json;version=2020-03-16" $req_body {query: {}, body: $req_body}
 }
 
 # Reopen an absence
@@ -2764,6 +2871,7 @@ export def "providers-employers-employees-absences-reopenabsence update-reopen" 
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($absence_id | is-empty) { error make --unspanned { msg: "path parameter 'absenceId' must be non-empty" } }
   let full_url = (build-url $base ({absence_id: (encode-path-segment $absence_id)} | format pattern "/providers/employers/employees/absences/{absence_id}/reopenabsence"))
   let req_body = $body
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
@@ -2771,7 +2879,7 @@ export def "providers-employers-employees-absences-reopenabsence update-reopen" 
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"Authorization": $authorization, "Accept": $hdr_accept, "If-Match": $if_match} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "patch" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json;version=2020-03-16" $req_body
+  do-request "patch" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json;version=2020-03-16" $req_body {query: {}, body: $req_body}
 }
 
 # Delete a specific child record
@@ -2795,12 +2903,13 @@ export def "providers-employers-employees-children delete-child-by-child" [
 ]: nothing -> record<version: record<obsoleteDate: string, resourceVersion: string>, messages: table<code: int, description: string, id: string, properties: list, type: string>, content: record> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($child_id | is-empty) { error make --unspanned { msg: "path parameter 'childId' must be non-empty" } }
   let full_url = (build-url $base ({child_id: (encode-path-segment $child_id)} | format pattern "/providers/employers/employees/children/{child_id}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"Authorization": $authorization, "Accept": $hdr_accept, "If-Match": $if_match} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
 }
 
 # Details of a child
@@ -2823,12 +2932,13 @@ export def "providers-employers-employees-children get-child-by-child" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($child_id | is-empty) { error make --unspanned { msg: "path parameter 'childId' must be non-empty" } }
   let full_url = (build-url $base ({child_id: (encode-path-segment $child_id)} | format pattern "/providers/employers/employees/children/{child_id}"))
   let accept_val = "application/json;version=2018-01-01"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"Authorization": $authorization, "Accept": $hdr_accept} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
 }
 
 # Edit the details of a child
@@ -2863,6 +2973,7 @@ export def "providers-employers-employees-children update-child-by-child" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($child_id | is-empty) { error make --unspanned { msg: "path parameter 'childId' must be non-empty" } }
   let full_url = (build-url $base ({child_id: (encode-path-segment $child_id)} | format pattern "/providers/employers/employees/children/{child_id}"))
   let req_body = {"dateOfBirth": $date_of_birth, "dateOfDeath": $date_of_death, "firstName": $first_name, "gender": $gender, "initials": $initials, "lastName": $last_name, "prefix": $prefix, "residenceStatus": $residence_status} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
@@ -2870,7 +2981,7 @@ export def "providers-employers-employees-children update-child-by-child" [
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"Authorization": $authorization, "Accept": $hdr_accept, "If-Match": $if_match} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json;version=2018-01-01" $req_body
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json;version=2018-01-01" $req_body {query: {}, body: $req_body}
 }
 
 # Delete a specific contact
@@ -2894,19 +3005,20 @@ export def "providers-employers-employees-contacts delete" [
 ]: nothing -> record<version: record<obsoleteDate: string, resourceVersion: string>, messages: table<code: int, description: string, id: string, properties: list, type: string>, content: record> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($contact_id | is-empty) { error make --unspanned { msg: "path parameter 'contactId' must be non-empty" } }
   let full_url = (build-url $base ({contact_id: (encode-path-segment $contact_id)} | format pattern "/providers/employers/employees/contacts/{contact_id}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"Authorization": $authorization, "Accept": $hdr_accept, "If-Match": $if_match} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
 }
 
 # Details of a single contact
 #
 # GET /providers/employers/employees/contacts/{contactId}
 # operationId: GetContactByContactId
-export def "providers-employers-employees-contacts get-by-contactId" [
+export def "providers-employers-employees-contacts get-by-contact-id" [
   contact_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -2922,12 +3034,13 @@ export def "providers-employers-employees-contacts get-by-contactId" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($contact_id | is-empty) { error make --unspanned { msg: "path parameter 'contactId' must be non-empty" } }
   let full_url = (build-url $base ({contact_id: (encode-path-segment $contact_id)} | format pattern "/providers/employers/employees/contacts/{contact_id}"))
   let accept_val = "application/json;version=2018-01-01"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"Authorization": $authorization, "Accept": $hdr_accept} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
 }
 
 # Edit a contact
@@ -2958,6 +3071,7 @@ export def "providers-employers-employees-contacts update" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($contact_id | is-empty) { error make --unspanned { msg: "path parameter 'contactId' must be non-empty" } }
   let full_url = (build-url $base ({contact_id: (encode-path-segment $contact_id)} | format pattern "/providers/employers/employees/contacts/{contact_id}"))
   let req_body = {"address": $address, "description": $description, "name": $name, "particularities": $particularities, "phoneNumber": $phone_number} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
@@ -2965,7 +3079,7 @@ export def "providers-employers-employees-contacts update" [
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"Authorization": $authorization, "Accept": $hdr_accept, "If-Match": $if_match} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json;version=2018-01-01" $req_body
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json;version=2018-01-01" $req_body {query: {}, body: $req_body}
 }
 
 # Delete an employee custom field record
@@ -2989,12 +3103,13 @@ export def "providers-employers-employees-customfields delete-custom-field-by-cu
 ]: nothing -> record<version: record<obsoleteDate: string, resourceVersion: string>, messages: table<code: int, description: string, id: string, properties: list, type: string>, content: record> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($employee_custom_field_id | is-empty) { error make --unspanned { msg: "path parameter 'employeeCustomFieldId' must be non-empty" } }
   let full_url = (build-url $base ({employee_custom_field_id: (encode-path-segment $employee_custom_field_id)} | format pattern "/providers/employers/employees/customfields/{employee_custom_field_id}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"Authorization": $authorization, "Accept": $hdr_accept, "If-Match": $if_match} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
 }
 
 # Details of an employee custom field
@@ -3021,13 +3136,14 @@ export def "providers-employers-employees-customfields get-custom-field-by-custo
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($employee_custom_field_id | is-empty) { error make --unspanned { msg: "path parameter 'employeeCustomFieldId' must be non-empty" } }
   let qp = [(serialize-qp "filter" $filter "scalar") (serialize-qp "orderBy" $order_by "scalar") (serialize-qp "pageNumber" $page_number "scalar") (serialize-qp "pageSize" $page_size "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({employee_custom_field_id: (encode-path-segment $employee_custom_field_id)} | format pattern "/providers/employers/employees/customfields/{employee_custom_field_id}") $qp)
   let accept_val = "application/json;version=2018-01-01"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"Authorization": $authorization, "Accept": $hdr_accept} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"filter": $filter, "orderBy": $order_by, "pageNumber": $page_number, "pageSize": $page_size} | compact), body: null}
 }
 
 # Edit an employee custom field record
@@ -3054,6 +3170,7 @@ export def "providers-employers-employees-customfields update-custom-field-by-cu
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($employee_custom_field_id | is-empty) { error make --unspanned { msg: "path parameter 'employeeCustomFieldId' must be non-empty" } }
   let full_url = (build-url $base ({employee_custom_field_id: (encode-path-segment $employee_custom_field_id)} | format pattern "/providers/employers/employees/customfields/{employee_custom_field_id}"))
   let req_body = {"value": $value} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
@@ -3061,7 +3178,7 @@ export def "providers-employers-employees-customfields update-custom-field-by-cu
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"Authorization": $authorization, "Accept": $hdr_accept, "If-Match": $if_match} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json;version=2018-01-01" $req_body
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json;version=2018-01-01" $req_body {query: {}, body: $req_body}
 }
 
 # Delete a specific education
@@ -3085,19 +3202,20 @@ export def "providers-employers-employees-educations delete" [
 ]: nothing -> record<version: record<obsoleteDate: string, resourceVersion: string>, messages: table<code: int, description: string, id: string, properties: list, type: string>, content: record> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($employee_education_id | is-empty) { error make --unspanned { msg: "path parameter 'employeeEducationId' must be non-empty" } }
   let full_url = (build-url $base ({employee_education_id: (encode-path-segment $employee_education_id)} | format pattern "/providers/employers/employees/educations/{employee_education_id}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"Authorization": $authorization, "Accept": $hdr_accept, "If-Match": $if_match} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
 }
 
 # Details of a single education
 #
 # GET /providers/employers/employees/educations/{employeeEducationId}
 # operationId: GetEducationByEducationId
-export def "providers-employers-employees-educations get-by-employeeEducationId" [
+export def "providers-employers-employees-educations get-by-employee-education-id" [
   employee_education_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -3113,12 +3231,13 @@ export def "providers-employers-employees-educations get-by-employeeEducationId"
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($employee_education_id | is-empty) { error make --unspanned { msg: "path parameter 'employeeEducationId' must be non-empty" } }
   let full_url = (build-url $base ({employee_education_id: (encode-path-segment $employee_education_id)} | format pattern "/providers/employers/employees/educations/{employee_education_id}"))
   let accept_val = "application/json;version=2018-01-01"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"Authorization": $authorization, "Accept": $hdr_accept} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
 }
 
 # Edit a Education
@@ -3161,6 +3280,7 @@ export def "providers-employers-employees-educations update" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($employee_education_id | is-empty) { error make --unspanned { msg: "path parameter 'employeeEducationId' must be non-empty" } }
   let full_url = (build-url $base ({employee_education_id: (encode-path-segment $employee_education_id)} | format pattern "/providers/employers/employees/educations/{employee_education_id}"))
   let req_body = {"educationLevel": $education_level, "employeeCosts": $employee_costs, "employerCosts": $employer_costs, "endDate": $end_date, "endOfValidityDate": $end_of_validity_date, "furtherIndication": $further_indication, "hasDiploma": $has_diploma, "institute": $institute, "name": $name, "particularities": $particularities, "startDate": $start_date, "typeOfEducation": $type_of_education, "yearOfDiploma": $year_of_diploma} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
@@ -3168,7 +3288,7 @@ export def "providers-employers-employees-educations update" [
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"Authorization": $authorization, "Accept": $hdr_accept, "If-Match": $if_match} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json;version=2018-01-01" $req_body
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json;version=2018-01-01" $req_body {query: {}, body: $req_body}
 }
 
 # Accept or reject wage proposals
@@ -3199,7 +3319,7 @@ export def "providers-employers-employees-employments-wage-proposals update" [
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"Authorization": $authorization, "Accept": $hdr_accept} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "patch" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json;version=2018-01-01" $req_body
+  do-request "patch" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json;version=2018-01-01" $req_body {query: {}, body: $req_body}
 }
 
 # Delete a specific abp fund record
@@ -3223,12 +3343,13 @@ export def "providers-employers-employees-employments-abpfunds delete-abp-fund-b
 ]: nothing -> record<version: record<obsoleteDate: string, resourceVersion: string>, messages: table<code: int, description: string, id: string, properties: list, type: string>, content: record> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($abp_fund_id | is-empty) { error make --unspanned { msg: "path parameter 'abpFundId' must be non-empty" } }
   let full_url = (build-url $base ({abp_fund_id: (encode-path-segment $abp_fund_id)} | format pattern "/providers/employers/employees/employments/abpfunds/{abp_fund_id}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"Authorization": $authorization, "Accept": $hdr_accept, "If-Match": $if_match} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
 }
 
 # Details of an abp fund
@@ -3255,13 +3376,14 @@ export def "providers-employers-employees-employments-abpfunds get-abp-fund-by-a
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($abp_fund_id | is-empty) { error make --unspanned { msg: "path parameter 'abpFundId' must be non-empty" } }
   let qp = [(serialize-qp "filter" $filter "scalar") (serialize-qp "orderBy" $order_by "scalar") (serialize-qp "pageNumber" $page_number "scalar") (serialize-qp "pageSize" $page_size "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({abp_fund_id: (encode-path-segment $abp_fund_id)} | format pattern "/providers/employers/employees/employments/abpfunds/{abp_fund_id}") $qp)
   let accept_val = "application/json;version=2018-01-01"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"Authorization": $authorization, "Accept": $hdr_accept} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"filter": $filter, "orderBy": $order_by, "pageNumber": $page_number, "pageSize": $page_size} | compact), body: null}
 }
 
 # Edit a abp fund record
@@ -3292,6 +3414,7 @@ export def "providers-employers-employees-employments-abpfunds update-abp-fund-b
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($abp_fund_id | is-empty) { error make --unspanned { msg: "path parameter 'abpFundId' must be non-empty" } }
   let full_url = (build-url $base ({abp_fund_id: (encode-path-segment $abp_fund_id)} | format pattern "/providers/employers/employees/employments/abpfunds/{abp_fund_id}"))
   let req_body = {"deviations": $deviations, "endDate": $end_date, "fixedContribution": $fixed_contribution, "startDate": $start_date} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
@@ -3299,7 +3422,7 @@ export def "providers-employers-employees-employments-abpfunds update-abp-fund-b
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"Authorization": $authorization, "Accept": $hdr_accept, "If-Match": $if_match} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json;version=2018-01-01" $req_body
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json;version=2018-01-01" $req_body {query: {}, body: $req_body}
 }
 
 # Delete an attachment of earnings record
@@ -3323,12 +3446,13 @@ export def "providers-employers-employees-employments-attachmentsofearnings dele
 ]: nothing -> record<version: record<obsoleteDate: string, resourceVersion: string>, messages: table<code: int, description: string, id: string, properties: list, type: string>, content: record> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($attachment_of_earnings_id | is-empty) { error make --unspanned { msg: "path parameter 'attachmentOfEarningsId' must be non-empty" } }
   let full_url = (build-url $base ({attachment_of_earnings_id: (encode-path-segment $attachment_of_earnings_id)} | format pattern "/providers/employers/employees/employments/attachmentsofearnings/{attachment_of_earnings_id}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"Authorization": $authorization, "Accept": $hdr_accept, "If-Match": $if_match} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
 }
 
 # Get the details of an attachment of earnings record
@@ -3351,12 +3475,13 @@ export def "providers-employers-employees-employments-attachmentsofearnings get-
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($attachment_of_earnings_id | is-empty) { error make --unspanned { msg: "path parameter 'attachmentOfEarningsId' must be non-empty" } }
   let full_url = (build-url $base ({attachment_of_earnings_id: (encode-path-segment $attachment_of_earnings_id)} | format pattern "/providers/employers/employees/employments/attachmentsofearnings/{attachment_of_earnings_id}"))
   let accept_val = "application/json;version=2018-01-01"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"Authorization": $authorization, "Accept": $hdr_accept} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
 }
 
 # Edit the details of an attachment of earnings record
@@ -3394,6 +3519,7 @@ export def "providers-employers-employees-employments-attachmentsofearnings upda
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($attachment_of_earnings_id | is-empty) { error make --unspanned { msg: "path parameter 'attachmentOfEarningsId' must be non-empty" } }
   let full_url = (build-url $base ({attachment_of_earnings_id: (encode-path-segment $attachment_of_earnings_id)} | format pattern "/providers/employers/employees/employments/attachmentsofearnings/{attachment_of_earnings_id}"))
   let req_body = {"beneficiary": $beneficiary, "creditor": $creditor, "description1": $description1, "description2": $description2, "descriptionPayslip": $description_payslip, "endDate": $end_date, "fixedPaymentPerPayrollPeriod": $fixed_payment_per_payroll_period, "iban": $iban, "startDate": $start_date, "totalAmount": $total_amount} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
@@ -3401,7 +3527,7 @@ export def "providers-employers-employees-employments-attachmentsofearnings upda
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"Authorization": $authorization, "Accept": $hdr_accept, "If-Match": $if_match} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json;version=2018-01-01" $req_body
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json;version=2018-01-01" $req_body {query: {}, body: $req_body}
 }
 
 # Delete a specific record
@@ -3425,12 +3551,13 @@ export def "providers-employers-employees-employments-basesforcalculation delete
 ]: nothing -> record<version: record<obsoleteDate: string, resourceVersion: string>, messages: table<code: int, description: string, id: string, properties: list, type: string>, content: record> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($baseforcalculation_id | is-empty) { error make --unspanned { msg: "path parameter 'baseforcalculationId' must be non-empty" } }
   let full_url = (build-url $base ({baseforcalculation_id: (encode-path-segment $baseforcalculation_id)} | format pattern "/providers/employers/employees/employments/basesforcalculation/{baseforcalculation_id}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"Authorization": $authorization, "Accept": $hdr_accept, "If-Match": $if_match} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
 }
 
 # Details of an base for employment fund calculations
@@ -3457,13 +3584,14 @@ export def "providers-employers-employees-employments-basesforcalculation get-ba
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($baseforcalculation_id | is-empty) { error make --unspanned { msg: "path parameter 'baseforcalculationId' must be non-empty" } }
   let qp = [(serialize-qp "filter" $filter "scalar") (serialize-qp "orderBy" $order_by "scalar") (serialize-qp "pageNumber" $page_number "scalar") (serialize-qp "pageSize" $page_size "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({baseforcalculation_id: (encode-path-segment $baseforcalculation_id)} | format pattern "/providers/employers/employees/employments/basesforcalculation/{baseforcalculation_id}") $qp)
   let accept_val = "application/json;version=2018-01-01"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"Authorization": $authorization, "Accept": $hdr_accept} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"filter": $filter, "orderBy": $order_by, "pageNumber": $page_number, "pageSize": $page_size} | compact), body: null}
 }
 
 # Change the properties of a base for calculation
@@ -3496,6 +3624,7 @@ export def "providers-employers-employees-employments-basesforcalculation update
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($baseforcalculation_id | is-empty) { error make --unspanned { msg: "path parameter 'baseforcalculationId' must be non-empty" } }
   let full_url = (build-url $base ({baseforcalculation_id: (encode-path-segment $baseforcalculation_id)} | format pattern "/providers/employers/employees/employments/basesforcalculation/{baseforcalculation_id}"))
   let req_body = {"ageBasedMaximum": $age_based_maximum, "ageBasedMinimum": $age_based_minimum, "deviations": $deviations, "endDate": $end_date, "startDate": $start_date} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
@@ -3503,7 +3632,7 @@ export def "providers-employers-employees-employments-basesforcalculation update
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"Authorization": $authorization, "Accept": $hdr_accept, "If-Match": $if_match} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json;version=2018-01-01" $req_body
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json;version=2018-01-01" $req_body {query: {}, body: $req_body}
 }
 
 # Delete a specific record
@@ -3527,12 +3656,13 @@ export def "providers-employers-employees-employments-basesforemploymentfundcalc
 ]: nothing -> record<version: record<obsoleteDate: string, resourceVersion: string>, messages: table<code: int, description: string, id: string, properties: list, type: string>, content: record> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($baseforemploymentfundcalculation_id | is-empty) { error make --unspanned { msg: "path parameter 'baseforemploymentfundcalculationId' must be non-empty" } }
   let full_url = (build-url $base ({baseforemploymentfundcalculation_id: (encode-path-segment $baseforemploymentfundcalculation_id)} | format pattern "/providers/employers/employees/employments/basesforemploymentfundcalculation/{baseforemploymentfundcalculation_id}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"Authorization": $authorization, "Accept": $hdr_accept, "If-Match": $if_match} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
 }
 
 # Details of an base for employment fund calculations
@@ -3559,13 +3689,14 @@ export def "providers-employers-employees-employments-basesforemploymentfundcalc
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($baseforemploymentfundcalculation_id | is-empty) { error make --unspanned { msg: "path parameter 'baseforemploymentfundcalculationId' must be non-empty" } }
   let qp = [(serialize-qp "filter" $filter "scalar") (serialize-qp "orderBy" $order_by "scalar") (serialize-qp "pageNumber" $page_number "scalar") (serialize-qp "pageSize" $page_size "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({baseforemploymentfundcalculation_id: (encode-path-segment $baseforemploymentfundcalculation_id)} | format pattern "/providers/employers/employees/employments/basesforemploymentfundcalculation/{baseforemploymentfundcalculation_id}") $qp)
   let accept_val = "application/json;version=2018-01-01"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"Authorization": $authorization, "Accept": $hdr_accept} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"filter": $filter, "orderBy": $order_by, "pageNumber": $page_number, "pageSize": $page_size} | compact), body: null}
 }
 
 # Change the properties of a base for employment fund calculation
@@ -3593,6 +3724,7 @@ export def "providers-employers-employees-employments-basesforemploymentfundcalc
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($baseforemploymentfundcalculation_id | is-empty) { error make --unspanned { msg: "path parameter 'baseforemploymentfundcalculationId' must be non-empty" } }
   let full_url = (build-url $base ({baseforemploymentfundcalculation_id: (encode-path-segment $baseforemploymentfundcalculation_id)} | format pattern "/providers/employers/employees/employments/basesforemploymentfundcalculation/{baseforemploymentfundcalculation_id}"))
   let req_body = {"base": $body_base, "endDate": $end_date, "startDate": $start_date} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
@@ -3600,7 +3732,7 @@ export def "providers-employers-employees-employments-basesforemploymentfundcalc
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"Authorization": $authorization, "Accept": $hdr_accept, "If-Match": $if_match} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json;version=2018-01-01" $req_body
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json;version=2018-01-01" $req_body {query: {}, body: $req_body}
 }
 
 # Delete a specific benefit or deduction record
@@ -3624,12 +3756,13 @@ export def "providers-employers-employees-employments-benefits-and-deductions de
 ]: nothing -> record<version: record<obsoleteDate: string, resourceVersion: string>, messages: table<code: int, description: string, id: string, properties: list, type: string>, content: record> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($benefitsanddeductions_id | is-empty) { error make --unspanned { msg: "path parameter 'benefitsanddeductionsId' must be non-empty" } }
   let full_url = (build-url $base ({benefitsanddeductions_id: (encode-path-segment $benefitsanddeductions_id)} | format pattern "/providers/employers/employees/employments/benefitsAndDeductions/{benefitsanddeductions_id}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"Authorization": $authorization, "Accept": $hdr_accept, "If-Match": $if_match} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
 }
 
 # Detail of a benefit or deduction record
@@ -3652,12 +3785,13 @@ export def "providers-employers-employees-employments-benefits-and-deductions ge
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($benefitsanddeductions_id | is-empty) { error make --unspanned { msg: "path parameter 'benefitsanddeductionsId' must be non-empty" } }
   let full_url = (build-url $base ({benefitsanddeductions_id: (encode-path-segment $benefitsanddeductions_id)} | format pattern "/providers/employers/employees/employments/benefitsAndDeductions/{benefitsanddeductions_id}"))
   let accept_val = "application/json;version=2018-01-01"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"Authorization": $authorization, "Accept": $hdr_accept} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
 }
 
 # Edit the details of a benefit or deduction record
@@ -3686,6 +3820,7 @@ export def "providers-employers-employees-employments-benefits-and-deductions up
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($benefitsanddeductions_id | is-empty) { error make --unspanned { msg: "path parameter 'benefitsanddeductionsId' must be non-empty" } }
   let full_url = (build-url $base ({benefitsanddeductions_id: (encode-path-segment $benefitsanddeductions_id)} | format pattern "/providers/employers/employees/employments/benefitsAndDeductions/{benefitsanddeductions_id}"))
   let req_body = {"endDate": $end_date, "startDate": $start_date, "value": $value} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
@@ -3693,7 +3828,7 @@ export def "providers-employers-employees-employments-benefits-and-deductions up
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"Authorization": $authorization, "Accept": $hdr_accept, "If-Match": $if_match} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json;version=2018-01-01" $req_body
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json;version=2018-01-01" $req_body {query: {}, body: $req_body}
 }
 
 # Delete a benefit in kind record
@@ -3717,12 +3852,13 @@ export def "providers-employers-employees-employments-benefitsinkind delete-bene
 ]: nothing -> record<version: record<obsoleteDate: string, resourceVersion: string>, messages: table<code: int, description: string, id: string, properties: list, type: string>, content: record> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($benefit_in_kind_id | is-empty) { error make --unspanned { msg: "path parameter 'benefitInKindId' must be non-empty" } }
   let full_url = (build-url $base ({benefit_in_kind_id: (encode-path-segment $benefit_in_kind_id)} | format pattern "/providers/employers/employees/employments/benefitsinkind/{benefit_in_kind_id}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"Authorization": $authorization, "Accept": $hdr_accept, "If-Match": $if_match} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
 }
 
 # Details of an benefit in kind
@@ -3749,13 +3885,14 @@ export def "providers-employers-employees-employments-benefitsinkind get-benefit
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($benefit_in_kind_id | is-empty) { error make --unspanned { msg: "path parameter 'benefitInKindId' must be non-empty" } }
   let qp = [(serialize-qp "filter" $filter "scalar") (serialize-qp "orderBy" $order_by "scalar") (serialize-qp "pageNumber" $page_number "scalar") (serialize-qp "pageSize" $page_size "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({benefit_in_kind_id: (encode-path-segment $benefit_in_kind_id)} | format pattern "/providers/employers/employees/employments/benefitsinkind/{benefit_in_kind_id}") $qp)
   let accept_val = "application/json;version=2018-01-01"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"Authorization": $authorization, "Accept": $hdr_accept} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"filter": $filter, "orderBy": $order_by, "pageNumber": $page_number, "pageSize": $page_size} | compact), body: null}
 }
 
 # Edit a benefit in kind record
@@ -3789,6 +3926,7 @@ export def "providers-employers-employees-employments-benefitsinkind update-bene
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($benefit_in_kind_id | is-empty) { error make --unspanned { msg: "path parameter 'benefitInKindId' must be non-empty" } }
   let full_url = (build-url $base ({benefit_in_kind_id: (encode-path-segment $benefit_in_kind_id)} | format pattern "/providers/employers/employees/employments/benefitsinkind/{benefit_in_kind_id}"))
   let req_body = {"benefitInKindType": $benefit_in_kind_type, "brand": $brand, "endDate": $end_date, "particularities": $particularities, "startDate": $start_date, "supplier": $supplier, "type": $type, "value": $value} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
@@ -3796,7 +3934,7 @@ export def "providers-employers-employees-employments-benefitsinkind update-bene
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"Authorization": $authorization, "Accept": $hdr_accept, "If-Match": $if_match} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json;version=2018-01-01" $req_body
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json;version=2018-01-01" $req_body {query: {}, body: $req_body}
 }
 
 # Delete a specific company car record
@@ -3820,12 +3958,13 @@ export def "providers-employers-employees-employments-companycars delete-company
 ]: nothing -> record<version: record<obsoleteDate: string, resourceVersion: string>, messages: table<code: int, description: string, id: string, properties: list, type: string>, content: record> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($company_car_id | is-empty) { error make --unspanned { msg: "path parameter 'companyCarId' must be non-empty" } }
   let full_url = (build-url $base ({company_car_id: (encode-path-segment $company_car_id)} | format pattern "/providers/employers/employees/employments/companycars/{company_car_id}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"Authorization": $authorization, "Accept": $hdr_accept, "If-Match": $if_match} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
 }
 
 # Details of a company car record
@@ -3848,12 +3987,13 @@ export def "providers-employers-employees-employments-companycars get-company-ca
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($company_car_id | is-empty) { error make --unspanned { msg: "path parameter 'companyCarId' must be non-empty" } }
   let full_url = (build-url $base ({company_car_id: (encode-path-segment $company_car_id)} | format pattern "/providers/employers/employees/employments/companycars/{company_car_id}"))
   let accept_val = "application/json;version=2018-01-01"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"Authorization": $authorization, "Accept": $hdr_accept} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
 }
 
 # Edit the details of a company car record
@@ -3892,6 +4032,7 @@ export def "providers-employers-employees-employments-companycars update-company
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($company_car_id | is-empty) { error make --unspanned { msg: "path parameter 'companyCarId' must be non-empty" } }
   let full_url = (build-url $base ({company_car_id: (encode-path-segment $company_car_id)} | format pattern "/providers/employers/employees/employments/companycars/{company_car_id}"))
   let req_body = {"brand": $brand, "catalogValue": $catalog_value, "comments": $comments, "endDate": $end_date, "fuelCardNumber": $fuel_card_number, "kilometersPrivateUse": $kilometers_private_use, "lease": $lease, "leaseOrBuy": $lease_or_buy, "licensePlateNumber": $license_plate_number, "model": $model, "startDate": $start_date, "supplier": $supplier} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
@@ -3899,7 +4040,7 @@ export def "providers-employers-employees-employments-companycars update-company
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"Authorization": $authorization, "Accept": $hdr_accept, "If-Match": $if_match} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json;version=2018-01-01" $req_body
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json;version=2018-01-01" $req_body {query: {}, body: $req_body}
 }
 
 # Delete a cost per hour record
@@ -3924,13 +4065,14 @@ export def "providers-employers-employees-employments-costperhour delete-cost-pe
 ]: nothing -> record<version: record<obsoleteDate: string, resourceVersion: string>, messages: table<code: int, description: string, id: string, properties: list, type: string>, content: record> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($costperhour_id | is-empty) { error make --unspanned { msg: "path parameter 'costperhourId' must be non-empty" } }
   let qp = [(serialize-qp "costPerHourId" $cost_per_hour_id "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({costperhour_id: (encode-path-segment $costperhour_id)} | format pattern "/providers/employers/employees/employments/costperhour/{costperhour_id}") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"Authorization": $authorization, "Accept": $hdr_accept, "If-Match": $if_match} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"costPerHourId": $cost_per_hour_id} | compact), body: null}
 }
 
 # Details of cost per hour
@@ -3954,13 +4096,14 @@ export def "providers-employers-employees-employments-costperhour get-cost-per-h
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($costperhour_id | is-empty) { error make --unspanned { msg: "path parameter 'costperhourId' must be non-empty" } }
   let qp = [(serialize-qp "costPerHourId" $cost_per_hour_id "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({costperhour_id: (encode-path-segment $costperhour_id)} | format pattern "/providers/employers/employees/employments/costperhour/{costperhour_id}") $qp)
   let accept_val = "application/json;version=2018-01-01"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"Authorization": $authorization, "Accept": $hdr_accept} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"costPerHourId": $cost_per_hour_id} | compact), body: null}
 }
 
 # Edit a cost per hour record
@@ -3987,6 +4130,7 @@ export def "providers-employers-employees-employments-costperhour update" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($costperhour_id | is-empty) { error make --unspanned { msg: "path parameter 'costperhourId' must be non-empty" } }
   let qp = [(serialize-qp "costPerHourId" $cost_per_hour_id "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({costperhour_id: (encode-path-segment $costperhour_id)} | format pattern "/providers/employers/employees/employments/costperhour/{costperhour_id}") $qp)
   let req_body = {"costPerHour": $cost_per_hour} | compact
@@ -3995,7 +4139,7 @@ export def "providers-employers-employees-employments-costperhour update" [
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"Authorization": $authorization, "Accept": $hdr_accept, "If-Match": $if_match} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json;version=2018-01-01" $req_body
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json;version=2018-01-01" $req_body {query: ({"costPerHourId": $cost_per_hour_id} | compact), body: $req_body}
 }
 
 # Delete an employment custom field record
@@ -4019,12 +4163,13 @@ export def "providers-employers-employees-employments-customfields delete-custom
 ]: nothing -> record<version: record<obsoleteDate: string, resourceVersion: string>, messages: table<code: int, description: string, id: string, properties: list, type: string>, content: record> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($employment_custom_field_id | is-empty) { error make --unspanned { msg: "path parameter 'employmentCustomFieldId' must be non-empty" } }
   let full_url = (build-url $base ({employment_custom_field_id: (encode-path-segment $employment_custom_field_id)} | format pattern "/providers/employers/employees/employments/customfields/{employment_custom_field_id}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"Authorization": $authorization, "Accept": $hdr_accept, "If-Match": $if_match} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
 }
 
 # Details of an employment custom field
@@ -4051,13 +4196,14 @@ export def "providers-employers-employees-employments-customfields get-custom-fi
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($employment_custom_field_id | is-empty) { error make --unspanned { msg: "path parameter 'employmentCustomFieldId' must be non-empty" } }
   let qp = [(serialize-qp "filter" $filter "scalar") (serialize-qp "orderBy" $order_by "scalar") (serialize-qp "pageNumber" $page_number "scalar") (serialize-qp "pageSize" $page_size "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({employment_custom_field_id: (encode-path-segment $employment_custom_field_id)} | format pattern "/providers/employers/employees/employments/customfields/{employment_custom_field_id}") $qp)
   let accept_val = "application/json;version=2018-01-01"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"Authorization": $authorization, "Accept": $hdr_accept} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"filter": $filter, "orderBy": $order_by, "pageNumber": $page_number, "pageSize": $page_size} | compact), body: null}
 }
 
 # Edit an employment custom field record
@@ -4084,6 +4230,7 @@ export def "providers-employers-employees-employments-customfields update-custom
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($employment_custom_field_id | is-empty) { error make --unspanned { msg: "path parameter 'employmentCustomFieldId' must be non-empty" } }
   let full_url = (build-url $base ({employment_custom_field_id: (encode-path-segment $employment_custom_field_id)} | format pattern "/providers/employers/employees/employments/customfields/{employment_custom_field_id}"))
   let req_body = {"value": $value} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
@@ -4091,7 +4238,7 @@ export def "providers-employers-employees-employments-customfields update-custom
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"Authorization": $authorization, "Accept": $hdr_accept, "If-Match": $if_match} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json;version=2018-01-01" $req_body
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json;version=2018-01-01" $req_body {query: {}, body: $req_body}
 }
 
 # Delete a custom notification record
@@ -4115,12 +4262,13 @@ export def "providers-employers-employees-employments-customnotifications delete
 ]: nothing -> record<version: record<obsoleteDate: string, resourceVersion: string>, messages: table<code: int, description: string, id: string, properties: list, type: string>, content: record> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($custom_notification_id | is-empty) { error make --unspanned { msg: "path parameter 'customNotificationId' must be non-empty" } }
   let full_url = (build-url $base ({custom_notification_id: (encode-path-segment $custom_notification_id)} | format pattern "/providers/employers/employees/employments/customnotifications/{custom_notification_id}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"Authorization": $authorization, "Accept": $hdr_accept, "If-Match": $if_match} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
 }
 
 # Details of a custom notification
@@ -4147,13 +4295,14 @@ export def "providers-employers-employees-employments-customnotifications get-cu
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($custom_notification_id | is-empty) { error make --unspanned { msg: "path parameter 'customNotificationId' must be non-empty" } }
   let qp = [(serialize-qp "filter" $filter "scalar") (serialize-qp "orderBy" $order_by "scalar") (serialize-qp "pageNumber" $page_number "scalar") (serialize-qp "pageSize" $page_size "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({custom_notification_id: (encode-path-segment $custom_notification_id)} | format pattern "/providers/employers/employees/employments/customnotifications/{custom_notification_id}") $qp)
   let accept_val = "application/json;version=2018-01-01"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"Authorization": $authorization, "Accept": $hdr_accept} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"filter": $filter, "orderBy": $order_by, "pageNumber": $page_number, "pageSize": $page_size} | compact), body: null}
 }
 
 # Edit a custom notification record
@@ -4183,6 +4332,7 @@ export def "providers-employers-employees-employments-customnotifications update
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($custom_notification_id | is-empty) { error make --unspanned { msg: "path parameter 'customNotificationId' must be non-empty" } }
   let full_url = (build-url $base ({custom_notification_id: (encode-path-segment $custom_notification_id)} | format pattern "/providers/employers/employees/employments/customnotifications/{custom_notification_id}"))
   let req_body = {"expirationDate": $expiration_date, "notificationDate": $notification_date, "notificationText": $notification_text, "recurrencePattern": $recurrence_pattern} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
@@ -4190,7 +4340,7 @@ export def "providers-employers-employees-employments-customnotifications update
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"Authorization": $authorization, "Accept": $hdr_accept, "If-Match": $if_match} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json;version=2018-01-01" $req_body
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json;version=2018-01-01" $req_body {query: {}, body: $req_body}
 }
 
 # Process approved declarations
@@ -4220,7 +4370,7 @@ export def "providers-employers-employees-employments-declarations-process updat
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"Authorization": $authorization} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "patch" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json;version=2018-01-01" $req_body
+  do-request "patch" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json;version=2018-01-01" $req_body {query: {}, body: $req_body}
 }
 
 # Review (accept or reject) open declarations
@@ -4251,14 +4401,14 @@ export def "providers-employers-employees-employments-declarations-review update
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"Authorization": $authorization, "Accept": $hdr_accept} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "patch" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json;version=2018-01-01" $req_body
+  do-request "patch" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json;version=2018-01-01" $req_body {query: {}, body: $req_body}
 }
 
 # Details of a declaration
 #
 # GET /providers/employers/employees/employments/declarations/{declarationId}
 # operationId: GetDeclarationsByDeclarationId
-export def "providers-employers-employees-employments-declarations get-by-declarationId" [
+export def "providers-employers-employees-employments-declarations get-by-declaration-id" [
   declaration_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -4278,13 +4428,14 @@ export def "providers-employers-employees-employments-declarations get-by-declar
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($declaration_id | is-empty) { error make --unspanned { msg: "path parameter 'declarationId' must be non-empty" } }
   let qp = [(serialize-qp "filter" $filter "scalar") (serialize-qp "orderBy" $order_by "scalar") (serialize-qp "pageNumber" $page_number "scalar") (serialize-qp "pageSize" $page_size "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({declaration_id: (encode-path-segment $declaration_id)} | format pattern "/providers/employers/employees/employments/declarations/{declaration_id}") $qp)
   let accept_val = "application/json;version=2018-01-01"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"Authorization": $authorization, "Accept": $hdr_accept} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"filter": $filter, "orderBy": $order_by, "pageNumber": $page_number, "pageSize": $page_size} | compact), body: null}
 }
 
 # Download attachment
@@ -4306,12 +4457,13 @@ export def "providers-employers-employees-employments-declarations-attachment ge
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($declaration_id | is-empty) { error make --unspanned { msg: "path parameter 'declarationId' must be non-empty" } }
   let full_url = (build-url $base ({declaration_id: (encode-path-segment $declaration_id)} | format pattern "/providers/employers/employees/employments/declarations/{declaration_id}/attachment"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"Authorization": $authorization} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
 }
 
 # Audit trail of a declaration
@@ -4338,13 +4490,14 @@ export def "providers-employers-employees-employments-declarations-audittrail ge
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($declaration_id | is-empty) { error make --unspanned { msg: "path parameter 'declarationId' must be non-empty" } }
   let qp = [(serialize-qp "filter" $filter "scalar") (serialize-qp "orderBy" $order_by "scalar") (serialize-qp "pageNumber" $page_number "scalar") (serialize-qp "pageSize" $page_size "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({declaration_id: (encode-path-segment $declaration_id)} | format pattern "/providers/employers/employees/employments/declarations/{declaration_id}/audittrail") $qp)
   let accept_val = "application/json;version=2018-01-01"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"Authorization": $authorization, "Accept": $hdr_accept} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"filter": $filter, "orderBy": $order_by, "pageNumber": $page_number, "pageSize": $page_size} | compact), body: null}
 }
 
 # Delete a specific Deviating AWF contributions record
@@ -4368,12 +4521,13 @@ export def "providers-employers-employees-employments-deviatingawfcontributions 
 ]: nothing -> record<version: record<obsoleteDate: string, resourceVersion: string>, messages: table<code: int, description: string, id: string, properties: list, type: string>, content: record> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($deviating_awf_contribution_id | is-empty) { error make --unspanned { msg: "path parameter 'deviatingAwfContributionId' must be non-empty" } }
   let full_url = (build-url $base ({deviating_awf_contribution_id: (encode-path-segment $deviating_awf_contribution_id)} | format pattern "/providers/employers/employees/employments/deviatingawfcontributions/{deviating_awf_contribution_id}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"Authorization": $authorization, "Accept": $hdr_accept, "If-Match": $if_match} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
 }
 
 # Details of a Deviating AWF contributions record
@@ -4396,12 +4550,13 @@ export def "providers-employers-employees-employments-deviatingawfcontributions 
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($deviating_awf_contribution_id | is-empty) { error make --unspanned { msg: "path parameter 'deviatingAwfContributionId' must be non-empty" } }
   let full_url = (build-url $base ({deviating_awf_contribution_id: (encode-path-segment $deviating_awf_contribution_id)} | format pattern "/providers/employers/employees/employments/deviatingawfcontributions/{deviating_awf_contribution_id}"))
   let accept_val = "application/json;version=2018-01-01"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"Authorization": $authorization, "Accept": $hdr_accept} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
 }
 
 # Edit the details of a Deviating AWF contributions record
@@ -4432,6 +4587,7 @@ export def "providers-employers-employees-employments-deviatingawfcontributions 
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($deviating_awf_contribution_id | is-empty) { error make --unspanned { msg: "path parameter 'deviatingAwfContributionId' must be non-empty" } }
   let full_url = (build-url $base ({deviating_awf_contribution_id: (encode-path-segment $deviating_awf_contribution_id)} | format pattern "/providers/employers/employees/employments/deviatingawfcontributions/{deviating_awf_contribution_id}"))
   let req_body = {"endPeriod": $end_period, "startPeriod": $start_period, "typeOfDeviatingAwfContribution": $type_of_deviating_awf_contribution} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
@@ -4439,7 +4595,7 @@ export def "providers-employers-employees-employments-deviatingawfcontributions 
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"Authorization": $authorization, "Accept": $hdr_accept, "If-Match": $if_match} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json;version=2018-01-01" $req_body
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json;version=2018-01-01" $req_body {query: {}, body: $req_body}
 }
 
 # Delete a deviating hourly wage record
@@ -4463,12 +4619,13 @@ export def "providers-employers-employees-employments-deviatinghourlywages delet
 ]: nothing -> record<version: record<obsoleteDate: string, resourceVersion: string>, messages: table<code: int, description: string, id: string, properties: list, type: string>, content: record> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($deviating_hourly_wage_id | is-empty) { error make --unspanned { msg: "path parameter 'deviatingHourlyWageId' must be non-empty" } }
   let full_url = (build-url $base ({deviating_hourly_wage_id: (encode-path-segment $deviating_hourly_wage_id)} | format pattern "/providers/employers/employees/employments/deviatinghourlywages/{deviating_hourly_wage_id}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"Authorization": $authorization, "Accept": $hdr_accept, "If-Match": $if_match} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
 }
 
 # Details of an deviating hourly wage
@@ -4495,13 +4652,14 @@ export def "providers-employers-employees-employments-deviatinghourlywages get-d
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($deviating_hourly_wage_id | is-empty) { error make --unspanned { msg: "path parameter 'deviatingHourlyWageId' must be non-empty" } }
   let qp = [(serialize-qp "filter" $filter "scalar") (serialize-qp "orderBy" $order_by "scalar") (serialize-qp "pageNumber" $page_number "scalar") (serialize-qp "pageSize" $page_size "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({deviating_hourly_wage_id: (encode-path-segment $deviating_hourly_wage_id)} | format pattern "/providers/employers/employees/employments/deviatinghourlywages/{deviating_hourly_wage_id}") $qp)
   let accept_val = "application/json;version=2018-01-01"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"Authorization": $authorization, "Accept": $hdr_accept} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"filter": $filter, "orderBy": $order_by, "pageNumber": $page_number, "pageSize": $page_size} | compact), body: null}
 }
 
 # Edit a deviating hourly wage record
@@ -4530,6 +4688,7 @@ export def "providers-employers-employees-employments-deviatinghourlywages updat
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($deviating_hourly_wage_id | is-empty) { error make --unspanned { msg: "path parameter 'deviatingHourlyWageId' must be non-empty" } }
   let full_url = (build-url $base ({deviating_hourly_wage_id: (encode-path-segment $deviating_hourly_wage_id)} | format pattern "/providers/employers/employees/employments/deviatinghourlywages/{deviating_hourly_wage_id}"))
   let req_body = {"endDate": $end_date, "startDate": $start_date, "value": $value} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
@@ -4537,7 +4696,7 @@ export def "providers-employers-employees-employments-deviatinghourlywages updat
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"Authorization": $authorization, "Accept": $hdr_accept, "If-Match": $if_match} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json;version=2018-01-01" $req_body
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json;version=2018-01-01" $req_body {query: {}, body: $req_body}
 }
 
 # Delete a specific employment fund record
@@ -4561,12 +4720,13 @@ export def "providers-employers-employees-employments-employmentfunds delete-fun
 ]: nothing -> record<version: record<obsoleteDate: string, resourceVersion: string>, messages: table<code: int, description: string, id: string, properties: list, type: string>, content: record> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($employment_fund_id | is-empty) { error make --unspanned { msg: "path parameter 'employmentFundId' must be non-empty" } }
   let full_url = (build-url $base ({employment_fund_id: (encode-path-segment $employment_fund_id)} | format pattern "/providers/employers/employees/employments/employmentfunds/{employment_fund_id}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"Authorization": $authorization, "Accept": $hdr_accept, "If-Match": $if_match} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
 }
 
 # Details of an employment fund
@@ -4593,13 +4753,14 @@ export def "providers-employers-employees-employments-employmentfunds get-fund-b
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($employment_fund_id | is-empty) { error make --unspanned { msg: "path parameter 'employmentFundId' must be non-empty" } }
   let qp = [(serialize-qp "filter" $filter "scalar") (serialize-qp "orderBy" $order_by "scalar") (serialize-qp "pageNumber" $page_number "scalar") (serialize-qp "pageSize" $page_size "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({employment_fund_id: (encode-path-segment $employment_fund_id)} | format pattern "/providers/employers/employees/employments/employmentfunds/{employment_fund_id}") $qp)
   let accept_val = "application/json;version=2018-01-01"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"Authorization": $authorization, "Accept": $hdr_accept} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"filter": $filter, "orderBy": $order_by, "pageNumber": $page_number, "pageSize": $page_size} | compact), body: null}
 }
 
 # Edit a employment fund record
@@ -4630,6 +4791,7 @@ export def "providers-employers-employees-employments-employmentfunds update-fun
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($employment_fund_id | is-empty) { error make --unspanned { msg: "path parameter 'employmentFundId' must be non-empty" } }
   let full_url = (build-url $base ({employment_fund_id: (encode-path-segment $employment_fund_id)} | format pattern "/providers/employers/employees/employments/employmentfunds/{employment_fund_id}"))
   let req_body = {"deviations": $deviations, "endDate": $end_date, "fixedContribution": $fixed_contribution, "startDate": $start_date} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
@@ -4637,7 +4799,7 @@ export def "providers-employers-employees-employments-employmentfunds update-fun
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"Authorization": $authorization, "Accept": $hdr_accept, "If-Match": $if_match} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json;version=2018-01-01" $req_body
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json;version=2018-01-01" $req_body {query: {}, body: $req_body}
 }
 
 # Delete a specific fiscal company car record
@@ -4661,12 +4823,13 @@ export def "providers-employers-employees-employments-fiscalcompanycars delete-f
 ]: nothing -> record<version: record<obsoleteDate: string, resourceVersion: string>, messages: table<code: int, description: string, id: string, properties: list, type: string>, content: record> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($fiscal_company_car_id | is-empty) { error make --unspanned { msg: "path parameter 'fiscalCompanyCarId' must be non-empty" } }
   let full_url = (build-url $base ({fiscal_company_car_id: (encode-path-segment $fiscal_company_car_id)} | format pattern "/providers/employers/employees/employments/fiscalcompanycars/{fiscal_company_car_id}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"Authorization": $authorization, "Accept": $hdr_accept, "If-Match": $if_match} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
 }
 
 # Details of a fiscal company car record
@@ -4689,12 +4852,13 @@ export def "providers-employers-employees-employments-fiscalcompanycars get-fisc
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($fiscal_company_car_id | is-empty) { error make --unspanned { msg: "path parameter 'fiscalCompanyCarId' must be non-empty" } }
   let full_url = (build-url $base ({fiscal_company_car_id: (encode-path-segment $fiscal_company_car_id)} | format pattern "/providers/employers/employees/employments/fiscalcompanycars/{fiscal_company_car_id}"))
   let accept_val = "application/json;version=2018-01-01"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"Authorization": $authorization, "Accept": $hdr_accept} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
 }
 
 # Edit the details of a fiscal company car record
@@ -4730,6 +4894,7 @@ export def "providers-employers-employees-employments-fiscalcompanycars update-f
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($fiscal_company_car_id | is-empty) { error make --unspanned { msg: "path parameter 'fiscalCompanyCarId' must be non-empty" } }
   let full_url = (build-url $base ({fiscal_company_car_id: (encode-path-segment $fiscal_company_car_id)} | format pattern "/providers/employers/employees/employments/fiscalcompanycars/{fiscal_company_car_id}"))
   let req_body = {"additionalTaxLiabilityGroup": $additional_tax_liability_group, "dateOfFirstAdmission": $date_of_first_admission, "deviatingAdditionalTaxLiability": $deviating_additional_tax_liability, "endDate": $end_date, "licensePlateNumber": $license_plate_number, "reasonForNoAdditionalTaxLiability": $reason_for_no_additional_tax_liability, "startDate": $start_date, "taxableBenefitForPrivateUse": $taxable_benefit_for_private_use, "valueForTaxPurposes": $value_for_tax_purposes} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
@@ -4737,7 +4902,7 @@ export def "providers-employers-employees-employments-fiscalcompanycars update-f
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"Authorization": $authorization, "Accept": $hdr_accept, "If-Match": $if_match} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json;version=2018-01-01" $req_body
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json;version=2018-01-01" $req_body {query: {}, body: $req_body}
 }
 
 # Delete a specific fiscal properties record
@@ -4761,12 +4926,13 @@ export def "providers-employers-employees-employments-fiscalproperties delete-fi
 ]: nothing -> record<version: record<obsoleteDate: string, resourceVersion: string>, messages: table<code: int, description: string, id: string, properties: list, type: string>, content: record> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($fiscal_properties_id | is-empty) { error make --unspanned { msg: "path parameter 'fiscalPropertiesId' must be non-empty" } }
   let full_url = (build-url $base ({fiscal_properties_id: (encode-path-segment $fiscal_properties_id)} | format pattern "/providers/employers/employees/employments/fiscalproperties/{fiscal_properties_id}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"Authorization": $authorization, "Accept": $hdr_accept, "If-Match": $if_match} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
 }
 
 # Details of a fiscal record
@@ -4789,12 +4955,13 @@ export def "providers-employers-employees-employments-fiscalproperties get-fisca
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($fiscal_properties_id | is-empty) { error make --unspanned { msg: "path parameter 'fiscalPropertiesId' must be non-empty" } }
   let full_url = (build-url $base ({fiscal_properties_id: (encode-path-segment $fiscal_properties_id)} | format pattern "/providers/employers/employees/employments/fiscalproperties/{fiscal_properties_id}"))
   let accept_val = "application/json;version=2018-01-01"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"Authorization": $authorization, "Accept": $hdr_accept} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
 }
 
 # Edit the details of a fiscal record
@@ -4848,6 +5015,7 @@ export def "providers-employers-employees-employments-fiscalproperties update-fi
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($fiscal_properties_id | is-empty) { error make --unspanned { msg: "path parameter 'fiscalPropertiesId' must be non-empty" } }
   let full_url = (build-url $base ({fiscal_properties_id: (encode-path-segment $fiscal_properties_id)} | format pattern "/providers/employers/employees/employments/fiscalproperties/{fiscal_properties_id}"))
   let req_body = {"annualSalary": $annual_salary, "applyDayTables": $apply_day_tables, "applyDeviatingPayrollTaxPercentageOn": $apply_deviating_payroll_tax_percentage_on, "applyPayrollTaxDeduction": $apply_payroll_tax_deduction, "applySalarysplit": $apply_salarysplit, "applyStudentDeduction": $apply_student_deduction, "contributionReductionEducation": $contribution_reduction_education, "deviatingCalculationRulePayrollTax": $deviating_calculation_rule_payroll_tax, "deviatingPayrollTaxPercentage": $deviating_payroll_tax_percentage, "deviatingPayrollTaxTableColour": $deviating_payroll_tax_table_colour, "deviatingPercentageThirtyPercentFacility": $deviating_percentage_thirty_percent_facility, "deviatingSmallJobsArrangement": $deviating_small_jobs_arrangement, "deviatingTaxTableCode": $deviating_tax_table_code, "doesWageIncludeAow": $does_wage_include_aow, "doesWageIncludeWajong": $does_wage_include_wajong, "hasEmployeeLoan": $has_employee_loan, "percentageForeignIncome": $percentage_foreign_income, "residentOf": $resident_of, "startDate": $start_date, "thirtyPercentFacility": $thirty_percent_facility, "usesTransportByWithholdingAgent": $uses_transport_by_withholding_agent} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
@@ -4855,7 +5023,7 @@ export def "providers-employers-employees-employments-fiscalproperties update-fi
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"Authorization": $authorization, "Accept": $hdr_accept, "If-Match": $if_match} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json;version=2018-01-01" $req_body
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json;version=2018-01-01" $req_body {query: {}, body: $req_body}
 }
 
 # Delete a specific Healthcare Insurance Act record
@@ -4879,12 +5047,13 @@ export def "providers-employers-employees-employments-healthcareinsuranceactconf
 ]: nothing -> record<version: record<obsoleteDate: string, resourceVersion: string>, messages: table<code: int, description: string, id: string, properties: list, type: string>, content: record> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($healthcare_insurance_act_configuration_id | is-empty) { error make --unspanned { msg: "path parameter 'healthcareInsuranceActConfigurationId' must be non-empty" } }
   let full_url = (build-url $base ({healthcare_insurance_act_configuration_id: (encode-path-segment $healthcare_insurance_act_configuration_id)} | format pattern "/providers/employers/employees/employments/healthcareinsuranceactconfigurations/{healthcare_insurance_act_configuration_id}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"Authorization": $authorization, "Accept": $hdr_accept, "If-Match": $if_match} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
 }
 
 # Details of a Healthcare Insurance Act record
@@ -4907,12 +5076,13 @@ export def "providers-employers-employees-employments-healthcareinsuranceactconf
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($healthcare_insurance_act_configuration_id | is-empty) { error make --unspanned { msg: "path parameter 'healthcareInsuranceActConfigurationId' must be non-empty" } }
   let full_url = (build-url $base ({healthcare_insurance_act_configuration_id: (encode-path-segment $healthcare_insurance_act_configuration_id)} | format pattern "/providers/employers/employees/employments/healthcareinsuranceactconfigurations/{healthcare_insurance_act_configuration_id}"))
   let accept_val = "application/json;version=2018-01-01"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"Authorization": $authorization, "Accept": $hdr_accept} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
 }
 
 # Edit the details of a Healthcare Insurance Act record
@@ -4943,6 +5113,7 @@ export def "providers-employers-employees-employments-healthcareinsuranceactconf
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($healthcare_insurance_act_configuration_id | is-empty) { error make --unspanned { msg: "path parameter 'healthcareInsuranceActConfigurationId' must be non-empty" } }
   let full_url = (build-url $base ({healthcare_insurance_act_configuration_id: (encode-path-segment $healthcare_insurance_act_configuration_id)} | format pattern "/providers/employers/employees/employments/healthcareinsuranceactconfigurations/{healthcare_insurance_act_configuration_id}"))
   let req_body = {"additionalContributionEmployer": $additional_contribution_employer, "additionalPremium": $additional_premium, "healthcareInsuranceActType": $healthcare_insurance_act_type, "nominalPremium": $nominal_premium, "startDate": $start_date} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
@@ -4950,7 +5121,7 @@ export def "providers-employers-employees-employments-healthcareinsuranceactconf
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"Authorization": $authorization, "Accept": $hdr_accept, "If-Match": $if_match} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json;version=2018-01-01" $req_body
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json;version=2018-01-01" $req_body {query: {}, body: $req_body}
 }
 
 # Delete a specific journal allocation record
@@ -4974,12 +5145,13 @@ export def "providers-employers-employees-employments-journalallocations delete-
 ]: nothing -> record<version: record<obsoleteDate: string, resourceVersion: string>, messages: table<code: int, description: string, id: string, properties: list, type: string>, content: record> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($journal_allocation_id | is-empty) { error make --unspanned { msg: "path parameter 'journalAllocationId' must be non-empty" } }
   let full_url = (build-url $base ({journal_allocation_id: (encode-path-segment $journal_allocation_id)} | format pattern "/providers/employers/employees/employments/journalallocations/{journal_allocation_id}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"Authorization": $authorization, "Accept": $hdr_accept, "If-Match": $if_match} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
 }
 
 # Details of a journal allocation
@@ -5002,12 +5174,13 @@ export def "providers-employers-employees-employments-journalallocations get-jou
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($journal_allocation_id | is-empty) { error make --unspanned { msg: "path parameter 'journalAllocationId' must be non-empty" } }
   let full_url = (build-url $base ({journal_allocation_id: (encode-path-segment $journal_allocation_id)} | format pattern "/providers/employers/employees/employments/journalallocations/{journal_allocation_id}"))
   let accept_val = "application/json;version=2018-01-01"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"Authorization": $authorization, "Accept": $hdr_accept} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
 }
 
 # Edit the details of a journal allocation record
@@ -5041,6 +5214,7 @@ export def "providers-employers-employees-employments-journalallocations update-
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($journal_allocation_id | is-empty) { error make --unspanned { msg: "path parameter 'journalAllocationId' must be non-empty" } }
   let full_url = (build-url $base ({journal_allocation_id: (encode-path-segment $journal_allocation_id)} | format pattern "/providers/employers/employees/employments/journalallocations/{journal_allocation_id}"))
   let req_body = {"allocationBasedOnActualHours": $allocation_based_on_actual_hours, "allocationBasedOnFixedWeights": $allocation_based_on_fixed_weights, "endPeriod": $end_period, "startPeriod": $start_period} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
@@ -5048,7 +5222,7 @@ export def "providers-employers-employees-employments-journalallocations update-
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"Authorization": $authorization, "Accept": $hdr_accept, "If-Match": $if_match} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json;version=2018-01-01" $req_body
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json;version=2018-01-01" $req_body {query: {}, body: $req_body}
 }
 
 # Delete a specific leave record
@@ -5072,19 +5246,20 @@ export def "providers-employers-employees-employments-leave delete" [
 ]: nothing -> record<version: record<obsoleteDate: string, resourceVersion: string>, messages: table<code: int, description: string, id: string, properties: list, type: string>, content: record> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($leave_id | is-empty) { error make --unspanned { msg: "path parameter 'leaveId' must be non-empty" } }
   let full_url = (build-url $base ({leave_id: (encode-path-segment $leave_id)} | format pattern "/providers/employers/employees/employments/leave/{leave_id}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"Authorization": $authorization, "Accept": $hdr_accept, "If-Match": $if_match} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
 }
 
 # A single leave entry
 #
 # GET /providers/employers/employees/employments/leave/{leaveId}
 # operationId: GetLeaveByLeaveId
-export def "providers-employers-employees-employments-leave get-by-leaveId" [
+export def "providers-employers-employees-employments-leave get-by-leave-id" [
   leave_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -5104,13 +5279,14 @@ export def "providers-employers-employees-employments-leave get-by-leaveId" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($leave_id | is-empty) { error make --unspanned { msg: "path parameter 'leaveId' must be non-empty" } }
   let qp = [(serialize-qp "filter" $filter "scalar") (serialize-qp "orderBy" $order_by "scalar") (serialize-qp "pageNumber" $page_number "scalar") (serialize-qp "pageSize" $page_size "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({leave_id: (encode-path-segment $leave_id)} | format pattern "/providers/employers/employees/employments/leave/{leave_id}") $qp)
   let accept_val = "application/json;version=2018-01-01"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"Authorization": $authorization, "Accept": $hdr_accept} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"filter": $filter, "orderBy": $order_by, "pageNumber": $page_number, "pageSize": $page_size} | compact), body: null}
 }
 
 # Edit the details of a leave
@@ -5145,6 +5321,7 @@ export def "providers-employers-employees-employments-leave update" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($leave_id | is-empty) { error make --unspanned { msg: "path parameter 'leaveId' must be non-empty" } }
   let full_url = (build-url $base ({leave_id: (encode-path-segment $leave_id)} | format pattern "/providers/employers/employees/employments/leave/{leave_id}"))
   let req_body = {"comment": $comment, "endDate": $end_date, "isAccrual": $is_accrual, "leaveType": $leave_type, "numberOfUnits": $number_of_units, "startDate": $start_date} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
@@ -5152,14 +5329,14 @@ export def "providers-employers-employees-employments-leave update" [
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"Authorization": $authorization, "Accept": $hdr_accept, "If-Match": $if_match} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json;version=2018-01-01" $req_body
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json;version=2018-01-01" $req_body {query: {}, body: $req_body}
 }
 
 # Get the values for the metadata fields
 #
 # GET /providers/employers/employees/employments/leave/{leaveId}/metadata
 # operationId: GetLeaveMetadataByLeaveId
-export def "providers-employers-employees-employments-leave-metadata get-by-leaveId" [
+export def "providers-employers-employees-employments-leave-metadata get-by-leave-id" [
   leave_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -5179,13 +5356,14 @@ export def "providers-employers-employees-employments-leave-metadata get-by-leav
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($leave_id | is-empty) { error make --unspanned { msg: "path parameter 'leaveId' must be non-empty" } }
   let qp = [(serialize-qp "filter" $filter "scalar") (serialize-qp "orderBy" $order_by "scalar") (serialize-qp "pageNumber" $page_number "scalar") (serialize-qp "pageSize" $page_size "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({leave_id: (encode-path-segment $leave_id)} | format pattern "/providers/employers/employees/employments/leave/{leave_id}/metadata") $qp)
   let accept_val = "application/json;version=2018-01-01"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"Authorization": $authorization, "Accept": $hdr_accept} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"filter": $filter, "orderBy": $order_by, "pageNumber": $page_number, "pageSize": $page_size} | compact), body: null}
 }
 
 # Change the status of leave requests
@@ -5216,7 +5394,7 @@ export def "providers-employers-employees-employments-leaverequests update-leave
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"Authorization": $authorization, "Accept": $hdr_accept} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "patch" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json;version=2018-01-01" $req_body
+  do-request "patch" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json;version=2018-01-01" $req_body {query: {}, body: $req_body}
 }
 
 # Details of a leave request
@@ -5243,13 +5421,14 @@ export def "providers-employers-employees-employments-leaverequests get-leave-re
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($leave_request_id | is-empty) { error make --unspanned { msg: "path parameter 'leaveRequestId' must be non-empty" } }
   let qp = [(serialize-qp "filter" $filter "scalar") (serialize-qp "orderBy" $order_by "scalar") (serialize-qp "pageNumber" $page_number "scalar") (serialize-qp "pageSize" $page_size "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({leave_request_id: (encode-path-segment $leave_request_id)} | format pattern "/providers/employers/employees/employments/leaverequests/{leave_request_id}") $qp)
   let accept_val = "application/json;version=2018-01-01"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"Authorization": $authorization, "Accept": $hdr_accept} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"filter": $filter, "orderBy": $order_by, "pageNumber": $page_number, "pageSize": $page_size} | compact), body: null}
 }
 
 # Change the details of a leave request
@@ -5283,6 +5462,7 @@ export def "providers-employers-employees-employments-leaverequests update-leave
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($leave_request_id | is-empty) { error make --unspanned { msg: "path parameter 'leaveRequestId' must be non-empty" } }
   let full_url = (build-url $base ({leave_request_id: (encode-path-segment $leave_request_id)} | format pattern "/providers/employers/employees/employments/leaverequests/{leave_request_id}"))
   let req_body = {"commentHandler": $comment_handler, "endDate": $end_date, "isAccrual": $is_accrual, "leaveType": $leave_type, "numberOfUnits": $number_of_units, "startDate": $start_date} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
@@ -5290,7 +5470,7 @@ export def "providers-employers-employees-employments-leaverequests update-leave
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"Authorization": $authorization, "Accept": $hdr_accept, "If-Match": $if_match} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json;version=2018-01-01" $req_body
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json;version=2018-01-01" $req_body {query: {}, body: $req_body}
 }
 
 # Delete an employment note record
@@ -5314,19 +5494,20 @@ export def "providers-employers-employees-employments-notes delete" [
 ]: nothing -> record<version: record<obsoleteDate: string, resourceVersion: string>, messages: table<code: int, description: string, id: string, properties: list, type: string>, content: record> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($note_id | is-empty) { error make --unspanned { msg: "path parameter 'noteId' must be non-empty" } }
   let full_url = (build-url $base ({note_id: (encode-path-segment $note_id)} | format pattern "/providers/employers/employees/employments/notes/{note_id}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"Authorization": $authorization, "Accept": $hdr_accept, "If-Match": $if_match} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
 }
 
 # Details of an employment note
 #
 # GET /providers/employers/employees/employments/notes/{noteId}
 # operationId: GetEmploymentNoteByNoteId
-export def "providers-employers-employees-employments-notes get-by-noteId" [
+export def "providers-employers-employees-employments-notes get-by-note-id" [
   note_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -5346,13 +5527,14 @@ export def "providers-employers-employees-employments-notes get-by-noteId" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($note_id | is-empty) { error make --unspanned { msg: "path parameter 'noteId' must be non-empty" } }
   let qp = [(serialize-qp "filter" $filter "scalar") (serialize-qp "orderBy" $order_by "scalar") (serialize-qp "pageNumber" $page_number "scalar") (serialize-qp "pageSize" $page_size "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({note_id: (encode-path-segment $note_id)} | format pattern "/providers/employers/employees/employments/notes/{note_id}") $qp)
   let accept_val = "application/json;version=2018-01-01"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"Authorization": $authorization, "Accept": $hdr_accept} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"filter": $filter, "orderBy": $order_by, "pageNumber": $page_number, "pageSize": $page_size} | compact), body: null}
 }
 
 # Edit an employment note record
@@ -5381,6 +5563,7 @@ export def "providers-employers-employees-employments-notes update" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($note_id | is-empty) { error make --unspanned { msg: "path parameter 'noteId' must be non-empty" } }
   let full_url = (build-url $base ({note_id: (encode-path-segment $note_id)} | format pattern "/providers/employers/employees/employments/notes/{note_id}"))
   let req_body = {"accessibleBy": $accessible_by, "note": $note, "subject": $subject} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
@@ -5388,7 +5571,7 @@ export def "providers-employers-employees-employments-notes update" [
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"Authorization": $authorization, "Accept": $hdr_accept, "If-Match": $if_match} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json;version=2018-01-01" $req_body
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json;version=2018-01-01" $req_body {query: {}, body: $req_body}
 }
 
 # Delete a specific organizational entity record
@@ -5412,12 +5595,13 @@ export def "providers-employers-employees-employments-organizationalentities del
 ]: nothing -> record<version: record<obsoleteDate: string, resourceVersion: string>, messages: table<code: int, description: string, id: string, properties: list, type: string>, content: record> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($organizational_entity_id | is-empty) { error make --unspanned { msg: "path parameter 'organizationalEntityId' must be non-empty" } }
   let full_url = (build-url $base ({organizational_entity_id: (encode-path-segment $organizational_entity_id)} | format pattern "/providers/employers/employees/employments/organizationalentities/{organizational_entity_id}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"Authorization": $authorization, "Accept": $hdr_accept, "If-Match": $if_match} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
 }
 
 # Details of an organizational entity
@@ -5440,12 +5624,13 @@ export def "providers-employers-employees-employments-organizationalentities get
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($organizational_entity_id | is-empty) { error make --unspanned { msg: "path parameter 'organizationalEntityId' must be non-empty" } }
   let full_url = (build-url $base ({organizational_entity_id: (encode-path-segment $organizational_entity_id)} | format pattern "/providers/employers/employees/employments/organizationalentities/{organizational_entity_id}"))
   let accept_val = "application/json;version=2018-01-01"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"Authorization": $authorization, "Accept": $hdr_accept} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
 }
 
 # Edit the details of an organizational entity
@@ -5483,6 +5668,7 @@ export def "providers-employers-employees-employments-organizationalentities upd
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($organizational_entity_id | is-empty) { error make --unspanned { msg: "path parameter 'organizationalEntityId' must be non-empty" } }
   let full_url = (build-url $base ({organizational_entity_id: (encode-path-segment $organizational_entity_id)} | format pattern "/providers/employers/employees/employments/organizationalentities/{organizational_entity_id}"))
   let req_body = {"department": $department, "deviatingFunctionDescription": $deviating_function_description, "deviatingFunctionGroup": $deviating_function_group, "distributionUnit": $distribution_unit, "function": $function, "internalTelephoneExtensionNumber": $internal_telephone_extension_number, "placeOfEmployment": $place_of_employment, "standardFunction": $standard_function, "startDate": $start_date} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
@@ -5490,7 +5676,7 @@ export def "providers-employers-employees-employments-organizationalentities upd
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"Authorization": $authorization, "Accept": $hdr_accept, "If-Match": $if_match} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json;version=2018-01-01" $req_body
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json;version=2018-01-01" $req_body {query: {}, body: $req_body}
 }
 
 # Delete a specific other payroll variables record
@@ -5514,19 +5700,20 @@ export def "providers-employers-employees-employments-other-payroll-variables de
 ]: nothing -> record<version: record<obsoleteDate: string, resourceVersion: string>, messages: table<code: int, description: string, id: string, properties: list, type: string>, content: record> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($other_payroll_variables_id | is-empty) { error make --unspanned { msg: "path parameter 'otherPayrollVariablesId' must be non-empty" } }
   let full_url = (build-url $base ({other_payroll_variables_id: (encode-path-segment $other_payroll_variables_id)} | format pattern "/providers/employers/employees/employments/otherPayrollVariables/{other_payroll_variables_id}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"Authorization": $authorization, "Accept": $hdr_accept, "If-Match": $if_match} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
 }
 
 # Details of other payroll variables for an employment
 #
 # GET /providers/employers/employees/employments/otherPayrollVariables/{otherPayrollVariablesId}
 # operationId: GetOtherPayrollVariablesByOtherPayrollVariablesId
-export def "providers-employers-employees-employments-other-payroll-variables get-by-otherPayrollVariablesId" [
+export def "providers-employers-employees-employments-other-payroll-variables get-by-other-payroll-variables-id" [
   other_payroll_variables_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -5546,13 +5733,14 @@ export def "providers-employers-employees-employments-other-payroll-variables ge
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($other_payroll_variables_id | is-empty) { error make --unspanned { msg: "path parameter 'otherPayrollVariablesId' must be non-empty" } }
   let qp = [(serialize-qp "filter" $filter "scalar") (serialize-qp "orderBy" $order_by "scalar") (serialize-qp "pageNumber" $page_number "scalar") (serialize-qp "pageSize" $page_size "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({other_payroll_variables_id: (encode-path-segment $other_payroll_variables_id)} | format pattern "/providers/employers/employees/employments/otherPayrollVariables/{other_payroll_variables_id}") $qp)
   let accept_val = "application/json;version=2018-01-01"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"Authorization": $authorization, "Accept": $hdr_accept} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"filter": $filter, "orderBy": $order_by, "pageNumber": $page_number, "pageSize": $page_size} | compact), body: null}
 }
 
 # Change the details of an other payroll variables record
@@ -5586,6 +5774,7 @@ export def "providers-employers-employees-employments-other-payroll-variables up
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($other_payroll_variables_id | is-empty) { error make --unspanned { msg: "path parameter 'otherPayrollVariablesId' must be non-empty" } }
   let full_url = (build-url $base ({other_payroll_variables_id: (encode-path-segment $other_payroll_variables_id)} | format pattern "/providers/employers/employees/employments/otherPayrollVariables/{other_payroll_variables_id}"))
   let req_body = {"endDate": $end_date, "insuranceProperties": $insurance_properties, "payrollProperties": $payroll_properties, "pensionProperties": $pension_properties, "productivityPercentage": $productivity_percentage, "startDate": $start_date} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
@@ -5593,7 +5782,7 @@ export def "providers-employers-employees-employments-other-payroll-variables up
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"Authorization": $authorization, "Accept": $hdr_accept, "If-Match": $if_match} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json;version=2018-01-01" $req_body
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json;version=2018-01-01" $req_body {query: {}, body: $req_body}
 }
 
 # Delete a payment information non-SEPA record
@@ -5617,12 +5806,13 @@ export def "providers-employers-employees-employments-paymentinformationnonsepa 
 ]: nothing -> record<version: record<obsoleteDate: string, resourceVersion: string>, messages: table<code: int, description: string, id: string, properties: list, type: string>, content: record> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($payment_information_non_sepa_id | is-empty) { error make --unspanned { msg: "path parameter 'paymentInformationNonSepaId' must be non-empty" } }
   let full_url = (build-url $base ({payment_information_non_sepa_id: (encode-path-segment $payment_information_non_sepa_id)} | format pattern "/providers/employers/employees/employments/paymentinformationnonsepa/{payment_information_non_sepa_id}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"Authorization": $authorization, "Accept": $hdr_accept, "If-Match": $if_match} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
 }
 
 # Get the details of a payment information non-SEPA
@@ -5645,12 +5835,13 @@ export def "providers-employers-employees-employments-paymentinformationnonsepa 
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($payment_information_non_sepa_id | is-empty) { error make --unspanned { msg: "path parameter 'paymentInformationNonSepaId' must be non-empty" } }
   let full_url = (build-url $base ({payment_information_non_sepa_id: (encode-path-segment $payment_information_non_sepa_id)} | format pattern "/providers/employers/employees/employments/paymentinformationnonsepa/{payment_information_non_sepa_id}"))
   let accept_val = "application/json;version=2018-01-01"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"Authorization": $authorization, "Accept": $hdr_accept} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
 }
 
 # Change the details of a payment information non-SEPA
@@ -5682,6 +5873,7 @@ export def "providers-employers-employees-employments-paymentinformationnonsepa 
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($payment_information_non_sepa_id | is-empty) { error make --unspanned { msg: "path parameter 'paymentInformationNonSepaId' must be non-empty" } }
   let full_url = (build-url $base ({payment_information_non_sepa_id: (encode-path-segment $payment_information_non_sepa_id)} | format pattern "/providers/employers/employees/employments/paymentinformationnonsepa/{payment_information_non_sepa_id}"))
   let req_body = {"bank": $bank, "bankAccountNumber": $bank_account_number, "beneficiary": $beneficiary, "payrollComponent": $payroll_component} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
@@ -5689,7 +5881,7 @@ export def "providers-employers-employees-employments-paymentinformationnonsepa 
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"Authorization": $authorization, "Accept": $hdr_accept, "If-Match": $if_match} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json;version=2018-01-01" $req_body
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json;version=2018-01-01" $req_body {query: {}, body: $req_body}
 }
 
 # Delete a specific SEPA payment-record record
@@ -5713,12 +5905,13 @@ export def "providers-employers-employees-employments-paymentinformationsepa del
 ]: nothing -> record<version: record<obsoleteDate: string, resourceVersion: string>, messages: table<code: int, description: string, id: string, properties: list, type: string>, content: record> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($payment_information_sepa_id | is-empty) { error make --unspanned { msg: "path parameter 'paymentInformationSepaId' must be non-empty" } }
   let full_url = (build-url $base ({payment_information_sepa_id: (encode-path-segment $payment_information_sepa_id)} | format pattern "/providers/employers/employees/employments/paymentinformationsepa/{payment_information_sepa_id}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"Authorization": $authorization, "Accept": $hdr_accept, "If-Match": $if_match} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
 }
 
 # Get the details of a payment information sepa
@@ -5742,12 +5935,13 @@ export def "providers-employers-employees-employments-paymentinformationsepa get
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($payment_information_sepa_id | is-empty) { error make --unspanned { msg: "path parameter 'paymentInformationSepaId' must be non-empty" } }
   let full_url = (build-url $base ({payment_information_sepa_id: (encode-path-segment $payment_information_sepa_id)} | format pattern "/providers/employers/employees/employments/paymentinformationsepa/{payment_information_sepa_id}"))
   let accept_val = ($accept | default "application/json;version=2018-01-01")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"Authorization": $authorization, "Accept": $hdr_accept} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
 }
 
 # change the details of a payment information sepa
@@ -5782,6 +5976,7 @@ export def "providers-employers-employees-employments-paymentinformationsepa upd
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($payment_information_sepa_id | is-empty) { error make --unspanned { msg: "path parameter 'paymentInformationSepaId' must be non-empty" } }
   let full_url = (build-url $base ({payment_information_sepa_id: (encode-path-segment $payment_information_sepa_id)} | format pattern "/providers/employers/employees/employments/paymentinformationsepa/{payment_information_sepa_id}"))
   let req_body = {"bic": $bic, "cityBeneficiary": $city_beneficiary, "description1": $description1, "description2": $description2, "iban": $iban, "nameBeneficiary": $name_beneficiary, "payrollComponent": $payroll_component, "visibleOnPayslip": $visible_on_payslip} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
@@ -5789,7 +5984,7 @@ export def "providers-employers-employees-employments-paymentinformationsepa upd
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"Authorization": $authorization, "Accept": $hdr_accept, "If-Match": $if_match} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json;version=2018-01-01" $req_body
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json;version=2018-01-01" $req_body {query: {}, body: $req_body}
 }
 
 # Delete a payment information SEPA separate payment record
@@ -5813,12 +6008,13 @@ export def "providers-employers-employees-employments-paymentinformationsepasepa
 ]: nothing -> record<version: record<obsoleteDate: string, resourceVersion: string>, messages: table<code: int, description: string, id: string, properties: list, type: string>, content: record> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($payment_information_sepa_separate_payment_id | is-empty) { error make --unspanned { msg: "path parameter 'paymentInformationSepaSeparatePaymentId' must be non-empty" } }
   let full_url = (build-url $base ({payment_information_sepa_separate_payment_id: (encode-path-segment $payment_information_sepa_separate_payment_id)} | format pattern "/providers/employers/employees/employments/paymentinformationsepaseparatepayments/{payment_information_sepa_separate_payment_id}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"Authorization": $authorization, "Accept": $hdr_accept, "If-Match": $if_match} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
 }
 
 # Get the details of a payment information SEPA separate payment record
@@ -5841,12 +6037,13 @@ export def "providers-employers-employees-employments-paymentinformationsepasepa
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($payment_information_sepa_separate_payment_id | is-empty) { error make --unspanned { msg: "path parameter 'paymentInformationSepaSeparatePaymentId' must be non-empty" } }
   let full_url = (build-url $base ({payment_information_sepa_separate_payment_id: (encode-path-segment $payment_information_sepa_separate_payment_id)} | format pattern "/providers/employers/employees/employments/paymentinformationsepaseparatepayments/{payment_information_sepa_separate_payment_id}"))
   let accept_val = "application/json;version=2018-01-01"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"Authorization": $authorization, "Accept": $hdr_accept} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
 }
 
 # Edit the details of a payment information separate payment record
@@ -5879,6 +6076,7 @@ export def "providers-employers-employees-employments-paymentinformationsepasepa
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($payment_information_sepa_separate_payment_id | is-empty) { error make --unspanned { msg: "path parameter 'paymentInformationSepaSeparatePaymentId' must be non-empty" } }
   let full_url = (build-url $base ({payment_information_sepa_separate_payment_id: (encode-path-segment $payment_information_sepa_separate_payment_id)} | format pattern "/providers/employers/employees/employments/paymentinformationsepaseparatepayments/{payment_information_sepa_separate_payment_id}"))
   let req_body = {"amount": $amount, "cityBeneficiary": $city_beneficiary, "description1": $description1, "description2": $description2, "endDate": $end_date, "iban": $iban, "nameBeneficiary": $name_beneficiary, "startDate": $start_date} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
@@ -5886,7 +6084,7 @@ export def "providers-employers-employees-employments-paymentinformationsepasepa
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"Authorization": $authorization, "Accept": $hdr_accept, "If-Match": $if_match} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json;version=2018-01-01" $req_body
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json;version=2018-01-01" $req_body {query: {}, body: $req_body}
 }
 
 # Delete a specific payroll period data record
@@ -5910,12 +6108,13 @@ export def "providers-employers-employees-employments-payrollperioddata delete-p
 ]: nothing -> record<version: record<obsoleteDate: string, resourceVersion: string>, messages: table<code: int, description: string, id: string, properties: list, type: string>, content: record> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($payrollperioddata_id | is-empty) { error make --unspanned { msg: "path parameter 'payrollperioddataId' must be non-empty" } }
   let full_url = (build-url $base ({payrollperioddata_id: (encode-path-segment $payrollperioddata_id)} | format pattern "/providers/employers/employees/employments/payrollperioddata/{payrollperioddata_id}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"Authorization": $authorization, "Accept": $hdr_accept, "If-Match": $if_match} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
 }
 
 # Details of a payroll period data
@@ -5938,12 +6137,13 @@ export def "providers-employers-employees-employments-payrollperioddata get-payr
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($payrollperioddata_id | is-empty) { error make --unspanned { msg: "path parameter 'payrollperioddataId' must be non-empty" } }
   let full_url = (build-url $base ({payrollperioddata_id: (encode-path-segment $payrollperioddata_id)} | format pattern "/providers/employers/employees/employments/payrollperioddata/{payrollperioddata_id}"))
   let accept_val = "application/json;version=2018-01-01"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"Authorization": $authorization, "Accept": $hdr_accept} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
 }
 
 # Edit the details of an payroll period data
@@ -5979,6 +6179,7 @@ export def "providers-employers-employees-employments-payrollperioddata update-p
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($payrollperioddata_id | is-empty) { error make --unspanned { msg: "path parameter 'payrollperioddataId' must be non-empty" } }
   let full_url = (build-url $base ({payrollperioddata_id: (encode-path-segment $payrollperioddata_id)} | format pattern "/providers/employers/employees/employments/payrollperioddata/{payrollperioddata_id}"))
   let req_body = {"costCenter": $cost_center, "costUnit": $cost_unit, "distributionUnit": $distribution_unit, "payrollComponents": $payroll_components, "payslipText": $payslip_text, "shift": $shift} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
@@ -5986,7 +6187,7 @@ export def "providers-employers-employees-employments-payrollperioddata update-p
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"Authorization": $authorization, "Accept": $hdr_accept, "If-Match": $if_match} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json;version=2018-01-01" $req_body
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json;version=2018-01-01" $req_body {query: {}, body: $req_body}
 }
 
 # Delete a pension benefit record
@@ -6010,12 +6211,13 @@ export def "providers-employers-employees-employments-pensionbenefits delete-pen
 ]: nothing -> record<version: record<obsoleteDate: string, resourceVersion: string>, messages: table<code: int, description: string, id: string, properties: list, type: string>, content: record> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($pension_benefit_id | is-empty) { error make --unspanned { msg: "path parameter 'pensionBenefitId' must be non-empty" } }
   let full_url = (build-url $base ({pension_benefit_id: (encode-path-segment $pension_benefit_id)} | format pattern "/providers/employers/employees/employments/pensionbenefits/{pension_benefit_id}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"Authorization": $authorization, "Accept": $hdr_accept, "If-Match": $if_match} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
 }
 
 # Details of an pension benefit
@@ -6042,13 +6244,14 @@ export def "providers-employers-employees-employments-pensionbenefits get-pensio
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($pension_benefit_id | is-empty) { error make --unspanned { msg: "path parameter 'pensionBenefitId' must be non-empty" } }
   let qp = [(serialize-qp "filter" $filter "scalar") (serialize-qp "orderBy" $order_by "scalar") (serialize-qp "pageNumber" $page_number "scalar") (serialize-qp "pageSize" $page_size "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({pension_benefit_id: (encode-path-segment $pension_benefit_id)} | format pattern "/providers/employers/employees/employments/pensionbenefits/{pension_benefit_id}") $qp)
   let accept_val = "application/json;version=2018-01-01"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"Authorization": $authorization, "Accept": $hdr_accept} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"filter": $filter, "orderBy": $order_by, "pageNumber": $page_number, "pageSize": $page_size} | compact), body: null}
 }
 
 # Edit a pension benefit record
@@ -6075,6 +6278,7 @@ export def "providers-employers-employees-employments-pensionbenefits update-pen
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($pension_benefit_id | is-empty) { error make --unspanned { msg: "path parameter 'pensionBenefitId' must be non-empty" } }
   let full_url = (build-url $base ({pension_benefit_id: (encode-path-segment $pension_benefit_id)} | format pattern "/providers/employers/employees/employments/pensionbenefits/{pension_benefit_id}"))
   let req_body = {"payout": $payout, "startDate": $start_date} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
@@ -6082,7 +6286,7 @@ export def "providers-employers-employees-employments-pensionbenefits update-pen
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"Authorization": $authorization, "Accept": $hdr_accept, "If-Match": $if_match} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json;version=2018-01-01" $req_body
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json;version=2018-01-01" $req_body {query: {}, body: $req_body}
 }
 
 # Delete an protected earnings record
@@ -6106,12 +6310,13 @@ export def "providers-employers-employees-employments-protectedearnings delete-p
 ]: nothing -> record<version: record<obsoleteDate: string, resourceVersion: string>, messages: table<code: int, description: string, id: string, properties: list, type: string>, content: record> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($protected_earnings_id | is-empty) { error make --unspanned { msg: "path parameter 'protectedEarningsId' must be non-empty" } }
   let full_url = (build-url $base ({protected_earnings_id: (encode-path-segment $protected_earnings_id)} | format pattern "/providers/employers/employees/employments/protectedearnings/{protected_earnings_id}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"Authorization": $authorization, "Accept": $hdr_accept, "If-Match": $if_match} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
 }
 
 # Get the details of an protected earnings record
@@ -6134,12 +6339,13 @@ export def "providers-employers-employees-employments-protectedearnings get-prot
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($protected_earnings_id | is-empty) { error make --unspanned { msg: "path parameter 'protectedEarningsId' must be non-empty" } }
   let full_url = (build-url $base ({protected_earnings_id: (encode-path-segment $protected_earnings_id)} | format pattern "/providers/employers/employees/employments/protectedearnings/{protected_earnings_id}"))
   let accept_val = "application/json;version=2018-01-01"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"Authorization": $authorization, "Accept": $hdr_accept} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
 }
 
 # Edit the details of an protected earnings record
@@ -6167,6 +6373,7 @@ export def "providers-employers-employees-employments-protectedearnings update-p
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($protected_earnings_id | is-empty) { error make --unspanned { msg: "path parameter 'protectedEarningsId' must be non-empty" } }
   let full_url = (build-url $base ({protected_earnings_id: (encode-path-segment $protected_earnings_id)} | format pattern "/providers/employers/employees/employments/protectedearnings/{protected_earnings_id}"))
   let req_body = {"endDate": $end_date, "startDate": $start_date, "threshold": $threshold} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
@@ -6174,7 +6381,7 @@ export def "providers-employers-employees-employments-protectedearnings update-p
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"Authorization": $authorization, "Accept": $hdr_accept, "If-Match": $if_match} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json;version=2018-01-01" $req_body
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json;version=2018-01-01" $req_body {query: {}, body: $req_body}
 }
 
 # Delete a specific social security benefits record
@@ -6198,12 +6405,13 @@ export def "providers-employers-employees-employments-socialsecuritybenefits del
 ]: nothing -> record<version: record<obsoleteDate: string, resourceVersion: string>, messages: table<code: int, description: string, id: string, properties: list, type: string>, content: record> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($social_security_benefit_id | is-empty) { error make --unspanned { msg: "path parameter 'socialSecurityBenefitId' must be non-empty" } }
   let full_url = (build-url $base ({social_security_benefit_id: (encode-path-segment $social_security_benefit_id)} | format pattern "/providers/employers/employees/employments/socialsecuritybenefits/{social_security_benefit_id}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"Authorization": $authorization, "Accept": $hdr_accept, "If-Match": $if_match} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
 }
 
 # Details of a social security benefits record
@@ -6226,12 +6434,13 @@ export def "providers-employers-employees-employments-socialsecuritybenefits get
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($social_security_benefit_id | is-empty) { error make --unspanned { msg: "path parameter 'socialSecurityBenefitId' must be non-empty" } }
   let full_url = (build-url $base ({social_security_benefit_id: (encode-path-segment $social_security_benefit_id)} | format pattern "/providers/employers/employees/employments/socialsecuritybenefits/{social_security_benefit_id}"))
   let accept_val = "application/json;version=2018-01-01"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"Authorization": $authorization, "Accept": $hdr_accept} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
 }
 
 # Edit the details of a social security benefits record
@@ -6262,6 +6471,7 @@ export def "providers-employers-employees-employments-socialsecuritybenefits upd
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($social_security_benefit_id | is-empty) { error make --unspanned { msg: "path parameter 'socialSecurityBenefitId' must be non-empty" } }
   let full_url = (build-url $base ({social_security_benefit_id: (encode-path-segment $social_security_benefit_id)} | format pattern "/providers/employers/employees/employments/socialsecuritybenefits/{social_security_benefit_id}"))
   let req_body = {"endDate": $end_date, "startDate": $start_date, "supplementation": $supplementation, "benefit": $benefit} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
@@ -6269,7 +6479,7 @@ export def "providers-employers-employees-employments-socialsecuritybenefits upd
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"Authorization": $authorization, "Accept": $hdr_accept, "If-Match": $if_match} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json;version=2018-01-01" $req_body
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json;version=2018-01-01" $req_body {query: {}, body: $req_body}
 }
 
 # Delete a specific social security record
@@ -6293,12 +6503,13 @@ export def "providers-employers-employees-employments-socialsecurityconfiguratio
 ]: nothing -> record<version: record<obsoleteDate: string, resourceVersion: string>, messages: table<code: int, description: string, id: string, properties: list, type: string>, content: record> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($social_security_configuration_id | is-empty) { error make --unspanned { msg: "path parameter 'socialSecurityConfigurationId' must be non-empty" } }
   let full_url = (build-url $base ({social_security_configuration_id: (encode-path-segment $social_security_configuration_id)} | format pattern "/providers/employers/employees/employments/socialsecurityconfigurations/{social_security_configuration_id}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"Authorization": $authorization, "Accept": $hdr_accept, "If-Match": $if_match} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
 }
 
 # Details of a social security record
@@ -6321,12 +6532,13 @@ export def "providers-employers-employees-employments-socialsecurityconfiguratio
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($social_security_configuration_id | is-empty) { error make --unspanned { msg: "path parameter 'socialSecurityConfigurationId' must be non-empty" } }
   let full_url = (build-url $base ({social_security_configuration_id: (encode-path-segment $social_security_configuration_id)} | format pattern "/providers/employers/employees/employments/socialsecurityconfigurations/{social_security_configuration_id}"))
   let accept_val = "application/json;version=2018-01-01"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"Authorization": $authorization, "Accept": $hdr_accept} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
 }
 
 # Edit the details of a social security record
@@ -6355,6 +6567,7 @@ export def "providers-employers-employees-employments-socialsecurityconfiguratio
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($social_security_configuration_id | is-empty) { error make --unspanned { msg: "path parameter 'socialSecurityConfigurationId' must be non-empty" } }
   let full_url = (build-url $base ({social_security_configuration_id: (encode-path-segment $social_security_configuration_id)} | format pattern "/providers/employers/employees/employments/socialsecurityconfigurations/{social_security_configuration_id}"))
   let req_body = {"isInsuredForOccupationalDisabilityInsuranceAct": $is_insured_for_occupational_disability_insurance_act, "isInsuredForSicknessBenefitsAct": $is_insured_for_sickness_benefits_act, "isInsuredForUnemploymentInsuranceAct": $is_insured_for_unemployment_insurance_act, "startDate": $start_date} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
@@ -6362,7 +6575,7 @@ export def "providers-employers-employees-employments-socialsecurityconfiguratio
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"Authorization": $authorization, "Accept": $hdr_accept, "If-Match": $if_match} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json;version=2018-01-01" $req_body
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json;version=2018-01-01" $req_body {query: {}, body: $req_body}
 }
 
 # Delete a wachtgeld record
@@ -6387,20 +6600,21 @@ export def "providers-employers-employees-employments-wachtgeld delete" [
 ]: nothing -> record<version: record<obsoleteDate: string, resourceVersion: string>, messages: table<code: int, description: string, id: string, properties: list, type: string>, content: record> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($wachtegelden_id | is-empty) { error make --unspanned { msg: "path parameter 'wachtegeldenId' must be non-empty" } }
   let qp = [(serialize-qp "wachtgeldId" $wachtgeld_id "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({wachtegelden_id: (encode-path-segment $wachtegelden_id)} | format pattern "/providers/employers/employees/employments/wachtgeld/{wachtegelden_id}") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"Authorization": $authorization, "Accept": $hdr_accept, "If-Match": $if_match} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"wachtgeldId": $wachtgeld_id} | compact), body: null}
 }
 
 # Details of wachtgeld
 #
 # GET /providers/employers/employees/employments/wachtgeld/{wachtegeldenId}
 # operationId: GetWachtgeldByWachtgeldId
-export def "providers-employers-employees-employments-wachtgeld get-by-wachtegeldenId" [
+export def "providers-employers-employees-employments-wachtgeld get-by-wachtegelden-id" [
   wachtegelden_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -6417,13 +6631,14 @@ export def "providers-employers-employees-employments-wachtgeld get-by-wachtegel
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($wachtegelden_id | is-empty) { error make --unspanned { msg: "path parameter 'wachtegeldenId' must be non-empty" } }
   let qp = [(serialize-qp "wachtgeldId" $wachtgeld_id "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({wachtegelden_id: (encode-path-segment $wachtegelden_id)} | format pattern "/providers/employers/employees/employments/wachtgeld/{wachtegelden_id}") $qp)
   let accept_val = "application/json;version=2018-01-01"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"Authorization": $authorization, "Accept": $hdr_accept} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"wachtgeldId": $wachtgeld_id} | compact), body: null}
 }
 
 # Edit a wachtgeld record
@@ -6453,6 +6668,7 @@ export def "providers-employers-employees-employments-wachtgeld update" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($wachtegelden_id | is-empty) { error make --unspanned { msg: "path parameter 'wachtegeldenId' must be non-empty" } }
   let qp = [(serialize-qp "wachtgeldId" $wachtgeld_id "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({wachtegelden_id: (encode-path-segment $wachtegelden_id)} | format pattern "/providers/employers/employees/employments/wachtgeld/{wachtegelden_id}") $qp)
   let req_body = {"startDate": $start_date, "value": $value, "valueAdditionalIncomeCivilService": $value_additional_income_civil_service, "valueAdditionalIncomeNonCivilService": $value_additional_income_non_civil_service} | compact
@@ -6461,7 +6677,7 @@ export def "providers-employers-employees-employments-wachtgeld update" [
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"Authorization": $authorization, "Accept": $hdr_accept, "If-Match": $if_match} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json;version=2018-01-01" $req_body
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json;version=2018-01-01" $req_body {query: ({"wachtgeldId": $wachtgeld_id} | compact), body: $req_body}
 }
 
 # Delete a specific wage record
@@ -6485,19 +6701,20 @@ export def "providers-employers-employees-employments-wages delete" [
 ]: nothing -> record<version: record<obsoleteDate: string, resourceVersion: string>, messages: table<code: int, description: string, id: string, properties: list, type: string>, content: record> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($wage_id | is-empty) { error make --unspanned { msg: "path parameter 'wageId' must be non-empty" } }
   let full_url = (build-url $base ({wage_id: (encode-path-segment $wage_id)} | format pattern "/providers/employers/employees/employments/wages/{wage_id}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"Authorization": $authorization, "Accept": $hdr_accept, "If-Match": $if_match} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
 }
 
 # Details of a single wage
 #
 # GET /providers/employers/employees/employments/wages/{wageId}
 # operationId: GetWageByWageId
-export def "providers-employers-employees-employments-wages get-by-wageId" [
+export def "providers-employers-employees-employments-wages get-by-wage-id" [
   wage_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -6513,12 +6730,13 @@ export def "providers-employers-employees-employments-wages get-by-wageId" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($wage_id | is-empty) { error make --unspanned { msg: "path parameter 'wageId' must be non-empty" } }
   let full_url = (build-url $base ({wage_id: (encode-path-segment $wage_id)} | format pattern "/providers/employers/employees/employments/wages/{wage_id}"))
   let accept_val = "application/json;version=2018-01-01"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"Authorization": $authorization, "Accept": $hdr_accept} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
 }
 
 # Edit a wage
@@ -6558,6 +6776,7 @@ export def "providers-employers-employees-employments-wages update" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($wage_id | is-empty) { error make --unspanned { msg: "path parameter 'wageId' must be non-empty" } }
   let full_url = (build-url $base ({wage_id: (encode-path-segment $wage_id)} | format pattern "/providers/employers/employees/employments/wages/{wage_id}"))
   let req_body = {"applyPayGrade": $apply_pay_grade, "employerCosts": $employer_costs, "employerCostsType": $employer_costs_type, "grossWage": $gross_wage, "grossWageType": $gross_wage_type, "netWage": $net_wage, "netWageType": $net_wage_type, "payGrade": $pay_grade, "payScale": $pay_scale, "startDate": $start_date} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
@@ -6565,7 +6784,7 @@ export def "providers-employers-employees-employments-wages update" [
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"Authorization": $authorization, "Accept": $hdr_accept, "If-Match": $if_match} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json;version=2018-01-01" $req_body
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json;version=2018-01-01" $req_body {query: {}, body: $req_body}
 }
 
 # Delete a specific working hours record
@@ -6589,12 +6808,13 @@ export def "providers-employers-employees-employments-workinghours delete-workin
 ]: nothing -> record<version: record<obsoleteDate: string, resourceVersion: string>, messages: table<code: int, description: string, id: string, properties: list, type: string>, content: record> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($workinghours_id | is-empty) { error make --unspanned { msg: "path parameter 'workinghoursId' must be non-empty" } }
   let full_url = (build-url $base ({workinghours_id: (encode-path-segment $workinghours_id)} | format pattern "/providers/employers/employees/employments/workinghours/{workinghours_id}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"Authorization": $authorization, "Accept": $hdr_accept, "If-Match": $if_match} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
 }
 
 # Details of the working hours
@@ -6617,12 +6837,13 @@ export def "providers-employers-employees-employments-workinghours get-working-h
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($workinghours_id | is-empty) { error make --unspanned { msg: "path parameter 'workinghoursId' must be non-empty" } }
   let full_url = (build-url $base ({workinghours_id: (encode-path-segment $workinghours_id)} | format pattern "/providers/employers/employees/employments/workinghours/{workinghours_id}"))
   let accept_val = "application/json;version=2018-01-01"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"Authorization": $authorization, "Accept": $hdr_accept} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
 }
 
 # Edit the working hours
@@ -6665,6 +6886,7 @@ export def "providers-employers-employees-employments-workinghours update-workin
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($workinghours_id | is-empty) { error make --unspanned { msg: "path parameter 'workinghoursId' must be non-empty" } }
   let full_url = (build-url $base ({workinghours_id: (encode-path-segment $workinghours_id)} | format pattern "/providers/employers/employees/employments/workinghours/{workinghours_id}"))
   let req_body = {"averageHoursPerWeek": $average_hours_per_week, "averageParttimeFactor": $average_parttime_factor, "calculateUsingWorkPattern": $calculate_using_work_pattern, "contractCode": $contract_code, "deviatingHoursPerWeek": $deviating_hours_per_week, "deviatingSvDaysPerPeriod": $deviating_sv_days_per_period, "flexibleHoursContract": $flexible_hours_contract, "regularWorkPattern": $regular_work_pattern, "shift": $shift, "shiftRateSickLeave": $shift_rate_sick_leave, "startDate": $start_date, "workPattern": $work_pattern} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
@@ -6672,14 +6894,14 @@ export def "providers-employers-employees-employments-workinghours update-workin
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"Authorization": $authorization, "Accept": $hdr_accept, "If-Match": $if_match} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json;version=2018-01-01" $req_body
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json;version=2018-01-01" $req_body {query: {}, body: $req_body}
 }
 
 # Details of an employment
 #
 # GET /providers/employers/employees/employments/{employmentId}
 # operationId: GetEmploymentByEmploymentId
-export def "providers-employers-employees-employments get-by-employmentId" [
+export def "providers-employers-employees-employments get-by-employment-id" [
   employment_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -6695,12 +6917,13 @@ export def "providers-employers-employees-employments get-by-employmentId" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($employment_id | is-empty) { error make --unspanned { msg: "path parameter 'employmentId' must be non-empty" } }
   let full_url = (build-url $base ({employment_id: (encode-path-segment $employment_id)} | format pattern "/providers/employers/employees/employments/{employment_id}"))
   let accept_val = "application/json;version=2019-12-16"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"Authorization": $authorization, "Accept": $hdr_accept} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
 }
 
 # Edit the type of an employment
@@ -6728,6 +6951,7 @@ export def "providers-employers-employees-employments update-type-of-category-ty
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($employment_id | is-empty) { error make --unspanned { msg: "path parameter 'employmentId' must be non-empty" } }
   let full_url = (build-url $base ({employment_id: (encode-path-segment $employment_id)} | format pattern "/providers/employers/employees/employments/{employment_id}"))
   let req_body = {"employmentCategoryType": $employment_category_type, "linkedEmployment": $linked_employment} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
@@ -6735,7 +6959,7 @@ export def "providers-employers-employees-employments update-type-of-category-ty
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"Authorization": $authorization, "Accept": $hdr_accept, "If-Match": $if_match} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "patch" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json;version=2019-12-16" $req_body
+  do-request "patch" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json;version=2019-12-16" $req_body {query: {}, body: $req_body}
 }
 
 # Edit the details of an employment
@@ -6822,6 +7046,7 @@ export def "providers-employers-employees-employments update" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($employment_id | is-empty) { error make --unspanned { msg: "path parameter 'employmentId' must be non-empty" } }
   let full_url = (build-url $base ({employment_id: (encode-path-segment $employment_id)} | format pattern "/providers/employers/employees/employments/{employment_id}"))
   let req_body = {"calculateWorkingHours": $calculate_working_hours, "cancellationNoticeDate": $cancellation_notice_date, "cancellationPeriodEmployee": $cancellation_period_employee, "cancellationPeriodEmployer": $cancellation_period_employer, "cancellationPeriodTimeUnit": $cancellation_period_time_unit, "commissionUntilDate": $commission_until_date, "commissionUntilDate1": $commission_until_date1, "commissionUntilDate2": $commission_until_date2, "commissionUntilDate3": $commission_until_date3, "commissionUntilDate4": $commission_until_date4, "commissionUntilDate5": $commission_until_date5, "commissionUntilDate6": $commission_until_date6, "deviatingCLAExternalParty": $deviating_cla_external_party, "deviatingCLATaxReturn": $deviating_cla_tax_return, "emailLeaveRequest": $email_leave_request, "employeeProfileId": $employee_profile_id, "employmentContractType": $employment_contract_type, "employmentDurationType": $employment_duration_type, "exemptionInsuranceObligation": $exemption_insurance_obligation, "exemptionPremiumWaiverMarginalLabour": $exemption_premium_waiver_marginal_labour, "exemptionWorkRelatedExpenseScheme": $exemption_work_related_expense_scheme, "hasOnCallAppearanceObligation": $has_on_call_appearance_obligation, "historicalStartDate": $historical_start_date, "incomeRelationshipNumber": $income_relationship_number, "isAnonymousEmployee": $is_anonymous_employee, "isDirectorAndMajorShareholder": $is_director_and_major_shareholder, "isFamilyOfOwner": $is_family_of_owner, "isGemoedsbezwaardEmployeeInsurance": $is_gemoedsbezwaard_employee_insurance, "isGemoedsbezwaardNationalInsurance": $is_gemoedsbezwaard_national_insurance, "isOnCallEmployment": $is_on_call_employment, "isPreviousOwner": $is_previous_owner, "namePayslip": $name_payslip, "participation55plusRegulationUWV": $participation55plus_regulation_uwv, "periodPayGradeAdjustment": $period_pay_grade_adjustment, "professionCode": $profession_code, "sendToExternalParty": $send_to_external_party, "signalPayGradeAdjustment": $signal_pay_grade_adjustment, "specialIncomeRatio": $special_income_ratio, "startCancellationNoticePeriod": $start_cancellation_notice_period, "startDateContractOfIndefiniteDuration": $start_date_contract_of_indefinite_duration, "temporaryTaxExemption": $temporary_tax_exemption, "typeOfEmployee": $type_of_employee, "typeOfParticipation": $type_of_participation, "vacationCoupons": $vacation_coupons, "valueOfParticipation": $value_of_participation, "wachtgeldOldRegulation": $wachtgeld_old_regulation, "writtenEmploymentContract": $written_employment_contract} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
@@ -6829,7 +7054,7 @@ export def "providers-employers-employees-employments update" [
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"Authorization": $authorization, "Accept": $hdr_accept, "If-Match": $if_match} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json;version=2019-12-16" $req_body
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json;version=2019-12-16" $req_body {query: {}, body: $req_body}
 }
 
 # List of abp funds the employment partakes in
@@ -6856,13 +7081,14 @@ export def "providers-employers-employees-employments-abpfunds get-abp-funds" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($employment_id | is-empty) { error make --unspanned { msg: "path parameter 'employmentId' must be non-empty" } }
   let qp = [(serialize-qp "filter" $filter "scalar") (serialize-qp "orderBy" $order_by "scalar") (serialize-qp "pageNumber" $page_number "scalar") (serialize-qp "pageSize" $page_size "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({employment_id: (encode-path-segment $employment_id)} | format pattern "/providers/employers/employees/employments/{employment_id}/abpfunds") $qp)
   let accept_val = "application/json;version=2018-01-01"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"Authorization": $authorization, "Accept": $hdr_accept} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"filter": $filter, "orderBy": $order_by, "pageNumber": $page_number, "pageSize": $page_size} | compact), body: null}
 }
 
 # Activate an abp fund for an employment
@@ -6894,6 +7120,7 @@ export def "providers-employers-employees-employments-abpfunds create-abp-fund" 
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($employment_id | is-empty) { error make --unspanned { msg: "path parameter 'employmentId' must be non-empty" } }
   let full_url = (build-url $base ({employment_id: (encode-path-segment $employment_id)} | format pattern "/providers/employers/employees/employments/{employment_id}/abpfunds"))
   let req_body = {"deviations": $deviations, "endDate": $end_date, "fixedContribution": $fixed_contribution, "fund": $fund, "startDate": $start_date} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
@@ -6901,7 +7128,7 @@ export def "providers-employers-employees-employments-abpfunds create-abp-fund" 
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"Authorization": $authorization, "Accept": $hdr_accept} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json;version=2018-01-01" $req_body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json;version=2018-01-01" $req_body {query: {}, body: $req_body}
 }
 
 # Get a list of attachment of earnings records
@@ -6928,13 +7155,14 @@ export def "providers-employers-employees-employments-attachmentsofearnings get-
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($employment_id | is-empty) { error make --unspanned { msg: "path parameter 'employmentId' must be non-empty" } }
   let qp = [(serialize-qp "filter" $filter "scalar") (serialize-qp "orderBy" $order_by "scalar") (serialize-qp "pageNumber" $page_number "scalar") (serialize-qp "pageSize" $page_size "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({employment_id: (encode-path-segment $employment_id)} | format pattern "/providers/employers/employees/employments/{employment_id}/attachmentsofearnings") $qp)
   let accept_val = "application/json;version=2018-01-01"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"Authorization": $authorization, "Accept": $hdr_accept} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"filter": $filter, "orderBy": $order_by, "pageNumber": $page_number, "pageSize": $page_size} | compact), body: null}
 }
 
 # Create a new attachment of earnings record
@@ -6959,6 +7187,7 @@ export def "providers-employers-employees-employments-attachmentsofearnings crea
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($employment_id | is-empty) { error make --unspanned { msg: "path parameter 'employmentId' must be non-empty" } }
   let full_url = (build-url $base ({employment_id: (encode-path-segment $employment_id)} | format pattern "/providers/employers/employees/employments/{employment_id}/attachmentsofearnings"))
   let req_body = $body
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else if (($input | is-not-empty) and ($req_body | is-empty)) { $input } else { $req_body }
@@ -6966,7 +7195,7 @@ export def "providers-employers-employees-employments-attachmentsofearnings crea
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"Authorization": $authorization, "Accept": $hdr_accept} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "applicationjson;version=2018-01-01" $req_body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "applicationjson;version=2018-01-01" $req_body {query: {}, body: $req_body}
 }
 
 # List of bases for employment fund calculations.
@@ -6993,13 +7222,14 @@ export def "providers-employers-employees-employments-basesforcalculation get-ba
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($employment_id | is-empty) { error make --unspanned { msg: "path parameter 'employmentId' must be non-empty" } }
   let qp = [(serialize-qp "filter" $filter "scalar") (serialize-qp "orderBy" $order_by "scalar") (serialize-qp "pageNumber" $page_number "scalar") (serialize-qp "pageSize" $page_size "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({employment_id: (encode-path-segment $employment_id)} | format pattern "/providers/employers/employees/employments/{employment_id}/basesforcalculation") $qp)
   let accept_val = "application/json;version=2018-01-01"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"Authorization": $authorization, "Accept": $hdr_accept} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"filter": $filter, "orderBy": $order_by, "pageNumber": $page_number, "pageSize": $page_size} | compact), body: null}
 }
 
 # Add a base for calculation
@@ -7033,6 +7263,7 @@ export def "providers-employers-employees-employments-basesforcalculation create
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($employment_id | is-empty) { error make --unspanned { msg: "path parameter 'employmentId' must be non-empty" } }
   let full_url = (build-url $base ({employment_id: (encode-path-segment $employment_id)} | format pattern "/providers/employers/employees/employments/{employment_id}/basesforcalculation"))
   let req_body = {"ageBasedMaximum": $age_based_maximum, "ageBasedMinimum": $age_based_minimum, "deviations": $deviations, "endDate": $end_date, "startDate": $start_date, "base": $body_base} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
@@ -7040,7 +7271,7 @@ export def "providers-employers-employees-employments-basesforcalculation create
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"Authorization": $authorization, "Accept": $hdr_accept} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json;version=2018-01-01" $req_body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json;version=2018-01-01" $req_body {query: {}, body: $req_body}
 }
 
 # List of bases for employment fund calculations.
@@ -7067,13 +7298,14 @@ export def "providers-employers-employees-employments-basesforemploymentfundcalc
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($employment_id | is-empty) { error make --unspanned { msg: "path parameter 'employmentId' must be non-empty" } }
   let qp = [(serialize-qp "filter" $filter "scalar") (serialize-qp "orderBy" $order_by "scalar") (serialize-qp "pageNumber" $page_number "scalar") (serialize-qp "pageSize" $page_size "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({employment_id: (encode-path-segment $employment_id)} | format pattern "/providers/employers/employees/employments/{employment_id}/basesforemploymentfundcalculation") $qp)
   let accept_val = "application/json;version=2018-01-01"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"Authorization": $authorization, "Accept": $hdr_accept} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"filter": $filter, "orderBy": $order_by, "pageNumber": $page_number, "pageSize": $page_size} | compact), body: null}
 }
 
 # Add a base for employment fund calculation
@@ -7102,6 +7334,7 @@ export def "providers-employers-employees-employments-basesforemploymentfundcalc
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($employment_id | is-empty) { error make --unspanned { msg: "path parameter 'employmentId' must be non-empty" } }
   let full_url = (build-url $base ({employment_id: (encode-path-segment $employment_id)} | format pattern "/providers/employers/employees/employments/{employment_id}/basesforemploymentfundcalculation"))
   let req_body = {"base": $body_base, "endDate": $end_date, "startDate": $start_date, "payrollComponent": $payroll_component} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
@@ -7109,7 +7342,7 @@ export def "providers-employers-employees-employments-basesforemploymentfundcalc
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"Authorization": $authorization, "Accept": $hdr_accept} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json;version=2018-01-01" $req_body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json;version=2018-01-01" $req_body {query: {}, body: $req_body}
 }
 
 # List Benefits in kind
@@ -7136,13 +7369,14 @@ export def "providers-employers-employees-employments-benefits-in-kind get" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($employment_id | is-empty) { error make --unspanned { msg: "path parameter 'employmentId' must be non-empty" } }
   let qp = [(serialize-qp "filter" $filter "scalar") (serialize-qp "orderBy" $order_by "scalar") (serialize-qp "pageNumber" $page_number "scalar") (serialize-qp "pageSize" $page_size "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({employment_id: (encode-path-segment $employment_id)} | format pattern "/providers/employers/employees/employments/{employment_id}/benefitsInKind") $qp)
   let accept_val = "application/json;version=2018-01-01"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"Authorization": $authorization, "Accept": $hdr_accept} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"filter": $filter, "orderBy": $order_by, "pageNumber": $page_number, "pageSize": $page_size} | compact), body: null}
 }
 
 # Add a Benefit in kind for an employment
@@ -7175,6 +7409,7 @@ export def "providers-employers-employees-employments-benefits-in-kind create" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($employment_id | is-empty) { error make --unspanned { msg: "path parameter 'employmentId' must be non-empty" } }
   let full_url = (build-url $base ({employment_id: (encode-path-segment $employment_id)} | format pattern "/providers/employers/employees/employments/{employment_id}/benefitsInKind"))
   let req_body = {"benefitInKindType": $benefit_in_kind_type, "brand": $brand, "endDate": $end_date, "particularities": $particularities, "startDate": $start_date, "supplier": $supplier, "type": $type, "value": $value} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
@@ -7182,7 +7417,7 @@ export def "providers-employers-employees-employments-benefits-in-kind create" [
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"Authorization": $authorization, "Accept": $hdr_accept} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json;version=2018-01-01" $req_body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json;version=2018-01-01" $req_body {query: {}, body: $req_body}
 }
 
 # list of benefits and deductions
@@ -7209,13 +7444,14 @@ export def "providers-employers-employees-employments-benefitsanddeductions get-
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($employment_id | is-empty) { error make --unspanned { msg: "path parameter 'employmentId' must be non-empty" } }
   let qp = [(serialize-qp "filter" $filter "scalar") (serialize-qp "orderBy" $order_by "scalar") (serialize-qp "pageNumber" $page_number "scalar") (serialize-qp "pageSize" $page_size "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({employment_id: (encode-path-segment $employment_id)} | format pattern "/providers/employers/employees/employments/{employment_id}/benefitsanddeductions") $qp)
   let accept_val = "application/json;version=2018-01-01"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"Authorization": $authorization, "Accept": $hdr_accept} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"filter": $filter, "orderBy": $order_by, "pageNumber": $page_number, "pageSize": $page_size} | compact), body: null}
 }
 
 # Add a benefit or deduction record for the employment
@@ -7244,6 +7480,7 @@ export def "providers-employers-employees-employments-benefitsanddeductions crea
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($employment_id | is-empty) { error make --unspanned { msg: "path parameter 'employmentId' must be non-empty" } }
   let full_url = (build-url $base ({employment_id: (encode-path-segment $employment_id)} | format pattern "/providers/employers/employees/employments/{employment_id}/benefitsanddeductions"))
   let req_body = {"endDate": $end_date, "payrollComponent": $payroll_component, "startDate": $start_date, "value": $value} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
@@ -7251,7 +7488,7 @@ export def "providers-employers-employees-employments-benefitsanddeductions crea
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"Authorization": $authorization, "Accept": $hdr_accept} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json;version=2018-01-01" $req_body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json;version=2018-01-01" $req_body {query: {}, body: $req_body}
 }
 
 # List of company cars for an employment
@@ -7278,13 +7515,14 @@ export def "providers-employers-employees-employments-companycars get-company-ca
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($employment_id | is-empty) { error make --unspanned { msg: "path parameter 'employmentId' must be non-empty" } }
   let qp = [(serialize-qp "filter" $filter "scalar") (serialize-qp "orderBy" $order_by "scalar") (serialize-qp "pageNumber" $page_number "scalar") (serialize-qp "pageSize" $page_size "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({employment_id: (encode-path-segment $employment_id)} | format pattern "/providers/employers/employees/employments/{employment_id}/companycars") $qp)
   let accept_val = "application/json;version=2018-01-01"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"Authorization": $authorization, "Accept": $hdr_accept} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"filter": $filter, "orderBy": $order_by, "pageNumber": $page_number, "pageSize": $page_size} | compact), body: null}
 }
 
 # Create a company car record for an employment
@@ -7322,6 +7560,7 @@ export def "providers-employers-employees-employments-companycars create-company
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($employment_id | is-empty) { error make --unspanned { msg: "path parameter 'employmentId' must be non-empty" } }
   let full_url = (build-url $base ({employment_id: (encode-path-segment $employment_id)} | format pattern "/providers/employers/employees/employments/{employment_id}/companycars"))
   let req_body = {"brand": $brand, "catalogValue": $catalog_value, "comments": $comments, "endDate": $end_date, "fuelCardNumber": $fuel_card_number, "kilometersPrivateUse": $kilometers_private_use, "lease": $lease, "leaseOrBuy": $lease_or_buy, "licensePlateNumber": $license_plate_number, "model": $model, "startDate": $start_date, "supplier": $supplier} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
@@ -7329,7 +7568,7 @@ export def "providers-employers-employees-employments-companycars create-company
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"Authorization": $authorization, "Accept": $hdr_accept} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json;version=2018-01-01" $req_body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json;version=2018-01-01" $req_body {query: {}, body: $req_body}
 }
 
 # Correct the start (employment) date for an employment.
@@ -7354,6 +7593,7 @@ export def "providers-employers-employees-employments-correctstartdate update-co
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($employment_id | is-empty) { error make --unspanned { msg: "path parameter 'employmentId' must be non-empty" } }
   let full_url = (build-url $base ({employment_id: (encode-path-segment $employment_id)} | format pattern "/providers/employers/employees/employments/{employment_id}/correctstartdate"))
   let req_body = {"startDate": $start_date} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
@@ -7361,7 +7601,7 @@ export def "providers-employers-employees-employments-correctstartdate update-co
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"Authorization": $authorization, "Accept": $hdr_accept} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "patch" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json;version=2018-01-01" $req_body
+  do-request "patch" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json;version=2018-01-01" $req_body {query: {}, body: $req_body}
 }
 
 # List of costs per hour for an employment
@@ -7389,13 +7629,14 @@ export def "providers-employers-employees-employments-costperhour get-cost-per-h
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($employment_id | is-empty) { error make --unspanned { msg: "path parameter 'employmentId' must be non-empty" } }
   let qp = [(serialize-qp "includeEstimation" $include_estimation "scalar") (serialize-qp "filter" $filter "scalar") (serialize-qp "orderBy" $order_by "scalar") (serialize-qp "pageNumber" $page_number "scalar") (serialize-qp "pageSize" $page_size "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({employment_id: (encode-path-segment $employment_id)} | format pattern "/providers/employers/employees/employments/{employment_id}/costperhour") $qp)
   let accept_val = "application/json;version=2018-01-01"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"Authorization": $authorization, "Accept": $hdr_accept} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"includeEstimation": $include_estimation, "filter": $filter, "orderBy": $order_by, "pageNumber": $page_number, "pageSize": $page_size} | compact), body: null}
 }
 
 # Add a cost per hour for an employment
@@ -7422,6 +7663,7 @@ export def "providers-employers-employees-employments-costperhour create-cost-pe
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($employment_id | is-empty) { error make --unspanned { msg: "path parameter 'employmentId' must be non-empty" } }
   let full_url = (build-url $base ({employment_id: (encode-path-segment $employment_id)} | format pattern "/providers/employers/employees/employments/{employment_id}/costperhour"))
   let req_body = {"costPerHour": $cost_per_hour, "payrollPeriods": $payroll_periods} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
@@ -7429,7 +7671,7 @@ export def "providers-employers-employees-employments-costperhour create-cost-pe
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"Authorization": $authorization, "Accept": $hdr_accept} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json;version=2018-01-01" $req_body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json;version=2018-01-01" $req_body {query: {}, body: $req_body}
 }
 
 # List employment custom fields for an employment
@@ -7456,13 +7698,14 @@ export def "providers-employers-employees-employments-customfields get-custom-fi
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($employment_id | is-empty) { error make --unspanned { msg: "path parameter 'employmentId' must be non-empty" } }
   let qp = [(serialize-qp "filter" $filter "scalar") (serialize-qp "orderBy" $order_by "scalar") (serialize-qp "pageNumber" $page_number "scalar") (serialize-qp "pageSize" $page_size "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({employment_id: (encode-path-segment $employment_id)} | format pattern "/providers/employers/employees/employments/{employment_id}/customfields") $qp)
   let accept_val = "application/json;version=2018-01-01"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"Authorization": $authorization, "Accept": $hdr_accept} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"filter": $filter, "orderBy": $order_by, "pageNumber": $page_number, "pageSize": $page_size} | compact), body: null}
 }
 
 # Add an employment custom field for an employment
@@ -7489,6 +7732,7 @@ export def "providers-employers-employees-employments-customfields create-custom
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($employment_id | is-empty) { error make --unspanned { msg: "path parameter 'employmentId' must be non-empty" } }
   let full_url = (build-url $base ({employment_id: (encode-path-segment $employment_id)} | format pattern "/providers/employers/employees/employments/{employment_id}/customfields"))
   let req_body = {"customField": $custom_field, "value": $value} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
@@ -7496,7 +7740,7 @@ export def "providers-employers-employees-employments-customfields create-custom
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"Authorization": $authorization, "Accept": $hdr_accept} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json;version=2018-01-01" $req_body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json;version=2018-01-01" $req_body {query: {}, body: $req_body}
 }
 
 # List custom notification
@@ -7523,13 +7767,14 @@ export def "providers-employers-employees-employments-customnotifications get-cu
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($employment_id | is-empty) { error make --unspanned { msg: "path parameter 'employmentId' must be non-empty" } }
   let qp = [(serialize-qp "filter" $filter "scalar") (serialize-qp "orderBy" $order_by "scalar") (serialize-qp "pageNumber" $page_number "scalar") (serialize-qp "pageSize" $page_size "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({employment_id: (encode-path-segment $employment_id)} | format pattern "/providers/employers/employees/employments/{employment_id}/customnotifications") $qp)
   let accept_val = "application/json;version=2018-01-01"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"Authorization": $authorization, "Accept": $hdr_accept} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"filter": $filter, "orderBy": $order_by, "pageNumber": $page_number, "pageSize": $page_size} | compact), body: null}
 }
 
 # Add a custom notification for an employment
@@ -7558,6 +7803,7 @@ export def "providers-employers-employees-employments-customnotifications create
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($employment_id | is-empty) { error make --unspanned { msg: "path parameter 'employmentId' must be non-empty" } }
   let full_url = (build-url $base ({employment_id: (encode-path-segment $employment_id)} | format pattern "/providers/employers/employees/employments/{employment_id}/customnotifications"))
   let req_body = {"expirationDate": $expiration_date, "notificationDate": $notification_date, "notificationText": $notification_text, "recurrencePattern": $recurrence_pattern} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
@@ -7565,14 +7811,14 @@ export def "providers-employers-employees-employments-customnotifications create
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"Authorization": $authorization, "Accept": $hdr_accept} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json;version=2018-01-01" $req_body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json;version=2018-01-01" $req_body {query: {}, body: $req_body}
 }
 
 # List of declarations for an employment
 #
 # GET /providers/employers/employees/employments/{employmentId}/declarations
 # operationId: GetDeclarationsByEmploymentId
-export def "providers-employers-employees-employments-declarations get-by-employmentId" [
+export def "providers-employers-employees-employments-declarations get-by-employment-id" [
   employment_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -7592,13 +7838,14 @@ export def "providers-employers-employees-employments-declarations get-by-employ
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($employment_id | is-empty) { error make --unspanned { msg: "path parameter 'employmentId' must be non-empty" } }
   let qp = [(serialize-qp "filter" $filter "scalar") (serialize-qp "orderBy" $order_by "scalar") (serialize-qp "pageNumber" $page_number "scalar") (serialize-qp "pageSize" $page_size "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({employment_id: (encode-path-segment $employment_id)} | format pattern "/providers/employers/employees/employments/{employment_id}/declarations") $qp)
   let accept_val = "application/json;version=2018-01-01"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"Authorization": $authorization, "Accept": $hdr_accept} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"filter": $filter, "orderBy": $order_by, "pageNumber": $page_number, "pageSize": $page_size} | compact), body: null}
 }
 
 # List of Deviating AWF contributions records for an employment
@@ -7625,13 +7872,14 @@ export def "providers-employers-employees-employments-deviatingawfcontributions 
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($employment_id | is-empty) { error make --unspanned { msg: "path parameter 'employmentId' must be non-empty" } }
   let qp = [(serialize-qp "filter" $filter "scalar") (serialize-qp "orderBy" $order_by "scalar") (serialize-qp "pageNumber" $page_number "scalar") (serialize-qp "pageSize" $page_size "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({employment_id: (encode-path-segment $employment_id)} | format pattern "/providers/employers/employees/employments/{employment_id}/deviatingawfcontributions") $qp)
   let accept_val = "application/json;version=2018-01-01"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"Authorization": $authorization, "Accept": $hdr_accept} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"filter": $filter, "orderBy": $order_by, "pageNumber": $page_number, "pageSize": $page_size} | compact), body: null}
 }
 
 # Create a Deviating AWF contributions record for an employment
@@ -7661,6 +7909,7 @@ export def "providers-employers-employees-employments-deviatingawfcontributions 
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($employment_id | is-empty) { error make --unspanned { msg: "path parameter 'employmentId' must be non-empty" } }
   let full_url = (build-url $base ({employment_id: (encode-path-segment $employment_id)} | format pattern "/providers/employers/employees/employments/{employment_id}/deviatingawfcontributions"))
   let req_body = {"endPeriod": $end_period, "startPeriod": $start_period, "typeOfDeviatingAwfContribution": $type_of_deviating_awf_contribution} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
@@ -7668,7 +7917,7 @@ export def "providers-employers-employees-employments-deviatingawfcontributions 
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"Authorization": $authorization, "Accept": $hdr_accept} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json;version=2018-01-01" $req_body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json;version=2018-01-01" $req_body {query: {}, body: $req_body}
 }
 
 # List deviating hourly wage
@@ -7695,13 +7944,14 @@ export def "providers-employers-employees-employments-deviatinghourlywages get-d
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($employment_id | is-empty) { error make --unspanned { msg: "path parameter 'employmentId' must be non-empty" } }
   let qp = [(serialize-qp "filter" $filter "scalar") (serialize-qp "orderBy" $order_by "scalar") (serialize-qp "pageNumber" $page_number "scalar") (serialize-qp "pageSize" $page_size "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({employment_id: (encode-path-segment $employment_id)} | format pattern "/providers/employers/employees/employments/{employment_id}/deviatinghourlywages") $qp)
   let accept_val = "application/json;version=2018-01-01"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"Authorization": $authorization, "Accept": $hdr_accept} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"filter": $filter, "orderBy": $order_by, "pageNumber": $page_number, "pageSize": $page_size} | compact), body: null}
 }
 
 # Add a deviating hourly wage for an employment
@@ -7730,6 +7980,7 @@ export def "providers-employers-employees-employments-deviatinghourlywages creat
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($employment_id | is-empty) { error make --unspanned { msg: "path parameter 'employmentId' must be non-empty" } }
   let full_url = (build-url $base ({employment_id: (encode-path-segment $employment_id)} | format pattern "/providers/employers/employees/employments/{employment_id}/deviatinghourlywages"))
   let req_body = {"endDate": $end_date, "payrollComponent": $payroll_component, "startDate": $start_date, "value": $value} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
@@ -7737,7 +7988,7 @@ export def "providers-employers-employees-employments-deviatinghourlywages creat
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"Authorization": $authorization, "Accept": $hdr_accept} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json;version=2018-01-01" $req_body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json;version=2018-01-01" $req_body {query: {}, body: $req_body}
 }
 
 # Get a list of employment dossier documents
@@ -7764,13 +8015,14 @@ export def "providers-employers-employees-employments-documents get" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($employment_id | is-empty) { error make --unspanned { msg: "path parameter 'employmentId' must be non-empty" } }
   let qp = [(serialize-qp "filter" $filter "scalar") (serialize-qp "orderBy" $order_by "scalar") (serialize-qp "pageNumber" $page_number "scalar") (serialize-qp "pageSize" $page_size "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({employment_id: (encode-path-segment $employment_id)} | format pattern "/providers/employers/employees/employments/{employment_id}/documents") $qp)
   let accept_val = "application/json;version=2018-01-01"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"Authorization": $authorization, "Accept": $hdr_accept} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"filter": $filter, "orderBy": $order_by, "pageNumber": $page_number, "pageSize": $page_size} | compact), body: null}
 }
 
 # Upload a document to the employment dossier
@@ -7796,6 +8048,7 @@ export def "providers-employers-employees-employments-documents create" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($employment_id | is-empty) { error make --unspanned { msg: "path parameter 'employmentId' must be non-empty" } }
   let full_url = (build-url $base ({employment_id: (encode-path-segment $employment_id)} | format pattern "/providers/employers/employees/employments/{employment_id}/documents"))
   let req_body = {"file": $file, "sendEmailNotification": $send_email_notification} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
@@ -7803,7 +8056,7 @@ export def "providers-employers-employees-employments-documents create" [
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"Authorization": $authorization, "Accept": $hdr_accept} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json;version=2018-01-01" $req_body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json;version=2018-01-01" $req_body {query: {}, body: $req_body}
 }
 
 # Delete a document in the employment dossier
@@ -7827,12 +8080,14 @@ export def "providers-employers-employees-employments-documents delete-by-and" [
 ]: nothing -> record<version: record<obsoleteDate: string, resourceVersion: string>, messages: table<code: int, description: string, id: string, properties: list, type: string>, content: record> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($employment_id | is-empty) { error make --unspanned { msg: "path parameter 'employmentId' must be non-empty" } }
+  if ($document_id | is-empty) { error make --unspanned { msg: "path parameter 'documentId' must be non-empty" } }
   let full_url = (build-url $base ({employment_id: (encode-path-segment $employment_id), document_id: (encode-path-segment $document_id)} | format pattern "/providers/employers/employees/employments/{employment_id}/documents/{document_id}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"Authorization": $authorization, "Accept": $hdr_accept} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
 }
 
 # Download employment dossier document
@@ -7855,12 +8110,14 @@ export def "providers-employers-employees-employments-documents get-by-and" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($employment_id | is-empty) { error make --unspanned { msg: "path parameter 'employmentId' must be non-empty" } }
+  if ($document_id | is-empty) { error make --unspanned { msg: "path parameter 'documentId' must be non-empty" } }
   let full_url = (build-url $base ({employment_id: (encode-path-segment $employment_id), document_id: (encode-path-segment $document_id)} | format pattern "/providers/employers/employees/employments/{employment_id}/documents/{document_id}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"Authorization": $authorization} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
 }
 
 # Edit the details of an employment dossier document
@@ -7890,6 +8147,8 @@ export def "providers-employers-employees-employments-documents update-by-and" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($employment_id | is-empty) { error make --unspanned { msg: "path parameter 'employmentId' must be non-empty" } }
+  if ($document_id | is-empty) { error make --unspanned { msg: "path parameter 'documentId' must be non-empty" } }
   let full_url = (build-url $base ({employment_id: (encode-path-segment $employment_id), document_id: (encode-path-segment $document_id)} | format pattern "/providers/employers/employees/employments/{employment_id}/documents/{document_id}"))
   let req_body = {"attribute": $attribute, "category": $category, "dateOfAlert": $date_of_alert, "description": $description, "year": $year} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
@@ -7897,7 +8156,7 @@ export def "providers-employers-employees-employments-documents update-by-and" [
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"Authorization": $authorization, "Accept": $hdr_accept} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json;version=2018-01-01" $req_body
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json;version=2018-01-01" $req_body {query: {}, body: $req_body}
 }
 
 # Get audittrail for the document in the employment dossier
@@ -7925,13 +8184,15 @@ export def "providers-employers-employees-employments-documents-audittrail get-a
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($employment_id | is-empty) { error make --unspanned { msg: "path parameter 'employmentId' must be non-empty" } }
+  if ($document_id | is-empty) { error make --unspanned { msg: "path parameter 'documentId' must be non-empty" } }
   let qp = [(serialize-qp "filter" $filter "scalar") (serialize-qp "orderBy" $order_by "scalar") (serialize-qp "pageNumber" $page_number "scalar") (serialize-qp "pageSize" $page_size "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({employment_id: (encode-path-segment $employment_id), document_id: (encode-path-segment $document_id)} | format pattern "/providers/employers/employees/employments/{employment_id}/documents/{document_id}/audittrail") $qp)
   let accept_val = "application/json;version=2018-01-01"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"Authorization": $authorization, "Accept": $hdr_accept} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"filter": $filter, "orderBy": $order_by, "pageNumber": $page_number, "pageSize": $page_size} | compact), body: null}
 }
 
 # Delete signature - Employment
@@ -7955,12 +8216,14 @@ export def "providers-employers-employees-employments-documents-signature delete
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($employment_id | is-empty) { error make --unspanned { msg: "path parameter 'employmentId' must be non-empty" } }
+  if ($document_id | is-empty) { error make --unspanned { msg: "path parameter 'documentId' must be non-empty" } }
   let full_url = (build-url $base ({employment_id: (encode-path-segment $employment_id), document_id: (encode-path-segment $document_id)} | format pattern "/providers/employers/employees/employments/{employment_id}/documents/{document_id}/signature"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"Authorization": $authorization, "Accept": $hdr_accept} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
 }
 
 # Signature details - Employment
@@ -7984,12 +8247,14 @@ export def "providers-employers-employees-employments-documents-signature get-by
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($employment_id | is-empty) { error make --unspanned { msg: "path parameter 'employmentId' must be non-empty" } }
+  if ($document_id | is-empty) { error make --unspanned { msg: "path parameter 'documentId' must be non-empty" } }
   let full_url = (build-url $base ({employment_id: (encode-path-segment $employment_id), document_id: (encode-path-segment $document_id)} | format pattern "/providers/employers/employees/employments/{employment_id}/documents/{document_id}/signature"))
   let accept_val = "application/json;version=2018-01-01"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"Authorization": $authorization, "Accept": $hdr_accept} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
 }
 
 # Initiate signature - Employment
@@ -8015,6 +8280,8 @@ export def "providers-employers-employees-employments-documents-signature-initia
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($employment_id | is-empty) { error make --unspanned { msg: "path parameter 'employmentId' must be non-empty" } }
+  if ($document_id | is-empty) { error make --unspanned { msg: "path parameter 'documentId' must be non-empty" } }
   let full_url = (build-url $base ({employment_id: (encode-path-segment $employment_id), document_id: (encode-path-segment $document_id)} | format pattern "/providers/employers/employees/employments/{employment_id}/documents/{document_id}/signature/initiate"))
   let req_body = $body
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else if (($input | is-not-empty) and ($req_body | is-empty)) { $input } else { $req_body }
@@ -8022,7 +8289,7 @@ export def "providers-employers-employees-employments-documents-signature-initia
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"Authorization": $authorization, "Accept": $hdr_accept} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json;version=2018-01-01" $req_body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json;version=2018-01-01" $req_body {query: {}, body: $req_body}
 }
 
 # Retrieve the report of the signing - Employment
@@ -8046,12 +8313,14 @@ export def "providers-employers-employees-employments-documents-signature-report
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($employment_id | is-empty) { error make --unspanned { msg: "path parameter 'employmentId' must be non-empty" } }
+  if ($document_id | is-empty) { error make --unspanned { msg: "path parameter 'documentId' must be non-empty" } }
   let full_url = (build-url $base ({employment_id: (encode-path-segment $employment_id), document_id: (encode-path-segment $document_id)} | format pattern "/providers/employers/employees/employments/{employment_id}/documents/{document_id}/signature/report"))
   let accept_val = "application/pdf"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"Authorization": $authorization, "Accept": $hdr_accept} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
 }
 
 # Generate a document for an employment
@@ -8084,6 +8353,8 @@ export def "providers-employers-employees-employments-documenttemplates-generate
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($employment_id | is-empty) { error make --unspanned { msg: "path parameter 'employmentId' must be non-empty" } }
+  if ($document_id | is-empty) { error make --unspanned { msg: "path parameter 'documentId' must be non-empty" } }
   let full_url = (build-url $base ({employment_id: (encode-path-segment $employment_id), document_id: (encode-path-segment $document_id)} | format pattern "/providers/employers/employees/employments/{employment_id}/documenttemplates/{document_id}/generatedocument"))
   let req_body = {"attribute": $attribute, "dateOfAlert": $date_of_alert, "description": $description, "filename": $filename, "referenceDate": $reference_date, "templateEmployerId": $template_employer_id, "year": $year, "sendEmailNotification": $send_email_notification} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
@@ -8091,7 +8362,7 @@ export def "providers-employers-employees-employments-documenttemplates-generate
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"Authorization": $authorization, "Accept": $hdr_accept} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json;version=2018-01-01" $req_body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json;version=2018-01-01" $req_body {query: {}, body: $req_body}
 }
 
 # Generate a document for an employment - preview
@@ -8123,6 +8394,8 @@ export def "providers-employers-employees-employments-documenttemplates-generate
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($employment_id | is-empty) { error make --unspanned { msg: "path parameter 'employmentId' must be non-empty" } }
+  if ($document_id | is-empty) { error make --unspanned { msg: "path parameter 'documentId' must be non-empty" } }
   let full_url = (build-url $base ({employment_id: (encode-path-segment $employment_id), document_id: (encode-path-segment $document_id)} | format pattern "/providers/employers/employees/employments/{employment_id}/documenttemplates/{document_id}/generatedocument/preview"))
   let req_body = {"attribute": $attribute, "dateOfAlert": $date_of_alert, "description": $description, "filename": $filename, "referenceDate": $reference_date, "templateEmployerId": $template_employer_id, "year": $year} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
@@ -8130,7 +8403,7 @@ export def "providers-employers-employees-employments-documenttemplates-generate
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"Authorization": $authorization, "Accept": $hdr_accept} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json;version=2018-01-01" $req_body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json;version=2018-01-01" $req_body {query: {}, body: $req_body}
 }
 
 # Activate employee profile for the employment
@@ -8156,6 +8429,7 @@ export def "providers-employers-employees-employments-employeeprofile update-pro
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($employment_id | is-empty) { error make --unspanned { msg: "path parameter 'employmentId' must be non-empty" } }
   let full_url = (build-url $base ({employment_id: (encode-path-segment $employment_id)} | format pattern "/providers/employers/employees/employments/{employment_id}/employeeprofile"))
   let req_body = {"activationDate": $activation_date, "employeeProfileId": $employee_profile_id} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
@@ -8163,7 +8437,7 @@ export def "providers-employers-employees-employments-employeeprofile update-pro
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"Authorization": $authorization, "Accept": $hdr_accept} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "patch" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json;version=2018-01-01" $req_body
+  do-request "patch" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json;version=2018-01-01" $req_body {query: {}, body: $req_body}
 }
 
 # List of funds the employment partakes in
@@ -8190,13 +8464,14 @@ export def "providers-employers-employees-employments-employmentfunds get-funds"
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($employment_id | is-empty) { error make --unspanned { msg: "path parameter 'employmentId' must be non-empty" } }
   let qp = [(serialize-qp "filter" $filter "scalar") (serialize-qp "orderBy" $order_by "scalar") (serialize-qp "pageNumber" $page_number "scalar") (serialize-qp "pageSize" $page_size "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({employment_id: (encode-path-segment $employment_id)} | format pattern "/providers/employers/employees/employments/{employment_id}/employmentfunds") $qp)
   let accept_val = "application/json;version=2018-01-01"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"Authorization": $authorization, "Accept": $hdr_accept} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"filter": $filter, "orderBy": $order_by, "pageNumber": $page_number, "pageSize": $page_size} | compact), body: null}
 }
 
 # Activate a fund for an employment
@@ -8228,6 +8503,7 @@ export def "providers-employers-employees-employments-employmentfunds create-fun
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($employment_id | is-empty) { error make --unspanned { msg: "path parameter 'employmentId' must be non-empty" } }
   let full_url = (build-url $base ({employment_id: (encode-path-segment $employment_id)} | format pattern "/providers/employers/employees/employments/{employment_id}/employmentfunds"))
   let req_body = {"deviations": $deviations, "endDate": $end_date, "fixedContribution": $fixed_contribution, "fund": $fund, "startDate": $start_date} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
@@ -8235,7 +8511,7 @@ export def "providers-employers-employees-employments-employmentfunds create-fun
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"Authorization": $authorization, "Accept": $hdr_accept} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json;version=2018-01-01" $req_body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json;version=2018-01-01" $req_body {query: {}, body: $req_body}
 }
 
 # List of fiscal company cars for an employment
@@ -8262,13 +8538,14 @@ export def "providers-employers-employees-employments-fiscalcompanycars get-fisc
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($employment_id | is-empty) { error make --unspanned { msg: "path parameter 'employmentId' must be non-empty" } }
   let qp = [(serialize-qp "filter" $filter "scalar") (serialize-qp "orderBy" $order_by "scalar") (serialize-qp "pageNumber" $page_number "scalar") (serialize-qp "pageSize" $page_size "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({employment_id: (encode-path-segment $employment_id)} | format pattern "/providers/employers/employees/employments/{employment_id}/fiscalcompanycars") $qp)
   let accept_val = "application/json;version=2018-01-01"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"Authorization": $authorization, "Accept": $hdr_accept} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"filter": $filter, "orderBy": $order_by, "pageNumber": $page_number, "pageSize": $page_size} | compact), body: null}
 }
 
 # Create a fiscal company car record for an employment
@@ -8303,6 +8580,7 @@ export def "providers-employers-employees-employments-fiscalcompanycars create-f
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($employment_id | is-empty) { error make --unspanned { msg: "path parameter 'employmentId' must be non-empty" } }
   let full_url = (build-url $base ({employment_id: (encode-path-segment $employment_id)} | format pattern "/providers/employers/employees/employments/{employment_id}/fiscalcompanycars"))
   let req_body = {"additionalTaxLiabilityGroup": $additional_tax_liability_group, "dateOfFirstAdmission": $date_of_first_admission, "deviatingAdditionalTaxLiability": $deviating_additional_tax_liability, "endDate": $end_date, "licensePlateNumber": $license_plate_number, "reasonForNoAdditionalTaxLiability": $reason_for_no_additional_tax_liability, "startDate": $start_date, "taxableBenefitForPrivateUse": $taxable_benefit_for_private_use, "valueForTaxPurposes": $value_for_tax_purposes} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
@@ -8310,7 +8588,7 @@ export def "providers-employers-employees-employments-fiscalcompanycars create-f
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"Authorization": $authorization, "Accept": $hdr_accept} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json;version=2018-01-01" $req_body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json;version=2018-01-01" $req_body {query: {}, body: $req_body}
 }
 
 # List of fiscal properties for an employment
@@ -8337,13 +8615,14 @@ export def "providers-employers-employees-employments-fiscalproperties get-fisca
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($employment_id | is-empty) { error make --unspanned { msg: "path parameter 'employmentId' must be non-empty" } }
   let qp = [(serialize-qp "filter" $filter "scalar") (serialize-qp "orderBy" $order_by "scalar") (serialize-qp "pageNumber" $page_number "scalar") (serialize-qp "pageSize" $page_size "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({employment_id: (encode-path-segment $employment_id)} | format pattern "/providers/employers/employees/employments/{employment_id}/fiscalproperties") $qp)
   let accept_val = "application/json;version=2018-01-01"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"Authorization": $authorization, "Accept": $hdr_accept} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"filter": $filter, "orderBy": $order_by, "pageNumber": $page_number, "pageSize": $page_size} | compact), body: null}
 }
 
 # Create a fiscal record for an employment
@@ -8396,6 +8675,7 @@ export def "providers-employers-employees-employments-fiscalproperties create-fi
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($employment_id | is-empty) { error make --unspanned { msg: "path parameter 'employmentId' must be non-empty" } }
   let full_url = (build-url $base ({employment_id: (encode-path-segment $employment_id)} | format pattern "/providers/employers/employees/employments/{employment_id}/fiscalproperties"))
   let req_body = {"annualSalary": $annual_salary, "applyDayTables": $apply_day_tables, "applyDeviatingPayrollTaxPercentageOn": $apply_deviating_payroll_tax_percentage_on, "applyPayrollTaxDeduction": $apply_payroll_tax_deduction, "applySalarysplit": $apply_salarysplit, "applyStudentDeduction": $apply_student_deduction, "contributionReductionEducation": $contribution_reduction_education, "deviatingCalculationRulePayrollTax": $deviating_calculation_rule_payroll_tax, "deviatingPayrollTaxPercentage": $deviating_payroll_tax_percentage, "deviatingPayrollTaxTableColour": $deviating_payroll_tax_table_colour, "deviatingPercentageThirtyPercentFacility": $deviating_percentage_thirty_percent_facility, "deviatingSmallJobsArrangement": $deviating_small_jobs_arrangement, "deviatingTaxTableCode": $deviating_tax_table_code, "doesWageIncludeAow": $does_wage_include_aow, "doesWageIncludeWajong": $does_wage_include_wajong, "hasEmployeeLoan": $has_employee_loan, "percentageForeignIncome": $percentage_foreign_income, "residentOf": $resident_of, "startDate": $start_date, "thirtyPercentFacility": $thirty_percent_facility, "usesTransportByWithholdingAgent": $uses_transport_by_withholding_agent} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
@@ -8403,7 +8683,7 @@ export def "providers-employers-employees-employments-fiscalproperties create-fi
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"Authorization": $authorization, "Accept": $hdr_accept} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json;version=2018-01-01" $req_body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json;version=2018-01-01" $req_body {query: {}, body: $req_body}
 }
 
 # List of Healthcare Insurance Act records for an employment
@@ -8430,13 +8710,14 @@ export def "providers-employers-employees-employments-healthcareinsuranceactconf
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($employment_id | is-empty) { error make --unspanned { msg: "path parameter 'employmentId' must be non-empty" } }
   let qp = [(serialize-qp "filter" $filter "scalar") (serialize-qp "orderBy" $order_by "scalar") (serialize-qp "pageNumber" $page_number "scalar") (serialize-qp "pageSize" $page_size "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({employment_id: (encode-path-segment $employment_id)} | format pattern "/providers/employers/employees/employments/{employment_id}/healthcareinsuranceactconfigurations") $qp)
   let accept_val = "application/json;version=2018-01-01"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"Authorization": $authorization, "Accept": $hdr_accept} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"filter": $filter, "orderBy": $order_by, "pageNumber": $page_number, "pageSize": $page_size} | compact), body: null}
 }
 
 # Create a Healthcare Insurance Act record for an employment
@@ -8466,6 +8747,7 @@ export def "providers-employers-employees-employments-healthcareinsuranceactconf
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($employment_id | is-empty) { error make --unspanned { msg: "path parameter 'employmentId' must be non-empty" } }
   let full_url = (build-url $base ({employment_id: (encode-path-segment $employment_id)} | format pattern "/providers/employers/employees/employments/{employment_id}/healthcareinsuranceactconfigurations"))
   let req_body = {"additionalContributionEmployer": $additional_contribution_employer, "additionalPremium": $additional_premium, "healthcareInsuranceActType": $healthcare_insurance_act_type, "nominalPremium": $nominal_premium, "startDate": $start_date} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
@@ -8473,7 +8755,7 @@ export def "providers-employers-employees-employments-healthcareinsuranceactconf
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"Authorization": $authorization, "Accept": $hdr_accept} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json;version=2018-01-01" $req_body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json;version=2018-01-01" $req_body {query: {}, body: $req_body}
 }
 
 # List of journal allocations for an employment
@@ -8500,13 +8782,14 @@ export def "providers-employers-employees-employments-journalallocations get-jou
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($employment_id | is-empty) { error make --unspanned { msg: "path parameter 'employmentId' must be non-empty" } }
   let qp = [(serialize-qp "filter" $filter "scalar") (serialize-qp "orderBy" $order_by "scalar") (serialize-qp "pageNumber" $page_number "scalar") (serialize-qp "pageSize" $page_size "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({employment_id: (encode-path-segment $employment_id)} | format pattern "/providers/employers/employees/employments/{employment_id}/journalallocations") $qp)
   let accept_val = "application/json;version=2018-01-01"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"Authorization": $authorization, "Accept": $hdr_accept} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"filter": $filter, "orderBy": $order_by, "pageNumber": $page_number, "pageSize": $page_size} | compact), body: null}
 }
 
 # Create a new journal allocation record for an employment
@@ -8539,6 +8822,7 @@ export def "providers-employers-employees-employments-journalallocations create-
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($employment_id | is-empty) { error make --unspanned { msg: "path parameter 'employmentId' must be non-empty" } }
   let full_url = (build-url $base ({employment_id: (encode-path-segment $employment_id)} | format pattern "/providers/employers/employees/employments/{employment_id}/journalallocations"))
   let req_body = {"allocationBasedOnActualHours": $allocation_based_on_actual_hours, "allocationBasedOnFixedWeights": $allocation_based_on_fixed_weights, "endPeriod": $end_period, "startPeriod": $start_period} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
@@ -8546,14 +8830,14 @@ export def "providers-employers-employees-employments-journalallocations create-
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"Authorization": $authorization, "Accept": $hdr_accept} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json;version=2018-01-01" $req_body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json;version=2018-01-01" $req_body {query: {}, body: $req_body}
 }
 
 # List of all the leave entries
 #
 # GET /providers/employers/employees/employments/{employmentId}/leave
 # operationId: GetLeaveByEmploymentId
-export def "providers-employers-employees-employments-leave get-by-employmentId" [
+export def "providers-employers-employees-employments-leave get-by-employment-id" [
   employment_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -8573,13 +8857,14 @@ export def "providers-employers-employees-employments-leave get-by-employmentId"
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($employment_id | is-empty) { error make --unspanned { msg: "path parameter 'employmentId' must be non-empty" } }
   let qp = [(serialize-qp "filter" $filter "scalar") (serialize-qp "orderBy" $order_by "scalar") (serialize-qp "pageNumber" $page_number "scalar") (serialize-qp "pageSize" $page_size "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({employment_id: (encode-path-segment $employment_id)} | format pattern "/providers/employers/employees/employments/{employment_id}/leave") $qp)
   let accept_val = "application/json;version=2018-01-01"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"Authorization": $authorization, "Accept": $hdr_accept} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"filter": $filter, "orderBy": $order_by, "pageNumber": $page_number, "pageSize": $page_size} | compact), body: null}
 }
 
 # Create a leave record for an employment
@@ -8613,6 +8898,7 @@ export def "providers-employers-employees-employments-leave create" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($employment_id | is-empty) { error make --unspanned { msg: "path parameter 'employmentId' must be non-empty" } }
   let full_url = (build-url $base ({employment_id: (encode-path-segment $employment_id)} | format pattern "/providers/employers/employees/employments/{employment_id}/leave"))
   let req_body = {"comment": $comment, "endDate": $end_date, "isAccrual": $is_accrual, "leaveType": $leave_type, "numberOfUnits": $number_of_units, "startDate": $start_date} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
@@ -8620,7 +8906,7 @@ export def "providers-employers-employees-employments-leave create" [
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"Authorization": $authorization, "Accept": $hdr_accept} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json;version=2018-01-01" $req_body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json;version=2018-01-01" $req_body {query: {}, body: $req_body}
 }
 
 # Get the default values to be used when POSTing a new record
@@ -8647,20 +8933,21 @@ export def "providers-employers-employees-employments-leave-defaults get" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($employment_id | is-empty) { error make --unspanned { msg: "path parameter 'employmentId' must be non-empty" } }
   let qp = [(serialize-qp "filter" $filter "scalar") (serialize-qp "orderBy" $order_by "scalar") (serialize-qp "pageNumber" $page_number "scalar") (serialize-qp "pageSize" $page_size "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({employment_id: (encode-path-segment $employment_id)} | format pattern "/providers/employers/employees/employments/{employment_id}/leave/defaults") $qp)
   let accept_val = "application/json;version=2018-01-01"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"Authorization": $authorization, "Accept": $hdr_accept} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"filter": $filter, "orderBy": $order_by, "pageNumber": $page_number, "pageSize": $page_size} | compact), body: null}
 }
 
 # Get the values for the metadata fields
 #
 # GET /providers/employers/employees/employments/{employmentId}/leave/metadata
 # operationId: GetLeaveMetadataByEmploymentId
-export def "providers-employers-employees-employments-leave-metadata get-by-employmentId" [
+export def "providers-employers-employees-employments-leave-metadata get-by-employment-id" [
   employment_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -8680,13 +8967,14 @@ export def "providers-employers-employees-employments-leave-metadata get-by-empl
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($employment_id | is-empty) { error make --unspanned { msg: "path parameter 'employmentId' must be non-empty" } }
   let qp = [(serialize-qp "filter" $filter "scalar") (serialize-qp "orderBy" $order_by "scalar") (serialize-qp "pageNumber" $page_number "scalar") (serialize-qp "pageSize" $page_size "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({employment_id: (encode-path-segment $employment_id)} | format pattern "/providers/employers/employees/employments/{employment_id}/leave/metadata") $qp)
   let accept_val = "application/json;version=2018-01-01"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"Authorization": $authorization, "Accept": $hdr_accept} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"filter": $filter, "orderBy": $order_by, "pageNumber": $page_number, "pageSize": $page_size} | compact), body: null}
 }
 
 # Download the leave overview for an employment and year
@@ -8710,12 +8998,14 @@ export def "providers-employers-employees-employments-leave-overview get-by-idan
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($employment_id | is-empty) { error make --unspanned { msg: "path parameter 'employmentId' must be non-empty" } }
+  if ($year | is-empty) { error make --unspanned { msg: "path parameter 'year' must be non-empty" } }
   let full_url = (build-url $base ({employment_id: (encode-path-segment $employment_id), year: (encode-path-segment $year)} | format pattern "/providers/employers/employees/employments/{employment_id}/leave/overview/{year}"))
   let accept_val = "application/pdf"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"Authorization": $authorization, "Accept": $hdr_accept} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
 }
 
 # Get the proposed number of leave hours for an employment
@@ -8744,13 +9034,14 @@ export def "providers-employers-employees-employments-leave-proposedleavehours g
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($employment_id | is-empty) { error make --unspanned { msg: "path parameter 'employmentId' must be non-empty" } }
   let qp = [(serialize-qp "startDate" $start_date "scalar") (serialize-qp "endDate" $end_date "scalar") (serialize-qp "filter" $filter "scalar") (serialize-qp "orderBy" $order_by "scalar") (serialize-qp "pageNumber" $page_number "scalar") (serialize-qp "pageSize" $page_size "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({employment_id: (encode-path-segment $employment_id)} | format pattern "/providers/employers/employees/employments/{employment_id}/leave/proposedleavehours") $qp)
   let accept_val = "application/json;version=2018-01-01"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"Authorization": $authorization, "Accept": $hdr_accept} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"startDate": $start_date, "endDate": $end_date, "filter": $filter, "orderBy": $order_by, "pageNumber": $page_number, "pageSize": $page_size} | compact), body: null}
 }
 
 # List of yearly leave balances for each leave type.
@@ -8777,13 +9068,14 @@ export def "providers-employers-employees-employments-leavebalances get-leave-ba
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($employment_id | is-empty) { error make --unspanned { msg: "path parameter 'employmentId' must be non-empty" } }
   let qp = [(serialize-qp "filter" $filter "scalar") (serialize-qp "orderBy" $order_by "scalar") (serialize-qp "pageNumber" $page_number "scalar") (serialize-qp "pageSize" $page_size "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({employment_id: (encode-path-segment $employment_id)} | format pattern "/providers/employers/employees/employments/{employment_id}/leavebalances") $qp)
   let accept_val = "application/json;version=2018-01-01"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"Authorization": $authorization, "Accept": $hdr_accept} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"filter": $filter, "orderBy": $order_by, "pageNumber": $page_number, "pageSize": $page_size} | compact), body: null}
 }
 
 # Get list of linked leave policies for the employment
@@ -8810,13 +9102,14 @@ export def "providers-employers-employees-employments-leavepolicies get-leave-po
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($employment_id | is-empty) { error make --unspanned { msg: "path parameter 'employmentId' must be non-empty" } }
   let qp = [(serialize-qp "filter" $filter "scalar") (serialize-qp "orderBy" $order_by "scalar") (serialize-qp "pageNumber" $page_number "scalar") (serialize-qp "pageSize" $page_size "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({employment_id: (encode-path-segment $employment_id)} | format pattern "/providers/employers/employees/employments/{employment_id}/leavepolicies") $qp)
   let accept_val = "application/json;version=2018-01-01"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"Authorization": $authorization, "Accept": $hdr_accept} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"filter": $filter, "orderBy": $order_by, "pageNumber": $page_number, "pageSize": $page_size} | compact), body: null}
 }
 
 # Link or unlink leave policies for the employment
@@ -8841,6 +9134,7 @@ export def "providers-employers-employees-employments-leavepolicies update-leave
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($employment_id | is-empty) { error make --unspanned { msg: "path parameter 'employmentId' must be non-empty" } }
   let full_url = (build-url $base ({employment_id: (encode-path-segment $employment_id)} | format pattern "/providers/employers/employees/employments/{employment_id}/leavepolicies"))
   let req_body = $body
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else if (($input | is-not-empty) and ($req_body | is-empty)) { $input } else { $req_body }
@@ -8848,14 +9142,14 @@ export def "providers-employers-employees-employments-leavepolicies update-leave
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"Authorization": $authorization, "Accept": $hdr_accept} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "patch" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body
+  do-request "patch" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: {}, body: $req_body}
 }
 
 # leave requests by employment
 #
 # GET /providers/employers/employees/employments/{employmentId}/leaverequests
 # operationId: GetLeaveRequestsByEmploymentId
-export def "providers-employers-employees-employments-leaverequests get-leave-requests-by-employmentId" [
+export def "providers-employers-employees-employments-leaverequests get-leave-requests-by-employment-id" [
   employment_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -8875,20 +9169,21 @@ export def "providers-employers-employees-employments-leaverequests get-leave-re
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($employment_id | is-empty) { error make --unspanned { msg: "path parameter 'employmentId' must be non-empty" } }
   let qp = [(serialize-qp "filter" $filter "scalar") (serialize-qp "orderBy" $order_by "scalar") (serialize-qp "pageNumber" $page_number "scalar") (serialize-qp "pageSize" $page_size "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({employment_id: (encode-path-segment $employment_id)} | format pattern "/providers/employers/employees/employments/{employment_id}/leaverequests") $qp)
   let accept_val = "application/json;version=2018-01-01"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"Authorization": $authorization, "Accept": $hdr_accept} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"filter": $filter, "orderBy": $order_by, "pageNumber": $page_number, "pageSize": $page_size} | compact), body: null}
 }
 
 # Get a list of notes for an employment.
 #
 # GET /providers/employers/employees/employments/{employmentId}/notes
 # operationId: GetEmploymentNotesByEmploymentId
-export def "providers-employers-employees-employments-notes get-by-employmentId" [
+export def "providers-employers-employees-employments-notes get-by-employment-id" [
   employment_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -8908,13 +9203,14 @@ export def "providers-employers-employees-employments-notes get-by-employmentId"
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($employment_id | is-empty) { error make --unspanned { msg: "path parameter 'employmentId' must be non-empty" } }
   let qp = [(serialize-qp "filter" $filter "scalar") (serialize-qp "orderBy" $order_by "scalar") (serialize-qp "pageNumber" $page_number "scalar") (serialize-qp "pageSize" $page_size "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({employment_id: (encode-path-segment $employment_id)} | format pattern "/providers/employers/employees/employments/{employment_id}/notes") $qp)
   let accept_val = "application/json;version=2018-01-01"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"Authorization": $authorization, "Accept": $hdr_accept} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"filter": $filter, "orderBy": $order_by, "pageNumber": $page_number, "pageSize": $page_size} | compact), body: null}
 }
 
 # Add a note for an employment
@@ -8942,6 +9238,7 @@ export def "providers-employers-employees-employments-notes create" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($employment_id | is-empty) { error make --unspanned { msg: "path parameter 'employmentId' must be non-empty" } }
   let full_url = (build-url $base ({employment_id: (encode-path-segment $employment_id)} | format pattern "/providers/employers/employees/employments/{employment_id}/notes"))
   let req_body = {"accessibleBy": $accessible_by, "note": $note, "subject": $subject} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
@@ -8949,7 +9246,7 @@ export def "providers-employers-employees-employments-notes create" [
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"Authorization": $authorization, "Accept": $hdr_accept} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json;version=2018-01-01" $req_body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json;version=2018-01-01" $req_body {query: {}, body: $req_body}
 }
 
 # List of organizational entities for an employment
@@ -8976,13 +9273,14 @@ export def "providers-employers-employees-employments-organizationalentities get
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($employment_id | is-empty) { error make --unspanned { msg: "path parameter 'employmentId' must be non-empty" } }
   let qp = [(serialize-qp "filter" $filter "scalar") (serialize-qp "orderBy" $order_by "scalar") (serialize-qp "pageNumber" $page_number "scalar") (serialize-qp "pageSize" $page_size "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({employment_id: (encode-path-segment $employment_id)} | format pattern "/providers/employers/employees/employments/{employment_id}/organizationalentities") $qp)
   let accept_val = "application/json;version=2018-01-01"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"Authorization": $authorization, "Accept": $hdr_accept} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"filter": $filter, "orderBy": $order_by, "pageNumber": $page_number, "pageSize": $page_size} | compact), body: null}
 }
 
 # Create an organizational entity for an employment
@@ -9019,6 +9317,7 @@ export def "providers-employers-employees-employments-organizationalentities cre
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($employment_id | is-empty) { error make --unspanned { msg: "path parameter 'employmentId' must be non-empty" } }
   let full_url = (build-url $base ({employment_id: (encode-path-segment $employment_id)} | format pattern "/providers/employers/employees/employments/{employment_id}/organizationalentities"))
   let req_body = {"department": $department, "deviatingFunctionDescription": $deviating_function_description, "deviatingFunctionGroup": $deviating_function_group, "distributionUnit": $distribution_unit, "function": $function, "internalTelephoneExtensionNumber": $internal_telephone_extension_number, "placeOfEmployment": $place_of_employment, "standardFunction": $standard_function, "startDate": $start_date} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
@@ -9026,14 +9325,14 @@ export def "providers-employers-employees-employments-organizationalentities cre
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"Authorization": $authorization, "Accept": $hdr_accept} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json;version=2018-01-01" $req_body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json;version=2018-01-01" $req_body {query: {}, body: $req_body}
 }
 
 # List of other payroll variables for an employment
 #
 # GET /providers/employers/employees/employments/{employmentId}/otherPayrollVariables
 # operationId: GetOtherPayrollVariablesByEmploymentId
-export def "providers-employers-employees-employments-other-payroll-variables get-by-employmentId" [
+export def "providers-employers-employees-employments-other-payroll-variables get-by-employment-id" [
   employment_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -9053,13 +9352,14 @@ export def "providers-employers-employees-employments-other-payroll-variables ge
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($employment_id | is-empty) { error make --unspanned { msg: "path parameter 'employmentId' must be non-empty" } }
   let qp = [(serialize-qp "filter" $filter "scalar") (serialize-qp "orderBy" $order_by "scalar") (serialize-qp "pageNumber" $page_number "scalar") (serialize-qp "pageSize" $page_size "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({employment_id: (encode-path-segment $employment_id)} | format pattern "/providers/employers/employees/employments/{employment_id}/otherPayrollVariables") $qp)
   let accept_val = "application/json;version=2018-01-01"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"Authorization": $authorization, "Accept": $hdr_accept} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"filter": $filter, "orderBy": $order_by, "pageNumber": $page_number, "pageSize": $page_size} | compact), body: null}
 }
 
 # Add other payroll variables for an employment
@@ -9092,6 +9392,7 @@ export def "providers-employers-employees-employments-other-payroll-variables cr
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($employment_id | is-empty) { error make --unspanned { msg: "path parameter 'employmentId' must be non-empty" } }
   let full_url = (build-url $base ({employment_id: (encode-path-segment $employment_id)} | format pattern "/providers/employers/employees/employments/{employment_id}/otherPayrollVariables"))
   let req_body = {"endDate": $end_date, "insuranceProperties": $insurance_properties, "payrollProperties": $payroll_properties, "pensionProperties": $pension_properties, "productivityPercentage": $productivity_percentage, "startDate": $start_date} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
@@ -9099,7 +9400,7 @@ export def "providers-employers-employees-employments-other-payroll-variables cr
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"Authorization": $authorization, "Accept": $hdr_accept} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json;version=2018-01-01" $req_body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json;version=2018-01-01" $req_body {query: {}, body: $req_body}
 }
 
 # Get a list of payment information non-SEPA
@@ -9126,13 +9427,14 @@ export def "providers-employers-employees-employments-paymentinformationnonsepa 
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($employment_id | is-empty) { error make --unspanned { msg: "path parameter 'employmentId' must be non-empty" } }
   let qp = [(serialize-qp "filter" $filter "scalar") (serialize-qp "orderBy" $order_by "scalar") (serialize-qp "pageNumber" $page_number "scalar") (serialize-qp "pageSize" $page_size "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({employment_id: (encode-path-segment $employment_id)} | format pattern "/providers/employers/employees/employments/{employment_id}/paymentinformationnonsepa") $qp)
   let accept_val = "application/json;version=2018-01-01"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"Authorization": $authorization, "Accept": $hdr_accept} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"filter": $filter, "orderBy": $order_by, "pageNumber": $page_number, "pageSize": $page_size} | compact), body: null}
 }
 
 # Create a new payment information non-SEPA record
@@ -9157,6 +9459,7 @@ export def "providers-employers-employees-employments-paymentinformationnonsepa 
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($employment_id | is-empty) { error make --unspanned { msg: "path parameter 'employmentId' must be non-empty" } }
   let full_url = (build-url $base ({employment_id: (encode-path-segment $employment_id)} | format pattern "/providers/employers/employees/employments/{employment_id}/paymentinformationnonsepa"))
   let req_body = $body
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else if (($input | is-not-empty) and ($req_body | is-empty)) { $input } else { $req_body }
@@ -9164,7 +9467,7 @@ export def "providers-employers-employees-employments-paymentinformationnonsepa 
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"Authorization": $authorization, "Accept": $hdr_accept} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "applicationjson;version=2018-01-01" $req_body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "applicationjson;version=2018-01-01" $req_body {query: {}, body: $req_body}
 }
 
 # Get a list of payment information sepa
@@ -9192,13 +9495,14 @@ export def "providers-employers-employees-employments-paymentinformationsepa get
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($employment_id | is-empty) { error make --unspanned { msg: "path parameter 'employmentId' must be non-empty" } }
   let qp = [(serialize-qp "filter" $filter "scalar") (serialize-qp "orderBy" $order_by "scalar") (serialize-qp "pageNumber" $page_number "scalar") (serialize-qp "pageSize" $page_size "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({employment_id: (encode-path-segment $employment_id)} | format pattern "/providers/employers/employees/employments/{employment_id}/paymentinformationsepa") $qp)
   let accept_val = ($accept | default "application/json;version=2018-01-01")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"Authorization": $authorization, "Accept": $hdr_accept} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"filter": $filter, "orderBy": $order_by, "pageNumber": $page_number, "pageSize": $page_size} | compact), body: null}
 }
 
 # create a new payment information sepa record
@@ -9224,6 +9528,7 @@ export def "providers-employers-employees-employments-paymentinformationsepa cre
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($employment_id | is-empty) { error make --unspanned { msg: "path parameter 'employmentId' must be non-empty" } }
   let full_url = (build-url $base ({employment_id: (encode-path-segment $employment_id)} | format pattern "/providers/employers/employees/employments/{employment_id}/paymentinformationsepa"))
   let req_body = $body
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else if (($input | is-not-empty) and ($req_body | is-empty)) { $input } else { $req_body }
@@ -9231,7 +9536,7 @@ export def "providers-employers-employees-employments-paymentinformationsepa cre
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"Authorization": $authorization, "Accept": $hdr_accept} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "applicationjson;version=2018-01-01" $req_body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "applicationjson;version=2018-01-01" $req_body {query: {}, body: $req_body}
 }
 
 # Get a list of payment information SEPA separate payment records
@@ -9258,13 +9563,14 @@ export def "providers-employers-employees-employments-paymentinformationsepasepa
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($employment_id | is-empty) { error make --unspanned { msg: "path parameter 'employmentId' must be non-empty" } }
   let qp = [(serialize-qp "filter" $filter "scalar") (serialize-qp "orderBy" $order_by "scalar") (serialize-qp "pageNumber" $page_number "scalar") (serialize-qp "pageSize" $page_size "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({employment_id: (encode-path-segment $employment_id)} | format pattern "/providers/employers/employees/employments/{employment_id}/paymentinformationsepaseparatepayments") $qp)
   let accept_val = "application/json;version=2018-01-01"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"Authorization": $authorization, "Accept": $hdr_accept} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"filter": $filter, "orderBy": $order_by, "pageNumber": $page_number, "pageSize": $page_size} | compact), body: null}
 }
 
 # Create a new payment information SEPA separate payment record
@@ -9289,6 +9595,7 @@ export def "providers-employers-employees-employments-paymentinformationsepasepa
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($employment_id | is-empty) { error make --unspanned { msg: "path parameter 'employmentId' must be non-empty" } }
   let full_url = (build-url $base ({employment_id: (encode-path-segment $employment_id)} | format pattern "/providers/employers/employees/employments/{employment_id}/paymentinformationsepaseparatepayments"))
   let req_body = $body
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else if (($input | is-not-empty) and ($req_body | is-empty)) { $input } else { $req_body }
@@ -9296,7 +9603,7 @@ export def "providers-employers-employees-employments-paymentinformationsepasepa
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"Authorization": $authorization, "Accept": $hdr_accept} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "applicationjson;version=2018-01-01" $req_body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "applicationjson;version=2018-01-01" $req_body {query: {}, body: $req_body}
 }
 
 # Overview of the data used in a payroll simulation
@@ -9323,13 +9630,14 @@ export def "providers-employers-employees-employments-payroll-simulator-data get
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($employment_id | is-empty) { error make --unspanned { msg: "path parameter 'employmentId' must be non-empty" } }
   let qp = [(serialize-qp "filter" $filter "scalar") (serialize-qp "orderBy" $order_by "scalar") (serialize-qp "pageNumber" $page_number "scalar") (serialize-qp "pageSize" $page_size "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({employment_id: (encode-path-segment $employment_id)} | format pattern "/providers/employers/employees/employments/{employment_id}/payrollSimulatorData") $qp)
   let accept_val = "application/json;version=2018-01-01"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"Authorization": $authorization, "Accept": $hdr_accept} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"filter": $filter, "orderBy": $order_by, "pageNumber": $page_number, "pageSize": $page_size} | compact), body: null}
 }
 
 # list of payroll period data
@@ -9356,13 +9664,14 @@ export def "providers-employers-employees-employments-payrollperioddata get-payr
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($employment_id | is-empty) { error make --unspanned { msg: "path parameter 'employmentId' must be non-empty" } }
   let qp = [(serialize-qp "filter" $filter "scalar") (serialize-qp "orderBy" $order_by "scalar") (serialize-qp "pageNumber" $page_number "scalar") (serialize-qp "pageSize" $page_size "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({employment_id: (encode-path-segment $employment_id)} | format pattern "/providers/employers/employees/employments/{employment_id}/payrollperioddata") $qp)
   let accept_val = "application/json;version=2018-01-01"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"Authorization": $authorization, "Accept": $hdr_accept} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"filter": $filter, "orderBy": $order_by, "pageNumber": $page_number, "pageSize": $page_size} | compact), body: null}
 }
 
 # Insert or update payroll period data
@@ -9405,6 +9714,7 @@ export def "providers-employers-employees-employments-payrollperioddata update-p
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($employment_id | is-empty) { error make --unspanned { msg: "path parameter 'employmentId' must be non-empty" } }
   let qp = [(serialize-qp "filter" $filter "scalar") (serialize-qp "orderBy" $order_by "scalar") (serialize-qp "pageNumber" $page_number "scalar") (serialize-qp "pageSize" $page_size "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({employment_id: (encode-path-segment $employment_id)} | format pattern "/providers/employers/employees/employments/{employment_id}/payrollperioddata") $qp)
   let req_body = {"costCenter": $cost_center, "costUnit": $cost_unit, "distributionUnit": $distribution_unit, "payrollComponents": $payroll_components, "payrollPeriod": $payroll_period, "payslipText": $payslip_text, "payslipType": $payslip_type, "shift": $shift} | compact
@@ -9413,7 +9723,7 @@ export def "providers-employers-employees-employments-payrollperioddata update-p
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"Authorization": $authorization, "Accept": $hdr_accept} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "patch" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json;version=2018-01-01" $req_body
+  do-request "patch" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json;version=2018-01-01" $req_body {query: ({"filter": $filter, "orderBy": $order_by, "pageNumber": $page_number, "pageSize": $page_size} | compact), body: $req_body}
 }
 
 # Create an payroll period data record for an employment
@@ -9452,6 +9762,7 @@ export def "providers-employers-employees-employments-payrollperioddata create-p
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($employment_id | is-empty) { error make --unspanned { msg: "path parameter 'employmentId' must be non-empty" } }
   let full_url = (build-url $base ({employment_id: (encode-path-segment $employment_id)} | format pattern "/providers/employers/employees/employments/{employment_id}/payrollperioddata"))
   let req_body = {"costCenter": $cost_center, "costUnit": $cost_unit, "distributionUnit": $distribution_unit, "payrollComponents": $payroll_components, "payrollPeriod": $payroll_period, "payslipText": $payslip_text, "payslipType": $payslip_type, "shift": $shift} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
@@ -9459,7 +9770,7 @@ export def "providers-employers-employees-employments-payrollperioddata create-p
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"Authorization": $authorization, "Accept": $hdr_accept} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json;version=2018-01-01" $req_body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json;version=2018-01-01" $req_body {query: {}, body: $req_body}
 }
 
 # Get payroll period results of an employment for a year
@@ -9483,12 +9794,14 @@ export def "providers-employers-employees-employments-payrollperiodresults-year 
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($employment_id | is-empty) { error make --unspanned { msg: "path parameter 'employmentId' must be non-empty" } }
+  if ($year | is-empty) { error make --unspanned { msg: "path parameter 'year' must be non-empty" } }
   let full_url = (build-url $base ({employment_id: (encode-path-segment $employment_id), year: (encode-path-segment $year)} | format pattern "/providers/employers/employees/employments/{employment_id}/payrollperiodresults/year/{year}"))
   let accept_val = "application/json;version=2018-01-01"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"Authorization": $authorization, "Accept": $hdr_accept} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
 }
 
 # List of payslips for an employment
@@ -9515,13 +9828,14 @@ export def "providers-employers-employees-employments-payslips get" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($employment_id | is-empty) { error make --unspanned { msg: "path parameter 'employmentId' must be non-empty" } }
   let qp = [(serialize-qp "filter" $filter "scalar") (serialize-qp "orderBy" $order_by "scalar") (serialize-qp "pageNumber" $page_number "scalar") (serialize-qp "pageSize" $page_size "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({employment_id: (encode-path-segment $employment_id)} | format pattern "/providers/employers/employees/employments/{employment_id}/payslips") $qp)
   let accept_val = "application/json;version=2018-01-01"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"Authorization": $authorization, "Accept": $hdr_accept} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"filter": $filter, "orderBy": $order_by, "pageNumber": $page_number, "pageSize": $page_size} | compact), body: null}
 }
 
 # Download a cummulative payslip for a single payroll period
@@ -9545,12 +9859,14 @@ export def "providers-employers-employees-employments-payslips-summary get-payro
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($employment_id | is-empty) { error make --unspanned { msg: "path parameter 'employmentId' must be non-empty" } }
+  if ($payroll_period_id | is-empty) { error make --unspanned { msg: "path parameter 'payrollPeriodId' must be non-empty" } }
   let full_url = (build-url $base ({employment_id: (encode-path-segment $employment_id), payroll_period_id: (encode-path-segment $payroll_period_id)} | format pattern "/providers/employers/employees/employments/{employment_id}/payslips/summary/{payroll_period_id}"))
   let accept_val = "application/pdf"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"Authorization": $authorization, "Accept": $hdr_accept} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
 }
 
 # Download payslips of an employment for a payrollrun
@@ -9575,12 +9891,14 @@ export def "providers-employers-employees-employments-payslips get-by-and-payrol
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($employment_id | is-empty) { error make --unspanned { msg: "path parameter 'employmentId' must be non-empty" } }
+  if ($payrollrun_id | is-empty) { error make --unspanned { msg: "path parameter 'payrollrunId' must be non-empty" } }
   let full_url = (build-url $base ({employment_id: (encode-path-segment $employment_id), payrollrun_id: (encode-path-segment $payrollrun_id)} | format pattern "/providers/employers/employees/employments/{employment_id}/payslips/{payrollrun_id}"))
   let accept_val = ($accept | default "application/json;version=2018-01-01")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"Authorization": $authorization, "Accept": $hdr_accept} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
 }
 
 # Download payslips for an employment and year
@@ -9604,12 +9922,14 @@ export def "providers-employers-employees-employments-payslips get-by-and" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($employment_id | is-empty) { error make --unspanned { msg: "path parameter 'employmentId' must be non-empty" } }
+  if ($year | is-empty) { error make --unspanned { msg: "path parameter 'year' must be non-empty" } }
   let full_url = (build-url $base ({employment_id: (encode-path-segment $employment_id), year: (encode-path-segment $year)} | format pattern "/providers/employers/employees/employments/{employment_id}/payslips/{year}"))
   let accept_val = "application/pdf"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"Authorization": $authorization, "Accept": $hdr_accept} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
 }
 
 # List pension benefit
@@ -9636,13 +9956,14 @@ export def "providers-employers-employees-employments-pensionbenefits get-pensio
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($employment_id | is-empty) { error make --unspanned { msg: "path parameter 'employmentId' must be non-empty" } }
   let qp = [(serialize-qp "filter" $filter "scalar") (serialize-qp "orderBy" $order_by "scalar") (serialize-qp "pageNumber" $page_number "scalar") (serialize-qp "pageSize" $page_size "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({employment_id: (encode-path-segment $employment_id)} | format pattern "/providers/employers/employees/employments/{employment_id}/pensionbenefits") $qp)
   let accept_val = "application/json;version=2018-01-01"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"Authorization": $authorization, "Accept": $hdr_accept} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"filter": $filter, "orderBy": $order_by, "pageNumber": $page_number, "pageSize": $page_size} | compact), body: null}
 }
 
 # Add a pension benefit for an employment
@@ -9668,6 +9989,7 @@ export def "providers-employers-employees-employments-pensionbenefits create-pen
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($employment_id | is-empty) { error make --unspanned { msg: "path parameter 'employmentId' must be non-empty" } }
   let full_url = (build-url $base ({employment_id: (encode-path-segment $employment_id)} | format pattern "/providers/employers/employees/employments/{employment_id}/pensionbenefits"))
   let req_body = {"payout": $payout, "startDate": $start_date} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
@@ -9675,7 +9997,7 @@ export def "providers-employers-employees-employments-pensionbenefits create-pen
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"Authorization": $authorization, "Accept": $hdr_accept} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json;version=2018-01-01" $req_body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json;version=2018-01-01" $req_body {query: {}, body: $req_body}
 }
 
 # Get a list of protected earnings records
@@ -9702,13 +10024,14 @@ export def "providers-employers-employees-employments-protectedearnings get-prot
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($employment_id | is-empty) { error make --unspanned { msg: "path parameter 'employmentId' must be non-empty" } }
   let qp = [(serialize-qp "filter" $filter "scalar") (serialize-qp "orderBy" $order_by "scalar") (serialize-qp "pageNumber" $page_number "scalar") (serialize-qp "pageSize" $page_size "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({employment_id: (encode-path-segment $employment_id)} | format pattern "/providers/employers/employees/employments/{employment_id}/protectedearnings") $qp)
   let accept_val = "application/json;version=2018-01-01"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"Authorization": $authorization, "Accept": $hdr_accept} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"filter": $filter, "orderBy": $order_by, "pageNumber": $page_number, "pageSize": $page_size} | compact), body: null}
 }
 
 # Create a new protected earnings record
@@ -9733,6 +10056,7 @@ export def "providers-employers-employees-employments-protectedearnings create-p
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($employment_id | is-empty) { error make --unspanned { msg: "path parameter 'employmentId' must be non-empty" } }
   let full_url = (build-url $base ({employment_id: (encode-path-segment $employment_id)} | format pattern "/providers/employers/employees/employments/{employment_id}/protectedearnings"))
   let req_body = $body
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else if (($input | is-not-empty) and ($req_body | is-empty)) { $input } else { $req_body }
@@ -9740,7 +10064,7 @@ export def "providers-employers-employees-employments-protectedearnings create-p
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"Authorization": $authorization, "Accept": $hdr_accept} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "applicationjson;version=2018-01-01" $req_body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "applicationjson;version=2018-01-01" $req_body {query: {}, body: $req_body}
 }
 
 # Undo termination for an employment.
@@ -9765,6 +10089,7 @@ export def "providers-employers-employees-employments-reinstate update" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($employment_id | is-empty) { error make --unspanned { msg: "path parameter 'employmentId' must be non-empty" } }
   let full_url = (build-url $base ({employment_id: (encode-path-segment $employment_id)} | format pattern "/providers/employers/employees/employments/{employment_id}/reinstate"))
   let req_body = $body
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
@@ -9772,7 +10097,7 @@ export def "providers-employers-employees-employments-reinstate update" [
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"Authorization": $authorization, "Accept": $hdr_accept} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "patch" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json;version=2018-01-01" $req_body
+  do-request "patch" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json;version=2018-01-01" $req_body {query: {}, body: $req_body}
 }
 
 # List of social security benefits records for an employment
@@ -9799,13 +10124,14 @@ export def "providers-employers-employees-employments-socialsecuritybenefits get
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($employment_id | is-empty) { error make --unspanned { msg: "path parameter 'employmentId' must be non-empty" } }
   let qp = [(serialize-qp "filter" $filter "scalar") (serialize-qp "orderBy" $order_by "scalar") (serialize-qp "pageNumber" $page_number "scalar") (serialize-qp "pageSize" $page_size "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({employment_id: (encode-path-segment $employment_id)} | format pattern "/providers/employers/employees/employments/{employment_id}/socialsecuritybenefits") $qp)
   let accept_val = "application/json;version=2018-01-01"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"Authorization": $authorization, "Accept": $hdr_accept} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"filter": $filter, "orderBy": $order_by, "pageNumber": $page_number, "pageSize": $page_size} | compact), body: null}
 }
 
 # Create a social security benefits record for an employment
@@ -9835,6 +10161,7 @@ export def "providers-employers-employees-employments-socialsecuritybenefits cre
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($employment_id | is-empty) { error make --unspanned { msg: "path parameter 'employmentId' must be non-empty" } }
   let full_url = (build-url $base ({employment_id: (encode-path-segment $employment_id)} | format pattern "/providers/employers/employees/employments/{employment_id}/socialsecuritybenefits"))
   let req_body = {"endDate": $end_date, "startDate": $start_date, "supplementation": $supplementation, "benefit": $benefit} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
@@ -9842,7 +10169,7 @@ export def "providers-employers-employees-employments-socialsecuritybenefits cre
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"Authorization": $authorization, "Accept": $hdr_accept} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json;version=2018-01-01" $req_body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json;version=2018-01-01" $req_body {query: {}, body: $req_body}
 }
 
 # List of social security records for an employment
@@ -9869,13 +10196,14 @@ export def "providers-employers-employees-employments-socialsecurityconfiguratio
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($employment_id | is-empty) { error make --unspanned { msg: "path parameter 'employmentId' must be non-empty" } }
   let qp = [(serialize-qp "filter" $filter "scalar") (serialize-qp "orderBy" $order_by "scalar") (serialize-qp "pageNumber" $page_number "scalar") (serialize-qp "pageSize" $page_size "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({employment_id: (encode-path-segment $employment_id)} | format pattern "/providers/employers/employees/employments/{employment_id}/socialsecurityconfigurations") $qp)
   let accept_val = "application/json;version=2018-01-01"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"Authorization": $authorization, "Accept": $hdr_accept} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"filter": $filter, "orderBy": $order_by, "pageNumber": $page_number, "pageSize": $page_size} | compact), body: null}
 }
 
 # Create a social security record for an employment
@@ -9903,6 +10231,7 @@ export def "providers-employers-employees-employments-socialsecurityconfiguratio
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($employment_id | is-empty) { error make --unspanned { msg: "path parameter 'employmentId' must be non-empty" } }
   let full_url = (build-url $base ({employment_id: (encode-path-segment $employment_id)} | format pattern "/providers/employers/employees/employments/{employment_id}/socialsecurityconfigurations"))
   let req_body = {"isInsuredForOccupationalDisabilityInsuranceAct": $is_insured_for_occupational_disability_insurance_act, "isInsuredForSicknessBenefitsAct": $is_insured_for_sickness_benefits_act, "isInsuredForUnemploymentInsuranceAct": $is_insured_for_unemployment_insurance_act, "startDate": $start_date} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
@@ -9910,7 +10239,7 @@ export def "providers-employers-employees-employments-socialsecurityconfiguratio
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"Authorization": $authorization, "Accept": $hdr_accept} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json;version=2018-01-01" $req_body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json;version=2018-01-01" $req_body {query: {}, body: $req_body}
 }
 
 # Terminate an employment.
@@ -9940,6 +10269,7 @@ export def "providers-employers-employees-employments-terminate update" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($employment_id | is-empty) { error make --unspanned { msg: "path parameter 'employmentId' must be non-empty" } }
   let full_url = (build-url $base ({employment_id: (encode-path-segment $employment_id)} | format pattern "/providers/employers/employees/employments/{employment_id}/terminate"))
   let req_body = {"createMdvEntry": $create_mdv_entry, "endDate": $end_date, "endOfEmploymentDueToIllness": $end_of_employment_due_to_illness, "endOfEmploymentReason": $end_of_employment_reason} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
@@ -9947,7 +10277,7 @@ export def "providers-employers-employees-employments-terminate update" [
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"Authorization": $authorization, "Accept": $hdr_accept} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "patch" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json;version=2018-01-01" $req_body
+  do-request "patch" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json;version=2018-01-01" $req_body {query: {}, body: $req_body}
 }
 
 # Create transition compensation employment for existing employment
@@ -9972,6 +10302,7 @@ export def "providers-employers-employees-employments-transitioncompensation cre
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($employment_id | is-empty) { error make --unspanned { msg: "path parameter 'employmentId' must be non-empty" } }
   let full_url = (build-url $base ({employment_id: (encode-path-segment $employment_id)} | format pattern "/providers/employers/employees/employments/{employment_id}/transitioncompensation"))
   let req_body = $body
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
@@ -9979,7 +10310,7 @@ export def "providers-employers-employees-employments-transitioncompensation cre
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"Authorization": $authorization, "Accept": $hdr_accept} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json;version=2018-01-01" $req_body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json;version=2018-01-01" $req_body {query: {}, body: $req_body}
 }
 
 # Calculate transition compensation
@@ -10009,6 +10340,7 @@ export def "providers-employers-employees-employments-transitioncompensation-cal
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($employment_id | is-empty) { error make --unspanned { msg: "path parameter 'employmentId' must be non-empty" } }
   let full_url = (build-url $base ({employment_id: (encode-path-segment $employment_id)} | format pattern "/providers/employers/employees/employments/{employment_id}/transitioncompensation/calculate"))
   let req_body = {"baseCalculationsBonusPercentage": $base_calculations_bonus_percentage, "endDate": $end_date, "grossMonthlySupplement": $gross_monthly_supplement, "grossMonthlyWage": $gross_monthly_wage, "shiftBonusPercentage": $shift_bonus_percentage, "startDate": $start_date} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
@@ -10016,7 +10348,7 @@ export def "providers-employers-employees-employments-transitioncompensation-cal
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"Authorization": $authorization, "Accept": $hdr_accept} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json;version=2018-01-01" $req_body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json;version=2018-01-01" $req_body {query: {}, body: $req_body}
 }
 
 # Get default input parameters transition compensation
@@ -10039,19 +10371,20 @@ export def "providers-employers-employees-employments-transitioncompensation-cal
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($employment_id | is-empty) { error make --unspanned { msg: "path parameter 'employmentId' must be non-empty" } }
   let full_url = (build-url $base ({employment_id: (encode-path-segment $employment_id)} | format pattern "/providers/employers/employees/employments/{employment_id}/transitioncompensation/calculate/defaults"))
   let accept_val = "application/json;version=2018-01-01"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"Authorization": $authorization, "Accept": $hdr_accept} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
 }
 
 # List wachtgeld
 #
 # GET /providers/employers/employees/employments/{employmentId}/wachtgeld
 # operationId: GetWachtgeldByEmploymentId
-export def "providers-employers-employees-employments-wachtgeld get-by-employmentId" [
+export def "providers-employers-employees-employments-wachtgeld get-by-employment-id" [
   employment_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -10071,13 +10404,14 @@ export def "providers-employers-employees-employments-wachtgeld get-by-employmen
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($employment_id | is-empty) { error make --unspanned { msg: "path parameter 'employmentId' must be non-empty" } }
   let qp = [(serialize-qp "filter" $filter "scalar") (serialize-qp "orderBy" $order_by "scalar") (serialize-qp "pageNumber" $page_number "scalar") (serialize-qp "pageSize" $page_size "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({employment_id: (encode-path-segment $employment_id)} | format pattern "/providers/employers/employees/employments/{employment_id}/wachtgeld") $qp)
   let accept_val = "application/json;version=2018-01-01"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"Authorization": $authorization, "Accept": $hdr_accept} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"filter": $filter, "orderBy": $order_by, "pageNumber": $page_number, "pageSize": $page_size} | compact), body: null}
 }
 
 # Add a wachtgeld for an employment
@@ -10105,6 +10439,7 @@ export def "providers-employers-employees-employments-wachtgeld create" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($employment_id | is-empty) { error make --unspanned { msg: "path parameter 'employmentId' must be non-empty" } }
   let full_url = (build-url $base ({employment_id: (encode-path-segment $employment_id)} | format pattern "/providers/employers/employees/employments/{employment_id}/wachtgeld"))
   let req_body = {"startDate": $start_date, "value": $value, "valueAdditionalIncomeCivilService": $value_additional_income_civil_service, "valueAdditionalIncomeNonCivilService": $value_additional_income_non_civil_service} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
@@ -10112,7 +10447,7 @@ export def "providers-employers-employees-employments-wachtgeld create" [
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"Authorization": $authorization, "Accept": $hdr_accept} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json;version=2018-01-01" $req_body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json;version=2018-01-01" $req_body {query: {}, body: $req_body}
 }
 
 # Perform a wage projection
@@ -10139,6 +10474,7 @@ export def "providers-employers-employees-employments-wageprojection create-wage
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($employment_id | is-empty) { error make --unspanned { msg: "path parameter 'employmentId' must be non-empty" } }
   let full_url = (build-url $base ({employment_id: (encode-path-segment $employment_id)} | format pattern "/providers/employers/employees/employments/{employment_id}/wageprojection"))
   let req_body = {"calculateUsingNextYearsValues": $calculate_using_next_years_values, "deviations": $deviations} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
@@ -10146,7 +10482,7 @@ export def "providers-employers-employees-employments-wageprojection create-wage
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"Authorization": $authorization, "Accept": $hdr_accept} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json;version=2018-01-01" $req_body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json;version=2018-01-01" $req_body {query: {}, body: $req_body}
 }
 
 # Perform a wage projection based on a default CLA configuration
@@ -10187,6 +10523,7 @@ export def "providers-employers-employees-employments-wageprojection-based-on-de
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($employment_id | is-empty) { error make --unspanned { msg: "path parameter 'employmentId' must be non-empty" } }
   let full_url = (build-url $base ({employment_id: (encode-path-segment $employment_id)} | format pattern "/providers/employers/employees/employments/{employment_id}/wageprojection/basedOnDefaultClaConfiguration"))
   let req_body = {"additionalPayrollPeriod": $additional_payroll_period, "applyPayrollTaxDeduction": $apply_payroll_tax_deduction, "calculateUsingNextYearsValues": $calculate_using_next_years_values, "companyCar": $company_car, "dateOfBirth": $date_of_birth, "deductions": $deductions, "deviations": $deviations, "grossWage": $gross_wage, "holidayAllowance": $holiday_allowance, "hoursPerWeek": $hours_per_week, "payments": $payments} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
@@ -10194,14 +10531,14 @@ export def "providers-employers-employees-employments-wageprojection-based-on-de
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"Authorization": $authorization, "Accept": $hdr_accept} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json;version=2018-01-01" $req_body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json;version=2018-01-01" $req_body {query: {}, body: $req_body}
 }
 
 # List of wages for an employment
 #
 # GET /providers/employers/employees/employments/{employmentId}/wages
 # operationId: GetWagesByEmploymentId
-export def "providers-employers-employees-employments-wages get-by-employmentId" [
+export def "providers-employers-employees-employments-wages get-by-employment-id" [
   employment_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -10221,13 +10558,14 @@ export def "providers-employers-employees-employments-wages get-by-employmentId"
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($employment_id | is-empty) { error make --unspanned { msg: "path parameter 'employmentId' must be non-empty" } }
   let qp = [(serialize-qp "filter" $filter "scalar") (serialize-qp "orderBy" $order_by "scalar") (serialize-qp "pageNumber" $page_number "scalar") (serialize-qp "pageSize" $page_size "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({employment_id: (encode-path-segment $employment_id)} | format pattern "/providers/employers/employees/employments/{employment_id}/wages") $qp)
   let accept_val = "application/json;version=2018-01-01"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"Authorization": $authorization, "Accept": $hdr_accept} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"filter": $filter, "orderBy": $order_by, "pageNumber": $page_number, "pageSize": $page_size} | compact), body: null}
 }
 
 # Create an wage for an employment
@@ -10266,6 +10604,7 @@ export def "providers-employers-employees-employments-wages create" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($employment_id | is-empty) { error make --unspanned { msg: "path parameter 'employmentId' must be non-empty" } }
   let full_url = (build-url $base ({employment_id: (encode-path-segment $employment_id)} | format pattern "/providers/employers/employees/employments/{employment_id}/wages"))
   let req_body = {"applyPayGrade": $apply_pay_grade, "employerCosts": $employer_costs, "employerCostsType": $employer_costs_type, "grossWage": $gross_wage, "grossWageType": $gross_wage_type, "netWage": $net_wage, "netWageType": $net_wage_type, "payGrade": $pay_grade, "payScale": $pay_scale, "startDate": $start_date} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
@@ -10273,7 +10612,7 @@ export def "providers-employers-employees-employments-wages create" [
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"Authorization": $authorization, "Accept": $hdr_accept} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json;version=2018-01-01" $req_body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json;version=2018-01-01" $req_body {query: {}, body: $req_body}
 }
 
 # Download wage sheets for an employment
@@ -10297,12 +10636,14 @@ export def "providers-employers-employees-employments-wagesheet get-wage-sheet-b
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($employment_id | is-empty) { error make --unspanned { msg: "path parameter 'employmentId' must be non-empty" } }
+  if ($year | is-empty) { error make --unspanned { msg: "path parameter 'year' must be non-empty" } }
   let full_url = (build-url $base ({employment_id: (encode-path-segment $employment_id), year: (encode-path-segment $year)} | format pattern "/providers/employers/employees/employments/{employment_id}/wagesheet/{year}"))
   let accept_val = "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"Authorization": $authorization, "Accept": $hdr_accept} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
 }
 
 # List of working hours for an employment
@@ -10329,13 +10670,14 @@ export def "providers-employers-employees-employments-workinghours get-working-h
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($employment_id | is-empty) { error make --unspanned { msg: "path parameter 'employmentId' must be non-empty" } }
   let qp = [(serialize-qp "filter" $filter "scalar") (serialize-qp "orderBy" $order_by "scalar") (serialize-qp "pageNumber" $page_number "scalar") (serialize-qp "pageSize" $page_size "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({employment_id: (encode-path-segment $employment_id)} | format pattern "/providers/employers/employees/employments/{employment_id}/workinghours") $qp)
   let accept_val = "application/json;version=2018-01-01"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"Authorization": $authorization, "Accept": $hdr_accept} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"filter": $filter, "orderBy": $order_by, "pageNumber": $page_number, "pageSize": $page_size} | compact), body: null}
 }
 
 # Create the working hours for an employment
@@ -10377,6 +10719,7 @@ export def "providers-employers-employees-employments-workinghours create-workin
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($employment_id | is-empty) { error make --unspanned { msg: "path parameter 'employmentId' must be non-empty" } }
   let full_url = (build-url $base ({employment_id: (encode-path-segment $employment_id)} | format pattern "/providers/employers/employees/employments/{employment_id}/workinghours"))
   let req_body = {"averageHoursPerWeek": $average_hours_per_week, "averageParttimeFactor": $average_parttime_factor, "calculateUsingWorkPattern": $calculate_using_work_pattern, "contractCode": $contract_code, "deviatingHoursPerWeek": $deviating_hours_per_week, "deviatingSvDaysPerPeriod": $deviating_sv_days_per_period, "flexibleHoursContract": $flexible_hours_contract, "regularWorkPattern": $regular_work_pattern, "shift": $shift, "shiftRateSickLeave": $shift_rate_sick_leave, "startDate": $start_date, "workPattern": $work_pattern} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
@@ -10384,7 +10727,7 @@ export def "providers-employers-employees-employments-workinghours create-workin
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"Authorization": $authorization, "Accept": $hdr_accept} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json;version=2018-01-01" $req_body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json;version=2018-01-01" $req_body {query: {}, body: $req_body}
 }
 
 # Year-end statements for the employment
@@ -10411,13 +10754,14 @@ export def "providers-employers-employees-employments-yearendstatements get-year
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($employment_id | is-empty) { error make --unspanned { msg: "path parameter 'employmentId' must be non-empty" } }
   let qp = [(serialize-qp "filter" $filter "scalar") (serialize-qp "orderBy" $order_by "scalar") (serialize-qp "pageNumber" $page_number "scalar") (serialize-qp "pageSize" $page_size "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({employment_id: (encode-path-segment $employment_id)} | format pattern "/providers/employers/employees/employments/{employment_id}/yearendstatements") $qp)
   let accept_val = "application/json;version=2018-01-01"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"Authorization": $authorization, "Accept": $hdr_accept} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"filter": $filter, "orderBy": $order_by, "pageNumber": $page_number, "pageSize": $page_size} | compact), body: null}
 }
 
 # Download year-end statement of an employment for a year
@@ -10441,12 +10785,14 @@ export def "providers-employers-employees-employments-yearendstatements get-end-
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($employment_id | is-empty) { error make --unspanned { msg: "path parameter 'employmentId' must be non-empty" } }
+  if ($year | is-empty) { error make --unspanned { msg: "path parameter 'year' must be non-empty" } }
   let full_url = (build-url $base ({employment_id: (encode-path-segment $employment_id), year: (encode-path-segment $year)} | format pattern "/providers/employers/employees/employments/{employment_id}/yearendstatements/{year}"))
   let accept_val = "application/pdf"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"Authorization": $authorization, "Accept": $hdr_accept} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
 }
 
 # Delete an employee note record
@@ -10470,19 +10816,20 @@ export def "providers-employers-employees-notes delete" [
 ]: nothing -> record<version: record<obsoleteDate: string, resourceVersion: string>, messages: table<code: int, description: string, id: string, properties: list, type: string>, content: record> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($note_id | is-empty) { error make --unspanned { msg: "path parameter 'noteId' must be non-empty" } }
   let full_url = (build-url $base ({note_id: (encode-path-segment $note_id)} | format pattern "/providers/employers/employees/notes/{note_id}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"Authorization": $authorization, "Accept": $hdr_accept, "If-Match": $if_match} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
 }
 
 # Details of an employee note
 #
 # GET /providers/employers/employees/notes/{noteId}
 # operationId: GetEmployeeNoteByNoteId
-export def "providers-employers-employees-notes get-by-noteId" [
+export def "providers-employers-employees-notes get-by-note-id" [
   note_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -10502,13 +10849,14 @@ export def "providers-employers-employees-notes get-by-noteId" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($note_id | is-empty) { error make --unspanned { msg: "path parameter 'noteId' must be non-empty" } }
   let qp = [(serialize-qp "filter" $filter "scalar") (serialize-qp "orderBy" $order_by "scalar") (serialize-qp "pageNumber" $page_number "scalar") (serialize-qp "pageSize" $page_size "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({note_id: (encode-path-segment $note_id)} | format pattern "/providers/employers/employees/notes/{note_id}") $qp)
   let accept_val = "application/json;version=2018-01-01"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"Authorization": $authorization, "Accept": $hdr_accept} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"filter": $filter, "orderBy": $order_by, "pageNumber": $page_number, "pageSize": $page_size} | compact), body: null}
 }
 
 # Edit an employee note record
@@ -10537,6 +10885,7 @@ export def "providers-employers-employees-notes update" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($note_id | is-empty) { error make --unspanned { msg: "path parameter 'noteId' must be non-empty" } }
   let full_url = (build-url $base ({note_id: (encode-path-segment $note_id)} | format pattern "/providers/employers/employees/notes/{note_id}"))
   let req_body = {"accessibleBy": $accessible_by, "note": $note, "subject": $subject} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
@@ -10544,7 +10893,7 @@ export def "providers-employers-employees-notes update" [
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"Authorization": $authorization, "Accept": $hdr_accept, "If-Match": $if_match} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json;version=2018-01-01" $req_body
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json;version=2018-01-01" $req_body {query: {}, body: $req_body}
 }
 
 # Delete a specific partner record
@@ -10568,19 +10917,20 @@ export def "providers-employers-employees-partners delete" [
 ]: nothing -> record<version: record<obsoleteDate: string, resourceVersion: string>, messages: table<code: int, description: string, id: string, properties: list, type: string>, content: record> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($partner_id | is-empty) { error make --unspanned { msg: "path parameter 'partnerId' must be non-empty" } }
   let full_url = (build-url $base ({partner_id: (encode-path-segment $partner_id)} | format pattern "/providers/employers/employees/partners/{partner_id}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"Authorization": $authorization, "Accept": $hdr_accept, "If-Match": $if_match} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
 }
 
 # Details of a single partner
 #
 # GET /providers/employers/employees/partners/{partnerId}
 # operationId: GetPartnerByPartnerId
-export def "providers-employers-employees-partners get-by-partnerId" [
+export def "providers-employers-employees-partners get-by-partner-id" [
   partner_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -10596,12 +10946,13 @@ export def "providers-employers-employees-partners get-by-partnerId" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($partner_id | is-empty) { error make --unspanned { msg: "path parameter 'partnerId' must be non-empty" } }
   let full_url = (build-url $base ({partner_id: (encode-path-segment $partner_id)} | format pattern "/providers/employers/employees/partners/{partner_id}"))
   let accept_val = "application/json;version=2018-01-01"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"Authorization": $authorization, "Accept": $hdr_accept} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
 }
 
 # Edit the details for a partner
@@ -10643,6 +10994,7 @@ export def "providers-employers-employees-partners update" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($partner_id | is-empty) { error make --unspanned { msg: "path parameter 'partnerId' must be non-empty" } }
   let full_url = (build-url $base ({partner_id: (encode-path-segment $partner_id)} | format pattern "/providers/employers/employees/partners/{partner_id}"))
   let req_body = {"dateOfBirth": $date_of_birth, "dateOfDeath": $date_of_death, "endDate": $end_date, "firstName": $first_name, "gender": $gender, "howToFormatLastName": $how_to_format_last_name, "initials": $initials, "lastName": $last_name, "placeOfBirth": $place_of_birth, "prefix": $prefix, "startDate": $start_date, "title": $title, "waoClassification": $wao_classification} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
@@ -10650,7 +11002,7 @@ export def "providers-employers-employees-partners update" [
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"Authorization": $authorization, "Accept": $hdr_accept, "If-Match": $if_match} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json;version=2018-01-01" $req_body
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json;version=2018-01-01" $req_body {query: {}, body: $req_body}
 }
 
 # Change the employee's self service (ESS) access
@@ -10681,14 +11033,14 @@ export def "providers-employers-employees-selfservice update-self-service-access
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"Authorization": $authorization, "Accept": $hdr_accept} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "patch" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json;version=2018-01-01" $req_body
+  do-request "patch" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json;version=2018-01-01" $req_body {query: {}, body: $req_body}
 }
 
 # Details of an employee
 #
 # GET /providers/employers/employees/{employeeId}
 # operationId: GetEmployeeByEmployeeId
-export def "providers-employers-employees get-by-employeeId" [
+export def "providers-employers-employees get-by-employee-id" [
   employee_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -10705,12 +11057,13 @@ export def "providers-employers-employees get-by-employeeId" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($employee_id | is-empty) { error make --unspanned { msg: "path parameter 'employeeId' must be non-empty" } }
   let full_url = (build-url $base ({employee_id: (encode-path-segment $employee_id)} | format pattern "/providers/employers/employees/{employee_id}"))
   let accept_val = ($accept | default "application/json;version=2018-12-31")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"Authorization": $authorization, "Accept": $hdr_accept} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
 }
 
 # Edit the details of an employee
@@ -10750,6 +11103,7 @@ export def "providers-employers-employees update" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($employee_id | is-empty) { error make --unspanned { msg: "path parameter 'employeeId' must be non-empty" } }
   let full_url = (build-url $base ({employee_id: (encode-path-segment $employee_id)} | format pattern "/providers/employers/employees/{employee_id}"))
   let req_body = {"address": $address, "contactInformation": $contact_information, "deviatingPostalAddress": $deviating_postal_address, "employeeNumber": $employee_number, "exclusionFromAbsenceStatus": $exclusion_from_absence_status, "identityDocument": $identity_document, "personalDetails": $personal_details, "travel": $travel} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
@@ -10757,14 +11111,14 @@ export def "providers-employers-employees update" [
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"Authorization": $authorization, "Accept": $hdr_accept, "If-Match": $if_match} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json;version=2018-12-31" $req_body
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json;version=2018-12-31" $req_body {query: {}, body: $req_body}
 }
 
 # List of absences for an employee
 #
 # GET /providers/employers/employees/{employeeId}/absences
 # operationId: GetAbsencesByEmployeeId
-export def "providers-employers-employees-absences get-by-employeeId" [
+export def "providers-employers-employees-absences get-by-employee-id" [
   employee_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -10784,13 +11138,14 @@ export def "providers-employers-employees-absences get-by-employeeId" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($employee_id | is-empty) { error make --unspanned { msg: "path parameter 'employeeId' must be non-empty" } }
   let qp = [(serialize-qp "filter" $filter "scalar") (serialize-qp "orderBy" $order_by "scalar") (serialize-qp "pageNumber" $page_number "scalar") (serialize-qp "pageSize" $page_size "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({employee_id: (encode-path-segment $employee_id)} | format pattern "/providers/employers/employees/{employee_id}/absences") $qp)
   let accept_val = "application/json;version=2020-03-16"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"Authorization": $authorization, "Accept": $hdr_accept} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"filter": $filter, "orderBy": $order_by, "pageNumber": $page_number, "pageSize": $page_size} | compact), body: null}
 }
 
 # Create an Absence for an employee
@@ -10840,6 +11195,7 @@ export def "providers-employers-employees-absences create" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($employee_id | is-empty) { error make --unspanned { msg: "path parameter 'employeeId' must be non-empty" } }
   let full_url = (build-url $base ({employee_id: (encode-path-segment $employee_id)} | format pattern "/providers/employers/employees/{employee_id}/absences"))
   let req_body = {"accidentType": $accident_type, "actionToBeTakenByOccupationalHealthAndSafetyService": $action_to_be_taken_by_occupational_health_and_safety_service, "caseManager": $case_manager, "causeOfAbsence": $cause_of_absence, "comments": $comments, "contactInformation": $contact_information, "expectedDateOfChildbirth": $expected_date_of_childbirth, "expectedDuration": $expected_duration, "expectedEndDateOfMaternityLeave": $expected_end_date_of_maternity_leave, "hasMobilityIssue": $has_mobility_issue, "hoursWorkedOnFirstDayOfAbsence": $hours_worked_on_first_day_of_absence, "isDisruptedEmploymentRelationship": $is_disrupted_employment_relationship, "isHospitalised": $is_hospitalised, "isRecoveredWithinTwoWeeks": $is_recovered_within_two_weeks, "isThirdPartyLiability": $is_third_party_liability, "isWorkRelatedIllness": $is_work_related_illness, "progress": $progress, "reintegration": $reintegration} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
@@ -10847,7 +11203,7 @@ export def "providers-employers-employees-absences create" [
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"Authorization": $authorization, "Accept": $hdr_accept} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json;version=2020-03-16" $req_body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json;version=2020-03-16" $req_body {query: {}, body: $req_body}
 }
 
 # Download the absence overview for an employee
@@ -10872,13 +11228,14 @@ export def "providers-employers-employees-absences-overview get" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($employee_id | is-empty) { error make --unspanned { msg: "path parameter 'employeeId' must be non-empty" } }
   let qp = [(serialize-qp "startDate" $start_date "scalar") (serialize-qp "endDate" $end_date "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({employee_id: (encode-path-segment $employee_id)} | format pattern "/providers/employers/employees/{employee_id}/absences/overview") $qp)
   let accept_val = "application/pdf"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"Authorization": $authorization, "Accept": $hdr_accept} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"startDate": $start_date, "endDate": $end_date} | compact), body: null}
 }
 
 # Get Benify URL for an employee
@@ -10901,12 +11258,13 @@ export def "providers-employers-employees-benifyurl get-benify-url" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($employee_id | is-empty) { error make --unspanned { msg: "path parameter 'employeeId' must be non-empty" } }
   let full_url = (build-url $base ({employee_id: (encode-path-segment $employee_id)} | format pattern "/providers/employers/employees/{employee_id}/benifyurl"))
   let accept_val = "application/json;version=2018-01-01"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"Authorization": $authorization, "Accept": $hdr_accept} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
 }
 
 # Start the change address workflow for an employee
@@ -10933,6 +11291,7 @@ export def "providers-employers-employees-changeaddressrequest create-change-add
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($employee_id | is-empty) { error make --unspanned { msg: "path parameter 'employeeId' must be non-empty" } }
   let full_url = (build-url $base ({employee_id: (encode-path-segment $employee_id)} | format pattern "/providers/employers/employees/{employee_id}/changeaddressrequest"))
   let req_body = {"address": $address, "comment": $comment} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
@@ -10940,7 +11299,7 @@ export def "providers-employers-employees-changeaddressrequest create-change-add
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"Authorization": $authorization, "Accept": $hdr_accept} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json;version=2018-01-01" $req_body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json;version=2018-01-01" $req_body {query: {}, body: $req_body}
 }
 
 # Start the change contactinformation workflow for an employee
@@ -10967,6 +11326,7 @@ export def "providers-employers-employees-changecontactinformationrequest create
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($employee_id | is-empty) { error make --unspanned { msg: "path parameter 'employeeId' must be non-empty" } }
   let full_url = (build-url $base ({employee_id: (encode-path-segment $employee_id)} | format pattern "/providers/employers/employees/{employee_id}/changecontactinformationrequest"))
   let req_body = {"comment": $comment, "contactInformation": $contact_information} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
@@ -10974,14 +11334,14 @@ export def "providers-employers-employees-changecontactinformationrequest create
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"Authorization": $authorization, "Accept": $hdr_accept} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json;version=2018-01-01" $req_body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json;version=2018-01-01" $req_body {query: {}, body: $req_body}
 }
 
 # List of children for an employee
 #
 # GET /providers/employers/employees/{employeeId}/children
 # operationId: GetChildrenByEmployeeId
-export def "providers-employers-employees-children get-by-employeeId" [
+export def "providers-employers-employees-children get-by-employee-id" [
   employee_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -11001,13 +11361,14 @@ export def "providers-employers-employees-children get-by-employeeId" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($employee_id | is-empty) { error make --unspanned { msg: "path parameter 'employeeId' must be non-empty" } }
   let qp = [(serialize-qp "filter" $filter "scalar") (serialize-qp "orderBy" $order_by "scalar") (serialize-qp "pageNumber" $page_number "scalar") (serialize-qp "pageSize" $page_size "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({employee_id: (encode-path-segment $employee_id)} | format pattern "/providers/employers/employees/{employee_id}/children") $qp)
   let accept_val = "application/json;version=2018-01-01"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"Authorization": $authorization, "Accept": $hdr_accept} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"filter": $filter, "orderBy": $order_by, "pageNumber": $page_number, "pageSize": $page_size} | compact), body: null}
 }
 
 # Create an child for an employee
@@ -11041,6 +11402,7 @@ export def "providers-employers-employees-children create-child" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($employee_id | is-empty) { error make --unspanned { msg: "path parameter 'employeeId' must be non-empty" } }
   let full_url = (build-url $base ({employee_id: (encode-path-segment $employee_id)} | format pattern "/providers/employers/employees/{employee_id}/children"))
   let req_body = {"dateOfBirth": $date_of_birth, "dateOfDeath": $date_of_death, "firstName": $first_name, "gender": $gender, "initials": $initials, "lastName": $last_name, "prefix": $prefix, "residenceStatus": $residence_status} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
@@ -11048,7 +11410,7 @@ export def "providers-employers-employees-children create-child" [
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"Authorization": $authorization, "Accept": $hdr_accept} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json;version=2018-01-01" $req_body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json;version=2018-01-01" $req_body {query: {}, body: $req_body}
 }
 
 # Citizen service number of an employee
@@ -11071,12 +11433,13 @@ export def "providers-employers-employees-citizenservicenumber get-citizen-servi
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($employee_id | is-empty) { error make --unspanned { msg: "path parameter 'employeeId' must be non-empty" } }
   let full_url = (build-url $base ({employee_id: (encode-path-segment $employee_id)} | format pattern "/providers/employers/employees/{employee_id}/citizenservicenumber"))
   let accept_val = "application/json;version=2018-01-01"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"Authorization": $authorization, "Accept": $hdr_accept} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
 }
 
 # Update the citizen service number of an employee
@@ -11102,6 +11465,7 @@ export def "providers-employers-employees-citizenservicenumber update-citizen-se
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($employee_id | is-empty) { error make --unspanned { msg: "path parameter 'employeeId' must be non-empty" } }
   let full_url = (build-url $base ({employee_id: (encode-path-segment $employee_id)} | format pattern "/providers/employers/employees/{employee_id}/citizenservicenumber"))
   let req_body = {"citizenServiceNumber": $citizen_service_number} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
@@ -11109,14 +11473,14 @@ export def "providers-employers-employees-citizenservicenumber update-citizen-se
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"Authorization": $authorization, "Accept": $hdr_accept, "If-Match": $if_match} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json;version=2018-01-01" $req_body
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json;version=2018-01-01" $req_body {query: {}, body: $req_body}
 }
 
 # List of contacts for an employee
 #
 # GET /providers/employers/employees/{employeeId}/contacts
 # operationId: GetContactsByEmployeeId
-export def "providers-employers-employees-contacts get-by-employeeId" [
+export def "providers-employers-employees-contacts get-by-employee-id" [
   employee_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -11136,13 +11500,14 @@ export def "providers-employers-employees-contacts get-by-employeeId" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($employee_id | is-empty) { error make --unspanned { msg: "path parameter 'employeeId' must be non-empty" } }
   let qp = [(serialize-qp "filter" $filter "scalar") (serialize-qp "orderBy" $order_by "scalar") (serialize-qp "pageNumber" $page_number "scalar") (serialize-qp "pageSize" $page_size "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({employee_id: (encode-path-segment $employee_id)} | format pattern "/providers/employers/employees/{employee_id}/contacts") $qp)
   let accept_val = "application/json;version=2018-01-01"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"Authorization": $authorization, "Accept": $hdr_accept} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"filter": $filter, "orderBy": $order_by, "pageNumber": $page_number, "pageSize": $page_size} | compact), body: null}
 }
 
 # Create a contact for an employee
@@ -11172,6 +11537,7 @@ export def "providers-employers-employees-contacts create" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($employee_id | is-empty) { error make --unspanned { msg: "path parameter 'employeeId' must be non-empty" } }
   let full_url = (build-url $base ({employee_id: (encode-path-segment $employee_id)} | format pattern "/providers/employers/employees/{employee_id}/contacts"))
   let req_body = {"address": $address, "description": $description, "name": $name, "particularities": $particularities, "phoneNumber": $phone_number} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
@@ -11179,7 +11545,7 @@ export def "providers-employers-employees-contacts create" [
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"Authorization": $authorization, "Accept": $hdr_accept} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json;version=2018-01-01" $req_body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json;version=2018-01-01" $req_body {query: {}, body: $req_body}
 }
 
 # List employee custom fields for an employee
@@ -11206,13 +11572,14 @@ export def "providers-employers-employees-customfields get-custom-fieldss" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($employee_id | is-empty) { error make --unspanned { msg: "path parameter 'employeeId' must be non-empty" } }
   let qp = [(serialize-qp "filter" $filter "scalar") (serialize-qp "orderBy" $order_by "scalar") (serialize-qp "pageNumber" $page_number "scalar") (serialize-qp "pageSize" $page_size "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({employee_id: (encode-path-segment $employee_id)} | format pattern "/providers/employers/employees/{employee_id}/customfields") $qp)
   let accept_val = "application/json;version=2018-01-01"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"Authorization": $authorization, "Accept": $hdr_accept} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"filter": $filter, "orderBy": $order_by, "pageNumber": $page_number, "pageSize": $page_size} | compact), body: null}
 }
 
 # Add an employee custom field for an employee
@@ -11239,6 +11606,7 @@ export def "providers-employers-employees-customfields create-custom-field" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($employee_id | is-empty) { error make --unspanned { msg: "path parameter 'employeeId' must be non-empty" } }
   let full_url = (build-url $base ({employee_id: (encode-path-segment $employee_id)} | format pattern "/providers/employers/employees/{employee_id}/customfields"))
   let req_body = {"customField": $custom_field, "value": $value} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
@@ -11246,14 +11614,14 @@ export def "providers-employers-employees-customfields create-custom-field" [
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"Authorization": $authorization, "Accept": $hdr_accept} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json;version=2018-01-01" $req_body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json;version=2018-01-01" $req_body {query: {}, body: $req_body}
 }
 
 # List of educations for an employee
 #
 # GET /providers/employers/employees/{employeeId}/educations
 # operationId: GetEducationsByEmployeeId
-export def "providers-employers-employees-educations get-by-employeeId" [
+export def "providers-employers-employees-educations get-by-employee-id" [
   employee_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -11273,13 +11641,14 @@ export def "providers-employers-employees-educations get-by-employeeId" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($employee_id | is-empty) { error make --unspanned { msg: "path parameter 'employeeId' must be non-empty" } }
   let qp = [(serialize-qp "filter" $filter "scalar") (serialize-qp "orderBy" $order_by "scalar") (serialize-qp "pageNumber" $page_number "scalar") (serialize-qp "pageSize" $page_size "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({employee_id: (encode-path-segment $employee_id)} | format pattern "/providers/employers/employees/{employee_id}/educations") $qp)
   let accept_val = "application/json;version=2018-01-01"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"Authorization": $authorization, "Accept": $hdr_accept} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"filter": $filter, "orderBy": $order_by, "pageNumber": $page_number, "pageSize": $page_size} | compact), body: null}
 }
 
 # Create a education for an employee
@@ -11321,6 +11690,7 @@ export def "providers-employers-employees-educations create" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($employee_id | is-empty) { error make --unspanned { msg: "path parameter 'employeeId' must be non-empty" } }
   let full_url = (build-url $base ({employee_id: (encode-path-segment $employee_id)} | format pattern "/providers/employers/employees/{employee_id}/educations"))
   let req_body = {"educationLevel": $education_level, "employeeCosts": $employee_costs, "employerCosts": $employer_costs, "endDate": $end_date, "endOfValidityDate": $end_of_validity_date, "furtherIndication": $further_indication, "hasDiploma": $has_diploma, "institute": $institute, "name": $name, "particularities": $particularities, "startDate": $start_date, "typeOfEducation": $type_of_education, "yearOfDiploma": $year_of_diploma} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
@@ -11328,14 +11698,14 @@ export def "providers-employers-employees-educations create" [
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"Authorization": $authorization, "Accept": $hdr_accept} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json;version=2018-01-01" $req_body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json;version=2018-01-01" $req_body {query: {}, body: $req_body}
 }
 
 # List of employments for an employee
 #
 # GET /providers/employers/employees/{employeeId}/employments
 # operationId: GetEmploymentsByEmployeeId
-export def "providers-employers-employees-employments get-by-employeeId" [
+export def "providers-employers-employees-employments get-by-employee-id" [
   employee_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -11355,13 +11725,14 @@ export def "providers-employers-employees-employments get-by-employeeId" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($employee_id | is-empty) { error make --unspanned { msg: "path parameter 'employeeId' must be non-empty" } }
   let qp = [(serialize-qp "filter" $filter "scalar") (serialize-qp "orderBy" $order_by "scalar") (serialize-qp "pageNumber" $page_number "scalar") (serialize-qp "pageSize" $page_size "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({employee_id: (encode-path-segment $employee_id)} | format pattern "/providers/employers/employees/{employee_id}/employments") $qp)
   let accept_val = "application/json;version=2019-12-16"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"Authorization": $authorization, "Accept": $hdr_accept} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"filter": $filter, "orderBy": $order_by, "pageNumber": $page_number, "pageSize": $page_size} | compact), body: null}
 }
 
 # Create employment for existing employee
@@ -11401,6 +11772,7 @@ export def "providers-employers-employees-employments create" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($employee_id | is-empty) { error make --unspanned { msg: "path parameter 'employeeId' must be non-empty" } }
   let full_url = (build-url $base ({employee_id: (encode-path-segment $employee_id)} | format pattern "/providers/employers/employees/{employee_id}/employments"))
   let req_body = {"employeeData": $employee_data, "employmentData": $employment_data, "fiscalData": $fiscal_data, "organizationalEntityData": $organizational_entity_data, "otherPayrollVariablesData": $other_payroll_variables_data, "socialSecurityData": $social_security_data, "wageData": $wage_data, "workingHoursData": $working_hours_data} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
@@ -11408,14 +11780,14 @@ export def "providers-employers-employees-employments create" [
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"Authorization": $authorization, "Accept": $hdr_accept} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json;version=2018-01-01" $req_body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json;version=2018-01-01" $req_body {query: {}, body: $req_body}
 }
 
 # Get a list of notes for an employee.
 #
 # GET /providers/employers/employees/{employeeId}/notes
 # operationId: GetEmployeeNotesByEmployeeId
-export def "providers-employers-employees-notes get-by-employeeId" [
+export def "providers-employers-employees-notes get-by-employee-id" [
   employee_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -11435,13 +11807,14 @@ export def "providers-employers-employees-notes get-by-employeeId" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($employee_id | is-empty) { error make --unspanned { msg: "path parameter 'employeeId' must be non-empty" } }
   let qp = [(serialize-qp "filter" $filter "scalar") (serialize-qp "orderBy" $order_by "scalar") (serialize-qp "pageNumber" $page_number "scalar") (serialize-qp "pageSize" $page_size "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({employee_id: (encode-path-segment $employee_id)} | format pattern "/providers/employers/employees/{employee_id}/notes") $qp)
   let accept_val = "application/json;version=2018-01-01"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"Authorization": $authorization, "Accept": $hdr_accept} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"filter": $filter, "orderBy": $order_by, "pageNumber": $page_number, "pageSize": $page_size} | compact), body: null}
 }
 
 # Add a note for an employee
@@ -11469,6 +11842,7 @@ export def "providers-employers-employees-notes create" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($employee_id | is-empty) { error make --unspanned { msg: "path parameter 'employeeId' must be non-empty" } }
   let full_url = (build-url $base ({employee_id: (encode-path-segment $employee_id)} | format pattern "/providers/employers/employees/{employee_id}/notes"))
   let req_body = {"accessibleBy": $accessible_by, "note": $note, "subject": $subject} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
@@ -11476,7 +11850,7 @@ export def "providers-employers-employees-notes create" [
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"Authorization": $authorization, "Accept": $hdr_accept} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json;version=2018-01-01" $req_body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json;version=2018-01-01" $req_body {query: {}, body: $req_body}
 }
 
 # List of occupational disabilities for an employee
@@ -11503,20 +11877,21 @@ export def "providers-employers-employees-occupationaldisabilities get-occupatio
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($employee_id | is-empty) { error make --unspanned { msg: "path parameter 'employeeId' must be non-empty" } }
   let qp = [(serialize-qp "filter" $filter "scalar") (serialize-qp "orderBy" $order_by "scalar") (serialize-qp "pageNumber" $page_number "scalar") (serialize-qp "pageSize" $page_size "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({employee_id: (encode-path-segment $employee_id)} | format pattern "/providers/employers/employees/{employee_id}/occupationaldisabilities") $qp)
   let accept_val = "application/json;version=2018-01-01"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"Authorization": $authorization, "Accept": $hdr_accept} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"filter": $filter, "orderBy": $order_by, "pageNumber": $page_number, "pageSize": $page_size} | compact), body: null}
 }
 
 # List of partners for an employee
 #
 # GET /providers/employers/employees/{employeeId}/partners
 # operationId: GetPartnersByEmployeeId
-export def "providers-employers-employees-partners get-by-employeeId" [
+export def "providers-employers-employees-partners get-by-employee-id" [
   employee_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -11536,13 +11911,14 @@ export def "providers-employers-employees-partners get-by-employeeId" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($employee_id | is-empty) { error make --unspanned { msg: "path parameter 'employeeId' must be non-empty" } }
   let qp = [(serialize-qp "filter" $filter "scalar") (serialize-qp "orderBy" $order_by "scalar") (serialize-qp "pageNumber" $page_number "scalar") (serialize-qp "pageSize" $page_size "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({employee_id: (encode-path-segment $employee_id)} | format pattern "/providers/employers/employees/{employee_id}/partners") $qp)
   let accept_val = "application/json;version=2018-01-01"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"Authorization": $authorization, "Accept": $hdr_accept} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"filter": $filter, "orderBy": $order_by, "pageNumber": $page_number, "pageSize": $page_size} | compact), body: null}
 }
 
 # Create the partner for an employee
@@ -11583,6 +11959,7 @@ export def "providers-employers-employees-partners create" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($employee_id | is-empty) { error make --unspanned { msg: "path parameter 'employeeId' must be non-empty" } }
   let full_url = (build-url $base ({employee_id: (encode-path-segment $employee_id)} | format pattern "/providers/employers/employees/{employee_id}/partners"))
   let req_body = {"dateOfBirth": $date_of_birth, "dateOfDeath": $date_of_death, "endDate": $end_date, "firstName": $first_name, "gender": $gender, "howToFormatLastName": $how_to_format_last_name, "initials": $initials, "lastName": $last_name, "placeOfBirth": $place_of_birth, "prefix": $prefix, "startDate": $start_date, "title": $title, "waoClassification": $wao_classification} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
@@ -11590,7 +11967,7 @@ export def "providers-employers-employees-partners create" [
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"Authorization": $authorization, "Accept": $hdr_accept} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json;version=2018-01-01" $req_body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json;version=2018-01-01" $req_body {query: {}, body: $req_body}
 }
 
 # Delete employee photo
@@ -11613,12 +11990,13 @@ export def "providers-employers-employees-photo delete" [
 ]: nothing -> record<version: record<obsoleteDate: string, resourceVersion: string>, messages: table<code: int, description: string, id: string, properties: list, type: string>, content: record> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($employee_id | is-empty) { error make --unspanned { msg: "path parameter 'employeeId' must be non-empty" } }
   let full_url = (build-url $base ({employee_id: (encode-path-segment $employee_id)} | format pattern "/providers/employers/employees/{employee_id}/photo"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"Authorization": $authorization, "Accept": $hdr_accept} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
 }
 
 # Photo of an employee
@@ -11642,12 +12020,13 @@ export def "providers-employers-employees-photo get" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($employee_id | is-empty) { error make --unspanned { msg: "path parameter 'employeeId' must be non-empty" } }
   let full_url = (build-url $base ({employee_id: (encode-path-segment $employee_id)} | format pattern "/providers/employers/employees/{employee_id}/photo"))
   let accept_val = ($accept | default "image/jpeg")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"Authorization": $authorization, "Accept": $hdr_accept} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
 }
 
 # Post employee photo
@@ -11673,6 +12052,7 @@ export def "providers-employers-employees-photo create" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($employee_id | is-empty) { error make --unspanned { msg: "path parameter 'employeeId' must be non-empty" } }
   let full_url = (build-url $base ({employee_id: (encode-path-segment $employee_id)} | format pattern "/providers/employers/employees/{employee_id}/photo"))
   let req_body = {"data": $data, "mimeType": $mime_type} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
@@ -11680,7 +12060,7 @@ export def "providers-employers-employees-photo create" [
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"Authorization": $authorization, "Accept": $hdr_accept} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json;version=2018-01-01" $req_body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json;version=2018-01-01" $req_body {query: {}, body: $req_body}
 }
 
 # Photo of an employee
@@ -11705,12 +12085,14 @@ export def "providers-employers-employees-photo get-by-and" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($employee_id | is-empty) { error make --unspanned { msg: "path parameter 'employeeId' must be non-empty" } }
+  if ($version | is-empty) { error make --unspanned { msg: "path parameter 'version' must be non-empty" } }
   let full_url = (build-url $base ({employee_id: (encode-path-segment $employee_id), version: (encode-path-segment $version)} | format pattern "/providers/employers/employees/{employee_id}/photo/{version}"))
   let accept_val = ($accept | default "image/jpeg")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"Authorization": $authorization, "Accept": $hdr_accept} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
 }
 
 # Set the date on which to revoke ESS access
@@ -11735,6 +12117,7 @@ export def "providers-employers-employees-revoke-employee-self-service-access up
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($employee_id | is-empty) { error make --unspanned { msg: "path parameter 'employeeId' must be non-empty" } }
   let full_url = (build-url $base ({employee_id: (encode-path-segment $employee_id)} | format pattern "/providers/employers/employees/{employee_id}/revokeEmployeeSelfServiceAccess"))
   let req_body = {"revokeEmployeeSelfServiceAccessOn": $revoke_employee_self_service_access_on} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
@@ -11742,14 +12125,14 @@ export def "providers-employers-employees-revoke-employee-self-service-access up
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"Authorization": $authorization, "Accept": $hdr_accept} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "patch" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json;version=2018-01-01" $req_body
+  do-request "patch" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json;version=2018-01-01" $req_body {query: {}, body: $req_body}
 }
 
 # Details of and employees self service portal status
 #
 # GET /providers/employers/employees/{employeeId}/selfservice
 # operationId: GetEmployeeSelfServiceByEmployeeId
-export def "providers-employers-employees-selfservice get-self-service-by-employeeId" [
+export def "providers-employers-employees-selfservice get-self-service-by-employee-id" [
   employee_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -11769,20 +12152,21 @@ export def "providers-employers-employees-selfservice get-self-service-by-employ
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($employee_id | is-empty) { error make --unspanned { msg: "path parameter 'employeeId' must be non-empty" } }
   let qp = [(serialize-qp "filter" $filter "scalar") (serialize-qp "orderBy" $order_by "scalar") (serialize-qp "pageNumber" $page_number "scalar") (serialize-qp "pageSize" $page_size "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({employee_id: (encode-path-segment $employee_id)} | format pattern "/providers/employers/employees/{employee_id}/selfservice") $qp)
   let accept_val = "application/json;version=2018-01-01"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"Authorization": $authorization, "Accept": $hdr_accept} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"filter": $filter, "orderBy": $order_by, "pageNumber": $page_number, "pageSize": $page_size} | compact), body: null}
 }
 
 # Details of a function
 #
 # GET /providers/employers/functions/{functionId}
 # operationId: GetFunctionByFunctionId
-export def "providers-employers-functions get-by-functionId" [
+export def "providers-employers-functions get-by-function-id" [
   function_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -11798,12 +12182,13 @@ export def "providers-employers-functions get-by-functionId" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($function_id | is-empty) { error make --unspanned { msg: "path parameter 'functionId' must be non-empty" } }
   let full_url = (build-url $base ({function_id: (encode-path-segment $function_id)} | format pattern "/providers/employers/functions/{function_id}"))
   let accept_val = "application/json;version=2018-01-01"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"Authorization": $authorization, "Accept": $hdr_accept} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
 }
 
 # Edit the details of a function
@@ -11830,6 +12215,7 @@ export def "providers-employers-functions update" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($function_id | is-empty) { error make --unspanned { msg: "path parameter 'functionId' must be non-empty" } }
   let full_url = (build-url $base ({function_id: (encode-path-segment $function_id)} | format pattern "/providers/employers/functions/{function_id}"))
   let req_body = {"description": $description, "group": $group} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
@@ -11837,7 +12223,7 @@ export def "providers-employers-functions update" [
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"Authorization": $authorization, "Accept": $hdr_accept, "If-Match": $if_match} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json;version=2018-01-01" $req_body
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json;version=2018-01-01" $req_body {query: {}, body: $req_body}
 }
 
 # List of employer last modified version numbers
@@ -11869,7 +12255,7 @@ export def "providers-employers-lastmodifiedversionnumbers get-last-modified-ver
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"Authorization": $authorization, "Accept": $hdr_accept} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"filter": $filter, "orderBy": $order_by, "pageNumber": $page_number, "pageSize": $page_size} | compact), body: null}
 }
 
 # Delete an age based leave record
@@ -11893,12 +12279,13 @@ export def "providers-employers-leave-policies-agebasedleave delete-age-based-by
 ]: nothing -> record<version: record<obsoleteDate: string, resourceVersion: string>, messages: table<code: int, description: string, id: string, properties: list, type: string>, content: record> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($age_based_leave_id | is-empty) { error make --unspanned { msg: "path parameter 'ageBasedLeaveId' must be non-empty" } }
   let full_url = (build-url $base ({age_based_leave_id: (encode-path-segment $age_based_leave_id)} | format pattern "/providers/employers/leavePolicies/agebasedleave/{age_based_leave_id}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"Authorization": $authorization, "Accept": $hdr_accept, "If-Match": $if_match} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
 }
 
 # An age based leave record
@@ -11925,13 +12312,14 @@ export def "providers-employers-leave-policies-agebasedleave get-age-based-by-ag
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($age_based_leave_id | is-empty) { error make --unspanned { msg: "path parameter 'ageBasedLeaveId' must be non-empty" } }
   let qp = [(serialize-qp "filter" $filter "scalar") (serialize-qp "orderBy" $order_by "scalar") (serialize-qp "pageNumber" $page_number "scalar") (serialize-qp "pageSize" $page_size "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({age_based_leave_id: (encode-path-segment $age_based_leave_id)} | format pattern "/providers/employers/leavePolicies/agebasedleave/{age_based_leave_id}") $qp)
   let accept_val = "application/json;version=2018-01-01"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"Authorization": $authorization, "Accept": $hdr_accept} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"filter": $filter, "orderBy": $order_by, "pageNumber": $page_number, "pageSize": $page_size} | compact), body: null}
 }
 
 # Edit the details of an age based leave
@@ -11962,6 +12350,7 @@ export def "providers-employers-leave-policies-agebasedleave update-age-based-by
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($age_based_leave_id | is-empty) { error make --unspanned { msg: "path parameter 'ageBasedLeaveId' must be non-empty" } }
   let full_url = (build-url $base ({age_based_leave_id: (encode-path-segment $age_based_leave_id)} | format pattern "/providers/employers/leavePolicies/agebasedleave/{age_based_leave_id}"))
   let req_body = {"from": $body_from, "leaveEntitlement": $leave_entitlement, "upToAndIncluding": $up_to_and_including} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
@@ -11969,7 +12358,7 @@ export def "providers-employers-leave-policies-agebasedleave update-age-based-by
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"Authorization": $authorization, "Accept": $hdr_accept, "If-Match": $if_match} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json;version=2018-01-01" $req_body
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json;version=2018-01-01" $req_body {query: {}, body: $req_body}
 }
 
 # Delete a wage based leave record
@@ -11993,12 +12382,13 @@ export def "providers-employers-leave-policies-wagebasedleave delete-wage-based-
 ]: nothing -> record<version: record<obsoleteDate: string, resourceVersion: string>, messages: table<code: int, description: string, id: string, properties: list, type: string>, content: record> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($wage_based_leave_id | is-empty) { error make --unspanned { msg: "path parameter 'wageBasedLeaveId' must be non-empty" } }
   let full_url = (build-url $base ({wage_based_leave_id: (encode-path-segment $wage_based_leave_id)} | format pattern "/providers/employers/leavePolicies/wagebasedleave/{wage_based_leave_id}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"Authorization": $authorization, "Accept": $hdr_accept, "If-Match": $if_match} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
 }
 
 # A wage based leave record
@@ -12025,13 +12415,14 @@ export def "providers-employers-leave-policies-wagebasedleave get-wage-based-by-
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($wage_based_leave_id | is-empty) { error make --unspanned { msg: "path parameter 'wageBasedLeaveId' must be non-empty" } }
   let qp = [(serialize-qp "filter" $filter "scalar") (serialize-qp "orderBy" $order_by "scalar") (serialize-qp "pageNumber" $page_number "scalar") (serialize-qp "pageSize" $page_size "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({wage_based_leave_id: (encode-path-segment $wage_based_leave_id)} | format pattern "/providers/employers/leavePolicies/wagebasedleave/{wage_based_leave_id}") $qp)
   let accept_val = "application/json;version=2018-01-01"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"Authorization": $authorization, "Accept": $hdr_accept} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"filter": $filter, "orderBy": $order_by, "pageNumber": $page_number, "pageSize": $page_size} | compact), body: null}
 }
 
 # Edit the details of a wage based leave
@@ -12060,6 +12451,7 @@ export def "providers-employers-leave-policies-wagebasedleave update-wage-based-
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($wage_based_leave_id | is-empty) { error make --unspanned { msg: "path parameter 'wageBasedLeaveId' must be non-empty" } }
   let full_url = (build-url $base ({wage_based_leave_id: (encode-path-segment $wage_based_leave_id)} | format pattern "/providers/employers/leavePolicies/wagebasedleave/{wage_based_leave_id}"))
   let req_body = {"fromWage": $from_wage, "leaveEntitlement": $leave_entitlement, "upToAndIncludingWage": $up_to_and_including_wage} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
@@ -12067,7 +12459,7 @@ export def "providers-employers-leave-policies-wagebasedleave update-wage-based-
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"Authorization": $authorization, "Accept": $hdr_accept, "If-Match": $if_match} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json;version=2018-01-01" $req_body
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json;version=2018-01-01" $req_body {query: {}, body: $req_body}
 }
 
 # Delete an years of service based leave record
@@ -12091,12 +12483,13 @@ export def "providers-employers-leave-policies-yearsofservicebasedleave delete-y
 ]: nothing -> record<version: record<obsoleteDate: string, resourceVersion: string>, messages: table<code: int, description: string, id: string, properties: list, type: string>, content: record> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($years_of_service_based_leave_id | is-empty) { error make --unspanned { msg: "path parameter 'yearsOfServiceBasedLeaveId' must be non-empty" } }
   let full_url = (build-url $base ({years_of_service_based_leave_id: (encode-path-segment $years_of_service_based_leave_id)} | format pattern "/providers/employers/leavePolicies/yearsofservicebasedleave/{years_of_service_based_leave_id}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"Authorization": $authorization, "Accept": $hdr_accept, "If-Match": $if_match} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
 }
 
 # A years of service based leave record
@@ -12123,13 +12516,14 @@ export def "providers-employers-leave-policies-yearsofservicebasedleave get-year
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($years_of_service_based_leave_id | is-empty) { error make --unspanned { msg: "path parameter 'yearsOfServiceBasedLeaveId' must be non-empty" } }
   let qp = [(serialize-qp "filter" $filter "scalar") (serialize-qp "orderBy" $order_by "scalar") (serialize-qp "pageNumber" $page_number "scalar") (serialize-qp "pageSize" $page_size "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({years_of_service_based_leave_id: (encode-path-segment $years_of_service_based_leave_id)} | format pattern "/providers/employers/leavePolicies/yearsofservicebasedleave/{years_of_service_based_leave_id}") $qp)
   let accept_val = "application/json;version=2018-01-01"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"Authorization": $authorization, "Accept": $hdr_accept} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"filter": $filter, "orderBy": $order_by, "pageNumber": $page_number, "pageSize": $page_size} | compact), body: null}
 }
 
 # Edit the details of a years of service based leave
@@ -12160,6 +12554,7 @@ export def "providers-employers-leave-policies-yearsofservicebasedleave update-y
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($years_of_service_based_leave_id | is-empty) { error make --unspanned { msg: "path parameter 'yearsOfServiceBasedLeaveId' must be non-empty" } }
   let full_url = (build-url $base ({years_of_service_based_leave_id: (encode-path-segment $years_of_service_based_leave_id)} | format pattern "/providers/employers/leavePolicies/yearsofservicebasedleave/{years_of_service_based_leave_id}"))
   let req_body = {"from": $body_from, "leaveEntitlement": $leave_entitlement, "upToAndIncluding": $up_to_and_including} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
@@ -12167,7 +12562,7 @@ export def "providers-employers-leave-policies-yearsofservicebasedleave update-y
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"Authorization": $authorization, "Accept": $hdr_accept, "If-Match": $if_match} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json;version=2018-01-01" $req_body
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json;version=2018-01-01" $req_body {query: {}, body: $req_body}
 }
 
 # Delete a leave policy
@@ -12191,12 +12586,13 @@ export def "providers-employers-leave-policies delete-policy-by-policy" [
 ]: nothing -> record<version: record<obsoleteDate: string, resourceVersion: string>, messages: table<code: int, description: string, id: string, properties: list, type: string>, content: record> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($leave_policy_id | is-empty) { error make --unspanned { msg: "path parameter 'leavePolicyId' must be non-empty" } }
   let full_url = (build-url $base ({leave_policy_id: (encode-path-segment $leave_policy_id)} | format pattern "/providers/employers/leavePolicies/{leave_policy_id}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"Authorization": $authorization, "Accept": $hdr_accept, "If-Match": $if_match} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
 }
 
 # A single leave policy
@@ -12223,13 +12619,14 @@ export def "providers-employers-leave-policies get-policy-by-policy" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($leave_policy_id | is-empty) { error make --unspanned { msg: "path parameter 'leavePolicyId' must be non-empty" } }
   let qp = [(serialize-qp "filter" $filter "scalar") (serialize-qp "orderBy" $order_by "scalar") (serialize-qp "pageNumber" $page_number "scalar") (serialize-qp "pageSize" $page_size "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({leave_policy_id: (encode-path-segment $leave_policy_id)} | format pattern "/providers/employers/leavePolicies/{leave_policy_id}") $qp)
   let accept_val = "application/json;version=2018-01-01"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"Authorization": $authorization, "Accept": $hdr_accept} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"filter": $filter, "orderBy": $order_by, "pageNumber": $page_number, "pageSize": $page_size} | compact), body: null}
 }
 
 # Edit the details of a leave policy
@@ -12271,6 +12668,7 @@ export def "providers-employers-leave-policies update-policy-by-policy" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($leave_policy_id | is-empty) { error make --unspanned { msg: "path parameter 'leavePolicyId' must be non-empty" } }
   let full_url = (build-url $base ({leave_policy_id: (encode-path-segment $leave_policy_id)} | format pattern "/providers/employers/leavePolicies/{leave_policy_id}"))
   let req_body = {"accrualType": $accrual_type, "additionalLeave": $additional_leave, "dayOfTheMonthToPerformAutomaticLeaveCalculationOn": $day_of_the_month_to_perform_automatic_leave_calculation_on, "leaveEntitlement": $leave_entitlement, "leaveRequest": $leave_request, "leaveUnitType": $leave_unit_type, "name": $name, "payoutLeaveImmediately": $payout_leave_immediately, "roundTo": $round_to, "roundingMethod": $rounding_method} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
@@ -12278,7 +12676,7 @@ export def "providers-employers-leave-policies update-policy-by-policy" [
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"Authorization": $authorization, "Accept": $hdr_accept, "If-Match": $if_match} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json;version=2018-01-01" $req_body
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json;version=2018-01-01" $req_body {query: {}, body: $req_body}
 }
 
 # Age based leave
@@ -12305,13 +12703,14 @@ export def "providers-employers-leave-policies-agebasedleave get-age-based-by-po
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($leave_policy_id | is-empty) { error make --unspanned { msg: "path parameter 'leavePolicyId' must be non-empty" } }
   let qp = [(serialize-qp "filter" $filter "scalar") (serialize-qp "orderBy" $order_by "scalar") (serialize-qp "pageNumber" $page_number "scalar") (serialize-qp "pageSize" $page_size "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({leave_policy_id: (encode-path-segment $leave_policy_id)} | format pattern "/providers/employers/leavePolicies/{leave_policy_id}/agebasedleave") $qp)
   let accept_val = "application/json;version=2018-01-01"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"Authorization": $authorization, "Accept": $hdr_accept} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"filter": $filter, "orderBy": $order_by, "pageNumber": $page_number, "pageSize": $page_size} | compact), body: null}
 }
 
 # Create an age based leave record
@@ -12341,6 +12740,7 @@ export def "providers-employers-leave-policies-agebasedleave create-age-based-by
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($leave_policy_id | is-empty) { error make --unspanned { msg: "path parameter 'leavePolicyId' must be non-empty" } }
   let full_url = (build-url $base ({leave_policy_id: (encode-path-segment $leave_policy_id)} | format pattern "/providers/employers/leavePolicies/{leave_policy_id}/agebasedleave"))
   let req_body = {"from": $body_from, "leaveEntitlement": $leave_entitlement, "upToAndIncluding": $up_to_and_including} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
@@ -12348,7 +12748,7 @@ export def "providers-employers-leave-policies-agebasedleave create-age-based-by
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"Authorization": $authorization, "Accept": $hdr_accept} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json;version=2018-01-01" $req_body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json;version=2018-01-01" $req_body {query: {}, body: $req_body}
 }
 
 # Wage based leave
@@ -12375,13 +12775,14 @@ export def "providers-employers-leave-policies-wagebasedleave get-wage-based-by-
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($leave_policy_id | is-empty) { error make --unspanned { msg: "path parameter 'leavePolicyId' must be non-empty" } }
   let qp = [(serialize-qp "filter" $filter "scalar") (serialize-qp "orderBy" $order_by "scalar") (serialize-qp "pageNumber" $page_number "scalar") (serialize-qp "pageSize" $page_size "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({leave_policy_id: (encode-path-segment $leave_policy_id)} | format pattern "/providers/employers/leavePolicies/{leave_policy_id}/wagebasedleave") $qp)
   let accept_val = "application/json;version=2018-01-01"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"Authorization": $authorization, "Accept": $hdr_accept} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"filter": $filter, "orderBy": $order_by, "pageNumber": $page_number, "pageSize": $page_size} | compact), body: null}
 }
 
 # Create a wage based leave record
@@ -12409,6 +12810,7 @@ export def "providers-employers-leave-policies-wagebasedleave create-wage-based-
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($leave_policy_id | is-empty) { error make --unspanned { msg: "path parameter 'leavePolicyId' must be non-empty" } }
   let full_url = (build-url $base ({leave_policy_id: (encode-path-segment $leave_policy_id)} | format pattern "/providers/employers/leavePolicies/{leave_policy_id}/wagebasedleave"))
   let req_body = {"fromWage": $from_wage, "leaveEntitlement": $leave_entitlement, "upToAndIncludingWage": $up_to_and_including_wage} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
@@ -12416,7 +12818,7 @@ export def "providers-employers-leave-policies-wagebasedleave create-wage-based-
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"Authorization": $authorization, "Accept": $hdr_accept} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json;version=2018-01-01" $req_body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json;version=2018-01-01" $req_body {query: {}, body: $req_body}
 }
 
 # years of service based leave
@@ -12443,13 +12845,14 @@ export def "providers-employers-leave-policies-yearsofservicebasedleave get-year
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($leave_policy_id | is-empty) { error make --unspanned { msg: "path parameter 'leavePolicyId' must be non-empty" } }
   let qp = [(serialize-qp "filter" $filter "scalar") (serialize-qp "orderBy" $order_by "scalar") (serialize-qp "pageNumber" $page_number "scalar") (serialize-qp "pageSize" $page_size "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({leave_policy_id: (encode-path-segment $leave_policy_id)} | format pattern "/providers/employers/leavePolicies/{leave_policy_id}/yearsofservicebasedleave") $qp)
   let accept_val = "application/json;version=2018-01-01"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"Authorization": $authorization, "Accept": $hdr_accept} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"filter": $filter, "orderBy": $order_by, "pageNumber": $page_number, "pageSize": $page_size} | compact), body: null}
 }
 
 # Create a years of service based leave record
@@ -12479,6 +12882,7 @@ export def "providers-employers-leave-policies-yearsofservicebasedleave create-y
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($leave_policy_id | is-empty) { error make --unspanned { msg: "path parameter 'leavePolicyId' must be non-empty" } }
   let full_url = (build-url $base ({leave_policy_id: (encode-path-segment $leave_policy_id)} | format pattern "/providers/employers/leavePolicies/{leave_policy_id}/yearsofservicebasedleave"))
   let req_body = {"from": $body_from, "leaveEntitlement": $leave_entitlement, "upToAndIncluding": $up_to_and_including} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
@@ -12486,7 +12890,7 @@ export def "providers-employers-leave-policies-yearsofservicebasedleave create-y
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"Authorization": $authorization, "Accept": $hdr_accept} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json;version=2018-01-01" $req_body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json;version=2018-01-01" $req_body {query: {}, body: $req_body}
 }
 
 # Get list of linked employments for the leave policy
@@ -12512,13 +12916,14 @@ export def "providers-employers-leavepolicies-employments get-by-leave-policy" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($leave_policy_id | is-empty) { error make --unspanned { msg: "path parameter 'leavePolicyId' must be non-empty" } }
   let qp = [(serialize-qp "orderBy" $order_by "scalar") (serialize-qp "pageNumber" $page_number "scalar") (serialize-qp "pageSize" $page_size "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({leave_policy_id: (encode-path-segment $leave_policy_id)} | format pattern "/providers/employers/leavepolicies/{leave_policy_id}/employments") $qp)
   let accept_val = "application/json;version=2018-01-01"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"Authorization": $authorization, "Accept": $hdr_accept} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"orderBy": $order_by, "pageNumber": $page_number, "pageSize": $page_size} | compact), body: null}
 }
 
 # Create or delete multiple linked employments for the leave policy
@@ -12543,6 +12948,7 @@ export def "providers-employers-leavepolicies-employments update-by-leave-policy
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($leave_policy_id | is-empty) { error make --unspanned { msg: "path parameter 'leavePolicyId' must be non-empty" } }
   let full_url = (build-url $base ({leave_policy_id: (encode-path-segment $leave_policy_id)} | format pattern "/providers/employers/leavepolicies/{leave_policy_id}/employments"))
   let req_body = $body
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else if (($input | is-not-empty) and ($req_body | is-empty)) { $input } else { $req_body }
@@ -12550,7 +12956,7 @@ export def "providers-employers-leavepolicies-employments update-by-leave-policy
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"Authorization": $authorization, "Accept": $hdr_accept} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "patch" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body
+  do-request "patch" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: {}, body: $req_body}
 }
 
 # List of employers with fewer fields for performance reasons
@@ -12582,7 +12988,7 @@ export def "providers-employers-minimized get-by-user" [
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"Authorization": $authorization, "Accept": $hdr_accept} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"filter": $filter, "orderBy": $order_by, "pageNumber": $page_number, "pageSize": $page_size} | compact), body: null}
 }
 
 # Delete an employer note record
@@ -12606,19 +13012,20 @@ export def "providers-employers-notes delete" [
 ]: nothing -> record<version: record<obsoleteDate: string, resourceVersion: string>, messages: table<code: int, description: string, id: string, properties: list, type: string>, content: record> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($note_id | is-empty) { error make --unspanned { msg: "path parameter 'noteId' must be non-empty" } }
   let full_url = (build-url $base ({note_id: (encode-path-segment $note_id)} | format pattern "/providers/employers/notes/{note_id}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"Authorization": $authorization, "Accept": $hdr_accept, "If-Match": $if_match} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
 }
 
 # Details of an employer note
 #
 # GET /providers/employers/notes/{noteId}
 # operationId: GetEmployerNoteByNoteId
-export def "providers-employers-notes get-by-noteId" [
+export def "providers-employers-notes get-by-note-id" [
   note_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -12638,13 +13045,14 @@ export def "providers-employers-notes get-by-noteId" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($note_id | is-empty) { error make --unspanned { msg: "path parameter 'noteId' must be non-empty" } }
   let qp = [(serialize-qp "filter" $filter "scalar") (serialize-qp "orderBy" $order_by "scalar") (serialize-qp "pageNumber" $page_number "scalar") (serialize-qp "pageSize" $page_size "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({note_id: (encode-path-segment $note_id)} | format pattern "/providers/employers/notes/{note_id}") $qp)
   let accept_val = "application/json;version=2018-01-01"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"Authorization": $authorization, "Accept": $hdr_accept} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"filter": $filter, "orderBy": $order_by, "pageNumber": $page_number, "pageSize": $page_size} | compact), body: null}
 }
 
 # Edit an employer note record
@@ -12673,6 +13081,7 @@ export def "providers-employers-notes update" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($note_id | is-empty) { error make --unspanned { msg: "path parameter 'noteId' must be non-empty" } }
   let full_url = (build-url $base ({note_id: (encode-path-segment $note_id)} | format pattern "/providers/employers/notes/{note_id}"))
   let req_body = {"accessibleBy": $accessible_by, "note": $note, "subject": $subject} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
@@ -12680,7 +13089,7 @@ export def "providers-employers-notes update" [
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"Authorization": $authorization, "Accept": $hdr_accept, "If-Match": $if_match} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json;version=2018-01-01" $req_body
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json;version=2018-01-01" $req_body {query: {}, body: $req_body}
 }
 
 # Mark one or more notifications as read.
@@ -12711,7 +13120,7 @@ export def "providers-employers-notifications update" [
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"Authorization": $authorization, "Accept": $hdr_accept} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "patch" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body
+  do-request "patch" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: {}, body: $req_body}
 }
 
 # MDV notifications
@@ -12733,12 +13142,13 @@ export def "providers-employers-payroll-administrations-mdv-notifications update
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($payroll_administration_id | is-empty) { error make --unspanned { msg: "path parameter 'payrollAdministrationId' must be non-empty" } }
   let full_url = (build-url $base ({payroll_administration_id: (encode-path-segment $payroll_administration_id)} | format pattern "/providers/employers/payrollAdministrations/{payroll_administration_id}/mdvNotifications"))
   let accept_val = "application/json;version=2018-01-01"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"Authorization": $authorization} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "patch" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "patch" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
 }
 
 # Detail APG pension declaration for an administration
@@ -12765,13 +13175,14 @@ export def "providers-employers-payrolladministrations-apgpensiondeclarations ge
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($apg_pension_declaration_id | is-empty) { error make --unspanned { msg: "path parameter 'apgPensionDeclarationId' must be non-empty" } }
   let qp = [(serialize-qp "filter" $filter "scalar") (serialize-qp "orderBy" $order_by "scalar") (serialize-qp "pageNumber" $page_number "scalar") (serialize-qp "pageSize" $page_size "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({apg_pension_declaration_id: (encode-path-segment $apg_pension_declaration_id)} | format pattern "/providers/employers/payrolladministrations/apgpensiondeclarations/{apg_pension_declaration_id}") $qp)
   let accept_val = "application/json;version=2018-01-01"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"Authorization": $authorization, "Accept": $hdr_accept} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"filter": $filter, "orderBy": $order_by, "pageNumber": $page_number, "pageSize": $page_size} | compact), body: null}
 }
 
 # Change the status of a apg pension declaration
@@ -12796,6 +13207,7 @@ export def "providers-employers-payrolladministrations-apgpensiondeclarations up
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($apg_pension_declaration_id | is-empty) { error make --unspanned { msg: "path parameter 'apgPensionDeclarationId' must be non-empty" } }
   let full_url = (build-url $base ({apg_pension_declaration_id: (encode-path-segment $apg_pension_declaration_id)} | format pattern "/providers/employers/payrolladministrations/apgpensiondeclarations/{apg_pension_declaration_id}"))
   let req_body = {"action": $action} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
@@ -12803,7 +13215,7 @@ export def "providers-employers-payrolladministrations-apgpensiondeclarations up
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"Authorization": $authorization, "Accept": $hdr_accept} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "patch" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body
+  do-request "patch" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: {}, body: $req_body}
 }
 
 # Download the message of a of an APG pension declaration
@@ -12826,12 +13238,13 @@ export def "providers-employers-payrolladministrations-apgpensiondeclarations-me
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($apg_pension_declaration_id | is-empty) { error make --unspanned { msg: "path parameter 'apgPensionDeclarationId' must be non-empty" } }
   let full_url = (build-url $base ({apg_pension_declaration_id: (encode-path-segment $apg_pension_declaration_id)} | format pattern "/providers/employers/payrolladministrations/apgpensiondeclarations/{apg_pension_declaration_id}/message"))
   let accept_val = "application/xml"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"Authorization": $authorization, "Accept": $hdr_accept} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
 }
 
 # Download the overview report of an APG pension declaration
@@ -12854,12 +13267,13 @@ export def "providers-employers-payrolladministrations-apgpensiondeclarations-ov
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($apg_pension_declaration_id | is-empty) { error make --unspanned { msg: "path parameter 'apgPensionDeclarationId' must be non-empty" } }
   let full_url = (build-url $base ({apg_pension_declaration_id: (encode-path-segment $apg_pension_declaration_id)} | format pattern "/providers/employers/payrolladministrations/apgpensiondeclarations/{apg_pension_declaration_id}/overview"))
   let accept_val = "application/pdf"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"Authorization": $authorization, "Accept": $hdr_accept} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
 }
 
 # Details of a journal run
@@ -12882,12 +13296,13 @@ export def "providers-employers-payrolladministrations-journalruns get-journal-r
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($journalrun_id | is-empty) { error make --unspanned { msg: "path parameter 'journalrunId' must be non-empty" } }
   let full_url = (build-url $base ({journalrun_id: (encode-path-segment $journalrun_id)} | format pattern "/providers/employers/payrolladministrations/journalruns/{journalrun_id}"))
   let accept_val = "application/json;version=2018-01-01"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"Authorization": $authorization, "Accept": $hdr_accept} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
 }
 
 # Change the status of a journal run
@@ -12915,6 +13330,7 @@ export def "providers-employers-payrolladministrations-journalruns update-journa
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($journalrun_id | is-empty) { error make --unspanned { msg: "path parameter 'journalrunId' must be non-empty" } }
   let full_url = (build-url $base ({journalrun_id: (encode-path-segment $journalrun_id)} | format pattern "/providers/employers/payrolladministrations/journalruns/{journalrun_id}"))
   let req_body = {"action": $action, "application": $application, "message": $message} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
@@ -12922,7 +13338,7 @@ export def "providers-employers-payrolladministrations-journalruns update-journa
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"Authorization": $authorization, "Accept": $hdr_accept} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "patch" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json;version=2018-01-01" $req_body
+  do-request "patch" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json;version=2018-01-01" $req_body {query: {}, body: $req_body}
 }
 
 # Download the journal run
@@ -12949,6 +13365,7 @@ export def "providers-employers-payrolladministrations-journalruns-download crea
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($journalrun_id | is-empty) { error make --unspanned { msg: "path parameter 'journalrunId' must be non-empty" } }
   let full_url = (build-url $base ({journalrun_id: (encode-path-segment $journalrun_id)} | format pattern "/providers/employers/payrolladministrations/journalruns/{journalrun_id}/download"))
   let req_body = {"date": $date, "includeCostCenter": $include_cost_center, "includeCostUnit": $include_cost_unit} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
@@ -12956,7 +13373,7 @@ export def "providers-employers-payrolladministrations-journalruns-download crea
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"Authorization": $authorization, "Accept": $hdr_accept} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json;version=2018-01-01" $req_body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json;version=2018-01-01" $req_body {query: {}, body: $req_body}
 }
 
 # Errors of a journal run
@@ -12979,12 +13396,13 @@ export def "providers-employers-payrolladministrations-journalruns-errors get-jo
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($journalrun_id | is-empty) { error make --unspanned { msg: "path parameter 'journalrunId' must be non-empty" } }
   let full_url = (build-url $base ({journalrun_id: (encode-path-segment $journalrun_id)} | format pattern "/providers/employers/payrolladministrations/journalruns/{journalrun_id}/errors"))
   let accept_val = "application/json;version=2018-01-01"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"Authorization": $authorization, "Accept": $hdr_accept} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
 }
 
 # List export attempts for a journal run
@@ -13011,13 +13429,14 @@ export def "providers-employers-payrolladministrations-journalruns-export-audit-
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($journalrun_id | is-empty) { error make --unspanned { msg: "path parameter 'journalrunId' must be non-empty" } }
   let qp = [(serialize-qp "filter" $filter "scalar") (serialize-qp "orderBy" $order_by "scalar") (serialize-qp "pageNumber" $page_number "scalar") (serialize-qp "pageSize" $page_size "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({journalrun_id: (encode-path-segment $journalrun_id)} | format pattern "/providers/employers/payrolladministrations/journalruns/{journalrun_id}/exportAuditTrail") $qp)
   let accept_val = "application/json;version=2018-01-01"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"Authorization": $authorization, "Accept": $hdr_accept} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"filter": $filter, "orderBy": $order_by, "pageNumber": $page_number, "pageSize": $page_size} | compact), body: null}
 }
 
 # Get journal results for a journal run
@@ -13040,12 +13459,13 @@ export def "providers-employers-payrolladministrations-journalruns-results get-j
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($journalrun_id | is-empty) { error make --unspanned { msg: "path parameter 'journalrunId' must be non-empty" } }
   let full_url = (build-url $base ({journalrun_id: (encode-path-segment $journalrun_id)} | format pattern "/providers/employers/payrolladministrations/journalruns/{journalrun_id}/results"))
   let accept_val = "application/json;version=2018-01-01"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"Authorization": $authorization, "Accept": $hdr_accept} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
 }
 
 # Get journal run overview for a journal run
@@ -13074,13 +13494,14 @@ export def "providers-employers-payrolladministrations-journalruns-runoverview g
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($journalrun_id | is-empty) { error make --unspanned { msg: "path parameter 'journalrunId' must be non-empty" } }
   let qp = [(serialize-qp "reportJournalNumber" $report_journal_number "scalar") (serialize-qp "reportVoucherNumber" $report_voucher_number "scalar") (serialize-qp "reportDescription" $report_description "scalar") (serialize-qp "reportYear" $report_year "scalar") (serialize-qp "reportPeriodNumber" $report_period_number "scalar") (serialize-qp "reportDate" $report_date "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({journalrun_id: (encode-path-segment $journalrun_id)} | format pattern "/providers/employers/payrolladministrations/journalruns/{journalrun_id}/runoverview") $qp)
   let accept_val = "text/csv"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"Authorization": $authorization, "Accept": $hdr_accept} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"reportJournalNumber": $report_journal_number, "reportVoucherNumber": $report_voucher_number, "reportDescription": $report_description, "reportYear": $report_year, "reportPeriodNumber": $report_period_number, "reportDate": $report_date} | compact), body: null}
 }
 
 # Get journal run overview per employment for a journal run
@@ -13109,13 +13530,14 @@ export def "providers-employers-payrolladministrations-journalruns-runoverviewpe
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($journalrun_id | is-empty) { error make --unspanned { msg: "path parameter 'journalrunId' must be non-empty" } }
   let qp = [(serialize-qp "reportJournalNumber" $report_journal_number "scalar") (serialize-qp "reportVoucherNumber" $report_voucher_number "scalar") (serialize-qp "reportDescription" $report_description "scalar") (serialize-qp "reportYear" $report_year "scalar") (serialize-qp "reportPeriodNumber" $report_period_number "scalar") (serialize-qp "reportDate" $report_date "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({journalrun_id: (encode-path-segment $journalrun_id)} | format pattern "/providers/employers/payrolladministrations/journalruns/{journalrun_id}/runoverviewperemployment") $qp)
   let accept_val = "text/csv"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"Authorization": $authorization, "Accept": $hdr_accept} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"reportJournalNumber": $report_journal_number, "reportVoucherNumber": $report_voucher_number, "reportDescription": $report_description, "reportYear": $report_year, "reportPeriodNumber": $report_period_number, "reportDate": $report_date} | compact), body: null}
 }
 
 # Send the journal run
@@ -13157,6 +13579,7 @@ export def "providers-employers-payrolladministrations-journalruns-send create-j
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($journalrun_id | is-empty) { error make --unspanned { msg: "path parameter 'journalrunId' must be non-empty" } }
   let full_url = (build-url $base ({journalrun_id: (encode-path-segment $journalrun_id)} | format pattern "/providers/employers/payrolladministrations/journalruns/{journalrun_id}/send"))
   let req_body = {"account": $account, "accountKey": $account_key, "administration": $administration, "date": $date, "description": $description, "deviatingJournalSeries": $deviating_journal_series, "financialYear": $financial_year, "includeCostCenter": $include_cost_center, "includeCostUnit": $include_cost_unit, "journalCode": $journal_code, "journalNumber": $journal_number, "linkCostCenterToGroup": $link_cost_center_to_group, "linkCostUnitToGroup": $link_cost_unit_to_group, "period": $period, "subAdministration": $sub_administration} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
@@ -13164,7 +13587,7 @@ export def "providers-employers-payrolladministrations-journalruns-send create-j
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"Authorization": $authorization, "Accept": $hdr_accept} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json;version=2018-01-01" $req_body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json;version=2018-01-01" $req_body {query: {}, body: $req_body}
 }
 
 # Change the status of payrollruns
@@ -13195,7 +13618,7 @@ export def "providers-employers-payrolladministrations-payrollruns update-by-pay
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"Authorization": $authorization, "Accept": $hdr_accept} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "patch" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body
+  do-request "patch" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: {}, body: $req_body}
 }
 
 # Delete a payroll run note record
@@ -13219,12 +13642,13 @@ export def "providers-employers-payrolladministrations-payrollruns-notes delete-
 ]: nothing -> record<version: record<obsoleteDate: string, resourceVersion: string>, messages: table<code: int, description: string, id: string, properties: list, type: string>, content: record> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($note_id | is-empty) { error make --unspanned { msg: "path parameter 'noteId' must be non-empty" } }
   let full_url = (build-url $base ({note_id: (encode-path-segment $note_id)} | format pattern "/providers/employers/payrolladministrations/payrollruns/notes/{note_id}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"Authorization": $authorization, "Accept": $hdr_accept, "If-Match": $if_match} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
 }
 
 # Details of a payroll run note
@@ -13251,13 +13675,14 @@ export def "providers-employers-payrolladministrations-payrollruns-notes get-pay
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($note_id | is-empty) { error make --unspanned { msg: "path parameter 'noteId' must be non-empty" } }
   let qp = [(serialize-qp "filter" $filter "scalar") (serialize-qp "orderBy" $order_by "scalar") (serialize-qp "pageNumber" $page_number "scalar") (serialize-qp "pageSize" $page_size "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({note_id: (encode-path-segment $note_id)} | format pattern "/providers/employers/payrolladministrations/payrollruns/notes/{note_id}") $qp)
   let accept_val = "application/json;version=2018-01-01"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"Authorization": $authorization, "Accept": $hdr_accept} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"filter": $filter, "orderBy": $order_by, "pageNumber": $page_number, "pageSize": $page_size} | compact), body: null}
 }
 
 # Edit a payroll run note record
@@ -13286,6 +13711,7 @@ export def "providers-employers-payrolladministrations-payrollruns-notes update-
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($note_id | is-empty) { error make --unspanned { msg: "path parameter 'noteId' must be non-empty" } }
   let full_url = (build-url $base ({note_id: (encode-path-segment $note_id)} | format pattern "/providers/employers/payrolladministrations/payrollruns/notes/{note_id}"))
   let req_body = {"accessibleBy": $accessible_by, "note": $note, "subject": $subject} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
@@ -13293,7 +13719,7 @@ export def "providers-employers-payrolladministrations-payrollruns-notes update-
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"Authorization": $authorization, "Accept": $hdr_accept, "If-Match": $if_match} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json;version=2018-01-01" $req_body
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json;version=2018-01-01" $req_body {query: {}, body: $req_body}
 }
 
 # Download a SEPA file
@@ -13319,13 +13745,14 @@ export def "providers-employers-payrolladministrations-payrollruns-sepafiles get
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($sepafile_id | is-empty) { error make --unspanned { msg: "path parameter 'sepafileId' must be non-empty" } }
   let qp = [(serialize-qp "paymentType" $payment_type "scalar") (serialize-qp "batchBooking" $batch_booking "scalar") (serialize-qp "requestedExecutionDate" $requested_execution_date "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({sepafile_id: (encode-path-segment $sepafile_id)} | format pattern "/providers/employers/payrolladministrations/payrollruns/sepafiles/{sepafile_id}") $qp)
   let accept_val = "application/xml"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"Authorization": $authorization, "Accept": $hdr_accept} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"paymentType": $payment_type, "batchBooking": $batch_booking, "requestedExecutionDate": $requested_execution_date} | compact), body: null}
 }
 
 # Details of a payrollrun
@@ -13348,12 +13775,13 @@ export def "providers-employers-payrolladministrations-payrollruns get-payroll-r
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($payrollrun_id | is-empty) { error make --unspanned { msg: "path parameter 'payrollrunId' must be non-empty" } }
   let full_url = (build-url $base ({payrollrun_id: (encode-path-segment $payrollrun_id)} | format pattern "/providers/employers/payrolladministrations/payrollruns/{payrollrun_id}"))
   let accept_val = "application/json;version=2018-01-01"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"Authorization": $authorization, "Accept": $hdr_accept} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
 }
 
 # Get payroll run balance sheet
@@ -13377,12 +13805,13 @@ export def "providers-employers-payrolladministrations-payrollruns-balance-sheet
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($payrollrun_id | is-empty) { error make --unspanned { msg: "path parameter 'payrollrunId' must be non-empty" } }
   let full_url = (build-url $base ({payrollrun_id: (encode-path-segment $payrollrun_id)} | format pattern "/providers/employers/payrolladministrations/payrollruns/{payrollrun_id}/BalanceSheet"))
   let accept_val = ($accept | default "application/json;version=2018-01-01")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"Authorization": $authorization, "Accept": $hdr_accept} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
 }
 
 # Download the default set of downloads for a payroll run
@@ -13405,12 +13834,13 @@ export def "providers-employers-payrolladministrations-payrollruns-defaultset ge
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($payrollrun_id | is-empty) { error make --unspanned { msg: "path parameter 'payrollrunId' must be non-empty" } }
   let full_url = (build-url $base ({payrollrun_id: (encode-path-segment $payrollrun_id)} | format pattern "/providers/employers/payrolladministrations/payrollruns/{payrollrun_id}/defaultset"))
   let accept_val = "application/pdf"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"Authorization": $authorization, "Accept": $hdr_accept} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
 }
 
 # Download errors and warnings for a payroll run
@@ -13433,12 +13863,13 @@ export def "providers-employers-payrolladministrations-payrollruns-errorsandwarn
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($payrollrun_id | is-empty) { error make --unspanned { msg: "path parameter 'payrollrunId' must be non-empty" } }
   let full_url = (build-url $base ({payrollrun_id: (encode-path-segment $payrollrun_id)} | format pattern "/providers/employers/payrolladministrations/payrollruns/{payrollrun_id}/errorsandwarnings"))
   let accept_val = "application/pdf"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"Authorization": $authorization, "Accept": $hdr_accept} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
 }
 
 # Download the journal entries by distribution Unit.
@@ -13461,12 +13892,13 @@ export def "providers-employers-payrolladministrations-payrollruns-journalentrie
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($payrollrun_id | is-empty) { error make --unspanned { msg: "path parameter 'payrollrunId' must be non-empty" } }
   let full_url = (build-url $base ({payrollrun_id: (encode-path-segment $payrollrun_id)} | format pattern "/providers/employers/payrolladministrations/payrollruns/{payrollrun_id}/journalentriesperdistributionunitoverviews"))
   let accept_val = "application/pdf"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"Authorization": $authorization, "Accept": $hdr_accept} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
 }
 
 # Get a list of notes for a payroll run.
@@ -13493,13 +13925,14 @@ export def "providers-employers-payrolladministrations-payrollruns-notes get-pay
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($payrollrun_id | is-empty) { error make --unspanned { msg: "path parameter 'payrollrunId' must be non-empty" } }
   let qp = [(serialize-qp "filter" $filter "scalar") (serialize-qp "orderBy" $order_by "scalar") (serialize-qp "pageNumber" $page_number "scalar") (serialize-qp "pageSize" $page_size "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({payrollrun_id: (encode-path-segment $payrollrun_id)} | format pattern "/providers/employers/payrolladministrations/payrollruns/{payrollrun_id}/notes") $qp)
   let accept_val = "application/json;version=2018-01-01"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"Authorization": $authorization, "Accept": $hdr_accept} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"filter": $filter, "orderBy": $order_by, "pageNumber": $page_number, "pageSize": $page_size} | compact), body: null}
 }
 
 # Add a note for a payroll run
@@ -13527,6 +13960,7 @@ export def "providers-employers-payrolladministrations-payrollruns-notes create-
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($payrollrun_id | is-empty) { error make --unspanned { msg: "path parameter 'payrollrunId' must be non-empty" } }
   let full_url = (build-url $base ({payrollrun_id: (encode-path-segment $payrollrun_id)} | format pattern "/providers/employers/payrolladministrations/payrollruns/{payrollrun_id}/notes"))
   let req_body = {"accessibleBy": $accessible_by, "note": $note, "subject": $subject} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
@@ -13534,7 +13968,7 @@ export def "providers-employers-payrolladministrations-payrollruns-notes create-
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"Authorization": $authorization, "Accept": $hdr_accept} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json;version=2018-01-01" $req_body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json;version=2018-01-01" $req_body {query: {}, body: $req_body}
 }
 
 # Download payment overviews for a payroll run
@@ -13557,12 +13991,13 @@ export def "providers-employers-payrolladministrations-payrollruns-paymentovervi
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($payrollrun_id | is-empty) { error make --unspanned { msg: "path parameter 'payrollrunId' must be non-empty" } }
   let full_url = (build-url $base ({payrollrun_id: (encode-path-segment $payrollrun_id)} | format pattern "/providers/employers/payrolladministrations/payrollruns/{payrollrun_id}/paymentoverviews"))
   let accept_val = "application/pdf"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"Authorization": $authorization, "Accept": $hdr_accept} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
 }
 
 # Download payroll control register for a payroll run
@@ -13585,12 +14020,13 @@ export def "providers-employers-payrolladministrations-payrollruns-payrollcontro
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($payrollrun_id | is-empty) { error make --unspanned { msg: "path parameter 'payrollrunId' must be non-empty" } }
   let full_url = (build-url $base ({payrollrun_id: (encode-path-segment $payrollrun_id)} | format pattern "/providers/employers/payrolladministrations/payrollruns/{payrollrun_id}/payrollcontrolregister"))
   let accept_val = "application/pdf"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"Authorization": $authorization, "Accept": $hdr_accept} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
 }
 
 # Download payslips for a payroll run
@@ -13613,12 +14049,13 @@ export def "providers-employers-payrolladministrations-payrollruns-payslips get-
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($payrollrun_id | is-empty) { error make --unspanned { msg: "path parameter 'payrollrunId' must be non-empty" } }
   let full_url = (build-url $base ({payrollrun_id: (encode-path-segment $payrollrun_id)} | format pattern "/providers/employers/payrolladministrations/payrollruns/{payrollrun_id}/payslips"))
   let accept_val = "application/pdf"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"Authorization": $authorization, "Accept": $hdr_accept} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
 }
 
 # Get results for a payroll run
@@ -13641,12 +14078,13 @@ export def "providers-employers-payrolladministrations-payrollruns-results get-p
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($payrollrun_id | is-empty) { error make --unspanned { msg: "path parameter 'payrollrunId' must be non-empty" } }
   let full_url = (build-url $base ({payrollrun_id: (encode-path-segment $payrollrun_id)} | format pattern "/providers/employers/payrolladministrations/payrollruns/{payrollrun_id}/results"))
   let accept_val = "application/json;version=2018-01-01"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"Authorization": $authorization, "Accept": $hdr_accept} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
 }
 
 # Download run overviews for a payroll run
@@ -13669,12 +14107,13 @@ export def "providers-employers-payrolladministrations-payrollruns-runoverviews 
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($payrollrun_id | is-empty) { error make --unspanned { msg: "path parameter 'payrollrunId' must be non-empty" } }
   let full_url = (build-url $base ({payrollrun_id: (encode-path-segment $payrollrun_id)} | format pattern "/providers/employers/payrolladministrations/payrollruns/{payrollrun_id}/runoverviews"))
   let accept_val = "application/pdf"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"Authorization": $authorization, "Accept": $hdr_accept} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
 }
 
 # Get a list of SEPA files for a payroll run
@@ -13697,12 +14136,13 @@ export def "providers-employers-payrolladministrations-payrollruns-sepafiles get
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($payrollrun_id | is-empty) { error make --unspanned { msg: "path parameter 'payrollrunId' must be non-empty" } }
   let full_url = (build-url $base ({payrollrun_id: (encode-path-segment $payrollrun_id)} | format pattern "/providers/employers/payrolladministrations/payrollruns/{payrollrun_id}/sepafiles"))
   let accept_val = "application/json;version=2018-01-01"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"Authorization": $authorization, "Accept": $hdr_accept} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
 }
 
 # Download a total SEPA file
@@ -13728,13 +14168,14 @@ export def "providers-employers-payrolladministrations-payrollruns-totalsepafile
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($payrollrun_id | is-empty) { error make --unspanned { msg: "path parameter 'payrollrunId' must be non-empty" } }
   let qp = [(serialize-qp "paymentType" $payment_type "scalar") (serialize-qp "batchBooking" $batch_booking "scalar") (serialize-qp "requestedExecutionDate" $requested_execution_date "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({payrollrun_id: (encode-path-segment $payrollrun_id)} | format pattern "/providers/employers/payrolladministrations/payrollruns/{payrollrun_id}/totalsepafile") $qp)
   let accept_val = "application/xml"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"Authorization": $authorization, "Accept": $hdr_accept} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"paymentType": $payment_type, "batchBooking": $batch_booking, "requestedExecutionDate": $requested_execution_date} | compact), body: null}
 }
 
 # Undo payroll run (verwijderen loonrun)
@@ -13757,12 +14198,13 @@ export def "providers-employers-payrolladministrations-payrollruns-undo create-p
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($payrollrun_id | is-empty) { error make --unspanned { msg: "path parameter 'payrollrunId' must be non-empty" } }
   let full_url = (build-url $base ({payrollrun_id: (encode-path-segment $payrollrun_id)} | format pattern "/providers/employers/payrolladministrations/payrollruns/{payrollrun_id}/undo"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"Authorization": $authorization, "Accept": $hdr_accept} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
 }
 
 # Download wage sheets for a payroll run
@@ -13786,12 +14228,13 @@ export def "providers-employers-payrolladministrations-payrollruns-wagesheets ge
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($payrollrun_id | is-empty) { error make --unspanned { msg: "path parameter 'payrollrunId' must be non-empty" } }
   let full_url = (build-url $base ({payrollrun_id: (encode-path-segment $payrollrun_id)} | format pattern "/providers/employers/payrolladministrations/payrollruns/{payrollrun_id}/wagesheets"))
   let accept_val = ($accept | default "application/pdf")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"Authorization": $authorization, "Accept": $hdr_accept} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
 }
 
 # Change the status of payroll tax returns
@@ -13822,7 +14265,7 @@ export def "providers-employers-payrolladministrations-payrolltaxreturns update-
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"Authorization": $authorization, "Accept": $hdr_accept} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "patch" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body
+  do-request "patch" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: {}, body: $req_body}
 }
 
 # Change the status of payroll tax returns
@@ -13847,6 +14290,7 @@ export def "providers-employers-payrolladministrations-payrolltaxreturns update-
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($message_reference | is-empty) { error make --unspanned { msg: "path parameter 'messageReference' must be non-empty" } }
   let full_url = (build-url $base ({message_reference: (encode-path-segment $message_reference)} | format pattern "/providers/employers/payrolladministrations/payrolltaxreturns/{message_reference}"))
   let req_body = {"action": $action} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
@@ -13854,7 +14298,7 @@ export def "providers-employers-payrolladministrations-payrolltaxreturns update-
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"Authorization": $authorization, "Accept": $hdr_accept} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "patch" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body
+  do-request "patch" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: {}, body: $req_body}
 }
 
 # Send the response message for the payroll tax return
@@ -13879,6 +14323,7 @@ export def "providers-employers-payrolladministrations-payrolltaxreturns-sendres
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($message_reference | is-empty) { error make --unspanned { msg: "path parameter 'messageReference' must be non-empty" } }
   let full_url = (build-url $base ({message_reference: (encode-path-segment $message_reference)} | format pattern "/providers/employers/payrolladministrations/payrolltaxreturns/{message_reference}/sendresponsemessagebymessagereference"))
   let req_body = {"responseMessageFile": $response_message_file} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
@@ -13886,7 +14331,7 @@ export def "providers-employers-payrolladministrations-payrolltaxreturns-sendres
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"Authorization": $authorization, "Accept": $hdr_accept} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: {}, body: $req_body}
 }
 
 # Details of a tax return for an administration
@@ -13909,12 +14354,13 @@ export def "providers-employers-payrolladministrations-payrolltaxreturns get-pay
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($payrolltaxreturn_id | is-empty) { error make --unspanned { msg: "path parameter 'payrolltaxreturnId' must be non-empty" } }
   let full_url = (build-url $base ({payrolltaxreturn_id: (encode-path-segment $payrolltaxreturn_id)} | format pattern "/providers/employers/payrolladministrations/payrolltaxreturns/{payrolltaxreturn_id}"))
   let accept_val = "application/json;version=2018-01-01"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"Authorization": $authorization, "Accept": $hdr_accept} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
 }
 
 # Pay payroll taxes using IDEAL
@@ -13937,12 +14383,13 @@ export def "providers-employers-payrolladministrations-payrolltaxreturns-ideal g
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($payrolltaxreturn_id | is-empty) { error make --unspanned { msg: "path parameter 'payrolltaxreturnId' must be non-empty" } }
   let full_url = (build-url $base ({payrolltaxreturn_id: (encode-path-segment $payrolltaxreturn_id)} | format pattern "/providers/employers/payrolladministrations/payrolltaxreturns/{payrolltaxreturn_id}/ideal"))
   let accept_val = "application/json;version=2018-01-01"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"Authorization": $authorization, "Accept": $hdr_accept} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
 }
 
 # Get the status of the IDEAL payment
@@ -13965,12 +14412,13 @@ export def "providers-employers-payrolladministrations-payrolltaxreturns-ideal-p
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($payrolltaxreturn_id | is-empty) { error make --unspanned { msg: "path parameter 'payrolltaxreturnId' must be non-empty" } }
   let full_url = (build-url $base ({payrolltaxreturn_id: (encode-path-segment $payrolltaxreturn_id)} | format pattern "/providers/employers/payrolladministrations/payrolltaxreturns/{payrolltaxreturn_id}/idealPaymentStatus"))
   let accept_val = "application/json;version=2018-01-01"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"Authorization": $authorization, "Accept": $hdr_accept} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
 }
 
 # Download the message of a payroll tax return
@@ -13993,12 +14441,13 @@ export def "providers-employers-payrolladministrations-payrolltaxreturns-message
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($payrolltaxreturn_id | is-empty) { error make --unspanned { msg: "path parameter 'payrolltaxreturnId' must be non-empty" } }
   let full_url = (build-url $base ({payrolltaxreturn_id: (encode-path-segment $payrolltaxreturn_id)} | format pattern "/providers/employers/payrolladministrations/payrolltaxreturns/{payrolltaxreturn_id}/message"))
   let accept_val = "application/xml"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"Authorization": $authorization, "Accept": $hdr_accept} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
 }
 
 # Download the overview report of a payroll tax return
@@ -14021,12 +14470,13 @@ export def "providers-employers-payrolladministrations-payrolltaxreturns-overvie
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($payrolltaxreturn_id | is-empty) { error make --unspanned { msg: "path parameter 'payrolltaxreturnId' must be non-empty" } }
   let full_url = (build-url $base ({payrolltaxreturn_id: (encode-path-segment $payrolltaxreturn_id)} | format pattern "/providers/employers/payrolladministrations/payrolltaxreturns/{payrolltaxreturn_id}/overview"))
   let accept_val = "application/pdf"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"Authorization": $authorization, "Accept": $hdr_accept} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
 }
 
 # Send the response message for the payroll tax return
@@ -14051,6 +14501,7 @@ export def "providers-employers-payrolladministrations-payrolltaxreturns-sendres
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($payrolltaxreturn_id | is-empty) { error make --unspanned { msg: "path parameter 'payrolltaxreturnId' must be non-empty" } }
   let full_url = (build-url $base ({payrolltaxreturn_id: (encode-path-segment $payrolltaxreturn_id)} | format pattern "/providers/employers/payrolladministrations/payrolltaxreturns/{payrolltaxreturn_id}/sendresponsemessage"))
   let req_body = {"responseMessageFile": $response_message_file} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
@@ -14058,7 +14509,7 @@ export def "providers-employers-payrolladministrations-payrolltaxreturns-sendres
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"Authorization": $authorization, "Accept": $hdr_accept} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: {}, body: $req_body}
 }
 
 # Detail UPA pension declaration
@@ -14085,13 +14536,14 @@ export def "providers-employers-payrolladministrations-upapensiondeclarations ge
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($upa_pension_declaration_id | is-empty) { error make --unspanned { msg: "path parameter 'upaPensionDeclarationId' must be non-empty" } }
   let qp = [(serialize-qp "filter" $filter "scalar") (serialize-qp "orderBy" $order_by "scalar") (serialize-qp "pageNumber" $page_number "scalar") (serialize-qp "pageSize" $page_size "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({upa_pension_declaration_id: (encode-path-segment $upa_pension_declaration_id)} | format pattern "/providers/employers/payrolladministrations/upapensiondeclarations/{upa_pension_declaration_id}") $qp)
   let accept_val = "application/json;version=2018-01-01"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"Authorization": $authorization, "Accept": $hdr_accept} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"filter": $filter, "orderBy": $order_by, "pageNumber": $page_number, "pageSize": $page_size} | compact), body: null}
 }
 
 # Change the status of a upa pension declaration
@@ -14116,6 +14568,7 @@ export def "providers-employers-payrolladministrations-upapensiondeclarations up
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($upa_pension_declaration_id | is-empty) { error make --unspanned { msg: "path parameter 'upaPensionDeclarationId' must be non-empty" } }
   let full_url = (build-url $base ({upa_pension_declaration_id: (encode-path-segment $upa_pension_declaration_id)} | format pattern "/providers/employers/payrolladministrations/upapensiondeclarations/{upa_pension_declaration_id}"))
   let req_body = {"action": $action} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
@@ -14123,7 +14576,7 @@ export def "providers-employers-payrolladministrations-upapensiondeclarations up
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"Authorization": $authorization, "Accept": $hdr_accept} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "patch" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body
+  do-request "patch" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: {}, body: $req_body}
 }
 
 # Download the message of a of an UPA pension declaration
@@ -14146,12 +14599,13 @@ export def "providers-employers-payrolladministrations-upapensiondeclarations-me
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($upa_pension_declaration_id | is-empty) { error make --unspanned { msg: "path parameter 'upaPensionDeclarationId' must be non-empty" } }
   let full_url = (build-url $base ({upa_pension_declaration_id: (encode-path-segment $upa_pension_declaration_id)} | format pattern "/providers/employers/payrolladministrations/upapensiondeclarations/{upa_pension_declaration_id}/message"))
   let accept_val = "application/xml"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"Authorization": $authorization, "Accept": $hdr_accept} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
 }
 
 # Download accumulated basic journal results report
@@ -14178,13 +14632,14 @@ export def "providers-employers-payrolladministrations-accumulatedbasicjournalre
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($payroll_administration_id | is-empty) { error make --unspanned { msg: "path parameter 'payrollAdministrationId' must be non-empty" } }
   let qp = [(serialize-qp "reportType" $report_type "scalar") (serialize-qp "groupingType" $grouping_type "scalar") (serialize-qp "startPeriod" $start_period "scalar") (serialize-qp "endPeriod" $end_period "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({payroll_administration_id: (encode-path-segment $payroll_administration_id)} | format pattern "/providers/employers/payrolladministrations/{payroll_administration_id}/accumulatedbasicjournalresultsreport") $qp)
   let accept_val = "application/pdf"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"Authorization": $authorization, "Accept": $hdr_accept} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"reportType": $report_type, "groupingType": $grouping_type, "startPeriod": $start_period, "endPeriod": $end_period} | compact), body: null}
 }
 
 # Download accumulations and balances reports
@@ -14211,13 +14666,14 @@ export def "providers-employers-payrolladministrations-accumulationsandbalancesr
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($payroll_administration_id | is-empty) { error make --unspanned { msg: "path parameter 'payrollAdministrationId' must be non-empty" } }
   let qp = [(serialize-qp "reportType" $report_type "scalar") (serialize-qp "reportYear" $report_year "scalar") (serialize-qp "includeEmploymentsThatEndedBeforeStartOfTheYear" $include_employments_that_ended_before_start_of_the_year "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({payroll_administration_id: (encode-path-segment $payroll_administration_id)} | format pattern "/providers/employers/payrolladministrations/{payroll_administration_id}/accumulationsandbalancesreport") $qp)
   let accept_val = ($accept | default "application/pdf")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"Authorization": $authorization, "Accept": $hdr_accept} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"reportType": $report_type, "reportYear": $report_year, "includeEmploymentsThatEndedBeforeStartOfTheYear": $include_employments_that_ended_before_start_of_the_year} | compact), body: null}
 }
 
 # Download annual payroll tax return report
@@ -14241,13 +14697,14 @@ export def "providers-employers-payrolladministrations-annualpayrolltaxreturnrep
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($payroll_administration_id | is-empty) { error make --unspanned { msg: "path parameter 'payrollAdministrationId' must be non-empty" } }
   let qp = [(serialize-qp "reportYear" $report_year "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({payroll_administration_id: (encode-path-segment $payroll_administration_id)} | format pattern "/providers/employers/payrolladministrations/{payroll_administration_id}/annualpayrolltaxreturnreport") $qp)
   let accept_val = "application/pdf"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"Authorization": $authorization, "Accept": $hdr_accept} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"reportYear": $report_year} | compact), body: null}
 }
 
 # Download annual wage sheet report
@@ -14274,13 +14731,14 @@ export def "providers-employers-payrolladministrations-annualwagesheetreport get
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($payroll_administration_id | is-empty) { error make --unspanned { msg: "path parameter 'payrollAdministrationId' must be non-empty" } }
   let qp = [(serialize-qp "reportYear" $report_year "scalar") (serialize-qp "startPeriod" $start_period "scalar") (serialize-qp "endPeriod" $end_period "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({payroll_administration_id: (encode-path-segment $payroll_administration_id)} | format pattern "/providers/employers/payrolladministrations/{payroll_administration_id}/annualwagesheetreport") $qp)
   let accept_val = ($accept | default "application/pdf")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"Authorization": $authorization, "Accept": $hdr_accept} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"reportYear": $report_year, "startPeriod": $start_period, "endPeriod": $end_period} | compact), body: null}
 }
 
 # List of APG pension declarations for an administration
@@ -14307,13 +14765,14 @@ export def "providers-employers-payrolladministrations-apgpensiondeclarations ge
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($payroll_administration_id | is-empty) { error make --unspanned { msg: "path parameter 'payrollAdministrationId' must be non-empty" } }
   let qp = [(serialize-qp "filter" $filter "scalar") (serialize-qp "orderBy" $order_by "scalar") (serialize-qp "pageNumber" $page_number "scalar") (serialize-qp "pageSize" $page_size "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({payroll_administration_id: (encode-path-segment $payroll_administration_id)} | format pattern "/providers/employers/payrolladministrations/{payroll_administration_id}/apgpensiondeclarations") $qp)
   let accept_val = "application/json;version=2018-01-01"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"Authorization": $authorization, "Accept": $hdr_accept} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"filter": $filter, "orderBy": $order_by, "pageNumber": $page_number, "pageSize": $page_size} | compact), body: null}
 }
 
 # Initiate a APG pension declaration
@@ -14336,12 +14795,13 @@ export def "providers-employers-payrolladministrations-apgpensiondeclarations-in
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($payroll_administration_id | is-empty) { error make --unspanned { msg: "path parameter 'payrollAdministrationId' must be non-empty" } }
   let full_url = (build-url $base ({payroll_administration_id: (encode-path-segment $payroll_administration_id)} | format pattern "/providers/employers/payrolladministrations/{payroll_administration_id}/apgpensiondeclarations/initiate"))
   let accept_val = "application/json;version=2018-01-01"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"Authorization": $authorization, "Accept": $hdr_accept} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
 }
 
 # Download attachment of earnings report
@@ -14365,13 +14825,14 @@ export def "providers-employers-payrolladministrations-attachmentsofearningsrepo
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($payroll_administration_id | is-empty) { error make --unspanned { msg: "path parameter 'payrollAdministrationId' must be non-empty" } }
   let qp = [(serialize-qp "reportYear" $report_year "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({payroll_administration_id: (encode-path-segment $payroll_administration_id)} | format pattern "/providers/employers/payrolladministrations/{payroll_administration_id}/attachmentsofearningsreport") $qp)
   let accept_val = "text/csv"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"Authorization": $authorization, "Accept": $hdr_accept} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"reportYear": $report_year} | compact), body: null}
 }
 
 # Get payroll period data audit trail
@@ -14399,13 +14860,14 @@ export def "providers-employers-payrolladministrations-audit-trail-payroll-perio
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($payroll_administration_id | is-empty) { error make --unspanned { msg: "path parameter 'payrollAdministrationId' must be non-empty" } }
   let qp = [(serialize-qp "startDate" $start_date "scalar") (serialize-qp "endDate" $end_date "scalar") (serialize-qp "filter" $filter "scalar") (serialize-qp "orderBy" $order_by "scalar") (serialize-qp "pageNumber" $page_number "scalar") (serialize-qp "pageSize" $page_size "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({payroll_administration_id: (encode-path-segment $payroll_administration_id)} | format pattern "/providers/employers/payrolladministrations/{payroll_administration_id}/auditTrail/PayrollPeriodData") $qp)
   let accept_val = "application/json;version=2018-01-01"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"Authorization": $authorization, "Accept": $hdr_accept} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"startDate": $start_date, "endDate": $end_date, "filter": $filter, "orderBy": $order_by, "pageNumber": $page_number, "pageSize": $page_size} | compact), body: null}
 }
 
 # Available payroll component sets
@@ -14428,12 +14890,13 @@ export def "providers-employers-payrolladministrations-availablepayrollcomponent
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($payroll_administration_id | is-empty) { error make --unspanned { msg: "path parameter 'payrollAdministrationId' must be non-empty" } }
   let full_url = (build-url $base ({payroll_administration_id: (encode-path-segment $payroll_administration_id)} | format pattern "/providers/employers/payrolladministrations/{payroll_administration_id}/availablepayrollcomponentsets"))
   let accept_val = "application/json;version=2018-01-01"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"Authorization": $authorization, "Accept": $hdr_accept} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
 }
 
 # Download WAB deviations report
@@ -14457,13 +14920,14 @@ export def "providers-employers-payrolladministrations-deviatingpremiumswab get-
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($payroll_administration_id | is-empty) { error make --unspanned { msg: "path parameter 'payrollAdministrationId' must be non-empty" } }
   let qp = [(serialize-qp "reportYear" $report_year "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({payroll_administration_id: (encode-path-segment $payroll_administration_id)} | format pattern "/providers/employers/payrolladministrations/{payroll_administration_id}/deviatingpremiumswab") $qp)
   let accept_val = "application/pdf"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"Authorization": $authorization, "Accept": $hdr_accept} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"reportYear": $report_year} | compact), body: null}
 }
 
 # Download the audit trail for the employment payroll data
@@ -14488,13 +14952,14 @@ export def "providers-employers-payrolladministrations-employment-payroll-data-a
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($payroll_administration_id | is-empty) { error make --unspanned { msg: "path parameter 'payrollAdministrationId' must be non-empty" } }
   let qp = [(serialize-qp "startDate" $start_date "scalar") (serialize-qp "endDate" $end_date "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({payroll_administration_id: (encode-path-segment $payroll_administration_id)} | format pattern "/providers/employers/payrolladministrations/{payroll_administration_id}/employmentPayrollDataAuditTrail") $qp)
   let accept_val = "application/pdf"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"Authorization": $authorization, "Accept": $hdr_accept} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"startDate": $start_date, "endDate": $end_date} | compact), body: null}
 }
 
 # List of journal runs for an administration
@@ -14521,13 +14986,14 @@ export def "providers-employers-payrolladministrations-journalruns get-journal-r
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($payroll_administration_id | is-empty) { error make --unspanned { msg: "path parameter 'payrollAdministrationId' must be non-empty" } }
   let qp = [(serialize-qp "filter" $filter "scalar") (serialize-qp "orderBy" $order_by "scalar") (serialize-qp "pageNumber" $page_number "scalar") (serialize-qp "pageSize" $page_size "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({payroll_administration_id: (encode-path-segment $payroll_administration_id)} | format pattern "/providers/employers/payrolladministrations/{payroll_administration_id}/journalruns") $qp)
   let accept_val = "application/json;version=2018-01-01"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"Authorization": $authorization, "Accept": $hdr_accept} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"filter": $filter, "orderBy": $order_by, "pageNumber": $page_number, "pageSize": $page_size} | compact), body: null}
 }
 
 # Initiate journal run (journaliseren)
@@ -14550,12 +15016,13 @@ export def "providers-employers-payrolladministrations-journalruns-initiate crea
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($payroll_administration_id | is-empty) { error make --unspanned { msg: "path parameter 'payrollAdministrationId' must be non-empty" } }
   let full_url = (build-url $base ({payroll_administration_id: (encode-path-segment $payroll_administration_id)} | format pattern "/providers/employers/payrolladministrations/{payroll_administration_id}/journalruns/initiate"))
   let accept_val = "application/json;version=2018-01-01"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"Authorization": $authorization, "Accept": $hdr_accept} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
 }
 
 # Download the audit trail for the payroll period data
@@ -14580,13 +15047,14 @@ export def "providers-employers-payrolladministrations-payroll-period-data-audit
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($payroll_administration_id | is-empty) { error make --unspanned { msg: "path parameter 'payrollAdministrationId' must be non-empty" } }
   let qp = [(serialize-qp "startDate" $start_date "scalar") (serialize-qp "endDate" $end_date "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({payroll_administration_id: (encode-path-segment $payroll_administration_id)} | format pattern "/providers/employers/payrolladministrations/{payroll_administration_id}/payrollPeriodDataAuditTrail") $qp)
   let accept_val = "application/pdf"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"Authorization": $authorization, "Accept": $hdr_accept} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"startDate": $start_date, "endDate": $end_date} | compact), body: null}
 }
 
 # List of payroll period data on payroll administration level
@@ -14617,13 +15085,15 @@ export def "providers-employers-payrolladministrations-payroll-periods-payrollpe
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($payroll_administration_id | is-empty) { error make --unspanned { msg: "path parameter 'payrollAdministrationId' must be non-empty" } }
+  if ($payroll_period_id | is-empty) { error make --unspanned { msg: "path parameter 'payrollPeriodId' must be non-empty" } }
   let qp = [(serialize-qp "payslipType" $payslip_type "scalar") (serialize-qp "payrollComponentSet" $payroll_component_set "scalar") (serialize-qp "payrollComponentCategory" $payroll_component_category "scalar") (serialize-qp "filter" $filter "scalar") (serialize-qp "orderBy" $order_by "scalar") (serialize-qp "pageNumber" $page_number "scalar") (serialize-qp "pageSize" $page_size "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({payroll_administration_id: (encode-path-segment $payroll_administration_id), payroll_period_id: (encode-path-segment $payroll_period_id)} | format pattern "/providers/employers/payrolladministrations/{payroll_administration_id}/payrollPeriods/{payroll_period_id}/payrollperioddata") $qp)
   let accept_val = "application/json;version=2018-01-01"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"Authorization": $authorization, "Accept": $hdr_accept} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"payslipType": $payslip_type, "payrollComponentSet": $payroll_component_set, "payrollComponentCategory": $payroll_component_category, "filter": $filter, "orderBy": $order_by, "pageNumber": $page_number, "pageSize": $page_size} | compact), body: null}
 }
 
 # Download payroll administration configuration report
@@ -14647,13 +15117,14 @@ export def "providers-employers-payrolladministrations-payrolladministrationsett
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($payroll_administration_id | is-empty) { error make --unspanned { msg: "path parameter 'payrollAdministrationId' must be non-empty" } }
   let qp = [(serialize-qp "reportYear" $report_year "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({payroll_administration_id: (encode-path-segment $payroll_administration_id)} | format pattern "/providers/employers/payrolladministrations/{payroll_administration_id}/payrolladministrationsettingsreport") $qp)
   let accept_val = "application/pdf"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"Authorization": $authorization, "Accept": $hdr_accept} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"reportYear": $report_year} | compact), body: null}
 }
 
 # Payroll components
@@ -14677,12 +15148,14 @@ export def "providers-employers-payrolladministrations-payrollcomponents-year ge
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($payroll_administration_id | is-empty) { error make --unspanned { msg: "path parameter 'payrollAdministrationId' must be non-empty" } }
+  if ($year | is-empty) { error make --unspanned { msg: "path parameter 'year' must be non-empty" } }
   let full_url = (build-url $base ({payroll_administration_id: (encode-path-segment $payroll_administration_id), year: (encode-path-segment $year)} | format pattern "/providers/employers/payrolladministrations/{payroll_administration_id}/payrollcomponents/year/{year}"))
   let accept_val = "application/json;version=2018-01-01"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"Authorization": $authorization, "Accept": $hdr_accept} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
 }
 
 # List of all available payroll periods and runs
@@ -14705,12 +15178,13 @@ export def "providers-employers-payrolladministrations-payrollperiods get-payrol
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($payroll_administration_id | is-empty) { error make --unspanned { msg: "path parameter 'payrollAdministrationId' must be non-empty" } }
   let full_url = (build-url $base ({payroll_administration_id: (encode-path-segment $payroll_administration_id)} | format pattern "/providers/employers/payrolladministrations/{payroll_administration_id}/payrollperiods"))
   let accept_val = "application/json;version=2018-01-01"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"Authorization": $authorization, "Accept": $hdr_accept} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
 }
 
 # Get the results of the given payroll period and the one before
@@ -14734,13 +15208,14 @@ export def "providers-employers-payrolladministrations-payrollperiods-compare ge
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($payroll_administration_id | is-empty) { error make --unspanned { msg: "path parameter 'payrollAdministrationId' must be non-empty" } }
   let qp = [(serialize-qp "payrollPeriodId" $payroll_period_id "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({payroll_administration_id: (encode-path-segment $payroll_administration_id)} | format pattern "/providers/employers/payrolladministrations/{payroll_administration_id}/payrollperiods/compare") $qp)
   let accept_val = "application/json;version=2018-01-01"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"Authorization": $authorization, "Accept": $hdr_accept} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"payrollPeriodId": $payroll_period_id} | compact), body: null}
 }
 
 # Initialise Payroll Period (automatische processen)
@@ -14770,6 +15245,7 @@ export def "providers-employers-payrolladministrations-payrollperiods-initialise
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($payroll_administration_id | is-empty) { error make --unspanned { msg: "path parameter 'payrollAdministrationId' must be non-empty" } }
   let full_url = (build-url $base ({payroll_administration_id: (encode-path-segment $payroll_administration_id)} | format pattern "/providers/employers/payrolladministrations/{payroll_administration_id}/payrollperiods/initialise"))
   let req_body = {"payrollPeriod": $payroll_period, "setAnnualBaseForCalculationsBasedOnFunds": $set_annual_base_for_calculations_based_on_funds, "setBaseForCalculations": $set_base_for_calculations, "setHoursWorked": $set_hours_worked, "setLeaveHours": $set_leave_hours} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
@@ -14777,7 +15253,7 @@ export def "providers-employers-payrolladministrations-payrollperiods-initialise
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"Authorization": $authorization, "Accept": $hdr_accept} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json;version=2018-01-01" $req_body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json;version=2018-01-01" $req_body {query: {}, body: $req_body}
 }
 
 # List of all available payroll periods
@@ -14800,12 +15276,13 @@ export def "providers-employers-payrolladministrations-payrollperiods-minimized 
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($payroll_administration_id | is-empty) { error make --unspanned { msg: "path parameter 'payrollAdministrationId' must be non-empty" } }
   let full_url = (build-url $base ({payroll_administration_id: (encode-path-segment $payroll_administration_id)} | format pattern "/providers/employers/payrolladministrations/{payroll_administration_id}/payrollperiods/minimized"))
   let accept_val = "application/json;version=2018-01-01"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"Authorization": $authorization, "Accept": $hdr_accept} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
 }
 
 # Get payroll results for the given payroll period
@@ -14831,13 +15308,15 @@ export def "providers-employers-payrolladministrations-payrollperiods-payrollres
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($payroll_administration_id | is-empty) { error make --unspanned { msg: "path parameter 'payrollAdministrationId' must be non-empty" } }
+  if ($payroll_period_id | is-empty) { error make --unspanned { msg: "path parameter 'payrollPeriodId' must be non-empty" } }
   let qp = [(serialize-qp "payrollComponents" $payroll_components "multi") (serialize-qp "payrollComponentSet" $payroll_component_set "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({payroll_administration_id: (encode-path-segment $payroll_administration_id), payroll_period_id: (encode-path-segment $payroll_period_id)} | format pattern "/providers/employers/payrolladministrations/{payroll_administration_id}/payrollperiods/{payroll_period_id}/payrollresults") $qp)
   let accept_val = "application/json;version=2018-01-01"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"Authorization": $authorization, "Accept": $hdr_accept} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"payrollComponents": $payroll_components, "payrollComponentSet": $payroll_component_set} | compact), body: null}
 }
 
 # Process Information about a payroll on administration level
@@ -14862,13 +15341,14 @@ export def "providers-employers-payrolladministrations-payrollprocessoverview ge
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($payroll_administration_id | is-empty) { error make --unspanned { msg: "path parameter 'payrollAdministrationId' must be non-empty" } }
   let qp = [(serialize-qp "payrollPeriodIdStart" $payroll_period_id_start "scalar") (serialize-qp "payrollPeriodIdEnd" $payroll_period_id_end "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({payroll_administration_id: (encode-path-segment $payroll_administration_id)} | format pattern "/providers/employers/payrolladministrations/{payroll_administration_id}/payrollprocessoverview") $qp)
   let accept_val = "application/json;version=2018-01-01"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"Authorization": $authorization, "Accept": $hdr_accept} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"payrollPeriodIdStart": $payroll_period_id_start, "payrollPeriodIdEnd": $payroll_period_id_end} | compact), body: null}
 }
 
 # List of payroll runs for an administration
@@ -14895,13 +15375,14 @@ export def "providers-employers-payrolladministrations-payrollruns get-payroll-r
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($payroll_administration_id | is-empty) { error make --unspanned { msg: "path parameter 'payrollAdministrationId' must be non-empty" } }
   let qp = [(serialize-qp "filter" $filter "scalar") (serialize-qp "orderBy" $order_by "scalar") (serialize-qp "pageNumber" $page_number "scalar") (serialize-qp "pageSize" $page_size "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({payroll_administration_id: (encode-path-segment $payroll_administration_id)} | format pattern "/providers/employers/payrolladministrations/{payroll_administration_id}/payrollruns") $qp)
   let accept_val = "application/json;version=2018-01-01"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"Authorization": $authorization, "Accept": $hdr_accept} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"filter": $filter, "orderBy": $order_by, "pageNumber": $page_number, "pageSize": $page_size} | compact), body: null}
 }
 
 # Initiate payroll run (verlonen)
@@ -14934,6 +15415,7 @@ export def "providers-employers-payrolladministrations-payrollruns-initiate crea
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($payroll_administration_id | is-empty) { error make --unspanned { msg: "path parameter 'payrollAdministrationId' must be non-empty" } }
   let full_url = (build-url $base ({payroll_administration_id: (encode-path-segment $payroll_administration_id)} | format pattern "/providers/employers/payrolladministrations/{payroll_administration_id}/payrollruns/initiate"))
   let req_body = {"availableForEmployeeDate": $available_for_employee_date, "payrollPeriod": $payroll_period, "sendEmailToEmployee": $send_email_to_employee, "textPaySlip": $text_pay_slip, "textPayment": $text_payment, "textTariffPaySlip": $text_tariff_pay_slip, "initiationParameters": $initiation_parameters} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
@@ -14941,7 +15423,7 @@ export def "providers-employers-payrolladministrations-payrollruns-initiate crea
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"Authorization": $authorization, "Accept": $hdr_accept} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json;version=2018-01-01" $req_body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json;version=2018-01-01" $req_body {query: {}, body: $req_body}
 }
 
 # Initiationvalues of a payrollrun
@@ -14967,13 +15449,15 @@ export def "providers-employers-payrolladministrations-payrollruns-initiationval
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($payroll_administration_id | is-empty) { error make --unspanned { msg: "path parameter 'payrollAdministrationId' must be non-empty" } }
+  if ($period_id | is-empty) { error make --unspanned { msg: "path parameter 'periodId' must be non-empty" } }
   let qp = [(serialize-qp "payrollrunId" $payrollrun_id "scalar") (serialize-qp "payrollPeriodId" $payroll_period_id "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({payroll_administration_id: (encode-path-segment $payroll_administration_id), period_id: (encode-path-segment $period_id)} | format pattern "/providers/employers/payrolladministrations/{payroll_administration_id}/payrollruns/{period_id}/initiationvalues") $qp)
   let accept_val = "application/json;version=2018-01-01"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"Authorization": $authorization, "Accept": $hdr_accept} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"payrollrunId": $payrollrun_id, "payrollPeriodId": $payroll_period_id} | compact), body: null}
 }
 
 # List of tax returns for an administration
@@ -15000,13 +15484,14 @@ export def "providers-employers-payrolladministrations-payrolltaxreturns get-pay
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($payroll_administration_id | is-empty) { error make --unspanned { msg: "path parameter 'payrollAdministrationId' must be non-empty" } }
   let qp = [(serialize-qp "filter" $filter "scalar") (serialize-qp "orderBy" $order_by "scalar") (serialize-qp "pageNumber" $page_number "scalar") (serialize-qp "pageSize" $page_size "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({payroll_administration_id: (encode-path-segment $payroll_administration_id)} | format pattern "/providers/employers/payrolladministrations/{payroll_administration_id}/payrolltaxreturns") $qp)
   let accept_val = "application/json;version=2018-01-01"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"Authorization": $authorization, "Accept": $hdr_accept} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"filter": $filter, "orderBy": $order_by, "pageNumber": $page_number, "pageSize": $page_size} | compact), body: null}
 }
 
 # Initiate payroll tax return (aanmaken loonaangifte)
@@ -15031,6 +15516,7 @@ export def "providers-employers-payrolladministrations-payrolltaxreturns-initiat
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($payroll_administration_id | is-empty) { error make --unspanned { msg: "path parameter 'payrollAdministrationId' must be non-empty" } }
   let full_url = (build-url $base ({payroll_administration_id: (encode-path-segment $payroll_administration_id)} | format pattern "/providers/employers/payrolladministrations/{payroll_administration_id}/payrolltaxreturns/initiate"))
   let req_body = {"notifyOfInitiation": $notify_of_initiation} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
@@ -15038,7 +15524,7 @@ export def "providers-employers-payrolladministrations-payrolltaxreturns-initiat
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"Authorization": $authorization, "Accept": $hdr_accept} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json;version=2018-01-01" $req_body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json;version=2018-01-01" $req_body {query: {}, body: $req_body}
 }
 
 # Download the SEPA file for a payroll tax return
@@ -15063,13 +15549,15 @@ export def "providers-employers-payrolladministrations-payrolltaxreturns-sepafil
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($payroll_administration_id | is-empty) { error make --unspanned { msg: "path parameter 'payrollAdministrationId' must be non-empty" } }
+  if ($payrolltaxreturn_id | is-empty) { error make --unspanned { msg: "path parameter 'payrolltaxreturnId' must be non-empty" } }
   let qp = [(serialize-qp "requestedExecutionDate" $requested_execution_date "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({payroll_administration_id: (encode-path-segment $payroll_administration_id), payrolltaxreturn_id: (encode-path-segment $payrolltaxreturn_id)} | format pattern "/providers/employers/payrolladministrations/{payroll_administration_id}/payrolltaxreturns/{payrolltaxreturn_id}/sepafile") $qp)
   let accept_val = "application/xml"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"Authorization": $authorization, "Accept": $hdr_accept} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"requestedExecutionDate": $requested_execution_date} | compact), body: null}
 }
 
 # Send an email to inform the salary administrator
@@ -15096,6 +15584,7 @@ export def "providers-employers-payrolladministrations-periodreadyforpayroll cre
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($payroll_administration_id | is-empty) { error make --unspanned { msg: "path parameter 'payrollAdministrationId' must be non-empty" } }
   let full_url = (build-url $base ({payroll_administration_id: (encode-path-segment $payroll_administration_id)} | format pattern "/providers/employers/payrolladministrations/{payroll_administration_id}/periodreadyforpayroll"))
   let req_body = {"emailAddressPeriodReadyForPayroll": $email_address_period_ready_for_payroll, "payrollPeriodId": $payroll_period_id, "userComment": $user_comment} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
@@ -15103,7 +15592,7 @@ export def "providers-employers-payrolladministrations-periodreadyforpayroll cre
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"Authorization": $authorization, "Accept": $hdr_accept} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json;version=2018-01-01" $req_body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json;version=2018-01-01" $req_body {query: {}, body: $req_body}
 }
 
 # List of UPA pension declarations
@@ -15130,13 +15619,14 @@ export def "providers-employers-payrolladministrations-upapensiondeclarations ge
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($payroll_administration_id | is-empty) { error make --unspanned { msg: "path parameter 'payrollAdministrationId' must be non-empty" } }
   let qp = [(serialize-qp "filter" $filter "scalar") (serialize-qp "orderBy" $order_by "scalar") (serialize-qp "pageNumber" $page_number "scalar") (serialize-qp "pageSize" $page_size "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({payroll_administration_id: (encode-path-segment $payroll_administration_id)} | format pattern "/providers/employers/payrolladministrations/{payroll_administration_id}/upapensiondeclarations") $qp)
   let accept_val = "application/json;version=2018-01-01"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"Authorization": $authorization, "Accept": $hdr_accept} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"filter": $filter, "orderBy": $order_by, "pageNumber": $page_number, "pageSize": $page_size} | compact), body: null}
 }
 
 # Initiate a UPA pension declaration
@@ -15159,12 +15649,13 @@ export def "providers-employers-payrolladministrations-upapensiondeclarations-in
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($payroll_administration_id | is-empty) { error make --unspanned { msg: "path parameter 'payrollAdministrationId' must be non-empty" } }
   let full_url = (build-url $base ({payroll_administration_id: (encode-path-segment $payroll_administration_id)} | format pattern "/providers/employers/payrolladministrations/{payroll_administration_id}/upapensiondeclarations/initiate"))
   let accept_val = "application/json;version=2018-01-01"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"Authorization": $authorization, "Accept": $hdr_accept} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
 }
 
 # Year-end statements for the payroll administration
@@ -15191,13 +15682,14 @@ export def "providers-employers-payrolladministrations-yearendstatements get-yea
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($payroll_administration_id | is-empty) { error make --unspanned { msg: "path parameter 'payrollAdministrationId' must be non-empty" } }
   let qp = [(serialize-qp "filter" $filter "scalar") (serialize-qp "orderBy" $order_by "scalar") (serialize-qp "pageNumber" $page_number "scalar") (serialize-qp "pageSize" $page_size "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({payroll_administration_id: (encode-path-segment $payroll_administration_id)} | format pattern "/providers/employers/payrolladministrations/{payroll_administration_id}/yearendstatements") $qp)
   let accept_val = "application/json;version=2018-01-01"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"Authorization": $authorization, "Accept": $hdr_accept} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"filter": $filter, "orderBy": $order_by, "pageNumber": $page_number, "pageSize": $page_size} | compact), body: null}
 }
 
 # Download year-end statement of a payroll administration for a year
@@ -15222,13 +15714,15 @@ export def "providers-employers-payrolladministrations-yearendstatements get-end
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($payroll_administration_id | is-empty) { error make --unspanned { msg: "path parameter 'payrollAdministrationId' must be non-empty" } }
+  if ($year | is-empty) { error make --unspanned { msg: "path parameter 'year' must be non-empty" } }
   let qp = [(serialize-qp "includeEmployeeSelfService" $include_employee_self_service "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({payroll_administration_id: (encode-path-segment $payroll_administration_id), year: (encode-path-segment $year)} | format pattern "/providers/employers/payrolladministrations/{payroll_administration_id}/yearendstatements/{year}") $qp)
   let accept_val = "application/pdf"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"Authorization": $authorization, "Accept": $hdr_accept} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"includeEmployeeSelfService": $include_employee_self_service} | compact), body: null}
 }
 
 # List of download requests for an employment
@@ -15260,7 +15754,7 @@ export def "providers-employers-users-downloadrequests get-download-requests-by-
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"Authorization": $authorization, "Accept": $hdr_accept} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"filter": $filter, "orderBy": $order_by, "pageNumber": $page_number, "pageSize": $page_size} | compact), body: null}
 }
 
 # Create a download request
@@ -15291,7 +15785,7 @@ export def "providers-employers-users-downloadrequests create-download-request-b
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"Authorization": $authorization, "Accept": $hdr_accept} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json;version=2018-01-01" $req_body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json;version=2018-01-01" $req_body {query: {}, body: $req_body}
 }
 
 # Delete a specific download request record
@@ -15315,12 +15809,13 @@ export def "providers-employers-users-downloadrequests delete-download-request-b
 ]: nothing -> record<version: record<obsoleteDate: string, resourceVersion: string>, messages: table<code: int, description: string, id: string, properties: list, type: string>, content: record> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($download_request_id | is-empty) { error make --unspanned { msg: "path parameter 'downloadRequestId' must be non-empty" } }
   let full_url = (build-url $base ({download_request_id: (encode-path-segment $download_request_id)} | format pattern "/providers/employers/users/downloadrequests/{download_request_id}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"Authorization": $authorization, "Accept": $hdr_accept, "If-Match": $if_match} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
 }
 
 # Details of a download request record
@@ -15343,12 +15838,13 @@ export def "providers-employers-users-downloadrequests get-download-request-by-d
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($download_request_id | is-empty) { error make --unspanned { msg: "path parameter 'downloadRequestId' must be non-empty" } }
   let full_url = (build-url $base ({download_request_id: (encode-path-segment $download_request_id)} | format pattern "/providers/employers/users/downloadrequests/{download_request_id}"))
   let accept_val = "application/json;version=2018-01-01"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"Authorization": $authorization, "Accept": $hdr_accept} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
 }
 
 # Download file of download request
@@ -15371,12 +15867,13 @@ export def "providers-employers-users-downloadrequests-file get-by-download-requ
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($download_request_id | is-empty) { error make --unspanned { msg: "path parameter 'downloadRequestId' must be non-empty" } }
   let full_url = (build-url $base ({download_request_id: (encode-path-segment $download_request_id)} | format pattern "/providers/employers/users/downloadrequests/{download_request_id}/file"))
   let accept_val = "application/vnd.rar"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"Authorization": $authorization, "Accept": $hdr_accept} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
 }
 
 # Configured external tenant for an employer user
@@ -15403,13 +15900,14 @@ export def "providers-employers-users-configuredexternaltenant get-configured-ex
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($employer_user_id | is-empty) { error make --unspanned { msg: "path parameter 'employerUserId' must be non-empty" } }
   let qp = [(serialize-qp "filter" $filter "scalar") (serialize-qp "orderBy" $order_by "scalar") (serialize-qp "pageNumber" $page_number "scalar") (serialize-qp "pageSize" $page_size "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({employer_user_id: (encode-path-segment $employer_user_id)} | format pattern "/providers/employers/users/{employer_user_id}/configuredexternaltenant") $qp)
   let accept_val = "application/json;version=2018-01-01"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"Authorization": $authorization, "Accept": $hdr_accept} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"filter": $filter, "orderBy": $order_by, "pageNumber": $page_number, "pageSize": $page_size} | compact), body: null}
 }
 
 # Add an external tenant for an employer user
@@ -15437,6 +15935,7 @@ export def "providers-employers-users-configuredexternaltenant update-configured
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($employer_user_id | is-empty) { error make --unspanned { msg: "path parameter 'employerUserId' must be non-empty" } }
   let full_url = (build-url $base ({employer_user_id: (encode-path-segment $employer_user_id)} | format pattern "/providers/employers/users/{employer_user_id}/configuredexternaltenant"))
   let req_body = {"externalTenant": $external_tenant, "externalUser": $external_user} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
@@ -15444,7 +15943,7 @@ export def "providers-employers-users-configuredexternaltenant update-configured
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"Authorization": $authorization, "Accept": $hdr_accept} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "patch" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json;version=2018-01-01" $req_body
+  do-request "patch" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json;version=2018-01-01" $req_body {query: {}, body: $req_body}
 }
 
 # Delete a specific user record
@@ -15468,19 +15967,20 @@ export def "providers-employers-users delete" [
 ]: nothing -> record<version: record<obsoleteDate: string, resourceVersion: string>, messages: table<code: int, description: string, id: string, properties: list, type: string>, content: record> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($user_id | is-empty) { error make --unspanned { msg: "path parameter 'userId' must be non-empty" } }
   let full_url = (build-url $base ({user_id: (encode-path-segment $user_id)} | format pattern "/providers/employers/users/{user_id}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"Authorization": $authorization, "Accept": $hdr_accept, "If-Match": $if_match} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
 }
 
 # Details of an user
 #
 # GET /providers/employers/users/{userId}
 # operationId: GetEmployerUserByUserId
-export def "providers-employers-users get-by-userId" [
+export def "providers-employers-users get-by-user-id" [
   user_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -15496,12 +15996,13 @@ export def "providers-employers-users get-by-userId" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($user_id | is-empty) { error make --unspanned { msg: "path parameter 'userId' must be non-empty" } }
   let full_url = (build-url $base ({user_id: (encode-path-segment $user_id)} | format pattern "/providers/employers/users/{user_id}"))
   let accept_val = "application/json;version=2018-01-01"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"Authorization": $authorization, "Accept": $hdr_accept} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
 }
 
 # Resend or change the status of an invite for an employer user.
@@ -15527,6 +16028,7 @@ export def "providers-employers-users update-invite" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($user_id | is-empty) { error make --unspanned { msg: "path parameter 'userId' must be non-empty" } }
   let full_url = (build-url $base ({user_id: (encode-path-segment $user_id)} | format pattern "/providers/employers/users/{user_id}"))
   let req_body = {"action": $action, "destinationForSecret": $destination_for_secret} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
@@ -15534,7 +16036,7 @@ export def "providers-employers-users update-invite" [
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"Authorization": $authorization, "Accept": $hdr_accept} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "patch" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json;version=2018-01-01" $req_body
+  do-request "patch" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json;version=2018-01-01" $req_body {query: {}, body: $req_body}
 }
 
 # Edit the details of an user
@@ -15573,6 +16075,7 @@ export def "providers-employers-users update" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($user_id | is-empty) { error make --unspanned { msg: "path parameter 'userId' must be non-empty" } }
   let full_url = (build-url $base ({user_id: (encode-path-segment $user_id)} | format pattern "/providers/employers/users/{user_id}"))
   let req_body = {"azureActiveDirectory": $azure_active_directory, "contactInformation": $contact_information, "hasAccessToPayrollingTestData": $has_access_to_payrolling_test_data, "hasMultiFactorAuthentication": $has_multi_factor_authentication, "loginMethod": $login_method, "personalDetails": $personal_details, "twoFactorAuthenticationRequired": $two_factor_authentication_required, "userCustomSpecifiedRole": $user_custom_specified_role, "userSpecifiedRole": $user_specified_role} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
@@ -15580,7 +16083,7 @@ export def "providers-employers-users update" [
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"Authorization": $authorization, "Accept": $hdr_accept, "If-Match": $if_match} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json;version=2018-01-01" $req_body
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json;version=2018-01-01" $req_body {query: {}, body: $req_body}
 }
 
 # List of employers linked to the user
@@ -15607,13 +16110,14 @@ export def "providers-employers-users-employers get-linked" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($user_id | is-empty) { error make --unspanned { msg: "path parameter 'userId' must be non-empty" } }
   let qp = [(serialize-qp "filter" $filter "scalar") (serialize-qp "orderBy" $order_by "scalar") (serialize-qp "pageNumber" $page_number "scalar") (serialize-qp "pageSize" $page_size "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({user_id: (encode-path-segment $user_id)} | format pattern "/providers/employers/users/{user_id}/employers") $qp)
   let accept_val = "application/json;version=2018-01-01"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"Authorization": $authorization, "Accept": $hdr_accept} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"filter": $filter, "orderBy": $order_by, "pageNumber": $page_number, "pageSize": $page_size} | compact), body: null}
 }
 
 # List of all the integrations for the employer user
@@ -15636,12 +16140,13 @@ export def "providers-employers-users-integrations get" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($user_id | is-empty) { error make --unspanned { msg: "path parameter 'userId' must be non-empty" } }
   let full_url = (build-url $base ({user_id: (encode-path-segment $user_id)} | format pattern "/providers/employers/users/{user_id}/integrations"))
   let accept_val = "application/json;version=2018-01-01"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"Authorization": $authorization, "Accept": $hdr_accept} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
 }
 
 # Delete an integration
@@ -15666,12 +16171,14 @@ export def "providers-employers-users-integrations delete-by-and-application" [
 ]: nothing -> record<version: record<obsoleteDate: string, resourceVersion: string>, messages: table<code: int, description: string, id: string, properties: list, type: string>, content: record> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($user_id | is-empty) { error make --unspanned { msg: "path parameter 'userId' must be non-empty" } }
+  if ($application_id | is-empty) { error make --unspanned { msg: "path parameter 'applicationId' must be non-empty" } }
   let full_url = (build-url $base ({user_id: (encode-path-segment $user_id), application_id: (encode-path-segment $application_id)} | format pattern "/providers/employers/users/{user_id}/integrations/{application_id}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"Authorization": $authorization, "Accept": $hdr_accept, "If-Match": $if_match} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
 }
 
 # Change an integration
@@ -15697,6 +16204,8 @@ export def "providers-employers-users-integrations update" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($user_id | is-empty) { error make --unspanned { msg: "path parameter 'userId' must be non-empty" } }
+  if ($application_id | is-empty) { error make --unspanned { msg: "path parameter 'applicationId' must be non-empty" } }
   let full_url = (build-url $base ({user_id: (encode-path-segment $user_id), application_id: (encode-path-segment $application_id)} | format pattern "/providers/employers/users/{user_id}/integrations/{application_id}"))
   let req_body = {"isBlocked": $is_blocked} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
@@ -15704,7 +16213,7 @@ export def "providers-employers-users-integrations update" [
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"Authorization": $authorization, "Accept": $hdr_accept} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json;version=2018-01-01" $req_body
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json;version=2018-01-01" $req_body {query: {}, body: $req_body}
 }
 
 # Download the application logo
@@ -15729,12 +16238,14 @@ export def "providers-employers-users-integrations-logo get-by-and-application" 
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($user_id | is-empty) { error make --unspanned { msg: "path parameter 'userId' must be non-empty" } }
+  if ($application_id | is-empty) { error make --unspanned { msg: "path parameter 'applicationId' must be non-empty" } }
   let full_url = (build-url $base ({user_id: (encode-path-segment $user_id), application_id: (encode-path-segment $application_id)} | format pattern "/providers/employers/users/{user_id}/integrations/{application_id}/logo"))
   let accept_val = ($accept | default "image/jpeg")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"Authorization": $authorization, "Accept": $hdr_accept} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
 }
 
 # The notification settings for the user
@@ -15761,13 +16272,14 @@ export def "providers-employers-users-notificationsettings get-notification-sett
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($user_id | is-empty) { error make --unspanned { msg: "path parameter 'userId' must be non-empty" } }
   let qp = [(serialize-qp "filter" $filter "scalar") (serialize-qp "orderBy" $order_by "scalar") (serialize-qp "pageNumber" $page_number "scalar") (serialize-qp "pageSize" $page_size "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({user_id: (encode-path-segment $user_id)} | format pattern "/providers/employers/users/{user_id}/notificationsettings") $qp)
   let accept_val = "application/json;version=2018-01-01"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"Authorization": $authorization, "Accept": $hdr_accept} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"filter": $filter, "orderBy": $order_by, "pageNumber": $page_number, "pageSize": $page_size} | compact), body: null}
 }
 
 # Manage the employer user notification settings
@@ -15795,6 +16307,7 @@ export def "providers-employers-users-notificationsettings update-notification-s
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($user_id | is-empty) { error make --unspanned { msg: "path parameter 'userId' must be non-empty" } }
   let full_url = (build-url $base ({user_id: (encode-path-segment $user_id)} | format pattern "/providers/employers/users/{user_id}/notificationsettings"))
   let req_body = {"notificationSet": $notification_set, "notifications": $notifications} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
@@ -15802,14 +16315,14 @@ export def "providers-employers-users-notificationsettings update-notification-s
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"Authorization": $authorization, "Accept": $hdr_accept} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "patch" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json;version=2018-01-01" $req_body
+  do-request "patch" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json;version=2018-01-01" $req_body {query: {}, body: $req_body}
 }
 
 # Details of a workflow
 #
 # GET /providers/employers/workflows/{workflowId}
 # operationId: GetWorkflowByWorkflowId
-export def "providers-employers-workflows get-by-workflowId" [
+export def "providers-employers-workflows get-by-workflow-id" [
   workflow_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -15825,12 +16338,13 @@ export def "providers-employers-workflows get-by-workflowId" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($workflow_id | is-empty) { error make --unspanned { msg: "path parameter 'workflowId' must be non-empty" } }
   let full_url = (build-url $base ({workflow_id: (encode-path-segment $workflow_id)} | format pattern "/providers/employers/workflows/{workflow_id}"))
   let accept_val = "application/json;version=2018-01-01"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"Authorization": $authorization, "Accept": $hdr_accept} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
 }
 
 # Change the workflow
@@ -15860,6 +16374,7 @@ export def "providers-employers-workflows update" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($workflow_id | is-empty) { error make --unspanned { msg: "path parameter 'workflowId' must be non-empty" } }
   let full_url = (build-url $base ({workflow_id: (encode-path-segment $workflow_id)} | format pattern "/providers/employers/workflows/{workflow_id}"))
   let req_body = {"assignee": $assignee, "status": $status} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
@@ -15867,7 +16382,7 @@ export def "providers-employers-workflows update" [
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"Authorization": $authorization, "Accept": $hdr_accept} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json;version=2018-01-01" $req_body
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json;version=2018-01-01" $req_body {query: {}, body: $req_body}
 }
 
 # Allows the user to transition the workflow.
@@ -15892,6 +16407,7 @@ export def "providers-employers-workflows-transition create" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($workflow_id | is-empty) { error make --unspanned { msg: "path parameter 'workflowId' must be non-empty" } }
   let full_url = (build-url $base ({workflow_id: (encode-path-segment $workflow_id)} | format pattern "/providers/employers/workflows/{workflow_id}/transition"))
   let req_body = $body
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
@@ -15899,7 +16415,7 @@ export def "providers-employers-workflows-transition create" [
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"Authorization": $authorization, "Accept": $hdr_accept} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json;version=2018-01-01" $req_body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json;version=2018-01-01" $req_body {query: {}, body: $req_body}
 }
 
 # Delete a specific workflow trigger mapping record
@@ -15923,12 +16439,13 @@ export def "providers-employers-workflowtriggermappings delete-fiscal-properties
 ]: nothing -> record<version: record<obsoleteDate: string, resourceVersion: string>, messages: table<code: int, description: string, id: string, properties: list, type: string>, content: record> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($workflow_trigger_mapping_id | is-empty) { error make --unspanned { msg: "path parameter 'workflowTriggerMappingId' must be non-empty" } }
   let full_url = (build-url $base ({workflow_trigger_mapping_id: (encode-path-segment $workflow_trigger_mapping_id)} | format pattern "/providers/employers/workflowtriggermappings/{workflow_trigger_mapping_id}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"Authorization": $authorization, "Accept": $hdr_accept, "If-Match": $if_match} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
 }
 
 # Details of a workflow trigger mapping record
@@ -15951,12 +16468,13 @@ export def "providers-employers-workflowtriggermappings get-workflow-trigger-map
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($workflow_trigger_mapping_id | is-empty) { error make --unspanned { msg: "path parameter 'workflowTriggerMappingId' must be non-empty" } }
   let full_url = (build-url $base ({workflow_trigger_mapping_id: (encode-path-segment $workflow_trigger_mapping_id)} | format pattern "/providers/employers/workflowtriggermappings/{workflow_trigger_mapping_id}"))
   let accept_val = "application/json;version=2018-01-01"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"Authorization": $authorization, "Accept": $hdr_accept} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
 }
 
 # Edit the details of a workflow trigger mapping record
@@ -15985,6 +16503,7 @@ export def "providers-employers-workflowtriggermappings update-workflow-trigger-
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($workflow_trigger_mapping_id | is-empty) { error make --unspanned { msg: "path parameter 'workflowTriggerMappingId' must be non-empty" } }
   let full_url = (build-url $base ({workflow_trigger_mapping_id: (encode-path-segment $workflow_trigger_mapping_id)} | format pattern "/providers/employers/workflowtriggermappings/{workflow_trigger_mapping_id}"))
   let req_body = {"trigger": $trigger, "workflowTemplate": $workflow_template} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
@@ -15992,7 +16511,7 @@ export def "providers-employers-workflowtriggermappings update-workflow-trigger-
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"Authorization": $authorization, "Accept": $hdr_accept, "If-Match": $if_match} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json;version=2018-01-01" $req_body
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json;version=2018-01-01" $req_body {query: {}, body: $req_body}
 }
 
 # Details of an employer
@@ -16015,12 +16534,13 @@ export def "providers-employers get" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($employer_id | is-empty) { error make --unspanned { msg: "path parameter 'employerId' must be non-empty" } }
   let full_url = (build-url $base ({employer_id: (encode-path-segment $employer_id)} | format pattern "/providers/employers/{employer_id}"))
   let accept_val = "application/json;version=2018-01-01"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"Authorization": $authorization, "Accept": $hdr_accept} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
 }
 
 # Edit the details of an employer
@@ -16063,6 +16583,7 @@ export def "providers-employers update" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($employer_id | is-empty) { error make --unspanned { msg: "path parameter 'employerId' must be non-empty" } }
   let full_url = (build-url $base ({employer_id: (encode-path-segment $employer_id)} | format pattern "/providers/employers/{employer_id}"))
   let req_body = {"address": $address, "branch": $branch, "chamberOfCommerceNumber": $chamber_of_commerce_number, "companyName": $company_name, "contact": $contact, "contactInformation": $contact_information, "deviatingPostalAddress": $deviating_postal_address, "legalForm": $legal_form, "providerSettings": $provider_settings, "sbi": $sbi} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
@@ -16070,7 +16591,7 @@ export def "providers-employers update" [
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"Authorization": $authorization, "Accept": $hdr_accept, "If-Match": $if_match} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json;version=2018-01-01" $req_body
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json;version=2018-01-01" $req_body {query: {}, body: $req_body}
 }
 
 # List of actual organizational entities for an employer
@@ -16098,13 +16619,14 @@ export def "providers-employers-actualorganizationalentities get-actual-organiza
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($employer_id | is-empty) { error make --unspanned { msg: "path parameter 'employerId' must be non-empty" } }
   let qp = [(serialize-qp "referenceDate" $reference_date "scalar") (serialize-qp "filter" $filter "scalar") (serialize-qp "orderBy" $order_by "scalar") (serialize-qp "pageNumber" $page_number "scalar") (serialize-qp "pageSize" $page_size "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({employer_id: (encode-path-segment $employer_id)} | format pattern "/providers/employers/{employer_id}/actualorganizationalentities") $qp)
   let accept_val = "application/json;version=2018-01-01"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"Authorization": $authorization, "Accept": $hdr_accept} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"referenceDate": $reference_date, "filter": $filter, "orderBy": $order_by, "pageNumber": $page_number, "pageSize": $page_size} | compact), body: null}
 }
 
 # List of actual wages for an employer
@@ -16132,13 +16654,14 @@ export def "providers-employers-actualwages get-actual-wages" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($employer_id | is-empty) { error make --unspanned { msg: "path parameter 'employerId' must be non-empty" } }
   let qp = [(serialize-qp "referenceDate" $reference_date "scalar") (serialize-qp "filter" $filter "scalar") (serialize-qp "orderBy" $order_by "scalar") (serialize-qp "pageNumber" $page_number "scalar") (serialize-qp "pageSize" $page_size "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({employer_id: (encode-path-segment $employer_id)} | format pattern "/providers/employers/{employer_id}/actualwages") $qp)
   let accept_val = "application/json;version=2018-01-01"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"Authorization": $authorization, "Accept": $hdr_accept} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"referenceDate": $reference_date, "filter": $filter, "orderBy": $order_by, "pageNumber": $page_number, "pageSize": $page_size} | compact), body: null}
 }
 
 # List of actual working hours for an employer
@@ -16166,13 +16689,14 @@ export def "providers-employers-actualworkinghours get-actual-working-hours" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($employer_id | is-empty) { error make --unspanned { msg: "path parameter 'employerId' must be non-empty" } }
   let qp = [(serialize-qp "referenceDate" $reference_date "scalar") (serialize-qp "filter" $filter "scalar") (serialize-qp "orderBy" $order_by "scalar") (serialize-qp "pageNumber" $page_number "scalar") (serialize-qp "pageSize" $page_size "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({employer_id: (encode-path-segment $employer_id)} | format pattern "/providers/employers/{employer_id}/actualworkinghours") $qp)
   let accept_val = "application/json;version=2018-01-01"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"Authorization": $authorization, "Accept": $hdr_accept} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"referenceDate": $reference_date, "filter": $filter, "orderBy": $order_by, "pageNumber": $page_number, "pageSize": $page_size} | compact), body: null}
 }
 
 # List of administrations for an employer
@@ -16199,13 +16723,14 @@ export def "providers-employers-administrations get" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($employer_id | is-empty) { error make --unspanned { msg: "path parameter 'employerId' must be non-empty" } }
   let qp = [(serialize-qp "filter" $filter "scalar") (serialize-qp "orderBy" $order_by "scalar") (serialize-qp "pageNumber" $page_number "scalar") (serialize-qp "pageSize" $page_size "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({employer_id: (encode-path-segment $employer_id)} | format pattern "/providers/employers/{employer_id}/administrations") $qp)
   let accept_val = "application/json;version=2018-01-01"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"Authorization": $authorization, "Accept": $hdr_accept} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"filter": $filter, "orderBy": $order_by, "pageNumber": $page_number, "pageSize": $page_size} | compact), body: null}
 }
 
 # Get a list of announcements for an employer.
@@ -16232,13 +16757,14 @@ export def "providers-employers-announcements get" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($employer_id | is-empty) { error make --unspanned { msg: "path parameter 'employerId' must be non-empty" } }
   let qp = [(serialize-qp "filter" $filter "scalar") (serialize-qp "orderBy" $order_by "scalar") (serialize-qp "pageNumber" $page_number "scalar") (serialize-qp "pageSize" $page_size "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({employer_id: (encode-path-segment $employer_id)} | format pattern "/providers/employers/{employer_id}/announcements") $qp)
   let accept_val = "application/json;version=2018-01-01"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"Authorization": $authorization, "Accept": $hdr_accept} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"filter": $filter, "orderBy": $order_by, "pageNumber": $page_number, "pageSize": $page_size} | compact), body: null}
 }
 
 # List of all the applications available to the employer
@@ -16261,12 +16787,13 @@ export def "providers-employers-applications get-available" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($employer_id | is-empty) { error make --unspanned { msg: "path parameter 'employerId' must be non-empty" } }
   let full_url = (build-url $base ({employer_id: (encode-path-segment $employer_id)} | format pattern "/providers/employers/{employer_id}/applications"))
   let accept_val = "application/json;version=2018-01-01"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"Authorization": $authorization, "Accept": $hdr_accept} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
 }
 
 # List of all the users linking the applications and the employer
@@ -16290,12 +16817,14 @@ export def "providers-employers-applications-users get-linked-by-and" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($employer_id | is-empty) { error make --unspanned { msg: "path parameter 'employerId' must be non-empty" } }
+  if ($application_id | is-empty) { error make --unspanned { msg: "path parameter 'applicationId' must be non-empty" } }
   let full_url = (build-url $base ({employer_id: (encode-path-segment $employer_id), application_id: (encode-path-segment $application_id)} | format pattern "/providers/employers/{employer_id}/applications/{application_id}/users"))
   let accept_val = "application/json;version=2018-01-01"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"Authorization": $authorization, "Accept": $hdr_accept} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
 }
 
 # List of assessments
@@ -16322,13 +16851,14 @@ export def "providers-employers-assessments get" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($employer_id | is-empty) { error make --unspanned { msg: "path parameter 'employerId' must be non-empty" } }
   let qp = [(serialize-qp "filter" $filter "scalar") (serialize-qp "orderBy" $order_by "scalar") (serialize-qp "pageNumber" $page_number "scalar") (serialize-qp "pageSize" $page_size "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({employer_id: (encode-path-segment $employer_id)} | format pattern "/providers/employers/{employer_id}/assessments") $qp)
   let accept_val = "application/json;version=2018-01-01"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"Authorization": $authorization, "Accept": $hdr_accept} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"filter": $filter, "orderBy": $order_by, "pageNumber": $page_number, "pageSize": $page_size} | compact), body: null}
 }
 
 # Workflows assigned to the user
@@ -16355,13 +16885,14 @@ export def "providers-employers-assignedworkflows get-assigned-workflows" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($employer_id | is-empty) { error make --unspanned { msg: "path parameter 'employerId' must be non-empty" } }
   let qp = [(serialize-qp "filter" $filter "scalar") (serialize-qp "orderBy" $order_by "scalar") (serialize-qp "pageNumber" $page_number "scalar") (serialize-qp "pageSize" $page_size "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({employer_id: (encode-path-segment $employer_id)} | format pattern "/providers/employers/{employer_id}/assignedworkflows") $qp)
   let accept_val = "application/json;version=2018-01-01"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"Authorization": $authorization, "Accept": $hdr_accept} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"filter": $filter, "orderBy": $order_by, "pageNumber": $page_number, "pageSize": $page_size} | compact), body: null}
 }
 
 # Get the employee data audit trail
@@ -16390,13 +16921,14 @@ export def "providers-employers-audit-trail-employee-data get" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($employer_id | is-empty) { error make --unspanned { msg: "path parameter 'employerId' must be non-empty" } }
   let qp = [(serialize-qp "startDate" $start_date "scalar") (serialize-qp "endDate" $end_date "scalar") (serialize-qp "filter" $filter "scalar") (serialize-qp "orderBy" $order_by "scalar") (serialize-qp "pageNumber" $page_number "scalar") (serialize-qp "pageSize" $page_size "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({employer_id: (encode-path-segment $employer_id)} | format pattern "/providers/employers/{employer_id}/auditTrail/EmployeeData") $qp)
   let accept_val = "application/json;version=2018-01-01"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"Authorization": $authorization, "Accept": $hdr_accept} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"startDate": $start_date, "endDate": $end_date, "filter": $filter, "orderBy": $order_by, "pageNumber": $page_number, "pageSize": $page_size} | compact), body: null}
 }
 
 # List of authorized activities with regard to the employer
@@ -16420,12 +16952,13 @@ export def "providers-employers-authorizations get" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($employer_id | is-empty) { error make --unspanned { msg: "path parameter 'employerId' must be non-empty" } }
   let full_url = (build-url $base ({employer_id: (encode-path-segment $employer_id)} | format pattern "/providers/employers/{employer_id}/authorizations"))
   let accept_val = ($accept | default "application/json;version=2018-01-01")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"Authorization": $authorization, "Accept": $hdr_accept} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
 }
 
 # List benefit in kind types for an employer
@@ -16452,13 +16985,14 @@ export def "providers-employers-benefitinkindtypes get-benefit-in-kind-types" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($employer_id | is-empty) { error make --unspanned { msg: "path parameter 'employerId' must be non-empty" } }
   let qp = [(serialize-qp "filter" $filter "scalar") (serialize-qp "orderBy" $order_by "scalar") (serialize-qp "pageNumber" $page_number "scalar") (serialize-qp "pageSize" $page_size "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({employer_id: (encode-path-segment $employer_id)} | format pattern "/providers/employers/{employer_id}/benefitinkindtypes") $qp)
   let accept_val = "application/json;version=2018-01-01"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"Authorization": $authorization, "Accept": $hdr_accept} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"filter": $filter, "orderBy": $order_by, "pageNumber": $page_number, "pageSize": $page_size} | compact), body: null}
 }
 
 # Add an benefit in kind type for an employer
@@ -16483,6 +17017,7 @@ export def "providers-employers-benefitinkindtypes create-benefit-in-kind-type" 
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($employer_id | is-empty) { error make --unspanned { msg: "path parameter 'employerId' must be non-empty" } }
   let full_url = (build-url $base ({employer_id: (encode-path-segment $employer_id)} | format pattern "/providers/employers/{employer_id}/benefitinkindtypes"))
   let req_body = {"description": $description} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
@@ -16490,7 +17025,7 @@ export def "providers-employers-benefitinkindtypes create-benefit-in-kind-type" 
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"Authorization": $authorization, "Accept": $hdr_accept} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json;version=2018-01-01" $req_body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json;version=2018-01-01" $req_body {query: {}, body: $req_body}
 }
 
 # List of billable items
@@ -16517,13 +17052,14 @@ export def "providers-employers-billableitems get-billable-items" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($employer_id | is-empty) { error make --unspanned { msg: "path parameter 'employerId' must be non-empty" } }
   let qp = [(serialize-qp "filter" $filter "scalar") (serialize-qp "orderBy" $order_by "scalar") (serialize-qp "pageNumber" $page_number "scalar") (serialize-qp "pageSize" $page_size "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({employer_id: (encode-path-segment $employer_id)} | format pattern "/providers/employers/{employer_id}/billableitems") $qp)
   let accept_val = "application/json;version=2018-01-01"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"Authorization": $authorization, "Accept": $hdr_accept} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"filter": $filter, "orderBy": $order_by, "pageNumber": $page_number, "pageSize": $page_size} | compact), body: null}
 }
 
 # List of concept employee for an employer
@@ -16550,13 +17086,14 @@ export def "providers-employers-conceptemployees get-concept-employees" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($employer_id | is-empty) { error make --unspanned { msg: "path parameter 'employerId' must be non-empty" } }
   let qp = [(serialize-qp "filter" $filter "scalar") (serialize-qp "orderBy" $order_by "scalar") (serialize-qp "pageNumber" $page_number "scalar") (serialize-qp "pageSize" $page_size "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({employer_id: (encode-path-segment $employer_id)} | format pattern "/providers/employers/{employer_id}/conceptemployees") $qp)
   let accept_val = "application/json;version=2018-01-01"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"Authorization": $authorization, "Accept": $hdr_accept} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"filter": $filter, "orderBy": $order_by, "pageNumber": $page_number, "pageSize": $page_size} | compact), body: null}
 }
 
 # Create a concept employee for an employer
@@ -16597,6 +17134,7 @@ export def "providers-employers-conceptemployees create-concept-employee" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($employer_id | is-empty) { error make --unspanned { msg: "path parameter 'employerId' must be non-empty" } }
   let full_url = (build-url $base ({employer_id: (encode-path-segment $employer_id)} | format pattern "/providers/employers/{employer_id}/conceptemployees"))
   let req_body = {"employeeData": $employee_data, "employmentData": $employment_data, "fiscalData": $fiscal_data, "organizationalEntityData": $organizational_entity_data, "otherPayrollVariablesData": $other_payroll_variables_data, "socialSecurityData": $social_security_data, "uniqueName": $unique_name, "wageData": $wage_data, "workingHoursData": $working_hours_data} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
@@ -16604,7 +17142,7 @@ export def "providers-employers-conceptemployees create-concept-employee" [
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"Authorization": $authorization, "Accept": $hdr_accept} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json;version=2018-01-01" $req_body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json;version=2018-01-01" $req_body {query: {}, body: $req_body}
 }
 
 # List of Concept employee's and their ESS (WNL) status
@@ -16631,13 +17169,14 @@ export def "providers-employers-conceptemployees-selfservice get-concept-employe
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($employer_id | is-empty) { error make --unspanned { msg: "path parameter 'employerId' must be non-empty" } }
   let qp = [(serialize-qp "filter" $filter "scalar") (serialize-qp "orderBy" $order_by "scalar") (serialize-qp "pageNumber" $page_number "scalar") (serialize-qp "pageSize" $page_size "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({employer_id: (encode-path-segment $employer_id)} | format pattern "/providers/employers/{employer_id}/conceptemployees/selfservice") $qp)
   let accept_val = "application/json;version=2018-01-01"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"Authorization": $authorization, "Accept": $hdr_accept} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"filter": $filter, "orderBy": $order_by, "pageNumber": $page_number, "pageSize": $page_size} | compact), body: null}
 }
 
 # List contract codes for an employer
@@ -16664,13 +17203,14 @@ export def "providers-employers-contractcodes get-contract-codes" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($employer_id | is-empty) { error make --unspanned { msg: "path parameter 'employerId' must be non-empty" } }
   let qp = [(serialize-qp "filter" $filter "scalar") (serialize-qp "orderBy" $order_by "scalar") (serialize-qp "pageNumber" $page_number "scalar") (serialize-qp "pageSize" $page_size "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({employer_id: (encode-path-segment $employer_id)} | format pattern "/providers/employers/{employer_id}/contractcodes") $qp)
   let accept_val = "application/json;version=2018-01-01"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"Authorization": $authorization, "Accept": $hdr_accept} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"filter": $filter, "orderBy": $order_by, "pageNumber": $page_number, "pageSize": $page_size} | compact), body: null}
 }
 
 # Add a contract code for an employer
@@ -16696,6 +17236,7 @@ export def "providers-employers-contractcodes create-contract-code" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($employer_id | is-empty) { error make --unspanned { msg: "path parameter 'employerId' must be non-empty" } }
   let full_url = (build-url $base ({employer_id: (encode-path-segment $employer_id)} | format pattern "/providers/employers/{employer_id}/contractcodes"))
   let req_body = {"code": $code, "description": $description} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
@@ -16703,7 +17244,7 @@ export def "providers-employers-contractcodes create-contract-code" [
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"Authorization": $authorization, "Accept": $hdr_accept} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json;version=2018-01-01" $req_body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json;version=2018-01-01" $req_body {query: {}, body: $req_body}
 }
 
 # List custom fields for an employer
@@ -16730,13 +17271,14 @@ export def "providers-employers-customfields get-custom-fields" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($employer_id | is-empty) { error make --unspanned { msg: "path parameter 'employerId' must be non-empty" } }
   let qp = [(serialize-qp "filter" $filter "scalar") (serialize-qp "orderBy" $order_by "scalar") (serialize-qp "pageNumber" $page_number "scalar") (serialize-qp "pageSize" $page_size "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({employer_id: (encode-path-segment $employer_id)} | format pattern "/providers/employers/{employer_id}/customfields") $qp)
   let accept_val = "application/json;version=2018-01-01"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"Authorization": $authorization, "Accept": $hdr_accept} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"filter": $filter, "orderBy": $order_by, "pageNumber": $page_number, "pageSize": $page_size} | compact), body: null}
 }
 
 # Add a custom field for an employer
@@ -16761,6 +17303,7 @@ export def "providers-employers-customfields create-custom-field" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($employer_id | is-empty) { error make --unspanned { msg: "path parameter 'employerId' must be non-empty" } }
   let full_url = (build-url $base ({employer_id: (encode-path-segment $employer_id)} | format pattern "/providers/employers/{employer_id}/customfields"))
   let req_body = {"description": $description} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
@@ -16768,7 +17311,7 @@ export def "providers-employers-customfields create-custom-field" [
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"Authorization": $authorization, "Accept": $hdr_accept} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json;version=2018-01-01" $req_body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json;version=2018-01-01" $req_body {query: {}, body: $req_body}
 }
 
 # List custom holidays for an employer
@@ -16795,13 +17338,14 @@ export def "providers-employers-customholidays get-custom-holidays" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($employer_id | is-empty) { error make --unspanned { msg: "path parameter 'employerId' must be non-empty" } }
   let qp = [(serialize-qp "filter" $filter "scalar") (serialize-qp "orderBy" $order_by "scalar") (serialize-qp "pageNumber" $page_number "scalar") (serialize-qp "pageSize" $page_size "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({employer_id: (encode-path-segment $employer_id)} | format pattern "/providers/employers/{employer_id}/customholidays") $qp)
   let accept_val = "application/json;version=2018-01-01"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"Authorization": $authorization, "Accept": $hdr_accept} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"filter": $filter, "orderBy": $order_by, "pageNumber": $page_number, "pageSize": $page_size} | compact), body: null}
 }
 
 # Add a custom holiday for an employer
@@ -16827,6 +17371,7 @@ export def "providers-employers-customholidays create-custom-holiday" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($employer_id | is-empty) { error make --unspanned { msg: "path parameter 'employerId' must be non-empty" } }
   let full_url = (build-url $base ({employer_id: (encode-path-segment $employer_id)} | format pattern "/providers/employers/{employer_id}/customholidays"))
   let req_body = {"date": $date, "description": $description} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
@@ -16834,7 +17379,7 @@ export def "providers-employers-customholidays create-custom-holiday" [
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"Authorization": $authorization, "Accept": $hdr_accept} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json;version=2018-01-01" $req_body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json;version=2018-01-01" $req_body {query: {}, body: $req_body}
 }
 
 # Dashboard of an employer
@@ -16857,12 +17402,13 @@ export def "providers-employers-dashboard get" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($employer_id | is-empty) { error make --unspanned { msg: "path parameter 'employerId' must be non-empty" } }
   let full_url = (build-url $base ({employer_id: (encode-path-segment $employer_id)} | format pattern "/providers/employers/{employer_id}/dashboard"))
   let accept_val = "application/json;version=2018-01-01"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"Authorization": $authorization, "Accept": $hdr_accept} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
 }
 
 # Get the list dashboard licenses
@@ -16889,13 +17435,14 @@ export def "providers-employers-dashboard-licenses get" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($employer_id | is-empty) { error make --unspanned { msg: "path parameter 'employerId' must be non-empty" } }
   let qp = [(serialize-qp "filter" $filter "scalar") (serialize-qp "orderBy" $order_by "scalar") (serialize-qp "pageNumber" $page_number "scalar") (serialize-qp "pageSize" $page_size "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({employer_id: (encode-path-segment $employer_id)} | format pattern "/providers/employers/{employer_id}/dashboardLicenses") $qp)
   let accept_val = "application/json;version=2018-01-01"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"Authorization": $authorization, "Accept": $hdr_accept} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"filter": $filter, "orderBy": $order_by, "pageNumber": $page_number, "pageSize": $page_size} | compact), body: null}
 }
 
 # Edit the dashboard license
@@ -16921,6 +17468,7 @@ export def "providers-employers-dashboard-licenses update" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($employer_id | is-empty) { error make --unspanned { msg: "path parameter 'employerId' must be non-empty" } }
   let full_url = (build-url $base ({employer_id: (encode-path-segment $employer_id)} | format pattern "/providers/employers/{employer_id}/dashboardLicenses"))
   let req_body = $body
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else if (($input | is-not-empty) and ($req_body | is-empty)) { $input } else { $req_body }
@@ -16928,7 +17476,7 @@ export def "providers-employers-dashboard-licenses update" [
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"Authorization": $authorization, "Accept": $hdr_accept, "If-Match": $if_match} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json;version=2018-01-01" $req_body
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json;version=2018-01-01" $req_body {query: {}, body: $req_body}
 }
 
 # Get Data New Business token for an employer
@@ -16951,19 +17499,20 @@ export def "providers-employers-datanewbusinesstoken get-data-new-business-token
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($employer_id | is-empty) { error make --unspanned { msg: "path parameter 'employerId' must be non-empty" } }
   let full_url = (build-url $base ({employer_id: (encode-path-segment $employer_id)} | format pattern "/providers/employers/{employer_id}/datanewbusinesstoken"))
   let accept_val = "application/json;version=2018-01-01"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"Authorization": $authorization, "Accept": $hdr_accept} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
 }
 
 # List of departments
 #
 # GET /providers/employers/{employerId}/departments
 # operationId: GetDepartmentsByEmployerId
-export def "providers-employers-departments get-by-employerId" [
+export def "providers-employers-departments get-by-employer-id" [
   employer_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -16983,13 +17532,14 @@ export def "providers-employers-departments get-by-employerId" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($employer_id | is-empty) { error make --unspanned { msg: "path parameter 'employerId' must be non-empty" } }
   let qp = [(serialize-qp "filter" $filter "scalar") (serialize-qp "orderBy" $order_by "scalar") (serialize-qp "pageNumber" $page_number "scalar") (serialize-qp "pageSize" $page_size "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({employer_id: (encode-path-segment $employer_id)} | format pattern "/providers/employers/{employer_id}/departments") $qp)
   let accept_val = "application/json;version=2018-01-01"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"Authorization": $authorization, "Accept": $hdr_accept} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"filter": $filter, "orderBy": $order_by, "pageNumber": $page_number, "pageSize": $page_size} | compact), body: null}
 }
 
 # Create a department for an employer
@@ -17018,6 +17568,7 @@ export def "providers-employers-departments create" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($employer_id | is-empty) { error make --unspanned { msg: "path parameter 'employerId' must be non-empty" } }
   let full_url = (build-url $base ({employer_id: (encode-path-segment $employer_id)} | format pattern "/providers/employers/{employer_id}/departments"))
   let req_body = {"code": $code, "description": $description, "emailLeaveRequest": $email_leave_request, "subDepartmentOf": $sub_department_of} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
@@ -17025,7 +17576,7 @@ export def "providers-employers-departments create" [
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"Authorization": $authorization, "Accept": $hdr_accept} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json;version=2018-01-01" $req_body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json;version=2018-01-01" $req_body {query: {}, body: $req_body}
 }
 
 # Get a list of employer dossier documents
@@ -17052,13 +17603,14 @@ export def "providers-employers-documents get" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($employer_id | is-empty) { error make --unspanned { msg: "path parameter 'employerId' must be non-empty" } }
   let qp = [(serialize-qp "filter" $filter "scalar") (serialize-qp "orderBy" $order_by "scalar") (serialize-qp "pageNumber" $page_number "scalar") (serialize-qp "pageSize" $page_size "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({employer_id: (encode-path-segment $employer_id)} | format pattern "/providers/employers/{employer_id}/documents") $qp)
   let accept_val = "application/json;version=2018-01-01"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"Authorization": $authorization, "Accept": $hdr_accept} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"filter": $filter, "orderBy": $order_by, "pageNumber": $page_number, "pageSize": $page_size} | compact), body: null}
 }
 
 # Upload a document to the employer dossier
@@ -17084,6 +17636,7 @@ export def "providers-employers-documents create" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($employer_id | is-empty) { error make --unspanned { msg: "path parameter 'employerId' must be non-empty" } }
   let full_url = (build-url $base ({employer_id: (encode-path-segment $employer_id)} | format pattern "/providers/employers/{employer_id}/documents"))
   let req_body = {"file": $file, "sendEmailNotification": $send_email_notification} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
@@ -17091,7 +17644,7 @@ export def "providers-employers-documents create" [
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"Authorization": $authorization, "Accept": $hdr_accept} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json;version=2018-01-01" $req_body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json;version=2018-01-01" $req_body {query: {}, body: $req_body}
 }
 
 # List of authorizations
@@ -17118,13 +17671,14 @@ export def "providers-employers-documents-authorizations get-dossier" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($employer_id | is-empty) { error make --unspanned { msg: "path parameter 'employerId' must be non-empty" } }
   let qp = [(serialize-qp "filter" $filter "scalar") (serialize-qp "orderBy" $order_by "scalar") (serialize-qp "pageNumber" $page_number "scalar") (serialize-qp "pageSize" $page_size "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({employer_id: (encode-path-segment $employer_id)} | format pattern "/providers/employers/{employer_id}/documents/authorizations") $qp)
   let accept_val = "application/json;version=2018-01-01"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"Authorization": $authorization, "Accept": $hdr_accept} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"filter": $filter, "orderBy": $order_by, "pageNumber": $page_number, "pageSize": $page_size} | compact), body: null}
 }
 
 # Edit the authorization matrix
@@ -17149,6 +17703,7 @@ export def "providers-employers-documents-authorizations update-dossier" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($employer_id | is-empty) { error make --unspanned { msg: "path parameter 'employerId' must be non-empty" } }
   let full_url = (build-url $base ({employer_id: (encode-path-segment $employer_id)} | format pattern "/providers/employers/{employer_id}/documents/authorizations"))
   let req_body = $body
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else if (($input | is-not-empty) and ($req_body | is-empty)) { $input } else { $req_body }
@@ -17156,7 +17711,7 @@ export def "providers-employers-documents-authorizations update-dossier" [
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"Authorization": $authorization, "Accept": $hdr_accept} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: {}, body: $req_body}
 }
 
 # Delete complete dossier
@@ -17179,12 +17734,13 @@ export def "providers-employers-documents-completedossier delete-complete-dossie
 ]: nothing -> record<version: record<obsoleteDate: string, resourceVersion: string>, messages: table<code: int, description: string, id: string, properties: list, type: string>, content: record> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($employer_id | is-empty) { error make --unspanned { msg: "path parameter 'employerId' must be non-empty" } }
   let full_url = (build-url $base ({employer_id: (encode-path-segment $employer_id)} | format pattern "/providers/employers/{employer_id}/documents/completedossier"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"Authorization": $authorization, "Accept": $hdr_accept} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
 }
 
 # Generate complete dossier
@@ -17207,12 +17763,13 @@ export def "providers-employers-documents-completedossier-initiate create-comple
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($employer_id | is-empty) { error make --unspanned { msg: "path parameter 'employerId' must be non-empty" } }
   let full_url = (build-url $base ({employer_id: (encode-path-segment $employer_id)} | format pattern "/providers/employers/{employer_id}/documents/completedossier/initiate"))
   let accept_val = "application/json;version=2018-01-01"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"Authorization": $authorization, "Accept": $hdr_accept} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
 }
 
 # Delete a document in the employer dossier
@@ -17236,12 +17793,14 @@ export def "providers-employers-documents delete-by-and" [
 ]: nothing -> record<version: record<obsoleteDate: string, resourceVersion: string>, messages: table<code: int, description: string, id: string, properties: list, type: string>, content: record> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($employer_id | is-empty) { error make --unspanned { msg: "path parameter 'employerId' must be non-empty" } }
+  if ($document_id | is-empty) { error make --unspanned { msg: "path parameter 'documentId' must be non-empty" } }
   let full_url = (build-url $base ({employer_id: (encode-path-segment $employer_id), document_id: (encode-path-segment $document_id)} | format pattern "/providers/employers/{employer_id}/documents/{document_id}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"Authorization": $authorization, "Accept": $hdr_accept} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
 }
 
 # Download employer dossier document
@@ -17264,12 +17823,14 @@ export def "providers-employers-documents get-by-and" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($employer_id | is-empty) { error make --unspanned { msg: "path parameter 'employerId' must be non-empty" } }
+  if ($document_id | is-empty) { error make --unspanned { msg: "path parameter 'documentId' must be non-empty" } }
   let full_url = (build-url $base ({employer_id: (encode-path-segment $employer_id), document_id: (encode-path-segment $document_id)} | format pattern "/providers/employers/{employer_id}/documents/{document_id}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"Authorization": $authorization} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
 }
 
 # Edit the details of an employer dossier document
@@ -17299,6 +17860,8 @@ export def "providers-employers-documents update-by-and" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($employer_id | is-empty) { error make --unspanned { msg: "path parameter 'employerId' must be non-empty" } }
+  if ($document_id | is-empty) { error make --unspanned { msg: "path parameter 'documentId' must be non-empty" } }
   let full_url = (build-url $base ({employer_id: (encode-path-segment $employer_id), document_id: (encode-path-segment $document_id)} | format pattern "/providers/employers/{employer_id}/documents/{document_id}"))
   let req_body = {"attribute": $attribute, "category": $category, "dateOfAlert": $date_of_alert, "description": $description, "year": $year} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
@@ -17306,7 +17869,7 @@ export def "providers-employers-documents update-by-and" [
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"Authorization": $authorization, "Accept": $hdr_accept} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json;version=2018-01-01" $req_body
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json;version=2018-01-01" $req_body {query: {}, body: $req_body}
 }
 
 # Get audittrail for the document in the employer dossier
@@ -17334,13 +17897,15 @@ export def "providers-employers-documents-audittrail get-audit-trail-by-and" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($employer_id | is-empty) { error make --unspanned { msg: "path parameter 'employerId' must be non-empty" } }
+  if ($document_id | is-empty) { error make --unspanned { msg: "path parameter 'documentId' must be non-empty" } }
   let qp = [(serialize-qp "filter" $filter "scalar") (serialize-qp "orderBy" $order_by "scalar") (serialize-qp "pageNumber" $page_number "scalar") (serialize-qp "pageSize" $page_size "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({employer_id: (encode-path-segment $employer_id), document_id: (encode-path-segment $document_id)} | format pattern "/providers/employers/{employer_id}/documents/{document_id}/audittrail") $qp)
   let accept_val = "application/json;version=2018-01-01"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"Authorization": $authorization, "Accept": $hdr_accept} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"filter": $filter, "orderBy": $order_by, "pageNumber": $page_number, "pageSize": $page_size} | compact), body: null}
 }
 
 # Get a list of document templates
@@ -17367,13 +17932,14 @@ export def "providers-employers-documenttemplates get-document-templates" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($employer_id | is-empty) { error make --unspanned { msg: "path parameter 'employerId' must be non-empty" } }
   let qp = [(serialize-qp "filter" $filter "scalar") (serialize-qp "orderBy" $order_by "scalar") (serialize-qp "pageNumber" $page_number "scalar") (serialize-qp "pageSize" $page_size "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({employer_id: (encode-path-segment $employer_id)} | format pattern "/providers/employers/{employer_id}/documenttemplates") $qp)
   let accept_val = "application/json;version=2018-01-01"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"Authorization": $authorization, "Accept": $hdr_accept} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"filter": $filter, "orderBy": $order_by, "pageNumber": $page_number, "pageSize": $page_size} | compact), body: null}
 }
 
 # Upload a document template to the employer dossier
@@ -17398,6 +17964,7 @@ export def "providers-employers-documenttemplates create-document-template" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($employer_id | is-empty) { error make --unspanned { msg: "path parameter 'employerId' must be non-empty" } }
   let full_url = (build-url $base ({employer_id: (encode-path-segment $employer_id)} | format pattern "/providers/employers/{employer_id}/documenttemplates"))
   let req_body = {"file": $file} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
@@ -17405,7 +17972,7 @@ export def "providers-employers-documenttemplates create-document-template" [
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"Authorization": $authorization, "Accept": $hdr_accept} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json;version=2018-01-01" $req_body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json;version=2018-01-01" $req_body {query: {}, body: $req_body}
 }
 
 # Delete a document template in the employer dossier
@@ -17429,12 +17996,14 @@ export def "providers-employers-documenttemplates delete-document-template-by-an
 ]: nothing -> record<version: record<obsoleteDate: string, resourceVersion: string>, messages: table<code: int, description: string, id: string, properties: list, type: string>, content: record> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($employer_id | is-empty) { error make --unspanned { msg: "path parameter 'employerId' must be non-empty" } }
+  if ($document_id | is-empty) { error make --unspanned { msg: "path parameter 'documentId' must be non-empty" } }
   let full_url = (build-url $base ({employer_id: (encode-path-segment $employer_id), document_id: (encode-path-segment $document_id)} | format pattern "/providers/employers/{employer_id}/documenttemplates/{document_id}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"Authorization": $authorization, "Accept": $hdr_accept} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
 }
 
 # Download template document
@@ -17457,12 +18026,14 @@ export def "providers-employers-documenttemplates get-document-template-by-and-d
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($employer_id | is-empty) { error make --unspanned { msg: "path parameter 'employerId' must be non-empty" } }
+  if ($document_id | is-empty) { error make --unspanned { msg: "path parameter 'documentId' must be non-empty" } }
   let full_url = (build-url $base ({employer_id: (encode-path-segment $employer_id), document_id: (encode-path-segment $document_id)} | format pattern "/providers/employers/{employer_id}/documenttemplates/{document_id}"))
   let accept_val = "application/vnd.openxmlformats-officedocument.wordprocessingml.document"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"Authorization": $authorization} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
 }
 
 # Edit the details of an document template
@@ -17491,6 +18062,8 @@ export def "providers-employers-documenttemplates update-document-template-by-an
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($employer_id | is-empty) { error make --unspanned { msg: "path parameter 'employerId' must be non-empty" } }
+  if ($document_id | is-empty) { error make --unspanned { msg: "path parameter 'documentId' must be non-empty" } }
   let full_url = (build-url $base ({employer_id: (encode-path-segment $employer_id), document_id: (encode-path-segment $document_id)} | format pattern "/providers/employers/{employer_id}/documenttemplates/{document_id}"))
   let req_body = {"attribute": $attribute, "dateOfAlert": $date_of_alert, "description": $description, "year": $year} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
@@ -17498,7 +18071,7 @@ export def "providers-employers-documenttemplates update-document-template-by-an
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"Authorization": $authorization, "Accept": $hdr_accept} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json;version=2018-01-01" $req_body
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json;version=2018-01-01" $req_body {query: {}, body: $req_body}
 }
 
 # Generate documents for selected employments
@@ -17532,6 +18105,8 @@ export def "providers-employers-documenttemplates-generatedocuments create-gener
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($employer_id | is-empty) { error make --unspanned { msg: "path parameter 'employerId' must be non-empty" } }
+  if ($document_id | is-empty) { error make --unspanned { msg: "path parameter 'documentId' must be non-empty" } }
   let full_url = (build-url $base ({employer_id: (encode-path-segment $employer_id), document_id: (encode-path-segment $document_id)} | format pattern "/providers/employers/{employer_id}/documenttemplates/{document_id}/generatedocuments"))
   let req_body = {"attribute": $attribute, "dateOfAlert": $date_of_alert, "description": $description, "filename": $filename, "referenceDate": $reference_date, "templateEmployerId": $template_employer_id, "year": $year, "employmentIds": $employment_ids, "sendEmailNotification": $send_email_notification} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
@@ -17539,7 +18114,7 @@ export def "providers-employers-documenttemplates-generatedocuments create-gener
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"Authorization": $authorization, "Accept": $hdr_accept} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json;version=2018-01-01" $req_body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json;version=2018-01-01" $req_body {query: {}, body: $req_body}
 }
 
 # List education further indications for an employer
@@ -17566,13 +18141,14 @@ export def "providers-employers-educationfurtherindications get-education-furthe
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($employer_id | is-empty) { error make --unspanned { msg: "path parameter 'employerId' must be non-empty" } }
   let qp = [(serialize-qp "filter" $filter "scalar") (serialize-qp "orderBy" $order_by "scalar") (serialize-qp "pageNumber" $page_number "scalar") (serialize-qp "pageSize" $page_size "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({employer_id: (encode-path-segment $employer_id)} | format pattern "/providers/employers/{employer_id}/educationfurtherindications") $qp)
   let accept_val = "application/json;version=2018-01-01"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"Authorization": $authorization, "Accept": $hdr_accept} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"filter": $filter, "orderBy": $order_by, "pageNumber": $page_number, "pageSize": $page_size} | compact), body: null}
 }
 
 # Add an education further indication for an employer
@@ -17598,6 +18174,7 @@ export def "providers-employers-educationfurtherindications create-education-fur
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($employer_id | is-empty) { error make --unspanned { msg: "path parameter 'employerId' must be non-empty" } }
   let full_url = (build-url $base ({employer_id: (encode-path-segment $employer_id)} | format pattern "/providers/employers/{employer_id}/educationfurtherindications"))
   let req_body = {"code": $code, "description": $description} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
@@ -17605,7 +18182,7 @@ export def "providers-employers-educationfurtherindications create-education-fur
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"Authorization": $authorization, "Accept": $hdr_accept} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json;version=2018-01-01" $req_body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json;version=2018-01-01" $req_body {query: {}, body: $req_body}
 }
 
 # List education types for an employer
@@ -17632,13 +18209,14 @@ export def "providers-employers-educationtypes get-education-types" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($employer_id | is-empty) { error make --unspanned { msg: "path parameter 'employerId' must be non-empty" } }
   let qp = [(serialize-qp "filter" $filter "scalar") (serialize-qp "orderBy" $order_by "scalar") (serialize-qp "pageNumber" $page_number "scalar") (serialize-qp "pageSize" $page_size "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({employer_id: (encode-path-segment $employer_id)} | format pattern "/providers/employers/{employer_id}/educationtypes") $qp)
   let accept_val = "application/json;version=2018-01-01"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"Authorization": $authorization, "Accept": $hdr_accept} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"filter": $filter, "orderBy": $order_by, "pageNumber": $page_number, "pageSize": $page_size} | compact), body: null}
 }
 
 # Add an education type for an employer
@@ -17664,6 +18242,7 @@ export def "providers-employers-educationtypes create-education-type" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($employer_id | is-empty) { error make --unspanned { msg: "path parameter 'employerId' must be non-empty" } }
   let full_url = (build-url $base ({employer_id: (encode-path-segment $employer_id)} | format pattern "/providers/employers/{employer_id}/educationtypes"))
   let req_body = {"code": $code, "description": $description} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
@@ -17671,7 +18250,7 @@ export def "providers-employers-educationtypes create-education-type" [
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"Authorization": $authorization, "Accept": $hdr_accept} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json;version=2018-01-01" $req_body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json;version=2018-01-01" $req_body {query: {}, body: $req_body}
 }
 
 # List of EmailIdentities for an employer
@@ -17698,13 +18277,14 @@ export def "providers-employers-emailidentities get-email-identities" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($employer_id | is-empty) { error make --unspanned { msg: "path parameter 'employerId' must be non-empty" } }
   let qp = [(serialize-qp "filter" $filter "scalar") (serialize-qp "orderBy" $order_by "scalar") (serialize-qp "pageNumber" $page_number "scalar") (serialize-qp "pageSize" $page_size "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({employer_id: (encode-path-segment $employer_id)} | format pattern "/providers/employers/{employer_id}/emailidentities") $qp)
   let accept_val = "application/json;version=2018-01-01"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"Authorization": $authorization, "Accept": $hdr_accept} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"filter": $filter, "orderBy": $order_by, "pageNumber": $page_number, "pageSize": $page_size} | compact), body: null}
 }
 
 # Create an EmailIdentity for an employer
@@ -17729,6 +18309,7 @@ export def "providers-employers-emailidentities create-email-identity" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($employer_id | is-empty) { error make --unspanned { msg: "path parameter 'employerId' must be non-empty" } }
   let full_url = (build-url $base ({employer_id: (encode-path-segment $employer_id)} | format pattern "/providers/employers/{employer_id}/emailidentities"))
   let req_body = {"emailIdentity": $email_identity} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
@@ -17736,7 +18317,7 @@ export def "providers-employers-emailidentities create-email-identity" [
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"Authorization": $authorization, "Accept": $hdr_accept} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json;version=2018-01-01" $req_body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json;version=2018-01-01" $req_body {query: {}, body: $req_body}
 }
 
 # Verify an EmailIdentity for an employer
@@ -17761,6 +18342,7 @@ export def "providers-employers-emailidentities-verify create-email-identity" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($employer_id | is-empty) { error make --unspanned { msg: "path parameter 'employerId' must be non-empty" } }
   let full_url = (build-url $base ({employer_id: (encode-path-segment $employer_id)} | format pattern "/providers/employers/{employer_id}/emailidentities/verify"))
   let req_body = {"emailIdentity": $email_identity} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
@@ -17768,7 +18350,7 @@ export def "providers-employers-emailidentities-verify create-email-identity" [
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"Authorization": $authorization, "Accept": $hdr_accept} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json;version=2018-01-01" $req_body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json;version=2018-01-01" $req_body {query: {}, body: $req_body}
 }
 
 # List email templates for an employer
@@ -17795,13 +18377,14 @@ export def "providers-employers-emailtemplates get-email-templates" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($employer_id | is-empty) { error make --unspanned { msg: "path parameter 'employerId' must be non-empty" } }
   let qp = [(serialize-qp "filter" $filter "scalar") (serialize-qp "orderBy" $order_by "scalar") (serialize-qp "pageNumber" $page_number "scalar") (serialize-qp "pageSize" $page_size "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({employer_id: (encode-path-segment $employer_id)} | format pattern "/providers/employers/{employer_id}/emailtemplates") $qp)
   let accept_val = "application/json;version=2018-01-01"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"Authorization": $authorization, "Accept": $hdr_accept} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"filter": $filter, "orderBy": $order_by, "pageNumber": $page_number, "pageSize": $page_size} | compact), body: null}
 }
 
 # Delete an email template record
@@ -17827,13 +18410,15 @@ export def "providers-employers-emailtemplates delete-email-template-by-and-emai
 ]: nothing -> record<version: record<obsoleteDate: string, resourceVersion: string>, messages: table<code: int, description: string, id: string, properties: list, type: string>, content: record> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($employer_id | is-empty) { error make --unspanned { msg: "path parameter 'employerId' must be non-empty" } }
+  if ($email_template_id | is-empty) { error make --unspanned { msg: "path parameter 'emailTemplateId' must be non-empty" } }
   let qp = [(serialize-qp "emailtemplateId" $emailtemplate_id "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({employer_id: (encode-path-segment $employer_id), email_template_id: (encode-path-segment $email_template_id)} | format pattern "/providers/employers/{employer_id}/emailtemplates/{email_template_id}") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"Authorization": $authorization, "Accept": $hdr_accept, "If-Match": $if_match} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"emailtemplateId": $emailtemplate_id} | compact), body: null}
 }
 
 # Details of an email template
@@ -17862,13 +18447,15 @@ export def "providers-employers-emailtemplates get-email-template-by-and-email-t
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($employer_id | is-empty) { error make --unspanned { msg: "path parameter 'employerId' must be non-empty" } }
+  if ($email_template_id | is-empty) { error make --unspanned { msg: "path parameter 'emailTemplateId' must be non-empty" } }
   let qp = [(serialize-qp "emailtemplateId" $emailtemplate_id "scalar") (serialize-qp "filter" $filter "scalar") (serialize-qp "orderBy" $order_by "scalar") (serialize-qp "pageNumber" $page_number "scalar") (serialize-qp "pageSize" $page_size "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({employer_id: (encode-path-segment $employer_id), email_template_id: (encode-path-segment $email_template_id)} | format pattern "/providers/employers/{employer_id}/emailtemplates/{email_template_id}") $qp)
   let accept_val = "application/json;version=2018-01-01"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"Authorization": $authorization, "Accept": $hdr_accept} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"emailtemplateId": $emailtemplate_id, "filter": $filter, "orderBy": $order_by, "pageNumber": $page_number, "pageSize": $page_size} | compact), body: null}
 }
 
 # Edit an email template record
@@ -17900,6 +18487,8 @@ export def "providers-employers-emailtemplates update-email-template-by-and-emai
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($employer_id | is-empty) { error make --unspanned { msg: "path parameter 'employerId' must be non-empty" } }
+  if ($email_template_id | is-empty) { error make --unspanned { msg: "path parameter 'emailTemplateId' must be non-empty" } }
   let qp = [(serialize-qp "emailtemplateId" $emailtemplate_id "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({employer_id: (encode-path-segment $employer_id), email_template_id: (encode-path-segment $email_template_id)} | format pattern "/providers/employers/{employer_id}/emailtemplates/{email_template_id}") $qp)
   let req_body = {"email": $email} | compact
@@ -17908,14 +18497,14 @@ export def "providers-employers-emailtemplates update-email-template-by-and-emai
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"Authorization": $authorization, "Accept": $hdr_accept, "If-Match": $if_match} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json;version=2018-01-01" $req_body
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json;version=2018-01-01" $req_body {query: ({"emailtemplateId": $emailtemplate_id} | compact), body: $req_body}
 }
 
 # List of employees for an employer
 #
 # GET /providers/employers/{employerId}/employees
 # operationId: GetEmployeesByEmployerId
-export def "providers-employers-employees get-by-employerId" [
+export def "providers-employers-employees get-by-employer-id" [
   employer_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -17937,13 +18526,14 @@ export def "providers-employers-employees get-by-employerId" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($employer_id | is-empty) { error make --unspanned { msg: "path parameter 'employerId' must be non-empty" } }
   let qp = [(serialize-qp "filter" $filter "scalar") (serialize-qp "orderBy" $order_by "scalar") (serialize-qp "pageNumber" $page_number "scalar") (serialize-qp "pageSize" $page_size "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({employer_id: (encode-path-segment $employer_id)} | format pattern "/providers/employers/{employer_id}/employees") $qp)
   let accept_val = ($accept | default "application/json;version=2018-12-31")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"Authorization": $authorization, "Accept": $hdr_accept, "X-ReportInput": $x_report_input} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"filter": $filter, "orderBy": $order_by, "pageNumber": $page_number, "pageSize": $page_size} | compact), body: null}
 }
 
 # List of Partners for an employer
@@ -17971,20 +18561,21 @@ export def "providers-employers-employees-actualpartners get-actual-partners" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($employer_id | is-empty) { error make --unspanned { msg: "path parameter 'employerId' must be non-empty" } }
   let qp = [(serialize-qp "referenceDate" $reference_date "scalar") (serialize-qp "filter" $filter "scalar") (serialize-qp "orderBy" $order_by "scalar") (serialize-qp "pageNumber" $page_number "scalar") (serialize-qp "pageSize" $page_size "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({employer_id: (encode-path-segment $employer_id)} | format pattern "/providers/employers/{employer_id}/employees/actualpartners") $qp)
   let accept_val = "application/json;version=2018-01-01"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"Authorization": $authorization, "Accept": $hdr_accept} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"referenceDate": $reference_date, "filter": $filter, "orderBy": $order_by, "pageNumber": $page_number, "pageSize": $page_size} | compact), body: null}
 }
 
 # List of Children for an employer
 #
 # GET /providers/employers/{employerId}/employees/children
 # operationId: GetChildrenByEmployerId
-export def "providers-employers-employees-children get-by-employerId" [
+export def "providers-employers-employees-children get-by-employer-id" [
   employer_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -18005,20 +18596,21 @@ export def "providers-employers-employees-children get-by-employerId" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($employer_id | is-empty) { error make --unspanned { msg: "path parameter 'employerId' must be non-empty" } }
   let qp = [(serialize-qp "referenceDate" $reference_date "scalar") (serialize-qp "filter" $filter "scalar") (serialize-qp "orderBy" $order_by "scalar") (serialize-qp "pageNumber" $page_number "scalar") (serialize-qp "pageSize" $page_size "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({employer_id: (encode-path-segment $employer_id)} | format pattern "/providers/employers/{employer_id}/employees/children") $qp)
   let accept_val = "application/json;version=2018-01-01"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"Authorization": $authorization, "Accept": $hdr_accept} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"referenceDate": $reference_date, "filter": $filter, "orderBy": $order_by, "pageNumber": $page_number, "pageSize": $page_size} | compact), body: null}
 }
 
 # List of Contacts for an employer
 #
 # GET /providers/employers/{employerId}/employees/contacts
 # operationId: GetContactsByEmployerId
-export def "providers-employers-employees-contacts get-by-employerId" [
+export def "providers-employers-employees-contacts get-by-employer-id" [
   employer_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -18039,20 +18631,21 @@ export def "providers-employers-employees-contacts get-by-employerId" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($employer_id | is-empty) { error make --unspanned { msg: "path parameter 'employerId' must be non-empty" } }
   let qp = [(serialize-qp "referenceDate" $reference_date "scalar") (serialize-qp "filter" $filter "scalar") (serialize-qp "orderBy" $order_by "scalar") (serialize-qp "pageNumber" $page_number "scalar") (serialize-qp "pageSize" $page_size "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({employer_id: (encode-path-segment $employer_id)} | format pattern "/providers/employers/{employer_id}/employees/contacts") $qp)
   let accept_val = "application/json;version=2018-01-01"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"Authorization": $authorization, "Accept": $hdr_accept} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"referenceDate": $reference_date, "filter": $filter, "orderBy": $order_by, "pageNumber": $page_number, "pageSize": $page_size} | compact), body: null}
 }
 
 # List of employments for an employer
 #
 # GET /providers/employers/{employerId}/employees/employments
 # operationId: GetEmploymentsByEmployerId
-export def "providers-employers-employees-employments get-by-employerId" [
+export def "providers-employers-employees-employments get-by-employer-id" [
   employer_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -18072,13 +18665,14 @@ export def "providers-employers-employees-employments get-by-employerId" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($employer_id | is-empty) { error make --unspanned { msg: "path parameter 'employerId' must be non-empty" } }
   let qp = [(serialize-qp "filter" $filter "scalar") (serialize-qp "orderBy" $order_by "scalar") (serialize-qp "pageNumber" $page_number "scalar") (serialize-qp "pageSize" $page_size "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({employer_id: (encode-path-segment $employer_id)} | format pattern "/providers/employers/{employer_id}/employees/employments") $qp)
   let accept_val = "application/json;version=2019-12-16"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"Authorization": $authorization, "Accept": $hdr_accept} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"filter": $filter, "orderBy": $order_by, "pageNumber": $page_number, "pageSize": $page_size} | compact), body: null}
 }
 
 # List of wage proposals for the employments of an employer
@@ -18105,13 +18699,14 @@ export def "providers-employers-employees-employments-wage-proposals get" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($employer_id | is-empty) { error make --unspanned { msg: "path parameter 'employerId' must be non-empty" } }
   let qp = [(serialize-qp "filter" $filter "scalar") (serialize-qp "orderBy" $order_by "scalar") (serialize-qp "pageNumber" $page_number "scalar") (serialize-qp "pageSize" $page_size "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({employer_id: (encode-path-segment $employer_id)} | format pattern "/providers/employers/{employer_id}/employees/employments/WageProposals") $qp)
   let accept_val = "application/json;version=2018-01-01"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"Authorization": $authorization, "Accept": $hdr_accept} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"filter": $filter, "orderBy": $order_by, "pageNumber": $page_number, "pageSize": $page_size} | compact), body: null}
 }
 
 # List of actual benefitsanddeductions for an employer
@@ -18139,13 +18734,14 @@ export def "providers-employers-employees-employments-actualbenefitsanddeduction
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($employer_id | is-empty) { error make --unspanned { msg: "path parameter 'employerId' must be non-empty" } }
   let qp = [(serialize-qp "referenceDate" $reference_date "scalar") (serialize-qp "filter" $filter "scalar") (serialize-qp "orderBy" $order_by "scalar") (serialize-qp "pageNumber" $page_number "scalar") (serialize-qp "pageSize" $page_size "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({employer_id: (encode-path-segment $employer_id)} | format pattern "/providers/employers/{employer_id}/employees/employments/actualbenefitsanddeductions") $qp)
   let accept_val = "application/json;version=2018-01-01"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"Authorization": $authorization, "Accept": $hdr_accept} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"referenceDate": $reference_date, "filter": $filter, "orderBy": $order_by, "pageNumber": $page_number, "pageSize": $page_size} | compact), body: null}
 }
 
 # Create benefits and deductions for multiple employments
@@ -18174,6 +18770,7 @@ export def "providers-employers-employees-employments-benefitsanddeductions crea
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($employer_id | is-empty) { error make --unspanned { msg: "path parameter 'employerId' must be non-empty" } }
   let full_url = (build-url $base ({employer_id: (encode-path-segment $employer_id)} | format pattern "/providers/employers/{employer_id}/employees/employments/benefitsanddeductions"))
   let req_body = {"employmentId": $employment_id, "payrollComponent": $payroll_component, "startDate": $start_date, "value": $value} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
@@ -18181,7 +18778,7 @@ export def "providers-employers-employees-employments-benefitsanddeductions crea
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"Authorization": $authorization, "Accept": $hdr_accept} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json;version=2018-01-01" $req_body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json;version=2018-01-01" $req_body {query: {}, body: $req_body}
 }
 
 # List absences per employment (for calendar)
@@ -18210,13 +18807,14 @@ export def "providers-employers-employees-employments-calendar-absences get" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($employer_id | is-empty) { error make --unspanned { msg: "path parameter 'employerId' must be non-empty" } }
   let qp = [(serialize-qp "filter" $filter "scalar") (serialize-qp "orderBy" $order_by "scalar") (serialize-qp "pageNumber" $page_number "scalar") (serialize-qp "pageSize" $page_size "scalar") (serialize-qp "startDate" $start_date "scalar") (serialize-qp "endDate" $end_date "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({employer_id: (encode-path-segment $employer_id)} | format pattern "/providers/employers/{employer_id}/employees/employments/calendar/absences") $qp)
   let accept_val = "application/json;version=2018-01-01"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"Authorization": $authorization, "Accept": $hdr_accept} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"filter": $filter, "orderBy": $order_by, "pageNumber": $page_number, "pageSize": $page_size, "startDate": $start_date, "endDate": $end_date} | compact), body: null}
 }
 
 # List available hours per employment (for calendar)
@@ -18245,13 +18843,14 @@ export def "providers-employers-employees-employments-calendar-availablehours ge
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($employer_id | is-empty) { error make --unspanned { msg: "path parameter 'employerId' must be non-empty" } }
   let qp = [(serialize-qp "filter" $filter "scalar") (serialize-qp "orderBy" $order_by "scalar") (serialize-qp "pageNumber" $page_number "scalar") (serialize-qp "pageSize" $page_size "scalar") (serialize-qp "startDate" $start_date "scalar") (serialize-qp "endDate" $end_date "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({employer_id: (encode-path-segment $employer_id)} | format pattern "/providers/employers/{employer_id}/employees/employments/calendar/availablehours") $qp)
   let accept_val = "application/json;version=2018-01-01"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"Authorization": $authorization, "Accept": $hdr_accept} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"filter": $filter, "orderBy": $order_by, "pageNumber": $page_number, "pageSize": $page_size, "startDate": $start_date, "endDate": $end_date} | compact), body: null}
 }
 
 # List leave per employment (for calendar)
@@ -18280,13 +18879,14 @@ export def "providers-employers-employees-employments-calendar-leave get" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($employer_id | is-empty) { error make --unspanned { msg: "path parameter 'employerId' must be non-empty" } }
   let qp = [(serialize-qp "filter" $filter "scalar") (serialize-qp "orderBy" $order_by "scalar") (serialize-qp "pageNumber" $page_number "scalar") (serialize-qp "pageSize" $page_size "scalar") (serialize-qp "startDate" $start_date "scalar") (serialize-qp "endDate" $end_date "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({employer_id: (encode-path-segment $employer_id)} | format pattern "/providers/employers/{employer_id}/employees/employments/calendar/leave") $qp)
   let accept_val = "application/json;version=2018-01-01"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"Authorization": $authorization, "Accept": $hdr_accept} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"filter": $filter, "orderBy": $order_by, "pageNumber": $page_number, "pageSize": $page_size, "startDate": $start_date, "endDate": $end_date} | compact), body: null}
 }
 
 # List leave requests per employment (for calendar)
@@ -18315,13 +18915,14 @@ export def "providers-employers-employees-employments-calendar-leaverequests get
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($employer_id | is-empty) { error make --unspanned { msg: "path parameter 'employerId' must be non-empty" } }
   let qp = [(serialize-qp "filter" $filter "scalar") (serialize-qp "orderBy" $order_by "scalar") (serialize-qp "pageNumber" $page_number "scalar") (serialize-qp "pageSize" $page_size "scalar") (serialize-qp "startDate" $start_date "scalar") (serialize-qp "endDate" $end_date "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({employer_id: (encode-path-segment $employer_id)} | format pattern "/providers/employers/{employer_id}/employees/employments/calendar/leaverequests") $qp)
   let accept_val = "application/json;version=2018-01-01"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"Authorization": $authorization, "Accept": $hdr_accept} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"filter": $filter, "orderBy": $order_by, "pageNumber": $page_number, "pageSize": $page_size, "startDate": $start_date, "endDate": $end_date} | compact), body: null}
 }
 
 # List of employments with additional entities
@@ -18349,20 +18950,21 @@ export def "providers-employers-employees-employments-comprehensive get" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($employer_id | is-empty) { error make --unspanned { msg: "path parameter 'employerId' must be non-empty" } }
   let qp = [(serialize-qp "referenceDate" $reference_date "scalar") (serialize-qp "filter" $filter "scalar") (serialize-qp "orderBy" $order_by "scalar") (serialize-qp "pageNumber" $page_number "scalar") (serialize-qp "pageSize" $page_size "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({employer_id: (encode-path-segment $employer_id)} | format pattern "/providers/employers/{employer_id}/employees/employments/comprehensive") $qp)
   let accept_val = "application/json;version=2019-12-16"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"Authorization": $authorization, "Accept": $hdr_accept} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"referenceDate": $reference_date, "filter": $filter, "orderBy": $order_by, "pageNumber": $page_number, "pageSize": $page_size} | compact), body: null}
 }
 
 # List of declarations for the employees of an employer
 #
 # GET /providers/employers/{employerId}/employees/employments/declarations
 # operationId: GetDeclarationsForEmployerId
-export def "providers-employers-employees-employments-declarations get-by-employerId" [
+export def "providers-employers-employees-employments-declarations get-by-employer-id" [
   employer_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -18382,13 +18984,14 @@ export def "providers-employers-employees-employments-declarations get-by-employ
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($employer_id | is-empty) { error make --unspanned { msg: "path parameter 'employerId' must be non-empty" } }
   let qp = [(serialize-qp "filter" $filter "scalar") (serialize-qp "orderBy" $order_by "scalar") (serialize-qp "pageNumber" $page_number "scalar") (serialize-qp "pageSize" $page_size "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({employer_id: (encode-path-segment $employer_id)} | format pattern "/providers/employers/{employer_id}/employees/employments/declarations") $qp)
   let accept_val = "application/json;version=2018-01-01"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"Authorization": $authorization, "Accept": $hdr_accept} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"filter": $filter, "orderBy": $order_by, "pageNumber": $page_number, "pageSize": $page_size} | compact), body: null}
 }
 
 # Get a list of declarations with attachment
@@ -18415,13 +19018,14 @@ export def "providers-employers-employees-employments-declarations-withattachmen
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($employer_id | is-empty) { error make --unspanned { msg: "path parameter 'employerId' must be non-empty" } }
   let qp = [(serialize-qp "filter" $filter "scalar") (serialize-qp "orderBy" $order_by "scalar") (serialize-qp "pageNumber" $page_number "scalar") (serialize-qp "pageSize" $page_size "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({employer_id: (encode-path-segment $employer_id)} | format pattern "/providers/employers/{employer_id}/employees/employments/declarations/withattachment") $qp)
   let accept_val = "application/json;version=2018-01-01"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"Authorization": $authorization, "Accept": $hdr_accept} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"filter": $filter, "orderBy": $order_by, "pageNumber": $page_number, "pageSize": $page_size} | compact), body: null}
 }
 
 # List of employment version numbers
@@ -18448,20 +19052,21 @@ export def "providers-employers-employees-employments-lastmodifiedversionnumbers
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($employer_id | is-empty) { error make --unspanned { msg: "path parameter 'employerId' must be non-empty" } }
   let qp = [(serialize-qp "filter" $filter "scalar") (serialize-qp "orderBy" $order_by "scalar") (serialize-qp "pageNumber" $page_number "scalar") (serialize-qp "pageSize" $page_size "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({employer_id: (encode-path-segment $employer_id)} | format pattern "/providers/employers/{employer_id}/employees/employments/lastmodifiedversionnumbers") $qp)
   let accept_val = "application/json;version=2018-01-01"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"Authorization": $authorization, "Accept": $hdr_accept} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"filter": $filter, "orderBy": $order_by, "pageNumber": $page_number, "pageSize": $page_size} | compact), body: null}
 }
 
 # List of leave requests for the employees of an employer
 #
 # GET /providers/employers/{employerId}/employees/employments/leaverequests
 # operationId: GetLeaveRequestsForEmployer
-export def "providers-employers-employees-employments-leaverequests get-leave-requests-by-employerId" [
+export def "providers-employers-employees-employments-leaverequests get-leave-requests-by-employer-id" [
   employer_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -18481,13 +19086,14 @@ export def "providers-employers-employees-employments-leaverequests get-leave-re
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($employer_id | is-empty) { error make --unspanned { msg: "path parameter 'employerId' must be non-empty" } }
   let qp = [(serialize-qp "filter" $filter "scalar") (serialize-qp "orderBy" $order_by "scalar") (serialize-qp "pageNumber" $page_number "scalar") (serialize-qp "pageSize" $page_size "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({employer_id: (encode-path-segment $employer_id)} | format pattern "/providers/employers/{employer_id}/employees/employments/leaverequests") $qp)
   let accept_val = "application/json;version=2018-01-01"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"Authorization": $authorization, "Accept": $hdr_accept} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"filter": $filter, "orderBy": $order_by, "pageNumber": $page_number, "pageSize": $page_size} | compact), body: null}
 }
 
 # List of employments with fewer fields for performance reasons
@@ -18514,13 +19120,14 @@ export def "providers-employers-employees-employments-minimized get" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($employer_id | is-empty) { error make --unspanned { msg: "path parameter 'employerId' must be non-empty" } }
   let qp = [(serialize-qp "filter" $filter "scalar") (serialize-qp "orderBy" $order_by "scalar") (serialize-qp "pageNumber" $page_number "scalar") (serialize-qp "pageSize" $page_size "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({employer_id: (encode-path-segment $employer_id)} | format pattern "/providers/employers/{employer_id}/employees/employments/minimized") $qp)
   let accept_val = "application/json;version=2019-12-16"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"Authorization": $authorization, "Accept": $hdr_accept} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"filter": $filter, "orderBy": $order_by, "pageNumber": $page_number, "pageSize": $page_size} | compact), body: null}
 }
 
 # Create wages for multiple employments
@@ -18547,6 +19154,7 @@ export def "providers-employers-employees-employments-wages create-collective" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($employer_id | is-empty) { error make --unspanned { msg: "path parameter 'employerId' must be non-empty" } }
   let full_url = (build-url $base ({employer_id: (encode-path-segment $employer_id)} | format pattern "/providers/employers/{employer_id}/employees/employments/wages"))
   let req_body = {"employmentId": $employment_id, "grossWage": $gross_wage, "startDate": $start_date} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
@@ -18554,14 +19162,14 @@ export def "providers-employers-employees-employments-wages create-collective" [
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"Authorization": $authorization, "Accept": $hdr_accept} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json;version=2018-01-01" $req_body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json;version=2018-01-01" $req_body {query: {}, body: $req_body}
 }
 
 # List of employee's and their ESS (WNL) status
 #
 # GET /providers/employers/{employerId}/employees/selfservice
 # operationId: GetEmployeeSelfServiceByEmployerId
-export def "providers-employers-employees-selfservice get-self-service-by-employerId" [
+export def "providers-employers-employees-selfservice get-self-service-by-employer-id" [
   employer_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -18581,20 +19189,21 @@ export def "providers-employers-employees-selfservice get-self-service-by-employ
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($employer_id | is-empty) { error make --unspanned { msg: "path parameter 'employerId' must be non-empty" } }
   let qp = [(serialize-qp "filter" $filter "scalar") (serialize-qp "orderBy" $order_by "scalar") (serialize-qp "pageNumber" $page_number "scalar") (serialize-qp "pageSize" $page_size "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({employer_id: (encode-path-segment $employer_id)} | format pattern "/providers/employers/{employer_id}/employees/selfservice") $qp)
   let accept_val = "application/json;version=2018-01-01"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"Authorization": $authorization, "Accept": $hdr_accept} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"filter": $filter, "orderBy": $order_by, "pageNumber": $page_number, "pageSize": $page_size} | compact), body: null}
 }
 
 # Change the ESS access for several employees
 #
 # PATCH /providers/employers/{employerId}/employees/selfservice
 # operationId: PatchEmployeeSelfServiceAccessByEmployerId
-export def "providers-employers-employees-selfservice update-self-service-access-by-employerId" [
+export def "providers-employers-employees-selfservice update-self-service-access-by-employer-id" [
   employer_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -18612,6 +19221,7 @@ export def "providers-employers-employees-selfservice update-self-service-access
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($employer_id | is-empty) { error make --unspanned { msg: "path parameter 'employerId' must be non-empty" } }
   let full_url = (build-url $base ({employer_id: (encode-path-segment $employer_id)} | format pattern "/providers/employers/{employer_id}/employees/selfservice"))
   let req_body = $body
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else if (($input | is-not-empty) and ($req_body | is-empty)) { $input } else { $req_body }
@@ -18619,7 +19229,7 @@ export def "providers-employers-employees-selfservice update-self-service-access
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"Authorization": $authorization, "Accept": $hdr_accept} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "patch" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json;version=2018-01-01" $req_body
+  do-request "patch" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json;version=2018-01-01" $req_body {query: {}, body: $req_body}
 }
 
 # Employment templates
@@ -18642,12 +19252,13 @@ export def "providers-employers-employmenttemplates get-employment-templates" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($employer_id | is-empty) { error make --unspanned { msg: "path parameter 'employerId' must be non-empty" } }
   let full_url = (build-url $base ({employer_id: (encode-path-segment $employer_id)} | format pattern "/providers/employers/{employer_id}/employmenttemplates"))
   let accept_val = "application/json;version=2018-01-01"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"Authorization": $authorization, "Accept": $hdr_accept} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
 }
 
 # Get available external tenants (employer scope)
@@ -18670,19 +19281,20 @@ export def "providers-employers-externaltenants get-external-tenants" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($employer_id | is-empty) { error make --unspanned { msg: "path parameter 'employerId' must be non-empty" } }
   let full_url = (build-url $base ({employer_id: (encode-path-segment $employer_id)} | format pattern "/providers/employers/{employer_id}/externaltenants"))
   let accept_val = "application/json;version=2018-01-01"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"Authorization": $authorization, "Accept": $hdr_accept} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
 }
 
 # List of functions
 #
 # GET /providers/employers/{employerId}/functions
 # operationId: GetFunctionsByEmployerId
-export def "providers-employers-functions get-by-employerId" [
+export def "providers-employers-functions get-by-employer-id" [
   employer_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -18702,13 +19314,14 @@ export def "providers-employers-functions get-by-employerId" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($employer_id | is-empty) { error make --unspanned { msg: "path parameter 'employerId' must be non-empty" } }
   let qp = [(serialize-qp "filter" $filter "scalar") (serialize-qp "orderBy" $order_by "scalar") (serialize-qp "pageNumber" $page_number "scalar") (serialize-qp "pageSize" $page_size "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({employer_id: (encode-path-segment $employer_id)} | format pattern "/providers/employers/{employer_id}/functions") $qp)
   let accept_val = "application/json;version=2018-01-01"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"Authorization": $authorization, "Accept": $hdr_accept} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"filter": $filter, "orderBy": $order_by, "pageNumber": $page_number, "pageSize": $page_size} | compact), body: null}
 }
 
 # Create a function for an employer
@@ -18734,6 +19347,7 @@ export def "providers-employers-functions create" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($employer_id | is-empty) { error make --unspanned { msg: "path parameter 'employerId' must be non-empty" } }
   let full_url = (build-url $base ({employer_id: (encode-path-segment $employer_id)} | format pattern "/providers/employers/{employer_id}/functions"))
   let req_body = {"description": $description, "group": $group} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
@@ -18741,7 +19355,7 @@ export def "providers-employers-functions create" [
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"Authorization": $authorization, "Accept": $hdr_accept} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json;version=2018-01-01" $req_body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json;version=2018-01-01" $req_body {query: {}, body: $req_body}
 }
 
 # Post leave for multiple employments.
@@ -18766,6 +19380,7 @@ export def "providers-employers-leave create-collective" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($employer_id | is-empty) { error make --unspanned { msg: "path parameter 'employerId' must be non-empty" } }
   let full_url = (build-url $base ({employer_id: (encode-path-segment $employer_id)} | format pattern "/providers/employers/{employer_id}/leave"))
   let req_body = $body
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else if (($input | is-not-empty) and ($req_body | is-empty)) { $input } else { $req_body }
@@ -18773,7 +19388,7 @@ export def "providers-employers-leave create-collective" [
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"Authorization": $authorization, "Accept": $hdr_accept} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json;version=2018-01-01" $req_body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json;version=2018-01-01" $req_body {query: {}, body: $req_body}
 }
 
 # Get the proposed number of leave hours for all employments of an employer
@@ -18802,13 +19417,14 @@ export def "providers-employers-leave-proposedleavehours get-proposed-hours" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($employer_id | is-empty) { error make --unspanned { msg: "path parameter 'employerId' must be non-empty" } }
   let qp = [(serialize-qp "startDate" $start_date "scalar") (serialize-qp "endDate" $end_date "scalar") (serialize-qp "filter" $filter "scalar") (serialize-qp "orderBy" $order_by "scalar") (serialize-qp "pageNumber" $page_number "scalar") (serialize-qp "pageSize" $page_size "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({employer_id: (encode-path-segment $employer_id)} | format pattern "/providers/employers/{employer_id}/leave/proposedleavehours") $qp)
   let accept_val = "application/json;version=2018-01-01"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"Authorization": $authorization, "Accept": $hdr_accept} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"startDate": $start_date, "endDate": $end_date, "filter": $filter, "orderBy": $order_by, "pageNumber": $page_number, "pageSize": $page_size} | compact), body: null}
 }
 
 # List of all the leave policies
@@ -18835,13 +19451,14 @@ export def "providers-employers-leave-policies get" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($employer_id | is-empty) { error make --unspanned { msg: "path parameter 'employerId' must be non-empty" } }
   let qp = [(serialize-qp "filter" $filter "scalar") (serialize-qp "orderBy" $order_by "scalar") (serialize-qp "pageNumber" $page_number "scalar") (serialize-qp "pageSize" $page_size "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({employer_id: (encode-path-segment $employer_id)} | format pattern "/providers/employers/{employer_id}/leavePolicies") $qp)
   let accept_val = "application/json;version=2018-01-01"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"Authorization": $authorization, "Accept": $hdr_accept} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"filter": $filter, "orderBy": $order_by, "pageNumber": $page_number, "pageSize": $page_size} | compact), body: null}
 }
 
 # Create a leave policy based on an existing leave policy
@@ -18867,6 +19484,7 @@ export def "providers-employers-leave-policies update-copy-policy" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($employer_id | is-empty) { error make --unspanned { msg: "path parameter 'employerId' must be non-empty" } }
   let full_url = (build-url $base ({employer_id: (encode-path-segment $employer_id)} | format pattern "/providers/employers/{employer_id}/leavePolicies"))
   let req_body = {"name": $name, "sourceLeavePolicyId": $source_leave_policy_id} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
@@ -18874,7 +19492,7 @@ export def "providers-employers-leave-policies update-copy-policy" [
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"Authorization": $authorization, "Accept": $hdr_accept} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "patch" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json;version=2018-01-01" $req_body
+  do-request "patch" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json;version=2018-01-01" $req_body {query: {}, body: $req_body}
 }
 
 # Create a leave policy
@@ -18915,6 +19533,7 @@ export def "providers-employers-leave-policies create-policy" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($employer_id | is-empty) { error make --unspanned { msg: "path parameter 'employerId' must be non-empty" } }
   let full_url = (build-url $base ({employer_id: (encode-path-segment $employer_id)} | format pattern "/providers/employers/{employer_id}/leavePolicies"))
   let req_body = {"accrualType": $accrual_type, "additionalLeave": $additional_leave, "dayOfTheMonthToPerformAutomaticLeaveCalculationOn": $day_of_the_month_to_perform_automatic_leave_calculation_on, "leaveEntitlement": $leave_entitlement, "leaveRequest": $leave_request, "leaveUnitType": $leave_unit_type, "name": $name, "payoutLeaveImmediately": $payout_leave_immediately, "roundTo": $round_to, "roundingMethod": $rounding_method} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
@@ -18922,7 +19541,7 @@ export def "providers-employers-leave-policies create-policy" [
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"Authorization": $authorization, "Accept": $hdr_accept} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json;version=2018-01-01" $req_body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json;version=2018-01-01" $req_body {query: {}, body: $req_body}
 }
 
 # The leave balance for all employments
@@ -18951,13 +19570,14 @@ export def "providers-employers-leavebalances get-leave-balances" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($employer_id | is-empty) { error make --unspanned { msg: "path parameter 'employerId' must be non-empty" } }
   let qp = [(serialize-qp "referenceDate" $reference_date "scalar") (serialize-qp "leaveType" $leave_type "multi") (serialize-qp "filter" $filter "scalar") (serialize-qp "orderBy" $order_by "scalar") (serialize-qp "pageNumber" $page_number "scalar") (serialize-qp "pageSize" $page_size "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({employer_id: (encode-path-segment $employer_id)} | format pattern "/providers/employers/{employer_id}/leavebalances") $qp)
   let accept_val = "application/json;version=2018-01-01"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"Authorization": $authorization, "Accept": $hdr_accept} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"referenceDate": $reference_date, "leaveType": $leave_type, "filter": $filter, "orderBy": $order_by, "pageNumber": $page_number, "pageSize": $page_size} | compact), body: null}
 }
 
 # Summed up leave balance total and grouped by
@@ -18986,13 +19606,14 @@ export def "providers-employers-leavebalances-grouped get-leave-balances" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($employer_id | is-empty) { error make --unspanned { msg: "path parameter 'employerId' must be non-empty" } }
   let qp = [(serialize-qp "referenceDate" $reference_date "scalar") (serialize-qp "leaveType" $leave_type "multi") (serialize-qp "orderBy" $order_by "scalar") (serialize-qp "pageNumber" $page_number "scalar") (serialize-qp "pageSize" $page_size "scalar") (serialize-qp "groupBy" $group_by "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({employer_id: (encode-path-segment $employer_id)} | format pattern "/providers/employers/{employer_id}/leavebalances/grouped") $qp)
   let accept_val = "application/json;version=2018-01-01"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"Authorization": $authorization, "Accept": $hdr_accept} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"referenceDate": $reference_date, "leaveType": $leave_type, "orderBy": $order_by, "pageNumber": $page_number, "pageSize": $page_size, "groupBy": $group_by} | compact), body: null}
 }
 
 # List of leave types
@@ -19019,13 +19640,14 @@ export def "providers-employers-leavetypes get-leave-types" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($employer_id | is-empty) { error make --unspanned { msg: "path parameter 'employerId' must be non-empty" } }
   let qp = [(serialize-qp "filter" $filter "scalar") (serialize-qp "orderBy" $order_by "scalar") (serialize-qp "pageNumber" $page_number "scalar") (serialize-qp "pageSize" $page_size "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({employer_id: (encode-path-segment $employer_id)} | format pattern "/providers/employers/{employer_id}/leavetypes") $qp)
   let accept_val = "application/json;version=2018-01-01"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"Authorization": $authorization, "Accept": $hdr_accept} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"filter": $filter, "orderBy": $order_by, "pageNumber": $page_number, "pageSize": $page_size} | compact), body: null}
 }
 
 # Details of a leave type
@@ -19049,12 +19671,14 @@ export def "providers-employers-leavetypes get-leave-type-by-and-leave-type" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($employer_id | is-empty) { error make --unspanned { msg: "path parameter 'employerId' must be non-empty" } }
+  if ($leave_type_id | is-empty) { error make --unspanned { msg: "path parameter 'leaveTypeId' must be non-empty" } }
   let full_url = (build-url $base ({employer_id: (encode-path-segment $employer_id), leave_type_id: (encode-path-segment $leave_type_id)} | format pattern "/providers/employers/{employer_id}/leavetypes/{leave_type_id}"))
   let accept_val = "application/json;version=2018-01-01"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"Authorization": $authorization, "Accept": $hdr_accept} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
 }
 
 # Edit the details of a leave type
@@ -19082,6 +19706,8 @@ export def "providers-employers-leavetypes update-leave-type-by-and-leave-type" 
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($employer_id | is-empty) { error make --unspanned { msg: "path parameter 'employerId' must be non-empty" } }
+  if ($leave_type_id | is-empty) { error make --unspanned { msg: "path parameter 'leaveTypeId' must be non-empty" } }
   let full_url = (build-url $base ({employer_id: (encode-path-segment $employer_id), leave_type_id: (encode-path-segment $leave_type_id)} | format pattern "/providers/employers/{employer_id}/leavetypes/{leave_type_id}"))
   let req_body = {"deviations": $deviations} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
@@ -19089,7 +19715,7 @@ export def "providers-employers-leavetypes update-leave-type-by-and-leave-type" 
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"Authorization": $authorization, "Accept": $hdr_accept, "If-Match": $if_match} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json;version=2018-01-01" $req_body
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json;version=2018-01-01" $req_body {query: {}, body: $req_body}
 }
 
 # Delete the employer logo
@@ -19112,12 +19738,13 @@ export def "providers-employers-logo delete" [
 ]: nothing -> record<version: record<obsoleteDate: string, resourceVersion: string>, messages: table<code: int, description: string, id: string, properties: list, type: string>, content: record> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($employer_id | is-empty) { error make --unspanned { msg: "path parameter 'employerId' must be non-empty" } }
   let full_url = (build-url $base ({employer_id: (encode-path-segment $employer_id)} | format pattern "/providers/employers/{employer_id}/logo"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"Authorization": $authorization, "Accept": $hdr_accept} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
 }
 
 # Logo of an employer
@@ -19141,12 +19768,13 @@ export def "providers-employers-logo get" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($employer_id | is-empty) { error make --unspanned { msg: "path parameter 'employerId' must be non-empty" } }
   let full_url = (build-url $base ({employer_id: (encode-path-segment $employer_id)} | format pattern "/providers/employers/{employer_id}/logo"))
   let accept_val = ($accept | default "image/jpeg")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"Authorization": $authorization, "Accept": $hdr_accept} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
 }
 
 # Upload a logo for the employer
@@ -19172,6 +19800,7 @@ export def "providers-employers-logo create" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($employer_id | is-empty) { error make --unspanned { msg: "path parameter 'employerId' must be non-empty" } }
   let full_url = (build-url $base ({employer_id: (encode-path-segment $employer_id)} | format pattern "/providers/employers/{employer_id}/logo"))
   let req_body = {"data": $data, "mimeType": $mime_type} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
@@ -19179,7 +19808,7 @@ export def "providers-employers-logo create" [
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"Authorization": $authorization, "Accept": $hdr_accept} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json;version=2018-01-01" $req_body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json;version=2018-01-01" $req_body {query: {}, body: $req_body}
 }
 
 # Logo of an employer
@@ -19204,12 +19833,14 @@ export def "providers-employers-logo get-by-and" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($employer_id | is-empty) { error make --unspanned { msg: "path parameter 'employerId' must be non-empty" } }
+  if ($version | is-empty) { error make --unspanned { msg: "path parameter 'version' must be non-empty" } }
   let full_url = (build-url $base ({employer_id: (encode-path-segment $employer_id), version: (encode-path-segment $version)} | format pattern "/providers/employers/{employer_id}/logo/{version}"))
   let accept_val = ($accept | default "image/jpeg")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"Authorization": $authorization, "Accept": $hdr_accept} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
 }
 
 # List of modules enabled for the employer
@@ -19232,12 +19863,13 @@ export def "providers-employers-modules get" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($employer_id | is-empty) { error make --unspanned { msg: "path parameter 'employerId' must be non-empty" } }
   let full_url = (build-url $base ({employer_id: (encode-path-segment $employer_id)} | format pattern "/providers/employers/{employer_id}/modules"))
   let accept_val = "application/json;version=2018-01-01"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"Authorization": $authorization, "Accept": $hdr_accept} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
 }
 
 # List of national holidays
@@ -19264,13 +19896,14 @@ export def "providers-employers-nationalholidays get-national-holidays" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($employer_id | is-empty) { error make --unspanned { msg: "path parameter 'employerId' must be non-empty" } }
   let qp = [(serialize-qp "filter" $filter "scalar") (serialize-qp "orderBy" $order_by "scalar") (serialize-qp "pageNumber" $page_number "scalar") (serialize-qp "pageSize" $page_size "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({employer_id: (encode-path-segment $employer_id)} | format pattern "/providers/employers/{employer_id}/nationalholidays") $qp)
   let accept_val = "application/json;version=2018-01-01"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"Authorization": $authorization, "Accept": $hdr_accept} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"filter": $filter, "orderBy": $order_by, "pageNumber": $page_number, "pageSize": $page_size} | compact), body: null}
 }
 
 # Details of a national holiday
@@ -19294,12 +19927,14 @@ export def "providers-employers-nationalholidays get-national-holidays-by-and-na
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($employer_id | is-empty) { error make --unspanned { msg: "path parameter 'employerId' must be non-empty" } }
+  if ($national_holiday_id | is-empty) { error make --unspanned { msg: "path parameter 'nationalHolidayId' must be non-empty" } }
   let full_url = (build-url $base ({employer_id: (encode-path-segment $employer_id), national_holiday_id: (encode-path-segment $national_holiday_id)} | format pattern "/providers/employers/{employer_id}/nationalholidays/{national_holiday_id}"))
   let accept_val = "application/json;version=2018-01-01"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"Authorization": $authorization, "Accept": $hdr_accept} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
 }
 
 # Edit the details of a national holidays
@@ -19327,6 +19962,8 @@ export def "providers-employers-nationalholidays update-national-holiday-by-and-
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($employer_id | is-empty) { error make --unspanned { msg: "path parameter 'employerId' must be non-empty" } }
+  if ($national_holiday_id | is-empty) { error make --unspanned { msg: "path parameter 'nationalHolidayId' must be non-empty" } }
   let full_url = (build-url $base ({employer_id: (encode-path-segment $employer_id), national_holiday_id: (encode-path-segment $national_holiday_id)} | format pattern "/providers/employers/{employer_id}/nationalholidays/{national_holiday_id}"))
   let req_body = {"deviations": $deviations} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
@@ -19334,14 +19971,14 @@ export def "providers-employers-nationalholidays update-national-holiday-by-and-
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"Authorization": $authorization, "Accept": $hdr_accept, "If-Match": $if_match} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json;version=2018-01-01" $req_body
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json;version=2018-01-01" $req_body {query: {}, body: $req_body}
 }
 
 # Get a list of notes for an employer.
 #
 # GET /providers/employers/{employerId}/notes
 # operationId: GetEmployerNotesByEmployerId
-export def "providers-employers-notes get-by-employerId" [
+export def "providers-employers-notes get-by-employer-id" [
   employer_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -19361,13 +19998,14 @@ export def "providers-employers-notes get-by-employerId" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($employer_id | is-empty) { error make --unspanned { msg: "path parameter 'employerId' must be non-empty" } }
   let qp = [(serialize-qp "filter" $filter "scalar") (serialize-qp "orderBy" $order_by "scalar") (serialize-qp "pageNumber" $page_number "scalar") (serialize-qp "pageSize" $page_size "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({employer_id: (encode-path-segment $employer_id)} | format pattern "/providers/employers/{employer_id}/notes") $qp)
   let accept_val = "application/json;version=2018-01-01"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"Authorization": $authorization, "Accept": $hdr_accept} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"filter": $filter, "orderBy": $order_by, "pageNumber": $page_number, "pageSize": $page_size} | compact), body: null}
 }
 
 # Add a note for an employer
@@ -19395,6 +20033,7 @@ export def "providers-employers-notes create" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($employer_id | is-empty) { error make --unspanned { msg: "path parameter 'employerId' must be non-empty" } }
   let full_url = (build-url $base ({employer_id: (encode-path-segment $employer_id)} | format pattern "/providers/employers/{employer_id}/notes"))
   let req_body = {"accessibleBy": $accessible_by, "note": $note, "subject": $subject} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
@@ -19402,7 +20041,7 @@ export def "providers-employers-notes create" [
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"Authorization": $authorization, "Accept": $hdr_accept} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json;version=2018-01-01" $req_body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json;version=2018-01-01" $req_body {query: {}, body: $req_body}
 }
 
 # Get a list of notifications for an employer.
@@ -19429,13 +20068,14 @@ export def "providers-employers-notifications get" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($employer_id | is-empty) { error make --unspanned { msg: "path parameter 'employerId' must be non-empty" } }
   let qp = [(serialize-qp "filter" $filter "scalar") (serialize-qp "orderBy" $order_by "scalar") (serialize-qp "pageNumber" $page_number "scalar") (serialize-qp "pageSize" $page_size "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({employer_id: (encode-path-segment $employer_id)} | format pattern "/providers/employers/{employer_id}/notifications") $qp)
   let accept_val = "application/json;version=2018-01-01"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"Authorization": $authorization, "Accept": $hdr_accept} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"filter": $filter, "orderBy": $order_by, "pageNumber": $page_number, "pageSize": $page_size} | compact), body: null}
 }
 
 # List of payroll administrations for an employer
@@ -19462,13 +20102,14 @@ export def "providers-employers-payrolladministrations get-payroll-administratio
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($employer_id | is-empty) { error make --unspanned { msg: "path parameter 'employerId' must be non-empty" } }
   let qp = [(serialize-qp "filter" $filter "scalar") (serialize-qp "orderBy" $order_by "scalar") (serialize-qp "pageNumber" $page_number "scalar") (serialize-qp "pageSize" $page_size "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({employer_id: (encode-path-segment $employer_id)} | format pattern "/providers/employers/{employer_id}/payrolladministrations") $qp)
   let accept_val = "application/json;version=2018-01-01"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"Authorization": $authorization, "Accept": $hdr_accept} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"filter": $filter, "orderBy": $order_by, "pageNumber": $page_number, "pageSize": $page_size} | compact), body: null}
 }
 
 # Get the status of proforma for this employer
@@ -19491,12 +20132,13 @@ export def "providers-employers-proforma get-status" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($employer_id | is-empty) { error make --unspanned { msg: "path parameter 'employerId' must be non-empty" } }
   let full_url = (build-url $base ({employer_id: (encode-path-segment $employer_id)} | format pattern "/providers/employers/{employer_id}/proforma"))
   let accept_val = "application/json;version=2018-01-01"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"Authorization": $authorization, "Accept": $hdr_accept} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
 }
 
 # Initialize the proforma environment
@@ -19522,6 +20164,7 @@ export def "providers-employers-proforma-initialize create" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($employer_id | is-empty) { error make --unspanned { msg: "path parameter 'employerId' must be non-empty" } }
   let full_url = (build-url $base ({employer_id: (encode-path-segment $employer_id)} | format pattern "/providers/employers/{employer_id}/proforma/initialize"))
   let req_body = {"employeeId": $employee_id, "proformaType": $proforma_type} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
@@ -19529,7 +20172,7 @@ export def "providers-employers-proforma-initialize create" [
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"Authorization": $authorization, "Accept": $hdr_accept} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json;version=2018-01-01" $req_body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json;version=2018-01-01" $req_body {query: {}, body: $req_body}
 }
 
 # Provider logo
@@ -19553,12 +20196,13 @@ export def "providers-employers-providerlogo get-logo" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($employer_id | is-empty) { error make --unspanned { msg: "path parameter 'employerId' must be non-empty" } }
   let full_url = (build-url $base ({employer_id: (encode-path-segment $employer_id)} | format pattern "/providers/employers/{employer_id}/providerlogo"))
   let accept_val = ($accept | default "image/jpeg")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"Authorization": $authorization, "Accept": $hdr_accept} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
 }
 
 # Provider logo
@@ -19583,12 +20227,14 @@ export def "providers-employers-providerlogo get-logo-by-and" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($employer_id | is-empty) { error make --unspanned { msg: "path parameter 'employerId' must be non-empty" } }
+  if ($version | is-empty) { error make --unspanned { msg: "path parameter 'version' must be non-empty" } }
   let full_url = (build-url $base ({employer_id: (encode-path-segment $employer_id), version: (encode-path-segment $version)} | format pattern "/providers/employers/{employer_id}/providerlogo/{version}"))
   let accept_val = ($accept | default "image/jpeg")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"Authorization": $authorization, "Accept": $hdr_accept} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
 }
 
 # List of user accessible departments
@@ -19615,20 +20261,21 @@ export def "providers-employers-useraccessibledepartments get-user-accessible-de
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($employer_id | is-empty) { error make --unspanned { msg: "path parameter 'employerId' must be non-empty" } }
   let qp = [(serialize-qp "filter" $filter "scalar") (serialize-qp "orderBy" $order_by "scalar") (serialize-qp "pageNumber" $page_number "scalar") (serialize-qp "pageSize" $page_size "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({employer_id: (encode-path-segment $employer_id)} | format pattern "/providers/employers/{employer_id}/useraccessibledepartments") $qp)
   let accept_val = "application/json;version=2018-01-01"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"Authorization": $authorization, "Accept": $hdr_accept} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"filter": $filter, "orderBy": $order_by, "pageNumber": $page_number, "pageSize": $page_size} | compact), body: null}
 }
 
 # List of users for an employer
 #
 # GET /providers/employers/{employerId}/users
 # operationId: GetEmployerUsersByEmployerId
-export def "providers-employers-users get-by-employerId" [
+export def "providers-employers-users get-by-employer-id" [
   employer_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -19648,13 +20295,14 @@ export def "providers-employers-users get-by-employerId" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($employer_id | is-empty) { error make --unspanned { msg: "path parameter 'employerId' must be non-empty" } }
   let qp = [(serialize-qp "filter" $filter "scalar") (serialize-qp "orderBy" $order_by "scalar") (serialize-qp "pageNumber" $page_number "scalar") (serialize-qp "pageSize" $page_size "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({employer_id: (encode-path-segment $employer_id)} | format pattern "/providers/employers/{employer_id}/users") $qp)
   let accept_val = "application/json;version=SSO_gebruiker"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"Authorization": $authorization, "Accept": $hdr_accept} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"filter": $filter, "orderBy": $order_by, "pageNumber": $page_number, "pageSize": $page_size} | compact), body: null}
 }
 
 # Create an SSO or Azure AD user for an employer
@@ -19689,6 +20337,7 @@ export def "providers-employers-users create" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($employer_id | is-empty) { error make --unspanned { msg: "path parameter 'employerId' must be non-empty" } }
   let full_url = (build-url $base ({employer_id: (encode-path-segment $employer_id)} | format pattern "/providers/employers/{employer_id}/users"))
   let req_body = {"azureActiveDirectory": $azure_active_directory, "contactInformation": $contact_information, "hasAccessToPayrollingTestData": $has_access_to_payrolling_test_data, "loginMethod": $login_method, "personalDetails": $personal_details, "ssoAccount": $sso_account} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
@@ -19696,7 +20345,7 @@ export def "providers-employers-users create" [
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"Authorization": $authorization, "Accept": $hdr_accept} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json;version=2018-01-01" $req_body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json;version=2018-01-01" $req_body {query: {}, body: $req_body}
 }
 
 # Get the list of departments that the user has access to
@@ -19722,13 +20371,14 @@ export def "providers-employers-users-departments get-linked" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($employer_id | is-empty) { error make --unspanned { msg: "path parameter 'employerId' must be non-empty" } }
   let qp = [(serialize-qp "orderBy" $order_by "scalar") (serialize-qp "pageNumber" $page_number "scalar") (serialize-qp "pageSize" $page_size "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({employer_id: (encode-path-segment $employer_id)} | format pattern "/providers/employers/{employer_id}/users/departments") $qp)
   let accept_val = "application/json;version=2018-01-01"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"Authorization": $authorization, "Accept": $hdr_accept} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"orderBy": $order_by, "pageNumber": $page_number, "pageSize": $page_size} | compact), body: null}
 }
 
 # Send an invite for an employer user
@@ -19759,6 +20409,7 @@ export def "providers-employers-users-invite create" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($employer_id | is-empty) { error make --unspanned { msg: "path parameter 'employerId' must be non-empty" } }
   let full_url = (build-url $base ({employer_id: (encode-path-segment $employer_id)} | format pattern "/providers/employers/{employer_id}/users/invite"))
   let req_body = {"contactInformation": $contact_information, "destinationForSecret": $destination_for_secret, "hasAccessToPayrollingTestData": $has_access_to_payrolling_test_data, "personalDetails": $personal_details, "twoFactorAuthenticationRequired": $two_factor_authentication_required} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
@@ -19766,7 +20417,7 @@ export def "providers-employers-users-invite create" [
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"Authorization": $authorization, "Accept": $hdr_accept} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json;version=2018-01-01" $req_body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json;version=2018-01-01" $req_body {query: {}, body: $req_body}
 }
 
 # Link an existing employer user to this employer.
@@ -19791,6 +20442,7 @@ export def "providers-employers-users-link create-existing" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($employer_id | is-empty) { error make --unspanned { msg: "path parameter 'employerId' must be non-empty" } }
   let full_url = (build-url $base ({employer_id: (encode-path-segment $employer_id)} | format pattern "/providers/employers/{employer_id}/users/link"))
   let req_body = {"departments": $departments} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
@@ -19798,7 +20450,7 @@ export def "providers-employers-users-link create-existing" [
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"Authorization": $authorization, "Accept": $hdr_accept} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json;version=2018-01-01" $req_body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json;version=2018-01-01" $req_body {query: {}, body: $req_body}
 }
 
 # The authorizations for the user
@@ -19826,13 +20478,15 @@ export def "providers-employers-users-authorizations get-by-and" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($employer_id | is-empty) { error make --unspanned { msg: "path parameter 'employerId' must be non-empty" } }
+  if ($user_id | is-empty) { error make --unspanned { msg: "path parameter 'userId' must be non-empty" } }
   let qp = [(serialize-qp "filter" $filter "scalar") (serialize-qp "orderBy" $order_by "scalar") (serialize-qp "pageNumber" $page_number "scalar") (serialize-qp "pageSize" $page_size "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({employer_id: (encode-path-segment $employer_id), user_id: (encode-path-segment $user_id)} | format pattern "/providers/employers/{employer_id}/users/{user_id}/authorizations") $qp)
   let accept_val = "application/json;version=2018-01-01"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"Authorization": $authorization, "Accept": $hdr_accept} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"filter": $filter, "orderBy": $order_by, "pageNumber": $page_number, "pageSize": $page_size} | compact), body: null}
 }
 
 # Manage the employer user authorizations
@@ -19861,6 +20515,8 @@ export def "providers-employers-users-authorizations update" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($employer_id | is-empty) { error make --unspanned { msg: "path parameter 'employerId' must be non-empty" } }
+  if ($user_id | is-empty) { error make --unspanned { msg: "path parameter 'userId' must be non-empty" } }
   let full_url = (build-url $base ({employer_id: (encode-path-segment $employer_id), user_id: (encode-path-segment $user_id)} | format pattern "/providers/employers/{employer_id}/users/{user_id}/authorizations"))
   let req_body = {"authorizationSet": $authorization_set, "authorizations": $authorizations} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
@@ -19868,7 +20524,7 @@ export def "providers-employers-users-authorizations update" [
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"Authorization": $authorization, "Accept": $hdr_accept} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "patch" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json;version=2018-01-01" $req_body
+  do-request "patch" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json;version=2018-01-01" $req_body {query: {}, body: $req_body}
 }
 
 # Link or unlink departments from an user.
@@ -19894,6 +20550,8 @@ export def "providers-employers-users-departments update-linked-by-and" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($employer_id | is-empty) { error make --unspanned { msg: "path parameter 'employerId' must be non-empty" } }
+  if ($user_id | is-empty) { error make --unspanned { msg: "path parameter 'userId' must be non-empty" } }
   let full_url = (build-url $base ({employer_id: (encode-path-segment $employer_id), user_id: (encode-path-segment $user_id)} | format pattern "/providers/employers/{employer_id}/users/{user_id}/departments"))
   let req_body = $body
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else if (($input | is-not-empty) and ($req_body | is-empty)) { $input } else { $req_body }
@@ -19901,14 +20559,14 @@ export def "providers-employers-users-departments update-linked-by-and" [
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"Authorization": $authorization, "Accept": $hdr_accept} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "patch" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body
+  do-request "patch" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: {}, body: $req_body}
 }
 
 # Workflows for the employer
 #
 # GET /providers/employers/{employerId}/workflows
 # operationId: GetWorkflowsByEmployerId
-export def "providers-employers-workflows get-by-employerId" [
+export def "providers-employers-workflows get-by-employer-id" [
   employer_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -19928,13 +20586,14 @@ export def "providers-employers-workflows get-by-employerId" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($employer_id | is-empty) { error make --unspanned { msg: "path parameter 'employerId' must be non-empty" } }
   let qp = [(serialize-qp "filter" $filter "scalar") (serialize-qp "orderBy" $order_by "scalar") (serialize-qp "pageNumber" $page_number "scalar") (serialize-qp "pageSize" $page_size "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({employer_id: (encode-path-segment $employer_id)} | format pattern "/providers/employers/{employer_id}/workflows") $qp)
   let accept_val = "application/json;version=2018-01-01"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"Authorization": $authorization, "Accept": $hdr_accept} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"filter": $filter, "orderBy": $order_by, "pageNumber": $page_number, "pageSize": $page_size} | compact), body: null}
 }
 
 # Workflowtrigger to workflowtemplate mapping
@@ -19961,13 +20620,14 @@ export def "providers-employers-workflowtriggermappings get-workflow-trigger-map
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($employer_id | is-empty) { error make --unspanned { msg: "path parameter 'employerId' must be non-empty" } }
   let qp = [(serialize-qp "filter" $filter "scalar") (serialize-qp "orderBy" $order_by "scalar") (serialize-qp "pageNumber" $page_number "scalar") (serialize-qp "pageSize" $page_size "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({employer_id: (encode-path-segment $employer_id)} | format pattern "/providers/employers/{employer_id}/workflowtriggermappings") $qp)
   let accept_val = "application/json;version=2018-01-01"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"Authorization": $authorization, "Accept": $hdr_accept} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"filter": $filter, "orderBy": $order_by, "pageNumber": $page_number, "pageSize": $page_size} | compact), body: null}
 }
 
 # Create a workflow trigger mapping record for an employer
@@ -19995,6 +20655,7 @@ export def "providers-employers-workflowtriggermappings create-workflow-trigger-
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($employer_id | is-empty) { error make --unspanned { msg: "path parameter 'employerId' must be non-empty" } }
   let full_url = (build-url $base ({employer_id: (encode-path-segment $employer_id)} | format pattern "/providers/employers/{employer_id}/workflowtriggermappings"))
   let req_body = {"trigger": $trigger, "workflowTemplate": $workflow_template} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
@@ -20002,7 +20663,7 @@ export def "providers-employers-workflowtriggermappings create-workflow-trigger-
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"Authorization": $authorization, "Accept": $hdr_accept} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json;version=2018-01-01" $req_body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json;version=2018-01-01" $req_body {query: {}, body: $req_body}
 }
 
 # A single leave policy
@@ -20029,13 +20690,14 @@ export def "providers-leave-policies get-policy-by-policy" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($leave_policy_id | is-empty) { error make --unspanned { msg: "path parameter 'leavePolicyId' must be non-empty" } }
   let qp = [(serialize-qp "filter" $filter "scalar") (serialize-qp "orderBy" $order_by "scalar") (serialize-qp "pageNumber" $page_number "scalar") (serialize-qp "pageSize" $page_size "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({leave_policy_id: (encode-path-segment $leave_policy_id)} | format pattern "/providers/leavePolicies/{leave_policy_id}") $qp)
   let accept_val = "application/json;version=2018-01-01"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"Authorization": $authorization, "Accept": $hdr_accept} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"filter": $filter, "orderBy": $order_by, "pageNumber": $page_number, "pageSize": $page_size} | compact), body: null}
 }
 
 # Age based leave
@@ -20062,13 +20724,14 @@ export def "providers-leave-policies-agebasedleave get-age-based-by-policy" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($leave_policy_id | is-empty) { error make --unspanned { msg: "path parameter 'leavePolicyId' must be non-empty" } }
   let qp = [(serialize-qp "filter" $filter "scalar") (serialize-qp "orderBy" $order_by "scalar") (serialize-qp "pageNumber" $page_number "scalar") (serialize-qp "pageSize" $page_size "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({leave_policy_id: (encode-path-segment $leave_policy_id)} | format pattern "/providers/leavePolicies/{leave_policy_id}/agebasedleave") $qp)
   let accept_val = "application/json;version=2018-01-01"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"Authorization": $authorization, "Accept": $hdr_accept} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"filter": $filter, "orderBy": $order_by, "pageNumber": $page_number, "pageSize": $page_size} | compact), body: null}
 }
 
 # Wage based leave
@@ -20095,13 +20758,14 @@ export def "providers-leave-policies-wagebasedleave get-wage-based-by-policy" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($leave_policy_id | is-empty) { error make --unspanned { msg: "path parameter 'leavePolicyId' must be non-empty" } }
   let qp = [(serialize-qp "filter" $filter "scalar") (serialize-qp "orderBy" $order_by "scalar") (serialize-qp "pageNumber" $page_number "scalar") (serialize-qp "pageSize" $page_size "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({leave_policy_id: (encode-path-segment $leave_policy_id)} | format pattern "/providers/leavePolicies/{leave_policy_id}/wagebasedleave") $qp)
   let accept_val = "application/json;version=2018-01-01"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"Authorization": $authorization, "Accept": $hdr_accept} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"filter": $filter, "orderBy": $order_by, "pageNumber": $page_number, "pageSize": $page_size} | compact), body: null}
 }
 
 # years of service based leave
@@ -20128,13 +20792,14 @@ export def "providers-leave-policies-yearsofservicebasedleave get-years-of-servi
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($leave_policy_id | is-empty) { error make --unspanned { msg: "path parameter 'leavePolicyId' must be non-empty" } }
   let qp = [(serialize-qp "filter" $filter "scalar") (serialize-qp "orderBy" $order_by "scalar") (serialize-qp "pageNumber" $page_number "scalar") (serialize-qp "pageSize" $page_size "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({leave_policy_id: (encode-path-segment $leave_policy_id)} | format pattern "/providers/leavePolicies/{leave_policy_id}/yearsofservicebasedleave") $qp)
   let accept_val = "application/json;version=2018-01-01"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"Authorization": $authorization, "Accept": $hdr_accept} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"filter": $filter, "orderBy": $order_by, "pageNumber": $page_number, "pageSize": $page_size} | compact), body: null}
 }
 
 # Details of a notification set
@@ -20157,12 +20822,13 @@ export def "providers-notificationsets get-notification-update-by-notification-u
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($notification_set_id | is-empty) { error make --unspanned { msg: "path parameter 'notificationSetId' must be non-empty" } }
   let full_url = (build-url $base ({notification_set_id: (encode-path-segment $notification_set_id)} | format pattern "/providers/notificationsets/{notification_set_id}"))
   let accept_val = "application/json;version=2018-01-01"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"Authorization": $authorization, "Accept": $hdr_accept} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
 }
 
 # Configured external tenant for a provider user
@@ -20187,13 +20853,14 @@ export def "providers-users-configuredexternaltenant get-configured-external-ten
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($provider_user_id | is-empty) { error make --unspanned { msg: "path parameter 'providerUserId' must be non-empty" } }
   let qp = [(serialize-qp "filter" $filter "scalar") (serialize-qp "orderBy" $order_by "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({provider_user_id: (encode-path-segment $provider_user_id)} | format pattern "/providers/users/{provider_user_id}/configuredexternaltenant") $qp)
   let accept_val = "application/json;version=2018-01-01"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"Authorization": $authorization, "Accept": $hdr_accept} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"filter": $filter, "orderBy": $order_by} | compact), body: null}
 }
 
 # Add an external tenant for a provider user
@@ -20221,6 +20888,7 @@ export def "providers-users-configuredexternaltenant update-configured-external-
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($provider_user_id | is-empty) { error make --unspanned { msg: "path parameter 'providerUserId' must be non-empty" } }
   let full_url = (build-url $base ({provider_user_id: (encode-path-segment $provider_user_id)} | format pattern "/providers/users/{provider_user_id}/configuredexternaltenant"))
   let req_body = {"externalTenant": $external_tenant, "externalUser": $external_user} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
@@ -20228,7 +20896,7 @@ export def "providers-users-configuredexternaltenant update-configured-external-
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"Authorization": $authorization, "Accept": $hdr_accept} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "patch" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json;version=2018-01-01" $req_body
+  do-request "patch" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json;version=2018-01-01" $req_body {query: {}, body: $req_body}
 }
 
 # List of applicationsets for a provider
@@ -20255,13 +20923,14 @@ export def "providers-applicationsets get" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($provider_id | is-empty) { error make --unspanned { msg: "path parameter 'providerId' must be non-empty" } }
   let qp = [(serialize-qp "filter" $filter "scalar") (serialize-qp "orderBy" $order_by "scalar") (serialize-qp "pageNumber" $page_number "scalar") (serialize-qp "pageSize" $page_size "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({provider_id: (encode-path-segment $provider_id)} | format pattern "/providers/{provider_id}/applicationsets") $qp)
   let accept_val = "application/json;version=2018-01-01"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"Authorization": $authorization, "Accept": $hdr_accept} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"filter": $filter, "orderBy": $order_by, "pageNumber": $page_number, "pageSize": $page_size} | compact), body: null}
 }
 
 # Create an applicationset for a provider
@@ -20288,6 +20957,7 @@ export def "providers-applicationsets create-application-update" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($provider_id | is-empty) { error make --unspanned { msg: "path parameter 'providerId' must be non-empty" } }
   let full_url = (build-url $base ({provider_id: (encode-path-segment $provider_id)} | format pattern "/providers/{provider_id}/applicationsets"))
   let req_body = {"applicationSetType": $application_set_type, "data": $data, "name": $name} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
@@ -20295,7 +20965,7 @@ export def "providers-applicationsets create-application-update" [
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"Authorization": $authorization, "Accept": $hdr_accept} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json;version=2018-01-01" $req_body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json;version=2018-01-01" $req_body {query: {}, body: $req_body}
 }
 
 # List of authorized activities with regard to the provider
@@ -20318,12 +20988,13 @@ export def "providers-authorizations get" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($provider_id | is-empty) { error make --unspanned { msg: "path parameter 'providerId' must be non-empty" } }
   let full_url = (build-url $base ({provider_id: (encode-path-segment $provider_id)} | format pattern "/providers/{provider_id}/authorizations"))
   let accept_val = "application/json;version=2018-01-01"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"Authorization": $authorization, "Accept": $hdr_accept} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
 }
 
 # List of authorization sets
@@ -20350,13 +21021,14 @@ export def "providers-authorizationsets get-authorization-sets" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($provider_id | is-empty) { error make --unspanned { msg: "path parameter 'providerId' must be non-empty" } }
   let qp = [(serialize-qp "filter" $filter "scalar") (serialize-qp "orderBy" $order_by "scalar") (serialize-qp "pageNumber" $page_number "scalar") (serialize-qp "pageSize" $page_size "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({provider_id: (encode-path-segment $provider_id)} | format pattern "/providers/{provider_id}/authorizationsets") $qp)
   let accept_val = "application/json;version=2018-01-01"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"Authorization": $authorization, "Accept": $hdr_accept} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"filter": $filter, "orderBy": $order_by, "pageNumber": $page_number, "pageSize": $page_size} | compact), body: null}
 }
 
 # List of billable items
@@ -20383,13 +21055,14 @@ export def "providers-billableitems get-billable-items" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($provider_id | is-empty) { error make --unspanned { msg: "path parameter 'providerId' must be non-empty" } }
   let qp = [(serialize-qp "filter" $filter "scalar") (serialize-qp "orderBy" $order_by "scalar") (serialize-qp "pageNumber" $page_number "scalar") (serialize-qp "pageSize" $page_size "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({provider_id: (encode-path-segment $provider_id)} | format pattern "/providers/{provider_id}/billableitems") $qp)
   let accept_val = "application/json;version=2018-01-01"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"Authorization": $authorization, "Accept": $hdr_accept} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"filter": $filter, "orderBy": $order_by, "pageNumber": $page_number, "pageSize": $page_size} | compact), body: null}
 }
 
 # List of EmailIdentities for a provider
@@ -20416,13 +21089,14 @@ export def "providers-emailidentities get-email-identities" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($provider_id | is-empty) { error make --unspanned { msg: "path parameter 'providerId' must be non-empty" } }
   let qp = [(serialize-qp "filter" $filter "scalar") (serialize-qp "orderBy" $order_by "scalar") (serialize-qp "pageNumber" $page_number "scalar") (serialize-qp "pageSize" $page_size "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({provider_id: (encode-path-segment $provider_id)} | format pattern "/providers/{provider_id}/emailidentities") $qp)
   let accept_val = "application/json;version=2018-01-01"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"Authorization": $authorization, "Accept": $hdr_accept} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"filter": $filter, "orderBy": $order_by, "pageNumber": $page_number, "pageSize": $page_size} | compact), body: null}
 }
 
 # Create an EmailIdentity for a provider
@@ -20447,6 +21121,7 @@ export def "providers-emailidentities create-email-identity" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($provider_id | is-empty) { error make --unspanned { msg: "path parameter 'providerId' must be non-empty" } }
   let full_url = (build-url $base ({provider_id: (encode-path-segment $provider_id)} | format pattern "/providers/{provider_id}/emailidentities"))
   let req_body = {"emailIdentity": $email_identity} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
@@ -20454,7 +21129,7 @@ export def "providers-emailidentities create-email-identity" [
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"Authorization": $authorization, "Accept": $hdr_accept} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json;version=2018-01-01" $req_body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json;version=2018-01-01" $req_body {query: {}, body: $req_body}
 }
 
 # Verify an EmailIdentity for a provider
@@ -20479,6 +21154,7 @@ export def "providers-emailidentities-verify create-email-identity" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($provider_id | is-empty) { error make --unspanned { msg: "path parameter 'providerId' must be non-empty" } }
   let full_url = (build-url $base ({provider_id: (encode-path-segment $provider_id)} | format pattern "/providers/{provider_id}/emailidentities/verify"))
   let req_body = {"emailIdentity": $email_identity} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
@@ -20486,7 +21162,7 @@ export def "providers-emailidentities-verify create-email-identity" [
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"Authorization": $authorization, "Accept": $hdr_accept} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json;version=2018-01-01" $req_body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json;version=2018-01-01" $req_body {query: {}, body: $req_body}
 }
 
 # List email templates for an provider
@@ -20513,13 +21189,14 @@ export def "providers-emailtemplates get-email-templates" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($provider_id | is-empty) { error make --unspanned { msg: "path parameter 'providerId' must be non-empty" } }
   let qp = [(serialize-qp "filter" $filter "scalar") (serialize-qp "orderBy" $order_by "scalar") (serialize-qp "pageNumber" $page_number "scalar") (serialize-qp "pageSize" $page_size "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({provider_id: (encode-path-segment $provider_id)} | format pattern "/providers/{provider_id}/emailtemplates") $qp)
   let accept_val = "application/json;version=2018-01-01"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"Authorization": $authorization, "Accept": $hdr_accept} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"filter": $filter, "orderBy": $order_by, "pageNumber": $page_number, "pageSize": $page_size} | compact), body: null}
 }
 
 # Details of an email template
@@ -20548,13 +21225,15 @@ export def "providers-emailtemplates get-email-template-by-and-email-template" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($provider_id | is-empty) { error make --unspanned { msg: "path parameter 'providerId' must be non-empty" } }
+  if ($email_template_id | is-empty) { error make --unspanned { msg: "path parameter 'emailTemplateId' must be non-empty" } }
   let qp = [(serialize-qp "emailtemplateId" $emailtemplate_id "scalar") (serialize-qp "filter" $filter "scalar") (serialize-qp "orderBy" $order_by "scalar") (serialize-qp "pageNumber" $page_number "scalar") (serialize-qp "pageSize" $page_size "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({provider_id: (encode-path-segment $provider_id), email_template_id: (encode-path-segment $email_template_id)} | format pattern "/providers/{provider_id}/emailtemplates/{email_template_id}") $qp)
   let accept_val = "application/json;version=2018-01-01"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"Authorization": $authorization, "Accept": $hdr_accept} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"emailtemplateId": $emailtemplate_id, "filter": $filter, "orderBy": $order_by, "pageNumber": $page_number, "pageSize": $page_size} | compact), body: null}
 }
 
 # Create an employer
@@ -20596,6 +21275,7 @@ export def "providers-employers create" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($provider_id | is-empty) { error make --unspanned { msg: "path parameter 'providerId' must be non-empty" } }
   let full_url = (build-url $base ({provider_id: (encode-path-segment $provider_id)} | format pattern "/providers/{provider_id}/employers"))
   let req_body = {"address": $address, "branch": $branch, "chamberOfCommerceNumber": $chamber_of_commerce_number, "companyName": $company_name, "contact": $contact, "contactInformation": $contact_information, "deviatingPostalAddress": $deviating_postal_address, "legalForm": $legal_form, "providerSettings": $provider_settings, "sbi": $sbi} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
@@ -20603,7 +21283,7 @@ export def "providers-employers create" [
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"Authorization": $authorization, "Accept": $hdr_accept} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json;version=2018-01-01" $req_body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json;version=2018-01-01" $req_body {query: {}, body: $req_body}
 }
 
 # Get available external tenants (provider scope)
@@ -20626,12 +21306,13 @@ export def "providers-externaltenants get-external-tenants" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($provider_id | is-empty) { error make --unspanned { msg: "path parameter 'providerId' must be non-empty" } }
   let full_url = (build-url $base ({provider_id: (encode-path-segment $provider_id)} | format pattern "/providers/{provider_id}/externaltenants"))
   let accept_val = "application/json;version=2018-01-01"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"Authorization": $authorization, "Accept": $hdr_accept} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
 }
 
 # List of all the leave policies at provider level.
@@ -20658,13 +21339,14 @@ export def "providers-leave-policies get" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($provider_id | is-empty) { error make --unspanned { msg: "path parameter 'providerId' must be non-empty" } }
   let qp = [(serialize-qp "filter" $filter "scalar") (serialize-qp "orderBy" $order_by "scalar") (serialize-qp "pageNumber" $page_number "scalar") (serialize-qp "pageSize" $page_size "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({provider_id: (encode-path-segment $provider_id)} | format pattern "/providers/{provider_id}/leavePolicies") $qp)
   let accept_val = "application/json;version=2018-01-01"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"Authorization": $authorization, "Accept": $hdr_accept} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"filter": $filter, "orderBy": $order_by, "pageNumber": $page_number, "pageSize": $page_size} | compact), body: null}
 }
 
 # Download the provider logo
@@ -20688,12 +21370,13 @@ export def "providers-logo list" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($provider_id | is-empty) { error make --unspanned { msg: "path parameter 'providerId' must be non-empty" } }
   let full_url = (build-url $base ({provider_id: (encode-path-segment $provider_id)} | format pattern "/providers/{provider_id}/logo"))
   let accept_val = ($accept | default "image/jpeg")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"Authorization": $authorization, "Accept": $hdr_accept} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
 }
 
 # Download the provider logo
@@ -20718,12 +21401,14 @@ export def "providers-logo get" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($provider_id | is-empty) { error make --unspanned { msg: "path parameter 'providerId' must be non-empty" } }
+  if ($version | is-empty) { error make --unspanned { msg: "path parameter 'version' must be non-empty" } }
   let full_url = (build-url $base ({provider_id: (encode-path-segment $provider_id), version: (encode-path-segment $version)} | format pattern "/providers/{provider_id}/logo/{version}"))
   let accept_val = ($accept | default "image/jpeg")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"Authorization": $authorization, "Accept": $hdr_accept} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
 }
 
 # List of notification sets
@@ -20750,13 +21435,14 @@ export def "providers-notificationsets get-notification-sets" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($provider_id | is-empty) { error make --unspanned { msg: "path parameter 'providerId' must be non-empty" } }
   let qp = [(serialize-qp "filter" $filter "scalar") (serialize-qp "orderBy" $order_by "scalar") (serialize-qp "pageNumber" $page_number "scalar") (serialize-qp "pageSize" $page_size "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({provider_id: (encode-path-segment $provider_id)} | format pattern "/providers/{provider_id}/notificationsets") $qp)
   let accept_val = "application/json;version=2018-01-01"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"Authorization": $authorization, "Accept": $hdr_accept} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"filter": $filter, "orderBy": $order_by, "pageNumber": $page_number, "pageSize": $page_size} | compact), body: null}
 }
 
 # Payroll status for each administration.
@@ -20784,13 +21470,14 @@ export def "providers-payrollprocessstatus get-payroll-process-status" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($provider_id | is-empty) { error make --unspanned { msg: "path parameter 'providerId' must be non-empty" } }
   let qp = [(serialize-qp "payrollPeriodId" $payroll_period_id "scalar") (serialize-qp "filter" $filter "scalar") (serialize-qp "orderBy" $order_by "scalar") (serialize-qp "pageNumber" $page_number "scalar") (serialize-qp "pageSize" $page_size "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({provider_id: (encode-path-segment $provider_id)} | format pattern "/providers/{provider_id}/payrollprocessstatus") $qp)
   let accept_val = "application/json;version=2018-01-01"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"Authorization": $authorization, "Accept": $hdr_accept} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"payrollPeriodId": $payroll_period_id, "filter": $filter, "orderBy": $order_by, "pageNumber": $page_number, "pageSize": $page_size} | compact), body: null}
 }
 
 # List of employers using Qwoater
@@ -20822,7 +21509,7 @@ export def "qwoater-employers get-by-user" [
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"Authorization": $authorization, "Accept": $hdr_accept} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"filter": $filter, "orderBy": $order_by, "pageNumber": $page_number, "pageSize": $page_size} | compact), body: null}
 }
 
 # Acquire the additional tax liability by the license plate number (company car)
@@ -20851,7 +21538,7 @@ export def "rdwservices-additionaltaxliability get-additional-taxliability-by-li
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"Authorization": $authorization, "Accept": $hdr_accept} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"licensePlateNumber": $license_plate_number} | compact), body: null}
 }
 
 # Get current user
@@ -20878,7 +21565,7 @@ export def "user get-by-token" [
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"Authorization": $authorization, "Accept": $hdr_accept} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
 }
 
 # Edit current user
@@ -20914,7 +21601,7 @@ export def "user update-by-token" [
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"Authorization": $authorization, "Accept": $hdr_accept} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json;version=2018-01-01" $req_body
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json;version=2018-01-01" $req_body {query: {}, body: $req_body}
 }
 
 # Get user filter settings
@@ -20937,12 +21624,13 @@ export def "user-filtersettings get-filter-settings-by-employer" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default "https://k8s.loket.nl/globalfilter-microservice")
+  if ($employer_id | is-empty) { error make --unspanned { msg: "path parameter 'employerId' must be non-empty" } }
   let full_url = (build-url $base ({employer_id: (encode-path-segment $employer_id)} | format pattern "/user/filtersettings/{employer_id}"))
   let accept_val = "application/json;version=2018-01-01"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"Authorization": $authorization, "Accept": $hdr_accept} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
 }
 
 # Edit the user filter settings
@@ -20968,6 +21656,7 @@ export def "user-filtersettings update-filter-settings-by-employer" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default "https://k8s.loket.nl/globalfilter-microservice")
+  if ($employer_id | is-empty) { error make --unspanned { msg: "path parameter 'employerId' must be non-empty" } }
   let full_url = (build-url $base ({employer_id: (encode-path-segment $employer_id)} | format pattern "/user/filtersettings/{employer_id}"))
   let req_body = {"employmentFilter": $employment_filter} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
@@ -20975,7 +21664,7 @@ export def "user-filtersettings update-filter-settings-by-employer" [
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"Authorization": $authorization, "Accept": $hdr_accept} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json;version=2018-01-01" $req_body
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json;version=2018-01-01" $req_body {query: {}, body: $req_body}
 }
 
 # Delete user photo
@@ -21002,7 +21691,7 @@ export def "user-photo delete-by-token" [
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"Authorization": $authorization, "Accept": $hdr_accept} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
 }
 
 # Photo of an user
@@ -21030,7 +21719,7 @@ export def "user-photo get-by-token" [
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"Authorization": $authorization, "Accept": $hdr_accept} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
 }
 
 # Post user photo
@@ -21062,7 +21751,7 @@ export def "user-photo create-by-token" [
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"Authorization": $authorization, "Accept": $hdr_accept} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json;version=2018-01-01" $req_body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json;version=2018-01-01" $req_body {query: {}, body: $req_body}
 }
 
 # Delete a specific applicationset for a user
@@ -21086,19 +21775,20 @@ export def "users-applicationsets delete-application-update-by-application-updat
 ]: nothing -> record<version: record<obsoleteDate: string, resourceVersion: string>, messages: table<code: int, description: string, id: string, properties: list, type: string>, content: record> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($application_set_id | is-empty) { error make --unspanned { msg: "path parameter 'applicationSetId' must be non-empty" } }
   let full_url = (build-url $base ({application_set_id: (encode-path-segment $application_set_id)} | format pattern "/users/applicationsets/{application_set_id}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"Authorization": $authorization, "Accept": $hdr_accept, "If-Match": $if_match} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
 }
 
 # Edit the details of an applicationset for a user
 #
 # PUT /users/applicationsets/{applicationSetId}
 # operationId: PutUserApplicationSetByApplicationSetId
-export def "users-applicationsets update-application-update-by-application-update" [
+export def "users-applicationsets update-application-by-application" [
   application_set_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -21118,6 +21808,7 @@ export def "users-applicationsets update-application-update-by-application-updat
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($application_set_id | is-empty) { error make --unspanned { msg: "path parameter 'applicationSetId' must be non-empty" } }
   let full_url = (build-url $base ({application_set_id: (encode-path-segment $application_set_id)} | format pattern "/users/applicationsets/{application_set_id}"))
   let req_body = {"data": $data, "name": $name} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
@@ -21125,7 +21816,7 @@ export def "users-applicationsets update-application-update-by-application-updat
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"Authorization": $authorization, "Accept": $hdr_accept, "If-Match": $if_match} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json;version=2018-01-01" $req_body
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json;version=2018-01-01" $req_body {query: {}, body: $req_body}
 }
 
 # Workflows initiated by the user
@@ -21157,7 +21848,7 @@ export def "users-initiatedworkflows get-initiated-workflows-by-bearer-token" [
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"Authorization": $authorization, "Accept": $hdr_accept} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"filter": $filter, "orderBy": $order_by, "pageNumber": $page_number, "pageSize": $page_size} | compact), body: null}
 }
 
 # List of all the integrations for the logon user
@@ -21184,7 +21875,7 @@ export def "users-integrations get-by-bearer-token" [
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"Authorization": $authorization, "Accept": $hdr_accept} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
 }
 
 # List of applicationsets for a user
@@ -21211,13 +21902,14 @@ export def "users-applicationsets get" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($user_id | is-empty) { error make --unspanned { msg: "path parameter 'userId' must be non-empty" } }
   let qp = [(serialize-qp "filter" $filter "scalar") (serialize-qp "orderBy" $order_by "scalar") (serialize-qp "pageNumber" $page_number "scalar") (serialize-qp "pageSize" $page_size "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({user_id: (encode-path-segment $user_id)} | format pattern "/users/{user_id}/applicationsets") $qp)
   let accept_val = "application/json;version=2018-01-01"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"Authorization": $authorization, "Accept": $hdr_accept} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"filter": $filter, "orderBy": $order_by, "pageNumber": $page_number, "pageSize": $page_size} | compact), body: null}
 }
 
 # Create an applicationset for a user
@@ -21244,6 +21936,7 @@ export def "users-applicationsets create-application-update" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($user_id | is-empty) { error make --unspanned { msg: "path parameter 'userId' must be non-empty" } }
   let full_url = (build-url $base ({user_id: (encode-path-segment $user_id)} | format pattern "/users/{user_id}/applicationsets"))
   let req_body = {"applicationSetType": $application_set_type, "data": $data, "name": $name} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
@@ -21251,7 +21944,7 @@ export def "users-applicationsets create-application-update" [
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"Authorization": $authorization, "Accept": $hdr_accept} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json;version=2018-01-01" $req_body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json;version=2018-01-01" $req_body {query: {}, body: $req_body}
 }
 
 # Get Yourcampus URL for a user
@@ -21274,12 +21967,13 @@ export def "users-yourcampusurl get-yourcampus-url" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($user_id | is-empty) { error make --unspanned { msg: "path parameter 'userId' must be non-empty" } }
   let full_url = (build-url $base ({user_id: (encode-path-segment $user_id)} | format pattern "/users/{user_id}/yourcampusurl"))
   let accept_val = "application/json;version=2018-01-01"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"Authorization": $authorization, "Accept": $hdr_accept} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
 }
 
 # Wage projection Collective labor agreements defaults
@@ -21306,13 +22000,14 @@ export def "wageprojection-cladata get-cla-data-for-wage-projection-by-collectiv
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($collective_labor_agreement_id | is-empty) { error make --unspanned { msg: "path parameter 'collectiveLaborAgreementId' must be non-empty" } }
   let qp = [(serialize-qp "filter" $filter "scalar") (serialize-qp "orderBy" $order_by "scalar") (serialize-qp "pageNumber" $page_number "scalar") (serialize-qp "pageSize" $page_size "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({collective_labor_agreement_id: (encode-path-segment $collective_labor_agreement_id)} | format pattern "/wageprojection/cladata/{collective_labor_agreement_id}") $qp)
   let accept_val = "application/json;version=2018-01-01"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"Authorization": $authorization, "Accept": $hdr_accept} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"filter": $filter, "orderBy": $order_by, "pageNumber": $page_number, "pageSize": $page_size} | compact), body: null}
 }
 
 # List of collective labor agreements (CLA)
@@ -21344,5 +22039,5 @@ export def "wageprojection-collectivelaboragreements get-collective-labor-agreem
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"Authorization": $authorization, "Accept": $hdr_accept} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"filter": $filter, "orderBy": $order_by, "pageNumber": $page_number, "pageSize": $page_size} | compact), body: null}
 }

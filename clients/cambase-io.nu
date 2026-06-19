@@ -3,16 +3,17 @@
 # Auth: --token flag or $env.CAMBASE_IO_TOKEN
 
 const BASE_URL = "http://api.cambase.io"
-const DEFAULT_AUTH = "bearer"
 
-# Build auth: returns {headers: record, query: string}
+# Build auth: returns {scheme: string, headers: record, query: string, location: string}.
+# `location` is "header" | "query" | "cookie" | "none" and tells dry-run callers
+# where the token went without inspecting headers/query themselves.
 def build-auth [token?: string, auth_scheme?: string]: nothing -> record {
   let token_val = if ($token != null) and ($token | is-not-empty) { $token } else { $env | get -o CAMBASE_IO_TOKEN | default "" }
   let scheme = ($auth_scheme | default "bearer")
-  if ($scheme == "none") or ($token_val | is-empty) { return {headers: {}, query: ""} }
+  if ($scheme == "none") or ($token_val | is-empty) { return {scheme: $scheme, headers: {}, query: "", location: "none"} }
   match $scheme {
-    "none" => { {headers: {}, query: ""} }
-    _ => { {headers: {Authorization: $"Bearer ($token_val)"}, query: ""} }
+    "none" => { {scheme: $scheme, headers: {}, query: "", location: "none"} }
+    _ => { {scheme: $scheme, headers: {Authorization: $"Bearer ($token_val)"}, query: "", location: "header"} }
   }
 }
 
@@ -21,8 +22,9 @@ def build-auth [token?: string, auth_scheme?: string]: nothing -> record {
 # ([A-Za-z0-9-._~]) stay literal; everything else gets %XX.
 def serialize-qp [name: string, value: any, style: string]: nothing -> list<string> {
   if ($value == null) { return [] }
-  let n = (encode-path-segment $name)
   let is_list = ($value | describe | str starts-with "list")
+  if $is_list and ($value | is-empty) { return [] }
+  let n = (encode-path-segment $name)
   if ($value | describe | str starts-with "record") { return ($value | transpose k v | each { $"($n)[(encode-path-segment $in.k)]=(encode-path-segment $in.v)" }) }
   if not $is_list { return [$"($n)=(encode-path-segment $value)"] }
   match $style {
@@ -53,22 +55,42 @@ def build-url [base: string, path: string, query?: string]: nothing -> string {
   if ($query != null) and ($query | is-not-empty) { $result | upsert query $query | url join } else { $result | url join }
 }
 
+# Build the dry-run record returned by --dry-run. Shape:
+#   {dry_run: true, method, url, query: <record>, headers, body, content_type, timeout,
+#    auth: {scheme, location}}
+# `meta` carries logical-form data (the query record by spec name, the pre-serialization
+# body) that do-request itself cannot reconstruct from its wire-format args.
+def build-dry-run-record [method: string, url: string, auth: record, content_type: string, timeout: duration, meta?: record]: nothing -> record {
+  let m = ($meta | default {})
+  {
+    dry_run: true
+    method: $method
+    url: $url
+    query: ($m | get -o query | default {})
+    headers: $auth.headers
+    body: ($m | get -o body)
+    content_type: $content_type
+    timeout: $timeout
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+}
+
 # Execute HTTP request with method dispatch
-def do-request [method: string, url: string, auth: record, insecure: bool, raw: bool, dry_run: bool, max_time?: duration, allow_errors?: bool, full?: bool, content_type?: string, body?: any]: nothing -> any {
+def do-request [method: string, url: string, auth: record, insecure: bool, raw: bool, dry_run: bool, max_time?: duration, allow_errors?: bool, full?: bool, content_type?: string, body?: any, dry_run_meta?: record]: nothing -> any {
   let req_url = if ($auth.query | is-not-empty) { if ($url | str contains "?") { $"($url)&($auth.query)" } else { $"($url)?($auth.query)" } } else { $url }
   let timeout = ($max_time | default 30min)
   let ct = ($content_type | default "application/json")
-  if $dry_run { return {method: $method, url: $req_url, headers: $auth.headers, query_string: $auth.query, content_type: $ct, timeout: $timeout, body: $body} }
+  if $dry_run { return (build-dry-run-record $method $req_url $auth $ct $timeout $dry_run_meta) }
   let resp = match $method {
     "get" => { http get --headers $auth.headers --full --allow-errors --max-time $timeout --insecure=$insecure --raw=$raw $req_url }
-    "head" => { http head --headers $auth.headers --max-time $timeout --insecure=$insecure $req_url }
-    "options" => { http options --headers $auth.headers --max-time $timeout --insecure=$insecure $req_url }
+    "head" => { http head --headers $auth.headers --full --allow-errors --max-time $timeout --insecure=$insecure $req_url }
+    "options" => { http options --headers $auth.headers --full --allow-errors --max-time $timeout --insecure=$insecure $req_url }
     "post" => { if ($body | is-empty) { http post --headers $auth.headers --full --allow-errors --max-time $timeout --insecure=$insecure --raw=$raw $req_url "" } else { http post --headers $auth.headers --content-type $ct --full --allow-errors --max-time $timeout --insecure=$insecure --raw=$raw $req_url $body } }
     "put" => { if ($body | is-empty) { http put --headers $auth.headers --full --allow-errors --max-time $timeout --insecure=$insecure --raw=$raw $req_url "" } else { http put --headers $auth.headers --content-type $ct --full --allow-errors --max-time $timeout --insecure=$insecure --raw=$raw $req_url $body } }
     "patch" => { if ($body | is-empty) { http patch --headers $auth.headers --full --allow-errors --max-time $timeout --insecure=$insecure --raw=$raw $req_url "" } else { http patch --headers $auth.headers --content-type $ct --full --allow-errors --max-time $timeout --insecure=$insecure --raw=$raw $req_url $body } }
     "delete" => { if ($body | is-empty) { http delete --headers $auth.headers --full --allow-errors --max-time $timeout --insecure=$insecure --raw=$raw $req_url } else { http delete --headers $auth.headers --content-type $ct --data $body --full --allow-errors --max-time $timeout --insecure=$insecure --raw=$raw $req_url } }
   }
-  if ($method in ["head" "options"]) { return $resp }
+  if ($method == "head") and (not $full) and (not $allow_errors) and $resp.status < 400 { return $resp.headers }
   if $allow_errors { $resp } else if $resp.status >= 400 { error make --unspanned { msg: $"HTTP ($resp.status): ($resp.body)" } } else if $full { {status: $resp.status, headers: $resp.headers, body: $resp.body} } else if $resp.status == 204 { null } else { $resp.body }
 }
 
@@ -79,7 +101,7 @@ def auth-scheme-completer [] { ["bearer"] }
 # List all available API commands with their parameters
 export def commands []: nothing -> table {
   let builtin_flags = ["base-url" "token" "auth-scheme" "insecure" "max-time" "raw" "allow-errors" "full" "dry-run" "accept" "help"]
-  let mod_name = (scope modules | where { $in.commands | any { $in.name == "models-json get-modelsindex" } } | get name | first)
+  let mod_name = (scope modules | where { $in.commands | any { $in.name == "models-json get-index" } } | get name | first)
   let mod_cmds = (scope modules | where name == $mod_name | get commands | first)
   let cmd_ids = ($mod_cmds | where name not-in [$mod_name "commands"] | get decl_id)
   scope commands | where decl_id in $cmd_ids | each {|cmd|
@@ -103,7 +125,7 @@ export def commands []: nothing -> table {
 #
 # GET /api/v1/models.json
 # operationId: Api::V1::Models#index
-export def "models-json get-modelsindex" [
+export def "models-json get-index" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -122,14 +144,14 @@ export def "models-json get-modelsindex" [
   let full_url = (build-url $base "/api/v1/models.json" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"page": $page, "order": $order} | compact), body: null}
 }
 
 # Creates a new Model
 #
 # POST /api/v1/models.json
 # operationId: Api::V1::Models#create
-export def "models-json create-modelscreate" [
+export def "models-json create" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -166,15 +188,15 @@ export def "models-json create-modelscreate" [
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  let req_body = ($req_body | transpose k v | where v != null | reduce -f {} {|p, acc| $acc | upsert $p.k $p.v } | url build-query)
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/x-www-form-urlencoded" $req_body
+  let req_body_wire = ($req_body | transpose k v | where v != null | reduce -f {} {|p, acc| $acc | upsert $p.k $p.v } | url build-query)
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/x-www-form-urlencoded" $req_body_wire {query: {}, body: $req_body}
 }
 
 # Searches all Models
 #
 # GET /api/v1/models/search.json
 # operationId: Api::V1::Models#search
-export def "models-search-json get-modelssearch" [
+export def "models-search-json list" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -205,14 +227,14 @@ export def "models-search-json get-modelssearch" [
   let full_url = (build-url $base "/api/v1/models/search.json" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"page": $page, "q[model_cont]": $q_model_cont, "q[manufacturer_name_cont]": $q_manufacturer_name_cont, "q[shape_eq]": $q_shape_eq, "q[resolution_eq]": $q_resolution_eq, "q[onvif_true]": $q_onvif_true, "q[psia_true]": $q_psia_true, "q[ptz_true]": $q_ptz_true, "q[infrared_true]": $q_infrared_true, "q[varifocal_true]": $q_varifocal_true, "q[sd_card_true]": $q_sd_card_true, "q[upnp_true]": $q_upnp_true, "q[audio_in_true]": $q_audio_in_true, "q[audio_out_true]": $q_audio_out_true} | compact), body: null}
 }
 
 # Fetches a single Model
 #
 # GET /api/v1/models/{id}.json
 # operationId: Api::V1::Models#show
-export def "models get-modelsshow" [
+export def "models get-show" [
   id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -226,10 +248,11 @@ export def "models get-modelsshow" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
   let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/api/v1/models/{id}.json"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
 }
 
 # Updates an existing Model
@@ -268,13 +291,14 @@ export def "models update-by-id" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
   let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/api/v1/models/{id}.json"))
   let req_body = {"vendor_id": $vendor_id, "model[model]": $model_model, "model[shape]": $model_shape, "model[resolution]": $model_resolution, "model[onvif]": $model_onvif, "model[psia]": $model_psia, "model[ptz]": $model_ptz, "model[infrared]": $model_infrared, "model[varifocal]": $model_varifocal, "model[sd_card]": $model_sd_card, "model[upnp]": $model_upnp, "model[audio_in]": $model_audio_in, "model[audio_out]": $model_audio_out, "model[default_username]": $model_default_username, "model[default_password]": $model_default_password, "model[jpeg_url]": $model_jpeg_url, "model[h264_url]": $model_h264_url, "model[mjpeg_url]": $model_mjpeg_url} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  let req_body = ($req_body | transpose k v | where v != null | reduce -f {} {|p, acc| $acc | upsert $p.k $p.v } | url build-query)
-  do-request "patch" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/x-www-form-urlencoded" $req_body
+  let req_body_wire = ($req_body | transpose k v | where v != null | reduce -f {} {|p, acc| $acc | upsert $p.k $p.v } | url build-query)
+  do-request "patch" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/x-www-form-urlencoded" $req_body_wire {query: {}, body: $req_body}
 }
 
 # Updates an existing Model
@@ -313,20 +337,21 @@ export def "models update-by-id-1" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
   let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/api/v1/models/{id}.json"))
   let req_body = {"vendor_id": $vendor_id, "model[model]": $model_model, "model[shape]": $model_shape, "model[resolution]": $model_resolution, "model[onvif]": $model_onvif, "model[psia]": $model_psia, "model[ptz]": $model_ptz, "model[infrared]": $model_infrared, "model[varifocal]": $model_varifocal, "model[sd_card]": $model_sd_card, "model[upnp]": $model_upnp, "model[audio_in]": $model_audio_in, "model[audio_out]": $model_audio_out, "model[default_username]": $model_default_username, "model[default_password]": $model_default_password, "model[jpeg_url]": $model_jpeg_url, "model[h264_url]": $model_h264_url, "model[mjpeg_url]": $model_mjpeg_url} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  let req_body = ($req_body | transpose k v | where v != null | reduce -f {} {|p, acc| $acc | upsert $p.k $p.v } | url build-query)
-  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/x-www-form-urlencoded" $req_body
+  let req_body_wire = ($req_body | transpose k v | where v != null | reduce -f {} {|p, acc| $acc | upsert $p.k $p.v } | url build-query)
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/x-www-form-urlencoded" $req_body_wire {query: {}, body: $req_body}
 }
 
 # Fetches all Recorders
 #
 # GET /api/v1/recorders.json
 # operationId: Api::V1::Recorders#index
-export def "recorders-json get-recordersindex" [
+export def "recorders-json get-index" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -345,14 +370,14 @@ export def "recorders-json get-recordersindex" [
   let full_url = (build-url $base "/api/v1/recorders.json" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"page": $page, "order": $order} | compact), body: null}
 }
 
 # Creates a new Recorder
 #
 # POST /api/v1/recorders.json
 # operationId: Api::V1::Recorders#create
-export def "recorders-json create-recorderscreate" [
+export def "recorders-json create" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -403,15 +428,15 @@ export def "recorders-json create-recorderscreate" [
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  let req_body = ($req_body | transpose k v | where v != null | reduce -f {} {|p, acc| $acc | upsert $p.k $p.v } | url build-query)
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/x-www-form-urlencoded" $req_body
+  let req_body_wire = ($req_body | transpose k v | where v != null | reduce -f {} {|p, acc| $acc | upsert $p.k $p.v } | url build-query)
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/x-www-form-urlencoded" $req_body_wire {query: {}, body: $req_body}
 }
 
 # Searches all Recorders
 #
 # GET /api/v1/recorders/search.json
 # operationId: Api::V1::Recorders#search
-export def "recorders-search-json get-recorderssearch" [
+export def "recorders-search-json list" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -447,14 +472,14 @@ export def "recorders-search-json get-recorderssearch" [
   let full_url = (build-url $base "/api/v1/recorders/search.json" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"page": $page, "q[model_cont]": $q_model_cont, "q[vendor_name_cont]": $q_vendor_name_cont, "q[sdhc_eq]": $q_sdhc_eq, "q[type_eq]": $q_type_eq, "q[resolution_eq]": $q_resolution_eq, "q[input_channels_eq]": $q_input_channels_eq, "q[playback_channels_eq]": $q_playback_channels_eq, "q[onvif_true]": $q_onvif_true, "q[psia_true]": $q_psia_true, "q[ptz_true]": $q_ptz_true, "q[sd_card_true]": $q_sd_card_true, "q[upnp_true]": $q_upnp_true, "q[audio_in_true]": $q_audio_in_true, "q[audio_out_true]": $q_audio_out_true, "q[hdmi_true]": $q_hdmi_true, "q[hot_swap_true]": $q_hot_swap_true, "q[support_3rdparty_true]": $q_support_3rdparty_true, "q[digital_io_true]": $q_digital_io_true} | compact), body: null}
 }
 
 # Fetches a single Recorder
 #
 # GET /api/v1/recorders/{id}.json
 # operationId: Api::V1::Recorders#show
-export def "recorders get-recordersshow" [
+export def "recorders get-show" [
   id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -468,10 +493,11 @@ export def "recorders get-recordersshow" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
   let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/api/v1/recorders/{id}.json"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
 }
 
 # Updates an existing Recorder
@@ -524,13 +550,14 @@ export def "recorders update-by-id" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
   let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/api/v1/recorders/{id}.json"))
   let req_body = {"vendor_id": $vendor_id, "recorder[model]": $recorder_model, "recorder[name]": $recorder_name, "recorder[recorder_type]": $recorder_recorder_type, "recorder[resolution]": $recorder_resolution, "recorder[onvif]": $recorder_onvif, "recorder[psia]": $recorder_psia, "recorder[ptz]": $recorder_ptz, "recorder[discontinued]": $recorder_discontinued, "recorder[support_3rdparty]": $recorder_support_3rdparty, "recorder[sd_card]": $recorder_sd_card, "recorder[upnp]": $recorder_upnp, "recorder[hot_swap]": $recorder_hot_swap, "recorder[hdmi]": $recorder_hdmi, "recorder[digital_io]": $recorder_digital_io, "recorder[audio_in]": $recorder_audio_in, "recorder[audio_out]": $recorder_audio_out, "recorder[input_channels]": $recorder_input_channels, "recorder[playback_channels]": $recorder_playback_channels, "recorder[usb]": $recorder_usb, "recorder[sdhc]": $recorder_sdhc, "recorder[mobile_access]": $recorder_mobile_access, "recorder[alarms]": $recorder_alarms, "recorder[raid_support]": $recorder_raid_support, "recorder[storage]": $recorder_storage, "recorder[additional_information]": $recorder_additional_information, "recorder[default_username]": $recorder_default_username, "recorder[default_password]": $recorder_default_password, "recorder[jpeg_url]": $recorder_jpeg_url, "recorder[h264_url]": $recorder_h264_url, "recorder[mjpeg_url]": $recorder_mjpeg_url, "recorder[official_url]": $recorder_official_url} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  let req_body = ($req_body | transpose k v | where v != null | reduce -f {} {|p, acc| $acc | upsert $p.k $p.v } | url build-query)
-  do-request "patch" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/x-www-form-urlencoded" $req_body
+  let req_body_wire = ($req_body | transpose k v | where v != null | reduce -f {} {|p, acc| $acc | upsert $p.k $p.v } | url build-query)
+  do-request "patch" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/x-www-form-urlencoded" $req_body_wire {query: {}, body: $req_body}
 }
 
 # Updates an existing Recorder
@@ -583,20 +610,21 @@ export def "recorders update-by-id-1" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
   let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/api/v1/recorders/{id}.json"))
   let req_body = {"vendor_id": $vendor_id, "recorder[model]": $recorder_model, "recorder[name]": $recorder_name, "recorder[recorder_type]": $recorder_recorder_type, "recorder[resolution]": $recorder_resolution, "recorder[onvif]": $recorder_onvif, "recorder[psia]": $recorder_psia, "recorder[ptz]": $recorder_ptz, "recorder[discontinued]": $recorder_discontinued, "recorder[support_3rdparty]": $recorder_support_3rdparty, "recorder[sd_card]": $recorder_sd_card, "recorder[upnp]": $recorder_upnp, "recorder[hot_swap]": $recorder_hot_swap, "recorder[hdmi]": $recorder_hdmi, "recorder[digital_io]": $recorder_digital_io, "recorder[audio_in]": $recorder_audio_in, "recorder[audio_out]": $recorder_audio_out, "recorder[input_channels]": $recorder_input_channels, "recorder[playback_channels]": $recorder_playback_channels, "recorder[usb]": $recorder_usb, "recorder[sdhc]": $recorder_sdhc, "recorder[mobile_access]": $recorder_mobile_access, "recorder[alarms]": $recorder_alarms, "recorder[raid_support]": $recorder_raid_support, "recorder[storage]": $recorder_storage, "recorder[additional_information]": $recorder_additional_information, "recorder[default_username]": $recorder_default_username, "recorder[default_password]": $recorder_default_password, "recorder[jpeg_url]": $recorder_jpeg_url, "recorder[h264_url]": $recorder_h264_url, "recorder[mjpeg_url]": $recorder_mjpeg_url, "recorder[official_url]": $recorder_official_url} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  let req_body = ($req_body | transpose k v | where v != null | reduce -f {} {|p, acc| $acc | upsert $p.k $p.v } | url build-query)
-  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/x-www-form-urlencoded" $req_body
+  let req_body_wire = ($req_body | transpose k v | where v != null | reduce -f {} {|p, acc| $acc | upsert $p.k $p.v } | url build-query)
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/x-www-form-urlencoded" $req_body_wire {query: {}, body: $req_body}
 }
 
 # Fetches all Vendors
 #
 # GET /api/v1/vendors.json
 # operationId: Api::V1::Vendors#index
-export def "vendors-json get-vendorsindex" [
+export def "vendors-json get-index" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -615,14 +643,14 @@ export def "vendors-json get-vendorsindex" [
   let full_url = (build-url $base "/api/v1/vendors.json" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"page": $page, "order": $order} | compact), body: null}
 }
 
 # Creates a new Vendor
 #
 # POST /api/v1/vendors.json
 # operationId: Api::V1::Vendors#create
-export def "vendors-json create-vendorscreate" [
+export def "vendors-json create" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -645,15 +673,15 @@ export def "vendors-json create-vendorscreate" [
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  let req_body = ($req_body | transpose k v | where v != null | reduce -f {} {|p, acc| $acc | upsert $p.k $p.v } | url build-query)
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/x-www-form-urlencoded" $req_body
+  let req_body_wire = ($req_body | transpose k v | where v != null | reduce -f {} {|p, acc| $acc | upsert $p.k $p.v } | url build-query)
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/x-www-form-urlencoded" $req_body_wire {query: {}, body: $req_body}
 }
 
 # Fetches a single Vendor
 #
 # GET /api/v1/vendors/{id}.json
 # operationId: Api::V1::Vendors#show
-export def "vendors get-vendorsshow" [
+export def "vendors get-show" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -668,11 +696,12 @@ export def "vendors get-vendorsshow" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
   let qp = [(serialize-qp "order" $order "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/api/v1/vendors/{id}.json") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"order": $order} | compact), body: null}
 }
 
 # Updates an existing Vendor
@@ -697,13 +726,14 @@ export def "vendors update-by-id" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
   let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/api/v1/vendors/{id}.json"))
   let req_body = {"vendor[name]": $vendor_name, "vendor[info]": $vendor_info, "vendor[url]": $vendor_url, "vendor[mac]": $vendor_mac} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  let req_body = ($req_body | transpose k v | where v != null | reduce -f {} {|p, acc| $acc | upsert $p.k $p.v } | url build-query)
-  do-request "patch" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/x-www-form-urlencoded" $req_body
+  let req_body_wire = ($req_body | transpose k v | where v != null | reduce -f {} {|p, acc| $acc | upsert $p.k $p.v } | url build-query)
+  do-request "patch" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/x-www-form-urlencoded" $req_body_wire {query: {}, body: $req_body}
 }
 
 # Updates an existing Vendor
@@ -728,11 +758,12 @@ export def "vendors update-by-id-1" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
   let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/api/v1/vendors/{id}.json"))
   let req_body = {"vendor[name]": $vendor_name, "vendor[info]": $vendor_info, "vendor[url]": $vendor_url, "vendor[mac]": $vendor_mac} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  let req_body = ($req_body | transpose k v | where v != null | reduce -f {} {|p, acc| $acc | upsert $p.k $p.v } | url build-query)
-  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/x-www-form-urlencoded" $req_body
+  let req_body_wire = ($req_body | transpose k v | where v != null | reduce -f {} {|p, acc| $acc | upsert $p.k $p.v } | url build-query)
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/x-www-form-urlencoded" $req_body_wire {query: {}, body: $req_body}
 }

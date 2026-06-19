@@ -3,16 +3,17 @@
 # Auth: --token flag or $env.AZURE_DATA_LAKE_STORAGE_TOKEN
 
 const BASE_URL = "https://azure.local"
-const DEFAULT_AUTH = "bearer"
 
-# Build auth: returns {headers: record, query: string}
+# Build auth: returns {scheme: string, headers: record, query: string, location: string}.
+# `location` is "header" | "query" | "cookie" | "none" and tells dry-run callers
+# where the token went without inspecting headers/query themselves.
 def build-auth [token?: string, auth_scheme?: string]: nothing -> record {
   let token_val = if ($token != null) and ($token | is-not-empty) { $token } else { $env | get -o AZURE_DATA_LAKE_STORAGE_TOKEN | default "" }
   let scheme = ($auth_scheme | default "bearer")
-  if ($scheme == "none") or ($token_val | is-empty) { return {headers: {}, query: ""} }
+  if ($scheme == "none") or ($token_val | is-empty) { return {scheme: $scheme, headers: {}, query: "", location: "none"} }
   match $scheme {
-    "none" => { {headers: {}, query: ""} }
-    _ => { {headers: {Authorization: $"Bearer ($token_val)"}, query: ""} }
+    "none" => { {scheme: $scheme, headers: {}, query: "", location: "none"} }
+    _ => { {scheme: $scheme, headers: {Authorization: $"Bearer ($token_val)"}, query: "", location: "header"} }
   }
 }
 
@@ -21,8 +22,9 @@ def build-auth [token?: string, auth_scheme?: string]: nothing -> record {
 # ([A-Za-z0-9-._~]) stay literal; everything else gets %XX.
 def serialize-qp [name: string, value: any, style: string]: nothing -> list<string> {
   if ($value == null) { return [] }
-  let n = (encode-path-segment $name)
   let is_list = ($value | describe | str starts-with "list")
+  if $is_list and ($value | is-empty) { return [] }
+  let n = (encode-path-segment $name)
   if ($value | describe | str starts-with "record") { return ($value | transpose k v | each { $"($n)[(encode-path-segment $in.k)]=(encode-path-segment $in.v)" }) }
   if not $is_list { return [$"($n)=(encode-path-segment $value)"] }
   match $style {
@@ -53,22 +55,42 @@ def build-url [base: string, path: string, query?: string]: nothing -> string {
   if ($query != null) and ($query | is-not-empty) { $result | upsert query $query | url join } else { $result | url join }
 }
 
+# Build the dry-run record returned by --dry-run. Shape:
+#   {dry_run: true, method, url, query: <record>, headers, body, content_type, timeout,
+#    auth: {scheme, location}}
+# `meta` carries logical-form data (the query record by spec name, the pre-serialization
+# body) that do-request itself cannot reconstruct from its wire-format args.
+def build-dry-run-record [method: string, url: string, auth: record, content_type: string, timeout: duration, meta?: record]: nothing -> record {
+  let m = ($meta | default {})
+  {
+    dry_run: true
+    method: $method
+    url: $url
+    query: ($m | get -o query | default {})
+    headers: $auth.headers
+    body: ($m | get -o body)
+    content_type: $content_type
+    timeout: $timeout
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+}
+
 # Execute HTTP request with method dispatch
-def do-request [method: string, url: string, auth: record, insecure: bool, raw: bool, dry_run: bool, max_time?: duration, allow_errors?: bool, full?: bool, content_type?: string, body?: any]: nothing -> any {
+def do-request [method: string, url: string, auth: record, insecure: bool, raw: bool, dry_run: bool, max_time?: duration, allow_errors?: bool, full?: bool, content_type?: string, body?: any, dry_run_meta?: record]: nothing -> any {
   let req_url = if ($auth.query | is-not-empty) { if ($url | str contains "?") { $"($url)&($auth.query)" } else { $"($url)?($auth.query)" } } else { $url }
   let timeout = ($max_time | default 30min)
   let ct = ($content_type | default "application/json")
-  if $dry_run { return {method: $method, url: $req_url, headers: $auth.headers, query_string: $auth.query, content_type: $ct, timeout: $timeout, body: $body} }
+  if $dry_run { return (build-dry-run-record $method $req_url $auth $ct $timeout $dry_run_meta) }
   let resp = match $method {
     "get" => { http get --headers $auth.headers --full --allow-errors --max-time $timeout --insecure=$insecure --raw=$raw $req_url }
-    "head" => { http head --headers $auth.headers --max-time $timeout --insecure=$insecure $req_url }
-    "options" => { http options --headers $auth.headers --max-time $timeout --insecure=$insecure $req_url }
+    "head" => { http head --headers $auth.headers --full --allow-errors --max-time $timeout --insecure=$insecure $req_url }
+    "options" => { http options --headers $auth.headers --full --allow-errors --max-time $timeout --insecure=$insecure $req_url }
     "post" => { if ($body | is-empty) { http post --headers $auth.headers --full --allow-errors --max-time $timeout --insecure=$insecure --raw=$raw $req_url "" } else { http post --headers $auth.headers --content-type $ct --full --allow-errors --max-time $timeout --insecure=$insecure --raw=$raw $req_url $body } }
     "put" => { if ($body | is-empty) { http put --headers $auth.headers --full --allow-errors --max-time $timeout --insecure=$insecure --raw=$raw $req_url "" } else { http put --headers $auth.headers --content-type $ct --full --allow-errors --max-time $timeout --insecure=$insecure --raw=$raw $req_url $body } }
     "patch" => { if ($body | is-empty) { http patch --headers $auth.headers --full --allow-errors --max-time $timeout --insecure=$insecure --raw=$raw $req_url "" } else { http patch --headers $auth.headers --content-type $ct --full --allow-errors --max-time $timeout --insecure=$insecure --raw=$raw $req_url $body } }
     "delete" => { if ($body | is-empty) { http delete --headers $auth.headers --full --allow-errors --max-time $timeout --insecure=$insecure --raw=$raw $req_url } else { http delete --headers $auth.headers --content-type $ct --data $body --full --allow-errors --max-time $timeout --insecure=$insecure --raw=$raw $req_url } }
   }
-  if ($method in ["head" "options"]) { return $resp }
+  if ($method == "head") and (not $full) and (not $allow_errors) and $resp.status < 400 { return $resp.headers }
   if $allow_errors { $resp } else if $resp.status >= 400 { error make --unspanned { msg: $"HTTP ($resp.status): ($resp.body)" } } else if $full { {status: $resp.status, headers: $resp.headers, body: $resp.body} } else if $resp.status == 204 { null } else { $resp.body }
 }
 
@@ -139,7 +161,7 @@ export def "account-operations list-filesystem" [
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"x-ms-client-request-id": $x_ms_client_request_id, "x-ms-date": $x_ms_date, "x-ms-version": $x_ms_version} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"resource": $resource, "prefix": $prefix, "continuation": $continuation, "maxResults": $max_results, "timeout": $timeout} | compact), body: null}
 }
 
 # Delete Filesystem
@@ -167,13 +189,14 @@ export def "filesystem-operations delete" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($filesystem | is-empty) { error make --unspanned { msg: "path parameter 'filesystem' must be non-empty" } }
   let qp = [(serialize-qp "resource" $resource "scalar") (serialize-qp "timeout" $timeout "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({filesystem: (encode-path-segment $filesystem)} | format pattern "/{filesystem}") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"x-ms-client-request-id": $x_ms_client_request_id, "x-ms-date": $x_ms_date, "x-ms-version": $x_ms_version, "If-Modified-Since": $if_modified_since, "If-Unmodified-Since": $if_unmodified_since} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"resource": $resource, "timeout": $timeout} | compact), body: null}
 }
 
 # List Paths
@@ -204,13 +227,14 @@ export def "filesystem-operations list-path" [
 ]: nothing -> record<paths: table<contentLength: int, eTag: string, group: string, isDirectory: bool, lastModified: string, name: string, owner: string, permissions: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($filesystem | is-empty) { error make --unspanned { msg: "path parameter 'filesystem' must be non-empty" } }
   let qp = [(serialize-qp "resource" $resource "scalar") (serialize-qp "timeout" $timeout "scalar") (serialize-qp "directory" $directory "scalar") (serialize-qp "recursive" $recursive "scalar") (serialize-qp "continuation" $continuation "scalar") (serialize-qp "maxResults" $max_results "scalar") (serialize-qp "upn" $upn "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({filesystem: (encode-path-segment $filesystem)} | format pattern "/{filesystem}") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"x-ms-client-request-id": $x_ms_client_request_id, "x-ms-date": $x_ms_date, "x-ms-version": $x_ms_version} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"resource": $resource, "timeout": $timeout, "directory": $directory, "recursive": $recursive, "continuation": $continuation, "maxResults": $max_results, "upn": $upn} | compact), body: null}
 }
 
 # Get Filesystem Properties.
@@ -236,13 +260,14 @@ export def "filesystem-operations get-properties" [
 ]: nothing -> record {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($filesystem | is-empty) { error make --unspanned { msg: "path parameter 'filesystem' must be non-empty" } }
   let qp = [(serialize-qp "resource" $resource "scalar") (serialize-qp "timeout" $timeout "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({filesystem: (encode-path-segment $filesystem)} | format pattern "/{filesystem}") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"x-ms-client-request-id": $x_ms_client_request_id, "x-ms-date": $x_ms_date, "x-ms-version": $x_ms_version} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "head" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "head" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"resource": $resource, "timeout": $timeout} | compact), body: null}
 }
 
 # Set Filesystem Properties
@@ -271,13 +296,14 @@ export def "filesystem-operations update-properties" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($filesystem | is-empty) { error make --unspanned { msg: "path parameter 'filesystem' must be non-empty" } }
   let qp = [(serialize-qp "resource" $resource "scalar") (serialize-qp "timeout" $timeout "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({filesystem: (encode-path-segment $filesystem)} | format pattern "/{filesystem}") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"x-ms-client-request-id": $x_ms_client_request_id, "x-ms-date": $x_ms_date, "x-ms-version": $x_ms_version, "x-ms-properties": $x_ms_properties, "If-Modified-Since": $if_modified_since, "If-Unmodified-Since": $if_unmodified_since} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "patch" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "patch" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"resource": $resource, "timeout": $timeout} | compact), body: null}
 }
 
 # Create Filesystem
@@ -304,13 +330,14 @@ export def "filesystem-operations create" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($filesystem | is-empty) { error make --unspanned { msg: "path parameter 'filesystem' must be non-empty" } }
   let qp = [(serialize-qp "resource" $resource "scalar") (serialize-qp "timeout" $timeout "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({filesystem: (encode-path-segment $filesystem)} | format pattern "/{filesystem}") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"x-ms-client-request-id": $x_ms_client_request_id, "x-ms-date": $x_ms_date, "x-ms-version": $x_ms_version, "x-ms-properties": $x_ms_properties} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"resource": $resource, "timeout": $timeout} | compact), body: null}
 }
 
 # Delete File | Delete Directory
@@ -343,13 +370,15 @@ export def "file-and-directory-operations delete" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($filesystem | is-empty) { error make --unspanned { msg: "path parameter 'filesystem' must be non-empty" } }
+  if ($path | is-empty) { error make --unspanned { msg: "path parameter 'path' must be non-empty" } }
   let qp = [(serialize-qp "timeout" $timeout "scalar") (serialize-qp "recursive" $recursive "scalar") (serialize-qp "continuation" $continuation "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({filesystem: (encode-path-segment $filesystem), path: (encode-path-segment $path)} | format pattern "/{filesystem}/{path}") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"x-ms-client-request-id": $x_ms_client_request_id, "x-ms-date": $x_ms_date, "x-ms-version": $x_ms_version, "x-ms-lease-id": $x_ms_lease_id, "If-Match": $if_match, "If-None-Match": $if_none_match, "If-Modified-Since": $if_modified_since, "If-Unmodified-Since": $if_unmodified_since} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"timeout": $timeout, "recursive": $recursive, "continuation": $continuation} | compact), body: null}
 }
 
 # Read File
@@ -383,13 +412,15 @@ export def "file-and-directory-operations get" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($filesystem | is-empty) { error make --unspanned { msg: "path parameter 'filesystem' must be non-empty" } }
+  if ($path | is-empty) { error make --unspanned { msg: "path parameter 'path' must be non-empty" } }
   let qp = [(serialize-qp "timeout" $timeout "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({filesystem: (encode-path-segment $filesystem), path: (encode-path-segment $path)} | format pattern "/{filesystem}/{path}") $qp)
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"x-ms-client-request-id": $x_ms_client_request_id, "x-ms-date": $x_ms_date, "x-ms-version": $x_ms_version, "Range": $range, "x-ms-lease-id": $x_ms_lease_id, "x-ms-range-get-content-md5": $x_ms_range_get_content_md5, "If-Match": $if_match, "If-None-Match": $if_none_match, "If-Modified-Since": $if_modified_since, "If-Unmodified-Since": $if_unmodified_since} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"timeout": $timeout} | compact), body: null}
 }
 
 # Get Properties | Get Status | Get Access Control List | Check Access
@@ -423,13 +454,15 @@ export def "file-and-directory-operations get-properties" [
 ]: nothing -> record {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($filesystem | is-empty) { error make --unspanned { msg: "path parameter 'filesystem' must be non-empty" } }
+  if ($path | is-empty) { error make --unspanned { msg: "path parameter 'path' must be non-empty" } }
   let qp = [(serialize-qp "timeout" $timeout "scalar") (serialize-qp "action" $action "scalar") (serialize-qp "upn" $upn "scalar") (serialize-qp "fsAction" $fs_action "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({filesystem: (encode-path-segment $filesystem), path: (encode-path-segment $path)} | format pattern "/{filesystem}/{path}") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"x-ms-client-request-id": $x_ms_client_request_id, "x-ms-date": $x_ms_date, "x-ms-version": $x_ms_version, "x-ms-lease-id": $x_ms_lease_id, "If-Match": $if_match, "If-None-Match": $if_none_match, "If-Modified-Since": $if_modified_since, "If-Unmodified-Since": $if_unmodified_since} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "head" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "head" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"timeout": $timeout, "action": $action, "upn": $upn, "fsAction": $fs_action} | compact), body: null}
 }
 
 # Append Data | Flush Data | Set Properties | Set Access Control
@@ -474,20 +507,22 @@ export def "file-and-directory-operations update" [
   --if-none-match: string # Optional for Flush Data and Set Properties, but invalid for Append Data. An ETag value or the special wildcard ("*") value. Specify this header to perform the operation only if the resource's ETag does not match the value specified. The ETag must be specified in quotes.
   --if-modified-since: string # Optional for Flush Data and Set Properties, but invalid for Append Data. A date and time value. Specify this header to perform the operation only if the resource has been modified since the specified date and time.
   --if-unmodified-since: string # Optional for Flush Data and Set Properties, but invalid for Append Data. A date and time value. Specify this header to perform the operation only if the resource has not been modified since the specified date and time.
-  --body: record
+  --body: any
 ]: any -> any {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($filesystem | is-empty) { error make --unspanned { msg: "path parameter 'filesystem' must be non-empty" } }
+  if ($path | is-empty) { error make --unspanned { msg: "path parameter 'path' must be non-empty" } }
   let qp = [(serialize-qp "timeout" $timeout "scalar") (serialize-qp "action" $action "scalar") (serialize-qp "position" $position "scalar") (serialize-qp "retainUncommittedData" $retain_uncommitted_data "scalar") (serialize-qp "close" $close "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({filesystem: (encode-path-segment $filesystem), path: (encode-path-segment $path)} | format pattern "/{filesystem}/{path}") $qp)
   let req_body = $body
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else if (($input | is-not-empty) and ($req_body | is-empty)) { $input } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"x-ms-client-request-id": $x_ms_client_request_id, "x-ms-date": $x_ms_date, "x-ms-version": $x_ms_version, "Content-Length": $content_length, "Content-MD5": $content_md5, "x-ms-lease-id": $x_ms_lease_id, "x-ms-cache-control": $x_ms_cache_control, "x-ms-content-type": $x_ms_content_type, "x-ms-content-disposition": $x_ms_content_disposition, "x-ms-content-encoding": $x_ms_content_encoding, "x-ms-content-language": $x_ms_content_language, "x-ms-content-md5": $x_ms_content_md5, "x-ms-properties": $x_ms_properties, "x-ms-owner": $x_ms_owner, "x-ms-group": $x_ms_group, "x-ms-permissions": $x_ms_permissions, "x-ms-acl": $x_ms_acl, "If-Match": $if_match, "If-None-Match": $if_none_match, "If-Modified-Since": $if_modified_since, "If-Unmodified-Since": $if_unmodified_since} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "patch" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body
+  do-request "patch" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/octet-stream" $req_body {query: ({"timeout": $timeout, "action": $action, "position": $position, "retainUncommittedData": $retain_uncommitted_data, "close": $close} | compact), body: $req_body}
 }
 
 # Lease Path
@@ -522,13 +557,15 @@ export def "file-and-directory-operations create-lease" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($filesystem | is-empty) { error make --unspanned { msg: "path parameter 'filesystem' must be non-empty" } }
+  if ($path | is-empty) { error make --unspanned { msg: "path parameter 'path' must be non-empty" } }
   let qp = [(serialize-qp "timeout" $timeout "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({filesystem: (encode-path-segment $filesystem), path: (encode-path-segment $path)} | format pattern "/{filesystem}/{path}") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"x-ms-client-request-id": $x_ms_client_request_id, "x-ms-date": $x_ms_date, "x-ms-version": $x_ms_version, "x-ms-lease-action": $x_ms_lease_action, "x-ms-lease-duration": $x_ms_lease_duration, "x-ms-lease-break-period": $x_ms_lease_break_period, "x-ms-lease-id": $x_ms_lease_id, "x-ms-proposed-lease-id": $x_ms_proposed_lease_id, "If-Match": $if_match, "If-None-Match": $if_none_match, "If-Modified-Since": $if_modified_since, "If-Unmodified-Since": $if_unmodified_since} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"timeout": $timeout} | compact), body: null}
 }
 
 # Create File | Create Directory | Rename File | Rename Directory
@@ -580,11 +617,13 @@ export def "file-and-directory-operations create" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($filesystem | is-empty) { error make --unspanned { msg: "path parameter 'filesystem' must be non-empty" } }
+  if ($path | is-empty) { error make --unspanned { msg: "path parameter 'path' must be non-empty" } }
   let qp = [(serialize-qp "timeout" $timeout "scalar") (serialize-qp "resource" $resource "scalar") (serialize-qp "continuation" $continuation "scalar") (serialize-qp "mode" $mode "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({filesystem: (encode-path-segment $filesystem), path: (encode-path-segment $path)} | format pattern "/{filesystem}/{path}") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"x-ms-client-request-id": $x_ms_client_request_id, "x-ms-date": $x_ms_date, "x-ms-version": $x_ms_version, "Cache-Control": $cache_control, "Content-Encoding": $content_encoding, "Content-Language": $content_language, "Content-Disposition": $content_disposition, "x-ms-cache-control": $x_ms_cache_control, "x-ms-content-type": $x_ms_content_type, "x-ms-content-encoding": $x_ms_content_encoding, "x-ms-content-language": $x_ms_content_language, "x-ms-content-disposition": $x_ms_content_disposition, "x-ms-rename-source": $x_ms_rename_source, "x-ms-lease-id": $x_ms_lease_id, "x-ms-source-lease-id": $x_ms_source_lease_id, "x-ms-properties": $x_ms_properties, "x-ms-permissions": $x_ms_permissions, "x-ms-umask": $x_ms_umask, "If-Match": $if_match, "If-None-Match": $if_none_match, "If-Modified-Since": $if_modified_since, "If-Unmodified-Since": $if_unmodified_since, "x-ms-source-if-match": $x_ms_source_if_match, "x-ms-source-if-none-match": $x_ms_source_if_none_match, "x-ms-source-if-modified-since": $x_ms_source_if_modified_since, "x-ms-source-if-unmodified-since": $x_ms_source_if_unmodified_since} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"timeout": $timeout, "resource": $resource, "continuation": $continuation, "mode": $mode} | compact), body: null}
 }

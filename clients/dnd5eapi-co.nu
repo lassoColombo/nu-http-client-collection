@@ -3,16 +3,17 @@
 # Auth: --token flag or $env.D_D_5E_API_TOKEN
 
 const BASE_URL = "https://www.dnd5eapi.co"
-const DEFAULT_AUTH = "bearer"
 
-# Build auth: returns {headers: record, query: string}
+# Build auth: returns {scheme: string, headers: record, query: string, location: string}.
+# `location` is "header" | "query" | "cookie" | "none" and tells dry-run callers
+# where the token went without inspecting headers/query themselves.
 def build-auth [token?: string, auth_scheme?: string]: nothing -> record {
   let token_val = if ($token != null) and ($token | is-not-empty) { $token } else { $env | get -o D_D_5E_API_TOKEN | default "" }
   let scheme = ($auth_scheme | default "bearer")
-  if ($scheme == "none") or ($token_val | is-empty) { return {headers: {}, query: ""} }
+  if ($scheme == "none") or ($token_val | is-empty) { return {scheme: $scheme, headers: {}, query: "", location: "none"} }
   match $scheme {
-    "none" => { {headers: {}, query: ""} }
-    _ => { {headers: {Authorization: $"Bearer ($token_val)"}, query: ""} }
+    "none" => { {scheme: $scheme, headers: {}, query: "", location: "none"} }
+    _ => { {scheme: $scheme, headers: {Authorization: $"Bearer ($token_val)"}, query: "", location: "header"} }
   }
 }
 
@@ -21,8 +22,9 @@ def build-auth [token?: string, auth_scheme?: string]: nothing -> record {
 # ([A-Za-z0-9-._~]) stay literal; everything else gets %XX.
 def serialize-qp [name: string, value: any, style: string]: nothing -> list<string> {
   if ($value == null) { return [] }
-  let n = (encode-path-segment $name)
   let is_list = ($value | describe | str starts-with "list")
+  if $is_list and ($value | is-empty) { return [] }
+  let n = (encode-path-segment $name)
   if ($value | describe | str starts-with "record") { return ($value | transpose k v | each { $"($n)[(encode-path-segment $in.k)]=(encode-path-segment $in.v)" }) }
   if not $is_list { return [$"($n)=(encode-path-segment $value)"] }
   match $style {
@@ -53,22 +55,42 @@ def build-url [base: string, path: string, query?: string]: nothing -> string {
   if ($query != null) and ($query | is-not-empty) { $result | upsert query $query | url join } else { $result | url join }
 }
 
+# Build the dry-run record returned by --dry-run. Shape:
+#   {dry_run: true, method, url, query: <record>, headers, body, content_type, timeout,
+#    auth: {scheme, location}}
+# `meta` carries logical-form data (the query record by spec name, the pre-serialization
+# body) that do-request itself cannot reconstruct from its wire-format args.
+def build-dry-run-record [method: string, url: string, auth: record, content_type: string, timeout: duration, meta?: record]: nothing -> record {
+  let m = ($meta | default {})
+  {
+    dry_run: true
+    method: $method
+    url: $url
+    query: ($m | get -o query | default {})
+    headers: $auth.headers
+    body: ($m | get -o body)
+    content_type: $content_type
+    timeout: $timeout
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+}
+
 # Execute HTTP request with method dispatch
-def do-request [method: string, url: string, auth: record, insecure: bool, raw: bool, dry_run: bool, max_time?: duration, allow_errors?: bool, full?: bool, content_type?: string, body?: any]: nothing -> any {
+def do-request [method: string, url: string, auth: record, insecure: bool, raw: bool, dry_run: bool, max_time?: duration, allow_errors?: bool, full?: bool, content_type?: string, body?: any, dry_run_meta?: record]: nothing -> any {
   let req_url = if ($auth.query | is-not-empty) { if ($url | str contains "?") { $"($url)&($auth.query)" } else { $"($url)?($auth.query)" } } else { $url }
   let timeout = ($max_time | default 30min)
   let ct = ($content_type | default "application/json")
-  if $dry_run { return {method: $method, url: $req_url, headers: $auth.headers, query_string: $auth.query, content_type: $ct, timeout: $timeout, body: $body} }
+  if $dry_run { return (build-dry-run-record $method $req_url $auth $ct $timeout $dry_run_meta) }
   let resp = match $method {
     "get" => { http get --headers $auth.headers --full --allow-errors --max-time $timeout --insecure=$insecure --raw=$raw $req_url }
-    "head" => { http head --headers $auth.headers --max-time $timeout --insecure=$insecure $req_url }
-    "options" => { http options --headers $auth.headers --max-time $timeout --insecure=$insecure $req_url }
+    "head" => { http head --headers $auth.headers --full --allow-errors --max-time $timeout --insecure=$insecure $req_url }
+    "options" => { http options --headers $auth.headers --full --allow-errors --max-time $timeout --insecure=$insecure $req_url }
     "post" => { if ($body | is-empty) { http post --headers $auth.headers --full --allow-errors --max-time $timeout --insecure=$insecure --raw=$raw $req_url "" } else { http post --headers $auth.headers --content-type $ct --full --allow-errors --max-time $timeout --insecure=$insecure --raw=$raw $req_url $body } }
     "put" => { if ($body | is-empty) { http put --headers $auth.headers --full --allow-errors --max-time $timeout --insecure=$insecure --raw=$raw $req_url "" } else { http put --headers $auth.headers --content-type $ct --full --allow-errors --max-time $timeout --insecure=$insecure --raw=$raw $req_url $body } }
     "patch" => { if ($body | is-empty) { http patch --headers $auth.headers --full --allow-errors --max-time $timeout --insecure=$insecure --raw=$raw $req_url "" } else { http patch --headers $auth.headers --content-type $ct --full --allow-errors --max-time $timeout --insecure=$insecure --raw=$raw $req_url $body } }
     "delete" => { if ($body | is-empty) { http delete --headers $auth.headers --full --allow-errors --max-time $timeout --insecure=$insecure --raw=$raw $req_url } else { http delete --headers $auth.headers --content-type $ct --data $body --full --allow-errors --max-time $timeout --insecure=$insecure --raw=$raw $req_url } }
   }
-  if ($method in ["head" "options"]) { return $resp }
+  if ($method == "head") and (not $full) and (not $allow_errors) and $resp.status < 400 { return $resp.headers }
   if $allow_errors { $resp } else if $resp.status >= 400 { error make --unspanned { msg: $"HTTP ($resp.status): ($resp.body)" } } else if $full { {status: $resp.status, headers: $resp.headers, body: $resp.body} } else if $resp.status == 204 { null } else { $resp.body }
 }
 
@@ -118,7 +140,7 @@ export def "common list" [
   let full_url = (build-url $base "/api")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
 }
 
 # Get an ability score by index.
@@ -138,10 +160,11 @@ export def "ability-scores get" [
 ]: nothing -> record<index: string, name: string, url: string, desc: list<string>, full_name: string, skills: table<index: string, name: string, url: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($index | is-empty) { error make --unspanned { msg: "path parameter 'index' must be non-empty" } }
   let full_url = (build-url $base ({index: (encode-path-segment $index)} | format pattern "/api/ability-scores/{index}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
 }
 
 # Get an alignment by index.
@@ -161,10 +184,11 @@ export def "alignments get" [
 ]: nothing -> record<index: string, name: string, url: string, abbreviation: string, desc: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($index | is-empty) { error make --unspanned { msg: "path parameter 'index' must be non-empty" } }
   let full_url = (build-url $base ({index: (encode-path-segment $index)} | format pattern "/api/alignments/{index}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
 }
 
 # Get a background by index.
@@ -184,10 +208,11 @@ export def "backgrounds get" [
 ]: nothing -> record<index: string, name: string, url: string, bonds: record<choose: float, desc: string, from: any, type: string>, feature: record<desc: list<string>, name: string>, flaws: record<choose: float, desc: string, from: any, type: string>, ideals: record<choose: float, desc: string, from: any, type: string>, language_options: record<choose: float, desc: string, from: any, type: string>, personality_traits: record, starting_equipment: table<index: string, name: string, url: string>, starting_equipment_options: record<choose: float, desc: string, from: any, type: string>, starting_proficiencies: table<index: string, name: string, url: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($index | is-empty) { error make --unspanned { msg: "path parameter 'index' must be non-empty" } }
   let full_url = (build-url $base ({index: (encode-path-segment $index)} | format pattern "/api/backgrounds/{index}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
 }
 
 # Get a class by index.
@@ -207,10 +232,11 @@ export def "classes get" [
 ]: nothing -> record<index: string, name: string, url: string, class_levels: string, hit_die: float, multi_classing: record<prerequisite_options: list<record>, prerequisites: list<record>, proficiencies: list<record>, proficiency_choices: list<record>>, proficiencies: table<index: string, name: string, url: string>, proficiency_choices: table<choose: float, desc: string, from: any, type: string>, saving_throws: table<index: string, name: string, url: string>, spellcasting: record<info: list<record>, level: float, spellcasting_ability: record<index: string, name: string, url: string>>, spells: string, starting_equipment: table<equipment: record, quantity: float>, starting_equipment_options: table<choose: float, desc: string, from: any, type: string>, subclasses: table<index: string, name: string, url: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($index | is-empty) { error make --unspanned { msg: "path parameter 'index' must be non-empty" } }
   let full_url = (build-url $base ({index: (encode-path-segment $index)} | format pattern "/api/classes/{index}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
 }
 
 # Get features available for a class.
@@ -230,10 +256,11 @@ export def "classes-features get" [
 ]: nothing -> record<count: float, results: table<index: string, name: string, url: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($index | is-empty) { error make --unspanned { msg: "path parameter 'index' must be non-empty" } }
   let full_url = (build-url $base ({index: (encode-path-segment $index)} | format pattern "/api/classes/{index}/features"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
 }
 
 # Get all level resources for a class.
@@ -254,11 +281,12 @@ export def "classes-levels list" [
 ]: nothing -> table<ability_score_bonuses: float, class_specific: any, features: list<record>, index: string, level: float, prof_bonus: float, spellcasting: record<cantrips_known: float, spell_slots_level_1: float, spell_slots_level_2: float, spell_slots_level_3: float, spell_slots_level_4: float, spell_slots_level_5: float, spell_slots_level_6: float, spell_slots_level_7: float, spell_slots_level_8: float, spell_slots_level_9: float, spells_known: float>, url: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($index | is-empty) { error make --unspanned { msg: "path parameter 'index' must be non-empty" } }
   let qp = [(serialize-qp "subclass" $subclass "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({index: (encode-path-segment $index)} | format pattern "/api/classes/{index}/levels") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"subclass": $subclass} | compact), body: null}
 }
 
 # Get level resource for a class and level.
@@ -279,10 +307,12 @@ export def "classes-levels get" [
 ]: nothing -> record<ability_score_bonuses: float, class_specific: any, features: table<index: string, name: string, url: string>, index: string, level: float, prof_bonus: float, spellcasting: record<cantrips_known: float, spell_slots_level_1: float, spell_slots_level_2: float, spell_slots_level_3: float, spell_slots_level_4: float, spell_slots_level_5: float, spell_slots_level_6: float, spell_slots_level_7: float, spell_slots_level_8: float, spell_slots_level_9: float, spells_known: float>, url: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($index | is-empty) { error make --unspanned { msg: "path parameter 'index' must be non-empty" } }
+  if ($class_level | is-empty) { error make --unspanned { msg: "path parameter 'class_level' must be non-empty" } }
   let full_url = (build-url $base ({index: (encode-path-segment $index), class_level: (encode-path-segment $class_level)} | format pattern "/api/classes/{index}/levels/{class_level}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
 }
 
 # Get features available to a class at the requested level.
@@ -303,10 +333,12 @@ export def "classes-levels-features get" [
 ]: nothing -> record<count: float, results: table<index: string, name: string, url: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($index | is-empty) { error make --unspanned { msg: "path parameter 'index' must be non-empty" } }
+  if ($class_level | is-empty) { error make --unspanned { msg: "path parameter 'class_level' must be non-empty" } }
   let full_url = (build-url $base ({index: (encode-path-segment $index), class_level: (encode-path-segment $class_level)} | format pattern "/api/classes/{index}/levels/{class_level}/features"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
 }
 
 # Get spells of the requested level available to the class.
@@ -327,10 +359,12 @@ export def "classes-levels-spells get" [
 ]: nothing -> record<count: float, results: table<index: string, name: string, url: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($index | is-empty) { error make --unspanned { msg: "path parameter 'index' must be non-empty" } }
+  if ($spell_level | is-empty) { error make --unspanned { msg: "path parameter 'spell_level' must be non-empty" } }
   let full_url = (build-url $base ({index: (encode-path-segment $index), spell_level: (encode-path-segment $spell_level)} | format pattern "/api/classes/{index}/levels/{spell_level}/spells"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
 }
 
 # Get multiclassing resource for a class.
@@ -350,10 +384,11 @@ export def "classes-multi-classing get" [
 ]: nothing -> record<prerequisite_options: table<choose: float, desc: string, from: any, type: string>, prerequisites: table<ability_score: record, minimum_score: float>, proficiencies: table<index: string, name: string, url: string>, proficiency_choices: table<choose: float, desc: string, from: any, type: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($index | is-empty) { error make --unspanned { msg: "path parameter 'index' must be non-empty" } }
   let full_url = (build-url $base ({index: (encode-path-segment $index)} | format pattern "/api/classes/{index}/multi-classing"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
 }
 
 # Get proficiencies available for a class.
@@ -373,10 +408,11 @@ export def "classes-proficiencies get" [
 ]: nothing -> record<count: float, results: table<index: string, name: string, url: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($index | is-empty) { error make --unspanned { msg: "path parameter 'index' must be non-empty" } }
   let full_url = (build-url $base ({index: (encode-path-segment $index)} | format pattern "/api/classes/{index}/proficiencies"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
 }
 
 # Get spellcasting info for a class.
@@ -396,10 +432,11 @@ export def "classes-spellcasting get" [
 ]: nothing -> record<info: table<desc: list, name: string>, level: float, spellcasting_ability: record<index: string, name: string, url: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($index | is-empty) { error make --unspanned { msg: "path parameter 'index' must be non-empty" } }
   let full_url = (build-url $base ({index: (encode-path-segment $index)} | format pattern "/api/classes/{index}/spellcasting"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
 }
 
 # Get spells available for a class.
@@ -419,10 +456,11 @@ export def "classes-spells get" [
 ]: nothing -> record<count: float, results: table<index: string, name: string, url: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($index | is-empty) { error make --unspanned { msg: "path parameter 'index' must be non-empty" } }
   let full_url = (build-url $base ({index: (encode-path-segment $index)} | format pattern "/api/classes/{index}/spells"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
 }
 
 # Get subclasses available for a class.
@@ -442,10 +480,11 @@ export def "classes-subclasses get" [
 ]: nothing -> record<count: float, results: table<index: string, name: string, url: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($index | is-empty) { error make --unspanned { msg: "path parameter 'index' must be non-empty" } }
   let full_url = (build-url $base ({index: (encode-path-segment $index)} | format pattern "/api/classes/{index}/subclasses"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
 }
 
 # Get a condition by index.
@@ -465,10 +504,11 @@ export def "conditions get" [
 ]: nothing -> record<index: string, name: string, url: string, desc: list<string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($index | is-empty) { error make --unspanned { msg: "path parameter 'index' must be non-empty" } }
   let full_url = (build-url $base ({index: (encode-path-segment $index)} | format pattern "/api/conditions/{index}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
 }
 
 # Get a damage type by index.
@@ -488,10 +528,11 @@ export def "damage-types get" [
 ]: nothing -> record<index: string, name: string, url: string, desc: list<string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($index | is-empty) { error make --unspanned { msg: "path parameter 'index' must be non-empty" } }
   let full_url = (build-url $base ({index: (encode-path-segment $index)} | format pattern "/api/damage-types/{index}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
 }
 
 # Get an equipment category by index.
@@ -511,10 +552,11 @@ export def "equipment-categories get" [
 ]: nothing -> record<index: string, name: string, url: string, equipment: table<index: string, name: string, url: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($index | is-empty) { error make --unspanned { msg: "path parameter 'index' must be non-empty" } }
   let full_url = (build-url $base ({index: (encode-path-segment $index)} | format pattern "/api/equipment-categories/{index}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
 }
 
 # Get an equipment item by index.
@@ -534,10 +576,11 @@ export def "equipment get" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($index | is-empty) { error make --unspanned { msg: "path parameter 'index' must be non-empty" } }
   let full_url = (build-url $base ({index: (encode-path-segment $index)} | format pattern "/api/equipment/{index}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
 }
 
 # Get a feat by index.
@@ -557,10 +600,11 @@ export def "feats get" [
 ]: nothing -> record<index: string, name: string, url: string, desc: list<string>, prerequisites: table<ability_score: record, minimum_score: float>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($index | is-empty) { error make --unspanned { msg: "path parameter 'index' must be non-empty" } }
   let full_url = (build-url $base ({index: (encode-path-segment $index)} | format pattern "/api/feats/{index}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
 }
 
 # Get a feature by index.
@@ -580,10 +624,11 @@ export def "features get" [
 ]: nothing -> record<index: string, name: string, url: string, desc: list<string>, class: record<index: string, name: string, url: string>, feature_specific: any, level: float, parent: record<index: string, name: string, url: string>, prerequisites: list<any>, subclass: record<index: string, name: string, url: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($index | is-empty) { error make --unspanned { msg: "path parameter 'index' must be non-empty" } }
   let full_url = (build-url $base ({index: (encode-path-segment $index)} | format pattern "/api/features/{index}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
 }
 
 # Get a language by index.
@@ -603,10 +648,11 @@ export def "languages get" [
 ]: nothing -> record<index: string, name: string, url: string, desc: string, script: string, type: string, typical_speakers: list<string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($index | is-empty) { error make --unspanned { msg: "path parameter 'index' must be non-empty" } }
   let full_url = (build-url $base ({index: (encode-path-segment $index)} | format pattern "/api/languages/{index}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
 }
 
 # Get a magic item by index.
@@ -626,10 +672,11 @@ export def "magic-items get" [
 ]: nothing -> record<index: string, name: string, url: string, desc: list<string>, equipment_category: record<index: string, name: string, url: string>, rarity: record<name: string>, variant: bool, variants: table<index: string, name: string, url: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($index | is-empty) { error make --unspanned { msg: "path parameter 'index' must be non-empty" } }
   let full_url = (build-url $base ({index: (encode-path-segment $index)} | format pattern "/api/magic-items/{index}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
 }
 
 # Get a magic school by index.
@@ -649,10 +696,11 @@ export def "magic-schools get" [
 ]: nothing -> record<index: string, name: string, url: string, desc: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($index | is-empty) { error make --unspanned { msg: "path parameter 'index' must be non-empty" } }
   let full_url = (build-url $base ({index: (encode-path-segment $index)} | format pattern "/api/magic-schools/{index}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
 }
 
 # Get list of monsters with optional filtering
@@ -676,7 +724,7 @@ export def "monsters list" [
   let full_url = (build-url $base "/api/monsters" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"challenge_rating": $challenge_rating} | compact), body: null}
 }
 
 # Get monster by index.
@@ -696,10 +744,11 @@ export def "monsters get" [
 ]: nothing -> record<index: string, name: string, url: string, desc: list<string>, charisma: float, constitution: float, dexterity: float, intelligence: float, strength: float, wisdom: float, actions: table<action_options: record, actions: list, attack_bonus: float, attacks: list, damage: list, dc: record, desc: string, multiattack_type: string, name: string, options: record>, alignments: string, armor_class: list<record>, challenge_rating: float, condition_immunities: table<index: string, name: string, url: string>, damage_immunities: list<string>, damage_resistances: list<string>, damage_vulnerabilities: list<string>, forms: table<index: string, name: string, url: string>, hit_dice: string, hit_points: float, hit_points_roll: string, image: string, languages: string, legendary_actions: table<action_options: record, actions: list, attack_bonus: float, attacks: list, damage: list, dc: record, desc: string, multiattack_type: string, name: string, options: record>, proficiencies: table<proficiency: record, value: float>, reactions: table<action_options: record, actions: list, attack_bonus: float, attacks: list, damage: list, dc: record, desc: string, multiattack_type: string, name: string, options: record>, senses: record<blindsight: string, darkvision: string, passive_perception: float, tremorsense: string, truesight: string>, size: string, special_abilities: table<attack_bonus: float, damage: list, dc: record, desc: string, name: string, spellcasting: record, usage: record>, speed: record<burrow: string, climb: string, fly: string, swim: string, walk: string>, subtype: string, type: string, xp: float> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($index | is-empty) { error make --unspanned { msg: "path parameter 'index' must be non-empty" } }
   let full_url = (build-url $base ({index: (encode-path-segment $index)} | format pattern "/api/monsters/{index}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
 }
 
 # Get a proficiency by index.
@@ -719,10 +768,11 @@ export def "proficiencies get" [
 ]: nothing -> record<index: string, name: string, url: string, classes: table<index: string, name: string, url: string>, races: table<index: string, name: string, url: string>, reference: record<index: string, name: string, url: string>, type: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($index | is-empty) { error make --unspanned { msg: "path parameter 'index' must be non-empty" } }
   let full_url = (build-url $base ({index: (encode-path-segment $index)} | format pattern "/api/proficiencies/{index}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
 }
 
 # Get a race by index.
@@ -742,10 +792,11 @@ export def "races get" [
 ]: nothing -> record<index: string, name: string, url: string, ability_bonuses: table<ability_score: record, bonus: float>, age: string, alignment: string, language_desc: string, languages: table<index: string, name: string, url: string>, size: string, size_description: string, speed: float, starting_proficiencies: table<index: string, name: string, url: string>, starting_proficiency_options: record<choose: float, desc: string, from: any, type: string>, subraces: table<index: string, name: string, url: string>, traits: table<index: string, name: string, url: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($index | is-empty) { error make --unspanned { msg: "path parameter 'index' must be non-empty" } }
   let full_url = (build-url $base ({index: (encode-path-segment $index)} | format pattern "/api/races/{index}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
 }
 
 # Get proficiencies available for a race.
@@ -765,10 +816,11 @@ export def "races-proficiencies get" [
 ]: nothing -> record<count: float, results: table<index: string, name: string, url: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($index | is-empty) { error make --unspanned { msg: "path parameter 'index' must be non-empty" } }
   let full_url = (build-url $base ({index: (encode-path-segment $index)} | format pattern "/api/races/{index}/proficiencies"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
 }
 
 # Get subraces available for a race.
@@ -788,10 +840,11 @@ export def "races-subraces get" [
 ]: nothing -> record<count: float, results: table<index: string, name: string, url: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($index | is-empty) { error make --unspanned { msg: "path parameter 'index' must be non-empty" } }
   let full_url = (build-url $base ({index: (encode-path-segment $index)} | format pattern "/api/races/{index}/subraces"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
 }
 
 # Get traits available for a race.
@@ -811,10 +864,11 @@ export def "races-traits get" [
 ]: nothing -> record<count: float, results: table<index: string, name: string, url: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($index | is-empty) { error make --unspanned { msg: "path parameter 'index' must be non-empty" } }
   let full_url = (build-url $base ({index: (encode-path-segment $index)} | format pattern "/api/races/{index}/traits"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
 }
 
 # Get a rule section by index.
@@ -834,10 +888,11 @@ export def "rule-sections get" [
 ]: nothing -> record<index: string, name: string, url: string, desc: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($index | is-empty) { error make --unspanned { msg: "path parameter 'index' must be non-empty" } }
   let full_url = (build-url $base ({index: (encode-path-segment $index)} | format pattern "/api/rule-sections/{index}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
 }
 
 # Get a rule by index.
@@ -857,10 +912,11 @@ export def "rules get" [
 ]: nothing -> record<index: string, name: string, url: string, desc: string, subsections: table<index: string, name: string, url: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($index | is-empty) { error make --unspanned { msg: "path parameter 'index' must be non-empty" } }
   let full_url = (build-url $base ({index: (encode-path-segment $index)} | format pattern "/api/rules/{index}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
 }
 
 # Get a skill by index.
@@ -880,10 +936,11 @@ export def "skills get" [
 ]: nothing -> record<index: string, name: string, url: string, desc: list<string>, ability_score: record<index: string, name: string, url: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($index | is-empty) { error make --unspanned { msg: "path parameter 'index' must be non-empty" } }
   let full_url = (build-url $base ({index: (encode-path-segment $index)} | format pattern "/api/skills/{index}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
 }
 
 # Get list of spells with optional filtering.
@@ -908,7 +965,7 @@ export def "spells list" [
   let full_url = (build-url $base "/api/spells" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"level": $level, "school": $school} | compact), body: null}
 }
 
 # Get a spell by index.
@@ -928,10 +985,11 @@ export def "spells get" [
 ]: nothing -> record<index: string, name: string, url: string, desc: list<string>, area_of_effect: record<size: float, type: string>, attack_type: string, casting_time: string, classes: table<index: string, name: string, url: string>, components: list<string>, concentration: bool, damage: any, duration: string, higher_level: list<string>, level: float, material: string, range: string, ritual: bool, school: record<index: string, name: string, url: string>, subclasses: table<index: string, name: string, url: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($index | is-empty) { error make --unspanned { msg: "path parameter 'index' must be non-empty" } }
   let full_url = (build-url $base ({index: (encode-path-segment $index)} | format pattern "/api/spells/{index}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
 }
 
 # Get a subclass by index.
@@ -951,10 +1009,11 @@ export def "subclasses get" [
 ]: nothing -> record<index: string, name: string, url: string, desc: list<string>, class: record<index: string, name: string, url: string>, spells: table<prerequisites: list, spell: record>, subclass_flavor: string, subclass_levels: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($index | is-empty) { error make --unspanned { msg: "path parameter 'index' must be non-empty" } }
   let full_url = (build-url $base ({index: (encode-path-segment $index)} | format pattern "/api/subclasses/{index}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
 }
 
 # Get features available for a subclass.
@@ -974,10 +1033,11 @@ export def "subclasses-features get" [
 ]: nothing -> record<count: float, results: table<index: string, name: string, url: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($index | is-empty) { error make --unspanned { msg: "path parameter 'index' must be non-empty" } }
   let full_url = (build-url $base ({index: (encode-path-segment $index)} | format pattern "/api/subclasses/{index}/features"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
 }
 
 # Get all level resources for a subclass.
@@ -997,10 +1057,11 @@ export def "subclasses-levels list" [
 ]: nothing -> table<class: record<index: string, name: string, url: string>, features: list<record>, index: string, level: float, subclass: record<index: string, name: string, url: string>, url: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($index | is-empty) { error make --unspanned { msg: "path parameter 'index' must be non-empty" } }
   let full_url = (build-url $base ({index: (encode-path-segment $index)} | format pattern "/api/subclasses/{index}/levels"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
 }
 
 # Get level resources for a subclass and level.
@@ -1021,10 +1082,12 @@ export def "subclasses-levels get" [
 ]: nothing -> record<ability_score_bonuses: float, classspecific: any, features: table<index: string, name: string, url: string>, index: string, level: float, prof_bonus: float, spellcasting: record<cantrips_known: float, spell_slots_level_1: float, spell_slots_level_2: float, spell_slots_level_3: float, spell_slots_level_4: float, spell_slots_level_5: float, spell_slots_level_6: float, spell_slots_level_7: float, spell_slots_level_8: float, spell_slots_level_9: float, spells_known: float>, url: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($index | is-empty) { error make --unspanned { msg: "path parameter 'index' must be non-empty" } }
+  if ($subclass_level | is-empty) { error make --unspanned { msg: "path parameter 'subclass_level' must be non-empty" } }
   let full_url = (build-url $base ({index: (encode-path-segment $index), subclass_level: (encode-path-segment $subclass_level)} | format pattern "/api/subclasses/{index}/levels/{subclass_level}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
 }
 
 # Get features of the requested spell level available to the class.
@@ -1045,10 +1108,12 @@ export def "subclasses-levels-features get" [
 ]: nothing -> record<count: float, results: table<index: string, name: string, url: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($index | is-empty) { error make --unspanned { msg: "path parameter 'index' must be non-empty" } }
+  if ($subclass_level | is-empty) { error make --unspanned { msg: "path parameter 'subclass_level' must be non-empty" } }
   let full_url = (build-url $base ({index: (encode-path-segment $index), subclass_level: (encode-path-segment $subclass_level)} | format pattern "/api/subclasses/{index}/levels/{subclass_level}/features"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
 }
 
 # Get a subrace by index.
@@ -1068,10 +1133,11 @@ export def "subraces get" [
 ]: nothing -> record<index: string, name: string, url: string, ability_bonuses: table<ability_score: record, bonus: float>, desc: string, language_options: record<choose: float, desc: string, from: any, type: string>, languages: table<index: string, name: string, url: string>, race: record<index: string, name: string, url: string>, racial_traits: table<index: string, name: string, url: string>, starting_proficiencies: table<index: string, name: string, url: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($index | is-empty) { error make --unspanned { msg: "path parameter 'index' must be non-empty" } }
   let full_url = (build-url $base ({index: (encode-path-segment $index)} | format pattern "/api/subraces/{index}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
 }
 
 # Get proficiences available for a subrace.
@@ -1091,10 +1157,11 @@ export def "subraces-proficiencies get" [
 ]: nothing -> record<count: float, results: table<index: string, name: string, url: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($index | is-empty) { error make --unspanned { msg: "path parameter 'index' must be non-empty" } }
   let full_url = (build-url $base ({index: (encode-path-segment $index)} | format pattern "/api/subraces/{index}/proficiencies"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
 }
 
 # Get traits available for a subrace.
@@ -1114,10 +1181,11 @@ export def "subraces-traits get" [
 ]: nothing -> record<count: float, results: table<index: string, name: string, url: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($index | is-empty) { error make --unspanned { msg: "path parameter 'index' must be non-empty" } }
   let full_url = (build-url $base ({index: (encode-path-segment $index)} | format pattern "/api/subraces/{index}/traits"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
 }
 
 # Get a trait by index.
@@ -1137,10 +1205,11 @@ export def "traits get" [
 ]: nothing -> record<index: string, name: string, url: string, desc: list<string>, language_options: record<choose: float, desc: string, from: any, type: string>, proficiencies: table<index: string, name: string, url: string>, proficiency_choices: record<choose: float, desc: string, from: any, type: string>, races: table<index: string, name: string, url: string>, subraces: table<index: string, name: string, url: string>, trait_specific: any> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($index | is-empty) { error make --unspanned { msg: "path parameter 'index' must be non-empty" } }
   let full_url = (build-url $base ({index: (encode-path-segment $index)} | format pattern "/api/traits/{index}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
 }
 
 # Get a weapon property by index.
@@ -1160,10 +1229,11 @@ export def "weapon-properties get" [
 ]: nothing -> record<index: string, name: string, url: string, desc: list<string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($index | is-empty) { error make --unspanned { msg: "path parameter 'index' must be non-empty" } }
   let full_url = (build-url $base ({index: (encode-path-segment $index)} | format pattern "/api/weapon-properties/{index}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
 }
 
 # Get list of all available resources for an endpoint.
@@ -1183,8 +1253,9 @@ export def "common get" [
 ]: nothing -> record<count: float, results: table<index: string, name: string, url: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($endpoint | is-empty) { error make --unspanned { msg: "path parameter 'endpoint' must be non-empty" } }
   let full_url = (build-url $base ({endpoint: (encode-path-segment $endpoint)} | format pattern "/api/{endpoint}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
 }

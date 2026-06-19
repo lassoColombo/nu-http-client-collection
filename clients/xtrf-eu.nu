@@ -3,17 +3,18 @@
 # Auth: --token flag or $env.XTRF_HOME_PORTAL_API_TOKEN
 
 const BASE_URL = "https://presentation.s.xtrf.eu/home-api"
-const DEFAULT_AUTH = "x-auth-access-token"
 
-# Build auth: returns {headers: record, query: string}
+# Build auth: returns {scheme: string, headers: record, query: string, location: string}.
+# `location` is "header" | "query" | "cookie" | "none" and tells dry-run callers
+# where the token went without inspecting headers/query themselves.
 def build-auth [token?: string, auth_scheme?: string]: nothing -> record {
   let token_val = if ($token != null) and ($token | is-not-empty) { $token } else { $env | get -o XTRF_HOME_PORTAL_API_TOKEN | default "" }
   let scheme = ($auth_scheme | default "bearer")
-  if ($scheme == "none") or ($token_val | is-empty) { return {headers: {}, query: ""} }
+  if ($scheme == "none") or ($token_val | is-empty) { return {scheme: $scheme, headers: {}, query: "", location: "none"} }
   match $scheme {
-    "x-auth-access-token" => { {headers: {X-AUTH-ACCESS-TOKEN: $token_val}, query: ""} }
-    "none" => { {headers: {}, query: ""} }
-    _ => { {headers: {Authorization: $"Bearer ($token_val)"}, query: ""} }
+    "x-auth-access-token" => { {scheme: $scheme, headers: {X-AUTH-ACCESS-TOKEN: $token_val}, query: "", location: "header"} }
+    "none" => { {scheme: $scheme, headers: {}, query: "", location: "none"} }
+    _ => { {scheme: $scheme, headers: {Authorization: $"Bearer ($token_val)"}, query: "", location: "header"} }
   }
 }
 
@@ -22,8 +23,9 @@ def build-auth [token?: string, auth_scheme?: string]: nothing -> record {
 # ([A-Za-z0-9-._~]) stay literal; everything else gets %XX.
 def serialize-qp [name: string, value: any, style: string]: nothing -> list<string> {
   if ($value == null) { return [] }
-  let n = (encode-path-segment $name)
   let is_list = ($value | describe | str starts-with "list")
+  if $is_list and ($value | is-empty) { return [] }
+  let n = (encode-path-segment $name)
   if ($value | describe | str starts-with "record") { return ($value | transpose k v | each { $"($n)[(encode-path-segment $in.k)]=(encode-path-segment $in.v)" }) }
   if not $is_list { return [$"($n)=(encode-path-segment $value)"] }
   match $style {
@@ -54,22 +56,42 @@ def build-url [base: string, path: string, query?: string]: nothing -> string {
   if ($query != null) and ($query | is-not-empty) { $result | upsert query $query | url join } else { $result | url join }
 }
 
+# Build the dry-run record returned by --dry-run. Shape:
+#   {dry_run: true, method, url, query: <record>, headers, body, content_type, timeout,
+#    auth: {scheme, location}}
+# `meta` carries logical-form data (the query record by spec name, the pre-serialization
+# body) that do-request itself cannot reconstruct from its wire-format args.
+def build-dry-run-record [method: string, url: string, auth: record, content_type: string, timeout: duration, meta?: record]: nothing -> record {
+  let m = ($meta | default {})
+  {
+    dry_run: true
+    method: $method
+    url: $url
+    query: ($m | get -o query | default {})
+    headers: $auth.headers
+    body: ($m | get -o body)
+    content_type: $content_type
+    timeout: $timeout
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+}
+
 # Execute HTTP request with method dispatch
-def do-request [method: string, url: string, auth: record, insecure: bool, raw: bool, dry_run: bool, max_time?: duration, allow_errors?: bool, full?: bool, content_type?: string, body?: any]: nothing -> any {
+def do-request [method: string, url: string, auth: record, insecure: bool, raw: bool, dry_run: bool, max_time?: duration, allow_errors?: bool, full?: bool, content_type?: string, body?: any, dry_run_meta?: record]: nothing -> any {
   let req_url = if ($auth.query | is-not-empty) { if ($url | str contains "?") { $"($url)&($auth.query)" } else { $"($url)?($auth.query)" } } else { $url }
   let timeout = ($max_time | default 30min)
   let ct = ($content_type | default "application/json")
-  if $dry_run { return {method: $method, url: $req_url, headers: $auth.headers, query_string: $auth.query, content_type: $ct, timeout: $timeout, body: $body} }
+  if $dry_run { return (build-dry-run-record $method $req_url $auth $ct $timeout $dry_run_meta) }
   let resp = match $method {
     "get" => { http get --headers $auth.headers --full --allow-errors --max-time $timeout --insecure=$insecure --raw=$raw $req_url }
-    "head" => { http head --headers $auth.headers --max-time $timeout --insecure=$insecure $req_url }
-    "options" => { http options --headers $auth.headers --max-time $timeout --insecure=$insecure $req_url }
+    "head" => { http head --headers $auth.headers --full --allow-errors --max-time $timeout --insecure=$insecure $req_url }
+    "options" => { http options --headers $auth.headers --full --allow-errors --max-time $timeout --insecure=$insecure $req_url }
     "post" => { if ($body | is-empty) { http post --headers $auth.headers --full --allow-errors --max-time $timeout --insecure=$insecure --raw=$raw $req_url "" } else { http post --headers $auth.headers --content-type $ct --full --allow-errors --max-time $timeout --insecure=$insecure --raw=$raw $req_url $body } }
     "put" => { if ($body | is-empty) { http put --headers $auth.headers --full --allow-errors --max-time $timeout --insecure=$insecure --raw=$raw $req_url "" } else { http put --headers $auth.headers --content-type $ct --full --allow-errors --max-time $timeout --insecure=$insecure --raw=$raw $req_url $body } }
     "patch" => { if ($body | is-empty) { http patch --headers $auth.headers --full --allow-errors --max-time $timeout --insecure=$insecure --raw=$raw $req_url "" } else { http patch --headers $auth.headers --content-type $ct --full --allow-errors --max-time $timeout --insecure=$insecure --raw=$raw $req_url $body } }
     "delete" => { if ($body | is-empty) { http delete --headers $auth.headers --full --allow-errors --max-time $timeout --insecure=$insecure --raw=$raw $req_url } else { http delete --headers $auth.headers --content-type $ct --data $body --full --allow-errors --max-time $timeout --insecure=$insecure --raw=$raw $req_url } }
   }
-  if ($method in ["head" "options"]) { return $resp }
+  if ($method == "head") and (not $full) and (not $allow_errors) and $resp.status < 400 { return $resp.headers }
   if $allow_errors { $resp } else if $resp.status >= 400 { error make --unspanned { msg: $"HTTP ($resp.status): ($resp.body)" } } else if $full { {status: $resp.status, headers: $resp.headers, body: $resp.body} } else if $resp.status == 204 { null } else { $resp.body }
 }
 
@@ -159,14 +181,14 @@ export def "accounting-customers-invoices get-list" [
   let full_url = (build-url $base "/accounting/customers/invoices" $qp)
   let accept_val = "application/vnd.xtrf-v1+json;charset=UTF-8"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"updatedSince": $updated_since} | compact), body: null}
 }
 
 # Creates a new invoice.
 #
 # POST /accounting/customers/invoices
 # operationId: create_1
-export def "accounting-customers-invoices create-by-" [
+export def "accounting-customers-invoices create" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -188,7 +210,7 @@ export def "accounting-customers-invoices create-by-" [
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/vnd.xtrf-v1+json;charset=UTF-8"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json;charset=UTF-8" $req_body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json;charset=UTF-8" $req_body {query: {}, body: $req_body}
 }
 
 # Generates client invoices' documents.
@@ -215,7 +237,7 @@ export def "accounting-customers-invoices-documents download" [
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/vnd.xtrf-v1+json;charset=UTF-8"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json;charset=UTF-8" $req_body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json;charset=UTF-8" $req_body {query: {}, body: $req_body}
 }
 
 # Returns client invoices' internal identifiers.
@@ -240,7 +262,7 @@ export def "accounting-customers-invoices-ids get-list" [
   let full_url = (build-url $base "/accounting/customers/invoices/ids" $qp)
   let accept_val = "application/vnd.xtrf-v1+json;charset=UTF-8"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"updatedSince": $updated_since} | compact), body: null}
 }
 
 # Sends reminders. Returns number of sent e-mails.
@@ -267,14 +289,14 @@ export def "accounting-customers-invoices-send-reminders send" [
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/vnd.xtrf-v1+json;charset=UTF-8"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json;charset=UTF-8" $req_body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json;charset=UTF-8" $req_body {query: {}, body: $req_body}
 }
 
 # Removes a client invoice.
 #
 # DELETE /accounting/customers/invoices/{invoiceId}
 # operationId: delete_1
-export def "accounting-customers-invoices delete-by-invoiceId" [
+export def "accounting-customers-invoices delete-by-invoice-id" [
   invoice_id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -288,10 +310,11 @@ export def "accounting-customers-invoices delete-by-invoiceId" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "x-auth-access-token"))
   let base = ($base_url | default $BASE_URL)
+  if ($invoice_id | is-empty) { error make --unspanned { msg: "path parameter 'invoiceId' must be non-empty" } }
   let full_url = (build-url $base ({invoice_id: (encode-path-segment $invoice_id)} | format pattern "/accounting/customers/invoices/{invoice_id}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
 }
 
 # Returns client invoice details.
@@ -313,11 +336,12 @@ export def "accounting-customers-invoices get" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "x-auth-access-token"))
   let base = ($base_url | default $BASE_URL)
+  if ($invoice_id | is-empty) { error make --unspanned { msg: "path parameter 'invoiceId' must be non-empty" } }
   let qp = [(serialize-qp "embed" $embed "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({invoice_id: (encode-path-segment $invoice_id)} | format pattern "/accounting/customers/invoices/{invoice_id}") $qp)
   let accept_val = "application/vnd.xtrf-v1+json;charset=UTF-8"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"embed": $embed} | compact), body: null}
 }
 
 # Returns dates of a given client invoice.
@@ -338,10 +362,11 @@ export def "accounting-customers-invoices-dates get" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "x-auth-access-token"))
   let base = ($base_url | default $BASE_URL)
+  if ($invoice_id | is-empty) { error make --unspanned { msg: "path parameter 'invoiceId' must be non-empty" } }
   let full_url = (build-url $base ({invoice_id: (encode-path-segment $invoice_id)} | format pattern "/accounting/customers/invoices/{invoice_id}/dates"))
   let accept_val = "application/vnd.xtrf-v1+json;charset=UTF-8"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
 }
 
 # Generates client invoice document (PDF).
@@ -362,10 +387,11 @@ export def "accounting-customers-invoices-document get" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "x-auth-access-token"))
   let base = ($base_url | default $BASE_URL)
+  if ($invoice_id | is-empty) { error make --unspanned { msg: "path parameter 'invoiceId' must be non-empty" } }
   let full_url = (build-url $base ({invoice_id: (encode-path-segment $invoice_id)} | format pattern "/accounting/customers/invoices/{invoice_id}/document"))
   let accept_val = "application/vnd.xtrf-v1+json;charset=UTF-8"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
 }
 
 # Duplicate client invoice.
@@ -386,10 +412,11 @@ export def "accounting-customers-invoices-duplicate create" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "x-auth-access-token"))
   let base = ($base_url | default $BASE_URL)
+  if ($invoice_id | is-empty) { error make --unspanned { msg: "path parameter 'invoiceId' must be non-empty" } }
   let full_url = (build-url $base ({invoice_id: (encode-path-segment $invoice_id)} | format pattern "/accounting/customers/invoices/{invoice_id}/duplicate"))
   let accept_val = "application/vnd.xtrf-v1+json;charset=UTF-8"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
 }
 
 # Duplicate client invoice as pro forma.
@@ -410,10 +437,11 @@ export def "accounting-customers-invoices-duplicate-pro-forma create" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "x-auth-access-token"))
   let base = ($base_url | default $BASE_URL)
+  if ($invoice_id | is-empty) { error make --unspanned { msg: "path parameter 'invoiceId' must be non-empty" } }
   let full_url = (build-url $base ({invoice_id: (encode-path-segment $invoice_id)} | format pattern "/accounting/customers/invoices/{invoice_id}/duplicate/proForma"))
   let accept_val = "application/vnd.xtrf-v1+json;charset=UTF-8"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
 }
 
 # Returns payment terms of a given client invoice.
@@ -434,10 +462,11 @@ export def "accounting-customers-invoices-payment-terms get" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "x-auth-access-token"))
   let base = ($base_url | default $BASE_URL)
+  if ($invoice_id | is-empty) { error make --unspanned { msg: "path parameter 'invoiceId' must be non-empty" } }
   let full_url = (build-url $base ({invoice_id: (encode-path-segment $invoice_id)} | format pattern "/accounting/customers/invoices/{invoice_id}/paymentTerms"))
   let accept_val = "application/vnd.xtrf-v1+json;charset=UTF-8"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
 }
 
 # Returns all payments for the client invoice.
@@ -458,10 +487,11 @@ export def "accounting-customers-invoices-payments get" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "x-auth-access-token"))
   let base = ($base_url | default $BASE_URL)
+  if ($invoice_id | is-empty) { error make --unspanned { msg: "path parameter 'invoiceId' must be non-empty" } }
   let full_url = (build-url $base ({invoice_id: (encode-path-segment $invoice_id)} | format pattern "/accounting/customers/invoices/{invoice_id}/payments"))
   let accept_val = "application/vnd.xtrf-v1+json;charset=UTF-8"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
 }
 
 # Adds a new payment to the client invoice. The invoice payment status (Not Paid, Partially Paid, Fully Paid) is automatically recalculated.
@@ -488,12 +518,13 @@ export def "accounting-customers-invoices-payments create" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "x-auth-access-token"))
   let base = ($base_url | default $BASE_URL)
+  if ($invoice_id | is-empty) { error make --unspanned { msg: "path parameter 'invoiceId' must be non-empty" } }
   let full_url = (build-url $base ({invoice_id: (encode-path-segment $invoice_id)} | format pattern "/accounting/customers/invoices/{invoice_id}/payments"))
   let req_body = {"amount": $amount, "notes": $notes, "paymentDate": $payment_date, "paymentMethodId": $payment_method_id} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json;charset=UTF-8" $req_body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json;charset=UTF-8" $req_body {query: {}, body: $req_body}
 }
 
 # Sends reminder.
@@ -514,17 +545,18 @@ export def "accounting-customers-invoices-send-reminder send" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "x-auth-access-token"))
   let base = ($base_url | default $BASE_URL)
+  if ($invoice_id | is-empty) { error make --unspanned { msg: "path parameter 'invoiceId' must be non-empty" } }
   let full_url = (build-url $base ({invoice_id: (encode-path-segment $invoice_id)} | format pattern "/accounting/customers/invoices/{invoice_id}/sendReminder"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
 }
 
 # Removes a customer payment.
 #
 # DELETE /accounting/customers/payments/{paymentId}
 # operationId: delete_2
-export def "accounting-customers-payments delete-by-paymentId" [
+export def "accounting-customers-payments delete-by-payment-id" [
   payment_id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -538,17 +570,18 @@ export def "accounting-customers-payments delete-by-paymentId" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "x-auth-access-token"))
   let base = ($base_url | default $BASE_URL)
+  if ($payment_id | is-empty) { error make --unspanned { msg: "path parameter 'paymentId' must be non-empty" } }
   let full_url = (build-url $base ({payment_id: (encode-path-segment $payment_id)} | format pattern "/accounting/customers/payments/{payment_id}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
 }
 
 # Lists all vendor invoices in all statuses (including not ready and drafts) that have been updated since a specific date.
 #
 # GET /accounting/providers/invoices
 # operationId: getAll_2
-export def "accounting-providers-invoices get-list-by-" [
+export def "accounting-providers-invoices get-list" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -566,14 +599,14 @@ export def "accounting-providers-invoices get-list-by-" [
   let full_url = (build-url $base "/accounting/providers/invoices" $qp)
   let accept_val = "application/vnd.xtrf-v1+json;charset=UTF-8"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"updatedSince": $updated_since} | compact), body: null}
 }
 
 # Creates a new invoice.
 #
 # POST /accounting/providers/invoices
 # operationId: create_4
-export def "accounting-providers-invoices create-by-" [
+export def "accounting-providers-invoices create" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -593,14 +626,14 @@ export def "accounting-providers-invoices create-by-" [
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/vnd.xtrf-v1+json;charset=UTF-8"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: {}, body: $req_body}
 }
 
 # Returns vendor invoices' internal identifiers.
 #
 # GET /accounting/providers/invoices/ids
 # operationId: getAllIds_3
-export def "accounting-providers-invoices-ids get-list-by-" [
+export def "accounting-providers-invoices-ids get-list" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -618,14 +651,14 @@ export def "accounting-providers-invoices-ids get-list-by-" [
   let full_url = (build-url $base "/accounting/providers/invoices/ids" $qp)
   let accept_val = "application/vnd.xtrf-v1+json;charset=UTF-8"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"updatedSince": $updated_since} | compact), body: null}
 }
 
 # Removes a provider invoice.
 #
 # DELETE /accounting/providers/invoices/{invoiceId}
 # operationId: delete_6
-export def "accounting-providers-invoices delete-by-invoiceId" [
+export def "accounting-providers-invoices delete-by-invoice-id" [
   invoice_id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -639,17 +672,18 @@ export def "accounting-providers-invoices delete-by-invoiceId" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "x-auth-access-token"))
   let base = ($base_url | default $BASE_URL)
+  if ($invoice_id | is-empty) { error make --unspanned { msg: "path parameter 'invoiceId' must be non-empty" } }
   let full_url = (build-url $base ({invoice_id: (encode-path-segment $invoice_id)} | format pattern "/accounting/providers/invoices/{invoice_id}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
 }
 
 # Returns provider invoice details.
 #
 # GET /accounting/providers/invoices/{invoiceId}
 # operationId: getById_3
-export def "accounting-providers-invoices get-by-invoiceId" [
+export def "accounting-providers-invoices get-by-invoice-id" [
   invoice_id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -663,17 +697,18 @@ export def "accounting-providers-invoices get-by-invoiceId" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "x-auth-access-token"))
   let base = ($base_url | default $BASE_URL)
+  if ($invoice_id | is-empty) { error make --unspanned { msg: "path parameter 'invoiceId' must be non-empty" } }
   let full_url = (build-url $base ({invoice_id: (encode-path-segment $invoice_id)} | format pattern "/accounting/providers/invoices/{invoice_id}"))
   let accept_val = "application/vnd.xtrf-v1+json;charset=UTF-8"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
 }
 
 # Generates provider invoice document (PDF).
 #
 # GET /accounting/providers/invoices/{invoiceId}/document
 # operationId: getDocument_1
-export def "accounting-providers-invoices-document get-by-invoiceId" [
+export def "accounting-providers-invoices-document get-by-invoice-id" [
   invoice_id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -687,17 +722,18 @@ export def "accounting-providers-invoices-document get-by-invoiceId" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "x-auth-access-token"))
   let base = ($base_url | default $BASE_URL)
+  if ($invoice_id | is-empty) { error make --unspanned { msg: "path parameter 'invoiceId' must be non-empty" } }
   let full_url = (build-url $base ({invoice_id: (encode-path-segment $invoice_id)} | format pattern "/accounting/providers/invoices/{invoice_id}/document"))
   let accept_val = "application/vnd.xtrf-v1+json;charset=UTF-8"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
 }
 
 # Returns all payments for the vendor invoice.
 #
 # GET /accounting/providers/invoices/{invoiceId}/payments
 # operationId: getPayments_1
-export def "accounting-providers-invoices-payments get-by-invoiceId" [
+export def "accounting-providers-invoices-payments get-by-invoice-id" [
   invoice_id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -711,10 +747,11 @@ export def "accounting-providers-invoices-payments get-by-invoiceId" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "x-auth-access-token"))
   let base = ($base_url | default $BASE_URL)
+  if ($invoice_id | is-empty) { error make --unspanned { msg: "path parameter 'invoiceId' must be non-empty" } }
   let full_url = (build-url $base ({invoice_id: (encode-path-segment $invoice_id)} | format pattern "/accounting/providers/invoices/{invoice_id}/payments"))
   let accept_val = "application/vnd.xtrf-v1+json;charset=UTF-8"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
 }
 
 # Creates a new payment on the vendor account and assigns the payment to the invoice.
@@ -722,7 +759,7 @@ export def "accounting-providers-invoices-payments get-by-invoiceId" [
 # POST /accounting/providers/invoices/{invoiceId}/payments
 # operationId: createPayment_1
 # --paymentDate shape: {value?: int}
-export def "accounting-providers-invoices-payments create-by-invoiceId" [
+export def "accounting-providers-invoices-payments create-by-invoice-id" [
   invoice_id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -741,12 +778,13 @@ export def "accounting-providers-invoices-payments create-by-invoiceId" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "x-auth-access-token"))
   let base = ($base_url | default $BASE_URL)
+  if ($invoice_id | is-empty) { error make --unspanned { msg: "path parameter 'invoiceId' must be non-empty" } }
   let full_url = (build-url $base ({invoice_id: (encode-path-segment $invoice_id)} | format pattern "/accounting/providers/invoices/{invoice_id}/payments"))
   let req_body = {"amount": $amount, "notes": $notes, "paymentDate": $payment_date, "paymentMethodId": $payment_method_id} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json;charset=UTF-8" $req_body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json;charset=UTF-8" $req_body {query: {}, body: $req_body}
 }
 
 # Sends a provider invoice.
@@ -767,10 +805,11 @@ export def "accounting-providers-invoices-send send" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "x-auth-access-token"))
   let base = ($base_url | default $BASE_URL)
+  if ($invoice_id | is-empty) { error make --unspanned { msg: "path parameter 'invoiceId' must be non-empty" } }
   let full_url = (build-url $base ({invoice_id: (encode-path-segment $invoice_id)} | format pattern "/accounting/providers/invoices/{invoice_id}/send"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
 }
 
 # Changes invoice status to given status.
@@ -793,19 +832,20 @@ export def "accounting-providers-invoices-status update" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "x-auth-access-token"))
   let base = ($base_url | default $BASE_URL)
+  if ($invoice_id | is-empty) { error make --unspanned { msg: "path parameter 'invoiceId' must be non-empty" } }
   let full_url = (build-url $base ({invoice_id: (encode-path-segment $invoice_id)} | format pattern "/accounting/providers/invoices/{invoice_id}/status"))
   let req_body = {"status": $status} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: {}, body: $req_body}
 }
 
 # Removes a provider payment.
 #
 # DELETE /accounting/providers/payments/{paymentId}
 # operationId: delete_7
-export def "accounting-providers-payments delete-by-paymentId" [
+export def "accounting-providers-payments delete-by-payment-id" [
   payment_id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -819,10 +859,11 @@ export def "accounting-providers-payments delete-by-paymentId" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "x-auth-access-token"))
   let base = ($base_url | default $BASE_URL)
+  if ($payment_id | is-empty) { error make --unspanned { msg: "path parameter 'paymentId' must be non-empty" } }
   let full_url = (build-url $base ({payment_id: (encode-path-segment $payment_id)} | format pattern "/accounting/providers/payments/{payment_id}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
 }
 
 # Searches for data (ie. customer, task, etc) and returns it in a tabular form.
@@ -851,7 +892,7 @@ export def "browser get-browse-json" [
   let full_url = (build-url $base "/browser" $qp)
   let accept_val = "application/vnd.xtrf-v1+json;charset=UTF-8"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"viewId": $view_id, "page": $page, "additionalOrder": $additional_order, "useDeferredColumns": $use_deferred_columns, "maxRows": $max_rows} | compact), body: null}
 }
 
 # Searches for data (ie. customer, task, etc) and returns it in a CSV form.
@@ -879,14 +920,14 @@ export def "browser-csv get-browse" [
   let full_url = (build-url $base "/browser/csv" $qp)
   let accept_val = "application/vnd.xtrf-v1+json;charset=UTF-8"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"viewId": $view_id, "separator": $separator, "secondarySeparator": $secondary_separator, "additionalOrder": $additional_order} | compact), body: null}
 }
 
 # Returns current view's detailed information, suitable for browser.
 #
 # GET /browser/views/details/for/{className}
 # operationId: getCurrentViewDetails
-export def "browser-views-details-for get-get" [
+export def "browser-views-details-for list" [
   class_name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -901,11 +942,12 @@ export def "browser-views-details-for get-get" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "x-auth-access-token"))
   let base = ($base_url | default $BASE_URL)
+  if ($class_name | is-empty) { error make --unspanned { msg: "path parameter 'className' must be non-empty" } }
   let qp = [(serialize-qp "placeName" $place_name "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({class_name: (encode-path-segment $class_name)} | format pattern "/browser/views/details/for/{class_name}") $qp)
   let accept_val = "application/vnd.xtrf-v1+json;charset=UTF-8"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"placeName": $place_name} | compact), body: null}
 }
 
 # Returns view's detailed information, suitable for browser.
@@ -928,11 +970,13 @@ export def "browser-views-details-for get" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "x-auth-access-token"))
   let base = ($base_url | default $BASE_URL)
+  if ($class_name | is-empty) { error make --unspanned { msg: "path parameter 'className' must be non-empty" } }
+  if ($view_id | is-empty) { error make --unspanned { msg: "path parameter 'viewId' must be non-empty" } }
   let qp = [(serialize-qp "placeName" $place_name "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({class_name: (encode-path-segment $class_name), view_id: (encode-path-segment $view_id)} | format pattern "/browser/views/details/for/{class_name}/{view_id}") $qp)
   let accept_val = "application/vnd.xtrf-v1+json;charset=UTF-8"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"placeName": $place_name} | compact), body: null}
 }
 
 # Selects given view as current and returns its detailed information, suitable for browser.
@@ -955,11 +999,13 @@ export def "browser-views-details-for get-select-and-its" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "x-auth-access-token"))
   let base = ($base_url | default $BASE_URL)
+  if ($class_name | is-empty) { error make --unspanned { msg: "path parameter 'className' must be non-empty" } }
+  if ($view_id | is-empty) { error make --unspanned { msg: "path parameter 'viewId' must be non-empty" } }
   let qp = [(serialize-qp "place name (denotes specific place in system with the table)" $place_name_denotes_specific_place_in_system_with_the_table "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({class_name: (encode-path-segment $class_name), view_id: (encode-path-segment $view_id)} | format pattern "/browser/views/details/for/{class_name}/{view_id}") $qp)
   let accept_val = "application/vnd.xtrf-v1+json;charset=UTF-8"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"place name (denotes specific place in system with the table)": $place_name_denotes_specific_place_in_system_with_the_table} | compact), body: null}
 }
 
 # Returns views' brief.
@@ -981,11 +1027,12 @@ export def "browser-views-for get-brief" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "x-auth-access-token"))
   let base = ($base_url | default $BASE_URL)
+  if ($class_name | is-empty) { error make --unspanned { msg: "path parameter 'className' must be non-empty" } }
   let qp = [(serialize-qp "placeName" $place_name "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({class_name: (encode-path-segment $class_name)} | format pattern "/browser/views/for/{class_name}") $qp)
   let accept_val = "application/vnd.xtrf-v1+json;charset=UTF-8"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"placeName": $place_name} | compact), body: null}
 }
 
 # Creates view for given class.
@@ -1015,12 +1062,13 @@ export def "browser-views-for create" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "x-auth-access-token"))
   let base = ($base_url | default $BASE_URL)
+  if ($class_name | is-empty) { error make --unspanned { msg: "path parameter 'className' must be non-empty" } }
   let full_url = (build-url $base ({class_name: (encode-path-segment $class_name)} | format pattern "/browser/views/for/{class_name}"))
   let req_body = {"columns": $columns, "order": $order, "permissions": $permissions, "settings": $settings} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/vnd.xtrf-v1+json;charset=UTF-8"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json;charset=UTF-8" $req_body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json;charset=UTF-8" $req_body {query: {}, body: $req_body}
 }
 
 # Removes a view.
@@ -1041,10 +1089,11 @@ export def "browser-views delete" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "x-auth-access-token"))
   let base = ($base_url | default $BASE_URL)
+  if ($view_id | is-empty) { error make --unspanned { msg: "path parameter 'viewId' must be non-empty" } }
   let full_url = (build-url $base ({view_id: (encode-path-segment $view_id)} | format pattern "/browser/views/{view_id}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
 }
 
 # Returns all view's information.
@@ -1065,10 +1114,11 @@ export def "browser-views get" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "x-auth-access-token"))
   let base = ($base_url | default $BASE_URL)
+  if ($view_id | is-empty) { error make --unspanned { msg: "path parameter 'viewId' must be non-empty" } }
   let full_url = (build-url $base ({view_id: (encode-path-segment $view_id)} | format pattern "/browser/views/{view_id}"))
   let accept_val = "application/vnd.xtrf-v1+json;charset=UTF-8"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
 }
 
 # Updates all view's information.
@@ -1098,12 +1148,13 @@ export def "browser-views update" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "x-auth-access-token"))
   let base = ($base_url | default $BASE_URL)
+  if ($view_id | is-empty) { error make --unspanned { msg: "path parameter 'viewId' must be non-empty" } }
   let full_url = (build-url $base ({view_id: (encode-path-segment $view_id)} | format pattern "/browser/views/{view_id}"))
   let req_body = {"columns": $columns, "order": $order, "permissions": $permissions, "settings": $settings} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/vnd.xtrf-v1+json;charset=UTF-8"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json;charset=UTF-8" $req_body
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json;charset=UTF-8" $req_body {query: {}, body: $req_body}
 }
 
 # Returns columns defined in view.
@@ -1124,10 +1175,11 @@ export def "browser-views-columns get" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "x-auth-access-token"))
   let base = ($base_url | default $BASE_URL)
+  if ($view_id | is-empty) { error make --unspanned { msg: "path parameter 'viewId' must be non-empty" } }
   let full_url = (build-url $base ({view_id: (encode-path-segment $view_id)} | format pattern "/browser/views/{view_id}/columns"))
   let accept_val = "application/vnd.xtrf-v1+json;charset=UTF-8"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
 }
 
 # Updates columns in view.
@@ -1150,12 +1202,13 @@ export def "browser-views-columns update" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "x-auth-access-token"))
   let base = ($base_url | default $BASE_URL)
+  if ($view_id | is-empty) { error make --unspanned { msg: "path parameter 'viewId' must be non-empty" } }
   let full_url = (build-url $base ({view_id: (encode-path-segment $view_id)} | format pattern "/browser/views/{view_id}/columns"))
   let req_body = $body
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else if (($input | is-not-empty) and ($req_body | is-empty)) { $input } else { $req_body }
   let accept_val = "application/vnd.xtrf-v1+json;charset=UTF-8"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json;charset=UTF-8" $req_body
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json;charset=UTF-8" $req_body {query: {}, body: $req_body}
 }
 
 # Deletes a single column from view.
@@ -1177,10 +1230,12 @@ export def "browser-views-columns delete" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "x-auth-access-token"))
   let base = ($base_url | default $BASE_URL)
+  if ($view_id | is-empty) { error make --unspanned { msg: "path parameter 'viewId' must be non-empty" } }
+  if ($column_name | is-empty) { error make --unspanned { msg: "path parameter 'columnName' must be non-empty" } }
   let full_url = (build-url $base ({view_id: (encode-path-segment $view_id), column_name: (encode-path-segment $column_name)} | format pattern "/browser/views/{view_id}/columns/{column_name}"))
   let accept_val = "application/vnd.xtrf-v1+json;charset=UTF-8"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
 }
 
 # Returns column's specific settings.
@@ -1202,10 +1257,12 @@ export def "browser-views-columns-settings get" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "x-auth-access-token"))
   let base = ($base_url | default $BASE_URL)
+  if ($view_id | is-empty) { error make --unspanned { msg: "path parameter 'viewId' must be non-empty" } }
+  if ($column_name | is-empty) { error make --unspanned { msg: "path parameter 'columnName' must be non-empty" } }
   let full_url = (build-url $base ({view_id: (encode-path-segment $view_id), column_name: (encode-path-segment $column_name)} | format pattern "/browser/views/{view_id}/columns/{column_name}/settings"))
   let accept_val = "application/vnd.xtrf-v1+json;charset=UTF-8"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
 }
 
 # Updates column's specific settings.
@@ -1229,12 +1286,14 @@ export def "browser-views-columns-settings update" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "x-auth-access-token"))
   let base = ($base_url | default $BASE_URL)
+  if ($view_id | is-empty) { error make --unspanned { msg: "path parameter 'viewId' must be non-empty" } }
+  if ($column_name | is-empty) { error make --unspanned { msg: "path parameter 'columnName' must be non-empty" } }
   let full_url = (build-url $base ({view_id: (encode-path-segment $view_id), column_name: (encode-path-segment $column_name)} | format pattern "/browser/views/{view_id}/columns/{column_name}/settings"))
   let req_body = $body
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/vnd.xtrf-v1+json;charset=UTF-8"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: {}, body: $req_body}
 }
 
 # Returns view's filter.
@@ -1255,10 +1314,11 @@ export def "browser-views-filter get" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "x-auth-access-token"))
   let base = ($base_url | default $BASE_URL)
+  if ($view_id | is-empty) { error make --unspanned { msg: "path parameter 'viewId' must be non-empty" } }
   let full_url = (build-url $base ({view_id: (encode-path-segment $view_id)} | format pattern "/browser/views/{view_id}/filter"))
   let accept_val = "application/vnd.xtrf-v1+json;charset=UTF-8"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
 }
 
 # Updates view's filter.
@@ -1281,12 +1341,13 @@ export def "browser-views-filter update" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "x-auth-access-token"))
   let base = ($base_url | default $BASE_URL)
+  if ($view_id | is-empty) { error make --unspanned { msg: "path parameter 'viewId' must be non-empty" } }
   let full_url = (build-url $base ({view_id: (encode-path-segment $view_id)} | format pattern "/browser/views/{view_id}/filter"))
   let req_body = $body
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else if (($input | is-not-empty) and ($req_body | is-empty)) { $input } else { $req_body }
   let accept_val = "application/vnd.xtrf-v1+json;charset=UTF-8"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json;charset=UTF-8" $req_body
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json;charset=UTF-8" $req_body {query: {}, body: $req_body}
 }
 
 # Updates view's filter property.
@@ -1313,12 +1374,14 @@ export def "browser-views-filter update-property" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "x-auth-access-token"))
   let base = ($base_url | default $BASE_URL)
+  if ($view_id | is-empty) { error make --unspanned { msg: "path parameter 'viewId' must be non-empty" } }
+  if ($filter_property | is-empty) { error make --unspanned { msg: "path parameter 'filterProperty' must be non-empty" } }
   let full_url = (build-url $base ({view_id: (encode-path-segment $view_id), filter_property: (encode-path-segment $filter_property)} | format pattern "/browser/views/{view_id}/filter/{filter_property}"))
   let req_body = {"name": $name, "settings": $settings, "settingsPresent": $settings_present, "type": $type} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/vnd.xtrf-v1+json;charset=UTF-8"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: {}, body: $req_body}
 }
 
 # Returns view's order settings.
@@ -1339,10 +1402,11 @@ export def "browser-views-order get" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "x-auth-access-token"))
   let base = ($base_url | default $BASE_URL)
+  if ($view_id | is-empty) { error make --unspanned { msg: "path parameter 'viewId' must be non-empty" } }
   let full_url = (build-url $base ({view_id: (encode-path-segment $view_id)} | format pattern "/browser/views/{view_id}/order"))
   let accept_val = "application/vnd.xtrf-v1+json;charset=UTF-8"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
 }
 
 # Updates view's order settings.
@@ -1366,12 +1430,13 @@ export def "browser-views-order update" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "x-auth-access-token"))
   let base = ($base_url | default $BASE_URL)
+  if ($view_id | is-empty) { error make --unspanned { msg: "path parameter 'viewId' must be non-empty" } }
   let full_url = (build-url $base ({view_id: (encode-path-segment $view_id)} | format pattern "/browser/views/{view_id}/order"))
   let req_body = {"column": $column, "type": $type} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/vnd.xtrf-v1+json;charset=UTF-8"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json;charset=UTF-8" $req_body
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json;charset=UTF-8" $req_body {query: {}, body: $req_body}
 }
 
 # Returns view's permissions.
@@ -1392,10 +1457,11 @@ export def "browser-views-permissions get" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "x-auth-access-token"))
   let base = ($base_url | default $BASE_URL)
+  if ($view_id | is-empty) { error make --unspanned { msg: "path parameter 'viewId' must be non-empty" } }
   let full_url = (build-url $base ({view_id: (encode-path-segment $view_id)} | format pattern "/browser/views/{view_id}/permissions"))
   let accept_val = "application/vnd.xtrf-v1+json;charset=UTF-8"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
 }
 
 # Updates view's permissions.
@@ -1418,12 +1484,13 @@ export def "browser-views-permissions update" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "x-auth-access-token"))
   let base = ($base_url | default $BASE_URL)
+  if ($view_id | is-empty) { error make --unspanned { msg: "path parameter 'viewId' must be non-empty" } }
   let full_url = (build-url $base ({view_id: (encode-path-segment $view_id)} | format pattern "/browser/views/{view_id}/permissions"))
   let req_body = {"sharedGroups": $shared_groups} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/vnd.xtrf-v1+json;charset=UTF-8"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: {}, body: $req_body}
 }
 
 # Returns view's settings.
@@ -1444,10 +1511,11 @@ export def "browser-views-settings get" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "x-auth-access-token"))
   let base = ($base_url | default $BASE_URL)
+  if ($view_id | is-empty) { error make --unspanned { msg: "path parameter 'viewId' must be non-empty" } }
   let full_url = (build-url $base ({view_id: (encode-path-segment $view_id)} | format pattern "/browser/views/{view_id}/settings"))
   let accept_val = "application/vnd.xtrf-v1+json;charset=UTF-8"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
 }
 
 # Updates view's settings.
@@ -1472,12 +1540,13 @@ export def "browser-views-settings update" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "x-auth-access-token"))
   let base = ($base_url | default $BASE_URL)
+  if ($view_id | is-empty) { error make --unspanned { msg: "path parameter 'viewId' must be non-empty" } }
   let full_url = (build-url $base ({view_id: (encode-path-segment $view_id)} | format pattern "/browser/views/{view_id}/settings"))
   let req_body = {"local": $local, "name": $name} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/vnd.xtrf-v1+json;charset=UTF-8"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: {}, body: $req_body}
 }
 
 # Returns view's local settings (for current user).
@@ -1498,10 +1567,11 @@ export def "browser-views-settings-local get" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "x-auth-access-token"))
   let base = ($base_url | default $BASE_URL)
+  if ($view_id | is-empty) { error make --unspanned { msg: "path parameter 'viewId' must be non-empty" } }
   let full_url = (build-url $base ({view_id: (encode-path-segment $view_id)} | format pattern "/browser/views/{view_id}/settings/local"))
   let accept_val = "application/vnd.xtrf-v1+json;charset=UTF-8"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
 }
 
 # Updates view's local settings (for current user).
@@ -1525,12 +1595,13 @@ export def "browser-views-settings-local update" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "x-auth-access-token"))
   let base = ($base_url | default $BASE_URL)
+  if ($view_id | is-empty) { error make --unspanned { msg: "path parameter 'viewId' must be non-empty" } }
   let full_url = (build-url $base ({view_id: (encode-path-segment $view_id)} | format pattern "/browser/views/{view_id}/settings/local"))
   let req_body = {"maxLinesInRow": $max_lines_in_row, "maxRows": $max_rows} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/vnd.xtrf-v1+json;charset=UTF-8"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: {}, body: $req_body}
 }
 
 # Returns list of simple clients representations
@@ -1555,7 +1626,7 @@ export def "customers get-list-names" [
   let full_url = (build-url $base "/customers" $qp)
   let accept_val = "application/vnd.xtrf-v1+json;charset=UTF-8"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"updatedSince": $updated_since} | compact), body: null}
 }
 
 # Creates a new client.
@@ -1569,7 +1640,7 @@ export def "customers get-list-names" [
 # --customFields item shape: {key?: string, name?: string, type?: "TEXT"|"DATE"|"DATE_AND_TIME"|"NUMBER"|"CHECKBOX"|"SELECTION"|"MULTI_SELECTION", value?: record}
 # --persons item shape: {active?: bool, contact?: record, customFields?: list, customerId?: int, firstProjectDate?: string, firstQuoteDate?: string, gender?: "FEMALE"|"MALE", id?: int, lastName?: string, lastProjectDate?: string, lastQuoteDate?: string, motherTonguesIds?: list<int>, name?: string, numberOfProjects?: int, numberOfQuotes?: int, positionId?: int}
 # --responsiblePersons shape: {accountManagerId?: int, projectCoordinatorId?: int, projectManagerId: int, salesPersonId: int}
-export def "customers create-by-" [
+export def "customers create" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1615,14 +1686,14 @@ export def "customers create-by-" [
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/vnd.xtrf-v1+json;charset=UTF-8"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: {}, body: $req_body}
 }
 
 # Returns clients' internal identifiers.
 #
 # GET /customers/ids
 # operationId: getAllIds_2
-export def "customers-ids get-list-by-" [
+export def "customers-ids get-list" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1642,7 +1713,7 @@ export def "customers-ids get-list-by-" [
   let full_url = (build-url $base "/customers/ids" $qp)
   let accept_val = "application/json;charset=UTF-8"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"updatedSince": $updated_since, "nameEquals": $name_equals, "emailEquals": $email_equals} | compact), body: null}
 }
 
 # Creates a new person.
@@ -1651,7 +1722,7 @@ export def "customers-ids get-list-by-" [
 # operationId: create_2
 # --contact shape: {emails?: record, fax?: string, phones?: list<string>, sms?: string}
 # --customFields item shape: {key?: string, name?: string, type?: "TEXT"|"DATE"|"DATE_AND_TIME"|"NUMBER"|"CHECKBOX"|"SELECTION"|"MULTI_SELECTION", value?: record}
-export def "customers-persons create-by-" [
+export def "customers-persons create" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1686,7 +1757,7 @@ export def "customers-persons create-by-" [
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/vnd.xtrf-v1+json;charset=UTF-8"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json;charset=UTF-8" $req_body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json;charset=UTF-8" $req_body {query: {}, body: $req_body}
 }
 
 # Generates a single use sign-in token.
@@ -1713,14 +1784,14 @@ export def "customers-persons-access-token generate-single-use-sign" [
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/vnd.xtrf-v1+json;charset=UTF-8"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json;charset=UTF-8" $req_body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json;charset=UTF-8" $req_body {query: {}, body: $req_body}
 }
 
 # Returns persons' internal identifiers.
 #
 # GET /customers/persons/ids
 # operationId: getAllIds_1
-export def "customers-persons-ids get-list-by-" [
+export def "customers-persons-ids get-list" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1738,14 +1809,14 @@ export def "customers-persons-ids get-list-by-" [
   let full_url = (build-url $base "/customers/persons/ids" $qp)
   let accept_val = "application/vnd.xtrf-v1+json;charset=UTF-8"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"updatedSince": $updated_since} | compact), body: null}
 }
 
 # Removes a person.
 #
 # DELETE /customers/persons/{personId}
 # operationId: delete_3
-export def "customers-persons delete-by-personId" [
+export def "customers-persons delete-by-person-id" [
   person_id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1759,17 +1830,18 @@ export def "customers-persons delete-by-personId" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "x-auth-access-token"))
   let base = ($base_url | default $BASE_URL)
+  if ($person_id | is-empty) { error make --unspanned { msg: "path parameter 'personId' must be non-empty" } }
   let full_url = (build-url $base ({person_id: (encode-path-segment $person_id)} | format pattern "/customers/persons/{person_id}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
 }
 
 # Returns person details.
 #
 # GET /customers/persons/{personId}
 # operationId: getById_1
-export def "customers-persons get-by-personId" [
+export def "customers-persons get-by-person-id" [
   person_id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1783,10 +1855,11 @@ export def "customers-persons get-by-personId" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "x-auth-access-token"))
   let base = ($base_url | default $BASE_URL)
+  if ($person_id | is-empty) { error make --unspanned { msg: "path parameter 'personId' must be non-empty" } }
   let full_url = (build-url $base ({person_id: (encode-path-segment $person_id)} | format pattern "/customers/persons/{person_id}"))
   let accept_val = "application/vnd.xtrf-v1+json;charset=UTF-8"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
 }
 
 # Updates an existing person.
@@ -1795,7 +1868,7 @@ export def "customers-persons get-by-personId" [
 # operationId: update_1
 # --contact shape: {emails?: record, fax?: string, phones?: list<string>, sms?: string}
 # --customFields item shape: {key?: string, name?: string, type?: "TEXT"|"DATE"|"DATE_AND_TIME"|"NUMBER"|"CHECKBOX"|"SELECTION"|"MULTI_SELECTION", value?: record}
-export def "customers-persons update-by-personId" [
+export def "customers-persons update-by-person-id" [
   person_id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1826,12 +1899,13 @@ export def "customers-persons update-by-personId" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "x-auth-access-token"))
   let base = ($base_url | default $BASE_URL)
+  if ($person_id | is-empty) { error make --unspanned { msg: "path parameter 'personId' must be non-empty" } }
   let full_url = (build-url $base ({person_id: (encode-path-segment $person_id)} | format pattern "/customers/persons/{person_id}"))
   let req_body = {"active": $active, "contact": $contact, "customFields": $custom_fields, "customerId": $customer_id, "firstProjectDate": $first_project_date, "firstQuoteDate": $first_quote_date, "gender": $gender, "id": $id, "lastName": $last_name, "lastProjectDate": $last_project_date, "lastQuoteDate": $last_quote_date, "motherTonguesIds": $mother_tongues_ids, "name": $name, "numberOfProjects": $number_of_projects, "numberOfQuotes": $number_of_quotes, "positionId": $position_id} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/vnd.xtrf-v1+json;charset=UTF-8"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json;charset=UTF-8" $req_body
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json;charset=UTF-8" $req_body {query: {}, body: $req_body}
 }
 
 # Returns contact of a given person.
@@ -1852,10 +1926,11 @@ export def "customers-persons-contact get" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "x-auth-access-token"))
   let base = ($base_url | default $BASE_URL)
+  if ($person_id | is-empty) { error make --unspanned { msg: "path parameter 'personId' must be non-empty" } }
   let full_url = (build-url $base ({person_id: (encode-path-segment $person_id)} | format pattern "/customers/persons/{person_id}/contact"))
   let accept_val = "application/vnd.xtrf-v1+json;charset=UTF-8"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
 }
 
 # Updates contact of a given person.
@@ -1882,12 +1957,13 @@ export def "customers-persons-contact update" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "x-auth-access-token"))
   let base = ($base_url | default $BASE_URL)
+  if ($person_id | is-empty) { error make --unspanned { msg: "path parameter 'personId' must be non-empty" } }
   let full_url = (build-url $base ({person_id: (encode-path-segment $person_id)} | format pattern "/customers/persons/{person_id}/contact"))
   let req_body = {"emails": $emails, "fax": $fax, "phones": $phones, "sms": $sms} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/vnd.xtrf-v1+json;charset=UTF-8"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json;charset=UTF-8" $req_body
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json;charset=UTF-8" $req_body {query: {}, body: $req_body}
 }
 
 # Returns custom fields of a given person.
@@ -1908,10 +1984,11 @@ export def "customers-persons-custom-fields get" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "x-auth-access-token"))
   let base = ($base_url | default $BASE_URL)
+  if ($person_id | is-empty) { error make --unspanned { msg: "path parameter 'personId' must be non-empty" } }
   let full_url = (build-url $base ({person_id: (encode-path-segment $person_id)} | format pattern "/customers/persons/{person_id}/customFields"))
   let accept_val = "application/vnd.xtrf-v1+json;charset=UTF-8"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
 }
 
 # Updates custom fields of a given person.
@@ -1936,19 +2013,20 @@ export def "customers-persons-custom-fields update" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "x-auth-access-token"))
   let base = ($base_url | default $BASE_URL)
+  if ($person_id | is-empty) { error make --unspanned { msg: "path parameter 'personId' must be non-empty" } }
   let full_url = (build-url $base ({person_id: (encode-path-segment $person_id)} | format pattern "/customers/persons/{person_id}/customFields"))
   let req_body = {"customFields": $custom_fields, "empty": $empty} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else if (($input | is-not-empty) and ($req_body | is-empty)) { $input } else { $req_body }
   let accept_val = "application/vnd.xtrf-v1+json;charset=UTF-8"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json;charset=UTF-8" $req_body
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json;charset=UTF-8" $req_body {query: {}, body: $req_body}
 }
 
 # Removes a customer price list.
 #
 # DELETE /customers/priceLists/{priceListId}
 # operationId: delete_4
-export def "customers-price-lists delete-by-priceListId" [
+export def "customers-price-lists delete-by-price-list-id" [
   price_list_id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1962,17 +2040,18 @@ export def "customers-price-lists delete-by-priceListId" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "x-auth-access-token"))
   let base = ($base_url | default $BASE_URL)
+  if ($price_list_id | is-empty) { error make --unspanned { msg: "path parameter 'priceListId' must be non-empty" } }
   let full_url = (build-url $base ({price_list_id: (encode-path-segment $price_list_id)} | format pattern "/customers/priceLists/{price_list_id}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
 }
 
 # Removes a client.
 #
 # DELETE /customers/{customerId}
 # operationId: delete_5
-export def "customers delete-by-customerId" [
+export def "customers delete-by-customer-id" [
   customer_id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1986,17 +2065,18 @@ export def "customers delete-by-customerId" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "x-auth-access-token"))
   let base = ($base_url | default $BASE_URL)
+  if ($customer_id | is-empty) { error make --unspanned { msg: "path parameter 'customerId' must be non-empty" } }
   let full_url = (build-url $base ({customer_id: (encode-path-segment $customer_id)} | format pattern "/customers/{customer_id}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
 }
 
 # Returns client details.
 #
 # GET /customers/{customerId}
 # operationId: getById_2
-export def "customers get-by-customerId" [
+export def "customers get-by-customer-id" [
   customer_id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -2011,11 +2091,12 @@ export def "customers get-by-customerId" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "x-auth-access-token"))
   let base = ($base_url | default $BASE_URL)
+  if ($customer_id | is-empty) { error make --unspanned { msg: "path parameter 'customerId' must be non-empty" } }
   let qp = [(serialize-qp "embed" $embed "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({customer_id: (encode-path-segment $customer_id)} | format pattern "/customers/{customer_id}") $qp)
   let accept_val = "application/vnd.xtrf-v1+json;charset=UTF-8"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"embed": $embed} | compact), body: null}
 }
 
 # Updates an existing client.
@@ -2029,7 +2110,7 @@ export def "customers get-by-customerId" [
 # --customFields item shape: {key?: string, name?: string, type?: "TEXT"|"DATE"|"DATE_AND_TIME"|"NUMBER"|"CHECKBOX"|"SELECTION"|"MULTI_SELECTION", value?: record}
 # --persons item shape: {active?: bool, contact?: record, customFields?: list, customerId?: int, firstProjectDate?: string, firstQuoteDate?: string, gender?: "FEMALE"|"MALE", id?: int, lastName?: string, lastProjectDate?: string, lastQuoteDate?: string, motherTonguesIds?: list<int>, name?: string, numberOfProjects?: int, numberOfQuotes?: int, positionId?: int}
 # --responsiblePersons shape: {accountManagerId?: int, projectCoordinatorId?: int, projectManagerId: int, salesPersonId: int}
-export def "customers update-by-customerId" [
+export def "customers update-by-customer-id" [
   customer_id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -2071,12 +2152,13 @@ export def "customers update-by-customerId" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "x-auth-access-token"))
   let base = ($base_url | default $BASE_URL)
+  if ($customer_id | is-empty) { error make --unspanned { msg: "path parameter 'customerId' must be non-empty" } }
   let full_url = (build-url $base ({customer_id: (encode-path-segment $customer_id)} | format pattern "/customers/{customer_id}"))
   let req_body = {"accountOnCustomerServer": $account_on_customer_server, "accounting": $accounting, "billingAddress": $billing_address, "branchId": $branch_id, "categoriesIds": $categories_ids, "clientFirstProjectDate": $client_first_project_date, "clientFirstQuoteDate": $client_first_quote_date, "clientLastProjectDate": $client_last_project_date, "clientLastQuoteDate": $client_last_quote_date, "clientNumberOfProjects": $client_number_of_projects, "clientNumberOfQuotes": $client_number_of_quotes, "contact": $contact, "contractNumber": $contract_number, "correspondenceAddress": $correspondence_address, "customFields": $custom_fields, "fullName": $full_name, "id": $id, "idNumber": $id_number, "industriesIds": $industries_ids, "leadSourceId": $lead_source_id, "limitAccessToPeopleResponsible": $limit_access_to_people_responsible, "name": $name, "notes": $notes, "persons": $persons, "responsiblePersons": $responsible_persons, "salesNotes": $sales_notes, "status": $status} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/vnd.xtrf-v1+json;charset=UTF-8"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: {}, body: $req_body}
 }
 
 # Returns address of a given client.
@@ -2097,10 +2179,11 @@ export def "customers-address get" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "x-auth-access-token"))
   let base = ($base_url | default $BASE_URL)
+  if ($customer_id | is-empty) { error make --unspanned { msg: "path parameter 'customerId' must be non-empty" } }
   let full_url = (build-url $base ({customer_id: (encode-path-segment $customer_id)} | format pattern "/customers/{customer_id}/address"))
   let accept_val = "application/vnd.xtrf-v1+json;charset=UTF-8"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
 }
 
 # Updates address of a given client.
@@ -2129,12 +2212,13 @@ export def "customers-address update" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "x-auth-access-token"))
   let base = ($base_url | default $BASE_URL)
+  if ($customer_id | is-empty) { error make --unspanned { msg: "path parameter 'customerId' must be non-empty" } }
   let full_url = (build-url $base ({customer_id: (encode-path-segment $customer_id)} | format pattern "/customers/{customer_id}/address"))
   let req_body = {"addressLine1": $address_line1, "addressLine2": $address_line2, "city": $city, "countryId": $country_id, "postalCode": $postal_code, "provinceId": $province_id, "sameAsBillingAddress": $same_as_billing_address} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/vnd.xtrf-v1+json;charset=UTF-8"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: {}, body: $req_body}
 }
 
 # Returns categories of a given client.
@@ -2155,10 +2239,11 @@ export def "customers-categories get" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "x-auth-access-token"))
   let base = ($base_url | default $BASE_URL)
+  if ($customer_id | is-empty) { error make --unspanned { msg: "path parameter 'customerId' must be non-empty" } }
   let full_url = (build-url $base ({customer_id: (encode-path-segment $customer_id)} | format pattern "/customers/{customer_id}/categories"))
   let accept_val = "application/vnd.xtrf-v1+json;charset=UTF-8"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
 }
 
 # Updates categories of a given client.
@@ -2181,19 +2266,20 @@ export def "customers-categories update" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "x-auth-access-token"))
   let base = ($base_url | default $BASE_URL)
+  if ($customer_id | is-empty) { error make --unspanned { msg: "path parameter 'customerId' must be non-empty" } }
   let full_url = (build-url $base ({customer_id: (encode-path-segment $customer_id)} | format pattern "/customers/{customer_id}/categories"))
   let req_body = {"empty": $empty} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else if (($input | is-not-empty) and ($req_body | is-empty)) { $input } else { $req_body }
   let accept_val = "application/vnd.xtrf-v1+json;charset=UTF-8"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: {}, body: $req_body}
 }
 
 # Returns contact of a given client.
 #
 # GET /customers/{customerId}/contact
 # operationId: getContact_1
-export def "customers-contact get-by-customerId" [
+export def "customers-contact get-by-customer-id" [
   customer_id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -2207,10 +2293,11 @@ export def "customers-contact get-by-customerId" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "x-auth-access-token"))
   let base = ($base_url | default $BASE_URL)
+  if ($customer_id | is-empty) { error make --unspanned { msg: "path parameter 'customerId' must be non-empty" } }
   let full_url = (build-url $base ({customer_id: (encode-path-segment $customer_id)} | format pattern "/customers/{customer_id}/contact"))
   let accept_val = "application/vnd.xtrf-v1+json;charset=UTF-8"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
 }
 
 # Updates contact of a given client.
@@ -2218,7 +2305,7 @@ export def "customers-contact get-by-customerId" [
 # PUT /customers/{customerId}/contact
 # operationId: updateContact_1
 # --emails shape: {additional?: list<string>, cc?: list<string>, primary: string}
-export def "customers-contact update-by-customerId" [
+export def "customers-contact update-by-customer-id" [
   customer_id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -2238,12 +2325,13 @@ export def "customers-contact update-by-customerId" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "x-auth-access-token"))
   let base = ($base_url | default $BASE_URL)
+  if ($customer_id | is-empty) { error make --unspanned { msg: "path parameter 'customerId' must be non-empty" } }
   let full_url = (build-url $base ({customer_id: (encode-path-segment $customer_id)} | format pattern "/customers/{customer_id}/contact"))
   let req_body = {"emails": $emails, "fax": $fax, "phones": $phones, "sms": $sms, "websites": $websites} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/vnd.xtrf-v1+json;charset=UTF-8"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: {}, body: $req_body}
 }
 
 # Returns correspondence address of a given client.
@@ -2264,10 +2352,11 @@ export def "customers-correspondence-address get" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "x-auth-access-token"))
   let base = ($base_url | default $BASE_URL)
+  if ($customer_id | is-empty) { error make --unspanned { msg: "path parameter 'customerId' must be non-empty" } }
   let full_url = (build-url $base ({customer_id: (encode-path-segment $customer_id)} | format pattern "/customers/{customer_id}/correspondenceAddress"))
   let accept_val = "application/vnd.xtrf-v1+json;charset=UTF-8"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
 }
 
 # Updates correspondence address of a given client.
@@ -2296,19 +2385,20 @@ export def "customers-correspondence-address update" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "x-auth-access-token"))
   let base = ($base_url | default $BASE_URL)
+  if ($customer_id | is-empty) { error make --unspanned { msg: "path parameter 'customerId' must be non-empty" } }
   let full_url = (build-url $base ({customer_id: (encode-path-segment $customer_id)} | format pattern "/customers/{customer_id}/correspondenceAddress"))
   let req_body = {"addressLine1": $address_line1, "addressLine2": $address_line2, "city": $city, "countryId": $country_id, "postalCode": $postal_code, "provinceId": $province_id, "sameAsBillingAddress": $same_as_billing_address} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/vnd.xtrf-v1+json;charset=UTF-8"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: {}, body: $req_body}
 }
 
 # Returns custom fields of a given client.
 #
 # GET /customers/{customerId}/customFields
 # operationId: getCustomFields_1
-export def "customers-custom-fields get-by-customerId" [
+export def "customers-custom-fields get-by-customer-id" [
   customer_id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -2322,10 +2412,11 @@ export def "customers-custom-fields get-by-customerId" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "x-auth-access-token"))
   let base = ($base_url | default $BASE_URL)
+  if ($customer_id | is-empty) { error make --unspanned { msg: "path parameter 'customerId' must be non-empty" } }
   let full_url = (build-url $base ({customer_id: (encode-path-segment $customer_id)} | format pattern "/customers/{customer_id}/customFields"))
   let accept_val = "application/vnd.xtrf-v1+json;charset=UTF-8"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
 }
 
 # Updates custom fields of a given client.
@@ -2333,7 +2424,7 @@ export def "customers-custom-fields get-by-customerId" [
 # PUT /customers/{customerId}/customFields
 # operationId: updateCustomFields_1
 # --customFields item shape: {key?: string, name?: string, type?: "TEXT"|"DATE"|"DATE_AND_TIME"|"NUMBER"|"CHECKBOX"|"SELECTION"|"MULTI_SELECTION", value?: record}
-export def "customers-custom-fields update-by-customerId" [
+export def "customers-custom-fields update-by-customer-id" [
   customer_id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -2350,12 +2441,13 @@ export def "customers-custom-fields update-by-customerId" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "x-auth-access-token"))
   let base = ($base_url | default $BASE_URL)
+  if ($customer_id | is-empty) { error make --unspanned { msg: "path parameter 'customerId' must be non-empty" } }
   let full_url = (build-url $base ({customer_id: (encode-path-segment $customer_id)} | format pattern "/customers/{customer_id}/customFields"))
   let req_body = {"customFields": $custom_fields, "empty": $empty} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else if (($input | is-not-empty) and ($req_body | is-empty)) { $input } else { $req_body }
   let accept_val = "application/vnd.xtrf-v1+json;charset=UTF-8"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: {}, body: $req_body}
 }
 
 # Returns custom field of a given client.
@@ -2377,10 +2469,12 @@ export def "customers-custom-fields get" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "x-auth-access-token"))
   let base = ($base_url | default $BASE_URL)
+  if ($customer_id | is-empty) { error make --unspanned { msg: "path parameter 'customerId' must be non-empty" } }
+  if ($custom_field_key | is-empty) { error make --unspanned { msg: "path parameter 'customFieldKey' must be non-empty" } }
   let full_url = (build-url $base ({customer_id: (encode-path-segment $customer_id), custom_field_key: (encode-path-segment $custom_field_key)} | format pattern "/customers/{customer_id}/customFields/{custom_field_key}"))
   let accept_val = "application/vnd.xtrf-v1+json;charset=UTF-8"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
 }
 
 # Updates given custom field of a given client.
@@ -2407,12 +2501,14 @@ export def "customers-custom-fields update" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "x-auth-access-token"))
   let base = ($base_url | default $BASE_URL)
+  if ($customer_id | is-empty) { error make --unspanned { msg: "path parameter 'customerId' must be non-empty" } }
+  if ($custom_field_key | is-empty) { error make --unspanned { msg: "path parameter 'customFieldKey' must be non-empty" } }
   let full_url = (build-url $base ({customer_id: (encode-path-segment $customer_id), custom_field_key: (encode-path-segment $custom_field_key)} | format pattern "/customers/{customer_id}/customFields/{custom_field_key}"))
   let req_body = {"key": $key, "name": $name, "type": $type, "value": $value} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/vnd.xtrf-v1+json;charset=UTF-8"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: {}, body: $req_body}
 }
 
 # Returns industries of a given client.
@@ -2433,10 +2529,11 @@ export def "customers-industries get" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "x-auth-access-token"))
   let base = ($base_url | default $BASE_URL)
+  if ($customer_id | is-empty) { error make --unspanned { msg: "path parameter 'customerId' must be non-empty" } }
   let full_url = (build-url $base ({customer_id: (encode-path-segment $customer_id)} | format pattern "/customers/{customer_id}/industries"))
   let accept_val = "application/vnd.xtrf-v1+json;charset=UTF-8"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
 }
 
 # Updates industries of a given client.
@@ -2459,12 +2556,13 @@ export def "customers-industries update" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "x-auth-access-token"))
   let base = ($base_url | default $BASE_URL)
+  if ($customer_id | is-empty) { error make --unspanned { msg: "path parameter 'customerId' must be non-empty" } }
   let full_url = (build-url $base ({customer_id: (encode-path-segment $customer_id)} | format pattern "/customers/{customer_id}/industries"))
   let req_body = {"empty": $empty} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else if (($input | is-not-empty) and ($req_body | is-empty)) { $input } else { $req_body }
   let accept_val = "application/vnd.xtrf-v1+json;charset=UTF-8"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: {}, body: $req_body}
 }
 
 # Returns active dictionary entities for all types.
@@ -2487,14 +2585,14 @@ export def "dictionaries-active list" [
   let full_url = (build-url $base "/dictionaries/active")
   let accept_val = "application/vnd.xtrf-v1+json;charset=UTF-8"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
 }
 
 # Returns dictionary entities for all types. Both active and not active ones.
 #
 # GET /dictionaries/all
 # operationId: getAll_1
-export def "dictionaries-all get-by-" [
+export def "dictionaries-all list" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2510,7 +2608,7 @@ export def "dictionaries-all get-by-" [
   let full_url = (build-url $base "/dictionaries/all")
   let accept_val = "application/vnd.xtrf-v1+json;charset=UTF-8"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
 }
 
 # Returns currency exchange rates.
@@ -2531,10 +2629,11 @@ export def "dictionaries-currency-exchange-rate get-by-iso-code" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "x-auth-access-token"))
   let base = ($base_url | default $BASE_URL)
+  if ($iso_code | is-empty) { error make --unspanned { msg: "path parameter 'isoCode' must be non-empty" } }
   let full_url = (build-url $base ({iso_code: (encode-path-segment $iso_code)} | format pattern "/dictionaries/currency/{iso_code}/exchangeRate"))
   let accept_val = "application/vnd.xtrf-v1+json;charset=UTF-8"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
 }
 
 # Adding currency exchange rates.
@@ -2564,12 +2663,13 @@ export def "dictionaries-currency-exchange-rate create" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "x-auth-access-token"))
   let base = ($base_url | default $BASE_URL)
+  if ($iso_code | is-empty) { error make --unspanned { msg: "path parameter 'isoCode' must be non-empty" } }
   let full_url = (build-url $base ({iso_code: (encode-path-segment $iso_code)} | format pattern "/dictionaries/currency/{iso_code}/exchangeRate"))
   let req_body = {"dateFrom": $date_from, "exchangeRate": $exchange_rate, "lastModification": $last_modification, "originDetails": $origin_details, "publicationDate": $publication_date} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: {}, body: $req_body}
 }
 
 # Returns active values from a given dictionary.
@@ -2591,11 +2691,12 @@ export def "dictionaries-active get" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "x-auth-access-token"))
   let base = ($base_url | default $BASE_URL)
+  if ($type | is-empty) { error make --unspanned { msg: "path parameter 'type' must be non-empty" } }
   let qp = [(serialize-qp "nameEquals" $name_equals "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({type: (encode-path-segment $type)} | format pattern "/dictionaries/{type}/active") $qp)
   let accept_val = "application/vnd.xtrf-v1+json;charset=UTF-8"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"nameEquals": $name_equals} | compact), body: null}
 }
 
 # Returns all values (both active and not active) from a given dictionary.
@@ -2617,11 +2718,12 @@ export def "dictionaries-all get" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "x-auth-access-token"))
   let base = ($base_url | default $BASE_URL)
+  if ($type | is-empty) { error make --unspanned { msg: "path parameter 'type' must be non-empty" } }
   let qp = [(serialize-qp "nameEquals" $name_equals "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({type: (encode-path-segment $type)} | format pattern "/dictionaries/{type}/all") $qp)
   let accept_val = "application/vnd.xtrf-v1+json;charset=UTF-8"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"nameEquals": $name_equals} | compact), body: null}
 }
 
 # Returns specific value from a given dictionary.
@@ -2643,10 +2745,12 @@ export def "dictionaries get-by-and" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "x-auth-access-token"))
   let base = ($base_url | default $BASE_URL)
+  if ($type | is-empty) { error make --unspanned { msg: "path parameter 'type' must be non-empty" } }
+  if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
   let full_url = (build-url $base ({type: (encode-path-segment $type), id: (encode-path-segment $id)} | format pattern "/dictionaries/{type}/{id}"))
   let accept_val = "application/vnd.xtrf-v1+json;charset=UTF-8"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
 }
 
 # Uploads a temporary file (ie. for XML import). Returns token which can be used in other API calls.
@@ -2675,7 +2779,7 @@ export def "files upload" [
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let req_body = if ($req_body | describe | str starts-with "record") { $req_body } else { {} }
   let mp = (build-multipart-body $req_body ["file"] $dry_run)
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full $mp.content_type $mp.body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full $mp.content_type $mp.body {query: {}, body: $req_body}
 }
 
 # Returns job details by jobId.
@@ -2696,10 +2800,11 @@ export def "jobs get-details" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "x-auth-access-token"))
   let base = ($base_url | default $BASE_URL)
+  if ($job_id | is-empty) { error make --unspanned { msg: "path parameter 'jobId' must be non-empty" } }
   let full_url = (build-url $base ({job_id: (encode-path-segment $job_id)} | format pattern "/jobs/{job_id}"))
   let accept_val = "application/vnd.xtrf-v1+json;charset=UTF-8"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
 }
 
 # Updates dates of a given job.
@@ -2725,12 +2830,13 @@ export def "jobs-dates update" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "x-auth-access-token"))
   let base = ($base_url | default $BASE_URL)
+  if ($job_id | is-empty) { error make --unspanned { msg: "path parameter 'jobId' must be non-empty" } }
   let full_url = (build-url $base ({job_id: (encode-path-segment $job_id)} | format pattern "/jobs/{job_id}/dates"))
   let req_body = {"actualEndDate": $actual_end_date, "actualStartDate": $actual_start_date, "deadline": $deadline, "startDate": $start_date} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: {}, body: $req_body}
 }
 
 # Returns list of input and output files of a job.
@@ -2751,10 +2857,11 @@ export def "jobs-files get" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "x-auth-access-token"))
   let base = ($base_url | default $BASE_URL)
+  if ($job_id | is-empty) { error make --unspanned { msg: "path parameter 'jobId' must be non-empty" } }
   let full_url = (build-url $base ({job_id: (encode-path-segment $job_id)} | format pattern "/jobs/{job_id}/files"))
   let accept_val = "application/vnd.xtrf-v1+json;charset=UTF-8"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
 }
 
 # POST /jobs/{jobId}/files/output
@@ -2780,19 +2887,20 @@ export def "jobs-files-output assign" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "x-auth-access-token"))
   let base = ($base_url | default $BASE_URL)
+  if ($job_id | is-empty) { error make --unspanned { msg: "path parameter 'jobId' must be non-empty" } }
   let full_url = (build-url $base ({job_id: (encode-path-segment $job_id)} | format pattern "/jobs/{job_id}/files/output"))
   let req_body = {"category": $category, "content": $content, "name": $name, "token": $body_token, "url": $url} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/vnd.xtrf-v1+json;charset=UTF-8"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json;charset=UTF-8" $req_body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json;charset=UTF-8" $req_body {query: {}, body: $req_body}
 }
 
 # Returns file metadata.
 #
 # GET /jobs/{jobId}/files/{fileId}
 # operationId: getJobFiles_1
-export def "jobs-files get-by-jobId-fileId" [
+export def "jobs-files get-by-job-id-file-id" [
   job_id: string
   file_id: int
   --base-url(-b): string@base-url-completer # API base URL
@@ -2807,10 +2915,12 @@ export def "jobs-files get-by-jobId-fileId" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "x-auth-access-token"))
   let base = ($base_url | default $BASE_URL)
+  if ($job_id | is-empty) { error make --unspanned { msg: "path parameter 'jobId' must be non-empty" } }
+  if ($file_id | is-empty) { error make --unspanned { msg: "path parameter 'fileId' must be non-empty" } }
   let full_url = (build-url $base ({job_id: (encode-path-segment $job_id), file_id: (encode-path-segment $file_id)} | format pattern "/jobs/{job_id}/files/{file_id}"))
   let accept_val = "application/vnd.xtrf-v1+json;charset=UTF-8"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
 }
 
 # Updates instructions for a job.
@@ -2838,12 +2948,13 @@ export def "jobs-instructions update" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "x-auth-access-token"))
   let base = ($base_url | default $BASE_URL)
+  if ($job_id | is-empty) { error make --unspanned { msg: "path parameter 'jobId' must be non-empty" } }
   let full_url = (build-url $base ({job_id: (encode-path-segment $job_id)} | format pattern "/jobs/{job_id}/instructions"))
   let req_body = {"forProvider": $for_provider, "fromCustomer": $from_customer, "internal": $internal, "notes": $notes, "paymentNoteForCustomer": $payment_note_for_customer, "paymentNoteForVendor": $payment_note_for_vendor} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: {}, body: $req_body}
 }
 
 # Changes job status if possible (400 Bad Request is returned otherwise).
@@ -2867,12 +2978,13 @@ export def "jobs-status update-change" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "x-auth-access-token"))
   let base = ($base_url | default $BASE_URL)
+  if ($job_id | is-empty) { error make --unspanned { msg: "path parameter 'jobId' must be non-empty" } }
   let full_url = (build-url $base ({job_id: (encode-path-segment $job_id)} | format pattern "/jobs/{job_id}/status"))
   let req_body = {"externalId": $external_id, "status": $status} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: {}, body: $req_body}
 }
 
 # Assigns vendor to a job in a project.
@@ -2896,12 +3008,13 @@ export def "jobs-vendor assign" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "x-auth-access-token"))
   let base = ($base_url | default $BASE_URL)
+  if ($job_id | is-empty) { error make --unspanned { msg: "path parameter 'jobId' must be non-empty" } }
   let full_url = (build-url $base ({job_id: (encode-path-segment $job_id)} | format pattern "/jobs/{job_id}/vendor"))
   let req_body = {"recalculateRates": $recalculate_rates, "vendorPriceProfileId": $vendor_price_profile_id} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: {}, body: $req_body}
 }
 
 # Returns license content.
@@ -2924,7 +3037,7 @@ export def "license get" [
   let full_url = (build-url $base "/license")
   let accept_val = "application/vnd.xtrf-v1+json;charset=UTF-8"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
 }
 
 # Refreshes license content.
@@ -2947,7 +3060,7 @@ export def "license-refresh refresh" [
   let full_url = (build-url $base "/license/refresh")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
 }
 
 # Executes a macro.
@@ -2972,12 +3085,13 @@ export def "macros-run create" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "x-auth-access-token"))
   let base = ($base_url | default $BASE_URL)
+  if ($macro_id | is-empty) { error make --unspanned { msg: "path parameter 'macroId' must be non-empty" } }
   let full_url = (build-url $base ({macro_id: (encode-path-segment $macro_id)} | format pattern "/macros/{macro_id}/run"))
   let req_body = {"async": $async, "ids": $ids, "params": $params} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/vnd.xtrf-v1+json;charset=UTF-8"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json;charset=UTF-8" $req_body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json;charset=UTF-8" $req_body {query: {}, body: $req_body}
 }
 
 # Creates a new Classic Project.
@@ -2988,7 +3102,7 @@ export def "macros-run create" [
 # --inputFiles item shape: {category?: "WORKFILE"|"TM"|"DICTIONARY"|"REF"|"LOG_FILE", content?: string, name?: string, token?: string, url?: string}
 # --instructions shape: {forProvider?: string, fromCustomer?: string, internal?: string, notes?: string, paymentNoteForCustomer?: string, paymentNoteForVendor?: string}
 # --people shape: {customerContacts?: record, responsiblePersons?: record}
-export def "projects create-by-" [
+export def "projects create" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -3018,7 +3132,7 @@ export def "projects create-by-" [
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/vnd.xtrf-v1+json;charset=UTF-8"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json;charset=UTF-8" $req_body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json;charset=UTF-8" $req_body {query: {}, body: $req_body}
 }
 
 # Downloads a file.
@@ -3039,17 +3153,18 @@ export def "projects-files-download get" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "x-auth-access-token"))
   let base = ($base_url | default $BASE_URL)
+  if ($file_id | is-empty) { error make --unspanned { msg: "path parameter 'fileId' must be non-empty" } }
   let full_url = (build-url $base ({file_id: (encode-path-segment $file_id)} | format pattern "/projects/files/{file_id}/download"))
   let accept_val = "multipart/form-data"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
 }
 
 # Returns projects' internal identifiers.
 #
 # GET /projects/ids
 # operationId: getAllIds_6
-export def "projects-ids get-list-by-" [
+export def "projects-ids get-list" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -3067,14 +3182,14 @@ export def "projects-ids get-list-by-" [
   let full_url = (build-url $base "/projects/ids" $qp)
   let accept_val = "application/vnd.xtrf-v1+json;charset=UTF-8"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"updatedSince": $updated_since} | compact), body: null}
 }
 
 # Removes a project.
 #
 # DELETE /projects/{projectId}
 # operationId: delete_12
-export def "projects delete-by-projectId" [
+export def "projects delete-by-project-id" [
   project_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -3088,17 +3203,18 @@ export def "projects delete-by-projectId" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "x-auth-access-token"))
   let base = ($base_url | default $BASE_URL)
+  if ($project_id | is-empty) { error make --unspanned { msg: "path parameter 'projectId' must be non-empty" } }
   let full_url = (build-url $base ({project_id: (encode-path-segment $project_id)} | format pattern "/projects/{project_id}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
 }
 
 # Returns project details.
 #
 # GET /projects/{projectId}
 # operationId: getById_7
-export def "projects get-by-projectId-by-projectId" [
+export def "projects get-by-project-id-by-project-id" [
   project_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -3113,11 +3229,12 @@ export def "projects get-by-projectId-by-projectId" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "x-auth-access-token"))
   let base = ($base_url | default $BASE_URL)
+  if ($project_id | is-empty) { error make --unspanned { msg: "path parameter 'projectId' must be non-empty" } }
   let qp = [(serialize-qp "embed" $embed "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({project_id: (encode-path-segment $project_id)} | format pattern "/projects/{project_id}") $qp)
   let accept_val = "application/vnd.xtrf-v1+json;charset=UTF-8"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"embed": $embed} | compact), body: null}
 }
 
 # Returns contacts of a given project.
@@ -3138,10 +3255,11 @@ export def "projects-contacts get" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "x-auth-access-token"))
   let base = ($base_url | default $BASE_URL)
+  if ($project_id | is-empty) { error make --unspanned { msg: "path parameter 'projectId' must be non-empty" } }
   let full_url = (build-url $base ({project_id: (encode-path-segment $project_id)} | format pattern "/projects/{project_id}/contacts"))
   let accept_val = "application/vnd.xtrf-v1+json;charset=UTF-8"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
 }
 
 # Updates contacts of a given project.
@@ -3166,19 +3284,20 @@ export def "projects-contacts update" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "x-auth-access-token"))
   let base = ($base_url | default $BASE_URL)
+  if ($project_id | is-empty) { error make --unspanned { msg: "path parameter 'projectId' must be non-empty" } }
   let full_url = (build-url $base ({project_id: (encode-path-segment $project_id)} | format pattern "/projects/{project_id}/contacts"))
   let req_body = {"additionalIds": $additional_ids, "primaryId": $primary_id, "sendBackToId": $send_back_to_id} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/vnd.xtrf-v1+json;charset=UTF-8"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: {}, body: $req_body}
 }
 
 # Returns custom fields of a given project.
 #
 # GET /projects/{projectId}/customFields
 # operationId: getCustomFields_5
-export def "projects-custom-fields get-by-projectId-by-projectId" [
+export def "projects-custom-fields get-by-project-id-by-project-id" [
   project_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -3192,10 +3311,11 @@ export def "projects-custom-fields get-by-projectId-by-projectId" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "x-auth-access-token"))
   let base = ($base_url | default $BASE_URL)
+  if ($project_id | is-empty) { error make --unspanned { msg: "path parameter 'projectId' must be non-empty" } }
   let full_url = (build-url $base ({project_id: (encode-path-segment $project_id)} | format pattern "/projects/{project_id}/customFields"))
   let accept_val = "application/vnd.xtrf-v1+json;charset=UTF-8"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
 }
 
 # Updates custom fields of a given project.
@@ -3203,7 +3323,7 @@ export def "projects-custom-fields get-by-projectId-by-projectId" [
 # PUT /projects/{projectId}/customFields
 # operationId: updateCustomFields_3
 # --customFields item shape: {key?: string, name?: string, type?: "TEXT"|"DATE"|"DATE_AND_TIME"|"NUMBER"|"CHECKBOX"|"SELECTION"|"MULTI_SELECTION", value?: record}
-export def "projects-custom-fields update-by-projectId" [
+export def "projects-custom-fields update-by-project-id" [
   project_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -3220,19 +3340,20 @@ export def "projects-custom-fields update-by-projectId" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "x-auth-access-token"))
   let base = ($base_url | default $BASE_URL)
+  if ($project_id | is-empty) { error make --unspanned { msg: "path parameter 'projectId' must be non-empty" } }
   let full_url = (build-url $base ({project_id: (encode-path-segment $project_id)} | format pattern "/projects/{project_id}/customFields"))
   let req_body = {"customFields": $custom_fields, "empty": $empty} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else if (($input | is-not-empty) and ($req_body | is-empty)) { $input } else { $req_body }
   let accept_val = "application/vnd.xtrf-v1+json;charset=UTF-8"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: {}, body: $req_body}
 }
 
 # Returns dates of a given project.
 #
 # GET /projects/{projectId}/dates
 # operationId: getDates_1
-export def "projects-dates get-by-projectId" [
+export def "projects-dates get-by-project-id" [
   project_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -3246,10 +3367,11 @@ export def "projects-dates get-by-projectId" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "x-auth-access-token"))
   let base = ($base_url | default $BASE_URL)
+  if ($project_id | is-empty) { error make --unspanned { msg: "path parameter 'projectId' must be non-empty" } }
   let full_url = (build-url $base ({project_id: (encode-path-segment $project_id)} | format pattern "/projects/{project_id}/dates"))
   let accept_val = "application/vnd.xtrf-v1+json;charset=UTF-8"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
 }
 
 # Updates dates of a given project.
@@ -3260,7 +3382,7 @@ export def "projects-dates get-by-projectId" [
 # --actualStartDate shape: {value?: int}
 # --deadline shape: {value?: int}
 # --startDate shape: {value?: int}
-export def "projects-dates update-by-projectId" [
+export def "projects-dates update-by-project-id" [
   project_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -3279,12 +3401,13 @@ export def "projects-dates update-by-projectId" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "x-auth-access-token"))
   let base = ($base_url | default $BASE_URL)
+  if ($project_id | is-empty) { error make --unspanned { msg: "path parameter 'projectId' must be non-empty" } }
   let full_url = (build-url $base ({project_id: (encode-path-segment $project_id)} | format pattern "/projects/{project_id}/dates"))
   let req_body = {"actualDeliveryDate": $actual_delivery_date, "actualStartDate": $actual_start_date, "deadline": $deadline, "startDate": $start_date} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/vnd.xtrf-v1+json;charset=UTF-8"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: {}, body: $req_body}
 }
 
 # Returns finance of a given project.
@@ -3305,10 +3428,11 @@ export def "projects-finance get" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "x-auth-access-token"))
   let base = ($base_url | default $BASE_URL)
+  if ($project_id | is-empty) { error make --unspanned { msg: "path parameter 'projectId' must be non-empty" } }
   let full_url = (build-url $base ({project_id: (encode-path-segment $project_id)} | format pattern "/projects/{project_id}/finance"))
   let accept_val = "application/vnd.xtrf-v1+json;charset=UTF-8"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
 }
 
 # Adds a payable to a project.
@@ -3349,12 +3473,13 @@ export def "projects-finance-payables create" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "x-auth-access-token"))
   let base = ($base_url | default $BASE_URL)
+  if ($project_id | is-empty) { error make --unspanned { msg: "path parameter 'projectId' must be non-empty" } }
   let full_url = (build-url $base ({project_id: (encode-path-segment $project_id)} | format pattern "/projects/{project_id}/finance/payables"))
   let req_body = {"calculationUnitId": $calculation_unit_id, "catLogFile": $cat_log_file, "currencyId": $currency_id, "description": $description, "id": $id, "ignoreMinimumCharge": $ignore_minimum_charge, "invoiceId": $invoice_id, "jobId": $job_id, "jobTypeId": $job_type_id, "languageCombination": $language_combination, "languageCombinationIdNumber": $language_combination_id_number, "minimumCharge": $minimum_charge, "quantity": $quantity, "rate": $rate, "rateOrigin": $rate_origin, "total": $total, "type": $type} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json;charset=UTF-8"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: {}, body: $req_body}
 }
 
 # Deletes a payable.
@@ -3376,10 +3501,12 @@ export def "projects-finance-payables delete" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "x-auth-access-token"))
   let base = ($base_url | default $BASE_URL)
+  if ($project_id | is-empty) { error make --unspanned { msg: "path parameter 'projectId' must be non-empty" } }
+  if ($payable_id | is-empty) { error make --unspanned { msg: "path parameter 'payableId' must be non-empty" } }
   let full_url = (build-url $base ({project_id: (encode-path-segment $project_id), payable_id: (encode-path-segment $payable_id)} | format pattern "/projects/{project_id}/finance/payables/{payable_id}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
 }
 
 # Updates a payable.
@@ -3419,12 +3546,14 @@ export def "projects-finance-payables update" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "x-auth-access-token"))
   let base = ($base_url | default $BASE_URL)
+  if ($project_id | is-empty) { error make --unspanned { msg: "path parameter 'projectId' must be non-empty" } }
+  if ($payable_id | is-empty) { error make --unspanned { msg: "path parameter 'payableId' must be non-empty" } }
   let full_url = (build-url $base ({project_id: (encode-path-segment $project_id), payable_id: (encode-path-segment $payable_id)} | format pattern "/projects/{project_id}/finance/payables/{payable_id}"))
   let req_body = {"calculationUnitId": $calculation_unit_id, "currencyId": $currency_id, "description": $description, "id": $id, "ignoreMinimumCharge": $ignore_minimum_charge, "invoiceId": $invoice_id, "jobId": $job_id, "jobTypeId": $job_type_id, "languageCombination": $language_combination, "languageCombinationIdNumber": $language_combination_id_number, "minimumCharge": $minimum_charge, "quantity": $quantity, "rate": $rate, "rateOrigin": $rate_origin, "total": $total, "type": $type} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json;charset=UTF-8"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: {}, body: $req_body}
 }
 
 # Adds a receivable to a project.
@@ -3465,12 +3594,13 @@ export def "projects-finance-receivables create" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "x-auth-access-token"))
   let base = ($base_url | default $BASE_URL)
+  if ($project_id | is-empty) { error make --unspanned { msg: "path parameter 'projectId' must be non-empty" } }
   let full_url = (build-url $base ({project_id: (encode-path-segment $project_id)} | format pattern "/projects/{project_id}/finance/receivables"))
   let req_body = {"calculationUnitId": $calculation_unit_id, "catLogFile": $cat_log_file, "currencyId": $currency_id, "description": $description, "id": $id, "ignoreMinimumCharge": $ignore_minimum_charge, "invoiceId": $invoice_id, "jobTypeId": $job_type_id, "languageCombination": $language_combination, "languageCombinationIdNumber": $language_combination_id_number, "minimumCharge": $minimum_charge, "quantity": $quantity, "rate": $rate, "rateOrigin": $rate_origin, "taskId": $task_id, "total": $total, "type": $type} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json;charset=UTF-8"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: {}, body: $req_body}
 }
 
 # Deletes a receivable.
@@ -3492,10 +3622,12 @@ export def "projects-finance-receivables delete" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "x-auth-access-token"))
   let base = ($base_url | default $BASE_URL)
+  if ($project_id | is-empty) { error make --unspanned { msg: "path parameter 'projectId' must be non-empty" } }
+  if ($receivable_id | is-empty) { error make --unspanned { msg: "path parameter 'receivableId' must be non-empty" } }
   let full_url = (build-url $base ({project_id: (encode-path-segment $project_id), receivable_id: (encode-path-segment $receivable_id)} | format pattern "/projects/{project_id}/finance/receivables/{receivable_id}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
 }
 
 # Updates a receivable.
@@ -3535,12 +3667,14 @@ export def "projects-finance-receivables update" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "x-auth-access-token"))
   let base = ($base_url | default $BASE_URL)
+  if ($project_id | is-empty) { error make --unspanned { msg: "path parameter 'projectId' must be non-empty" } }
+  if ($receivable_id | is-empty) { error make --unspanned { msg: "path parameter 'receivableId' must be non-empty" } }
   let full_url = (build-url $base ({project_id: (encode-path-segment $project_id), receivable_id: (encode-path-segment $receivable_id)} | format pattern "/projects/{project_id}/finance/receivables/{receivable_id}"))
   let req_body = {"calculationUnitId": $calculation_unit_id, "currencyId": $currency_id, "description": $description, "id": $id, "ignoreMinimumCharge": $ignore_minimum_charge, "invoiceId": $invoice_id, "jobTypeId": $job_type_id, "languageCombination": $language_combination, "languageCombinationIdNumber": $language_combination_id_number, "minimumCharge": $minimum_charge, "quantity": $quantity, "rate": $rate, "rateOrigin": $rate_origin, "taskId": $task_id, "total": $total, "type": $type} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json;charset=UTF-8"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: {}, body: $req_body}
 }
 
 # Returns instructions of a given project.
@@ -3561,17 +3695,18 @@ export def "projects-instructions get" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "x-auth-access-token"))
   let base = ($base_url | default $BASE_URL)
+  if ($project_id | is-empty) { error make --unspanned { msg: "path parameter 'projectId' must be non-empty" } }
   let full_url = (build-url $base ({project_id: (encode-path-segment $project_id)} | format pattern "/projects/{project_id}/instructions"))
   let accept_val = "application/vnd.xtrf-v1+json;charset=UTF-8"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
 }
 
 # Updates instructions of a given project.
 #
 # PUT /projects/{projectId}/instructions
 # operationId: updateInstructions_1
-export def "projects-instructions update-by-projectId" [
+export def "projects-instructions update-by-project-id" [
   project_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -3592,12 +3727,13 @@ export def "projects-instructions update-by-projectId" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "x-auth-access-token"))
   let base = ($base_url | default $BASE_URL)
+  if ($project_id | is-empty) { error make --unspanned { msg: "path parameter 'projectId' must be non-empty" } }
   let full_url = (build-url $base ({project_id: (encode-path-segment $project_id)} | format pattern "/projects/{project_id}/instructions"))
   let req_body = {"forProvider": $for_provider, "fromCustomer": $from_customer, "internal": $internal, "notes": $notes, "paymentNoteForCustomer": $payment_note_for_customer, "paymentNoteForVendor": $payment_note_for_vendor} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/vnd.xtrf-v1+json;charset=UTF-8"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: {}, body: $req_body}
 }
 
 # Creates a new language combination for a given project without creating a task.
@@ -3621,12 +3757,13 @@ export def "projects-language-combinations create" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "x-auth-access-token"))
   let base = ($base_url | default $BASE_URL)
+  if ($project_id | is-empty) { error make --unspanned { msg: "path parameter 'projectId' must be non-empty" } }
   let full_url = (build-url $base ({project_id: (encode-path-segment $project_id)} | format pattern "/projects/{project_id}/languageCombinations"))
   let req_body = {"sourceLanguageId": $source_language_id, "targetLanguageId": $target_language_id} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/vnd.xtrf-v1+json;charset=UTF-8"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: {}, body: $req_body}
 }
 
 # Creates a new task for a given project.
@@ -3662,19 +3799,20 @@ export def "projects-tasks create" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "x-auth-access-token"))
   let base = ($base_url | default $BASE_URL)
+  if ($project_id | is-empty) { error make --unspanned { msg: "path parameter 'projectId' must be non-empty" } }
   let full_url = (build-url $base ({project_id: (encode-path-segment $project_id)} | format pattern "/projects/{project_id}/tasks"))
   let req_body = {"clientTaskPONumber": $client_task_po_number, "dates": $dates, "files": $files, "instructions": $instructions, "languageCombination": $language_combination, "name": $name, "people": $people, "specializationId": $specialization_id, "workflowId": $workflow_id} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/vnd.xtrf-v1+json;charset=UTF-8"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: {}, body: $req_body}
 }
 
 # Returns providers' internal identifiers.
 #
 # GET /providers/ids
 # operationId: getAllIds_5
-export def "providers-ids get-list-by-" [
+export def "providers-ids get-list" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -3692,14 +3830,14 @@ export def "providers-ids get-list-by-" [
   let full_url = (build-url $base "/providers/ids" $qp)
   let accept_val = "application/vnd.xtrf-v1+json;charset=UTF-8"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"updatedSince": $updated_since} | compact), body: null}
 }
 
 # Returns persons' internal identifiers.
 #
 # GET /providers/persons/ids
 # operationId: getAllIds_4
-export def "providers-persons-ids get-list-by-" [
+export def "providers-persons-ids get-list" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -3717,14 +3855,14 @@ export def "providers-persons-ids get-list-by-" [
   let full_url = (build-url $base "/providers/persons/ids" $qp)
   let accept_val = "application/vnd.xtrf-v1+json;charset=UTF-8"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"updatedSince": $updated_since} | compact), body: null}
 }
 
 # Removes a person.
 #
 # DELETE /providers/persons/{personId}
 # operationId: delete_8
-export def "providers-persons delete-by-personId" [
+export def "providers-persons delete-by-person-id" [
   person_id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -3738,17 +3876,18 @@ export def "providers-persons delete-by-personId" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "x-auth-access-token"))
   let base = ($base_url | default $BASE_URL)
+  if ($person_id | is-empty) { error make --unspanned { msg: "path parameter 'personId' must be non-empty" } }
   let full_url = (build-url $base ({person_id: (encode-path-segment $person_id)} | format pattern "/providers/persons/{person_id}"))
   let accept_val = "application/vnd.xtrf-v1+json;charset=UTF-8"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
 }
 
 # Returns person details.
 #
 # GET /providers/persons/{personId}
 # operationId: getById_4
-export def "providers-persons get-by-personId" [
+export def "providers-persons get-by-person-id" [
   person_id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -3762,17 +3901,18 @@ export def "providers-persons get-by-personId" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "x-auth-access-token"))
   let base = ($base_url | default $BASE_URL)
+  if ($person_id | is-empty) { error make --unspanned { msg: "path parameter 'personId' must be non-empty" } }
   let full_url = (build-url $base ({person_id: (encode-path-segment $person_id)} | format pattern "/providers/persons/{person_id}"))
   let accept_val = "application/vnd.xtrf-v1+json;charset=UTF-8"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
 }
 
 # Returns contact of a given person.
 #
 # GET /providers/persons/{personId}/contact
 # operationId: getContact_2
-export def "providers-persons-contact get-by-personId" [
+export def "providers-persons-contact get-by-person-id" [
   person_id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -3786,17 +3926,18 @@ export def "providers-persons-contact get-by-personId" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "x-auth-access-token"))
   let base = ($base_url | default $BASE_URL)
+  if ($person_id | is-empty) { error make --unspanned { msg: "path parameter 'personId' must be non-empty" } }
   let full_url = (build-url $base ({person_id: (encode-path-segment $person_id)} | format pattern "/providers/persons/{person_id}/contact"))
   let accept_val = "application/vnd.xtrf-v1+json;charset=UTF-8"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
 }
 
 # Returns custom fields of a given person.
 #
 # GET /providers/persons/{personId}/customFields
 # operationId: getCustomFields_2
-export def "providers-persons-custom-fields get-by-personId" [
+export def "providers-persons-custom-fields get-by-person-id" [
   person_id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -3810,10 +3951,11 @@ export def "providers-persons-custom-fields get-by-personId" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "x-auth-access-token"))
   let base = ($base_url | default $BASE_URL)
+  if ($person_id | is-empty) { error make --unspanned { msg: "path parameter 'personId' must be non-empty" } }
   let full_url = (build-url $base ({person_id: (encode-path-segment $person_id)} | format pattern "/providers/persons/{person_id}/customFields"))
   let accept_val = "application/vnd.xtrf-v1+json;charset=UTF-8"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
 }
 
 # Sends invitation to Vendor Portal.
@@ -3834,17 +3976,18 @@ export def "providers-persons-notification-invitation send" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "x-auth-access-token"))
   let base = ($base_url | default $BASE_URL)
+  if ($person_id | is-empty) { error make --unspanned { msg: "path parameter 'personId' must be non-empty" } }
   let full_url = (build-url $base ({person_id: (encode-path-segment $person_id)} | format pattern "/providers/persons/{person_id}/notification/invitation"))
   let accept_val = "application/vnd.xtrf-v1+json;charset=UTF-8"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
 }
 
 # Removes a provider price list.
 #
 # DELETE /providers/priceLists/{priceListId}
 # operationId: delete_9
-export def "providers-price-lists delete-by-priceListId" [
+export def "providers-price-lists delete-by-price-list-id" [
   price_list_id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -3858,17 +4001,18 @@ export def "providers-price-lists delete-by-priceListId" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "x-auth-access-token"))
   let base = ($base_url | default $BASE_URL)
+  if ($price_list_id | is-empty) { error make --unspanned { msg: "path parameter 'priceListId' must be non-empty" } }
   let full_url = (build-url $base ({price_list_id: (encode-path-segment $price_list_id)} | format pattern "/providers/priceLists/{price_list_id}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
 }
 
 # Removes a provider.
 #
 # DELETE /providers/{providerId}
 # operationId: delete_10
-export def "providers delete-by-providerId" [
+export def "providers delete-by-provider-id" [
   provider_id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -3882,17 +4026,18 @@ export def "providers delete-by-providerId" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "x-auth-access-token"))
   let base = ($base_url | default $BASE_URL)
+  if ($provider_id | is-empty) { error make --unspanned { msg: "path parameter 'providerId' must be non-empty" } }
   let full_url = (build-url $base ({provider_id: (encode-path-segment $provider_id)} | format pattern "/providers/{provider_id}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
 }
 
 # Returns provider details.
 #
 # GET /providers/{providerId}
 # operationId: getById_5
-export def "providers get-by-providerId" [
+export def "providers get-by-provider-id" [
   provider_id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -3907,18 +4052,19 @@ export def "providers get-by-providerId" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "x-auth-access-token"))
   let base = ($base_url | default $BASE_URL)
+  if ($provider_id | is-empty) { error make --unspanned { msg: "path parameter 'providerId' must be non-empty" } }
   let qp = [(serialize-qp "embed" $embed "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({provider_id: (encode-path-segment $provider_id)} | format pattern "/providers/{provider_id}") $qp)
   let accept_val = "application/vnd.xtrf-v1+json;charset=UTF-8"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"embed": $embed} | compact), body: null}
 }
 
 # Returns address of a given provider.
 #
 # GET /providers/{providerId}/address
 # operationId: getAddress_1
-export def "providers-address get-by-providerId" [
+export def "providers-address get-by-provider-id" [
   provider_id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -3932,10 +4078,11 @@ export def "providers-address get-by-providerId" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "x-auth-access-token"))
   let base = ($base_url | default $BASE_URL)
+  if ($provider_id | is-empty) { error make --unspanned { msg: "path parameter 'providerId' must be non-empty" } }
   let full_url = (build-url $base ({provider_id: (encode-path-segment $provider_id)} | format pattern "/providers/{provider_id}/address"))
   let accept_val = "application/vnd.xtrf-v1+json;charset=UTF-8"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
 }
 
 # Returns competencies of a given provider.
@@ -3956,17 +4103,18 @@ export def "providers-competencies get" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "x-auth-access-token"))
   let base = ($base_url | default $BASE_URL)
+  if ($provider_id | is-empty) { error make --unspanned { msg: "path parameter 'providerId' must be non-empty" } }
   let full_url = (build-url $base ({provider_id: (encode-path-segment $provider_id)} | format pattern "/providers/{provider_id}/competencies"))
   let accept_val = "application/vnd.xtrf-v1+json;charset=UTF-8"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
 }
 
 # Returns contact of a given provider.
 #
 # GET /providers/{providerId}/contact
 # operationId: getContact_3
-export def "providers-contact get-by-providerId" [
+export def "providers-contact get-by-provider-id" [
   provider_id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -3980,17 +4128,18 @@ export def "providers-contact get-by-providerId" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "x-auth-access-token"))
   let base = ($base_url | default $BASE_URL)
+  if ($provider_id | is-empty) { error make --unspanned { msg: "path parameter 'providerId' must be non-empty" } }
   let full_url = (build-url $base ({provider_id: (encode-path-segment $provider_id)} | format pattern "/providers/{provider_id}/contact"))
   let accept_val = "application/vnd.xtrf-v1+json;charset=UTF-8"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
 }
 
 # Returns correspondence address of a given provider.
 #
 # GET /providers/{providerId}/correspondenceAddress
 # operationId: getCorrespondenceAddress_1
-export def "providers-correspondence-address get-by-providerId" [
+export def "providers-correspondence-address get-by-provider-id" [
   provider_id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -4004,17 +4153,18 @@ export def "providers-correspondence-address get-by-providerId" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "x-auth-access-token"))
   let base = ($base_url | default $BASE_URL)
+  if ($provider_id | is-empty) { error make --unspanned { msg: "path parameter 'providerId' must be non-empty" } }
   let full_url = (build-url $base ({provider_id: (encode-path-segment $provider_id)} | format pattern "/providers/{provider_id}/correspondenceAddress"))
   let accept_val = "application/vnd.xtrf-v1+json;charset=UTF-8"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
 }
 
 # Returns custom fields of a given provider.
 #
 # GET /providers/{providerId}/customFields
 # operationId: getCustomFields_3
-export def "providers-custom-fields get-by-providerId" [
+export def "providers-custom-fields get-by-provider-id" [
   provider_id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -4028,17 +4178,18 @@ export def "providers-custom-fields get-by-providerId" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "x-auth-access-token"))
   let base = ($base_url | default $BASE_URL)
+  if ($provider_id | is-empty) { error make --unspanned { msg: "path parameter 'providerId' must be non-empty" } }
   let full_url = (build-url $base ({provider_id: (encode-path-segment $provider_id)} | format pattern "/providers/{provider_id}/customFields"))
   let accept_val = "application/vnd.xtrf-v1+json;charset=UTF-8"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
 }
 
 # Sends invitations to Vendor Portal.
 #
 # POST /providers/{providerId}/notification/invitation
 # operationId: sendInvitations_1
-export def "providers-notification-invitation send-by-providerId" [
+export def "providers-notification-invitation send-by-provider-id" [
   provider_id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -4052,17 +4203,18 @@ export def "providers-notification-invitation send-by-providerId" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "x-auth-access-token"))
   let base = ($base_url | default $BASE_URL)
+  if ($provider_id | is-empty) { error make --unspanned { msg: "path parameter 'providerId' must be non-empty" } }
   let full_url = (build-url $base ({provider_id: (encode-path-segment $provider_id)} | format pattern "/providers/{provider_id}/notification/invitation"))
   let accept_val = "application/vnd.xtrf-v1+json;charset=UTF-8"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
 }
 
 # Returns quotes' internal identifiers.
 #
 # GET /quotes/ids
 # operationId: getAllIds_7
-export def "quotes-ids get-list-by-" [
+export def "quotes-ids get-list" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -4080,14 +4232,14 @@ export def "quotes-ids get-list-by-" [
   let full_url = (build-url $base "/quotes/ids" $qp)
   let accept_val = "application/vnd.xtrf-v1+json;charset=UTF-8"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"updatedSince": $updated_since} | compact), body: null}
 }
 
 # Removes a quote.
 #
 # DELETE /quotes/{quoteId}
 # operationId: delete_13
-export def "quotes delete-by-quoteId" [
+export def "quotes delete-by-quote-id" [
   quote_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -4101,17 +4253,18 @@ export def "quotes delete-by-quoteId" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "x-auth-access-token"))
   let base = ($base_url | default $BASE_URL)
+  if ($quote_id | is-empty) { error make --unspanned { msg: "path parameter 'quoteId' must be non-empty" } }
   let full_url = (build-url $base ({quote_id: (encode-path-segment $quote_id)} | format pattern "/quotes/{quote_id}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
 }
 
 # Returns quote details.
 #
 # GET /quotes/{quoteId}
 # operationId: getById_8
-export def "quotes get-by-quoteId-by-quoteId" [
+export def "quotes get-by-quote-id-by-quote-id" [
   quote_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -4126,18 +4279,19 @@ export def "quotes get-by-quoteId-by-quoteId" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "x-auth-access-token"))
   let base = ($base_url | default $BASE_URL)
+  if ($quote_id | is-empty) { error make --unspanned { msg: "path parameter 'quoteId' must be non-empty" } }
   let qp = [(serialize-qp "embed" $embed "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({quote_id: (encode-path-segment $quote_id)} | format pattern "/quotes/{quote_id}") $qp)
   let accept_val = "application/vnd.xtrf-v1+json;charset=UTF-8"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"embed": $embed} | compact), body: null}
 }
 
 # Sends a quote for customer confirmation.
 #
 # POST /quotes/{quoteId}/confirmation/send
 # operationId: send_1
-export def "quotes-confirmation-send send-by-quoteId" [
+export def "quotes-confirmation-send send-by-quote-id" [
   quote_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -4151,17 +4305,18 @@ export def "quotes-confirmation-send send-by-quoteId" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "x-auth-access-token"))
   let base = ($base_url | default $BASE_URL)
+  if ($quote_id | is-empty) { error make --unspanned { msg: "path parameter 'quoteId' must be non-empty" } }
   let full_url = (build-url $base ({quote_id: (encode-path-segment $quote_id)} | format pattern "/quotes/{quote_id}/confirmation/send"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
 }
 
 # Returns custom fields of a given quote.
 #
 # GET /quotes/{quoteId}/customFields
 # operationId: getCustomFields_6
-export def "quotes-custom-fields get-by-quoteId-by-quoteId" [
+export def "quotes-custom-fields get-by-quote-id-by-quote-id" [
   quote_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -4175,10 +4330,11 @@ export def "quotes-custom-fields get-by-quoteId-by-quoteId" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "x-auth-access-token"))
   let base = ($base_url | default $BASE_URL)
+  if ($quote_id | is-empty) { error make --unspanned { msg: "path parameter 'quoteId' must be non-empty" } }
   let full_url = (build-url $base ({quote_id: (encode-path-segment $quote_id)} | format pattern "/quotes/{quote_id}/customFields"))
   let accept_val = "application/vnd.xtrf-v1+json;charset=UTF-8"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
 }
 
 # Updates custom fields of a given quote.
@@ -4186,7 +4342,7 @@ export def "quotes-custom-fields get-by-quoteId-by-quoteId" [
 # PUT /quotes/{quoteId}/customFields
 # operationId: updateCustomFields_4
 # --customFields item shape: {key?: string, name?: string, type?: "TEXT"|"DATE"|"DATE_AND_TIME"|"NUMBER"|"CHECKBOX"|"SELECTION"|"MULTI_SELECTION", value?: record}
-export def "quotes-custom-fields update-by-quoteId" [
+export def "quotes-custom-fields update-by-quote-id" [
   quote_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -4203,19 +4359,20 @@ export def "quotes-custom-fields update-by-quoteId" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "x-auth-access-token"))
   let base = ($base_url | default $BASE_URL)
+  if ($quote_id | is-empty) { error make --unspanned { msg: "path parameter 'quoteId' must be non-empty" } }
   let full_url = (build-url $base ({quote_id: (encode-path-segment $quote_id)} | format pattern "/quotes/{quote_id}/customFields"))
   let req_body = {"customFields": $custom_fields, "empty": $empty} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else if (($input | is-not-empty) and ($req_body | is-empty)) { $input } else { $req_body }
   let accept_val = "application/vnd.xtrf-v1+json;charset=UTF-8"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: {}, body: $req_body}
 }
 
 # Returns dates of a given quote.
 #
 # GET /quotes/{quoteId}/dates
 # operationId: getDates_2
-export def "quotes-dates get-by-quoteId" [
+export def "quotes-dates get-by-quote-id" [
   quote_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -4229,17 +4386,18 @@ export def "quotes-dates get-by-quoteId" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "x-auth-access-token"))
   let base = ($base_url | default $BASE_URL)
+  if ($quote_id | is-empty) { error make --unspanned { msg: "path parameter 'quoteId' must be non-empty" } }
   let full_url = (build-url $base ({quote_id: (encode-path-segment $quote_id)} | format pattern "/quotes/{quote_id}/dates"))
   let accept_val = "application/vnd.xtrf-v1+json;charset=UTF-8"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
 }
 
 # Returns finance of a given quote.
 #
 # GET /quotes/{quoteId}/finance
 # operationId: getFinance_1
-export def "quotes-finance get-by-quoteId-by-quoteId" [
+export def "quotes-finance get-by-quote-id-by-quote-id" [
   quote_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -4253,10 +4411,11 @@ export def "quotes-finance get-by-quoteId-by-quoteId" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "x-auth-access-token"))
   let base = ($base_url | default $BASE_URL)
+  if ($quote_id | is-empty) { error make --unspanned { msg: "path parameter 'quoteId' must be non-empty" } }
   let full_url = (build-url $base ({quote_id: (encode-path-segment $quote_id)} | format pattern "/quotes/{quote_id}/finance"))
   let accept_val = "application/vnd.xtrf-v1+json;charset=UTF-8"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
 }
 
 # Adds a payable.
@@ -4265,7 +4424,7 @@ export def "quotes-finance get-by-quoteId-by-quoteId" [
 # operationId: createPayable_1
 # --catLogFile shape: {content?: string, name?: string, token?: string, url?: string}
 # --languageCombination shape: {sourceLanguageId?: int, targetLanguageId?: int}
-export def "quotes-finance-payables create-by-quoteId-by-quoteId" [
+export def "quotes-finance-payables create-by-quote-id-by-quote-id" [
   quote_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -4297,19 +4456,20 @@ export def "quotes-finance-payables create-by-quoteId-by-quoteId" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "x-auth-access-token"))
   let base = ($base_url | default $BASE_URL)
+  if ($quote_id | is-empty) { error make --unspanned { msg: "path parameter 'quoteId' must be non-empty" } }
   let full_url = (build-url $base ({quote_id: (encode-path-segment $quote_id)} | format pattern "/quotes/{quote_id}/finance/payables"))
   let req_body = {"calculationUnitId": $calculation_unit_id, "catLogFile": $cat_log_file, "currencyId": $currency_id, "description": $description, "id": $id, "ignoreMinimumCharge": $ignore_minimum_charge, "invoiceId": $invoice_id, "jobId": $job_id, "jobTypeId": $job_type_id, "languageCombination": $language_combination, "languageCombinationIdNumber": $language_combination_id_number, "minimumCharge": $minimum_charge, "quantity": $quantity, "rate": $rate, "rateOrigin": $rate_origin, "total": $total, "type": $type} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: {}, body: $req_body}
 }
 
 # Deletes a payable.
 #
 # DELETE /quotes/{quoteId}/finance/payables/{payableId}
 # operationId: deletePayable_1
-export def "quotes-finance-payables delete-by-quoteId-payableId-by-quoteId-payableId" [
+export def "quotes-finance-payables delete-by-quote-id-payable-id-by-quote-id-payable-id" [
   quote_id: string
   payable_id: int
   --base-url(-b): string@base-url-completer # API base URL
@@ -4324,10 +4484,12 @@ export def "quotes-finance-payables delete-by-quoteId-payableId-by-quoteId-payab
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "x-auth-access-token"))
   let base = ($base_url | default $BASE_URL)
+  if ($quote_id | is-empty) { error make --unspanned { msg: "path parameter 'quoteId' must be non-empty" } }
+  if ($payable_id | is-empty) { error make --unspanned { msg: "path parameter 'payableId' must be non-empty" } }
   let full_url = (build-url $base ({quote_id: (encode-path-segment $quote_id), payable_id: (encode-path-segment $payable_id)} | format pattern "/quotes/{quote_id}/finance/payables/{payable_id}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
 }
 
 # Updates a payable.
@@ -4335,7 +4497,7 @@ export def "quotes-finance-payables delete-by-quoteId-payableId-by-quoteId-payab
 # PUT /quotes/{quoteId}/finance/payables/{payableId}
 # operationId: updatePayable_1
 # --languageCombination shape: {sourceLanguageId?: int, targetLanguageId?: int}
-export def "quotes-finance-payables update-by-quoteId-payableId-by-quoteId-payableId" [
+export def "quotes-finance-payables update-by-quote-id-payable-id-by-quote-id-payable-id" [
   quote_id: string
   payable_id: int
   --base-url(-b): string@base-url-completer # API base URL
@@ -4367,12 +4529,14 @@ export def "quotes-finance-payables update-by-quoteId-payableId-by-quoteId-payab
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "x-auth-access-token"))
   let base = ($base_url | default $BASE_URL)
+  if ($quote_id | is-empty) { error make --unspanned { msg: "path parameter 'quoteId' must be non-empty" } }
+  if ($payable_id | is-empty) { error make --unspanned { msg: "path parameter 'payableId' must be non-empty" } }
   let full_url = (build-url $base ({quote_id: (encode-path-segment $quote_id), payable_id: (encode-path-segment $payable_id)} | format pattern "/quotes/{quote_id}/finance/payables/{payable_id}"))
   let req_body = {"calculationUnitId": $calculation_unit_id, "currencyId": $currency_id, "description": $description, "id": $id, "ignoreMinimumCharge": $ignore_minimum_charge, "invoiceId": $invoice_id, "jobId": $job_id, "jobTypeId": $job_type_id, "languageCombination": $language_combination, "languageCombinationIdNumber": $language_combination_id_number, "minimumCharge": $minimum_charge, "quantity": $quantity, "rate": $rate, "rateOrigin": $rate_origin, "total": $total, "type": $type} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: {}, body: $req_body}
 }
 
 # Adds a receivable.
@@ -4381,7 +4545,7 @@ export def "quotes-finance-payables update-by-quoteId-payableId-by-quoteId-payab
 # operationId: createReceivable_1
 # --catLogFile shape: {content?: string, name?: string, token?: string, url?: string}
 # --languageCombination shape: {sourceLanguageId?: int, targetLanguageId?: int}
-export def "quotes-finance-receivables create-by-quoteId-by-quoteId" [
+export def "quotes-finance-receivables create-by-quote-id-by-quote-id" [
   quote_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -4413,19 +4577,20 @@ export def "quotes-finance-receivables create-by-quoteId-by-quoteId" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "x-auth-access-token"))
   let base = ($base_url | default $BASE_URL)
+  if ($quote_id | is-empty) { error make --unspanned { msg: "path parameter 'quoteId' must be non-empty" } }
   let full_url = (build-url $base ({quote_id: (encode-path-segment $quote_id)} | format pattern "/quotes/{quote_id}/finance/receivables"))
   let req_body = {"calculationUnitId": $calculation_unit_id, "catLogFile": $cat_log_file, "currencyId": $currency_id, "description": $description, "id": $id, "ignoreMinimumCharge": $ignore_minimum_charge, "invoiceId": $invoice_id, "jobTypeId": $job_type_id, "languageCombination": $language_combination, "languageCombinationIdNumber": $language_combination_id_number, "minimumCharge": $minimum_charge, "quantity": $quantity, "rate": $rate, "rateOrigin": $rate_origin, "taskId": $task_id, "total": $total, "type": $type} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: {}, body: $req_body}
 }
 
 # Deletes a receivable.
 #
 # DELETE /quotes/{quoteId}/finance/receivables/{receivableId}
 # operationId: deleteReceivable_1
-export def "quotes-finance-receivables delete-by-quoteId-receivableId-by-quoteId-receivableId" [
+export def "quotes-finance-receivables delete-by-quote-id-receivable-id-by-quote-id-receivable-id" [
   quote_id: string
   receivable_id: int
   --base-url(-b): string@base-url-completer # API base URL
@@ -4440,10 +4605,12 @@ export def "quotes-finance-receivables delete-by-quoteId-receivableId-by-quoteId
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "x-auth-access-token"))
   let base = ($base_url | default $BASE_URL)
+  if ($quote_id | is-empty) { error make --unspanned { msg: "path parameter 'quoteId' must be non-empty" } }
+  if ($receivable_id | is-empty) { error make --unspanned { msg: "path parameter 'receivableId' must be non-empty" } }
   let full_url = (build-url $base ({quote_id: (encode-path-segment $quote_id), receivable_id: (encode-path-segment $receivable_id)} | format pattern "/quotes/{quote_id}/finance/receivables/{receivable_id}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
 }
 
 # Updates a receivable.
@@ -4451,7 +4618,7 @@ export def "quotes-finance-receivables delete-by-quoteId-receivableId-by-quoteId
 # PUT /quotes/{quoteId}/finance/receivables/{receivableId}
 # operationId: updateReceivable_1
 # --languageCombination shape: {sourceLanguageId?: int, targetLanguageId?: int}
-export def "quotes-finance-receivables update-by-quoteId-receivableId-by-quoteId-receivableId" [
+export def "quotes-finance-receivables update-by-quote-id-receivable-id-by-quote-id-receivable-id" [
   quote_id: string
   receivable_id: int
   --base-url(-b): string@base-url-completer # API base URL
@@ -4483,19 +4650,21 @@ export def "quotes-finance-receivables update-by-quoteId-receivableId-by-quoteId
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "x-auth-access-token"))
   let base = ($base_url | default $BASE_URL)
+  if ($quote_id | is-empty) { error make --unspanned { msg: "path parameter 'quoteId' must be non-empty" } }
+  if ($receivable_id | is-empty) { error make --unspanned { msg: "path parameter 'receivableId' must be non-empty" } }
   let full_url = (build-url $base ({quote_id: (encode-path-segment $quote_id), receivable_id: (encode-path-segment $receivable_id)} | format pattern "/quotes/{quote_id}/finance/receivables/{receivable_id}"))
   let req_body = {"calculationUnitId": $calculation_unit_id, "currencyId": $currency_id, "description": $description, "id": $id, "ignoreMinimumCharge": $ignore_minimum_charge, "invoiceId": $invoice_id, "jobTypeId": $job_type_id, "languageCombination": $language_combination, "languageCombinationIdNumber": $language_combination_id_number, "minimumCharge": $minimum_charge, "quantity": $quantity, "rate": $rate, "rateOrigin": $rate_origin, "taskId": $task_id, "total": $total, "type": $type} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: {}, body: $req_body}
 }
 
 # Returns instructions of a given quote.
 #
 # GET /quotes/{quoteId}/instructions
 # operationId: getInstructions_1
-export def "quotes-instructions get-by-quoteId" [
+export def "quotes-instructions get-by-quote-id" [
   quote_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -4509,17 +4678,18 @@ export def "quotes-instructions get-by-quoteId" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "x-auth-access-token"))
   let base = ($base_url | default $BASE_URL)
+  if ($quote_id | is-empty) { error make --unspanned { msg: "path parameter 'quoteId' must be non-empty" } }
   let full_url = (build-url $base ({quote_id: (encode-path-segment $quote_id)} | format pattern "/quotes/{quote_id}/instructions"))
   let accept_val = "application/vnd.xtrf-v1+json;charset=UTF-8"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
 }
 
 # Updates instructions of a given quote.
 #
 # PUT /quotes/{quoteId}/instructions
 # operationId: updateInstructions_2
-export def "quotes-instructions update-by-quoteId" [
+export def "quotes-instructions update-by-quote-id" [
   quote_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -4540,19 +4710,20 @@ export def "quotes-instructions update-by-quoteId" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "x-auth-access-token"))
   let base = ($base_url | default $BASE_URL)
+  if ($quote_id | is-empty) { error make --unspanned { msg: "path parameter 'quoteId' must be non-empty" } }
   let full_url = (build-url $base ({quote_id: (encode-path-segment $quote_id)} | format pattern "/quotes/{quote_id}/instructions"))
   let req_body = {"forProvider": $for_provider, "fromCustomer": $from_customer, "internal": $internal, "notes": $notes, "paymentNoteForCustomer": $payment_note_for_customer, "paymentNoteForVendor": $payment_note_for_vendor} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/vnd.xtrf-v1+json;charset=UTF-8"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: {}, body: $req_body}
 }
 
 # Creates a new language combination for a given quote without creating a task.
 #
 # POST /quotes/{quoteId}/languageCombinations
 # operationId: createLanguageCombination_1
-export def "quotes-language-combinations create-by-quoteId" [
+export def "quotes-language-combinations create-by-quote-id" [
   quote_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -4569,12 +4740,13 @@ export def "quotes-language-combinations create-by-quoteId" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "x-auth-access-token"))
   let base = ($base_url | default $BASE_URL)
+  if ($quote_id | is-empty) { error make --unspanned { msg: "path parameter 'quoteId' must be non-empty" } }
   let full_url = (build-url $base ({quote_id: (encode-path-segment $quote_id)} | format pattern "/quotes/{quote_id}/languageCombinations"))
   let req_body = {"sourceLanguageId": $source_language_id, "targetLanguageId": $target_language_id} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/vnd.xtrf-v1+json;charset=UTF-8"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: {}, body: $req_body}
 }
 
 # Starts a quote.
@@ -4595,10 +4767,11 @@ export def "quotes-start start" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "x-auth-access-token"))
   let base = ($base_url | default $BASE_URL)
+  if ($quote_id | is-empty) { error make --unspanned { msg: "path parameter 'quoteId' must be non-empty" } }
   let full_url = (build-url $base ({quote_id: (encode-path-segment $quote_id)} | format pattern "/quotes/{quote_id}/start"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
 }
 
 # Creates a new task for a given quote.
@@ -4612,7 +4785,7 @@ export def "quotes-start start" [
 # --jobs shape: {jobCount?: int, jobIds?: list<int>}
 # --languageCombination shape: {sourceLanguageId?: int, targetLanguageId?: int}
 # --people shape: {customerContacts?: record, responsiblePersons?: record}
-export def "quotes-tasks create-by-quoteId" [
+export def "quotes-tasks create-by-quote-id" [
   quote_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -4640,12 +4813,13 @@ export def "quotes-tasks create-by-quoteId" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "x-auth-access-token"))
   let base = ($base_url | default $BASE_URL)
+  if ($quote_id | is-empty) { error make --unspanned { msg: "path parameter 'quoteId' must be non-empty" } }
   let full_url = (build-url $base ({quote_id: (encode-path-segment $quote_id)} | format pattern "/quotes/{quote_id}/tasks"))
   let req_body = {"clientTaskPONumber": $client_task_po_number, "customFields": $custom_fields, "dates": $dates, "finance": $finance, "id": $id, "idNumber": $id_number, "instructions": $instructions, "jobs": $jobs, "languageCombination": $language_combination, "name": $name, "people": $people, "projectId": $project_id, "quoteId": $body_quote_id} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/vnd.xtrf-v1+json;charset=UTF-8"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: {}, body: $req_body}
 }
 
 # Exports reports definition to XML.
@@ -4672,7 +4846,7 @@ export def "reports-export-xml export" [
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/vnd.xtrf-v1+json;charset=UTF-8"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json;charset=UTF-8" $req_body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json;charset=UTF-8" $req_body {query: {}, body: $req_body}
 }
 
 # Imports reports definition from XML.
@@ -4699,14 +4873,14 @@ export def "reports-import-xml import" [
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/vnd.xtrf-v1+json;charset=UTF-8"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json;charset=UTF-8" $req_body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json;charset=UTF-8" $req_body {query: {}, body: $req_body}
 }
 
 # Removes a report.
 #
 # DELETE /reports/{reportId}
 # operationId: delete_11
-export def "reports delete-by-reportId" [
+export def "reports delete-by-report-id" [
   report_id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -4720,17 +4894,18 @@ export def "reports delete-by-reportId" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "x-auth-access-token"))
   let base = ($base_url | default $BASE_URL)
+  if ($report_id | is-empty) { error make --unspanned { msg: "path parameter 'reportId' must be non-empty" } }
   let full_url = (build-url $base ({report_id: (encode-path-segment $report_id)} | format pattern "/reports/{report_id}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
 }
 
 # Duplicates a report.
 #
 # POST /reports/{reportId}/duplicate
 # operationId: duplicate_1
-export def "reports-duplicate create-by-reportId" [
+export def "reports-duplicate create-by-report-id" [
   report_id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -4744,10 +4919,11 @@ export def "reports-duplicate create-by-reportId" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "x-auth-access-token"))
   let base = ($base_url | default $BASE_URL)
+  if ($report_id | is-empty) { error make --unspanned { msg: "path parameter 'reportId' must be non-empty" } }
   let full_url = (build-url $base ({report_id: (encode-path-segment $report_id)} | format pattern "/reports/{report_id}/duplicate"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
 }
 
 # Marks report as preferred or not.
@@ -4770,12 +4946,13 @@ export def "reports-preferred update" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "x-auth-access-token"))
   let base = ($base_url | default $BASE_URL)
+  if ($report_id | is-empty) { error make --unspanned { msg: "path parameter 'reportId' must be non-empty" } }
   let full_url = (build-url $base ({report_id: (encode-path-segment $report_id)} | format pattern "/reports/{report_id}/preferred"))
   let req_body = {"preferred": $preferred} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json;charset=UTF-8" $req_body
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json;charset=UTF-8" $req_body {query: {}, body: $req_body}
 }
 
 # Generates CSV content for a report.
@@ -4796,10 +4973,11 @@ export def "reports-result-csv generate" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "x-auth-access-token"))
   let base = ($base_url | default $BASE_URL)
+  if ($report_id | is-empty) { error make --unspanned { msg: "path parameter 'reportId' must be non-empty" } }
   let full_url = (build-url $base ({report_id: (encode-path-segment $report_id)} | format pattern "/reports/{report_id}/result/csv"))
   let accept_val = "application/vnd.xtrf-v1+json;charset=UTF-8"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
 }
 
 # Generates printer friendly content for a report.
@@ -4820,10 +4998,11 @@ export def "reports-result-printer-friendly generate" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "x-auth-access-token"))
   let base = ($base_url | default $BASE_URL)
+  if ($report_id | is-empty) { error make --unspanned { msg: "path parameter 'reportId' must be non-empty" } }
   let full_url = (build-url $base ({report_id: (encode-path-segment $report_id)} | format pattern "/reports/{report_id}/result/printerFriendly"))
   let accept_val = "application/vnd.xtrf-v1+json;charset=UTF-8"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
 }
 
 # Returns active services list
@@ -4848,14 +5027,14 @@ export def "services-active get-list" [
   let full_url = (build-url $base "/services/active" $qp)
   let accept_val = "application/vnd.xtrf-v1+json;charset=UTF-8"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"nameEquals": $name_equals} | compact), body: null}
 }
 
 # Returns services list
 #
 # GET /services/all
 # operationId: getAll_3
-export def "services-all get-by-" [
+export def "services-all get" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -4873,14 +5052,14 @@ export def "services-all get-by-" [
   let full_url = (build-url $base "/services/all" $qp)
   let accept_val = "application/vnd.xtrf-v1+json;charset=UTF-8"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"nameEquals": $name_equals} | compact), body: null}
 }
 
 # Returns all subscriptions
 #
 # GET /subscription
 # operationId: getAll_4
-export def "subscription get-list-by-" [
+export def "subscription get-list" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -4896,7 +5075,7 @@ export def "subscription get-list-by-" [
   let full_url = (build-url $base "/subscription")
   let accept_val = "application/vnd.xtrf-v1+json;charset=UTF-8"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
 }
 
 # Subscribe to event
@@ -4926,7 +5105,7 @@ export def "subscription subscribe" [
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/vnd.xtrf-v1+json;charset=UTF-8"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json;charset=UTF-8" $req_body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json;charset=UTF-8" $req_body {query: {}, body: $req_body}
 }
 
 # This method can be used to determine if hooks are supported.
@@ -4949,7 +5128,7 @@ export def "subscription-supports get-are-hooks-supported" [
   let full_url = (build-url $base "/subscription/supports")
   let accept_val = "application/vnd.xtrf-v1+json;charset=UTF-8"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
 }
 
 # Unsubscribe from event
@@ -4970,17 +5149,18 @@ export def "subscription unsubscribe" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "x-auth-access-token"))
   let base = ($base_url | default $BASE_URL)
+  if ($subscription_id | is-empty) { error make --unspanned { msg: "path parameter 'subscriptionId' must be non-empty" } }
   let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id)} | format pattern "/subscription/{subscription_id}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
 }
 
 # Removes a task.
 #
 # DELETE /tasks/{taskId}
 # operationId: delete_14
-export def "tasks delete-by-taskId" [
+export def "tasks delete-by-task-id" [
   task_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -4997,11 +5177,12 @@ export def "tasks delete-by-taskId" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "x-auth-access-token"))
   let base = ($base_url | default $BASE_URL)
+  if ($task_id | is-empty) { error make --unspanned { msg: "path parameter 'taskId' must be non-empty" } }
   let qp = [(serialize-qp "removeFilesFromDisc" $remove_files_from_disc "scalar") (serialize-qp "removeExternalProjects" $remove_external_projects "scalar") (serialize-qp "forceJobsRemoval" $force_jobs_removal "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({task_id: (encode-path-segment $task_id)} | format pattern "/tasks/{task_id}") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"removeFilesFromDisc": $remove_files_from_disc, "removeExternalProjects": $remove_external_projects, "forceJobsRemoval": $force_jobs_removal} | compact), body: null}
 }
 
 # Updates Client Task PO Number of a given task.
@@ -5024,19 +5205,20 @@ export def "tasks-client-task-po-number update" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "x-auth-access-token"))
   let base = ($base_url | default $BASE_URL)
+  if ($task_id | is-empty) { error make --unspanned { msg: "path parameter 'taskId' must be non-empty" } }
   let full_url = (build-url $base ({task_id: (encode-path-segment $task_id)} | format pattern "/tasks/{task_id}/clientTaskPONumber"))
   let req_body = {"value": $value} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/vnd.xtrf-v1+json;charset=UTF-8"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: {}, body: $req_body}
 }
 
 # Returns contacts of a given task.
 #
 # GET /tasks/{taskId}/contacts
 # operationId: getContacts_1
-export def "tasks-contacts get-by-taskId" [
+export def "tasks-contacts get-by-task-id" [
   task_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -5050,17 +5232,18 @@ export def "tasks-contacts get-by-taskId" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "x-auth-access-token"))
   let base = ($base_url | default $BASE_URL)
+  if ($task_id | is-empty) { error make --unspanned { msg: "path parameter 'taskId' must be non-empty" } }
   let full_url = (build-url $base ({task_id: (encode-path-segment $task_id)} | format pattern "/tasks/{task_id}/contacts"))
   let accept_val = "application/vnd.xtrf-v1+json;charset=UTF-8"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
 }
 
 # Updates contacts of a given task.
 #
 # PUT /tasks/{taskId}/contacts
 # operationId: updateContacts_1
-export def "tasks-contacts update-by-taskId" [
+export def "tasks-contacts update-by-task-id" [
   task_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -5078,19 +5261,20 @@ export def "tasks-contacts update-by-taskId" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "x-auth-access-token"))
   let base = ($base_url | default $BASE_URL)
+  if ($task_id | is-empty) { error make --unspanned { msg: "path parameter 'taskId' must be non-empty" } }
   let full_url = (build-url $base ({task_id: (encode-path-segment $task_id)} | format pattern "/tasks/{task_id}/contacts"))
   let req_body = {"additionalIds": $additional_ids, "primaryId": $primary_id, "sendBackToId": $send_back_to_id} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/vnd.xtrf-v1+json;charset=UTF-8"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: {}, body: $req_body}
 }
 
 # Returns custom fields of a given task.
 #
 # GET /tasks/{taskId}/customFields
 # operationId: getCustomFields_7
-export def "tasks-custom-fields get-by-taskId" [
+export def "tasks-custom-fields get-by-task-id" [
   task_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -5104,10 +5288,11 @@ export def "tasks-custom-fields get-by-taskId" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "x-auth-access-token"))
   let base = ($base_url | default $BASE_URL)
+  if ($task_id | is-empty) { error make --unspanned { msg: "path parameter 'taskId' must be non-empty" } }
   let full_url = (build-url $base ({task_id: (encode-path-segment $task_id)} | format pattern "/tasks/{task_id}/customFields"))
   let accept_val = "application/vnd.xtrf-v1+json;charset=UTF-8"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
 }
 
 # Updates custom fields of a given task.
@@ -5115,7 +5300,7 @@ export def "tasks-custom-fields get-by-taskId" [
 # PUT /tasks/{taskId}/customFields
 # operationId: updateCustomFields_5
 # --customFields item shape: {key?: string, name?: string, type?: "TEXT"|"DATE"|"DATE_AND_TIME"|"NUMBER"|"CHECKBOX"|"SELECTION"|"MULTI_SELECTION", value?: record}
-export def "tasks-custom-fields update-by-taskId" [
+export def "tasks-custom-fields update-by-task-id" [
   task_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -5132,19 +5317,20 @@ export def "tasks-custom-fields update-by-taskId" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "x-auth-access-token"))
   let base = ($base_url | default $BASE_URL)
+  if ($task_id | is-empty) { error make --unspanned { msg: "path parameter 'taskId' must be non-empty" } }
   let full_url = (build-url $base ({task_id: (encode-path-segment $task_id)} | format pattern "/tasks/{task_id}/customFields"))
   let req_body = {"customFields": $custom_fields, "empty": $empty} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else if (($input | is-not-empty) and ($req_body | is-empty)) { $input } else { $req_body }
   let accept_val = "application/vnd.xtrf-v1+json;charset=UTF-8"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: {}, body: $req_body}
 }
 
 # Returns dates of a given task.
 #
 # GET /tasks/{taskId}/dates
 # operationId: getDates_3
-export def "tasks-dates get-by-taskId" [
+export def "tasks-dates get-by-task-id" [
   task_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -5158,10 +5344,11 @@ export def "tasks-dates get-by-taskId" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "x-auth-access-token"))
   let base = ($base_url | default $BASE_URL)
+  if ($task_id | is-empty) { error make --unspanned { msg: "path parameter 'taskId' must be non-empty" } }
   let full_url = (build-url $base ({task_id: (encode-path-segment $task_id)} | format pattern "/tasks/{task_id}/dates"))
   let accept_val = "application/vnd.xtrf-v1+json;charset=UTF-8"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
 }
 
 # Updates dates of a given task.
@@ -5172,7 +5359,7 @@ export def "tasks-dates get-by-taskId" [
 # --actualStartDate shape: {value?: int}
 # --deadline shape: {value?: int}
 # --startDate shape: {value?: int}
-export def "tasks-dates update-by-taskId" [
+export def "tasks-dates update-by-task-id" [
   task_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -5191,12 +5378,13 @@ export def "tasks-dates update-by-taskId" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "x-auth-access-token"))
   let base = ($base_url | default $BASE_URL)
+  if ($task_id | is-empty) { error make --unspanned { msg: "path parameter 'taskId' must be non-empty" } }
   let full_url = (build-url $base ({task_id: (encode-path-segment $task_id)} | format pattern "/tasks/{task_id}/dates"))
   let req_body = {"actualDeliveryDate": $actual_delivery_date, "actualStartDate": $actual_start_date, "deadline": $deadline, "startDate": $start_date} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/vnd.xtrf-v1+json;charset=UTF-8"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: {}, body: $req_body}
 }
 
 # Returns lists of files of a given task.
@@ -5217,10 +5405,11 @@ export def "tasks-files get" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "x-auth-access-token"))
   let base = ($base_url | default $BASE_URL)
+  if ($task_id | is-empty) { error make --unspanned { msg: "path parameter 'taskId' must be non-empty" } }
   let full_url = (build-url $base ({task_id: (encode-path-segment $task_id)} | format pattern "/tasks/{task_id}/files"))
   let accept_val = "application/vnd.xtrf-v1+json;charset=UTF-8"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
 }
 
 # Adds files to a given task.
@@ -5246,19 +5435,20 @@ export def "tasks-files-input create" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "x-auth-access-token"))
   let base = ($base_url | default $BASE_URL)
+  if ($task_id | is-empty) { error make --unspanned { msg: "path parameter 'taskId' must be non-empty" } }
   let full_url = (build-url $base ({task_id: (encode-path-segment $task_id)} | format pattern "/tasks/{task_id}/files/input"))
   let req_body = {"content": $content, "name": $name, "token": $body_token, "url": $url} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: {}, body: $req_body}
 }
 
 # Returns instructions of a given task.
 #
 # GET /tasks/{taskId}/instructions
 # operationId: getInstructions_2
-export def "tasks-instructions get-by-taskId" [
+export def "tasks-instructions get-by-task-id" [
   task_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -5272,17 +5462,18 @@ export def "tasks-instructions get-by-taskId" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "x-auth-access-token"))
   let base = ($base_url | default $BASE_URL)
+  if ($task_id | is-empty) { error make --unspanned { msg: "path parameter 'taskId' must be non-empty" } }
   let full_url = (build-url $base ({task_id: (encode-path-segment $task_id)} | format pattern "/tasks/{task_id}/instructions"))
   let accept_val = "application/vnd.xtrf-v1+json;charset=UTF-8"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
 }
 
 # Updates instructions of a given task.
 #
 # PUT /tasks/{taskId}/instructions
 # operationId: updateInstructions_3
-export def "tasks-instructions update-by-taskId" [
+export def "tasks-instructions update-by-task-id" [
   task_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -5303,12 +5494,13 @@ export def "tasks-instructions update-by-taskId" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "x-auth-access-token"))
   let base = ($base_url | default $BASE_URL)
+  if ($task_id | is-empty) { error make --unspanned { msg: "path parameter 'taskId' must be non-empty" } }
   let full_url = (build-url $base ({task_id: (encode-path-segment $task_id)} | format pattern "/tasks/{task_id}/instructions"))
   let req_body = {"forProvider": $for_provider, "fromCustomer": $from_customer, "internal": $internal, "notes": $notes, "paymentNoteForCustomer": $payment_note_for_customer, "paymentNoteForVendor": $payment_note_for_vendor} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/vnd.xtrf-v1+json;charset=UTF-8"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: {}, body: $req_body}
 }
 
 # Updates name of a given task.
@@ -5331,12 +5523,13 @@ export def "tasks-name update" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "x-auth-access-token"))
   let base = ($base_url | default $BASE_URL)
+  if ($task_id | is-empty) { error make --unspanned { msg: "path parameter 'taskId' must be non-empty" } }
   let full_url = (build-url $base ({task_id: (encode-path-segment $task_id)} | format pattern "/tasks/{task_id}/name"))
   let req_body = {"value": $value} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/vnd.xtrf-v1+json;charset=UTF-8"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: {}, body: $req_body}
 }
 
 # Returns progress of a given task.
@@ -5357,17 +5550,18 @@ export def "tasks-progress get" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "x-auth-access-token"))
   let base = ($base_url | default $BASE_URL)
+  if ($task_id | is-empty) { error make --unspanned { msg: "path parameter 'taskId' must be non-empty" } }
   let full_url = (build-url $base ({task_id: (encode-path-segment $task_id)} | format pattern "/tasks/{task_id}/progress"))
   let accept_val = "application/vnd.xtrf-v1+json;charset=UTF-8"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
 }
 
 # Starts a task.
 #
 # POST /tasks/{taskId}/start
 # operationId: start_1
-export def "tasks-start start-by-taskId" [
+export def "tasks-start start-by-task-id" [
   task_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -5381,17 +5575,18 @@ export def "tasks-start start-by-taskId" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "x-auth-access-token"))
   let base = ($base_url | default $BASE_URL)
+  if ($task_id | is-empty) { error make --unspanned { msg: "path parameter 'taskId' must be non-empty" } }
   let full_url = (build-url $base ({task_id: (encode-path-segment $task_id)} | format pattern "/tasks/{task_id}/start"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
 }
 
 # Returns list of simple users representations
 #
 # GET /users
 # operationId: getAllNamesWithIds_1
-export def "users get-list-names-by-" [
+export def "users get-list-names" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -5407,7 +5602,7 @@ export def "users get-list-names-by-" [
   let full_url = (build-url $base "/users")
   let accept_val = "application/vnd.xtrf-v1+json;charset=UTF-8"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
 }
 
 # Returns currently signed in user details.
@@ -5430,7 +5625,7 @@ export def "users-me get" [
   let full_url = (build-url $base "/users/me")
   let accept_val = "application/vnd.xtrf-v1+json;charset=UTF-8"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
 }
 
 # Returns time zone preferred by user currently signed in.
@@ -5453,14 +5648,14 @@ export def "users-me-time-zone get" [
   let full_url = (build-url $base "/users/me/timeZone")
   let accept_val = "application/vnd.xtrf-v1+json;charset=UTF-8"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
 }
 
 # Returns user details.
 #
 # GET /users/{userId}
 # operationId: getById_6
-export def "users get-by-userId" [
+export def "users get-by-user-id" [
   user_id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -5474,10 +5669,11 @@ export def "users get-by-userId" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "x-auth-access-token"))
   let base = ($base_url | default $BASE_URL)
+  if ($user_id | is-empty) { error make --unspanned { msg: "path parameter 'userId' must be non-empty" } }
   let full_url = (build-url $base ({user_id: (encode-path-segment $user_id)} | format pattern "/users/{user_id}"))
   let accept_val = "application/vnd.xtrf-v1+json;charset=UTF-8"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
 }
 
 # Updates an existing user.
@@ -5485,7 +5681,7 @@ export def "users get-by-userId" [
 # PUT /users/{userId}
 # operationId: update_3
 # --customFields item shape: {key?: string, name?: string, type?: "TEXT"|"DATE"|"DATE_AND_TIME"|"NUMBER"|"CHECKBOX"|"SELECTION"|"MULTI_SELECTION", value?: record}
-export def "users update-by-userId" [
+export def "users update-by-user-id" [
   user_id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -5512,19 +5708,20 @@ export def "users update-by-userId" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "x-auth-access-token"))
   let base = ($base_url | default $BASE_URL)
+  if ($user_id | is-empty) { error make --unspanned { msg: "path parameter 'userId' must be non-empty" } }
   let full_url = (build-url $base ({user_id: (encode-path-segment $user_id)} | format pattern "/users/{user_id}"))
   let req_body = {"customFields": $custom_fields, "email": $email, "firstName": $first_name, "gender": $gender, "id": $id, "lastName": $last_name, "login": $login, "mobilePhone": $mobile_phone, "phone": $phone, "positionName": $position_name, "timeZoneId": $time_zone_id, "userGroupName": $user_group_name} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/vnd.xtrf-v1+json;charset=UTF-8"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: {}, body: $req_body}
 }
 
 # Returns custom fields of a given user.
 #
 # GET /users/{userId}/customFields
 # operationId: getCustomFields_4
-export def "users-custom-fields get-by-userId" [
+export def "users-custom-fields get-by-user-id" [
   user_id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -5538,10 +5735,11 @@ export def "users-custom-fields get-by-userId" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "x-auth-access-token"))
   let base = ($base_url | default $BASE_URL)
+  if ($user_id | is-empty) { error make --unspanned { msg: "path parameter 'userId' must be non-empty" } }
   let full_url = (build-url $base ({user_id: (encode-path-segment $user_id)} | format pattern "/users/{user_id}/customFields"))
   let accept_val = "application/vnd.xtrf-v1+json;charset=UTF-8"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
 }
 
 # Updates custom fields of a given user.
@@ -5549,7 +5747,7 @@ export def "users-custom-fields get-by-userId" [
 # PUT /users/{userId}/customFields
 # operationId: updateCustomFields_2
 # --customFields item shape: {key?: string, name?: string, type?: "TEXT"|"DATE"|"DATE_AND_TIME"|"NUMBER"|"CHECKBOX"|"SELECTION"|"MULTI_SELECTION", value?: record}
-export def "users-custom-fields update-by-userId" [
+export def "users-custom-fields update-by-user-id" [
   user_id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -5566,19 +5764,20 @@ export def "users-custom-fields update-by-userId" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "x-auth-access-token"))
   let base = ($base_url | default $BASE_URL)
+  if ($user_id | is-empty) { error make --unspanned { msg: "path parameter 'userId' must be non-empty" } }
   let full_url = (build-url $base ({user_id: (encode-path-segment $user_id)} | format pattern "/users/{user_id}/customFields"))
   let req_body = {"customFields": $custom_fields, "empty": $empty} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else if (($input | is-not-empty) and ($req_body | is-empty)) { $input } else { $req_body }
   let accept_val = "application/vnd.xtrf-v1+json;charset=UTF-8"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: {}, body: $req_body}
 }
 
 # Returns custom field of a given user.
 #
 # GET /users/{userId}/customFields/{customFieldKey}
 # operationId: getCustomField_1
-export def "users-custom-fields get-by-userId-customFieldKey" [
+export def "users-custom-fields get-by-user-id-custom-field-key" [
   user_id: int
   custom_field_key: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -5593,17 +5792,19 @@ export def "users-custom-fields get-by-userId-customFieldKey" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "x-auth-access-token"))
   let base = ($base_url | default $BASE_URL)
+  if ($user_id | is-empty) { error make --unspanned { msg: "path parameter 'userId' must be non-empty" } }
+  if ($custom_field_key | is-empty) { error make --unspanned { msg: "path parameter 'customFieldKey' must be non-empty" } }
   let full_url = (build-url $base ({user_id: (encode-path-segment $user_id), custom_field_key: (encode-path-segment $custom_field_key)} | format pattern "/users/{user_id}/customFields/{custom_field_key}"))
   let accept_val = "application/vnd.xtrf-v1+json;charset=UTF-8"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
 }
 
 # Updates given custom field of a given user.
 #
 # PUT /users/{userId}/customFields/{customFieldKey}
 # operationId: updateCustomField_1
-export def "users-custom-fields update-by-userId-customFieldKey" [
+export def "users-custom-fields update-by-user-id-custom-field-key" [
   user_id: int
   custom_field_key: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -5623,12 +5824,14 @@ export def "users-custom-fields update-by-userId-customFieldKey" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "x-auth-access-token"))
   let base = ($base_url | default $BASE_URL)
+  if ($user_id | is-empty) { error make --unspanned { msg: "path parameter 'userId' must be non-empty" } }
+  if ($custom_field_key | is-empty) { error make --unspanned { msg: "path parameter 'customFieldKey' must be non-empty" } }
   let full_url = (build-url $base ({user_id: (encode-path-segment $user_id), custom_field_key: (encode-path-segment $custom_field_key)} | format pattern "/users/{user_id}/customFields/{custom_field_key}"))
   let req_body = {"key": $key, "name": $name, "type": $type, "value": $value} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/vnd.xtrf-v1+json;charset=UTF-8"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: {}, body: $req_body}
 }
 
 # Sets user's password to a new value.
@@ -5652,13 +5855,14 @@ export def "users-password update-change" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "x-auth-access-token"))
   let base = ($base_url | default $BASE_URL)
+  if ($user_id | is-empty) { error make --unspanned { msg: "path parameter 'userId' must be non-empty" } }
   let full_url = (build-url $base ({user_id: (encode-path-segment $user_id)} | format pattern "/users/{user_id}/password"))
   let req_body = {"newPassword": $new_password, "oldPassword": $old_password} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  let req_body = ($req_body | transpose k v | where v != null | reduce -f {} {|p, acc| $acc | upsert $p.k $p.v } | url build-query)
-  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/x-www-form-urlencoded" $req_body
+  let req_body_wire = ($req_body | transpose k v | where v != null | reduce -f {} {|p, acc| $acc | upsert $p.k $p.v } | url build-query)
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/x-www-form-urlencoded" $req_body_wire {query: {}, body: $req_body}
 }
 
 # GET /v2/jobs/for-external-id
@@ -5683,14 +5887,14 @@ export def "jobs-for-external-id get" [
   let full_url = (build-url $base "/v2/jobs/for-external-id" $qp)
   let accept_val = "application/json;charset=UTF-8"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"externalProjectId": $external_project_id, "externalId": $external_id} | compact), body: null}
 }
 
 # Returns details for a job.
 #
 # GET /v2/jobs/{jobId}
 # operationId: getFileById_1
-export def "jobs get-file-by-jobId" [
+export def "jobs get-file-by-job-id" [
   job_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -5704,10 +5908,11 @@ export def "jobs get-file-by-jobId" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "x-auth-access-token"))
   let base = ($base_url | default $BASE_URL)
+  if ($job_id | is-empty) { error make --unspanned { msg: "path parameter 'jobId' must be non-empty" } }
   let full_url = (build-url $base ({job_id: (encode-path-segment $job_id)} | format pattern "/v2/jobs/{job_id}"))
   let accept_val = "application/json;charset=UTF-8"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
 }
 
 # Updates dates of a given job.
@@ -5733,12 +5938,13 @@ export def "jobs-dates update-change" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "x-auth-access-token"))
   let base = ($base_url | default $BASE_URL)
+  if ($job_id | is-empty) { error make --unspanned { msg: "path parameter 'jobId' must be non-empty" } }
   let full_url = (build-url $base ({job_id: (encode-path-segment $job_id)} | format pattern "/v2/jobs/{job_id}/dates"))
   let req_body = {"actualEndDate": $actual_end_date, "actualStartDate": $actual_start_date, "deadline": $deadline, "startDate": $start_date} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: {}, body: $req_body}
 }
 
 # POST /v2/jobs/{jobId}/files/addExternalLink
@@ -5765,12 +5971,13 @@ export def "jobs-files-add-external-link create" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "x-auth-access-token"))
   let base = ($base_url | default $BASE_URL)
+  if ($job_id | is-empty) { error make --unspanned { msg: "path parameter 'jobId' must be non-empty" } }
   let full_url = (build-url $base ({job_id: (encode-path-segment $job_id)} | format pattern "/v2/jobs/{job_id}/files/addExternalLink"))
   let req_body = {"category": $category, "externalInfo": $external_info, "filename": $filename, "languageCombinationIds": $language_combination_ids, "languageIds": $language_ids} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json;charset=UTF-8"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: {}, body: $req_body}
 }
 
 # Returns list of files delivered in the job.
@@ -5791,10 +5998,11 @@ export def "jobs-files-delivered get" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "x-auth-access-token"))
   let base = ($base_url | default $BASE_URL)
+  if ($job_id | is-empty) { error make --unspanned { msg: "path parameter 'jobId' must be non-empty" } }
   let full_url = (build-url $base ({job_id: (encode-path-segment $job_id)} | format pattern "/v2/jobs/{job_id}/files/delivered"))
   let accept_val = "application/json;charset=UTF-8"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
 }
 
 # Adds files to the project as delivered in the job.
@@ -5818,12 +6026,13 @@ export def "jobs-files-delivered-add create" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "x-auth-access-token"))
   let base = ($base_url | default $BASE_URL)
+  if ($job_id | is-empty) { error make --unspanned { msg: "path parameter 'jobId' must be non-empty" } }
   let full_url = (build-url $base ({job_id: (encode-path-segment $job_id)} | format pattern "/v2/jobs/{job_id}/files/delivered/add"))
   let req_body = {"files": $files} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: {}, body: $req_body}
 }
 
 # Adds file link to the project as a link delivered in the job.
@@ -5847,19 +6056,20 @@ export def "jobs-files-delivered-add-link create" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "x-auth-access-token"))
   let base = ($base_url | default $BASE_URL)
+  if ($job_id | is-empty) { error make --unspanned { msg: "path parameter 'jobId' must be non-empty" } }
   let full_url = (build-url $base ({job_id: (encode-path-segment $job_id)} | format pattern "/v2/jobs/{job_id}/files/delivered/addLink"))
   let req_body = {"fileLinks": $file_links} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json;charset=UTF-8"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: {}, body: $req_body}
 }
 
 # Uploads file to the project as a file delivered in the job.
 #
 # POST /v2/jobs/{jobId}/files/delivered/upload
 # operationId: uploadFile_1
-export def "jobs-files-delivered-upload upload-by-jobId" [
+export def "jobs-files-delivered-upload upload-by-job-id" [
   job_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -5875,6 +6085,7 @@ export def "jobs-files-delivered-upload upload-by-jobId" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "x-auth-access-token"))
   let base = ($base_url | default $BASE_URL)
+  if ($job_id | is-empty) { error make --unspanned { msg: "path parameter 'jobId' must be non-empty" } }
   let full_url = (build-url $base ({job_id: (encode-path-segment $job_id)} | format pattern "/v2/jobs/{job_id}/files/delivered/upload"))
   let req_body = {"file": $file} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
@@ -5882,7 +6093,7 @@ export def "jobs-files-delivered-upload upload-by-jobId" [
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let req_body = if ($req_body | describe | str starts-with "record") { $req_body } else { {} }
   let mp = (build-multipart-body $req_body ["file"] $dry_run)
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full $mp.content_type $mp.body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full $mp.content_type $mp.body {query: {}, body: $req_body}
 }
 
 # Returns list of files shared with the job as Reference Files.
@@ -5903,10 +6114,11 @@ export def "jobs-files-shared-reference-files get" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "x-auth-access-token"))
   let base = ($base_url | default $BASE_URL)
+  if ($job_id | is-empty) { error make --unspanned { msg: "path parameter 'jobId' must be non-empty" } }
   let full_url = (build-url $base ({job_id: (encode-path-segment $job_id)} | format pattern "/v2/jobs/{job_id}/files/sharedReferenceFiles"))
   let accept_val = "application/json;charset=UTF-8"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
 }
 
 # Shares selected files as Reference Files with a job in a project.
@@ -5929,12 +6141,13 @@ export def "jobs-files-shared-reference-files-share update" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "x-auth-access-token"))
   let base = ($base_url | default $BASE_URL)
+  if ($job_id | is-empty) { error make --unspanned { msg: "path parameter 'jobId' must be non-empty" } }
   let full_url = (build-url $base ({job_id: (encode-path-segment $job_id)} | format pattern "/v2/jobs/{job_id}/files/sharedReferenceFiles/share"))
   let req_body = {"files": $files} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json;charset=UTF-8"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json;charset=UTF-8" $req_body
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json;charset=UTF-8" $req_body {query: {}, body: $req_body}
 }
 
 # Returns list of files shared with the job as Work Files.
@@ -5955,10 +6168,11 @@ export def "jobs-files-shared-work-files get" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "x-auth-access-token"))
   let base = ($base_url | default $BASE_URL)
+  if ($job_id | is-empty) { error make --unspanned { msg: "path parameter 'jobId' must be non-empty" } }
   let full_url = (build-url $base ({job_id: (encode-path-segment $job_id)} | format pattern "/v2/jobs/{job_id}/files/sharedWorkFiles"))
   let accept_val = "application/json;charset=UTF-8"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
 }
 
 # Shares selected files as Work Files with a job in a project.
@@ -5981,12 +6195,13 @@ export def "jobs-files-shared-work-files-share update" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "x-auth-access-token"))
   let base = ($base_url | default $BASE_URL)
+  if ($job_id | is-empty) { error make --unspanned { msg: "path parameter 'jobId' must be non-empty" } }
   let full_url = (build-url $base ({job_id: (encode-path-segment $job_id)} | format pattern "/v2/jobs/{job_id}/files/sharedWorkFiles/share"))
   let req_body = {"files": $files} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json;charset=UTF-8"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json;charset=UTF-8" $req_body
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json;charset=UTF-8" $req_body {query: {}, body: $req_body}
 }
 
 # Stops sharing selected files with a job in a project.
@@ -6009,19 +6224,20 @@ export def "jobs-files-stop-sharing stop" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "x-auth-access-token"))
   let base = ($base_url | default $BASE_URL)
+  if ($job_id | is-empty) { error make --unspanned { msg: "path parameter 'jobId' must be non-empty" } }
   let full_url = (build-url $base ({job_id: (encode-path-segment $job_id)} | format pattern "/v2/jobs/{job_id}/files/stopSharing"))
   let req_body = {"files": $files} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json;charset=UTF-8"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json;charset=UTF-8" $req_body
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json;charset=UTF-8" $req_body {query: {}, body: $req_body}
 }
 
 # Updates instructions for a job.
 #
 # PUT /v2/jobs/{jobId}/instructions
 # operationId: updateInstructions_4
-export def "jobs-instructions update-by-jobId" [
+export def "jobs-instructions update-by-job-id" [
   job_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -6037,19 +6253,20 @@ export def "jobs-instructions update-by-jobId" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "x-auth-access-token"))
   let base = ($base_url | default $BASE_URL)
+  if ($job_id | is-empty) { error make --unspanned { msg: "path parameter 'jobId' must be non-empty" } }
   let full_url = (build-url $base ({job_id: (encode-path-segment $job_id)} | format pattern "/v2/jobs/{job_id}/instructions"))
   let req_body = {"value": $value} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: {}, body: $req_body}
 }
 
 # Changes job status if possible (400 Bad Request is returned otherwise).
 #
 # PUT /v2/jobs/{jobId}/status
 # operationId: changeStatus_1
-export def "jobs-status update-change-by-jobId" [
+export def "jobs-status update-change-by-job-id" [
   job_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -6066,19 +6283,20 @@ export def "jobs-status update-change-by-jobId" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "x-auth-access-token"))
   let base = ($base_url | default $BASE_URL)
+  if ($job_id | is-empty) { error make --unspanned { msg: "path parameter 'jobId' must be non-empty" } }
   let full_url = (build-url $base ({job_id: (encode-path-segment $job_id)} | format pattern "/v2/jobs/{job_id}/status"))
   let req_body = {"externalId": $external_id, "status": $status} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: {}, body: $req_body}
 }
 
 # Assigns vendor to a job in a project.
 #
 # PUT /v2/jobs/{jobId}/vendor
 # operationId: assignVendor_1
-export def "jobs-vendor assign-by-jobId" [
+export def "jobs-vendor assign-by-job-id" [
   job_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -6094,19 +6312,20 @@ export def "jobs-vendor assign-by-jobId" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "x-auth-access-token"))
   let base = ($base_url | default $BASE_URL)
+  if ($job_id | is-empty) { error make --unspanned { msg: "path parameter 'jobId' must be non-empty" } }
   let full_url = (build-url $base ({job_id: (encode-path-segment $job_id)} | format pattern "/v2/jobs/{job_id}/vendor"))
   let req_body = {"vendorPriceProfileId": $vendor_price_profile_id} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: {}, body: $req_body}
 }
 
 # Creates a new Smart Project.
 #
 # POST /v2/projects
 # operationId: create_6
-export def "projects create-by--1" [
+export def "projects create-1" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -6129,7 +6348,7 @@ export def "projects create-by--1" [
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json;charset=UTF-8"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: {}, body: $req_body}
 }
 
 # Prepares a ZIP archive that contains the specified files.
@@ -6156,14 +6375,14 @@ export def "projects-files-archive archive" [
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json;charset=UTF-8"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: {}, body: $req_body}
 }
 
 # Returns details of a file.
 #
 # GET /v2/projects/files/{fileId}
 # operationId: getFileById_2
-export def "projects-files get-by-fileId" [
+export def "projects-files get-by-file-id" [
   file_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -6177,10 +6396,11 @@ export def "projects-files get-by-fileId" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "x-auth-access-token"))
   let base = ($base_url | default $BASE_URL)
+  if ($file_id | is-empty) { error make --unspanned { msg: "path parameter 'fileId' must be non-empty" } }
   let full_url = (build-url $base ({file_id: (encode-path-segment $file_id)} | format pattern "/v2/projects/files/{file_id}"))
   let accept_val = "application/json;charset=UTF-8"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
 }
 
 # Downloads a file content.
@@ -6202,17 +6422,19 @@ export def "projects-files-download get-content" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "x-auth-access-token"))
   let base = ($base_url | default $BASE_URL)
+  if ($file_id | is-empty) { error make --unspanned { msg: "path parameter 'fileId' must be non-empty" } }
+  if ($file_name | is-empty) { error make --unspanned { msg: "path parameter 'fileName' must be non-empty" } }
   let full_url = (build-url $base ({file_id: (encode-path-segment $file_id), file_name: (encode-path-segment $file_name)} | format pattern "/v2/projects/files/{file_id}/download/{file_name}"))
   let accept_val = "multipart/form-data"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
 }
 
 # Returns project details.
 #
 # GET /v2/projects/for-external-id/{externalProjectId}
 # operationId: getByExternalId_1
-export def "projects-for-external-id get-by-externalProjectId" [
+export def "projects-for-external-id get-by-external-project-id" [
   external_project_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -6226,17 +6448,18 @@ export def "projects-for-external-id get-by-externalProjectId" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "x-auth-access-token"))
   let base = ($base_url | default $BASE_URL)
+  if ($external_project_id | is-empty) { error make --unspanned { msg: "path parameter 'externalProjectId' must be non-empty" } }
   let full_url = (build-url $base ({external_project_id: (encode-path-segment $external_project_id)} | format pattern "/v2/projects/for-external-id/{external_project_id}"))
   let accept_val = "application/json;charset=UTF-8"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
 }
 
 # Returns project details.
 #
 # GET /v2/projects/{projectId}
 # operationId: getById_9
-export def "projects get-by-projectId-by-projectId-1" [
+export def "projects get-by-project-id-by-project-id-1" [
   project_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -6250,10 +6473,11 @@ export def "projects get-by-projectId-by-projectId-1" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "x-auth-access-token"))
   let base = ($base_url | default $BASE_URL)
+  if ($project_id | is-empty) { error make --unspanned { msg: "path parameter 'projectId' must be non-empty" } }
   let full_url = (build-url $base ({project_id: (encode-path-segment $project_id)} | format pattern "/v2/projects/{project_id}"))
   let accept_val = "application/json;charset=UTF-8"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
 }
 
 # Returns process id.
@@ -6274,17 +6498,18 @@ export def "projects-add-job create-to-process" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "x-auth-access-token"))
   let base = ($base_url | default $BASE_URL)
+  if ($project_id | is-empty) { error make --unspanned { msg: "path parameter 'projectId' must be non-empty" } }
   let full_url = (build-url $base ({project_id: (encode-path-segment $project_id)} | format pattern "/v2/projects/{project_id}/addJob"))
   let accept_val = "application/json;charset=UTF-8"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
 }
 
 # Returns if cat tool project is created or queued.
 #
 # GET /v2/projects/{projectId}/catToolProject
 # operationId: getCATToolProjectInfo
-export def "projects-cat-tool-project get-get" [
+export def "projects-cat-tool-project get" [
   project_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -6298,17 +6523,18 @@ export def "projects-cat-tool-project get-get" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "x-auth-access-token"))
   let base = ($base_url | default $BASE_URL)
+  if ($project_id | is-empty) { error make --unspanned { msg: "path parameter 'projectId' must be non-empty" } }
   let full_url = (build-url $base ({project_id: (encode-path-segment $project_id)} | format pattern "/v2/projects/{project_id}/catToolProject"))
   let accept_val = "application/json;charset=UTF-8"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
 }
 
 # Returns Client Contacts information for a project.
 #
 # GET /v2/projects/{projectId}/clientContacts
 # operationId: getContacts_2
-export def "projects-client-contacts get-by-projectId" [
+export def "projects-client-contacts get-by-project-id" [
   project_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -6322,17 +6548,18 @@ export def "projects-client-contacts get-by-projectId" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "x-auth-access-token"))
   let base = ($base_url | default $BASE_URL)
+  if ($project_id | is-empty) { error make --unspanned { msg: "path parameter 'projectId' must be non-empty" } }
   let full_url = (build-url $base ({project_id: (encode-path-segment $project_id)} | format pattern "/v2/projects/{project_id}/clientContacts"))
   let accept_val = "application/json;charset=UTF-8"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
 }
 
 # Updates Client Contacts for a project.
 #
 # PUT /v2/projects/{projectId}/clientContacts
 # operationId: updateContacts_2
-export def "projects-client-contacts update-by-projectId" [
+export def "projects-client-contacts update-by-project-id" [
   project_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -6349,12 +6576,13 @@ export def "projects-client-contacts update-by-projectId" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "x-auth-access-token"))
   let base = ($base_url | default $BASE_URL)
+  if ($project_id | is-empty) { error make --unspanned { msg: "path parameter 'projectId' must be non-empty" } }
   let full_url = (build-url $base ({project_id: (encode-path-segment $project_id)} | format pattern "/v2/projects/{project_id}/clientContacts"))
   let req_body = {"additionalIds": $additional_ids, "primaryId": $primary_id} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json;charset=UTF-8"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: {}, body: $req_body}
 }
 
 # Updates Client Deadline for a project.
@@ -6377,12 +6605,13 @@ export def "projects-client-deadline update" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "x-auth-access-token"))
   let base = ($base_url | default $BASE_URL)
+  if ($project_id | is-empty) { error make --unspanned { msg: "path parameter 'projectId' must be non-empty" } }
   let full_url = (build-url $base ({project_id: (encode-path-segment $project_id)} | format pattern "/v2/projects/{project_id}/clientDeadline"))
   let req_body = {"value": $value} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: {}, body: $req_body}
 }
 
 # Updates Client Notes for a project.
@@ -6405,12 +6634,13 @@ export def "projects-client-notes update" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "x-auth-access-token"))
   let base = ($base_url | default $BASE_URL)
+  if ($project_id | is-empty) { error make --unspanned { msg: "path parameter 'projectId' must be non-empty" } }
   let full_url = (build-url $base ({project_id: (encode-path-segment $project_id)} | format pattern "/v2/projects/{project_id}/clientNotes"))
   let req_body = {"value": $value} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: {}, body: $req_body}
 }
 
 # Updates Client Reference Number for a project.
@@ -6433,19 +6663,20 @@ export def "projects-client-reference-number update" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "x-auth-access-token"))
   let base = ($base_url | default $BASE_URL)
+  if ($project_id | is-empty) { error make --unspanned { msg: "path parameter 'projectId' must be non-empty" } }
   let full_url = (build-url $base ({project_id: (encode-path-segment $project_id)} | format pattern "/v2/projects/{project_id}/clientReferenceNumber"))
   let req_body = {"value": $value} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: {}, body: $req_body}
 }
 
 # Returns a list of custom field keys and values for a project.
 #
 # GET /v2/projects/{projectId}/customFields
 # operationId: getCustomFields_8
-export def "projects-custom-fields get-by-projectId-by-projectId-1" [
+export def "projects-custom-fields get-by-project-id-by-project-id-1" [
   project_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -6459,17 +6690,18 @@ export def "projects-custom-fields get-by-projectId-by-projectId-1" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "x-auth-access-token"))
   let base = ($base_url | default $BASE_URL)
+  if ($project_id | is-empty) { error make --unspanned { msg: "path parameter 'projectId' must be non-empty" } }
   let full_url = (build-url $base ({project_id: (encode-path-segment $project_id)} | format pattern "/v2/projects/{project_id}/customFields"))
   let accept_val = "application/json;charset=UTF-8"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
 }
 
 # Updates a custom field with a specified key in a project
 #
 # PUT /v2/projects/{projectId}/customFields/{key}
 # operationId: updateCustomField_2
-export def "projects-custom-fields update-by-projectId-key" [
+export def "projects-custom-fields update-by-project-id-key" [
   project_id: string
   key: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -6486,12 +6718,14 @@ export def "projects-custom-fields update-by-projectId-key" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "x-auth-access-token"))
   let base = ($base_url | default $BASE_URL)
+  if ($project_id | is-empty) { error make --unspanned { msg: "path parameter 'projectId' must be non-empty" } }
+  if ($key | is-empty) { error make --unspanned { msg: "path parameter 'key' must be non-empty" } }
   let full_url = (build-url $base ({project_id: (encode-path-segment $project_id), key: (encode-path-segment $key)} | format pattern "/v2/projects/{project_id}/customFields/{key}"))
   let req_body = {"value": $value} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: {}, body: $req_body}
 }
 
 # Returns list of files in a project.
@@ -6512,10 +6746,11 @@ export def "projects-files get" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "x-auth-access-token"))
   let base = ($base_url | default $BASE_URL)
+  if ($project_id | is-empty) { error make --unspanned { msg: "path parameter 'projectId' must be non-empty" } }
   let full_url = (build-url $base ({project_id: (encode-path-segment $project_id)} | format pattern "/v2/projects/{project_id}/files"))
   let accept_val = "application/json;charset=UTF-8"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
 }
 
 # Adds files to the project as added by PM.
@@ -6523,7 +6758,7 @@ export def "projects-files get" [
 # PUT /v2/projects/{projectId}/files/add
 # operationId: addFiles_1
 # --files item shape: {category?: string, fileId?: string, languageCombinationIds?: list, languageIds?: list<int>}
-export def "projects-files-add create-by-projectId" [
+export def "projects-files-add create-by-project-id" [
   project_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -6539,12 +6774,13 @@ export def "projects-files-add create-by-projectId" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "x-auth-access-token"))
   let base = ($base_url | default $BASE_URL)
+  if ($project_id | is-empty) { error make --unspanned { msg: "path parameter 'projectId' must be non-empty" } }
   let full_url = (build-url $base ({project_id: (encode-path-segment $project_id)} | format pattern "/v2/projects/{project_id}/files/add"))
   let req_body = {"files": $files} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: {}, body: $req_body}
 }
 
 # POST /v2/projects/{projectId}/files/addExternalLink
@@ -6571,12 +6807,13 @@ export def "projects-files-add-external-link create" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "x-auth-access-token"))
   let base = ($base_url | default $BASE_URL)
+  if ($project_id | is-empty) { error make --unspanned { msg: "path parameter 'projectId' must be non-empty" } }
   let full_url = (build-url $base ({project_id: (encode-path-segment $project_id)} | format pattern "/v2/projects/{project_id}/files/addExternalLink"))
   let req_body = {"category": $category, "externalInfo": $external_info, "filename": $filename, "languageCombinationIds": $language_combination_ids, "languageIds": $language_ids} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json;charset=UTF-8"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: {}, body: $req_body}
 }
 
 # Adds file links to the project as added by PM.
@@ -6584,7 +6821,7 @@ export def "projects-files-add-external-link create" [
 # POST /v2/projects/{projectId}/files/addLink
 # operationId: addFileLinks_1
 # --fileLinks item shape: {category?: string, externalInfo?: record, filename?: string, languageCombinationIds?: list, languageIds?: list<int>, toBeGenerated?: bool, url?: string}
-export def "projects-files-add-link create-by-projectId" [
+export def "projects-files-add-link create-by-project-id" [
   project_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -6600,12 +6837,13 @@ export def "projects-files-add-link create-by-projectId" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "x-auth-access-token"))
   let base = ($base_url | default $BASE_URL)
+  if ($project_id | is-empty) { error make --unspanned { msg: "path parameter 'projectId' must be non-empty" } }
   let full_url = (build-url $base ({project_id: (encode-path-segment $project_id)} | format pattern "/v2/projects/{project_id}/files/addLink"))
   let req_body = {"fileLinks": $file_links} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json;charset=UTF-8"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: {}, body: $req_body}
 }
 
 # Returns list of files in a project, that are ready to be delivered to client.
@@ -6626,17 +6864,18 @@ export def "projects-files-deliverable get" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "x-auth-access-token"))
   let base = ($base_url | default $BASE_URL)
+  if ($project_id | is-empty) { error make --unspanned { msg: "path parameter 'projectId' must be non-empty" } }
   let full_url = (build-url $base ({project_id: (encode-path-segment $project_id)} | format pattern "/v2/projects/{project_id}/files/deliverable"))
   let accept_val = "application/json;charset=UTF-8"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
 }
 
 # Uploads file to the project as a file uploaded by PM.
 #
 # POST /v2/projects/{projectId}/files/upload
 # operationId: uploadFile_2
-export def "projects-files-upload upload-by-projectId" [
+export def "projects-files-upload upload-by-project-id" [
   project_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -6652,6 +6891,7 @@ export def "projects-files-upload upload-by-projectId" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "x-auth-access-token"))
   let base = ($base_url | default $BASE_URL)
+  if ($project_id | is-empty) { error make --unspanned { msg: "path parameter 'projectId' must be non-empty" } }
   let full_url = (build-url $base ({project_id: (encode-path-segment $project_id)} | format pattern "/v2/projects/{project_id}/files/upload"))
   let req_body = {"file": $file} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
@@ -6659,14 +6899,14 @@ export def "projects-files-upload upload-by-projectId" [
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let req_body = if ($req_body | describe | str starts-with "record") { $req_body } else { {} }
   let mp = (build-multipart-body $req_body ["file"] $dry_run)
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full $mp.content_type $mp.body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full $mp.content_type $mp.body {query: {}, body: $req_body}
 }
 
 # Returns finance information for a project.
 #
 # GET /v2/projects/{projectId}/finance
 # operationId: getFinance_2
-export def "projects-finance get-by-projectId" [
+export def "projects-finance get-by-project-id" [
   project_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -6680,10 +6920,11 @@ export def "projects-finance get-by-projectId" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "x-auth-access-token"))
   let base = ($base_url | default $BASE_URL)
+  if ($project_id | is-empty) { error make --unspanned { msg: "path parameter 'projectId' must be non-empty" } }
   let full_url = (build-url $base ({project_id: (encode-path-segment $project_id)} | format pattern "/v2/projects/{project_id}/finance"))
   let accept_val = "application/json;charset=UTF-8"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
 }
 
 # Adds a payable to a project.
@@ -6692,7 +6933,7 @@ export def "projects-finance get-by-projectId" [
 # operationId: createPayable_2
 # --catLogFile shape: {content?: string, name?: string, token?: string, url?: string}
 # --languageCombination shape: {sourceLanguageId?: int, targetLanguageId?: int}
-export def "projects-finance-payables create-by-projectId" [
+export def "projects-finance-payables create-by-project-id" [
   project_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -6724,19 +6965,20 @@ export def "projects-finance-payables create-by-projectId" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "x-auth-access-token"))
   let base = ($base_url | default $BASE_URL)
+  if ($project_id | is-empty) { error make --unspanned { msg: "path parameter 'projectId' must be non-empty" } }
   let full_url = (build-url $base ({project_id: (encode-path-segment $project_id)} | format pattern "/v2/projects/{project_id}/finance/payables"))
   let req_body = {"calculationUnitId": $calculation_unit_id, "catLogFile": $cat_log_file, "currencyId": $currency_id, "description": $description, "id": $id, "ignoreMinimumCharge": $ignore_minimum_charge, "invoiceId": $invoice_id, "jobId": $job_id, "jobTypeId": $job_type_id, "languageCombination": $language_combination, "languageCombinationIdNumber": $language_combination_id_number, "minimumCharge": $minimum_charge, "quantity": $quantity, "rate": $rate, "rateOrigin": $rate_origin, "total": $total, "type": $type} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json;charset=UTF-8"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: {}, body: $req_body}
 }
 
 # Deletes a payable.
 #
 # DELETE /v2/projects/{projectId}/finance/payables/{payableId}
 # operationId: deletePayable_2
-export def "projects-finance-payables delete-by-projectId-payableId" [
+export def "projects-finance-payables delete-by-project-id-payable-id" [
   project_id: string
   payable_id: int
   --base-url(-b): string@base-url-completer # API base URL
@@ -6751,10 +6993,12 @@ export def "projects-finance-payables delete-by-projectId-payableId" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "x-auth-access-token"))
   let base = ($base_url | default $BASE_URL)
+  if ($project_id | is-empty) { error make --unspanned { msg: "path parameter 'projectId' must be non-empty" } }
+  if ($payable_id | is-empty) { error make --unspanned { msg: "path parameter 'payableId' must be non-empty" } }
   let full_url = (build-url $base ({project_id: (encode-path-segment $project_id), payable_id: (encode-path-segment $payable_id)} | format pattern "/v2/projects/{project_id}/finance/payables/{payable_id}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
 }
 
 # Updates a payable.
@@ -6762,7 +7006,7 @@ export def "projects-finance-payables delete-by-projectId-payableId" [
 # PUT /v2/projects/{projectId}/finance/payables/{payableId}
 # operationId: updatePayable_2
 # --languageCombination shape: {sourceLanguageId?: int, targetLanguageId?: int}
-export def "projects-finance-payables update-by-projectId-payableId" [
+export def "projects-finance-payables update-by-project-id-payable-id" [
   project_id: string
   payable_id: int
   --base-url(-b): string@base-url-completer # API base URL
@@ -6794,12 +7038,14 @@ export def "projects-finance-payables update-by-projectId-payableId" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "x-auth-access-token"))
   let base = ($base_url | default $BASE_URL)
+  if ($project_id | is-empty) { error make --unspanned { msg: "path parameter 'projectId' must be non-empty" } }
+  if ($payable_id | is-empty) { error make --unspanned { msg: "path parameter 'payableId' must be non-empty" } }
   let full_url = (build-url $base ({project_id: (encode-path-segment $project_id), payable_id: (encode-path-segment $payable_id)} | format pattern "/v2/projects/{project_id}/finance/payables/{payable_id}"))
   let req_body = {"calculationUnitId": $calculation_unit_id, "currencyId": $currency_id, "description": $description, "id": $id, "ignoreMinimumCharge": $ignore_minimum_charge, "invoiceId": $invoice_id, "jobId": $job_id, "jobTypeId": $job_type_id, "languageCombination": $language_combination, "languageCombinationIdNumber": $language_combination_id_number, "minimumCharge": $minimum_charge, "quantity": $quantity, "rate": $rate, "rateOrigin": $rate_origin, "total": $total, "type": $type} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json;charset=UTF-8"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: {}, body: $req_body}
 }
 
 # Adds a receivable to a project.
@@ -6808,7 +7054,7 @@ export def "projects-finance-payables update-by-projectId-payableId" [
 # operationId: createReceivable_2
 # --catLogFile shape: {content?: string, name?: string, token?: string, url?: string}
 # --languageCombination shape: {sourceLanguageId?: int, targetLanguageId?: int}
-export def "projects-finance-receivables create-by-projectId" [
+export def "projects-finance-receivables create-by-project-id" [
   project_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -6840,19 +7086,20 @@ export def "projects-finance-receivables create-by-projectId" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "x-auth-access-token"))
   let base = ($base_url | default $BASE_URL)
+  if ($project_id | is-empty) { error make --unspanned { msg: "path parameter 'projectId' must be non-empty" } }
   let full_url = (build-url $base ({project_id: (encode-path-segment $project_id)} | format pattern "/v2/projects/{project_id}/finance/receivables"))
   let req_body = {"calculationUnitId": $calculation_unit_id, "catLogFile": $cat_log_file, "currencyId": $currency_id, "description": $description, "id": $id, "ignoreMinimumCharge": $ignore_minimum_charge, "invoiceId": $invoice_id, "jobTypeId": $job_type_id, "languageCombination": $language_combination, "languageCombinationIdNumber": $language_combination_id_number, "minimumCharge": $minimum_charge, "quantity": $quantity, "rate": $rate, "rateOrigin": $rate_origin, "taskId": $task_id, "total": $total, "type": $type} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json;charset=UTF-8"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: {}, body: $req_body}
 }
 
 # Deletes a receivable.
 #
 # DELETE /v2/projects/{projectId}/finance/receivables/{receivableId}
 # operationId: deleteReceivable_2
-export def "projects-finance-receivables delete-by-projectId-receivableId" [
+export def "projects-finance-receivables delete-by-project-id-receivable-id" [
   project_id: string
   receivable_id: int
   --base-url(-b): string@base-url-completer # API base URL
@@ -6867,10 +7114,12 @@ export def "projects-finance-receivables delete-by-projectId-receivableId" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "x-auth-access-token"))
   let base = ($base_url | default $BASE_URL)
+  if ($project_id | is-empty) { error make --unspanned { msg: "path parameter 'projectId' must be non-empty" } }
+  if ($receivable_id | is-empty) { error make --unspanned { msg: "path parameter 'receivableId' must be non-empty" } }
   let full_url = (build-url $base ({project_id: (encode-path-segment $project_id), receivable_id: (encode-path-segment $receivable_id)} | format pattern "/v2/projects/{project_id}/finance/receivables/{receivable_id}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
 }
 
 # Updates a receivable.
@@ -6878,7 +7127,7 @@ export def "projects-finance-receivables delete-by-projectId-receivableId" [
 # PUT /v2/projects/{projectId}/finance/receivables/{receivableId}
 # operationId: updateReceivable_2
 # --languageCombination shape: {sourceLanguageId?: int, targetLanguageId?: int}
-export def "projects-finance-receivables update-by-projectId-receivableId" [
+export def "projects-finance-receivables update-by-project-id-receivable-id" [
   project_id: string
   receivable_id: int
   --base-url(-b): string@base-url-completer # API base URL
@@ -6910,12 +7159,14 @@ export def "projects-finance-receivables update-by-projectId-receivableId" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "x-auth-access-token"))
   let base = ($base_url | default $BASE_URL)
+  if ($project_id | is-empty) { error make --unspanned { msg: "path parameter 'projectId' must be non-empty" } }
+  if ($receivable_id | is-empty) { error make --unspanned { msg: "path parameter 'receivableId' must be non-empty" } }
   let full_url = (build-url $base ({project_id: (encode-path-segment $project_id), receivable_id: (encode-path-segment $receivable_id)} | format pattern "/v2/projects/{project_id}/finance/receivables/{receivable_id}"))
   let req_body = {"calculationUnitId": $calculation_unit_id, "currencyId": $currency_id, "description": $description, "id": $id, "ignoreMinimumCharge": $ignore_minimum_charge, "invoiceId": $invoice_id, "jobTypeId": $job_type_id, "languageCombination": $language_combination, "languageCombinationIdNumber": $language_combination_id_number, "minimumCharge": $minimum_charge, "quantity": $quantity, "rate": $rate, "rateOrigin": $rate_origin, "taskId": $task_id, "total": $total, "type": $type} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json;charset=UTF-8"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: {}, body: $req_body}
 }
 
 # Updates Internal Notes for a project.
@@ -6938,12 +7189,13 @@ export def "projects-internal-notes update" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "x-auth-access-token"))
   let base = ($base_url | default $BASE_URL)
+  if ($project_id | is-empty) { error make --unspanned { msg: "path parameter 'projectId' must be non-empty" } }
   let full_url = (build-url $base ({project_id: (encode-path-segment $project_id)} | format pattern "/v2/projects/{project_id}/internalNotes"))
   let req_body = {"value": $value} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: {}, body: $req_body}
 }
 
 # Returns list of jobs in a project.
@@ -6964,10 +7216,11 @@ export def "projects-jobs get" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "x-auth-access-token"))
   let base = ($base_url | default $BASE_URL)
+  if ($project_id | is-empty) { error make --unspanned { msg: "path parameter 'projectId' must be non-empty" } }
   let full_url = (build-url $base ({project_id: (encode-path-segment $project_id)} | format pattern "/v2/projects/{project_id}/jobs"))
   let accept_val = "application/json;charset=UTF-8"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
 }
 
 # Updates Order Date for a project.
@@ -6990,12 +7243,13 @@ export def "projects-order-date update-ordered" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "x-auth-access-token"))
   let base = ($base_url | default $BASE_URL)
+  if ($project_id | is-empty) { error make --unspanned { msg: "path parameter 'projectId' must be non-empty" } }
   let full_url = (build-url $base ({project_id: (encode-path-segment $project_id)} | format pattern "/v2/projects/{project_id}/orderDate"))
   let req_body = {"value": $value} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: {}, body: $req_body}
 }
 
 # Returns process id.
@@ -7016,10 +7270,11 @@ export def "projects-process get" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "x-auth-access-token"))
   let base = ($base_url | default $BASE_URL)
+  if ($project_id | is-empty) { error make --unspanned { msg: "path parameter 'projectId' must be non-empty" } }
   let full_url = (build-url $base ({project_id: (encode-path-segment $project_id)} | format pattern "/v2/projects/{project_id}/process"))
   let accept_val = "application/json;charset=UTF-8"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
 }
 
 # Updates source language for a project.
@@ -7042,12 +7297,13 @@ export def "projects-source-language update" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "x-auth-access-token"))
   let base = ($base_url | default $BASE_URL)
+  if ($project_id | is-empty) { error make --unspanned { msg: "path parameter 'projectId' must be non-empty" } }
   let full_url = (build-url $base ({project_id: (encode-path-segment $project_id)} | format pattern "/v2/projects/{project_id}/sourceLanguage"))
   let req_body = {"sourceLanguageId": $source_language_id} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: {}, body: $req_body}
 }
 
 # Updates specialization for a project.
@@ -7070,19 +7326,20 @@ export def "projects-specialization update" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "x-auth-access-token"))
   let base = ($base_url | default $BASE_URL)
+  if ($project_id | is-empty) { error make --unspanned { msg: "path parameter 'projectId' must be non-empty" } }
   let full_url = (build-url $base ({project_id: (encode-path-segment $project_id)} | format pattern "/v2/projects/{project_id}/specialization"))
   let req_body = {"specializationId": $specialization_id} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: {}, body: $req_body}
 }
 
 # Changes project status if possible (400 Bad Request is returned otherwise).
 #
 # PUT /v2/projects/{projectId}/status
 # operationId: changeStatus_2
-export def "projects-status update-change-by-projectId" [
+export def "projects-status update-change-by-project-id" [
   project_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -7098,12 +7355,13 @@ export def "projects-status update-change-by-projectId" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "x-auth-access-token"))
   let base = ($base_url | default $BASE_URL)
+  if ($project_id | is-empty) { error make --unspanned { msg: "path parameter 'projectId' must be non-empty" } }
   let full_url = (build-url $base ({project_id: (encode-path-segment $project_id)} | format pattern "/v2/projects/{project_id}/status"))
   let req_body = {"status": $status} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: {}, body: $req_body}
 }
 
 # Updates target languages for a project.
@@ -7126,12 +7384,13 @@ export def "projects-target-languages update" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "x-auth-access-token"))
   let base = ($base_url | default $BASE_URL)
+  if ($project_id | is-empty) { error make --unspanned { msg: "path parameter 'projectId' must be non-empty" } }
   let full_url = (build-url $base ({project_id: (encode-path-segment $project_id)} | format pattern "/v2/projects/{project_id}/targetLanguages"))
   let req_body = {"targetLanguageIds": $target_language_ids} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: {}, body: $req_body}
 }
 
 # Updates instructions for all vendors performing the jobs in a project.
@@ -7154,12 +7413,13 @@ export def "projects-vendor-instructions update" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "x-auth-access-token"))
   let base = ($base_url | default $BASE_URL)
+  if ($project_id | is-empty) { error make --unspanned { msg: "path parameter 'projectId' must be non-empty" } }
   let full_url = (build-url $base ({project_id: (encode-path-segment $project_id)} | format pattern "/v2/projects/{project_id}/vendorInstructions"))
   let req_body = {"value": $value} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: {}, body: $req_body}
 }
 
 # Updates volume for a project.
@@ -7182,19 +7442,20 @@ export def "projects-volume update" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "x-auth-access-token"))
   let base = ($base_url | default $BASE_URL)
+  if ($project_id | is-empty) { error make --unspanned { msg: "path parameter 'projectId' must be non-empty" } }
   let full_url = (build-url $base ({project_id: (encode-path-segment $project_id)} | format pattern "/v2/projects/{project_id}/volume"))
   let req_body = {"value": $value} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: {}, body: $req_body}
 }
 
 # Creates a new Smart Quote.
 #
 # POST /v2/quotes
 # operationId: create_7
-export def "quotes create-by-" [
+export def "quotes create" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -7217,14 +7478,14 @@ export def "quotes create-by-" [
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json;charset=UTF-8"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: {}, body: $req_body}
 }
 
 # Prepares a ZIP archive that contains the specified files.
 #
 # POST /v2/quotes/files/archive
 # operationId: archive_1
-export def "quotes-files-archive archive-by-" [
+export def "quotes-files-archive archive" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -7244,14 +7505,14 @@ export def "quotes-files-archive archive-by-" [
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json;charset=UTF-8"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json;charset=UTF-8" $req_body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json;charset=UTF-8" $req_body {query: {}, body: $req_body}
 }
 
 # Returns details of a file.
 #
 # GET /v2/quotes/files/{fileId}
 # operationId: getFileById_3
-export def "quotes-files get-by-fileId" [
+export def "quotes-files get-by-file-id" [
   file_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -7265,17 +7526,18 @@ export def "quotes-files get-by-fileId" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "x-auth-access-token"))
   let base = ($base_url | default $BASE_URL)
+  if ($file_id | is-empty) { error make --unspanned { msg: "path parameter 'fileId' must be non-empty" } }
   let full_url = (build-url $base ({file_id: (encode-path-segment $file_id)} | format pattern "/v2/quotes/files/{file_id}"))
   let accept_val = "application/json;charset=UTF-8"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
 }
 
 # Downloads a file content.
 #
 # GET /v2/quotes/files/{fileId}/download/{fileName}
 # operationId: getFileContentById_1
-export def "quotes-files-download get-content-by-fileId-fileName" [
+export def "quotes-files-download get-content-by-file-id-file-name" [
   file_id: string
   file_name: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -7290,17 +7552,19 @@ export def "quotes-files-download get-content-by-fileId-fileName" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "x-auth-access-token"))
   let base = ($base_url | default $BASE_URL)
+  if ($file_id | is-empty) { error make --unspanned { msg: "path parameter 'fileId' must be non-empty" } }
+  if ($file_name | is-empty) { error make --unspanned { msg: "path parameter 'fileName' must be non-empty" } }
   let full_url = (build-url $base ({file_id: (encode-path-segment $file_id), file_name: (encode-path-segment $file_name)} | format pattern "/v2/quotes/files/{file_id}/download/{file_name}"))
   let accept_val = "multipart/form-data"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
 }
 
 # Returns quote details.
 #
 # GET /v2/quotes/{quoteId}
 # operationId: getById_10
-export def "quotes get-by-quoteId-by-quoteId-1" [
+export def "quotes get-by-quote-id-by-quote-id-1" [
   quote_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -7314,10 +7578,11 @@ export def "quotes get-by-quoteId-by-quoteId-1" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "x-auth-access-token"))
   let base = ($base_url | default $BASE_URL)
+  if ($quote_id | is-empty) { error make --unspanned { msg: "path parameter 'quoteId' must be non-empty" } }
   let full_url = (build-url $base ({quote_id: (encode-path-segment $quote_id)} | format pattern "/v2/quotes/{quote_id}"))
   let accept_val = "application/json;charset=UTF-8"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
 }
 
 # Updates Business Days for a quote.
@@ -7340,19 +7605,20 @@ export def "quotes-business-days update" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "x-auth-access-token"))
   let base = ($base_url | default $BASE_URL)
+  if ($quote_id | is-empty) { error make --unspanned { msg: "path parameter 'quoteId' must be non-empty" } }
   let full_url = (build-url $base ({quote_id: (encode-path-segment $quote_id)} | format pattern "/v2/quotes/{quote_id}/businessDays"))
   let req_body = $body
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else if (($input | is-not-empty) and ($req_body | is-empty)) { $input } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: {}, body: $req_body}
 }
 
 # Returns Client Contacts information for a quote.
 #
 # GET /v2/quotes/{quoteId}/clientContacts
 # operationId: getContacts_3
-export def "quotes-client-contacts get-by-quoteId" [
+export def "quotes-client-contacts get-by-quote-id" [
   quote_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -7366,17 +7632,18 @@ export def "quotes-client-contacts get-by-quoteId" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "x-auth-access-token"))
   let base = ($base_url | default $BASE_URL)
+  if ($quote_id | is-empty) { error make --unspanned { msg: "path parameter 'quoteId' must be non-empty" } }
   let full_url = (build-url $base ({quote_id: (encode-path-segment $quote_id)} | format pattern "/v2/quotes/{quote_id}/clientContacts"))
   let accept_val = "application/json;charset=UTF-8"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
 }
 
 # Updates Client Contacts for a quote.
 #
 # PUT /v2/quotes/{quoteId}/clientContacts
 # operationId: updateContacts_3
-export def "quotes-client-contacts update-by-quoteId" [
+export def "quotes-client-contacts update-by-quote-id" [
   quote_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -7393,19 +7660,20 @@ export def "quotes-client-contacts update-by-quoteId" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "x-auth-access-token"))
   let base = ($base_url | default $BASE_URL)
+  if ($quote_id | is-empty) { error make --unspanned { msg: "path parameter 'quoteId' must be non-empty" } }
   let full_url = (build-url $base ({quote_id: (encode-path-segment $quote_id)} | format pattern "/v2/quotes/{quote_id}/clientContacts"))
   let req_body = {"additionalIds": $additional_ids, "primaryId": $primary_id} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json;charset=UTF-8"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json;charset=UTF-8" $req_body
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json;charset=UTF-8" $req_body {query: {}, body: $req_body}
 }
 
 # Updates Client Notes for a quote.
 #
 # PUT /v2/quotes/{quoteId}/clientNotes
 # operationId: updateClientNotes_1
-export def "quotes-client-notes update-by-quoteId" [
+export def "quotes-client-notes update-by-quote-id" [
   quote_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -7421,19 +7689,20 @@ export def "quotes-client-notes update-by-quoteId" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "x-auth-access-token"))
   let base = ($base_url | default $BASE_URL)
+  if ($quote_id | is-empty) { error make --unspanned { msg: "path parameter 'quoteId' must be non-empty" } }
   let full_url = (build-url $base ({quote_id: (encode-path-segment $quote_id)} | format pattern "/v2/quotes/{quote_id}/clientNotes"))
   let req_body = {"value": $value} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: {}, body: $req_body}
 }
 
 # Updates Client Reference Number for a quote.
 #
 # PUT /v2/quotes/{quoteId}/clientReferenceNumber
 # operationId: updateClientReferenceNumber_1
-export def "quotes-client-reference-number update-by-quoteId" [
+export def "quotes-client-reference-number update-by-quote-id" [
   quote_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -7449,19 +7718,20 @@ export def "quotes-client-reference-number update-by-quoteId" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "x-auth-access-token"))
   let base = ($base_url | default $BASE_URL)
+  if ($quote_id | is-empty) { error make --unspanned { msg: "path parameter 'quoteId' must be non-empty" } }
   let full_url = (build-url $base ({quote_id: (encode-path-segment $quote_id)} | format pattern "/v2/quotes/{quote_id}/clientReferenceNumber"))
   let req_body = {"value": $value} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: {}, body: $req_body}
 }
 
 # Returns a list of custom field keys and values for a project.
 #
 # GET /v2/quotes/{quoteId}/customFields
 # operationId: getCustomFields_9
-export def "quotes-custom-fields get-by-quoteId-by-quoteId-1" [
+export def "quotes-custom-fields get-by-quote-id-by-quote-id-1" [
   quote_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -7475,17 +7745,18 @@ export def "quotes-custom-fields get-by-quoteId-by-quoteId-1" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "x-auth-access-token"))
   let base = ($base_url | default $BASE_URL)
+  if ($quote_id | is-empty) { error make --unspanned { msg: "path parameter 'quoteId' must be non-empty" } }
   let full_url = (build-url $base ({quote_id: (encode-path-segment $quote_id)} | format pattern "/v2/quotes/{quote_id}/customFields"))
   let accept_val = "application/json;charset=UTF-8"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
 }
 
 # Updates a custom field with a specified key in a quote.
 #
 # PUT /v2/quotes/{quoteId}/customFields/{key}
 # operationId: updateCustomField_3
-export def "quotes-custom-fields update-by-quoteId-key" [
+export def "quotes-custom-fields update-by-quote-id-key" [
   quote_id: string
   key: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -7502,12 +7773,14 @@ export def "quotes-custom-fields update-by-quoteId-key" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "x-auth-access-token"))
   let base = ($base_url | default $BASE_URL)
+  if ($quote_id | is-empty) { error make --unspanned { msg: "path parameter 'quoteId' must be non-empty" } }
+  if ($key | is-empty) { error make --unspanned { msg: "path parameter 'key' must be non-empty" } }
   let full_url = (build-url $base ({quote_id: (encode-path-segment $quote_id), key: (encode-path-segment $key)} | format pattern "/v2/quotes/{quote_id}/customFields/{key}"))
   let req_body = {"value": $value} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: {}, body: $req_body}
 }
 
 # Updates Expected Delivery Date for a quote.
@@ -7530,19 +7803,20 @@ export def "quotes-expected-delivery-date update" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "x-auth-access-token"))
   let base = ($base_url | default $BASE_URL)
+  if ($quote_id | is-empty) { error make --unspanned { msg: "path parameter 'quoteId' must be non-empty" } }
   let full_url = (build-url $base ({quote_id: (encode-path-segment $quote_id)} | format pattern "/v2/quotes/{quote_id}/expectedDeliveryDate"))
   let req_body = {"value": $value} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: {}, body: $req_body}
 }
 
 # Returns list of files in a quote.
 #
 # GET /v2/quotes/{quoteId}/files
 # operationId: getFiles_1
-export def "quotes-files get-by-quoteId" [
+export def "quotes-files get-by-quote-id" [
   quote_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -7556,17 +7830,18 @@ export def "quotes-files get-by-quoteId" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "x-auth-access-token"))
   let base = ($base_url | default $BASE_URL)
+  if ($quote_id | is-empty) { error make --unspanned { msg: "path parameter 'quoteId' must be non-empty" } }
   let full_url = (build-url $base ({quote_id: (encode-path-segment $quote_id)} | format pattern "/v2/quotes/{quote_id}/files"))
   let accept_val = "application/json;charset=UTF-8"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
 }
 
 # Adds files to the quote as added by PM.
 #
 # PUT /v2/quotes/{quoteId}/files/add
 # operationId: addFiles_2
-export def "quotes-files-add create-by-quoteId" [
+export def "quotes-files-add create-by-quote-id" [
   quote_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -7582,19 +7857,20 @@ export def "quotes-files-add create-by-quoteId" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "x-auth-access-token"))
   let base = ($base_url | default $BASE_URL)
+  if ($quote_id | is-empty) { error make --unspanned { msg: "path parameter 'quoteId' must be non-empty" } }
   let full_url = (build-url $base ({quote_id: (encode-path-segment $quote_id)} | format pattern "/v2/quotes/{quote_id}/files/add"))
   let req_body = {"value": $value} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: {}, body: $req_body}
 }
 
 # Uploads file to the quote as a file uploaded by PM.
 #
 # POST /v2/quotes/{quoteId}/files/upload
 # operationId: uploadFile_3
-export def "quotes-files-upload upload-by-quoteId" [
+export def "quotes-files-upload upload-by-quote-id" [
   quote_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -7610,6 +7886,7 @@ export def "quotes-files-upload upload-by-quoteId" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "x-auth-access-token"))
   let base = ($base_url | default $BASE_URL)
+  if ($quote_id | is-empty) { error make --unspanned { msg: "path parameter 'quoteId' must be non-empty" } }
   let full_url = (build-url $base ({quote_id: (encode-path-segment $quote_id)} | format pattern "/v2/quotes/{quote_id}/files/upload"))
   let req_body = {"file": $file} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
@@ -7617,14 +7894,14 @@ export def "quotes-files-upload upload-by-quoteId" [
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let req_body = if ($req_body | describe | str starts-with "record") { $req_body } else { {} }
   let mp = (build-multipart-body $req_body ["file"] $dry_run)
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full $mp.content_type $mp.body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full $mp.content_type $mp.body {query: {}, body: $req_body}
 }
 
 # Returns finance information for a quote.
 #
 # GET /v2/quotes/{quoteId}/finance
 # operationId: getFinance_3
-export def "quotes-finance get-by-quoteId-by-quoteId-1" [
+export def "quotes-finance get-by-quote-id-by-quote-id-1" [
   quote_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -7638,10 +7915,11 @@ export def "quotes-finance get-by-quoteId-by-quoteId-1" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "x-auth-access-token"))
   let base = ($base_url | default $BASE_URL)
+  if ($quote_id | is-empty) { error make --unspanned { msg: "path parameter 'quoteId' must be non-empty" } }
   let full_url = (build-url $base ({quote_id: (encode-path-segment $quote_id)} | format pattern "/v2/quotes/{quote_id}/finance"))
   let accept_val = "application/json;charset=UTF-8"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
 }
 
 # Adds a payable to a quote.
@@ -7650,7 +7928,7 @@ export def "quotes-finance get-by-quoteId-by-quoteId-1" [
 # operationId: createPayable_3
 # --catLogFile shape: {content?: string, name?: string, token?: string, url?: string}
 # --languageCombination shape: {sourceLanguageId?: int, targetLanguageId?: int}
-export def "quotes-finance-payables create-by-quoteId-by-quoteId-1" [
+export def "quotes-finance-payables create-by-quote-id-by-quote-id-1" [
   quote_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -7682,19 +7960,20 @@ export def "quotes-finance-payables create-by-quoteId-by-quoteId-1" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "x-auth-access-token"))
   let base = ($base_url | default $BASE_URL)
+  if ($quote_id | is-empty) { error make --unspanned { msg: "path parameter 'quoteId' must be non-empty" } }
   let full_url = (build-url $base ({quote_id: (encode-path-segment $quote_id)} | format pattern "/v2/quotes/{quote_id}/finance/payables"))
   let req_body = {"calculationUnitId": $calculation_unit_id, "catLogFile": $cat_log_file, "currencyId": $currency_id, "description": $description, "id": $id, "ignoreMinimumCharge": $ignore_minimum_charge, "invoiceId": $invoice_id, "jobId": $job_id, "jobTypeId": $job_type_id, "languageCombination": $language_combination, "languageCombinationIdNumber": $language_combination_id_number, "minimumCharge": $minimum_charge, "quantity": $quantity, "rate": $rate, "rateOrigin": $rate_origin, "total": $total, "type": $type} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: {}, body: $req_body}
 }
 
 # Deletes a payable.
 #
 # DELETE /v2/quotes/{quoteId}/finance/payables/{payableId}
 # operationId: deletePayable_3
-export def "quotes-finance-payables delete-by-quoteId-payableId-by-quoteId-payableId-1" [
+export def "quotes-finance-payables delete-by-quote-id-payable-id-by-quote-id-payable-id-1" [
   quote_id: string
   payable_id: int
   --base-url(-b): string@base-url-completer # API base URL
@@ -7709,10 +7988,12 @@ export def "quotes-finance-payables delete-by-quoteId-payableId-by-quoteId-payab
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "x-auth-access-token"))
   let base = ($base_url | default $BASE_URL)
+  if ($quote_id | is-empty) { error make --unspanned { msg: "path parameter 'quoteId' must be non-empty" } }
+  if ($payable_id | is-empty) { error make --unspanned { msg: "path parameter 'payableId' must be non-empty" } }
   let full_url = (build-url $base ({quote_id: (encode-path-segment $quote_id), payable_id: (encode-path-segment $payable_id)} | format pattern "/v2/quotes/{quote_id}/finance/payables/{payable_id}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
 }
 
 # Updates a payable.
@@ -7720,7 +8001,7 @@ export def "quotes-finance-payables delete-by-quoteId-payableId-by-quoteId-payab
 # PUT /v2/quotes/{quoteId}/finance/payables/{payableId}
 # operationId: updatePayable_3
 # --languageCombination shape: {sourceLanguageId?: int, targetLanguageId?: int}
-export def "quotes-finance-payables update-by-quoteId-payableId-by-quoteId-payableId-1" [
+export def "quotes-finance-payables update-by-quote-id-payable-id-by-quote-id-payable-id-1" [
   quote_id: string
   payable_id: int
   --base-url(-b): string@base-url-completer # API base URL
@@ -7752,12 +8033,14 @@ export def "quotes-finance-payables update-by-quoteId-payableId-by-quoteId-payab
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "x-auth-access-token"))
   let base = ($base_url | default $BASE_URL)
+  if ($quote_id | is-empty) { error make --unspanned { msg: "path parameter 'quoteId' must be non-empty" } }
+  if ($payable_id | is-empty) { error make --unspanned { msg: "path parameter 'payableId' must be non-empty" } }
   let full_url = (build-url $base ({quote_id: (encode-path-segment $quote_id), payable_id: (encode-path-segment $payable_id)} | format pattern "/v2/quotes/{quote_id}/finance/payables/{payable_id}"))
   let req_body = {"calculationUnitId": $calculation_unit_id, "currencyId": $currency_id, "description": $description, "id": $id, "ignoreMinimumCharge": $ignore_minimum_charge, "invoiceId": $invoice_id, "jobId": $job_id, "jobTypeId": $job_type_id, "languageCombination": $language_combination, "languageCombinationIdNumber": $language_combination_id_number, "minimumCharge": $minimum_charge, "quantity": $quantity, "rate": $rate, "rateOrigin": $rate_origin, "total": $total, "type": $type} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: {}, body: $req_body}
 }
 
 # Adds a receivable to a quote.
@@ -7766,7 +8049,7 @@ export def "quotes-finance-payables update-by-quoteId-payableId-by-quoteId-payab
 # operationId: createReceivable_3
 # --catLogFile shape: {content?: string, name?: string, token?: string, url?: string}
 # --languageCombination shape: {sourceLanguageId?: int, targetLanguageId?: int}
-export def "quotes-finance-receivables create-by-quoteId-by-quoteId-1" [
+export def "quotes-finance-receivables create-by-quote-id-by-quote-id-1" [
   quote_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -7798,19 +8081,20 @@ export def "quotes-finance-receivables create-by-quoteId-by-quoteId-1" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "x-auth-access-token"))
   let base = ($base_url | default $BASE_URL)
+  if ($quote_id | is-empty) { error make --unspanned { msg: "path parameter 'quoteId' must be non-empty" } }
   let full_url = (build-url $base ({quote_id: (encode-path-segment $quote_id)} | format pattern "/v2/quotes/{quote_id}/finance/receivables"))
   let req_body = {"calculationUnitId": $calculation_unit_id, "catLogFile": $cat_log_file, "currencyId": $currency_id, "description": $description, "id": $id, "ignoreMinimumCharge": $ignore_minimum_charge, "invoiceId": $invoice_id, "jobTypeId": $job_type_id, "languageCombination": $language_combination, "languageCombinationIdNumber": $language_combination_id_number, "minimumCharge": $minimum_charge, "quantity": $quantity, "rate": $rate, "rateOrigin": $rate_origin, "taskId": $task_id, "total": $total, "type": $type} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: {}, body: $req_body}
 }
 
 # Deletes a receivable.
 #
 # DELETE /v2/quotes/{quoteId}/finance/receivables/{receivableId}
 # operationId: deleteReceivable_3
-export def "quotes-finance-receivables delete-by-quoteId-receivableId-by-quoteId-receivableId-1" [
+export def "quotes-finance-receivables delete-by-quote-id-receivable-id-by-quote-id-receivable-id-1" [
   quote_id: string
   receivable_id: int
   --base-url(-b): string@base-url-completer # API base URL
@@ -7825,10 +8109,12 @@ export def "quotes-finance-receivables delete-by-quoteId-receivableId-by-quoteId
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "x-auth-access-token"))
   let base = ($base_url | default $BASE_URL)
+  if ($quote_id | is-empty) { error make --unspanned { msg: "path parameter 'quoteId' must be non-empty" } }
+  if ($receivable_id | is-empty) { error make --unspanned { msg: "path parameter 'receivableId' must be non-empty" } }
   let full_url = (build-url $base ({quote_id: (encode-path-segment $quote_id), receivable_id: (encode-path-segment $receivable_id)} | format pattern "/v2/quotes/{quote_id}/finance/receivables/{receivable_id}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
 }
 
 # Updates a receivable.
@@ -7836,7 +8122,7 @@ export def "quotes-finance-receivables delete-by-quoteId-receivableId-by-quoteId
 # PUT /v2/quotes/{quoteId}/finance/receivables/{receivableId}
 # operationId: updateReceivable_3
 # --languageCombination shape: {sourceLanguageId?: int, targetLanguageId?: int}
-export def "quotes-finance-receivables update-by-quoteId-receivableId-by-quoteId-receivableId-1" [
+export def "quotes-finance-receivables update-by-quote-id-receivable-id-by-quote-id-receivable-id-1" [
   quote_id: string
   receivable_id: int
   --base-url(-b): string@base-url-completer # API base URL
@@ -7868,19 +8154,21 @@ export def "quotes-finance-receivables update-by-quoteId-receivableId-by-quoteId
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "x-auth-access-token"))
   let base = ($base_url | default $BASE_URL)
+  if ($quote_id | is-empty) { error make --unspanned { msg: "path parameter 'quoteId' must be non-empty" } }
+  if ($receivable_id | is-empty) { error make --unspanned { msg: "path parameter 'receivableId' must be non-empty" } }
   let full_url = (build-url $base ({quote_id: (encode-path-segment $quote_id), receivable_id: (encode-path-segment $receivable_id)} | format pattern "/v2/quotes/{quote_id}/finance/receivables/{receivable_id}"))
   let req_body = {"calculationUnitId": $calculation_unit_id, "currencyId": $currency_id, "description": $description, "id": $id, "ignoreMinimumCharge": $ignore_minimum_charge, "invoiceId": $invoice_id, "jobTypeId": $job_type_id, "languageCombination": $language_combination, "languageCombinationIdNumber": $language_combination_id_number, "minimumCharge": $minimum_charge, "quantity": $quantity, "rate": $rate, "rateOrigin": $rate_origin, "taskId": $task_id, "total": $total, "type": $type} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: {}, body: $req_body}
 }
 
 # Updates Internal Notes for a quote.
 #
 # PUT /v2/quotes/{quoteId}/internalNotes
 # operationId: updateInternalNotes_1
-export def "quotes-internal-notes update-by-quoteId" [
+export def "quotes-internal-notes update-by-quote-id" [
   quote_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -7896,19 +8184,20 @@ export def "quotes-internal-notes update-by-quoteId" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "x-auth-access-token"))
   let base = ($base_url | default $BASE_URL)
+  if ($quote_id | is-empty) { error make --unspanned { msg: "path parameter 'quoteId' must be non-empty" } }
   let full_url = (build-url $base ({quote_id: (encode-path-segment $quote_id)} | format pattern "/v2/quotes/{quote_id}/internalNotes"))
   let req_body = {"value": $value} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: {}, body: $req_body}
 }
 
 # Returns list of jobs in a quote.
 #
 # GET /v2/quotes/{quoteId}/jobs
 # operationId: getJobs_1
-export def "quotes-jobs get-by-quoteId" [
+export def "quotes-jobs get-by-quote-id" [
   quote_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -7922,10 +8211,11 @@ export def "quotes-jobs get-by-quoteId" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "x-auth-access-token"))
   let base = ($base_url | default $BASE_URL)
+  if ($quote_id | is-empty) { error make --unspanned { msg: "path parameter 'quoteId' must be non-empty" } }
   let full_url = (build-url $base ({quote_id: (encode-path-segment $quote_id)} | format pattern "/v2/quotes/{quote_id}/jobs"))
   let accept_val = "application/json;charset=UTF-8"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
 }
 
 # Updates Quote Expiry Date for a quote.
@@ -7948,19 +8238,20 @@ export def "quotes-quote-expiry update" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "x-auth-access-token"))
   let base = ($base_url | default $BASE_URL)
+  if ($quote_id | is-empty) { error make --unspanned { msg: "path parameter 'quoteId' must be non-empty" } }
   let full_url = (build-url $base ({quote_id: (encode-path-segment $quote_id)} | format pattern "/v2/quotes/{quote_id}/quoteExpiry"))
   let req_body = {"value": $value} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: {}, body: $req_body}
 }
 
 # Updates source language for a quote.
 #
 # PUT /v2/quotes/{quoteId}/sourceLanguage
 # operationId: updateSourceLanguage_1
-export def "quotes-source-language update-by-quoteId" [
+export def "quotes-source-language update-by-quote-id" [
   quote_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -7976,19 +8267,20 @@ export def "quotes-source-language update-by-quoteId" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "x-auth-access-token"))
   let base = ($base_url | default $BASE_URL)
+  if ($quote_id | is-empty) { error make --unspanned { msg: "path parameter 'quoteId' must be non-empty" } }
   let full_url = (build-url $base ({quote_id: (encode-path-segment $quote_id)} | format pattern "/v2/quotes/{quote_id}/sourceLanguage"))
   let req_body = {"sourceLanguageId": $source_language_id} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: {}, body: $req_body}
 }
 
 # Updates specialization for a quote.
 #
 # PUT /v2/quotes/{quoteId}/specialization
 # operationId: updateSpecialization_1
-export def "quotes-specialization update-by-quoteId" [
+export def "quotes-specialization update-by-quote-id" [
   quote_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -8004,19 +8296,20 @@ export def "quotes-specialization update-by-quoteId" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "x-auth-access-token"))
   let base = ($base_url | default $BASE_URL)
+  if ($quote_id | is-empty) { error make --unspanned { msg: "path parameter 'quoteId' must be non-empty" } }
   let full_url = (build-url $base ({quote_id: (encode-path-segment $quote_id)} | format pattern "/v2/quotes/{quote_id}/specialization"))
   let req_body = {"specializationId": $specialization_id} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: {}, body: $req_body}
 }
 
 # Changes quote status if possible (400 Bad Request is returned otherwise).
 #
 # PUT /v2/quotes/{quoteId}/status
 # operationId: changeStatus_3
-export def "quotes-status update-change-by-quoteId" [
+export def "quotes-status update-change-by-quote-id" [
   quote_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -8032,19 +8325,20 @@ export def "quotes-status update-change-by-quoteId" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "x-auth-access-token"))
   let base = ($base_url | default $BASE_URL)
+  if ($quote_id | is-empty) { error make --unspanned { msg: "path parameter 'quoteId' must be non-empty" } }
   let full_url = (build-url $base ({quote_id: (encode-path-segment $quote_id)} | format pattern "/v2/quotes/{quote_id}/status"))
   let req_body = {"status": $status} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: {}, body: $req_body}
 }
 
 # Updates target languages for a quote.
 #
 # PUT /v2/quotes/{quoteId}/targetLanguages
 # operationId: updateTargetLanguages_1
-export def "quotes-target-languages update-by-quoteId" [
+export def "quotes-target-languages update-by-quote-id" [
   quote_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -8060,19 +8354,20 @@ export def "quotes-target-languages update-by-quoteId" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "x-auth-access-token"))
   let base = ($base_url | default $BASE_URL)
+  if ($quote_id | is-empty) { error make --unspanned { msg: "path parameter 'quoteId' must be non-empty" } }
   let full_url = (build-url $base ({quote_id: (encode-path-segment $quote_id)} | format pattern "/v2/quotes/{quote_id}/targetLanguages"))
   let req_body = {"targetLanguageIds": $target_language_ids} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: {}, body: $req_body}
 }
 
 # Updates instructions for all vendors performing the jobs in a quote.
 #
 # PUT /v2/quotes/{quoteId}/vendorInstructions
 # operationId: updateVendorInstructions_1
-export def "quotes-vendor-instructions update-by-quoteId" [
+export def "quotes-vendor-instructions update-by-quote-id" [
   quote_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -8088,19 +8383,20 @@ export def "quotes-vendor-instructions update-by-quoteId" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "x-auth-access-token"))
   let base = ($base_url | default $BASE_URL)
+  if ($quote_id | is-empty) { error make --unspanned { msg: "path parameter 'quoteId' must be non-empty" } }
   let full_url = (build-url $base ({quote_id: (encode-path-segment $quote_id)} | format pattern "/v2/quotes/{quote_id}/vendorInstructions"))
   let req_body = {"value": $value} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: {}, body: $req_body}
 }
 
 # Updates volume for a quote.
 #
 # PUT /v2/quotes/{quoteId}/volume
 # operationId: updateVolume_1
-export def "quotes-volume update-by-quoteId" [
+export def "quotes-volume update-by-quote-id" [
   quote_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -8116,10 +8412,11 @@ export def "quotes-volume update-by-quoteId" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "x-auth-access-token"))
   let base = ($base_url | default $BASE_URL)
+  if ($quote_id | is-empty) { error make --unspanned { msg: "path parameter 'quoteId' must be non-empty" } }
   let full_url = (build-url $base ({quote_id: (encode-path-segment $quote_id)} | format pattern "/v2/quotes/{quote_id}/volume"))
   let req_body = {"value": $value} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: {}, body: $req_body}
 }

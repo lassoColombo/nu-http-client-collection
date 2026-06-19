@@ -3,17 +3,18 @@
 # Auth: --token flag or $env.BOOKS_API_TOKEN
 
 const BASE_URL = "https://api.nytimes.com/svc/books/v3"
-const DEFAULT_AUTH = "query-api-key"
 
-# Build auth: returns {headers: record, query: string}
+# Build auth: returns {scheme: string, headers: record, query: string, location: string}.
+# `location` is "header" | "query" | "cookie" | "none" and tells dry-run callers
+# where the token went without inspecting headers/query themselves.
 def build-auth [token?: string, auth_scheme?: string]: nothing -> record {
   let token_val = if ($token != null) and ($token | is-not-empty) { $token } else { $env | get -o BOOKS_API_TOKEN | default "" }
   let scheme = ($auth_scheme | default "bearer")
-  if ($scheme == "none") or ($token_val | is-empty) { return {headers: {}, query: ""} }
+  if ($scheme == "none") or ($token_val | is-empty) { return {scheme: $scheme, headers: {}, query: "", location: "none"} }
   match $scheme {
-    "query-api-key" => { {headers: {}, query: $"(encode-path-segment "api-key")=(encode-path-segment $token_val)"} }
-    "none" => { {headers: {}, query: ""} }
-    _ => { {headers: {Authorization: $"Bearer ($token_val)"}, query: ""} }
+    "query-api-key" => { {scheme: $scheme, headers: {}, query: $"(encode-path-segment "api-key")=(encode-path-segment $token_val)", location: "query"} }
+    "none" => { {scheme: $scheme, headers: {}, query: "", location: "none"} }
+    _ => { {scheme: $scheme, headers: {Authorization: $"Bearer ($token_val)"}, query: "", location: "header"} }
   }
 }
 
@@ -22,8 +23,9 @@ def build-auth [token?: string, auth_scheme?: string]: nothing -> record {
 # ([A-Za-z0-9-._~]) stay literal; everything else gets %XX.
 def serialize-qp [name: string, value: any, style: string]: nothing -> list<string> {
   if ($value == null) { return [] }
-  let n = (encode-path-segment $name)
   let is_list = ($value | describe | str starts-with "list")
+  if $is_list and ($value | is-empty) { return [] }
+  let n = (encode-path-segment $name)
   if ($value | describe | str starts-with "record") { return ($value | transpose k v | each { $"($n)[(encode-path-segment $in.k)]=(encode-path-segment $in.v)" }) }
   if not $is_list { return [$"($n)=(encode-path-segment $value)"] }
   match $style {
@@ -54,22 +56,42 @@ def build-url [base: string, path: string, query?: string]: nothing -> string {
   if ($query != null) and ($query | is-not-empty) { $result | upsert query $query | url join } else { $result | url join }
 }
 
+# Build the dry-run record returned by --dry-run. Shape:
+#   {dry_run: true, method, url, query: <record>, headers, body, content_type, timeout,
+#    auth: {scheme, location}}
+# `meta` carries logical-form data (the query record by spec name, the pre-serialization
+# body) that do-request itself cannot reconstruct from its wire-format args.
+def build-dry-run-record [method: string, url: string, auth: record, content_type: string, timeout: duration, meta?: record]: nothing -> record {
+  let m = ($meta | default {})
+  {
+    dry_run: true
+    method: $method
+    url: $url
+    query: ($m | get -o query | default {})
+    headers: $auth.headers
+    body: ($m | get -o body)
+    content_type: $content_type
+    timeout: $timeout
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+}
+
 # Execute HTTP request with method dispatch
-def do-request [method: string, url: string, auth: record, insecure: bool, raw: bool, dry_run: bool, max_time?: duration, allow_errors?: bool, full?: bool, content_type?: string, body?: any]: nothing -> any {
+def do-request [method: string, url: string, auth: record, insecure: bool, raw: bool, dry_run: bool, max_time?: duration, allow_errors?: bool, full?: bool, content_type?: string, body?: any, dry_run_meta?: record]: nothing -> any {
   let req_url = if ($auth.query | is-not-empty) { if ($url | str contains "?") { $"($url)&($auth.query)" } else { $"($url)?($auth.query)" } } else { $url }
   let timeout = ($max_time | default 30min)
   let ct = ($content_type | default "application/json")
-  if $dry_run { return {method: $method, url: $req_url, headers: $auth.headers, query_string: $auth.query, content_type: $ct, timeout: $timeout, body: $body} }
+  if $dry_run { return (build-dry-run-record $method $req_url $auth $ct $timeout $dry_run_meta) }
   let resp = match $method {
     "get" => { http get --headers $auth.headers --full --allow-errors --max-time $timeout --insecure=$insecure --raw=$raw $req_url }
-    "head" => { http head --headers $auth.headers --max-time $timeout --insecure=$insecure $req_url }
-    "options" => { http options --headers $auth.headers --max-time $timeout --insecure=$insecure $req_url }
+    "head" => { http head --headers $auth.headers --full --allow-errors --max-time $timeout --insecure=$insecure $req_url }
+    "options" => { http options --headers $auth.headers --full --allow-errors --max-time $timeout --insecure=$insecure $req_url }
     "post" => { if ($body | is-empty) { http post --headers $auth.headers --full --allow-errors --max-time $timeout --insecure=$insecure --raw=$raw $req_url "" } else { http post --headers $auth.headers --content-type $ct --full --allow-errors --max-time $timeout --insecure=$insecure --raw=$raw $req_url $body } }
     "put" => { if ($body | is-empty) { http put --headers $auth.headers --full --allow-errors --max-time $timeout --insecure=$insecure --raw=$raw $req_url "" } else { http put --headers $auth.headers --content-type $ct --full --allow-errors --max-time $timeout --insecure=$insecure --raw=$raw $req_url $body } }
     "patch" => { if ($body | is-empty) { http patch --headers $auth.headers --full --allow-errors --max-time $timeout --insecure=$insecure --raw=$raw $req_url "" } else { http patch --headers $auth.headers --content-type $ct --full --allow-errors --max-time $timeout --insecure=$insecure --raw=$raw $req_url $body } }
     "delete" => { if ($body | is-empty) { http delete --headers $auth.headers --full --allow-errors --max-time $timeout --insecure=$insecure --raw=$raw $req_url } else { http delete --headers $auth.headers --content-type $ct --data $body --full --allow-errors --max-time $timeout --insecure=$insecure --raw=$raw $req_url } }
   }
-  if ($method in ["head" "options"]) { return $resp }
+  if ($method == "head") and (not $full) and (not $allow_errors) and $resp.status < 400 { return $resp.headers }
   if $allow_errors { $resp } else if $resp.status >= 400 { error make --unspanned { msg: $"HTTP ($resp.status): ($resp.body)" } } else if $full { {status: $resp.status, headers: $resp.headers, body: $resp.body} } else if $resp.status == 204 { null } else { $resp.body }
 }
 
@@ -130,11 +152,12 @@ export def "lists-format get" [
 ]: nothing -> record<copyright: string, last_modified: string, num_results: int, results: table<amazon_product_url: string, asterisk: int, bestsellers_date: string, book_details: list, dagger: int, display_name: string, isbns: list, list_name: string, published_date: string, rank: int, rank_last_week: int, reviews: list, weeks_on_list: int>, status: string> {
   let auth = (build-auth $token ($auth_scheme | default "query-api-key"))
   let base = ($base_url | default $BASE_URL)
+  if ($format | is-empty) { error make --unspanned { msg: "path parameter 'format' must be non-empty" } }
   let qp = [(serialize-qp "list" $list "scalar") (serialize-qp "weeks-on-list" $weeks_on_list "scalar") (serialize-qp "bestsellers-date" $bestsellers_date "scalar") (serialize-qp "date" $date "scalar") (serialize-qp "isbn" $isbn "scalar") (serialize-qp "published-date" $published_date "scalar") (serialize-qp "rank" $rank "scalar") (serialize-qp "rank-last-week" $rank_last_week "scalar") (serialize-qp "offset" $offset "scalar") (serialize-qp "sort-order" $sort_order "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({format: (encode-path-segment $format)} | format pattern "/lists.{format}") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"list": $list, "weeks-on-list": $weeks_on_list, "bestsellers-date": $bestsellers_date, "date": $date, "isbn": $isbn, "published-date": $published_date, "rank": $rank, "rank-last-week": $rank_last_week, "offset": $offset, "sort-order": $sort_order} | compact), body: null}
 }
 
 # Best Seller History List
@@ -165,7 +188,7 @@ export def "lists-best-sellers-history-json get" [
   let full_url = (build-url $base "/lists/best-sellers/history.json" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"age-group": $age_group, "author": $author, "contributor": $contributor, "isbn": $isbn, "price": $price, "publisher": $publisher, "title": $title} | compact), body: null}
 }
 
 # Best Seller List Names
@@ -187,11 +210,12 @@ export def "lists-names-format get" [
 ]: nothing -> record<copyright: string, num_results: int, results: table<display_name: string, list_name: string, list_name_encoded: string, newest_published_date: string, oldest_published_date: string, updated: string>, status: string> {
   let auth = (build-auth $token ($auth_scheme | default "query-api-key"))
   let base = ($base_url | default $BASE_URL)
+  if ($format | is-empty) { error make --unspanned { msg: "path parameter 'format' must be non-empty" } }
   let qp = [(serialize-qp "api-key" $api_key "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({format: (encode-path-segment $format)} | format pattern "/lists/names.{format}") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"api-key": $api_key} | compact), body: null}
 }
 
 # Best Seller List Overview
@@ -214,11 +238,12 @@ export def "lists-overview-format get" [
 ]: nothing -> record<copyright: string, num_results: int, results: record<bestsellers_date: string, lists: list<record>, published_date: string>, status: string> {
   let auth = (build-auth $token ($auth_scheme | default "query-api-key"))
   let base = ($base_url | default $BASE_URL)
+  if ($format | is-empty) { error make --unspanned { msg: "path parameter 'format' must be non-empty" } }
   let qp = [(serialize-qp "published_date" $published_date "scalar") (serialize-qp "api-key" $api_key "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({format: (encode-path-segment $format)} | format pattern "/lists/overview.{format}") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"published_date": $published_date, "api-key": $api_key} | compact), body: null}
 }
 
 # Best Seller List by Date
@@ -249,11 +274,13 @@ export def "lists get-json" [
 ]: nothing -> record<copyright: string, last_modified: string, num_results: int, results: record<bestsellers_date: string, books: list<record>, corrections: list<record>, display_name: string, list_name: string, normal_list_ends_at: int, published_date: string, updated: string>, status: string> {
   let auth = (build-auth $token ($auth_scheme | default "query-api-key"))
   let base = ($base_url | default $BASE_URL)
+  if ($date | is-empty) { error make --unspanned { msg: "path parameter 'date' must be non-empty" } }
+  if ($list | is-empty) { error make --unspanned { msg: "path parameter 'list' must be non-empty" } }
   let qp = [(serialize-qp "isbn" $isbn "scalar") (serialize-qp "list-name" $list_name "scalar") (serialize-qp "published-date" $published_date "scalar") (serialize-qp "bestsellers-date" $bestsellers_date "scalar") (serialize-qp "weeks-on-list" $weeks_on_list "scalar") (serialize-qp "rank" $rank "scalar") (serialize-qp "rank-last-week" $rank_last_week "scalar") (serialize-qp "offset" $offset "scalar") (serialize-qp "sort-order" $sort_order "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({date: (encode-path-segment $date), list: (encode-path-segment $list)} | format pattern "/lists/{date}/{list}.json") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"isbn": $isbn, "list-name": $list_name, "published-date": $published_date, "bestsellers-date": $bestsellers_date, "weeks-on-list": $weeks_on_list, "rank": $rank, "rank-last-week": $rank_last_week, "offset": $offset, "sort-order": $sort_order} | compact), body: null}
 }
 
 # Reviews
@@ -278,9 +305,10 @@ export def "reviews-format get" [
 ]: nothing -> record<copyright: string, num_results: int, results: table<book_author: string, book_title: string, byline: string, isbn13: list, publication_dt: string, summary: string, url: string>, status: string> {
   let auth = (build-auth $token ($auth_scheme | default "query-api-key"))
   let base = ($base_url | default $BASE_URL)
+  if ($format | is-empty) { error make --unspanned { msg: "path parameter 'format' must be non-empty" } }
   let qp = [(serialize-qp "isbn" $isbn "scalar") (serialize-qp "title" $title "scalar") (serialize-qp "author" $author "scalar") (serialize-qp "api-key" $api_key "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({format: (encode-path-segment $format)} | format pattern "/reviews.{format}") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"isbn": $isbn, "title": $title, "author": $author, "api-key": $api_key} | compact), body: null}
 }

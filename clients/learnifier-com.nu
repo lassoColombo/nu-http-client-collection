@@ -3,16 +3,17 @@
 # Auth: --token flag or $env.LEARNIFIER_TOKEN
 
 const BASE_URL = "http://learnifier.com"
-const DEFAULT_AUTH = "bearer"
 
-# Build auth: returns {headers: record, query: string}
+# Build auth: returns {scheme: string, headers: record, query: string, location: string}.
+# `location` is "header" | "query" | "cookie" | "none" and tells dry-run callers
+# where the token went without inspecting headers/query themselves.
 def build-auth [token?: string, auth_scheme?: string]: nothing -> record {
   let token_val = if ($token != null) and ($token | is-not-empty) { $token } else { $env | get -o LEARNIFIER_TOKEN | default "" }
   let scheme = ($auth_scheme | default "bearer")
-  if ($scheme == "none") or ($token_val | is-empty) { return {headers: {}, query: ""} }
+  if ($scheme == "none") or ($token_val | is-empty) { return {scheme: $scheme, headers: {}, query: "", location: "none"} }
   match $scheme {
-    "none" => { {headers: {}, query: ""} }
-    _ => { {headers: {Authorization: $"Bearer ($token_val)"}, query: ""} }
+    "none" => { {scheme: $scheme, headers: {}, query: "", location: "none"} }
+    _ => { {scheme: $scheme, headers: {Authorization: $"Bearer ($token_val)"}, query: "", location: "header"} }
   }
 }
 
@@ -21,8 +22,9 @@ def build-auth [token?: string, auth_scheme?: string]: nothing -> record {
 # ([A-Za-z0-9-._~]) stay literal; everything else gets %XX.
 def serialize-qp [name: string, value: any, style: string]: nothing -> list<string> {
   if ($value == null) { return [] }
-  let n = (encode-path-segment $name)
   let is_list = ($value | describe | str starts-with "list")
+  if $is_list and ($value | is-empty) { return [] }
+  let n = (encode-path-segment $name)
   if ($value | describe | str starts-with "record") { return ($value | transpose k v | each { $"($n)[(encode-path-segment $in.k)]=(encode-path-segment $in.v)" }) }
   if not $is_list { return [$"($n)=(encode-path-segment $value)"] }
   match $style {
@@ -53,22 +55,42 @@ def build-url [base: string, path: string, query?: string]: nothing -> string {
   if ($query != null) and ($query | is-not-empty) { $result | upsert query $query | url join } else { $result | url join }
 }
 
+# Build the dry-run record returned by --dry-run. Shape:
+#   {dry_run: true, method, url, query: <record>, headers, body, content_type, timeout,
+#    auth: {scheme, location}}
+# `meta` carries logical-form data (the query record by spec name, the pre-serialization
+# body) that do-request itself cannot reconstruct from its wire-format args.
+def build-dry-run-record [method: string, url: string, auth: record, content_type: string, timeout: duration, meta?: record]: nothing -> record {
+  let m = ($meta | default {})
+  {
+    dry_run: true
+    method: $method
+    url: $url
+    query: ($m | get -o query | default {})
+    headers: $auth.headers
+    body: ($m | get -o body)
+    content_type: $content_type
+    timeout: $timeout
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+}
+
 # Execute HTTP request with method dispatch
-def do-request [method: string, url: string, auth: record, insecure: bool, raw: bool, dry_run: bool, max_time?: duration, allow_errors?: bool, full?: bool, content_type?: string, body?: any]: nothing -> any {
+def do-request [method: string, url: string, auth: record, insecure: bool, raw: bool, dry_run: bool, max_time?: duration, allow_errors?: bool, full?: bool, content_type?: string, body?: any, dry_run_meta?: record]: nothing -> any {
   let req_url = if ($auth.query | is-not-empty) { if ($url | str contains "?") { $"($url)&($auth.query)" } else { $"($url)?($auth.query)" } } else { $url }
   let timeout = ($max_time | default 30min)
   let ct = ($content_type | default "application/json")
-  if $dry_run { return {method: $method, url: $req_url, headers: $auth.headers, query_string: $auth.query, content_type: $ct, timeout: $timeout, body: $body} }
+  if $dry_run { return (build-dry-run-record $method $req_url $auth $ct $timeout $dry_run_meta) }
   let resp = match $method {
     "get" => { http get --headers $auth.headers --full --allow-errors --max-time $timeout --insecure=$insecure --raw=$raw $req_url }
-    "head" => { http head --headers $auth.headers --max-time $timeout --insecure=$insecure $req_url }
-    "options" => { http options --headers $auth.headers --max-time $timeout --insecure=$insecure $req_url }
+    "head" => { http head --headers $auth.headers --full --allow-errors --max-time $timeout --insecure=$insecure $req_url }
+    "options" => { http options --headers $auth.headers --full --allow-errors --max-time $timeout --insecure=$insecure $req_url }
     "post" => { if ($body | is-empty) { http post --headers $auth.headers --full --allow-errors --max-time $timeout --insecure=$insecure --raw=$raw $req_url "" } else { http post --headers $auth.headers --content-type $ct --full --allow-errors --max-time $timeout --insecure=$insecure --raw=$raw $req_url $body } }
     "put" => { if ($body | is-empty) { http put --headers $auth.headers --full --allow-errors --max-time $timeout --insecure=$insecure --raw=$raw $req_url "" } else { http put --headers $auth.headers --content-type $ct --full --allow-errors --max-time $timeout --insecure=$insecure --raw=$raw $req_url $body } }
     "patch" => { if ($body | is-empty) { http patch --headers $auth.headers --full --allow-errors --max-time $timeout --insecure=$insecure --raw=$raw $req_url "" } else { http patch --headers $auth.headers --content-type $ct --full --allow-errors --max-time $timeout --insecure=$insecure --raw=$raw $req_url $body } }
     "delete" => { if ($body | is-empty) { http delete --headers $auth.headers --full --allow-errors --max-time $timeout --insecure=$insecure --raw=$raw $req_url } else { http delete --headers $auth.headers --content-type $ct --data $body --full --allow-errors --max-time $timeout --insecure=$insecure --raw=$raw $req_url } }
   }
-  if ($method in ["head" "options"]) { return $resp }
+  if ($method == "head") and (not $full) and (not $allow_errors) and $resp.status < 400 { return $resp.headers }
   if $allow_errors { $resp } else if $resp.status >= 400 { error make --unspanned { msg: $"HTTP ($resp.status): ($resp.body)" } } else if $full { {status: $resp.status, headers: $resp.headers, body: $resp.body} } else if $resp.status == 204 { null } else { $resp.body }
 }
 
@@ -120,7 +142,7 @@ export def "coursedesigns get" [
   let full_url = (build-url $base "/coursedesigns")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
 }
 
 # Get Organization Unit with External Id
@@ -144,7 +166,7 @@ export def "extorgunit get" [
   let full_url = (build-url $base "/extorgunit" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"extid": $extid} | compact), body: null}
 }
 
 # Gets a participation by external id
@@ -168,7 +190,7 @@ export def "extparticipation get" [
   let full_url = (build-url $base "/extparticipation" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"extid": $extid} | compact), body: null}
 }
 
 # Gets Organization Unit by external id
@@ -192,7 +214,7 @@ export def "extproject get" [
   let full_url = (build-url $base "/extproject" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"extid": $extid} | compact), body: null}
 }
 
 # Gets a user by external id
@@ -216,7 +238,7 @@ export def "extuser get" [
   let full_url = (build-url $base "/extuser" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"extid": $extid} | compact), body: null}
 }
 
 # List Global User Groups.
@@ -238,7 +260,7 @@ export def "globalusergroups get" [
   let full_url = (build-url $base "/globalusergroups")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
 }
 
 # List of all users in group.
@@ -258,10 +280,11 @@ export def "globalusergroups-members get" [
 ]: nothing -> table<authorizationPossible: bool, displayName: string, externalId: string, firstLogin: string, firstName: string, hardLock: bool, homeOrg: int, id: string, lastLogin: string, lastName: string, locked: bool, prefs: record<locale: string>, primaryEmail: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($groupid | is-empty) { error make --unspanned { msg: "path parameter 'groupid' must be non-empty" } }
   let full_url = (build-url $base ({groupid: (encode-path-segment $groupid)} | format pattern "/globalusergroups/{groupid}/members"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
 }
 
 # Organization Units
@@ -283,7 +306,7 @@ export def "orgunits list" [
   let full_url = (build-url $base "/orgunits")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
 }
 
 # Adds an Organization Unit
@@ -314,7 +337,7 @@ export def "orgunits create" [
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: {}, body: $req_body}
 }
 
 # Get Organization Unit
@@ -334,10 +357,11 @@ export def "orgunits get" [
 ]: nothing -> record<externalId: string, id: int, name: string, parentId: int, type: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($orgid | is-empty) { error make --unspanned { msg: "path parameter 'orgid' must be non-empty" } }
   let full_url = (build-url $base ({orgid: (encode-path-segment $orgid)} | format pattern "/orgunits/{orgid}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
 }
 
 # Updates an Organization Unit
@@ -364,12 +388,13 @@ export def "orgunits update" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($orgid | is-empty) { error make --unspanned { msg: "path parameter 'orgid' must be non-empty" } }
   let full_url = (build-url $base ({orgid: (encode-path-segment $orgid)} | format pattern "/orgunits/{orgid}"))
   let req_body = {"caller": $caller, "clientNumber": $client_number, "country": $country, "displayName": $display_name, "externalId": $external_id, "parent": $parent} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "patch" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body
+  do-request "patch" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: {}, body: $req_body}
 }
 
 # Organization Unit Projects
@@ -389,10 +414,11 @@ export def "orgunits-projects list" [
 ]: nothing -> table<adminUrl: string, country: string, created: string, createdBy: string, designId: int, externalId: string, id: int, locale: string, name: string, note: string, orgId: int, status: string, timezone: string, userDescription: string, userTitle: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($orgid | is-empty) { error make --unspanned { msg: "path parameter 'orgid' must be non-empty" } }
   let full_url = (build-url $base ({orgid: (encode-path-segment $orgid)} | format pattern "/orgunits/{orgid}/projects"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
 }
 
 # Create project
@@ -422,12 +448,13 @@ export def "orgunits-projects create" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($orgid | is-empty) { error make --unspanned { msg: "path parameter 'orgid' must be non-empty" } }
   let full_url = (build-url $base ({orgid: (encode-path-segment $orgid)} | format pattern "/orgunits/{orgid}/projects"))
   let req_body = {"country": $country, "createdBy": $created_by, "designId": $design_id, "locale": $locale, "name": $name, "note": $note, "timezone": $timezone, "userDescription": $user_description, "userTitle": $user_title} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: {}, body: $req_body}
 }
 
 # Deletes the project
@@ -448,10 +475,12 @@ export def "orgunits-projects delete" [
 ]: nothing -> record<code: int, field: string, message: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($orgid | is-empty) { error make --unspanned { msg: "path parameter 'orgid' must be non-empty" } }
+  if ($projectid | is-empty) { error make --unspanned { msg: "path parameter 'projectid' must be non-empty" } }
   let full_url = (build-url $base ({orgid: (encode-path-segment $orgid), projectid: (encode-path-segment $projectid)} | format pattern "/orgunits/{orgid}/projects/{projectid}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
 }
 
 # Project information
@@ -472,10 +501,12 @@ export def "orgunits-projects get" [
 ]: nothing -> record<adminUrl: string, country: string, created: string, createdBy: string, designId: int, externalId: string, id: int, locale: string, name: string, note: string, orgId: int, status: string, timezone: string, userDescription: string, userTitle: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($orgid | is-empty) { error make --unspanned { msg: "path parameter 'orgid' must be non-empty" } }
+  if ($projectid | is-empty) { error make --unspanned { msg: "path parameter 'projectid' must be non-empty" } }
   let full_url = (build-url $base ({orgid: (encode-path-segment $orgid), projectid: (encode-path-segment $projectid)} | format pattern "/orgunits/{orgid}/projects/{projectid}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
 }
 
 # Update project information
@@ -505,12 +536,14 @@ export def "orgunits-projects update" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($orgid | is-empty) { error make --unspanned { msg: "path parameter 'orgid' must be non-empty" } }
+  if ($projectid | is-empty) { error make --unspanned { msg: "path parameter 'projectid' must be non-empty" } }
   let full_url = (build-url $base ({orgid: (encode-path-segment $orgid), projectid: (encode-path-segment $projectid)} | format pattern "/orgunits/{orgid}/projects/{projectid}"))
   let req_body = {"country": $country, "locale": $locale, "name": $name, "note": $note, "status": $status, "timezone": $timezone, "userDescription": $user_description, "userTitle": $user_title} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "patch" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body
+  do-request "patch" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: {}, body: $req_body}
 }
 
 # Project participants
@@ -531,10 +564,12 @@ export def "orgunits-projects-participants get" [
 ]: nothing -> table<accessLink: string, activated: bool, activitiesCompleted: float, activitiesTotal: float, errorMessage: string, expiration: string, externalId: string, firstAccess: string, firstActivation: string, firstMail: string, id: int, inError: bool, lastAccess: string, lastActivation: string, lastMail: string, projectId: int, userId: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($orgid | is-empty) { error make --unspanned { msg: "path parameter 'orgid' must be non-empty" } }
+  if ($projectid | is-empty) { error make --unspanned { msg: "path parameter 'projectid' must be non-empty" } }
   let full_url = (build-url $base ({orgid: (encode-path-segment $orgid), projectid: (encode-path-segment $projectid)} | format pattern "/orgunits/{orgid}/projects/{projectid}/participants"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
 }
 
 # Add participant
@@ -559,12 +594,14 @@ export def "orgunits-projects-participants create" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($orgid | is-empty) { error make --unspanned { msg: "path parameter 'orgid' must be non-empty" } }
+  if ($projectid | is-empty) { error make --unspanned { msg: "path parameter 'projectid' must be non-empty" } }
   let full_url = (build-url $base ({orgid: (encode-path-segment $orgid), projectid: (encode-path-segment $projectid)} | format pattern "/orgunits/{orgid}/projects/{projectid}/participants"))
   let req_body = {"email": $email, "extid": $extid, "userid": $userid} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: {}, body: $req_body}
 }
 
 # Deletes a participant
@@ -586,10 +623,13 @@ export def "orgunits-projects-participants-participant-id delete" [
 ]: nothing -> record<code: int, field: string, message: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($orgid | is-empty) { error make --unspanned { msg: "path parameter 'orgid' must be non-empty" } }
+  if ($projectid | is-empty) { error make --unspanned { msg: "path parameter 'projectid' must be non-empty" } }
+  if ($participant_id | is-empty) { error make --unspanned { msg: "path parameter 'participantId' must be non-empty" } }
   let full_url = (build-url $base ({orgid: (encode-path-segment $orgid), projectid: (encode-path-segment $projectid), participant_id: (encode-path-segment $participant_id)} | format pattern "/orgunits/{orgid}/projects/{projectid}/participants/${participant_id}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
 }
 
 # Activate participant
@@ -611,10 +651,13 @@ export def "orgunits-projects-participants-participant-id-activate create" [
 ]: nothing -> record<code: int, field: string, message: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($orgid | is-empty) { error make --unspanned { msg: "path parameter 'orgid' must be non-empty" } }
+  if ($projectid | is-empty) { error make --unspanned { msg: "path parameter 'projectid' must be non-empty" } }
+  if ($participant_id | is-empty) { error make --unspanned { msg: "path parameter 'participantId' must be non-empty" } }
   let full_url = (build-url $base ({orgid: (encode-path-segment $orgid), projectid: (encode-path-segment $projectid), participant_id: (encode-path-segment $participant_id)} | format pattern "/orgunits/{orgid}/projects/{projectid}/participants/${participant_id}/activate"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
 }
 
 # Participant login link
@@ -636,10 +679,13 @@ export def "orgunits-projects-participants-participant-id-loginlink create" [
 ]: nothing -> record<link: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($orgid | is-empty) { error make --unspanned { msg: "path parameter 'orgid' must be non-empty" } }
+  if ($projectid | is-empty) { error make --unspanned { msg: "path parameter 'projectid' must be non-empty" } }
+  if ($participant_id | is-empty) { error make --unspanned { msg: "path parameter 'participantId' must be non-empty" } }
   let full_url = (build-url $base ({orgid: (encode-path-segment $orgid), projectid: (encode-path-segment $projectid), participant_id: (encode-path-segment $participant_id)} | format pattern "/orgunits/{orgid}/projects/{projectid}/participants/${participant_id}/loginlink"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
 }
 
 # Project team members
@@ -660,10 +706,12 @@ export def "orgunits-projects-teammembers get" [
 ]: nothing -> table<roles: record<name: string, roleid: string>, userid: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($orgid | is-empty) { error make --unspanned { msg: "path parameter 'orgid' must be non-empty" } }
+  if ($projectid | is-empty) { error make --unspanned { msg: "path parameter 'projectid' must be non-empty" } }
   let full_url = (build-url $base ({orgid: (encode-path-segment $orgid), projectid: (encode-path-segment $projectid)} | format pattern "/orgunits/{orgid}/projects/{projectid}/teammembers"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
 }
 
 # List User Groups.
@@ -683,10 +731,11 @@ export def "orgunits-usergroups list" [
 ]: nothing -> table<children: list<any>, globalId: int, groupId: int, name: string, parent: int, userGroup: int> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($orgid | is-empty) { error make --unspanned { msg: "path parameter 'orgid' must be non-empty" } }
   let full_url = (build-url $base ({orgid: (encode-path-segment $orgid)} | format pattern "/orgunits/{orgid}/usergroups"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
 }
 
 # Create a User Group.
@@ -709,12 +758,13 @@ export def "orgunits-usergroups create" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($orgid | is-empty) { error make --unspanned { msg: "path parameter 'orgid' must be non-empty" } }
   let full_url = (build-url $base ({orgid: (encode-path-segment $orgid)} | format pattern "/orgunits/{orgid}/usergroups"))
   let req_body = {"name": $name, "parent": $parent} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: {}, body: $req_body}
 }
 
 # Get user group
@@ -735,10 +785,12 @@ export def "orgunits-usergroups get" [
 ]: nothing -> record<children: list<any>, globalId: int, groupId: int, name: string, parent: int, userGroup: int> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($orgid | is-empty) { error make --unspanned { msg: "path parameter 'orgid' must be non-empty" } }
+  if ($groupid | is-empty) { error make --unspanned { msg: "path parameter 'groupid' must be non-empty" } }
   let full_url = (build-url $base ({orgid: (encode-path-segment $orgid), groupid: (encode-path-segment $groupid)} | format pattern "/orgunits/{orgid}/usergroups/{groupid}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
 }
 
 # List of all users in group.
@@ -759,10 +811,12 @@ export def "orgunits-usergroups-members get" [
 ]: nothing -> table<authorizationPossible: bool, displayName: string, externalId: string, firstLogin: string, firstName: string, hardLock: bool, homeOrg: int, id: string, lastLogin: string, lastName: string, locked: bool, prefs: record<locale: string>, primaryEmail: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($orgid | is-empty) { error make --unspanned { msg: "path parameter 'orgid' must be non-empty" } }
+  if ($groupid | is-empty) { error make --unspanned { msg: "path parameter 'groupid' must be non-empty" } }
   let full_url = (build-url $base ({orgid: (encode-path-segment $orgid), groupid: (encode-path-segment $groupid)} | format pattern "/orgunits/{orgid}/usergroups/{groupid}/members"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
 }
 
 # Add user group member.
@@ -785,12 +839,14 @@ export def "orgunits-usergroups-members create" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($orgid | is-empty) { error make --unspanned { msg: "path parameter 'orgid' must be non-empty" } }
+  if ($groupid | is-empty) { error make --unspanned { msg: "path parameter 'groupid' must be non-empty" } }
   let full_url = (build-url $base ({orgid: (encode-path-segment $orgid), groupid: (encode-path-segment $groupid)} | format pattern "/orgunits/{orgid}/usergroups/{groupid}/members"))
   let req_body = {"uuid": $uuid} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: {}, body: $req_body}
 }
 
 # Remove user group member.
@@ -812,10 +868,13 @@ export def "orgunits-usergroups-members delete" [
 ]: nothing -> record<code: int, field: string, message: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($orgid | is-empty) { error make --unspanned { msg: "path parameter 'orgid' must be non-empty" } }
+  if ($groupid | is-empty) { error make --unspanned { msg: "path parameter 'groupid' must be non-empty" } }
+  if ($uuid | is-empty) { error make --unspanned { msg: "path parameter 'uuid' must be non-empty" } }
   let full_url = (build-url $base ({orgid: (encode-path-segment $orgid), groupid: (encode-path-segment $groupid), uuid: (encode-path-segment $uuid)} | format pattern "/orgunits/{orgid}/usergroups/{groupid}/members/{uuid}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
 }
 
 # Lists all users
@@ -840,7 +899,7 @@ export def "users list" [
   let full_url = (build-url $base "/users" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"limit": $limit, "offset": $offset} | compact), body: null}
 }
 
 # Adds a user
@@ -873,7 +932,7 @@ export def "users create" [
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: {}, body: $req_body}
 }
 
 # User information
@@ -893,10 +952,11 @@ export def "users get" [
 ]: nothing -> record<authorizationPossible: bool, displayName: string, externalId: string, firstLogin: string, firstName: string, hardLock: bool, homeOrg: int, id: string, lastLogin: string, lastName: string, locked: bool, prefs: record<locale: string>, primaryEmail: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($userid | is-empty) { error make --unspanned { msg: "path parameter 'userid' must be non-empty" } }
   let full_url = (build-url $base ({userid: (encode-path-segment $userid)} | format pattern "/users/{userid}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
 }
 
 # Updates user information
@@ -925,12 +985,13 @@ export def "users update" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($userid | is-empty) { error make --unspanned { msg: "path parameter 'userid' must be non-empty" } }
   let full_url = (build-url $base ({userid: (encode-path-segment $userid)} | format pattern "/users/{userid}"))
   let req_body = {"displayName": $display_name, "externalId": $external_id, "firstName": $first_name, "hardLock": $hard_lock, "homeOrg": $home_org, "lastName": $last_name, "locale": $locale, "primaryEmail": $primary_email} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "patch" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body
+  do-request "patch" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: {}, body: $req_body}
 }
 
 # User profile picture
@@ -951,10 +1012,12 @@ export def "users-pic-key-apikey get" [
 ]: nothing -> record<code: int, field: string, message: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($userid | is-empty) { error make --unspanned { msg: "path parameter 'userid' must be non-empty" } }
+  if ($apikey | is-empty) { error make --unspanned { msg: "path parameter 'APIKEY' must be non-empty" } }
   let full_url = (build-url $base ({userid: (encode-path-segment $userid), apikey: (encode-path-segment $apikey)} | format pattern "/users/{userid}/pic?key={apikey}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
 }
 
 # Returns information about the projects the user is a participant in.
@@ -974,8 +1037,9 @@ export def "users-project-participations get" [
 ]: nothing -> record<accessLink: string, activated: bool, activitiesCompleted: float, activitiesTotal: float, errorMessage: string, expiration: string, externalId: string, firstAccess: string, firstActivation: string, firstMail: string, id: int, inError: bool, lastAccess: string, lastActivation: string, lastMail: string, projectId: int, projectName: string, projectOrgId: int, projectStatus: string, projectThumbnail: string, projectUserTitle: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($userid | is-empty) { error make --unspanned { msg: "path parameter 'userid' must be non-empty" } }
   let full_url = (build-url $base ({userid: (encode-path-segment $userid)} | format pattern "/users/{userid}/projectParticipations"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
 }

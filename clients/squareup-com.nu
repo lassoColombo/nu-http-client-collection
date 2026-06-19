@@ -3,17 +3,18 @@
 # Auth: --token flag or $env.SQUARE_CONNECT_API_TOKEN
 
 const BASE_URL = "https://connect.squareup.com"
-const DEFAULT_AUTH = "bearer"
 
-# Build auth: returns {headers: record, query: string}
+# Build auth: returns {scheme: string, headers: record, query: string, location: string}.
+# `location` is "header" | "query" | "cookie" | "none" and tells dry-run callers
+# where the token went without inspecting headers/query themselves.
 def build-auth [token?: string, auth_scheme?: string]: nothing -> record {
   let token_val = if ($token != null) and ($token | is-not-empty) { $token } else { $env | get -o SQUARE_CONNECT_API_TOKEN | default "" }
   let scheme = ($auth_scheme | default "bearer")
-  if ($scheme == "none") or ($token_val | is-empty) { return {headers: {}, query: ""} }
+  if ($scheme == "none") or ($token_val | is-empty) { return {scheme: $scheme, headers: {}, query: "", location: "none"} }
   match $scheme {
-    "bearer" => { {headers: {Authorization: $"Bearer ($token_val)"}, query: ""} }
-    "none" => { {headers: {}, query: ""} }
-    _ => { {headers: {Authorization: $"Bearer ($token_val)"}, query: ""} }
+    "bearer" => { {scheme: $scheme, headers: {Authorization: $"Bearer ($token_val)"}, query: "", location: "header"} }
+    "none" => { {scheme: $scheme, headers: {}, query: "", location: "none"} }
+    _ => { {scheme: $scheme, headers: {Authorization: $"Bearer ($token_val)"}, query: "", location: "header"} }
   }
 }
 
@@ -22,8 +23,9 @@ def build-auth [token?: string, auth_scheme?: string]: nothing -> record {
 # ([A-Za-z0-9-._~]) stay literal; everything else gets %XX.
 def serialize-qp [name: string, value: any, style: string]: nothing -> list<string> {
   if ($value == null) { return [] }
-  let n = (encode-path-segment $name)
   let is_list = ($value | describe | str starts-with "list")
+  if $is_list and ($value | is-empty) { return [] }
+  let n = (encode-path-segment $name)
   if ($value | describe | str starts-with "record") { return ($value | transpose k v | each { $"($n)[(encode-path-segment $in.k)]=(encode-path-segment $in.v)" }) }
   if not $is_list { return [$"($n)=(encode-path-segment $value)"] }
   match $style {
@@ -54,22 +56,42 @@ def build-url [base: string, path: string, query?: string]: nothing -> string {
   if ($query != null) and ($query | is-not-empty) { $result | upsert query $query | url join } else { $result | url join }
 }
 
+# Build the dry-run record returned by --dry-run. Shape:
+#   {dry_run: true, method, url, query: <record>, headers, body, content_type, timeout,
+#    auth: {scheme, location}}
+# `meta` carries logical-form data (the query record by spec name, the pre-serialization
+# body) that do-request itself cannot reconstruct from its wire-format args.
+def build-dry-run-record [method: string, url: string, auth: record, content_type: string, timeout: duration, meta?: record]: nothing -> record {
+  let m = ($meta | default {})
+  {
+    dry_run: true
+    method: $method
+    url: $url
+    query: ($m | get -o query | default {})
+    headers: $auth.headers
+    body: ($m | get -o body)
+    content_type: $content_type
+    timeout: $timeout
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+}
+
 # Execute HTTP request with method dispatch
-def do-request [method: string, url: string, auth: record, insecure: bool, raw: bool, dry_run: bool, max_time?: duration, allow_errors?: bool, full?: bool, content_type?: string, body?: any]: nothing -> any {
+def do-request [method: string, url: string, auth: record, insecure: bool, raw: bool, dry_run: bool, max_time?: duration, allow_errors?: bool, full?: bool, content_type?: string, body?: any, dry_run_meta?: record]: nothing -> any {
   let req_url = if ($auth.query | is-not-empty) { if ($url | str contains "?") { $"($url)&($auth.query)" } else { $"($url)?($auth.query)" } } else { $url }
   let timeout = ($max_time | default 30min)
   let ct = ($content_type | default "application/json")
-  if $dry_run { return {method: $method, url: $req_url, headers: $auth.headers, query_string: $auth.query, content_type: $ct, timeout: $timeout, body: $body} }
+  if $dry_run { return (build-dry-run-record $method $req_url $auth $ct $timeout $dry_run_meta) }
   let resp = match $method {
     "get" => { http get --headers $auth.headers --full --allow-errors --max-time $timeout --insecure=$insecure --raw=$raw $req_url }
-    "head" => { http head --headers $auth.headers --max-time $timeout --insecure=$insecure $req_url }
-    "options" => { http options --headers $auth.headers --max-time $timeout --insecure=$insecure $req_url }
+    "head" => { http head --headers $auth.headers --full --allow-errors --max-time $timeout --insecure=$insecure $req_url }
+    "options" => { http options --headers $auth.headers --full --allow-errors --max-time $timeout --insecure=$insecure $req_url }
     "post" => { if ($body | is-empty) { http post --headers $auth.headers --full --allow-errors --max-time $timeout --insecure=$insecure --raw=$raw $req_url "" } else { http post --headers $auth.headers --content-type $ct --full --allow-errors --max-time $timeout --insecure=$insecure --raw=$raw $req_url $body } }
     "put" => { if ($body | is-empty) { http put --headers $auth.headers --full --allow-errors --max-time $timeout --insecure=$insecure --raw=$raw $req_url "" } else { http put --headers $auth.headers --content-type $ct --full --allow-errors --max-time $timeout --insecure=$insecure --raw=$raw $req_url $body } }
     "patch" => { if ($body | is-empty) { http patch --headers $auth.headers --full --allow-errors --max-time $timeout --insecure=$insecure --raw=$raw $req_url "" } else { http patch --headers $auth.headers --content-type $ct --full --allow-errors --max-time $timeout --insecure=$insecure --raw=$raw $req_url $body } }
     "delete" => { if ($body | is-empty) { http delete --headers $auth.headers --full --allow-errors --max-time $timeout --insecure=$insecure --raw=$raw $req_url } else { http delete --headers $auth.headers --content-type $ct --data $body --full --allow-errors --max-time $timeout --insecure=$insecure --raw=$raw $req_url } }
   }
-  if ($method in ["head" "options"]) { return $resp }
+  if ($method == "head") and (not $full) and (not $allow_errors) and $resp.status < 400 { return $resp.headers }
   if $allow_errors { $resp } else if $resp.status >= 400 { error make --unspanned { msg: $"HTTP ($resp.status): ($resp.body)" } } else if $full { {status: $resp.status, headers: $resp.headers, body: $resp.body} } else if $resp.status == 204 { null } else { $resp.body }
 }
 
@@ -124,7 +146,7 @@ export def "mobile-authorization-code create" [
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: {}, body: $req_body}
 }
 
 # RenewToken
@@ -147,12 +169,13 @@ export def "oauth2-clients-access-token-renew create" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($client_id | is-empty) { error make --unspanned { msg: "path parameter 'client_id' must be non-empty" } }
   let full_url = (build-url $base ({client_id: (encode-path-segment $client_id)} | format pattern "/oauth2/clients/{client_id}/access-token/renew"))
   let req_body = {"access_token": $access_token} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: {}, body: $req_body}
 }
 
 # RevokeToken
@@ -182,7 +205,7 @@ export def "oauth2-revoke delete-token" [
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: {}, body: $req_body}
 }
 
 # ObtainToken
@@ -217,7 +240,7 @@ export def "oauth2-token create-obtain" [
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: {}, body: $req_body}
 }
 
 # ListEmployees
@@ -250,7 +273,7 @@ export def "me-employees list" [
   let full_url = (build-url $base "/v1/me/employees" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"order": $order, "begin_updated_at": $begin_updated_at, "end_updated_at": $end_updated_at, "begin_created_at": $begin_created_at, "end_created_at": $end_created_at, "status": $status, "external_id": $external_id, "limit": $limit, "batch_token": $batch_token} | compact), body: null}
 }
 
 # CreateEmployee
@@ -286,7 +309,7 @@ export def "me-employees create" [
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: {}, body: $req_body}
 }
 
 # RetrieveEmployee
@@ -307,10 +330,11 @@ export def "me-employees get" [
 ]: nothing -> record<authorized_location_ids: list<string>, created_at: string, email: string, external_id: string, first_name: string, id: string, last_name: string, role_ids: list<string>, status: string, updated_at: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($employee_id | is-empty) { error make --unspanned { msg: "path parameter 'employee_id' must be non-empty" } }
   let full_url = (build-url $base ({employee_id: (encode-path-segment $employee_id)} | format pattern "/v1/me/employees/{employee_id}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
 }
 
 # UpdateEmployee
@@ -342,12 +366,13 @@ export def "me-employees update" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($employee_id | is-empty) { error make --unspanned { msg: "path parameter 'employee_id' must be non-empty" } }
   let full_url = (build-url $base ({employee_id: (encode-path-segment $employee_id)} | format pattern "/v1/me/employees/{employee_id}"))
   let req_body = {"authorized_location_ids": $authorized_location_ids, "created_at": $created_at, "email": $email, "external_id": $external_id, "first_name": $first_name, "id": $id, "last_name": $last_name, "role_ids": $role_ids, "status": $status, "updated_at": $updated_at} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: {}, body: $req_body}
 }
 
 # ListEmployeeRoles
@@ -374,7 +399,7 @@ export def "me-roles list-employee" [
   let full_url = (build-url $base "/v1/me/roles" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"order": $order, "limit": $limit, "batch_token": $batch_token} | compact), body: null}
 }
 
 # CreateEmployeeRole
@@ -406,7 +431,7 @@ export def "me-roles create-employee" [
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: {}, body: $req_body}
 }
 
 # RetrieveEmployeeRole
@@ -427,10 +452,11 @@ export def "me-roles get-employee" [
 ]: nothing -> record<created_at: string, id: string, is_owner: bool, name: string, permissions: list<string>, updated_at: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($role_id | is-empty) { error make --unspanned { msg: "path parameter 'role_id' must be non-empty" } }
   let full_url = (build-url $base ({role_id: (encode-path-segment $role_id)} | format pattern "/v1/me/roles/{role_id}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
 }
 
 # UpdateEmployeeRole
@@ -458,12 +484,13 @@ export def "me-roles update-employee" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($role_id | is-empty) { error make --unspanned { msg: "path parameter 'role_id' must be non-empty" } }
   let full_url = (build-url $base ({role_id: (encode-path-segment $role_id)} | format pattern "/v1/me/roles/{role_id}"))
   let req_body = {"created_at": $created_at, "id": $id, "is_owner": $is_owner, "name": $name, "permissions": $permissions, "updated_at": $updated_at} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: {}, body: $req_body}
 }
 
 # ListOrders
@@ -487,11 +514,12 @@ export def "orders list" [
 ]: nothing -> table<btc_price_satoshi: float, btc_receive_address: string, buyer_email: string, buyer_note: string, canceled_note: string, completed_note: string, created_at: string, errors: list<record>, expires_at: string, id: string, order_history: list<record>, payment_id: string, promo_code: string, recipient_name: string, recipient_phone_number: string, refunded_note: string, shipping_address: record<address_line_1: string, address_line_2: string, address_line_3: string, administrative_district_level_1: string, administrative_district_level_2: string, administrative_district_level_3: string, country: string, first_name: string, last_name: string, locality: string, organization: string, postal_code: string, sublocality: string, sublocality_2: string, sublocality_3: string>, state: string, subtotal_money: record<amount: int, currency_code: string>, tender: record<card_brand: string, change_back_money: record, employee_id: string, entry_method: string, id: string, is_exchange: bool, name: string, pan_suffix: string, payment_note: string, receipt_url: string, refunded_money: record, settled_at: string, tendered_at: string, tendered_money: record, total_money: record, type: string>, total_discount_money: record<amount: int, currency_code: string>, total_price_money: record<amount: int, currency_code: string>, total_shipping_money: record<amount: int, currency_code: string>, total_tax_money: record<amount: int, currency_code: string>, updated_at: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($location_id | is-empty) { error make --unspanned { msg: "path parameter 'location_id' must be non-empty" } }
   let qp = [(serialize-qp "order" $order "scalar") (serialize-qp "limit" $limit "scalar") (serialize-qp "batch_token" $batch_token "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({location_id: (encode-path-segment $location_id)} | format pattern "/v1/{location_id}/orders") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"order": $order, "limit": $limit, "batch_token": $batch_token} | compact), body: null}
 }
 
 # RetrieveOrder
@@ -513,17 +541,19 @@ export def "orders get" [
 ]: nothing -> record<btc_price_satoshi: float, btc_receive_address: string, buyer_email: string, buyer_note: string, canceled_note: string, completed_note: string, created_at: string, errors: table<category: string, code: string, detail: string, field: string>, expires_at: string, id: string, order_history: table<action: string, created_at: string>, payment_id: string, promo_code: string, recipient_name: string, recipient_phone_number: string, refunded_note: string, shipping_address: record<address_line_1: string, address_line_2: string, address_line_3: string, administrative_district_level_1: string, administrative_district_level_2: string, administrative_district_level_3: string, country: string, first_name: string, last_name: string, locality: string, organization: string, postal_code: string, sublocality: string, sublocality_2: string, sublocality_3: string>, state: string, subtotal_money: record<amount: int, currency_code: string>, tender: record<card_brand: string, change_back_money: record<amount: int, currency_code: string>, employee_id: string, entry_method: string, id: string, is_exchange: bool, name: string, pan_suffix: string, payment_note: string, receipt_url: string, refunded_money: record<amount: int, currency_code: string>, settled_at: string, tendered_at: string, tendered_money: record<amount: int, currency_code: string>, total_money: record<amount: int, currency_code: string>, type: string>, total_discount_money: record<amount: int, currency_code: string>, total_price_money: record<amount: int, currency_code: string>, total_shipping_money: record<amount: int, currency_code: string>, total_tax_money: record<amount: int, currency_code: string>, updated_at: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($location_id | is-empty) { error make --unspanned { msg: "path parameter 'location_id' must be non-empty" } }
+  if ($order_id | is-empty) { error make --unspanned { msg: "path parameter 'order_id' must be non-empty" } }
   let full_url = (build-url $base ({location_id: (encode-path-segment $location_id), order_id: (encode-path-segment $order_id)} | format pattern "/v1/{location_id}/orders/{order_id}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
 }
 
 # UpdateOrder
 #
 # PUT /v1/{location_id}/orders/{order_id}
 # operationId: UpdateOrder
-export def "orders update-by-location_id-order_id" [
+export def "orders update-by-location-id-order-id" [
   location_id: string
   order_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -544,12 +574,14 @@ export def "orders update-by-location_id-order_id" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($location_id | is-empty) { error make --unspanned { msg: "path parameter 'location_id' must be non-empty" } }
+  if ($order_id | is-empty) { error make --unspanned { msg: "path parameter 'order_id' must be non-empty" } }
   let full_url = (build-url $base ({location_id: (encode-path-segment $location_id), order_id: (encode-path-segment $order_id)} | format pattern "/v1/{location_id}/orders/{order_id}"))
   let req_body = {"action": $action, "canceled_note": $canceled_note, "completed_note": $completed_note, "refunded_note": $refunded_note, "shipped_tracking_number": $shipped_tracking_number} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: {}, body: $req_body}
 }
 
 # ListPayments
@@ -576,18 +608,19 @@ export def "payments list" [
 ]: nothing -> table<additive_tax: list<record>, additive_tax_money: record<amount: int, currency_code: string>, created_at: string, creator_id: string, device: record<id: string, name: string>, discount_money: record<amount: int, currency_code: string>, gross_sales_money: record<amount: int, currency_code: string>, id: string, inclusive_tax: list<record>, inclusive_tax_money: record<amount: int, currency_code: string>, is_partial: bool, itemizations: list<record>, merchant_id: string, net_sales_money: record<amount: int, currency_code: string>, net_total_money: record<amount: int, currency_code: string>, payment_url: string, processing_fee_money: record<amount: int, currency_code: string>, receipt_url: string, refunded_money: record<amount: int, currency_code: string>, refunds: list<record>, surcharge_money: record<amount: int, currency_code: string>, surcharges: list<record>, swedish_rounding_money: record<amount: int, currency_code: string>, tax_money: record<amount: int, currency_code: string>, tender: list<record>, tip_money: record<amount: int, currency_code: string>, total_collected_money: record<amount: int, currency_code: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($location_id | is-empty) { error make --unspanned { msg: "path parameter 'location_id' must be non-empty" } }
   let qp = [(serialize-qp "order" $order "scalar") (serialize-qp "begin_time" $begin_time "scalar") (serialize-qp "end_time" $end_time "scalar") (serialize-qp "limit" $limit "scalar") (serialize-qp "batch_token" $batch_token "scalar") (serialize-qp "include_partial" $include_partial "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({location_id: (encode-path-segment $location_id)} | format pattern "/v1/{location_id}/payments") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"order": $order, "begin_time": $begin_time, "end_time": $end_time, "limit": $limit, "batch_token": $batch_token, "include_partial": $include_partial} | compact), body: null}
 }
 
 # RetrievePayment
 #
 # GET /v1/{location_id}/payments/{payment_id}
 # operationId: RetrievePayment
-export def "payments get-by-location_id-payment_id" [
+export def "payments get-by-location-id-payment-id" [
   location_id: string
   payment_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -602,10 +635,12 @@ export def "payments get-by-location_id-payment_id" [
 ]: nothing -> record<additive_tax: table<applied_money: record, errors: list, fee_id: string, inclusion_type: string, name: string, rate: string>, additive_tax_money: record<amount: int, currency_code: string>, created_at: string, creator_id: string, device: record<id: string, name: string>, discount_money: record<amount: int, currency_code: string>, gross_sales_money: record<amount: int, currency_code: string>, id: string, inclusive_tax: table<applied_money: record, errors: list, fee_id: string, inclusion_type: string, name: string, rate: string>, inclusive_tax_money: record<amount: int, currency_code: string>, is_partial: bool, itemizations: table<discount_money: record, discounts: list, gross_sales_money: record, item_detail: record, item_variation_name: string, itemization_type: string, modifiers: list, name: string, net_sales_money: record, notes: string, quantity: float, single_quantity_money: record, taxes: list, total_money: record>, merchant_id: string, net_sales_money: record<amount: int, currency_code: string>, net_total_money: record<amount: int, currency_code: string>, payment_url: string, processing_fee_money: record<amount: int, currency_code: string>, receipt_url: string, refunded_money: record<amount: int, currency_code: string>, refunds: table<created_at: string, is_exchange: bool, merchant_id: string, payment_id: string, processed_at: string, reason: string, refunded_additive_tax: list, refunded_additive_tax_money: record, refunded_discount_money: record, refunded_inclusive_tax: list, refunded_inclusive_tax_money: record, refunded_money: record, refunded_processing_fee_money: record, refunded_surcharge_money: record, refunded_surcharges: list, refunded_tax_money: record, refunded_tip_money: record, type: string>, surcharge_money: record<amount: int, currency_code: string>, surcharges: table<amount_money: record, applied_money: record, name: string, rate: string, surcharge_id: string, taxable: bool, taxes: list, type: string>, swedish_rounding_money: record<amount: int, currency_code: string>, tax_money: record<amount: int, currency_code: string>, tender: table<card_brand: string, change_back_money: record, employee_id: string, entry_method: string, id: string, is_exchange: bool, name: string, pan_suffix: string, payment_note: string, receipt_url: string, refunded_money: record, settled_at: string, tendered_at: string, tendered_money: record, total_money: record, type: string>, tip_money: record<amount: int, currency_code: string>, total_collected_money: record<amount: int, currency_code: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($location_id | is-empty) { error make --unspanned { msg: "path parameter 'location_id' must be non-empty" } }
+  if ($payment_id | is-empty) { error make --unspanned { msg: "path parameter 'payment_id' must be non-empty" } }
   let full_url = (build-url $base ({location_id: (encode-path-segment $location_id), payment_id: (encode-path-segment $payment_id)} | format pattern "/v1/{location_id}/payments/{payment_id}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
 }
 
 # ListRefunds
@@ -631,11 +666,12 @@ export def "refunds list" [
 ]: nothing -> table<created_at: string, is_exchange: bool, merchant_id: string, payment_id: string, processed_at: string, reason: string, refunded_additive_tax: list<record>, refunded_additive_tax_money: record<amount: int, currency_code: string>, refunded_discount_money: record<amount: int, currency_code: string>, refunded_inclusive_tax: list<record>, refunded_inclusive_tax_money: record<amount: int, currency_code: string>, refunded_money: record<amount: int, currency_code: string>, refunded_processing_fee_money: record<amount: int, currency_code: string>, refunded_surcharge_money: record<amount: int, currency_code: string>, refunded_surcharges: list<record>, refunded_tax_money: record<amount: int, currency_code: string>, refunded_tip_money: record<amount: int, currency_code: string>, type: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($location_id | is-empty) { error make --unspanned { msg: "path parameter 'location_id' must be non-empty" } }
   let qp = [(serialize-qp "order" $order "scalar") (serialize-qp "begin_time" $begin_time "scalar") (serialize-qp "end_time" $end_time "scalar") (serialize-qp "limit" $limit "scalar") (serialize-qp "batch_token" $batch_token "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({location_id: (encode-path-segment $location_id)} | format pattern "/v1/{location_id}/refunds") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"order": $order, "begin_time": $begin_time, "end_time": $end_time, "limit": $limit, "batch_token": $batch_token} | compact), body: null}
 }
 
 # CreateRefund
@@ -663,12 +699,13 @@ export def "refunds create" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($location_id | is-empty) { error make --unspanned { msg: "path parameter 'location_id' must be non-empty" } }
   let full_url = (build-url $base ({location_id: (encode-path-segment $location_id)} | format pattern "/v1/{location_id}/refunds"))
   let req_body = {"payment_id": $payment_id, "reason": $reason, "refunded_money": $refunded_money, "request_idempotence_key": $request_idempotence_key, "type": $type} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: {}, body: $req_body}
 }
 
 # ListSettlements
@@ -695,11 +732,12 @@ export def "settlements list" [
 ]: nothing -> table<bank_account_id: string, entries: list<record>, id: string, initiated_at: string, status: string, total_money: record<amount: int, currency_code: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($location_id | is-empty) { error make --unspanned { msg: "path parameter 'location_id' must be non-empty" } }
   let qp = [(serialize-qp "order" $order "scalar") (serialize-qp "begin_time" $begin_time "scalar") (serialize-qp "end_time" $end_time "scalar") (serialize-qp "limit" $limit "scalar") (serialize-qp "status" $status "scalar") (serialize-qp "batch_token" $batch_token "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({location_id: (encode-path-segment $location_id)} | format pattern "/v1/{location_id}/settlements") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"order": $order, "begin_time": $begin_time, "end_time": $end_time, "limit": $limit, "status": $status, "batch_token": $batch_token} | compact), body: null}
 }
 
 # RetrieveSettlement
@@ -721,10 +759,12 @@ export def "settlements get" [
 ]: nothing -> record<bank_account_id: string, entries: table<amount_money: record, fee_money: record, payment_id: string, type: string>, id: string, initiated_at: string, status: string, total_money: record<amount: int, currency_code: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($location_id | is-empty) { error make --unspanned { msg: "path parameter 'location_id' must be non-empty" } }
+  if ($settlement_id | is-empty) { error make --unspanned { msg: "path parameter 'settlement_id' must be non-empty" } }
   let full_url = (build-url $base ({location_id: (encode-path-segment $location_id), settlement_id: (encode-path-segment $settlement_id)} | format pattern "/v1/{location_id}/settlements/{settlement_id}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
 }
 
 # RegisterDomain
@@ -751,7 +791,7 @@ export def "apple-pay-domains create" [
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: {}, body: $req_body}
 }
 
 # ListBankAccounts
@@ -778,7 +818,7 @@ export def "bank-accounts list" [
   let full_url = (build-url $base "/v2/bank-accounts" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"cursor": $cursor, "limit": $limit, "location_id": $location_id} | compact), body: null}
 }
 
 # GetBankAccountByV1Id
@@ -799,10 +839,11 @@ export def "bank-accounts-by-v1-id get" [
 ]: nothing -> record<bank_account: record<account_number_suffix: string, account_type: string, bank_name: string, country: string, creditable: bool, currency: string, debit_mandate_reference_id: string, debitable: bool, fingerprint: string, holder_name: string, id: string, location_id: string, primary_bank_identification_number: string, reference_id: string, secondary_bank_identification_number: string, status: string, version: int>, errors: table<category: string, code: string, detail: string, field: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($v1_bank_account_id | is-empty) { error make --unspanned { msg: "path parameter 'v1_bank_account_id' must be non-empty" } }
   let full_url = (build-url $base ({v1_bank_account_id: (encode-path-segment $v1_bank_account_id)} | format pattern "/v2/bank-accounts/by-v1-id/{v1_bank_account_id}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
 }
 
 # GetBankAccount
@@ -823,10 +864,11 @@ export def "bank-accounts get" [
 ]: nothing -> record<bank_account: record<account_number_suffix: string, account_type: string, bank_name: string, country: string, creditable: bool, currency: string, debit_mandate_reference_id: string, debitable: bool, fingerprint: string, holder_name: string, id: string, location_id: string, primary_bank_identification_number: string, reference_id: string, secondary_bank_identification_number: string, status: string, version: int>, errors: table<category: string, code: string, detail: string, field: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($bank_account_id | is-empty) { error make --unspanned { msg: "path parameter 'bank_account_id' must be non-empty" } }
   let full_url = (build-url $base ({bank_account_id: (encode-path-segment $bank_account_id)} | format pattern "/v2/bank-accounts/{bank_account_id}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
 }
 
 # CreateBooking
@@ -855,7 +897,7 @@ export def "bookings create" [
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: {}, body: $req_body}
 }
 
 # SearchAvailability
@@ -883,7 +925,7 @@ export def "bookings-availability-search list" [
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: {}, body: $req_body}
 }
 
 # RetrieveBusinessBookingProfile
@@ -906,7 +948,7 @@ export def "bookings-business-booking-profile get" [
   let full_url = (build-url $base "/v2/bookings/business-booking-profile")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
 }
 
 # ListTeamMemberBookingProfiles
@@ -934,7 +976,7 @@ export def "bookings-team-member-booking-profiles list" [
   let full_url = (build-url $base "/v2/bookings/team-member-booking-profiles" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"bookable_only": $bookable_only, "limit": $limit, "cursor": $cursor, "location_id": $location_id} | compact), body: null}
 }
 
 # RetrieveTeamMemberBookingProfile
@@ -955,10 +997,11 @@ export def "bookings-team-member-booking-profiles get" [
 ]: nothing -> record<errors: table<category: string, code: string, detail: string, field: string>, team_member_booking_profile: record<description: string, display_name: string, is_bookable: bool, profile_image_url: string, team_member_id: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($team_member_id | is-empty) { error make --unspanned { msg: "path parameter 'team_member_id' must be non-empty" } }
   let full_url = (build-url $base ({team_member_id: (encode-path-segment $team_member_id)} | format pattern "/v2/bookings/team-member-booking-profiles/{team_member_id}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
 }
 
 # RetrieveBooking
@@ -979,10 +1022,11 @@ export def "bookings get" [
 ]: nothing -> record<booking: record<appointment_segments: list<record>, created_at: string, customer_id: string, customer_note: string, id: string, location_id: string, seller_note: string, start_at: string, status: string, updated_at: string, version: int>, errors: table<category: string, code: string, detail: string, field: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($booking_id | is-empty) { error make --unspanned { msg: "path parameter 'booking_id' must be non-empty" } }
   let full_url = (build-url $base ({booking_id: (encode-path-segment $booking_id)} | format pattern "/v2/bookings/{booking_id}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
 }
 
 # UpdateBooking
@@ -1007,12 +1051,13 @@ export def "bookings update" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($booking_id | is-empty) { error make --unspanned { msg: "path parameter 'booking_id' must be non-empty" } }
   let full_url = (build-url $base ({booking_id: (encode-path-segment $booking_id)} | format pattern "/v2/bookings/{booking_id}"))
   let req_body = {"booking": $booking, "idempotency_key": $idempotency_key} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: {}, body: $req_body}
 }
 
 # CancelBooking
@@ -1036,12 +1081,13 @@ export def "bookings-cancel cancel" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($booking_id | is-empty) { error make --unspanned { msg: "path parameter 'booking_id' must be non-empty" } }
   let full_url = (build-url $base ({booking_id: (encode-path-segment $booking_id)} | format pattern "/v2/bookings/{booking_id}/cancel"))
   let req_body = {"booking_version": $booking_version, "idempotency_key": $idempotency_key} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: {}, body: $req_body}
 }
 
 # ListCards
@@ -1070,7 +1116,7 @@ export def "cards list" [
   let full_url = (build-url $base "/v2/cards" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"cursor": $cursor, "customer_id": $customer_id, "include_disabled": $include_disabled, "reference_id": $reference_id, "sort_order": $sort_order} | compact), body: null}
 }
 
 # CreateCard
@@ -1101,7 +1147,7 @@ export def "cards create" [
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: {}, body: $req_body}
 }
 
 # RetrieveCard
@@ -1122,10 +1168,11 @@ export def "cards get" [
 ]: nothing -> record<card: record<billing_address: record<address_line_1: string, address_line_2: string, address_line_3: string, administrative_district_level_1: string, administrative_district_level_2: string, administrative_district_level_3: string, country: string, first_name: string, last_name: string, locality: string, organization: string, postal_code: string, sublocality: string, sublocality_2: string, sublocality_3: string>, bin: string, card_brand: string, card_type: string, cardholder_name: string, customer_id: string, enabled: bool, exp_month: int, exp_year: int, fingerprint: string, id: string, last_4: string, prepaid_type: string, reference_id: string, version: int>, errors: table<category: string, code: string, detail: string, field: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($card_id | is-empty) { error make --unspanned { msg: "path parameter 'card_id' must be non-empty" } }
   let full_url = (build-url $base ({card_id: (encode-path-segment $card_id)} | format pattern "/v2/cards/{card_id}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
 }
 
 # DisableCard
@@ -1146,10 +1193,11 @@ export def "cards-disable disable" [
 ]: nothing -> record<card: record<billing_address: record<address_line_1: string, address_line_2: string, address_line_3: string, administrative_district_level_1: string, administrative_district_level_2: string, administrative_district_level_3: string, country: string, first_name: string, last_name: string, locality: string, organization: string, postal_code: string, sublocality: string, sublocality_2: string, sublocality_3: string>, bin: string, card_brand: string, card_type: string, cardholder_name: string, customer_id: string, enabled: bool, exp_month: int, exp_year: int, fingerprint: string, id: string, last_4: string, prepaid_type: string, reference_id: string, version: int>, errors: table<category: string, code: string, detail: string, field: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($card_id | is-empty) { error make --unspanned { msg: "path parameter 'card_id' must be non-empty" } }
   let full_url = (build-url $base ({card_id: (encode-path-segment $card_id)} | format pattern "/v2/cards/{card_id}/disable"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
 }
 
 # ListCashDrawerShifts
@@ -1179,7 +1227,7 @@ export def "cash-drawers-shifts list" [
   let full_url = (build-url $base "/v2/cash-drawers/shifts" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"location_id": $location_id, "sort_order": $sort_order, "begin_time": $begin_time, "end_time": $end_time, "limit": $limit, "cursor": $cursor} | compact), body: null}
 }
 
 # RetrieveCashDrawerShift
@@ -1201,11 +1249,12 @@ export def "cash-drawers-shifts get" [
 ]: nothing -> record<cash_drawer_shift: record<cash_paid_in_money: record<amount: int, currency: string>, cash_paid_out_money: record<amount: int, currency: string>, cash_payment_money: record<amount: int, currency: string>, cash_refunds_money: record<amount: int, currency: string>, closed_at: string, closed_cash_money: record<amount: int, currency: string>, closing_employee_id: string, description: string, device: record<id: string, name: string>, employee_ids: list<string>, ended_at: string, ending_employee_id: string, expected_cash_money: record<amount: int, currency: string>, id: string, opened_at: string, opened_cash_money: record<amount: int, currency: string>, opening_employee_id: string, state: string>, errors: table<category: string, code: string, detail: string, field: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($shift_id | is-empty) { error make --unspanned { msg: "path parameter 'shift_id' must be non-empty" } }
   let qp = [(serialize-qp "location_id" $location_id "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({shift_id: (encode-path-segment $shift_id)} | format pattern "/v2/cash-drawers/shifts/{shift_id}") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"location_id": $location_id} | compact), body: null}
 }
 
 # ListCashDrawerShiftEvents
@@ -1229,11 +1278,12 @@ export def "cash-drawers-shifts-events list" [
 ]: nothing -> record<cursor: string, errors: table<category: string, code: string, detail: string, field: string>, events: table<created_at: string, description: string, employee_id: string, event_money: record, event_type: string, id: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($shift_id | is-empty) { error make --unspanned { msg: "path parameter 'shift_id' must be non-empty" } }
   let qp = [(serialize-qp "location_id" $location_id "scalar") (serialize-qp "limit" $limit "scalar") (serialize-qp "cursor" $cursor "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({shift_id: (encode-path-segment $shift_id)} | format pattern "/v2/cash-drawers/shifts/{shift_id}/events") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"location_id": $location_id, "limit": $limit, "cursor": $cursor} | compact), body: null}
 }
 
 # BatchDeleteCatalogObjects
@@ -1260,7 +1310,7 @@ export def "catalog-batch-delete delete-objects" [
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: {}, body: $req_body}
 }
 
 # BatchRetrieveCatalogObjects
@@ -1289,7 +1339,7 @@ export def "catalog-batch-retrieve get-objects" [
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: {}, body: $req_body}
 }
 
 # BatchUpsertCatalogObjects
@@ -1318,7 +1368,7 @@ export def "catalog-batch-upsert update-objects" [
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: {}, body: $req_body}
 }
 
 # CatalogInfo
@@ -1341,7 +1391,7 @@ export def "catalog-info get" [
   let full_url = (build-url $base "/v2/catalog/info")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
 }
 
 # ListCatalog
@@ -1368,7 +1418,7 @@ export def "catalog-list list" [
   let full_url = (build-url $base "/v2/catalog/list" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"cursor": $cursor, "types": $types, "catalog_version": $catalog_version} | compact), body: null}
 }
 
 # UpsertCatalogObject
@@ -1397,7 +1447,7 @@ export def "catalog-object update" [
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: {}, body: $req_body}
 }
 
 # DeleteCatalogObject
@@ -1418,10 +1468,11 @@ export def "catalog-object delete" [
 ]: nothing -> record<deleted_at: string, deleted_object_ids: list<string>, errors: table<category: string, code: string, detail: string, field: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($object_id | is-empty) { error make --unspanned { msg: "path parameter 'object_id' must be non-empty" } }
   let full_url = (build-url $base ({object_id: (encode-path-segment $object_id)} | format pattern "/v2/catalog/object/{object_id}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
 }
 
 # RetrieveCatalogObject
@@ -1444,11 +1495,12 @@ export def "catalog-object get" [
 ]: nothing -> record<errors: table<category: string, code: string, detail: string, field: string>, object: record<absent_at_location_ids: list<string>, catalog_v1_ids: list<record>, category_data: record<name: string>, custom_attribute_definition_data: record<allowed_object_types: list, app_visibility: string, custom_attribute_usage_count: int, description: string, key: string, name: string, number_config: record, selection_config: record, seller_visibility: string, source_application: record, string_config: record, type: string>, custom_attribute_values: record, discount_data: record<amount_money: record, discount_type: string, label_color: string, modify_tax_basis: string, name: string, percentage: string, pin_required: bool>, id: string, image_data: record<caption: string, name: string, url: string>, image_id: string, is_deleted: bool, item_data: record<abbreviation: string, available_electronically: bool, available_for_pickup: bool, available_online: bool, category_id: string, description: string, item_options: list, label_color: string, modifier_list_info: list, name: string, product_type: string, skip_modifier_screen: bool, sort_name: string, tax_ids: list, variations: list>, item_option_data: record<description: string, display_name: string, name: string, show_colors: bool, values: list>, item_option_value_data: record<color: string, description: string, item_option_id: string, name: string, ordinal: int>, item_variation_data: record<available_for_booking: bool, inventory_alert_threshold: int, inventory_alert_type: string, item_id: string, item_option_values: list, location_overrides: list, measurement_unit_id: string, name: string, ordinal: int, price_money: record, pricing_type: string, service_duration: int, sku: string, stockable: bool, stockable_conversion: record, team_member_ids: list, track_inventory: bool, upc: string, user_data: string>, measurement_unit_data: record<measurement_unit: record, precision: int>, modifier_data: record<modifier_list_id: string, name: string, ordinal: int, price_money: record>, modifier_list_data: record<modifiers: list, name: string, ordinal: int, selection_type: string>, present_at_all_locations: bool, present_at_location_ids: list<string>, pricing_rule_data: record<apply_products_id: string, customer_group_ids_any: list, discount_id: string, exclude_products_id: string, exclude_strategy: string, match_products_id: string, name: string, time_period_ids: list, valid_from_date: string, valid_from_local_time: string, valid_until_date: string, valid_until_local_time: string>, product_set_data: record<all_products: bool, name: string, product_ids_all: list, product_ids_any: list, quantity_exact: int, quantity_max: int, quantity_min: int>, quick_amounts_settings_data: record<amounts: list, eligible_for_auto_amounts: bool, option: string>, subscription_plan_data: record<name: string, phases: list>, tax_data: record<applies_to_custom_amounts: bool, calculation_phase: string, enabled: bool, inclusion_type: string, name: string, percentage: string>, time_period_data: record<event: string>, type: string, updated_at: string, version: int>, related_objects: table<absent_at_location_ids: list, catalog_v1_ids: list, category_data: record, custom_attribute_definition_data: record, custom_attribute_values: record, discount_data: record, id: string, image_data: record, image_id: string, is_deleted: bool, item_data: record, item_option_data: record, item_option_value_data: record, item_variation_data: record, measurement_unit_data: record, modifier_data: record, modifier_list_data: record, present_at_all_locations: bool, present_at_location_ids: list, pricing_rule_data: record, product_set_data: record, quick_amounts_settings_data: record, subscription_plan_data: record, tax_data: record, time_period_data: record, type: string, updated_at: string, version: int>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($object_id | is-empty) { error make --unspanned { msg: "path parameter 'object_id' must be non-empty" } }
   let qp = [(serialize-qp "include_related_objects" $include_related_objects "scalar") (serialize-qp "catalog_version" $catalog_version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({object_id: (encode-path-segment $object_id)} | format pattern "/v2/catalog/object/{object_id}") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"include_related_objects": $include_related_objects, "catalog_version": $catalog_version} | compact), body: null}
 }
 
 # SearchCatalogObjects
@@ -1482,7 +1534,7 @@ export def "catalog-search list-objects" [
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: {}, body: $req_body}
 }
 
 # SearchCatalogItems
@@ -1518,7 +1570,7 @@ export def "catalog-search-catalog-items list" [
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: {}, body: $req_body}
 }
 
 # UpdateItemModifierLists
@@ -1547,7 +1599,7 @@ export def "catalog-update-item-modifier-lists update" [
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: {}, body: $req_body}
 }
 
 # UpdateItemTaxes
@@ -1576,7 +1628,7 @@ export def "catalog-update-item-taxes update" [
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: {}, body: $req_body}
 }
 
 # ListCustomers
@@ -1604,7 +1656,7 @@ export def "customers list" [
   let full_url = (build-url $base "/v2/customers" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"cursor": $cursor, "limit": $limit, "sort_field": $sort_field, "sort_order": $sort_order} | compact), body: null}
 }
 
 # CreateCustomer
@@ -1642,7 +1694,7 @@ export def "customers create" [
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: {}, body: $req_body}
 }
 
 # ListCustomerGroups
@@ -1668,7 +1720,7 @@ export def "customers-groups list" [
   let full_url = (build-url $base "/v2/customers/groups" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"cursor": $cursor, "limit": $limit} | compact), body: null}
 }
 
 # CreateCustomerGroup
@@ -1697,14 +1749,14 @@ export def "customers-groups create" [
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: {}, body: $req_body}
 }
 
 # DeleteCustomerGroup
 #
 # DELETE /v2/customers/groups/{group_id}
 # operationId: DeleteCustomerGroup
-export def "customers-groups delete-by-group_id" [
+export def "customers-groups delete-by-group-id" [
   group_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1718,10 +1770,11 @@ export def "customers-groups delete-by-group_id" [
 ]: nothing -> record<errors: table<category: string, code: string, detail: string, field: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($group_id | is-empty) { error make --unspanned { msg: "path parameter 'group_id' must be non-empty" } }
   let full_url = (build-url $base ({group_id: (encode-path-segment $group_id)} | format pattern "/v2/customers/groups/{group_id}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
 }
 
 # RetrieveCustomerGroup
@@ -1742,10 +1795,11 @@ export def "customers-groups get" [
 ]: nothing -> record<errors: table<category: string, code: string, detail: string, field: string>, group: record<created_at: string, id: string, name: string, updated_at: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($group_id | is-empty) { error make --unspanned { msg: "path parameter 'group_id' must be non-empty" } }
   let full_url = (build-url $base ({group_id: (encode-path-segment $group_id)} | format pattern "/v2/customers/groups/{group_id}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
 }
 
 # UpdateCustomerGroup
@@ -1769,12 +1823,13 @@ export def "customers-groups update" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($group_id | is-empty) { error make --unspanned { msg: "path parameter 'group_id' must be non-empty" } }
   let full_url = (build-url $base ({group_id: (encode-path-segment $group_id)} | format pattern "/v2/customers/groups/{group_id}"))
   let req_body = {"group": $group} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: {}, body: $req_body}
 }
 
 # SearchCustomers
@@ -1804,7 +1859,7 @@ export def "customers-search list" [
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: {}, body: $req_body}
 }
 
 # ListCustomerSegments
@@ -1830,7 +1885,7 @@ export def "customers-segments list" [
   let full_url = (build-url $base "/v2/customers/segments" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"cursor": $cursor, "limit": $limit} | compact), body: null}
 }
 
 # RetrieveCustomerSegment
@@ -1851,10 +1906,11 @@ export def "customers-segments get" [
 ]: nothing -> record<errors: table<category: string, code: string, detail: string, field: string>, segment: record<created_at: string, id: string, name: string, updated_at: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($segment_id | is-empty) { error make --unspanned { msg: "path parameter 'segment_id' must be non-empty" } }
   let full_url = (build-url $base ({segment_id: (encode-path-segment $segment_id)} | format pattern "/v2/customers/segments/{segment_id}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
 }
 
 # DeleteCustomer
@@ -1876,11 +1932,12 @@ export def "customers delete" [
 ]: nothing -> record<errors: table<category: string, code: string, detail: string, field: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($customer_id | is-empty) { error make --unspanned { msg: "path parameter 'customer_id' must be non-empty" } }
   let qp = [(serialize-qp "version" $version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({customer_id: (encode-path-segment $customer_id)} | format pattern "/v2/customers/{customer_id}") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"version": $version} | compact), body: null}
 }
 
 # RetrieveCustomer
@@ -1901,10 +1958,11 @@ export def "customers get" [
 ]: nothing -> record<customer: record<address: record<address_line_1: string, address_line_2: string, address_line_3: string, administrative_district_level_1: string, administrative_district_level_2: string, administrative_district_level_3: string, country: string, first_name: string, last_name: string, locality: string, organization: string, postal_code: string, sublocality: string, sublocality_2: string, sublocality_3: string>, birthday: string, cards: list<record>, company_name: string, created_at: string, creation_source: string, email_address: string, family_name: string, given_name: string, group_ids: list<string>, id: string, nickname: string, note: string, phone_number: string, preferences: record<email_unsubscribed: bool>, reference_id: string, segment_ids: list<string>, updated_at: string, version: int>, errors: table<category: string, code: string, detail: string, field: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($customer_id | is-empty) { error make --unspanned { msg: "path parameter 'customer_id' must be non-empty" } }
   let full_url = (build-url $base ({customer_id: (encode-path-segment $customer_id)} | format pattern "/v2/customers/{customer_id}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
 }
 
 # UpdateCustomer
@@ -1938,12 +1996,13 @@ export def "customers update" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($customer_id | is-empty) { error make --unspanned { msg: "path parameter 'customer_id' must be non-empty" } }
   let full_url = (build-url $base ({customer_id: (encode-path-segment $customer_id)} | format pattern "/v2/customers/{customer_id}"))
   let req_body = {"address": $address, "birthday": $birthday, "company_name": $company_name, "email_address": $email_address, "family_name": $family_name, "given_name": $given_name, "nickname": $nickname, "note": $note, "phone_number": $phone_number, "reference_id": $reference_id, "version": $version} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: {}, body: $req_body}
 }
 
 # CreateCustomerCard
@@ -1970,12 +2029,13 @@ export def "customers-cards create" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($customer_id | is-empty) { error make --unspanned { msg: "path parameter 'customer_id' must be non-empty" } }
   let full_url = (build-url $base ({customer_id: (encode-path-segment $customer_id)} | format pattern "/v2/customers/{customer_id}/cards"))
   let req_body = {"billing_address": $billing_address, "card_nonce": $card_nonce, "cardholder_name": $cardholder_name, "verification_token": $verification_token} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: {}, body: $req_body}
 }
 
 # DeleteCustomerCard
@@ -1997,17 +2057,19 @@ export def "customers-cards delete" [
 ]: nothing -> record<errors: table<category: string, code: string, detail: string, field: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($customer_id | is-empty) { error make --unspanned { msg: "path parameter 'customer_id' must be non-empty" } }
+  if ($card_id | is-empty) { error make --unspanned { msg: "path parameter 'card_id' must be non-empty" } }
   let full_url = (build-url $base ({customer_id: (encode-path-segment $customer_id), card_id: (encode-path-segment $card_id)} | format pattern "/v2/customers/{customer_id}/cards/{card_id}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
 }
 
 # RemoveGroupFromCustomer
 #
 # DELETE /v2/customers/{customer_id}/groups/{group_id}
 # operationId: RemoveGroupFromCustomer
-export def "customers-groups delete-by-customer_id-group_id" [
+export def "customers-groups delete-by-customer-id-group-id" [
   customer_id: string
   group_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -2022,17 +2084,19 @@ export def "customers-groups delete-by-customer_id-group_id" [
 ]: nothing -> record<errors: table<category: string, code: string, detail: string, field: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($customer_id | is-empty) { error make --unspanned { msg: "path parameter 'customer_id' must be non-empty" } }
+  if ($group_id | is-empty) { error make --unspanned { msg: "path parameter 'group_id' must be non-empty" } }
   let full_url = (build-url $base ({customer_id: (encode-path-segment $customer_id), group_id: (encode-path-segment $group_id)} | format pattern "/v2/customers/{customer_id}/groups/{group_id}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
 }
 
 # AddGroupToCustomer
 #
 # PUT /v2/customers/{customer_id}/groups/{group_id}
 # operationId: AddGroupToCustomer
-export def "customers-groups create-by-customer_id-group_id" [
+export def "customers-groups create-by-customer-id-group-id" [
   customer_id: string
   group_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -2047,10 +2111,12 @@ export def "customers-groups create-by-customer_id-group_id" [
 ]: nothing -> record<errors: table<category: string, code: string, detail: string, field: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($customer_id | is-empty) { error make --unspanned { msg: "path parameter 'customer_id' must be non-empty" } }
+  if ($group_id | is-empty) { error make --unspanned { msg: "path parameter 'group_id' must be non-empty" } }
   let full_url = (build-url $base ({customer_id: (encode-path-segment $customer_id), group_id: (encode-path-segment $group_id)} | format pattern "/v2/customers/{customer_id}/groups/{group_id}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
 }
 
 # ListDeviceCodes
@@ -2078,7 +2144,7 @@ export def "devices-codes list" [
   let full_url = (build-url $base "/v2/devices/codes" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"cursor": $cursor, "location_id": $location_id, "product_type": $product_type, "status": $status} | compact), body: null}
 }
 
 # CreateDeviceCode
@@ -2107,7 +2173,7 @@ export def "devices-codes create" [
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: {}, body: $req_body}
 }
 
 # GetDeviceCode
@@ -2128,10 +2194,11 @@ export def "devices-codes get" [
 ]: nothing -> record<device_code: record<code: string, created_at: string, device_id: string, id: string, location_id: string, name: string, pair_by: string, paired_at: string, product_type: string, status: string, status_changed_at: string>, errors: table<category: string, code: string, detail: string, field: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
   let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/v2/devices/codes/{id}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
 }
 
 # ListDisputes
@@ -2158,7 +2225,7 @@ export def "disputes list" [
   let full_url = (build-url $base "/v2/disputes" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"cursor": $cursor, "states": $states, "location_id": $location_id} | compact), body: null}
 }
 
 # RetrieveDispute
@@ -2179,10 +2246,11 @@ export def "disputes get" [
 ]: nothing -> record<dispute: record<amount_money: record<amount: int, currency: string>, brand_dispute_id: string, card_brand: string, created_at: string, dispute_id: string, disputed_payment: record<payment_id: string>, due_at: string, evidence_ids: list<string>, id: string, location_id: string, reason: string, reported_at: string, reported_date: string, state: string, updated_at: string, version: int>, errors: table<category: string, code: string, detail: string, field: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($dispute_id | is-empty) { error make --unspanned { msg: "path parameter 'dispute_id' must be non-empty" } }
   let full_url = (build-url $base ({dispute_id: (encode-path-segment $dispute_id)} | format pattern "/v2/disputes/{dispute_id}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
 }
 
 # AcceptDispute
@@ -2203,10 +2271,11 @@ export def "disputes-accept create" [
 ]: nothing -> record<dispute: record<amount_money: record<amount: int, currency: string>, brand_dispute_id: string, card_brand: string, created_at: string, dispute_id: string, disputed_payment: record<payment_id: string>, due_at: string, evidence_ids: list<string>, id: string, location_id: string, reason: string, reported_at: string, reported_date: string, state: string, updated_at: string, version: int>, errors: table<category: string, code: string, detail: string, field: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($dispute_id | is-empty) { error make --unspanned { msg: "path parameter 'dispute_id' must be non-empty" } }
   let full_url = (build-url $base ({dispute_id: (encode-path-segment $dispute_id)} | format pattern "/v2/disputes/{dispute_id}/accept"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
 }
 
 # ListDisputeEvidence
@@ -2228,11 +2297,12 @@ export def "disputes-evidence list" [
 ]: nothing -> record<cursor: string, errors: table<category: string, code: string, detail: string, field: string>, evidence: table<dispute_id: string, evidence_file: record, evidence_id: string, evidence_text: string, evidence_type: string, id: string, uploaded_at: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($dispute_id | is-empty) { error make --unspanned { msg: "path parameter 'dispute_id' must be non-empty" } }
   let qp = [(serialize-qp "cursor" $cursor "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({dispute_id: (encode-path-segment $dispute_id)} | format pattern "/v2/disputes/{dispute_id}/evidence") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"cursor": $cursor} | compact), body: null}
 }
 
 # CreateDisputeEvidenceText
@@ -2257,12 +2327,13 @@ export def "disputes-evidence-text create" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($dispute_id | is-empty) { error make --unspanned { msg: "path parameter 'dispute_id' must be non-empty" } }
   let full_url = (build-url $base ({dispute_id: (encode-path-segment $dispute_id)} | format pattern "/v2/disputes/{dispute_id}/evidence-text"))
   let req_body = {"evidence_text": $evidence_text, "evidence_type": $evidence_type, "idempotency_key": $idempotency_key} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: {}, body: $req_body}
 }
 
 # DeleteDisputeEvidence
@@ -2284,10 +2355,12 @@ export def "disputes-evidence delete" [
 ]: nothing -> record<errors: table<category: string, code: string, detail: string, field: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($dispute_id | is-empty) { error make --unspanned { msg: "path parameter 'dispute_id' must be non-empty" } }
+  if ($evidence_id | is-empty) { error make --unspanned { msg: "path parameter 'evidence_id' must be non-empty" } }
   let full_url = (build-url $base ({dispute_id: (encode-path-segment $dispute_id), evidence_id: (encode-path-segment $evidence_id)} | format pattern "/v2/disputes/{dispute_id}/evidence/{evidence_id}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
 }
 
 # RetrieveDisputeEvidence
@@ -2309,10 +2382,12 @@ export def "disputes-evidence get" [
 ]: nothing -> record<errors: table<category: string, code: string, detail: string, field: string>, evidence: record<dispute_id: string, evidence_file: record<filename: string, filetype: string>, evidence_id: string, evidence_text: string, evidence_type: string, id: string, uploaded_at: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($dispute_id | is-empty) { error make --unspanned { msg: "path parameter 'dispute_id' must be non-empty" } }
+  if ($evidence_id | is-empty) { error make --unspanned { msg: "path parameter 'evidence_id' must be non-empty" } }
   let full_url = (build-url $base ({dispute_id: (encode-path-segment $dispute_id), evidence_id: (encode-path-segment $evidence_id)} | format pattern "/v2/disputes/{dispute_id}/evidence/{evidence_id}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
 }
 
 # SubmitEvidence
@@ -2333,10 +2408,11 @@ export def "disputes-submit-evidence submit" [
 ]: nothing -> record<dispute: record<amount_money: record<amount: int, currency: string>, brand_dispute_id: string, card_brand: string, created_at: string, dispute_id: string, disputed_payment: record<payment_id: string>, due_at: string, evidence_ids: list<string>, id: string, location_id: string, reason: string, reported_at: string, reported_date: string, state: string, updated_at: string, version: int>, errors: table<category: string, code: string, detail: string, field: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($dispute_id | is-empty) { error make --unspanned { msg: "path parameter 'dispute_id' must be non-empty" } }
   let full_url = (build-url $base ({dispute_id: (encode-path-segment $dispute_id)} | format pattern "/v2/disputes/{dispute_id}/submit-evidence"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
 }
 
 # ListEmployees
@@ -2363,7 +2439,7 @@ export def "employees list" [
   let full_url = (build-url $base "/v2/employees" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"location_id": $location_id, "status": $status, "limit": $limit, "cursor": $cursor} | compact), body: null}
 }
 
 # RetrieveEmployee
@@ -2383,10 +2459,11 @@ export def "employees get" [
 ]: nothing -> record<employee: record<created_at: string, email: string, first_name: string, id: string, is_owner: bool, last_name: string, location_ids: list<string>, phone_number: string, status: string, updated_at: string>, errors: table<category: string, code: string, detail: string, field: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
   let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/v2/employees/{id}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
 }
 
 # ListGiftCards
@@ -2415,7 +2492,7 @@ export def "gift-cards list" [
   let full_url = (build-url $base "/v2/gift-cards" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"type": $type, "state": $state, "limit": $limit, "cursor": $cursor, "customer_id": $customer_id} | compact), body: null}
 }
 
 # CreateGiftCard
@@ -2445,7 +2522,7 @@ export def "gift-cards create" [
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: {}, body: $req_body}
 }
 
 # ListGiftCardActivities
@@ -2477,7 +2554,7 @@ export def "gift-cards-activities list" [
   let full_url = (build-url $base "/v2/gift-cards/activities" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"gift_card_id": $gift_card_id, "type": $type, "location_id": $location_id, "begin_time": $begin_time, "end_time": $end_time, "limit": $limit, "cursor": $cursor, "sort_order": $sort_order} | compact), body: null}
 }
 
 # CreateGiftCardActivity
@@ -2506,7 +2583,7 @@ export def "gift-cards-activities create-activity" [
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: {}, body: $req_body}
 }
 
 # RetrieveGiftCardFromGAN
@@ -2533,7 +2610,7 @@ export def "gift-cards-from-gan get" [
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: {}, body: $req_body}
 }
 
 # RetrieveGiftCardFromNonce
@@ -2560,7 +2637,7 @@ export def "gift-cards-from-nonce get" [
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: {}, body: $req_body}
 }
 
 # LinkCustomerToGiftCard
@@ -2583,12 +2660,13 @@ export def "gift-cards-link-customer create" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($gift_card_id | is-empty) { error make --unspanned { msg: "path parameter 'gift_card_id' must be non-empty" } }
   let full_url = (build-url $base ({gift_card_id: (encode-path-segment $gift_card_id)} | format pattern "/v2/gift-cards/{gift_card_id}/link-customer"))
   let req_body = {"customer_id": $customer_id} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: {}, body: $req_body}
 }
 
 # UnlinkCustomerFromGiftCard
@@ -2611,12 +2689,13 @@ export def "gift-cards-unlink-customer create" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($gift_card_id | is-empty) { error make --unspanned { msg: "path parameter 'gift_card_id' must be non-empty" } }
   let full_url = (build-url $base ({gift_card_id: (encode-path-segment $gift_card_id)} | format pattern "/v2/gift-cards/{gift_card_id}/unlink-customer"))
   let req_body = {"customer_id": $customer_id} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: {}, body: $req_body}
 }
 
 # RetrieveGiftCard
@@ -2637,10 +2716,11 @@ export def "gift-cards get" [
 ]: nothing -> record<errors: table<category: string, code: string, detail: string, field: string>, gift_card: record<balance_money: record<amount: int, currency: string>, created_at: string, customer_ids: list<string>, gan: string, gan_source: any, id: string, state: any, type: any>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
   let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/v2/gift-cards/{id}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
 }
 
 # DeprecatedRetrieveInventoryAdjustment
@@ -2661,10 +2741,11 @@ export def "inventory-adjustment get-deprecated" [
 ]: nothing -> record<adjustment: record<adjustment_group: record<from_state: string, id: string, root_adjustment_id: string, to_state: string>, catalog_object_id: string, catalog_object_type: string, created_at: string, employee_id: string, from_state: string, goods_receipt_id: string, id: string, location_id: string, occurred_at: string, purchase_order_id: string, quantity: string, reference_id: string, refund_id: string, source: record<application_id: string, name: string, product: string>, to_state: string, total_price_money: record<amount: int, currency: string>, transaction_id: string>, errors: table<category: string, code: string, detail: string, field: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($adjustment_id | is-empty) { error make --unspanned { msg: "path parameter 'adjustment_id' must be non-empty" } }
   let full_url = (build-url $base ({adjustment_id: (encode-path-segment $adjustment_id)} | format pattern "/v2/inventory/adjustment/{adjustment_id}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
 }
 
 # RetrieveInventoryAdjustment
@@ -2685,10 +2766,11 @@ export def "inventory-adjustments get" [
 ]: nothing -> record<adjustment: record<adjustment_group: record<from_state: string, id: string, root_adjustment_id: string, to_state: string>, catalog_object_id: string, catalog_object_type: string, created_at: string, employee_id: string, from_state: string, goods_receipt_id: string, id: string, location_id: string, occurred_at: string, purchase_order_id: string, quantity: string, reference_id: string, refund_id: string, source: record<application_id: string, name: string, product: string>, to_state: string, total_price_money: record<amount: int, currency: string>, transaction_id: string>, errors: table<category: string, code: string, detail: string, field: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($adjustment_id | is-empty) { error make --unspanned { msg: "path parameter 'adjustment_id' must be non-empty" } }
   let full_url = (build-url $base ({adjustment_id: (encode-path-segment $adjustment_id)} | format pattern "/v2/inventory/adjustments/{adjustment_id}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
 }
 
 # DeprecatedBatchChangeInventory
@@ -2718,7 +2800,7 @@ export def "inventory-batch-change create-deprecated" [
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: {}, body: $req_body}
 }
 
 # DeprecatedBatchRetrieveInventoryChanges
@@ -2751,7 +2833,7 @@ export def "inventory-batch-retrieve-changes get-deprecated" [
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: {}, body: $req_body}
 }
 
 # DeprecatedBatchRetrieveInventoryCounts
@@ -2782,7 +2864,7 @@ export def "inventory-batch-retrieve-counts get-deprecated" [
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: {}, body: $req_body}
 }
 
 # BatchChangeInventory
@@ -2812,7 +2894,7 @@ export def "inventory-changes-batch-create create" [
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: {}, body: $req_body}
 }
 
 # BatchRetrieveInventoryChanges
@@ -2845,7 +2927,7 @@ export def "inventory-changes-batch-retrieve get" [
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: {}, body: $req_body}
 }
 
 # BatchRetrieveInventoryCounts
@@ -2876,7 +2958,7 @@ export def "inventory-counts-batch-retrieve get" [
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: {}, body: $req_body}
 }
 
 # DeprecatedRetrieveInventoryPhysicalCount
@@ -2897,10 +2979,11 @@ export def "inventory-physical-count get-deprecated" [
 ]: nothing -> record<count: record<catalog_object_id: string, catalog_object_type: string, created_at: string, employee_id: string, id: string, location_id: string, occurred_at: string, quantity: string, reference_id: string, source: record<application_id: string, name: string, product: string>, state: string>, errors: table<category: string, code: string, detail: string, field: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($physical_count_id | is-empty) { error make --unspanned { msg: "path parameter 'physical_count_id' must be non-empty" } }
   let full_url = (build-url $base ({physical_count_id: (encode-path-segment $physical_count_id)} | format pattern "/v2/inventory/physical-count/{physical_count_id}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
 }
 
 # RetrieveInventoryPhysicalCount
@@ -2921,10 +3004,11 @@ export def "inventory-physical-counts get" [
 ]: nothing -> record<count: record<catalog_object_id: string, catalog_object_type: string, created_at: string, employee_id: string, id: string, location_id: string, occurred_at: string, quantity: string, reference_id: string, source: record<application_id: string, name: string, product: string>, state: string>, errors: table<category: string, code: string, detail: string, field: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($physical_count_id | is-empty) { error make --unspanned { msg: "path parameter 'physical_count_id' must be non-empty" } }
   let full_url = (build-url $base ({physical_count_id: (encode-path-segment $physical_count_id)} | format pattern "/v2/inventory/physical-counts/{physical_count_id}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
 }
 
 # RetrieveInventoryTransfer
@@ -2945,10 +3029,11 @@ export def "inventory-transfers get" [
 ]: nothing -> record<errors: table<category: string, code: string, detail: string, field: string>, transfer: record<catalog_object_id: string, catalog_object_type: string, created_at: string, employee_id: string, from_location_id: string, id: string, occurred_at: string, quantity: string, reference_id: string, source: record<application_id: string, name: string, product: string>, state: string, to_location_id: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($transfer_id | is-empty) { error make --unspanned { msg: "path parameter 'transfer_id' must be non-empty" } }
   let full_url = (build-url $base ({transfer_id: (encode-path-segment $transfer_id)} | format pattern "/v2/inventory/transfers/{transfer_id}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
 }
 
 # RetrieveInventoryCount
@@ -2971,11 +3056,12 @@ export def "inventory get-count" [
 ]: nothing -> record<counts: table<calculated_at: string, catalog_object_id: string, catalog_object_type: string, is_estimated: bool, location_id: string, quantity: string, state: string>, cursor: string, errors: table<category: string, code: string, detail: string, field: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($catalog_object_id | is-empty) { error make --unspanned { msg: "path parameter 'catalog_object_id' must be non-empty" } }
   let qp = [(serialize-qp "location_ids" $location_ids "scalar") (serialize-qp "cursor" $cursor "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({catalog_object_id: (encode-path-segment $catalog_object_id)} | format pattern "/v2/inventory/{catalog_object_id}") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"location_ids": $location_ids, "cursor": $cursor} | compact), body: null}
 }
 
 # RetrieveInventoryChanges
@@ -2998,11 +3084,12 @@ export def "inventory-changes get" [
 ]: nothing -> record<changes: table<adjustment: record, measurement_unit: record, measurement_unit_id: string, physical_count: record, transfer: record, type: string>, cursor: string, errors: table<category: string, code: string, detail: string, field: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($catalog_object_id | is-empty) { error make --unspanned { msg: "path parameter 'catalog_object_id' must be non-empty" } }
   let qp = [(serialize-qp "location_ids" $location_ids "scalar") (serialize-qp "cursor" $cursor "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({catalog_object_id: (encode-path-segment $catalog_object_id)} | format pattern "/v2/inventory/{catalog_object_id}/changes") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"location_ids": $location_ids, "cursor": $cursor} | compact), body: null}
 }
 
 # ListInvoices
@@ -3029,7 +3116,7 @@ export def "invoices list" [
   let full_url = (build-url $base "/v2/invoices" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"location_id": $location_id, "cursor": $cursor, "limit": $limit} | compact), body: null}
 }
 
 # CreateInvoice
@@ -3058,7 +3145,7 @@ export def "invoices create" [
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: {}, body: $req_body}
 }
 
 # SearchInvoices
@@ -3088,7 +3175,7 @@ export def "invoices-search list" [
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: {}, body: $req_body}
 }
 
 # DeleteInvoice
@@ -3110,11 +3197,12 @@ export def "invoices delete" [
 ]: nothing -> record<errors: table<category: string, code: string, detail: string, field: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($invoice_id | is-empty) { error make --unspanned { msg: "path parameter 'invoice_id' must be non-empty" } }
   let qp = [(serialize-qp "version" $version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({invoice_id: (encode-path-segment $invoice_id)} | format pattern "/v2/invoices/{invoice_id}") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"version": $version} | compact), body: null}
 }
 
 # GetInvoice
@@ -3135,10 +3223,11 @@ export def "invoices get" [
 ]: nothing -> record<errors: table<category: string, code: string, detail: string, field: string>, invoice: record<accepted_payment_methods: record<bank_account: bool, card: bool, square_gift_card: bool>, created_at: string, custom_fields: list<record>, delivery_method: any, description: string, id: string, invoice_number: string, location_id: string, next_payment_amount_money: record<amount: int, currency: string>, order_id: string, payment_requests: list<record>, primary_recipient: record<address: record, company_name: string, customer_id: string, email_address: string, family_name: string, given_name: string, phone_number: string>, public_url: string, scheduled_at: string, status: string, subscription_id: string, timezone: string, title: string, updated_at: string, version: int>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($invoice_id | is-empty) { error make --unspanned { msg: "path parameter 'invoice_id' must be non-empty" } }
   let full_url = (build-url $base ({invoice_id: (encode-path-segment $invoice_id)} | format pattern "/v2/invoices/{invoice_id}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
 }
 
 # UpdateInvoice
@@ -3164,12 +3253,13 @@ export def "invoices update" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($invoice_id | is-empty) { error make --unspanned { msg: "path parameter 'invoice_id' must be non-empty" } }
   let full_url = (build-url $base ({invoice_id: (encode-path-segment $invoice_id)} | format pattern "/v2/invoices/{invoice_id}"))
   let req_body = {"fields_to_clear": $fields_to_clear, "idempotency_key": $idempotency_key, "invoice": $invoice} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: {}, body: $req_body}
 }
 
 # CancelInvoice
@@ -3192,12 +3282,13 @@ export def "invoices-cancel cancel" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($invoice_id | is-empty) { error make --unspanned { msg: "path parameter 'invoice_id' must be non-empty" } }
   let full_url = (build-url $base ({invoice_id: (encode-path-segment $invoice_id)} | format pattern "/v2/invoices/{invoice_id}/cancel"))
   let req_body = {"version": $version} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: {}, body: $req_body}
 }
 
 # PublishInvoice
@@ -3221,12 +3312,13 @@ export def "invoices-publish publish" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($invoice_id | is-empty) { error make --unspanned { msg: "path parameter 'invoice_id' must be non-empty" } }
   let full_url = (build-url $base ({invoice_id: (encode-path-segment $invoice_id)} | format pattern "/v2/invoices/{invoice_id}/publish"))
   let req_body = {"idempotency_key": $idempotency_key, "version": $version} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: {}, body: $req_body}
 }
 
 # ListBreakTypes
@@ -3253,7 +3345,7 @@ export def "labor-break-types list" [
   let full_url = (build-url $base "/v2/labor/break-types" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"location_id": $location_id, "limit": $limit, "cursor": $cursor} | compact), body: null}
 }
 
 # CreateBreakType
@@ -3282,7 +3374,7 @@ export def "labor-break-types create" [
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: {}, body: $req_body}
 }
 
 # DeleteBreakType
@@ -3303,10 +3395,11 @@ export def "labor-break-types delete" [
 ]: nothing -> record<errors: table<category: string, code: string, detail: string, field: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
   let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/v2/labor/break-types/{id}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
 }
 
 # GetBreakType
@@ -3327,10 +3420,11 @@ export def "labor-break-types get" [
 ]: nothing -> record<break_type: record<break_name: string, created_at: string, expected_duration: string, id: string, is_paid: bool, location_id: string, updated_at: string, version: int>, errors: table<category: string, code: string, detail: string, field: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
   let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/v2/labor/break-types/{id}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
 }
 
 # UpdateBreakType
@@ -3354,12 +3448,13 @@ export def "labor-break-types update" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
   let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/v2/labor/break-types/{id}"))
   let req_body = {"break_type": $break_type} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: {}, body: $req_body}
 }
 
 # ListEmployeeWages
@@ -3386,7 +3481,7 @@ export def "labor-employee-wages list" [
   let full_url = (build-url $base "/v2/labor/employee-wages" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"employee_id": $employee_id, "limit": $limit, "cursor": $cursor} | compact), body: null}
 }
 
 # GetEmployeeWage
@@ -3407,10 +3502,11 @@ export def "labor-employee-wages get" [
 ]: nothing -> record<employee_wage: record<employee_id: string, hourly_rate: record<amount: int, currency: string>, id: string, title: string>, errors: table<category: string, code: string, detail: string, field: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
   let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/v2/labor/employee-wages/{id}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
 }
 
 # CreateShift
@@ -3439,7 +3535,7 @@ export def "labor-shifts create" [
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: {}, body: $req_body}
 }
 
 # SearchShifts
@@ -3469,7 +3565,7 @@ export def "labor-shifts-search list" [
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: {}, body: $req_body}
 }
 
 # DeleteShift
@@ -3490,10 +3586,11 @@ export def "labor-shifts delete" [
 ]: nothing -> record<errors: table<category: string, code: string, detail: string, field: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
   let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/v2/labor/shifts/{id}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
 }
 
 # GetShift
@@ -3514,10 +3611,11 @@ export def "labor-shifts get" [
 ]: nothing -> record<errors: table<category: string, code: string, detail: string, field: string>, shift: record<breaks: list<record>, created_at: string, employee_id: string, end_at: string, id: string, location_id: string, start_at: string, status: string, team_member_id: string, timezone: string, updated_at: string, version: int, wage: record<hourly_rate: record, title: string>>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
   let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/v2/labor/shifts/{id}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
 }
 
 # UpdateShift
@@ -3541,12 +3639,13 @@ export def "labor-shifts update" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
   let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/v2/labor/shifts/{id}"))
   let req_body = {"shift": $shift} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: {}, body: $req_body}
 }
 
 # ListTeamMemberWages
@@ -3573,7 +3672,7 @@ export def "labor-team-member-wages list" [
   let full_url = (build-url $base "/v2/labor/team-member-wages" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"team_member_id": $team_member_id, "limit": $limit, "cursor": $cursor} | compact), body: null}
 }
 
 # GetTeamMemberWage
@@ -3594,10 +3693,11 @@ export def "labor-team-member-wages get" [
 ]: nothing -> record<errors: table<category: string, code: string, detail: string, field: string>, team_member_wage: record<hourly_rate: record<amount: int, currency: string>, id: string, team_member_id: string, title: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
   let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/v2/labor/team-member-wages/{id}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
 }
 
 # ListWorkweekConfigs
@@ -3623,7 +3723,7 @@ export def "labor-workweek-configs list" [
   let full_url = (build-url $base "/v2/labor/workweek-configs" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"limit": $limit, "cursor": $cursor} | compact), body: null}
 }
 
 # UpdateWorkweekConfig
@@ -3647,12 +3747,13 @@ export def "labor-workweek-configs update" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
   let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/v2/labor/workweek-configs/{id}"))
   let req_body = {"workweek_config": $workweek_config} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: {}, body: $req_body}
 }
 
 # ListLocations
@@ -3675,7 +3776,7 @@ export def "locations list" [
   let full_url = (build-url $base "/v2/locations")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
 }
 
 # CreateLocation
@@ -3703,7 +3804,7 @@ export def "locations create" [
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: {}, body: $req_body}
 }
 
 # RetrieveLocation
@@ -3724,10 +3825,11 @@ export def "locations get" [
 ]: nothing -> record<errors: table<category: string, code: string, detail: string, field: string>, location: record<address: record<address_line_1: string, address_line_2: string, address_line_3: string, administrative_district_level_1: string, administrative_district_level_2: string, administrative_district_level_3: string, country: string, first_name: string, last_name: string, locality: string, organization: string, postal_code: string, sublocality: string, sublocality_2: string, sublocality_3: string>, business_email: string, business_hours: record<periods: list>, business_name: string, capabilities: list<string>, coordinates: record<latitude: float, longitude: float>, country: string, created_at: string, currency: string, description: string, facebook_url: string, full_format_logo_url: string, id: string, instagram_username: string, language_code: string, logo_url: string, mcc: string, merchant_id: string, name: string, phone_number: string, pos_background_url: string, status: string, tax_ids: record<eu_vat: string, fr_naf: string, fr_siret: string>, timezone: string, twitter_username: string, type: string, website_url: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($location_id | is-empty) { error make --unspanned { msg: "path parameter 'location_id' must be non-empty" } }
   let full_url = (build-url $base ({location_id: (encode-path-segment $location_id)} | format pattern "/v2/locations/{location_id}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
 }
 
 # UpdateLocation
@@ -3751,12 +3853,13 @@ export def "locations update" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($location_id | is-empty) { error make --unspanned { msg: "path parameter 'location_id' must be non-empty" } }
   let full_url = (build-url $base ({location_id: (encode-path-segment $location_id)} | format pattern "/v2/locations/{location_id}"))
   let req_body = {"location": $location} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: {}, body: $req_body}
 }
 
 # CreateCheckout
@@ -3790,12 +3893,13 @@ export def "locations-checkouts create" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($location_id | is-empty) { error make --unspanned { msg: "path parameter 'location_id' must be non-empty" } }
   let full_url = (build-url $base ({location_id: (encode-path-segment $location_id)} | format pattern "/v2/locations/{location_id}/checkouts"))
   let req_body = {"additional_recipients": $additional_recipients, "ask_for_shipping_address": $ask_for_shipping_address, "idempotency_key": $idempotency_key, "merchant_support_email": $merchant_support_email, "note": $note, "order": $order, "pre_populate_buyer_email": $pre_populate_buyer_email, "pre_populate_shipping_address": $pre_populate_shipping_address, "redirect_url": $redirect_url} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: {}, body: $req_body}
 }
 
 # ListRefunds
@@ -3819,11 +3923,12 @@ export def "locations-refunds get" [
 ]: nothing -> record<cursor: string, errors: table<category: string, code: string, detail: string, field: string>, refunds: table<additional_recipients: list, amount_money: record, created_at: string, id: string, location_id: string, processing_fee_money: record, reason: string, status: string, tender_id: string, transaction_id: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($location_id | is-empty) { error make --unspanned { msg: "path parameter 'location_id' must be non-empty" } }
   let qp = [(serialize-qp "begin_time" $begin_time "scalar") (serialize-qp "end_time" $end_time "scalar") (serialize-qp "sort_order" $sort_order "scalar") (serialize-qp "cursor" $cursor "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({location_id: (encode-path-segment $location_id)} | format pattern "/v2/locations/{location_id}/refunds") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"begin_time": $begin_time, "end_time": $end_time, "sort_order": $sort_order, "cursor": $cursor} | compact), body: null}
 }
 
 # ListTransactions
@@ -3848,11 +3953,12 @@ export def "locations-transactions list" [
 ]: nothing -> record<cursor: string, errors: table<category: string, code: string, detail: string, field: string>, transactions: table<client_id: string, created_at: string, id: string, location_id: string, order_id: string, product: string, reference_id: string, refunds: list, shipping_address: record, tenders: list>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($location_id | is-empty) { error make --unspanned { msg: "path parameter 'location_id' must be non-empty" } }
   let qp = [(serialize-qp "begin_time" $begin_time "scalar") (serialize-qp "end_time" $end_time "scalar") (serialize-qp "sort_order" $sort_order "scalar") (serialize-qp "cursor" $cursor "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({location_id: (encode-path-segment $location_id)} | format pattern "/v2/locations/{location_id}/transactions") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"begin_time": $begin_time, "end_time": $end_time, "sort_order": $sort_order, "cursor": $cursor} | compact), body: null}
 }
 
 # Charge
@@ -3892,12 +3998,13 @@ export def "locations-transactions create-charge" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($location_id | is-empty) { error make --unspanned { msg: "path parameter 'location_id' must be non-empty" } }
   let full_url = (build-url $base ({location_id: (encode-path-segment $location_id)} | format pattern "/v2/locations/{location_id}/transactions"))
   let req_body = {"additional_recipients": $additional_recipients, "amount_money": $amount_money, "billing_address": $billing_address, "buyer_email_address": $buyer_email_address, "card_nonce": $card_nonce, "customer_card_id": $customer_card_id, "customer_id": $customer_id, "delay_capture": $delay_capture, "idempotency_key": $idempotency_key, "note": $note, "order_id": $order_id, "reference_id": $reference_id, "shipping_address": $shipping_address, "verification_token": $verification_token} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: {}, body: $req_body}
 }
 
 # RetrieveTransaction
@@ -3919,10 +4026,12 @@ export def "locations-transactions get" [
 ]: nothing -> record<errors: table<category: string, code: string, detail: string, field: string>, transaction: record<client_id: string, created_at: string, id: string, location_id: string, order_id: string, product: string, reference_id: string, refunds: list<record>, shipping_address: record<address_line_1: string, address_line_2: string, address_line_3: string, administrative_district_level_1: string, administrative_district_level_2: string, administrative_district_level_3: string, country: string, first_name: string, last_name: string, locality: string, organization: string, postal_code: string, sublocality: string, sublocality_2: string, sublocality_3: string>, tenders: list<record>>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($location_id | is-empty) { error make --unspanned { msg: "path parameter 'location_id' must be non-empty" } }
+  if ($transaction_id | is-empty) { error make --unspanned { msg: "path parameter 'transaction_id' must be non-empty" } }
   let full_url = (build-url $base ({location_id: (encode-path-segment $location_id), transaction_id: (encode-path-segment $transaction_id)} | format pattern "/v2/locations/{location_id}/transactions/{transaction_id}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
 }
 
 # CaptureTransaction
@@ -3944,10 +4053,12 @@ export def "locations-transactions-capture create" [
 ]: nothing -> record<errors: table<category: string, code: string, detail: string, field: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($location_id | is-empty) { error make --unspanned { msg: "path parameter 'location_id' must be non-empty" } }
+  if ($transaction_id | is-empty) { error make --unspanned { msg: "path parameter 'transaction_id' must be non-empty" } }
   let full_url = (build-url $base ({location_id: (encode-path-segment $location_id), transaction_id: (encode-path-segment $transaction_id)} | format pattern "/v2/locations/{location_id}/transactions/{transaction_id}/capture"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
 }
 
 # CreateRefund
@@ -3974,12 +4085,14 @@ export def "locations-transactions-refund create" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($location_id | is-empty) { error make --unspanned { msg: "path parameter 'location_id' must be non-empty" } }
+  if ($transaction_id | is-empty) { error make --unspanned { msg: "path parameter 'transaction_id' must be non-empty" } }
   let full_url = (build-url $base ({location_id: (encode-path-segment $location_id), transaction_id: (encode-path-segment $transaction_id)} | format pattern "/v2/locations/{location_id}/transactions/{transaction_id}/refund"))
   let req_body = {"amount_money": $amount_money, "idempotency_key": $idempotency_key, "reason": $reason, "tender_id": $tender_id} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: {}, body: $req_body}
 }
 
 # VoidTransaction
@@ -4001,10 +4114,12 @@ export def "locations-transactions-void create" [
 ]: nothing -> record<errors: table<category: string, code: string, detail: string, field: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($location_id | is-empty) { error make --unspanned { msg: "path parameter 'location_id' must be non-empty" } }
+  if ($transaction_id | is-empty) { error make --unspanned { msg: "path parameter 'transaction_id' must be non-empty" } }
   let full_url = (build-url $base ({location_id: (encode-path-segment $location_id), transaction_id: (encode-path-segment $transaction_id)} | format pattern "/v2/locations/{location_id}/transactions/{transaction_id}/void"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
 }
 
 # CreateLoyaltyAccount
@@ -4033,7 +4148,7 @@ export def "loyalty-accounts create" [
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: {}, body: $req_body}
 }
 
 # SearchLoyaltyAccounts
@@ -4063,7 +4178,7 @@ export def "loyalty-accounts-search list" [
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: {}, body: $req_body}
 }
 
 # RetrieveLoyaltyAccount
@@ -4084,10 +4199,11 @@ export def "loyalty-accounts get" [
 ]: nothing -> record<errors: table<category: string, code: string, detail: string, field: string>, loyalty_account: record<balance: int, created_at: string, customer_id: string, enrolled_at: string, expiring_point_deadlines: list<record>, id: string, lifetime_points: int, mapping: record<created_at: string, id: string, phone_number: string>, program_id: string, updated_at: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($account_id | is-empty) { error make --unspanned { msg: "path parameter 'account_id' must be non-empty" } }
   let full_url = (build-url $base ({account_id: (encode-path-segment $account_id)} | format pattern "/v2/loyalty/accounts/{account_id}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
 }
 
 # AccumulateLoyaltyPoints
@@ -4113,12 +4229,13 @@ export def "loyalty-accounts-accumulate create-points" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($account_id | is-empty) { error make --unspanned { msg: "path parameter 'account_id' must be non-empty" } }
   let full_url = (build-url $base ({account_id: (encode-path-segment $account_id)} | format pattern "/v2/loyalty/accounts/{account_id}/accumulate"))
   let req_body = {"accumulate_points": $accumulate_points, "idempotency_key": $idempotency_key, "location_id": $location_id} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: {}, body: $req_body}
 }
 
 # AdjustLoyaltyPoints
@@ -4143,12 +4260,13 @@ export def "loyalty-accounts-adjust create-points" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($account_id | is-empty) { error make --unspanned { msg: "path parameter 'account_id' must be non-empty" } }
   let full_url = (build-url $base ({account_id: (encode-path-segment $account_id)} | format pattern "/v2/loyalty/accounts/{account_id}/adjust"))
   let req_body = {"adjust_points": $adjust_points, "idempotency_key": $idempotency_key} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: {}, body: $req_body}
 }
 
 # SearchLoyaltyEvents
@@ -4178,7 +4296,7 @@ export def "loyalty-events-search list" [
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: {}, body: $req_body}
 }
 
 # ListLoyaltyPrograms
@@ -4201,7 +4319,7 @@ export def "loyalty-programs list" [
   let full_url = (build-url $base "/v2/loyalty/programs")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
 }
 
 # RetrieveLoyaltyProgram
@@ -4222,10 +4340,11 @@ export def "loyalty-programs get" [
 ]: nothing -> record<errors: table<category: string, code: string, detail: string, field: string>, program: record<accrual_rules: list<record>, created_at: string, expiration_policy: record<expiration_duration: string>, id: string, location_ids: list<string>, reward_tiers: list<record>, status: string, terminology: record<one: string, other: string>, updated_at: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($program_id | is-empty) { error make --unspanned { msg: "path parameter 'program_id' must be non-empty" } }
   let full_url = (build-url $base ({program_id: (encode-path-segment $program_id)} | format pattern "/v2/loyalty/programs/{program_id}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
 }
 
 # CalculateLoyaltyPoints
@@ -4250,12 +4369,13 @@ export def "loyalty-programs-calculate create-points" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($program_id | is-empty) { error make --unspanned { msg: "path parameter 'program_id' must be non-empty" } }
   let full_url = (build-url $base ({program_id: (encode-path-segment $program_id)} | format pattern "/v2/loyalty/programs/{program_id}/calculate"))
   let req_body = {"order_id": $order_id, "transaction_amount_money": $transaction_amount_money} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: {}, body: $req_body}
 }
 
 # CreateLoyaltyReward
@@ -4284,7 +4404,7 @@ export def "loyalty-rewards create" [
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: {}, body: $req_body}
 }
 
 # SearchLoyaltyRewards
@@ -4314,7 +4434,7 @@ export def "loyalty-rewards-search list" [
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: {}, body: $req_body}
 }
 
 # DeleteLoyaltyReward
@@ -4335,10 +4455,11 @@ export def "loyalty-rewards delete" [
 ]: nothing -> record<errors: table<category: string, code: string, detail: string, field: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($reward_id | is-empty) { error make --unspanned { msg: "path parameter 'reward_id' must be non-empty" } }
   let full_url = (build-url $base ({reward_id: (encode-path-segment $reward_id)} | format pattern "/v2/loyalty/rewards/{reward_id}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
 }
 
 # RetrieveLoyaltyReward
@@ -4359,10 +4480,11 @@ export def "loyalty-rewards get" [
 ]: nothing -> record<errors: table<category: string, code: string, detail: string, field: string>, reward: record<created_at: string, id: string, loyalty_account_id: string, order_id: string, points: int, redeemed_at: string, reward_tier_id: string, status: string, updated_at: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($reward_id | is-empty) { error make --unspanned { msg: "path parameter 'reward_id' must be non-empty" } }
   let full_url = (build-url $base ({reward_id: (encode-path-segment $reward_id)} | format pattern "/v2/loyalty/rewards/{reward_id}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
 }
 
 # RedeemLoyaltyReward
@@ -4386,12 +4508,13 @@ export def "loyalty-rewards-redeem create" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($reward_id | is-empty) { error make --unspanned { msg: "path parameter 'reward_id' must be non-empty" } }
   let full_url = (build-url $base ({reward_id: (encode-path-segment $reward_id)} | format pattern "/v2/loyalty/rewards/{reward_id}/redeem"))
   let req_body = {"idempotency_key": $idempotency_key, "location_id": $location_id} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: {}, body: $req_body}
 }
 
 # ListMerchants
@@ -4416,7 +4539,7 @@ export def "merchants list" [
   let full_url = (build-url $base "/v2/merchants" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"cursor": $cursor} | compact), body: null}
 }
 
 # RetrieveMerchant
@@ -4437,10 +4560,11 @@ export def "merchants get" [
 ]: nothing -> record<errors: table<category: string, code: string, detail: string, field: string>, merchant: record<business_name: string, country: string, currency: string, id: string, language_code: string, main_location_id: string, status: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($merchant_id | is-empty) { error make --unspanned { msg: "path parameter 'merchant_id' must be non-empty" } }
   let full_url = (build-url $base ({merchant_id: (encode-path-segment $merchant_id)} | format pattern "/v2/merchants/{merchant_id}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
 }
 
 # CreateOrder
@@ -4469,7 +4593,7 @@ export def "orders create" [
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: {}, body: $req_body}
 }
 
 # BatchRetrieveOrders
@@ -4497,7 +4621,7 @@ export def "orders-batch-retrieve get" [
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: {}, body: $req_body}
 }
 
 # CalculateOrder
@@ -4527,7 +4651,7 @@ export def "orders-calculate create" [
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: {}, body: $req_body}
 }
 
 # SearchOrders
@@ -4559,7 +4683,7 @@ export def "orders-search list" [
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: {}, body: $req_body}
 }
 
 # RetrieveOrder
@@ -4579,17 +4703,18 @@ export def "orders list-1" [
 ]: nothing -> record<errors: table<category: string, code: string, detail: string, field: string>, order: record<closed_at: string, created_at: string, customer_id: string, discounts: list<record>, fulfillments: list<record>, id: string, line_items: list<record>, location_id: string, metadata: record, net_amounts: record<discount_money: record, service_charge_money: record, tax_money: record, tip_money: record, total_money: record>, pricing_options: record<auto_apply_discounts: bool, auto_apply_taxes: bool>, reference_id: string, refunds: list<record>, return_amounts: record<discount_money: record, service_charge_money: record, tax_money: record, tip_money: record, total_money: record>, returns: list<record>, rewards: list<record>, rounding_adjustment: record<amount_money: record, name: string, uid: string>, service_charges: list<record>, source: record<name: string>, state: string, taxes: list<record>, tenders: list<record>, total_discount_money: record<amount: int, currency: string>, total_money: record<amount: int, currency: string>, total_service_charge_money: record<amount: int, currency: string>, total_tax_money: record<amount: int, currency: string>, total_tip_money: record<amount: int, currency: string>, updated_at: string, version: int>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($order_id | is-empty) { error make --unspanned { msg: "path parameter 'order_id' must be non-empty" } }
   let full_url = (build-url $base ({order_id: (encode-path-segment $order_id)} | format pattern "/v2/orders/{order_id}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
 }
 
 # UpdateOrder
 #
 # PUT /v2/orders/{order_id}
 # --order shape: {closed_at?: string, created_at?: string, customer_id?: string, discounts?: list, fulfillments?: list, id?: string, line_items?: list, location_id: string, metadata?: record, net_amounts?: record, pricing_options?: record, reference_id?: string, refunds?: list, return_amounts?: record, returns?: list, rewards?: list, rounding_adjustment?: record, service_charges?: list, source?: record, state?: string, taxes?: list, tenders?: list, total_discount_money?: record, total_money?: record, ... (5 more fields)}
-export def "orders update-by-order_id" [
+export def "orders update-by-order-id" [
   order_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -4607,12 +4732,13 @@ export def "orders update-by-order_id" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($order_id | is-empty) { error make --unspanned { msg: "path parameter 'order_id' must be non-empty" } }
   let full_url = (build-url $base ({order_id: (encode-path-segment $order_id)} | format pattern "/v2/orders/{order_id}"))
   let req_body = {"fields_to_clear": $fields_to_clear, "idempotency_key": $idempotency_key, "order": $order} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: {}, body: $req_body}
 }
 
 # PayOrder
@@ -4637,12 +4763,13 @@ export def "orders-pay create" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($order_id | is-empty) { error make --unspanned { msg: "path parameter 'order_id' must be non-empty" } }
   let full_url = (build-url $base ({order_id: (encode-path-segment $order_id)} | format pattern "/v2/orders/{order_id}/pay"))
   let req_body = {"idempotency_key": $idempotency_key, "order_version": $order_version, "payment_ids": $payment_ids} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: {}, body: $req_body}
 }
 
 # ListPayments
@@ -4674,7 +4801,7 @@ export def "payments get" [
   let full_url = (build-url $base "/v2/payments" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"begin_time": $begin_time, "end_time": $end_time, "sort_order": $sort_order, "cursor": $cursor, "location_id": $location_id, "total": $total, "last_4": $last_4, "card_brand": $card_brand, "limit": $limit} | compact), body: null}
 }
 
 # CreatePayment
@@ -4727,7 +4854,7 @@ export def "payments create" [
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: {}, body: $req_body}
 }
 
 # CancelPaymentByIdempotencyKey
@@ -4754,14 +4881,14 @@ export def "payments-cancel cancel-by-idempotency-key" [
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: {}, body: $req_body}
 }
 
 # GetPayment
 #
 # GET /v2/payments/{payment_id}
 # operationId: GetPayment
-export def "payments get-by-payment_id" [
+export def "payments get-by-payment-id" [
   payment_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -4775,10 +4902,11 @@ export def "payments get-by-payment_id" [
 ]: nothing -> record<errors: table<category: string, code: string, detail: string, field: string>, payment: record<amount_money: record<amount: int, currency: string>, app_fee_money: record<amount: int, currency: string>, approved_money: record<amount: int, currency: string>, bank_account_details: record<account_ownership_type: string, ach_details: record, bank_name: string, country: string, errors: list, fingerprint: string, statement_description: string, transfer_type: string>, billing_address: record<address_line_1: string, address_line_2: string, address_line_3: string, administrative_district_level_1: string, administrative_district_level_2: string, administrative_district_level_3: string, country: string, first_name: string, last_name: string, locality: string, organization: string, postal_code: string, sublocality: string, sublocality_2: string, sublocality_3: string>, buyer_email_address: string, capabilities: list<string>, card_details: record<application_cryptogram: string, application_identifier: string, application_name: string, auth_result_code: string, avs_status: string, card: record, card_payment_timeline: record, cvv_status: string, device_details: record, entry_method: string, errors: list, refund_requires_card_presence: bool, statement_description: string, status: string, verification_method: string, verification_results: string>, cash_details: record<buyer_supplied_money: record, change_back_money: record>, created_at: string, customer_id: string, delay_action: string, delay_duration: string, delayed_until: string, employee_id: string, external_details: record<source: string, source_fee_money: record, source_id: string, type: string>, id: string, location_id: string, note: string, order_id: string, processing_fee: list<record>, receipt_number: string, receipt_url: string, reference_id: string, refund_ids: list<string>, refunded_money: record<amount: int, currency: string>, risk_evaluation: record<created_at: string, risk_level: string>, shipping_address: record<address_line_1: string, address_line_2: string, address_line_3: string, administrative_district_level_1: string, administrative_district_level_2: string, administrative_district_level_3: string, country: string, first_name: string, last_name: string, locality: string, organization: string, postal_code: string, sublocality: string, sublocality_2: string, sublocality_3: string>, source_type: string, statement_description_identifier: string, status: string, tip_money: record<amount: int, currency: string>, total_money: record<amount: int, currency: string>, updated_at: string, version_token: string, wallet_details: record<status: string>>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($payment_id | is-empty) { error make --unspanned { msg: "path parameter 'payment_id' must be non-empty" } }
   let full_url = (build-url $base ({payment_id: (encode-path-segment $payment_id)} | format pattern "/v2/payments/{payment_id}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
 }
 
 # UpdatePayment
@@ -4803,12 +4931,13 @@ export def "payments update" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($payment_id | is-empty) { error make --unspanned { msg: "path parameter 'payment_id' must be non-empty" } }
   let full_url = (build-url $base ({payment_id: (encode-path-segment $payment_id)} | format pattern "/v2/payments/{payment_id}"))
   let req_body = {"idempotency_key": $idempotency_key, "payment": $payment} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: {}, body: $req_body}
 }
 
 # CancelPayment
@@ -4829,10 +4958,11 @@ export def "payments-cancel cancel" [
 ]: nothing -> record<errors: table<category: string, code: string, detail: string, field: string>, payment: record<amount_money: record<amount: int, currency: string>, app_fee_money: record<amount: int, currency: string>, approved_money: record<amount: int, currency: string>, bank_account_details: record<account_ownership_type: string, ach_details: record, bank_name: string, country: string, errors: list, fingerprint: string, statement_description: string, transfer_type: string>, billing_address: record<address_line_1: string, address_line_2: string, address_line_3: string, administrative_district_level_1: string, administrative_district_level_2: string, administrative_district_level_3: string, country: string, first_name: string, last_name: string, locality: string, organization: string, postal_code: string, sublocality: string, sublocality_2: string, sublocality_3: string>, buyer_email_address: string, capabilities: list<string>, card_details: record<application_cryptogram: string, application_identifier: string, application_name: string, auth_result_code: string, avs_status: string, card: record, card_payment_timeline: record, cvv_status: string, device_details: record, entry_method: string, errors: list, refund_requires_card_presence: bool, statement_description: string, status: string, verification_method: string, verification_results: string>, cash_details: record<buyer_supplied_money: record, change_back_money: record>, created_at: string, customer_id: string, delay_action: string, delay_duration: string, delayed_until: string, employee_id: string, external_details: record<source: string, source_fee_money: record, source_id: string, type: string>, id: string, location_id: string, note: string, order_id: string, processing_fee: list<record>, receipt_number: string, receipt_url: string, reference_id: string, refund_ids: list<string>, refunded_money: record<amount: int, currency: string>, risk_evaluation: record<created_at: string, risk_level: string>, shipping_address: record<address_line_1: string, address_line_2: string, address_line_3: string, administrative_district_level_1: string, administrative_district_level_2: string, administrative_district_level_3: string, country: string, first_name: string, last_name: string, locality: string, organization: string, postal_code: string, sublocality: string, sublocality_2: string, sublocality_3: string>, source_type: string, statement_description_identifier: string, status: string, tip_money: record<amount: int, currency: string>, total_money: record<amount: int, currency: string>, updated_at: string, version_token: string, wallet_details: record<status: string>>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($payment_id | is-empty) { error make --unspanned { msg: "path parameter 'payment_id' must be non-empty" } }
   let full_url = (build-url $base ({payment_id: (encode-path-segment $payment_id)} | format pattern "/v2/payments/{payment_id}/cancel"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
 }
 
 # CompletePayment
@@ -4853,10 +4983,11 @@ export def "payments-complete complete" [
 ]: nothing -> record<errors: table<category: string, code: string, detail: string, field: string>, payment: record<amount_money: record<amount: int, currency: string>, app_fee_money: record<amount: int, currency: string>, approved_money: record<amount: int, currency: string>, bank_account_details: record<account_ownership_type: string, ach_details: record, bank_name: string, country: string, errors: list, fingerprint: string, statement_description: string, transfer_type: string>, billing_address: record<address_line_1: string, address_line_2: string, address_line_3: string, administrative_district_level_1: string, administrative_district_level_2: string, administrative_district_level_3: string, country: string, first_name: string, last_name: string, locality: string, organization: string, postal_code: string, sublocality: string, sublocality_2: string, sublocality_3: string>, buyer_email_address: string, capabilities: list<string>, card_details: record<application_cryptogram: string, application_identifier: string, application_name: string, auth_result_code: string, avs_status: string, card: record, card_payment_timeline: record, cvv_status: string, device_details: record, entry_method: string, errors: list, refund_requires_card_presence: bool, statement_description: string, status: string, verification_method: string, verification_results: string>, cash_details: record<buyer_supplied_money: record, change_back_money: record>, created_at: string, customer_id: string, delay_action: string, delay_duration: string, delayed_until: string, employee_id: string, external_details: record<source: string, source_fee_money: record, source_id: string, type: string>, id: string, location_id: string, note: string, order_id: string, processing_fee: list<record>, receipt_number: string, receipt_url: string, reference_id: string, refund_ids: list<string>, refunded_money: record<amount: int, currency: string>, risk_evaluation: record<created_at: string, risk_level: string>, shipping_address: record<address_line_1: string, address_line_2: string, address_line_3: string, administrative_district_level_1: string, administrative_district_level_2: string, administrative_district_level_3: string, country: string, first_name: string, last_name: string, locality: string, organization: string, postal_code: string, sublocality: string, sublocality_2: string, sublocality_3: string>, source_type: string, statement_description_identifier: string, status: string, tip_money: record<amount: int, currency: string>, total_money: record<amount: int, currency: string>, updated_at: string, version_token: string, wallet_details: record<status: string>>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($payment_id | is-empty) { error make --unspanned { msg: "path parameter 'payment_id' must be non-empty" } }
   let full_url = (build-url $base ({payment_id: (encode-path-segment $payment_id)} | format pattern "/v2/payments/{payment_id}/complete"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
 }
 
 # ListPaymentRefunds
@@ -4888,7 +5019,7 @@ export def "refunds list-payment" [
   let full_url = (build-url $base "/v2/refunds" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"begin_time": $begin_time, "end_time": $end_time, "sort_order": $sort_order, "cursor": $cursor, "location_id": $location_id, "status": $status, "source_type": $source_type, "limit": $limit} | compact), body: null}
 }
 
 # RefundPayment
@@ -4921,7 +5052,7 @@ export def "refunds create-payment" [
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: {}, body: $req_body}
 }
 
 # GetPaymentRefund
@@ -4942,10 +5073,11 @@ export def "refunds get-payment" [
 ]: nothing -> record<errors: table<category: string, code: string, detail: string, field: string>, refund: record<amount_money: record<amount: int, currency: string>, app_fee_money: record<amount: int, currency: string>, created_at: string, id: string, location_id: string, order_id: string, payment_id: string, processing_fee: list<record>, reason: string, status: string, updated_at: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($refund_id | is-empty) { error make --unspanned { msg: "path parameter 'refund_id' must be non-empty" } }
   let full_url = (build-url $base ({refund_id: (encode-path-segment $refund_id)} | format pattern "/v2/refunds/{refund_id}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
 }
 
 # ListSites
@@ -4968,7 +5100,7 @@ export def "sites list" [
   let full_url = (build-url $base "/v2/sites")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
 }
 
 # DeleteSnippet
@@ -4989,10 +5121,11 @@ export def "sites-snippet delete" [
 ]: nothing -> record<errors: table<category: string, code: string, detail: string, field: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($site_id | is-empty) { error make --unspanned { msg: "path parameter 'site_id' must be non-empty" } }
   let full_url = (build-url $base ({site_id: (encode-path-segment $site_id)} | format pattern "/v2/sites/{site_id}/snippet"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
 }
 
 # RetrieveSnippet
@@ -5013,10 +5146,11 @@ export def "sites-snippet get" [
 ]: nothing -> record<errors: table<category: string, code: string, detail: string, field: string>, snippet: record<content: string, created_at: string, id: string, site_id: string, updated_at: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($site_id | is-empty) { error make --unspanned { msg: "path parameter 'site_id' must be non-empty" } }
   let full_url = (build-url $base ({site_id: (encode-path-segment $site_id)} | format pattern "/v2/sites/{site_id}/snippet"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
 }
 
 # UpsertSnippet
@@ -5040,12 +5174,13 @@ export def "sites-snippet update" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($site_id | is-empty) { error make --unspanned { msg: "path parameter 'site_id' must be non-empty" } }
   let full_url = (build-url $base ({site_id: (encode-path-segment $site_id)} | format pattern "/v2/sites/{site_id}/snippet"))
   let req_body = {"snippet": $snippet} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: {}, body: $req_body}
 }
 
 # CreateSubscription
@@ -5082,7 +5217,7 @@ export def "subscriptions create" [
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: {}, body: $req_body}
 }
 
 # SearchSubscriptions
@@ -5112,7 +5247,7 @@ export def "subscriptions-search list" [
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: {}, body: $req_body}
 }
 
 # RetrieveSubscription
@@ -5133,10 +5268,11 @@ export def "subscriptions get" [
 ]: nothing -> record<errors: table<category: string, code: string, detail: string, field: string>, subscription: record<canceled_date: string, card_id: string, charged_through_date: string, created_at: string, customer_id: string, id: string, invoice_ids: list<string>, location_id: string, plan_id: string, price_override_money: record<amount: int, currency: string>, start_date: string, status: string, tax_percentage: string, timezone: string, version: int>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($subscription_id | is-empty) { error make --unspanned { msg: "path parameter 'subscription_id' must be non-empty" } }
   let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id)} | format pattern "/v2/subscriptions/{subscription_id}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
 }
 
 # UpdateSubscription
@@ -5160,12 +5296,13 @@ export def "subscriptions update" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($subscription_id | is-empty) { error make --unspanned { msg: "path parameter 'subscription_id' must be non-empty" } }
   let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id)} | format pattern "/v2/subscriptions/{subscription_id}"))
   let req_body = {"subscription": $subscription} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: {}, body: $req_body}
 }
 
 # CancelSubscription
@@ -5186,10 +5323,11 @@ export def "subscriptions-cancel cancel" [
 ]: nothing -> record<errors: table<category: string, code: string, detail: string, field: string>, subscription: record<canceled_date: string, card_id: string, charged_through_date: string, created_at: string, customer_id: string, id: string, invoice_ids: list<string>, location_id: string, plan_id: string, price_override_money: record<amount: int, currency: string>, start_date: string, status: string, tax_percentage: string, timezone: string, version: int>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($subscription_id | is-empty) { error make --unspanned { msg: "path parameter 'subscription_id' must be non-empty" } }
   let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id)} | format pattern "/v2/subscriptions/{subscription_id}/cancel"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
 }
 
 # ListSubscriptionEvents
@@ -5212,11 +5350,12 @@ export def "subscriptions-events list" [
 ]: nothing -> record<cursor: string, errors: table<category: string, code: string, detail: string, field: string>, subscription_events: table<effective_date: string, id: string, info: any, plan_id: string, subscription_event_type: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($subscription_id | is-empty) { error make --unspanned { msg: "path parameter 'subscription_id' must be non-empty" } }
   let qp = [(serialize-qp "cursor" $cursor "scalar") (serialize-qp "limit" $limit "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id)} | format pattern "/v2/subscriptions/{subscription_id}/events") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"cursor": $cursor, "limit": $limit} | compact), body: null}
 }
 
 # ResumeSubscription
@@ -5237,10 +5376,11 @@ export def "subscriptions-resume create" [
 ]: nothing -> record<errors: table<category: string, code: string, detail: string, field: string>, subscription: record<canceled_date: string, card_id: string, charged_through_date: string, created_at: string, customer_id: string, id: string, invoice_ids: list<string>, location_id: string, plan_id: string, price_override_money: record<amount: int, currency: string>, start_date: string, status: string, tax_percentage: string, timezone: string, version: int>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($subscription_id | is-empty) { error make --unspanned { msg: "path parameter 'subscription_id' must be non-empty" } }
   let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id)} | format pattern "/v2/subscriptions/{subscription_id}/resume"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
 }
 
 # CreateTeamMember
@@ -5269,7 +5409,7 @@ export def "team-members create" [
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: {}, body: $req_body}
 }
 
 # BulkCreateTeamMembers
@@ -5296,7 +5436,7 @@ export def "team-members-bulk-create create" [
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: {}, body: $req_body}
 }
 
 # BulkUpdateTeamMembers
@@ -5323,7 +5463,7 @@ export def "team-members-bulk-update update" [
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: {}, body: $req_body}
 }
 
 # SearchTeamMembers
@@ -5353,7 +5493,7 @@ export def "team-members-search list" [
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: {}, body: $req_body}
 }
 
 # RetrieveTeamMember
@@ -5374,10 +5514,11 @@ export def "team-members get" [
 ]: nothing -> record<errors: table<category: string, code: string, detail: string, field: string>, team_member: record<assigned_locations: record<assignment_type: string, location_ids: list>, created_at: string, email_address: string, family_name: string, given_name: string, id: string, is_owner: bool, phone_number: string, reference_id: string, status: string, updated_at: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($team_member_id | is-empty) { error make --unspanned { msg: "path parameter 'team_member_id' must be non-empty" } }
   let full_url = (build-url $base ({team_member_id: (encode-path-segment $team_member_id)} | format pattern "/v2/team-members/{team_member_id}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
 }
 
 # UpdateTeamMember
@@ -5401,12 +5542,13 @@ export def "team-members update" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($team_member_id | is-empty) { error make --unspanned { msg: "path parameter 'team_member_id' must be non-empty" } }
   let full_url = (build-url $base ({team_member_id: (encode-path-segment $team_member_id)} | format pattern "/v2/team-members/{team_member_id}"))
   let req_body = {"team_member": $team_member} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: {}, body: $req_body}
 }
 
 # RetrieveWageSetting
@@ -5427,10 +5569,11 @@ export def "team-members-wage-setting get" [
 ]: nothing -> record<errors: table<category: string, code: string, detail: string, field: string>, wage_setting: record<created_at: string, is_overtime_exempt: bool, job_assignments: list<record>, team_member_id: string, updated_at: string, version: int>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($team_member_id | is-empty) { error make --unspanned { msg: "path parameter 'team_member_id' must be non-empty" } }
   let full_url = (build-url $base ({team_member_id: (encode-path-segment $team_member_id)} | format pattern "/v2/team-members/{team_member_id}/wage-setting"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
 }
 
 # UpdateWageSetting
@@ -5454,12 +5597,13 @@ export def "team-members-wage-setting update" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($team_member_id | is-empty) { error make --unspanned { msg: "path parameter 'team_member_id' must be non-empty" } }
   let full_url = (build-url $base ({team_member_id: (encode-path-segment $team_member_id)} | format pattern "/v2/team-members/{team_member_id}/wage-setting"))
   let req_body = {"wage_setting": $wage_setting} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: {}, body: $req_body}
 }
 
 # CreateTerminalCheckout
@@ -5488,7 +5632,7 @@ export def "terminals-checkouts create" [
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: {}, body: $req_body}
 }
 
 # SearchTerminalCheckouts
@@ -5518,7 +5662,7 @@ export def "terminals-checkouts-search list" [
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: {}, body: $req_body}
 }
 
 # GetTerminalCheckout
@@ -5539,10 +5683,11 @@ export def "terminals-checkouts get" [
 ]: nothing -> record<checkout: record<amount_money: record<amount: int, currency: string>, app_id: string, cancel_reason: string, created_at: string, deadline_duration: string, device_options: record<device_id: string, skip_receipt_screen: bool, tip_settings: record>, id: string, location_id: string, note: string, payment_ids: list<string>, payment_type: string, reference_id: string, status: string, updated_at: string>, errors: table<category: string, code: string, detail: string, field: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($checkout_id | is-empty) { error make --unspanned { msg: "path parameter 'checkout_id' must be non-empty" } }
   let full_url = (build-url $base ({checkout_id: (encode-path-segment $checkout_id)} | format pattern "/v2/terminals/checkouts/{checkout_id}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
 }
 
 # CancelTerminalCheckout
@@ -5563,10 +5708,11 @@ export def "terminals-checkouts-cancel cancel" [
 ]: nothing -> record<checkout: record<amount_money: record<amount: int, currency: string>, app_id: string, cancel_reason: string, created_at: string, deadline_duration: string, device_options: record<device_id: string, skip_receipt_screen: bool, tip_settings: record>, id: string, location_id: string, note: string, payment_ids: list<string>, payment_type: string, reference_id: string, status: string, updated_at: string>, errors: table<category: string, code: string, detail: string, field: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($checkout_id | is-empty) { error make --unspanned { msg: "path parameter 'checkout_id' must be non-empty" } }
   let full_url = (build-url $base ({checkout_id: (encode-path-segment $checkout_id)} | format pattern "/v2/terminals/checkouts/{checkout_id}/cancel"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
 }
 
 # CreateTerminalRefund
@@ -5595,7 +5741,7 @@ export def "terminals-refunds create" [
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: {}, body: $req_body}
 }
 
 # SearchTerminalRefunds
@@ -5625,7 +5771,7 @@ export def "terminals-refunds-search list" [
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: {}, body: $req_body}
 }
 
 # GetTerminalRefund
@@ -5646,10 +5792,11 @@ export def "terminals-refunds get" [
 ]: nothing -> record<errors: table<category: string, code: string, detail: string, field: string>, refund: record<amount_money: record<amount: int, currency: string>, app_id: string, cancel_reason: string, created_at: string, deadline_duration: string, device_id: string, id: string, location_id: string, order_id: string, payment_id: string, reason: string, refund_id: string, status: string, updated_at: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($terminal_refund_id | is-empty) { error make --unspanned { msg: "path parameter 'terminal_refund_id' must be non-empty" } }
   let full_url = (build-url $base ({terminal_refund_id: (encode-path-segment $terminal_refund_id)} | format pattern "/v2/terminals/refunds/{terminal_refund_id}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
 }
 
 # CancelTerminalRefund
@@ -5670,8 +5817,9 @@ export def "terminals-refunds-cancel cancel" [
 ]: nothing -> record<errors: table<category: string, code: string, detail: string, field: string>, refund: record<amount_money: record<amount: int, currency: string>, app_id: string, cancel_reason: string, created_at: string, deadline_duration: string, device_id: string, id: string, location_id: string, order_id: string, payment_id: string, reason: string, refund_id: string, status: string, updated_at: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($terminal_refund_id | is-empty) { error make --unspanned { msg: "path parameter 'terminal_refund_id' must be non-empty" } }
   let full_url = (build-url $base ({terminal_refund_id: (encode-path-segment $terminal_refund_id)} | format pattern "/v2/terminals/refunds/{terminal_refund_id}/cancel"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
 }

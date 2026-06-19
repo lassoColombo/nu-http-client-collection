@@ -3,17 +3,18 @@
 # Auth: --token flag or $env.PAYLOCITY_API_TOKEN
 
 const BASE_URL = "https://api.paylocity.com/api"
-const DEFAULT_AUTH = "bearer"
 
-# Build auth: returns {headers: record, query: string}
+# Build auth: returns {scheme: string, headers: record, query: string, location: string}.
+# `location` is "header" | "query" | "cookie" | "none" and tells dry-run callers
+# where the token went without inspecting headers/query themselves.
 def build-auth [token?: string, auth_scheme?: string]: nothing -> record {
   let token_val = if ($token != null) and ($token | is-not-empty) { $token } else { $env | get -o PAYLOCITY_API_TOKEN | default "" }
   let scheme = ($auth_scheme | default "bearer")
-  if ($scheme == "none") or ($token_val | is-empty) { return {headers: {}, query: ""} }
+  if ($scheme == "none") or ($token_val | is-empty) { return {scheme: $scheme, headers: {}, query: "", location: "none"} }
   match $scheme {
-    "bearer" => { {headers: {Authorization: $"Bearer ($token_val)"}, query: ""} }
-    "none" => { {headers: {}, query: ""} }
-    _ => { {headers: {Authorization: $"Bearer ($token_val)"}, query: ""} }
+    "bearer" => { {scheme: $scheme, headers: {Authorization: $"Bearer ($token_val)"}, query: "", location: "header"} }
+    "none" => { {scheme: $scheme, headers: {}, query: "", location: "none"} }
+    _ => { {scheme: $scheme, headers: {Authorization: $"Bearer ($token_val)"}, query: "", location: "header"} }
   }
 }
 
@@ -22,8 +23,9 @@ def build-auth [token?: string, auth_scheme?: string]: nothing -> record {
 # ([A-Za-z0-9-._~]) stay literal; everything else gets %XX.
 def serialize-qp [name: string, value: any, style: string]: nothing -> list<string> {
   if ($value == null) { return [] }
-  let n = (encode-path-segment $name)
   let is_list = ($value | describe | str starts-with "list")
+  if $is_list and ($value | is-empty) { return [] }
+  let n = (encode-path-segment $name)
   if ($value | describe | str starts-with "record") { return ($value | transpose k v | each { $"($n)[(encode-path-segment $in.k)]=(encode-path-segment $in.v)" }) }
   if not $is_list { return [$"($n)=(encode-path-segment $value)"] }
   match $style {
@@ -54,22 +56,42 @@ def build-url [base: string, path: string, query?: string]: nothing -> string {
   if ($query != null) and ($query | is-not-empty) { $result | upsert query $query | url join } else { $result | url join }
 }
 
+# Build the dry-run record returned by --dry-run. Shape:
+#   {dry_run: true, method, url, query: <record>, headers, body, content_type, timeout,
+#    auth: {scheme, location}}
+# `meta` carries logical-form data (the query record by spec name, the pre-serialization
+# body) that do-request itself cannot reconstruct from its wire-format args.
+def build-dry-run-record [method: string, url: string, auth: record, content_type: string, timeout: duration, meta?: record]: nothing -> record {
+  let m = ($meta | default {})
+  {
+    dry_run: true
+    method: $method
+    url: $url
+    query: ($m | get -o query | default {})
+    headers: $auth.headers
+    body: ($m | get -o body)
+    content_type: $content_type
+    timeout: $timeout
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+}
+
 # Execute HTTP request with method dispatch
-def do-request [method: string, url: string, auth: record, insecure: bool, raw: bool, dry_run: bool, max_time?: duration, allow_errors?: bool, full?: bool, content_type?: string, body?: any]: nothing -> any {
+def do-request [method: string, url: string, auth: record, insecure: bool, raw: bool, dry_run: bool, max_time?: duration, allow_errors?: bool, full?: bool, content_type?: string, body?: any, dry_run_meta?: record]: nothing -> any {
   let req_url = if ($auth.query | is-not-empty) { if ($url | str contains "?") { $"($url)&($auth.query)" } else { $"($url)?($auth.query)" } } else { $url }
   let timeout = ($max_time | default 30min)
   let ct = ($content_type | default "application/json")
-  if $dry_run { return {method: $method, url: $req_url, headers: $auth.headers, query_string: $auth.query, content_type: $ct, timeout: $timeout, body: $body} }
+  if $dry_run { return (build-dry-run-record $method $req_url $auth $ct $timeout $dry_run_meta) }
   let resp = match $method {
     "get" => { http get --headers $auth.headers --full --allow-errors --max-time $timeout --insecure=$insecure --raw=$raw $req_url }
-    "head" => { http head --headers $auth.headers --max-time $timeout --insecure=$insecure $req_url }
-    "options" => { http options --headers $auth.headers --max-time $timeout --insecure=$insecure $req_url }
+    "head" => { http head --headers $auth.headers --full --allow-errors --max-time $timeout --insecure=$insecure $req_url }
+    "options" => { http options --headers $auth.headers --full --allow-errors --max-time $timeout --insecure=$insecure $req_url }
     "post" => { if ($body | is-empty) { http post --headers $auth.headers --full --allow-errors --max-time $timeout --insecure=$insecure --raw=$raw $req_url "" } else { http post --headers $auth.headers --content-type $ct --full --allow-errors --max-time $timeout --insecure=$insecure --raw=$raw $req_url $body } }
     "put" => { if ($body | is-empty) { http put --headers $auth.headers --full --allow-errors --max-time $timeout --insecure=$insecure --raw=$raw $req_url "" } else { http put --headers $auth.headers --content-type $ct --full --allow-errors --max-time $timeout --insecure=$insecure --raw=$raw $req_url $body } }
     "patch" => { if ($body | is-empty) { http patch --headers $auth.headers --full --allow-errors --max-time $timeout --insecure=$insecure --raw=$raw $req_url "" } else { http patch --headers $auth.headers --content-type $ct --full --allow-errors --max-time $timeout --insecure=$insecure --raw=$raw $req_url $body } }
     "delete" => { if ($body | is-empty) { http delete --headers $auth.headers --full --allow-errors --max-time $timeout --insecure=$insecure --raw=$raw $req_url } else { http delete --headers $auth.headers --content-type $ct --data $body --full --allow-errors --max-time $timeout --insecure=$insecure --raw=$raw $req_url } }
   }
-  if ($method in ["head" "options"]) { return $resp }
+  if ($method == "head") and (not $full) and (not $allow_errors) and $resp.status < 400 { return $resp.headers }
   if $allow_errors { $resp } else if $resp.status >= 400 { error make --unspanned { msg: $"HTTP ($resp.status): ($resp.body)" } } else if $full { {status: $resp.status, headers: $resp.headers, body: $resp.body} } else if $resp.status == 204 { null } else { $resp.body }
 }
 
@@ -119,10 +141,12 @@ export def "companies-codes get-list-company-and-descriptions-by-resource" [
 ]: nothing -> table<code: string, description: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($company_id | is-empty) { error make --unspanned { msg: "path parameter 'companyId' must be non-empty" } }
+  if ($code_resource | is-empty) { error make --unspanned { msg: "path parameter 'codeResource' must be non-empty" } }
   let full_url = (build-url $base ({company_id: (encode-path-segment $company_id), code_resource: (encode-path-segment $code_resource)} | format pattern "/v2/companies/{company_id}/codes/{code_resource}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
 }
 
 # Get All Custom Fields
@@ -144,10 +168,12 @@ export def "companies-customfields get-list-custom-fields" [
 ]: nothing -> table<category: string, defaultValue: string, isRequired: bool, label: string, type: string, values: list<record>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($company_id | is-empty) { error make --unspanned { msg: "path parameter 'companyId' must be non-empty" } }
+  if ($category | is-empty) { error make --unspanned { msg: "path parameter 'category' must be non-empty" } }
   let full_url = (build-url $base ({company_id: (encode-path-segment $company_id), category: (encode-path-segment $category)} | format pattern "/v2/companies/{company_id}/customfields/{category}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
 }
 
 # Add new employee
@@ -235,12 +261,13 @@ export def "companies-employees create" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($company_id | is-empty) { error make --unspanned { msg: "path parameter 'companyId' must be non-empty" } }
   let full_url = (build-url $base ({company_id: (encode-path-segment $company_id)} | format pattern "/v2/companies/{company_id}/employees"))
   let req_body = {"additionalDirectDeposit": $additional_direct_deposit, "additionalRate": $additional_rate, "benefitSetup": $benefit_setup, "birthDate": $birth_date, "coEmpCode": $co_emp_code, "companyFEIN": $company_fein, "companyName": $company_name, "currency": $currency, "customBooleanFields": $custom_boolean_fields, "customDateFields": $custom_date_fields, "customDropDownFields": $custom_drop_down_fields, "customNumberFields": $custom_number_fields, "customTextFields": $custom_text_fields, "departmentPosition": $department_position, "disabilityDescription": $disability_description, "emergencyContacts": $emergency_contacts, "employeeId": $employee_id, "ethnicity": $ethnicity, "federalTax": $federal_tax, "firstName": $first_name, "gender": $gender, "homeAddress": $home_address, "isHighlyCompensated": $is_highly_compensated, "isSmoker": $is_smoker, "lastName": $last_name, "localTax": $local_tax, "mainDirectDeposit": $main_direct_deposit, "maritalStatus": $marital_status, "middleName": $middle_name, "nonPrimaryStateTax": $non_primary_state_tax, "ownerPercent": $owner_percent, "preferredName": $preferred_name, "primaryPayRate": $primary_pay_rate, "primaryStateTax": $primary_state_tax, "priorLastName": $prior_last_name, "salutation": $salutation, "ssn": $ssn, "status": $status, "suffix": $suffix, "taxSetup": $tax_setup, "veteranDescription": $veteran_description, "webTime": $web_time, "workAddress": $work_address, "workEligibility": $work_eligibility} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: {}, body: $req_body}
 }
 
 # Get all employees
@@ -264,11 +291,12 @@ export def "companies-employees get-list" [
 ]: nothing -> table<employeeId: string, statusCode: string, statusTypeCode: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($company_id | is-empty) { error make --unspanned { msg: "path parameter 'companyId' must be non-empty" } }
   let qp = [(serialize-qp "pagesize" $pagesize "scalar") (serialize-qp "pagenumber" $pagenumber "scalar") (serialize-qp "includetotalcount" $includetotalcount "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({company_id: (encode-path-segment $company_id)} | format pattern "/v2/companies/{company_id}/employees/") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"pagesize": $pagesize, "pagenumber": $pagenumber, "includetotalcount": $includetotalcount} | compact), body: null}
 }
 
 # Get employee
@@ -290,10 +318,12 @@ export def "companies-employees get" [
 ]: nothing -> record<additionalDirectDeposit: table<accountNumber: string, accountType: string, amount: float, amountType: string, blockSpecial: bool, isSkipPreNote: bool, nameOnAccount: string, preNoteDate: string, routingNumber: string>, additionalRate: table<changeReason: string, costCenter1: string, costCenter2: string, costCenter3: string, effectiveDate: string, endCheckDate: string, job: string, rate: float, rateCode: string, rateNotes: string, ratePer: string, shift: string>, benefitSetup: record<benefitClass: string, benefitClassEffectiveDate: string, benefitSalary: float, benefitSalaryEffectiveDate: string, doNotApplyAdministrativePeriod: bool, isMeasureAcaEligibility: bool>, birthDate: string, coEmpCode: string, companyFEIN: string, companyName: string, currency: string, customBooleanFields: table<category: string, label: string, value: bool>, customDateFields: table<category: string, label: string, value: string>, customDropDownFields: table<category: string, label: string, value: string>, customNumberFields: table<category: string, label: string, value: float>, customTextFields: table<category: string, label: string, value: string>, departmentPosition: record<changeReason: string, clockBadgeNumber: string, costCenter1: string, costCenter2: string, costCenter3: string, effectiveDate: string, employeeType: string, equalEmploymentOpportunityClass: string, isMinimumWageExempt: bool, isOvertimeExempt: bool, isSupervisorReviewer: bool, isUnionDuesCollected: bool, isUnionInitiationCollected: bool, jobTitle: string, payGroup: string, positionCode: string, reviewerCompanyNumber: string, reviewerEmployeeId: string, shift: string, supervisorCompanyNumber: string, supervisorEmployeeId: string, tipped: string, unionAffiliationDate: string, unionCode: string, unionPosition: string, workersCompensation: string>, disabilityDescription: string, emergencyContacts: table<address1: string, address2: string, city: string, country: string, county: string, email: string, firstName: string, homePhone: string, lastName: string, mobilePhone: string, notes: string, pager: string, primaryPhone: string, priority: string, relationship: string, state: string, syncEmployeeInfo: bool, workExtension: string, workPhone: string, zip: string>, employeeId: string, ethnicity: string, federalTax: record<amount: float, deductionsAmount: float, dependentsAmount: float, exemptions: float, filingStatus: string, higherRate: bool, otherIncomeAmount: float, percentage: float, taxCalculationCode: string, w4FormYear: int>, firstName: string, gender: string, homeAddress: record<address1: string, address2: string, city: string, country: string, county: string, emailAddress: string, mobilePhone: string, phone: string, postalCode: string, state: string>, isHighlyCompensated: bool, isSmoker: bool, lastName: string, localTax: table<exemptions: float, exemptions2: float, filingStatus: string, residentPSD: string, taxCode: string, workPSD: string>, mainDirectDeposit: record<accountNumber: string, accountType: string, blockSpecial: bool, isSkipPreNote: bool, nameOnAccount: string, preNoteDate: string, routingNumber: string>, maritalStatus: string, middleName: string, nonPrimaryStateTax: record<amount: float, deductionsAmount: float, dependentsAmount: float, exemptions: float, exemptions2: float, filingStatus: string, higherRate: bool, otherIncomeAmount: float, percentage: float, reciprocityCode: string, specialCheckCalc: string, taxCalculationCode: string, taxCode: string, w4FormYear: int>, ownerPercent: float, preferredName: string, primaryPayRate: record<annualSalary: float, baseRate: float, beginCheckDate: string, changeReason: string, defaultHours: float, effectiveDate: string, isAutoPay: bool, payFrequency: string, payGrade: string, payRateNote: string, payType: string, ratePer: string, salary: float>, primaryStateTax: record<amount: float, deductionsAmount: float, dependentsAmount: float, exemptions: float, exemptions2: float, filingStatus: string, higherRate: bool, otherIncomeAmount: float, percentage: float, specialCheckCalc: string, taxCalculationCode: string, taxCode: string, w4FormYear: int>, priorLastName: string, salutation: string, ssn: string, status: record<adjustedSeniorityDate: string, changeReason: string, effectiveDate: string, employeeStatus: string, hireDate: string, isEligibleForRehire: bool, reHireDate: string, statusType: string, terminationDate: string>, suffix: string, taxSetup: record<fitwExemptNotes: string, fitwExemptReason: string, futaExemptNotes: string, futaExemptReason: string, isEmployee943: bool, isPension: bool, isStatutory: bool, medExemptNotes: string, medExemptReason: string, sitwExemptNotes: string, sitwExemptReason: string, ssExemptNotes: string, ssExemptReason: string, suiExemptNotes: string, suiExemptReason: string, suiState: string, taxDistributionCode1099R: string, taxForm: string>, veteranDescription: string, webTime: record<badgeNumber: string, chargeRate: float, isTimeLaborEnabled: bool>, workAddress: record<address1: string, address2: string, city: string, country: string, county: string, emailAddress: string, location: string, mailStop: string, mobilePhone: string, pager: string, phone: string, phoneExtension: string, postalCode: string, state: string>, workEligibility: record<alienOrAdmissionDocumentNumber: string, attestedDate: string, countryOfIssuance: string, foreignPassportNumber: string, i94AdmissionNumber: string, i9DateVerified: string, i9Notes: string, isI9Verified: bool, isSsnVerified: bool, ssnDateVerified: string, ssnNotes: string, visaType: string, workAuthorization: string, workUntil: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($company_id | is-empty) { error make --unspanned { msg: "path parameter 'companyId' must be non-empty" } }
+  if ($employee_id | is-empty) { error make --unspanned { msg: "path parameter 'employeeId' must be non-empty" } }
   let full_url = (build-url $base ({company_id: (encode-path-segment $company_id), employee_id: (encode-path-segment $employee_id)} | format pattern "/v2/companies/{company_id}/employees/{employee_id}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
 }
 
 # Update employee
@@ -382,12 +412,14 @@ export def "companies-employees update" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($company_id | is-empty) { error make --unspanned { msg: "path parameter 'companyId' must be non-empty" } }
+  if ($employee_id | is-empty) { error make --unspanned { msg: "path parameter 'employeeId' must be non-empty" } }
   let full_url = (build-url $base ({company_id: (encode-path-segment $company_id), employee_id: (encode-path-segment $employee_id)} | format pattern "/v2/companies/{company_id}/employees/{employee_id}"))
   let req_body = {"additionalDirectDeposit": $additional_direct_deposit, "additionalRate": $additional_rate, "benefitSetup": $benefit_setup, "birthDate": $birth_date, "coEmpCode": $co_emp_code, "companyFEIN": $company_fein, "companyName": $company_name, "currency": $currency, "customBooleanFields": $custom_boolean_fields, "customDateFields": $custom_date_fields, "customDropDownFields": $custom_drop_down_fields, "customNumberFields": $custom_number_fields, "customTextFields": $custom_text_fields, "departmentPosition": $department_position, "disabilityDescription": $disability_description, "emergencyContacts": $emergency_contacts, "employeeId": $body_employee_id, "ethnicity": $ethnicity, "federalTax": $federal_tax, "firstName": $first_name, "gender": $gender, "homeAddress": $home_address, "isHighlyCompensated": $is_highly_compensated, "isSmoker": $is_smoker, "lastName": $last_name, "localTax": $local_tax, "mainDirectDeposit": $main_direct_deposit, "maritalStatus": $marital_status, "middleName": $middle_name, "nonPrimaryStateTax": $non_primary_state_tax, "ownerPercent": $owner_percent, "preferredName": $preferred_name, "primaryPayRate": $primary_pay_rate, "primaryStateTax": $primary_state_tax, "priorLastName": $prior_last_name, "salutation": $salutation, "ssn": $ssn, "status": $status, "suffix": $suffix, "taxSetup": $tax_setup, "veteranDescription": $veteran_description, "webTime": $web_time, "workAddress": $work_address, "workEligibility": $work_eligibility} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "patch" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body
+  do-request "patch" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: {}, body: $req_body}
 }
 
 # Add/update additional rates
@@ -422,12 +454,14 @@ export def "companies-employees-additional-rates create-or-update" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($company_id | is-empty) { error make --unspanned { msg: "path parameter 'companyId' must be non-empty" } }
+  if ($employee_id | is-empty) { error make --unspanned { msg: "path parameter 'employeeId' must be non-empty" } }
   let full_url = (build-url $base ({company_id: (encode-path-segment $company_id), employee_id: (encode-path-segment $employee_id)} | format pattern "/v2/companies/{company_id}/employees/{employee_id}/additionalRates"))
   let req_body = {"changeReason": $change_reason, "costCenter1": $cost_center1, "costCenter2": $cost_center2, "costCenter3": $cost_center3, "effectiveDate": $effective_date, "endCheckDate": $end_check_date, "job": $job, "rate": $rate, "rateCode": $rate_code, "rateNotes": $rate_notes, "ratePer": $rate_per, "shift": $shift} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: {}, body: $req_body}
 }
 
 # Add/update employee's benefit setup
@@ -456,12 +490,14 @@ export def "companies-employees-benefit-setup update-or-create" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($company_id | is-empty) { error make --unspanned { msg: "path parameter 'companyId' must be non-empty" } }
+  if ($employee_id | is-empty) { error make --unspanned { msg: "path parameter 'employeeId' must be non-empty" } }
   let full_url = (build-url $base ({company_id: (encode-path-segment $company_id), employee_id: (encode-path-segment $employee_id)} | format pattern "/v2/companies/{company_id}/employees/{employee_id}/benefitSetup"))
   let req_body = {"benefitClass": $benefit_class, "benefitClassEffectiveDate": $benefit_class_effective_date, "benefitSalary": $benefit_salary, "benefitSalaryEffectiveDate": $benefit_salary_effective_date, "doNotApplyAdministrativePeriod": $do_not_apply_administrative_period, "isMeasureAcaEligibility": $is_measure_aca_eligibility} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: {}, body: $req_body}
 }
 
 # Get All Direct Deposit
@@ -483,10 +519,12 @@ export def "companies-employees-direct-deposit get-list" [
 ]: nothing -> table<additionalDirectDeposit: list<record>, mainDirectDeposit: record<accountNumber: string, accountType: string, blockSpecial: bool, isSkipPreNote: bool, nameOnAccount: string, preNoteDate: string, routingNumber: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($company_id | is-empty) { error make --unspanned { msg: "path parameter 'companyId' must be non-empty" } }
+  if ($employee_id | is-empty) { error make --unspanned { msg: "path parameter 'employeeId' must be non-empty" } }
   let full_url = (build-url $base ({company_id: (encode-path-segment $company_id), employee_id: (encode-path-segment $employee_id)} | format pattern "/v2/companies/{company_id}/employees/{employee_id}/directDeposit"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
 }
 
 # Get All Earnings
@@ -508,10 +546,12 @@ export def "companies-employees-earnings get-list" [
 ]: nothing -> table<agency: string, amount: float, annualMaximum: float, calculationCode: string, costCenter1: string, costCenter2: string, costCenter3: string, earningCode: string, effectiveDate: string, endDate: string, frequency: string, goal: float, hoursOrUnits: float, isSelfInsured: bool, jobCode: string, miscellaneousInfo: string, paidTowardsGoal: float, payPeriodMaximum: float, payPeriodMinimum: float, rate: float, rateCode: string, startDate: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($company_id | is-empty) { error make --unspanned { msg: "path parameter 'companyId' must be non-empty" } }
+  if ($employee_id | is-empty) { error make --unspanned { msg: "path parameter 'employeeId' must be non-empty" } }
   let full_url = (build-url $base ({company_id: (encode-path-segment $company_id), employee_id: (encode-path-segment $employee_id)} | format pattern "/v2/companies/{company_id}/employees/{employee_id}/earnings"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
 }
 
 # Add/Update Earning
@@ -556,12 +596,14 @@ export def "companies-employees-earnings create-or-update" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($company_id | is-empty) { error make --unspanned { msg: "path parameter 'companyId' must be non-empty" } }
+  if ($employee_id | is-empty) { error make --unspanned { msg: "path parameter 'employeeId' must be non-empty" } }
   let full_url = (build-url $base ({company_id: (encode-path-segment $company_id), employee_id: (encode-path-segment $employee_id)} | format pattern "/v2/companies/{company_id}/employees/{employee_id}/earnings"))
   let req_body = {"agency": $agency, "amount": $amount, "annualMaximum": $annual_maximum, "calculationCode": $calculation_code, "costCenter1": $cost_center1, "costCenter2": $cost_center2, "costCenter3": $cost_center3, "earningCode": $earning_code, "effectiveDate": $effective_date, "endDate": $end_date, "frequency": $frequency, "goal": $goal, "hoursOrUnits": $hours_or_units, "isSelfInsured": $is_self_insured, "jobCode": $job_code, "miscellaneousInfo": $miscellaneous_info, "paidTowardsGoal": $paid_towards_goal, "payPeriodMaximum": $pay_period_maximum, "payPeriodMinimum": $pay_period_minimum, "rate": $rate, "rateCode": $rate_code, "startDate": $start_date} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: {}, body: $req_body}
 }
 
 # Get Earnings by Earning Code
@@ -584,10 +626,13 @@ export def "companies-employees-earnings get-by-code" [
 ]: nothing -> table<agency: string, amount: float, annualMaximum: float, calculationCode: string, costCenter1: string, costCenter2: string, costCenter3: string, earningCode: string, effectiveDate: string, endDate: string, frequency: string, goal: float, hoursOrUnits: float, isSelfInsured: bool, jobCode: string, miscellaneousInfo: string, paidTowardsGoal: float, payPeriodMaximum: float, payPeriodMinimum: float, rate: float, rateCode: string, startDate: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($company_id | is-empty) { error make --unspanned { msg: "path parameter 'companyId' must be non-empty" } }
+  if ($employee_id | is-empty) { error make --unspanned { msg: "path parameter 'employeeId' must be non-empty" } }
+  if ($earning_code | is-empty) { error make --unspanned { msg: "path parameter 'earningCode' must be non-empty" } }
   let full_url = (build-url $base ({company_id: (encode-path-segment $company_id), employee_id: (encode-path-segment $employee_id), earning_code: (encode-path-segment $earning_code)} | format pattern "/v2/companies/{company_id}/employees/{employee_id}/earnings/{earning_code}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
 }
 
 # Delete Earning by Earning Code and Start Date
@@ -611,10 +656,14 @@ export def "companies-employees-earnings delete-by-code-and-start-date" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($company_id | is-empty) { error make --unspanned { msg: "path parameter 'companyId' must be non-empty" } }
+  if ($employee_id | is-empty) { error make --unspanned { msg: "path parameter 'employeeId' must be non-empty" } }
+  if ($earning_code | is-empty) { error make --unspanned { msg: "path parameter 'earningCode' must be non-empty" } }
+  if ($start_date | is-empty) { error make --unspanned { msg: "path parameter 'startDate' must be non-empty" } }
   let full_url = (build-url $base ({company_id: (encode-path-segment $company_id), employee_id: (encode-path-segment $employee_id), earning_code: (encode-path-segment $earning_code), start_date: (encode-path-segment $start_date)} | format pattern "/v2/companies/{company_id}/employees/{employee_id}/earnings/{earning_code}/{start_date}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
 }
 
 # Get Earning by Earning Code and Start Date
@@ -638,10 +687,14 @@ export def "companies-employees-earnings get-by-code-and-start-date" [
 ]: nothing -> record<agency: string, amount: float, annualMaximum: float, calculationCode: string, costCenter1: string, costCenter2: string, costCenter3: string, earningCode: string, effectiveDate: string, endDate: string, frequency: string, goal: float, hoursOrUnits: float, isSelfInsured: bool, jobCode: string, miscellaneousInfo: string, paidTowardsGoal: float, payPeriodMaximum: float, payPeriodMinimum: float, rate: float, rateCode: string, startDate: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($company_id | is-empty) { error make --unspanned { msg: "path parameter 'companyId' must be non-empty" } }
+  if ($employee_id | is-empty) { error make --unspanned { msg: "path parameter 'employeeId' must be non-empty" } }
+  if ($earning_code | is-empty) { error make --unspanned { msg: "path parameter 'earningCode' must be non-empty" } }
+  if ($start_date | is-empty) { error make --unspanned { msg: "path parameter 'startDate' must be non-empty" } }
   let full_url = (build-url $base ({company_id: (encode-path-segment $company_id), employee_id: (encode-path-segment $employee_id), earning_code: (encode-path-segment $earning_code), start_date: (encode-path-segment $start_date)} | format pattern "/v2/companies/{company_id}/employees/{employee_id}/earnings/{earning_code}/{start_date}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
 }
 
 # Add/update emergency contacts
@@ -684,12 +737,14 @@ export def "companies-employees-emergency-contacts create-or-update" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($company_id | is-empty) { error make --unspanned { msg: "path parameter 'companyId' must be non-empty" } }
+  if ($employee_id | is-empty) { error make --unspanned { msg: "path parameter 'employeeId' must be non-empty" } }
   let full_url = (build-url $base ({company_id: (encode-path-segment $company_id), employee_id: (encode-path-segment $employee_id)} | format pattern "/v2/companies/{company_id}/employees/{employee_id}/emergencyContacts"))
   let req_body = {"address1": $address1, "address2": $address2, "city": $city, "country": $country, "county": $county, "email": $email, "firstName": $first_name, "homePhone": $home_phone, "lastName": $last_name, "mobilePhone": $mobile_phone, "notes": $notes, "pager": $pager, "primaryPhone": $primary_phone, "priority": $priority, "relationship": $relationship, "state": $state, "syncEmployeeInfo": $sync_employee_info, "workExtension": $work_extension, "workPhone": $work_phone, "zip": $zip} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: {}, body: $req_body}
 }
 
 # Get all local taxes
@@ -711,10 +766,12 @@ export def "companies-employees-local-taxes get-list" [
 ]: nothing -> table<exemptions: float, exemptions2: float, filingStatus: string, residentPSD: string, taxCode: string, workPSD: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($company_id | is-empty) { error make --unspanned { msg: "path parameter 'companyId' must be non-empty" } }
+  if ($employee_id | is-empty) { error make --unspanned { msg: "path parameter 'employeeId' must be non-empty" } }
   let full_url = (build-url $base ({company_id: (encode-path-segment $company_id), employee_id: (encode-path-segment $employee_id)} | format pattern "/v2/companies/{company_id}/employees/{employee_id}/localTaxes"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
 }
 
 # Add new local tax
@@ -743,12 +800,14 @@ export def "companies-employees-local-taxes create-tax" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($company_id | is-empty) { error make --unspanned { msg: "path parameter 'companyId' must be non-empty" } }
+  if ($employee_id | is-empty) { error make --unspanned { msg: "path parameter 'employeeId' must be non-empty" } }
   let full_url = (build-url $base ({company_id: (encode-path-segment $company_id), employee_id: (encode-path-segment $employee_id)} | format pattern "/v2/companies/{company_id}/employees/{employee_id}/localTaxes"))
   let req_body = {"exemptions": $exemptions, "exemptions2": $exemptions2, "filingStatus": $filing_status, "residentPSD": $resident_psd, "taxCode": $tax_code, "workPSD": $work_psd} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: {}, body: $req_body}
 }
 
 # Delete local tax by tax code
@@ -771,10 +830,13 @@ export def "companies-employees-local-taxes delete-tax-by-tax-code" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($company_id | is-empty) { error make --unspanned { msg: "path parameter 'companyId' must be non-empty" } }
+  if ($employee_id | is-empty) { error make --unspanned { msg: "path parameter 'employeeId' must be non-empty" } }
+  if ($tax_code | is-empty) { error make --unspanned { msg: "path parameter 'taxCode' must be non-empty" } }
   let full_url = (build-url $base ({company_id: (encode-path-segment $company_id), employee_id: (encode-path-segment $employee_id), tax_code: (encode-path-segment $tax_code)} | format pattern "/v2/companies/{company_id}/employees/{employee_id}/localTaxes/{tax_code}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
 }
 
 # Get local taxes by tax code
@@ -797,10 +859,13 @@ export def "companies-employees-local-taxes get-tax-by-tax-code" [
 ]: nothing -> table<exemptions: float, exemptions2: float, filingStatus: string, residentPSD: string, taxCode: string, workPSD: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($company_id | is-empty) { error make --unspanned { msg: "path parameter 'companyId' must be non-empty" } }
+  if ($employee_id | is-empty) { error make --unspanned { msg: "path parameter 'employeeId' must be non-empty" } }
+  if ($tax_code | is-empty) { error make --unspanned { msg: "path parameter 'taxCode' must be non-empty" } }
   let full_url = (build-url $base ({company_id: (encode-path-segment $company_id), employee_id: (encode-path-segment $employee_id), tax_code: (encode-path-segment $tax_code)} | format pattern "/v2/companies/{company_id}/employees/{employee_id}/localTaxes/{tax_code}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
 }
 
 # Add/update non-primary state tax
@@ -837,12 +902,14 @@ export def "companies-employees-nonprimary-state-tax create-or-update-non-primar
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($company_id | is-empty) { error make --unspanned { msg: "path parameter 'companyId' must be non-empty" } }
+  if ($employee_id | is-empty) { error make --unspanned { msg: "path parameter 'employeeId' must be non-empty" } }
   let full_url = (build-url $base ({company_id: (encode-path-segment $company_id), employee_id: (encode-path-segment $employee_id)} | format pattern "/v2/companies/{company_id}/employees/{employee_id}/nonprimaryStateTax"))
   let req_body = {"amount": $amount, "deductionsAmount": $deductions_amount, "dependentsAmount": $dependents_amount, "exemptions": $exemptions, "exemptions2": $exemptions2, "filingStatus": $filing_status, "higherRate": $higher_rate, "otherIncomeAmount": $other_income_amount, "percentage": $percentage, "reciprocityCode": $reciprocity_code, "specialCheckCalc": $special_check_calc, "taxCalculationCode": $tax_calculation_code, "taxCode": $tax_code, "w4FormYear": $w4_form_year} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: {}, body: $req_body}
 }
 
 # Get employee pay statement details data for the specified year.
@@ -869,11 +936,14 @@ export def "companies-employees-paystatement-details get-gets-pay-statement-data
 ]: nothing -> table<amount: float, checkDate: string, det: string, detCode: string, detType: string, eligibleCompensation: float, hours: float, rate: float, transactionNumber: int, transactionType: string, year: int> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($company_id | is-empty) { error make --unspanned { msg: "path parameter 'companyId' must be non-empty" } }
+  if ($employee_id | is-empty) { error make --unspanned { msg: "path parameter 'employeeId' must be non-empty" } }
+  if ($year | is-empty) { error make --unspanned { msg: "path parameter 'year' must be non-empty" } }
   let qp = [(serialize-qp "pagesize" $pagesize "scalar") (serialize-qp "pagenumber" $pagenumber "scalar") (serialize-qp "includetotalcount" $includetotalcount "scalar") (serialize-qp "codegroup" $codegroup "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({company_id: (encode-path-segment $company_id), employee_id: (encode-path-segment $employee_id), year: (encode-path-segment $year)} | format pattern "/v2/companies/{company_id}/employees/{employee_id}/paystatement/details/{year}") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"pagesize": $pagesize, "pagenumber": $pagenumber, "includetotalcount": $includetotalcount, "codegroup": $codegroup} | compact), body: null}
 }
 
 # Get employee pay statement details data for the specified year and check date.
@@ -901,11 +971,15 @@ export def "companies-employees-paystatement-details check-gets-pay-statement-da
 ]: nothing -> table<amount: float, checkDate: string, det: string, detCode: string, detType: string, eligibleCompensation: float, hours: float, rate: float, transactionNumber: int, transactionType: string, year: int> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($company_id | is-empty) { error make --unspanned { msg: "path parameter 'companyId' must be non-empty" } }
+  if ($employee_id | is-empty) { error make --unspanned { msg: "path parameter 'employeeId' must be non-empty" } }
+  if ($year | is-empty) { error make --unspanned { msg: "path parameter 'year' must be non-empty" } }
+  if ($check_date | is-empty) { error make --unspanned { msg: "path parameter 'checkDate' must be non-empty" } }
   let qp = [(serialize-qp "pagesize" $pagesize "scalar") (serialize-qp "pagenumber" $pagenumber "scalar") (serialize-qp "includetotalcount" $includetotalcount "scalar") (serialize-qp "codegroup" $codegroup "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({company_id: (encode-path-segment $company_id), employee_id: (encode-path-segment $employee_id), year: (encode-path-segment $year), check_date: (encode-path-segment $check_date)} | format pattern "/v2/companies/{company_id}/employees/{employee_id}/paystatement/details/{year}/{check_date}") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"pagesize": $pagesize, "pagenumber": $pagenumber, "includetotalcount": $includetotalcount, "codegroup": $codegroup} | compact), body: null}
 }
 
 # Get employee pay statement summary data for the specified year.
@@ -932,11 +1006,14 @@ export def "companies-employees-paystatement-summary get-gets-pay-statement-data
 ]: nothing -> table<autoPay: bool, beginDate: string, checkDate: string, checkNumber: int, directDepositAmount: float, endDate: string, grossPay: float, hours: float, netCheck: float, netPay: float, overtimeDollars: float, overtimeHours: float, process: int, regularDollars: float, regularHours: float, transactionNumber: int, voucherNumber: int, workersCompCode: string, year: int> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($company_id | is-empty) { error make --unspanned { msg: "path parameter 'companyId' must be non-empty" } }
+  if ($employee_id | is-empty) { error make --unspanned { msg: "path parameter 'employeeId' must be non-empty" } }
+  if ($year | is-empty) { error make --unspanned { msg: "path parameter 'year' must be non-empty" } }
   let qp = [(serialize-qp "pagesize" $pagesize "scalar") (serialize-qp "pagenumber" $pagenumber "scalar") (serialize-qp "includetotalcount" $includetotalcount "scalar") (serialize-qp "codegroup" $codegroup "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({company_id: (encode-path-segment $company_id), employee_id: (encode-path-segment $employee_id), year: (encode-path-segment $year)} | format pattern "/v2/companies/{company_id}/employees/{employee_id}/paystatement/summary/{year}") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"pagesize": $pagesize, "pagenumber": $pagenumber, "includetotalcount": $includetotalcount, "codegroup": $codegroup} | compact), body: null}
 }
 
 # Get employee pay statement summary data for the specified year and check date.
@@ -964,11 +1041,15 @@ export def "companies-employees-paystatement-summary check-gets-pay-statement-da
 ]: nothing -> table<autoPay: bool, beginDate: string, checkDate: string, checkNumber: int, directDepositAmount: float, endDate: string, grossPay: float, hours: float, netCheck: float, netPay: float, overtimeDollars: float, overtimeHours: float, process: int, regularDollars: float, regularHours: float, transactionNumber: int, voucherNumber: int, workersCompCode: string, year: int> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($company_id | is-empty) { error make --unspanned { msg: "path parameter 'companyId' must be non-empty" } }
+  if ($employee_id | is-empty) { error make --unspanned { msg: "path parameter 'employeeId' must be non-empty" } }
+  if ($year | is-empty) { error make --unspanned { msg: "path parameter 'year' must be non-empty" } }
+  if ($check_date | is-empty) { error make --unspanned { msg: "path parameter 'checkDate' must be non-empty" } }
   let qp = [(serialize-qp "pagesize" $pagesize "scalar") (serialize-qp "pagenumber" $pagenumber "scalar") (serialize-qp "includetotalcount" $includetotalcount "scalar") (serialize-qp "codegroup" $codegroup "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({company_id: (encode-path-segment $company_id), employee_id: (encode-path-segment $employee_id), year: (encode-path-segment $year), check_date: (encode-path-segment $check_date)} | format pattern "/v2/companies/{company_id}/employees/{employee_id}/paystatement/summary/{year}/{check_date}") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"pagesize": $pagesize, "pagenumber": $pagenumber, "includetotalcount": $includetotalcount, "codegroup": $codegroup} | compact), body: null}
 }
 
 # Add/update primary state tax
@@ -1004,12 +1085,14 @@ export def "companies-employees-primary-state-tax create-or-update" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($company_id | is-empty) { error make --unspanned { msg: "path parameter 'companyId' must be non-empty" } }
+  if ($employee_id | is-empty) { error make --unspanned { msg: "path parameter 'employeeId' must be non-empty" } }
   let full_url = (build-url $base ({company_id: (encode-path-segment $company_id), employee_id: (encode-path-segment $employee_id)} | format pattern "/v2/companies/{company_id}/employees/{employee_id}/primaryStateTax"))
   let req_body = {"amount": $amount, "deductionsAmount": $deductions_amount, "dependentsAmount": $dependents_amount, "exemptions": $exemptions, "exemptions2": $exemptions2, "filingStatus": $filing_status, "higherRate": $higher_rate, "otherIncomeAmount": $other_income_amount, "percentage": $percentage, "specialCheckCalc": $special_check_calc, "taxCalculationCode": $tax_calculation_code, "taxCode": $tax_code, "w4FormYear": $w4_form_year} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: {}, body: $req_body}
 }
 
 # Get sensitive data
@@ -1031,10 +1114,12 @@ export def "companies-employees-sensitivedata get-sensitive-data" [
 ]: nothing -> table<disability: record<disability: string, disabilityClassifications: list, hasDisability: string>, ethnicity: record<ethnicRacialIdentities: list, ethnicity: string>, gender: record<displayPronouns: bool, genderIdentityDescription: string, identifyAsLegalGender: string, legalGender: string, pronouns: string, sexualOrientation: string>, veteran: record<isVeteran: string, veteran: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($company_id | is-empty) { error make --unspanned { msg: "path parameter 'companyId' must be non-empty" } }
+  if ($employee_id | is-empty) { error make --unspanned { msg: "path parameter 'employeeId' must be non-empty" } }
   let full_url = (build-url $base ({company_id: (encode-path-segment $company_id), employee_id: (encode-path-segment $employee_id)} | format pattern "/v2/companies/{company_id}/employees/{employee_id}/sensitivedata"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
 }
 
 # Add/update sensitive data
@@ -1065,12 +1150,14 @@ export def "companies-employees-sensitivedata create-or-update-sensitive-data" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($company_id | is-empty) { error make --unspanned { msg: "path parameter 'companyId' must be non-empty" } }
+  if ($employee_id | is-empty) { error make --unspanned { msg: "path parameter 'employeeId' must be non-empty" } }
   let full_url = (build-url $base ({company_id: (encode-path-segment $company_id), employee_id: (encode-path-segment $employee_id)} | format pattern "/v2/companies/{company_id}/employees/{employee_id}/sensitivedata"))
   let req_body = {"disability": $disability, "ethnicity": $ethnicity, "gender": $gender, "veteran": $veteran} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: {}, body: $req_body}
 }
 
 # Get Company-Specific Open API Documentation
@@ -1092,12 +1179,13 @@ export def "companies-openapi get-company-specific-open-documentation" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($company_id | is-empty) { error make --unspanned { msg: "path parameter 'companyId' must be non-empty" } }
   let full_url = (build-url $base ({company_id: (encode-path-segment $company_id)} | format pattern "/v2/companies/{company_id}/openapi"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"Authorization": $authorization} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
 }
 
 # Obtain new client secret.
@@ -1124,7 +1212,7 @@ export def "credentials-secrets create-client" [
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: {}, body: $req_body}
 }
 
 # Add new employee to Web Link
@@ -1210,10 +1298,11 @@ export def "weblinkstaging-companies-employees-newemployees create-new-to-web-li
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($company_id | is-empty) { error make --unspanned { msg: "path parameter 'companyId' must be non-empty" } }
   let full_url = (build-url $base ({company_id: (encode-path-segment $company_id)} | format pattern "/v2/weblinkstaging/companies/{company_id}/employees/newemployees"))
   let req_body = {"additionalDirectDeposit": $additional_direct_deposit, "benefitSetup": $benefit_setup, "birthDate": $birth_date, "customBooleanFields": $custom_boolean_fields, "customDateFields": $custom_date_fields, "customDropDownFields": $custom_drop_down_fields, "customNumberFields": $custom_number_fields, "customTextFields": $custom_text_fields, "departmentPosition": $department_position, "disabilityDescription": $disability_description, "employeeId": $employee_id, "ethnicity": $ethnicity, "federalTax": $federal_tax, "firstName": $first_name, "fitwExemptReason": $fitw_exempt_reason, "futaExemptReason": $futa_exempt_reason, "gender": $gender, "homeAddress": $home_address, "isEmployee943": $is_employee943, "isSmoker": $is_smoker, "lastName": $last_name, "localTax": $local_tax, "mainDirectDeposit": $main_direct_deposit, "maritalStatus": $marital_status, "medExemptReason": $med_exempt_reason, "middleName": $middle_name, "nonPrimaryStateTax": $non_primary_state_tax, "preferredName": $preferred_name, "primaryPayRate": $primary_pay_rate, "primaryStateTax": $primary_state_tax, "priorLastName": $prior_last_name, "salutation": $salutation, "sitwExemptReason": $sitw_exempt_reason, "ssExemptReason": $ss_exempt_reason, "ssn": $ssn, "status": $status, "suffix": $suffix, "suiExemptReason": $sui_exempt_reason, "suiState": $sui_state, "taxDistributionCode1099R": $tax_distribution_code1099_r, "taxForm": $tax_form, "veteranDescription": $veteran_description, "webTime": $web_time, "workAddress": $work_address, "workEligibility": $work_eligibility} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: {}, body: $req_body}
 }

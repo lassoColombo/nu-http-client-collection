@@ -3,17 +3,18 @@
 # Auth: --token flag or $env.AWS_WELL_ARCHITECTED_TOOL_TOKEN
 
 const BASE_URL = "http://wellarchitected.us-east-1.amazonaws.com"
-const DEFAULT_AUTH = "bearer"
 
-# Build auth: returns {headers: record, query: string}
+# Build auth: returns {scheme: string, headers: record, query: string, location: string}.
+# `location` is "header" | "query" | "cookie" | "none" and tells dry-run callers
+# where the token went without inspecting headers/query themselves.
 def build-auth [token?: string, auth_scheme?: string]: nothing -> record {
   let token_val = if ($token != null) and ($token | is-not-empty) { $token } else { $env | get -o AWS_WELL_ARCHITECTED_TOOL_TOKEN | default "" }
   let scheme = ($auth_scheme | default "bearer")
-  if ($scheme == "none") or ($token_val | is-empty) { return {headers: {}, query: ""} }
+  if ($scheme == "none") or ($token_val | is-empty) { return {scheme: $scheme, headers: {}, query: "", location: "none"} }
   match $scheme {
-    "bearer" => { {headers: {Authorization: $"Bearer ($token_val)"}, query: ""} }
-    "none" => { {headers: {}, query: ""} }
-    _ => { {headers: {Authorization: $"Bearer ($token_val)"}, query: ""} }
+    "bearer" => { {scheme: $scheme, headers: {Authorization: $"Bearer ($token_val)"}, query: "", location: "header"} }
+    "none" => { {scheme: $scheme, headers: {}, query: "", location: "none"} }
+    _ => { {scheme: $scheme, headers: {Authorization: $"Bearer ($token_val)"}, query: "", location: "header"} }
   }
 }
 
@@ -22,8 +23,9 @@ def build-auth [token?: string, auth_scheme?: string]: nothing -> record {
 # ([A-Za-z0-9-._~]) stay literal; everything else gets %XX.
 def serialize-qp [name: string, value: any, style: string]: nothing -> list<string> {
   if ($value == null) { return [] }
-  let n = (encode-path-segment $name)
   let is_list = ($value | describe | str starts-with "list")
+  if $is_list and ($value | is-empty) { return [] }
+  let n = (encode-path-segment $name)
   if ($value | describe | str starts-with "record") { return ($value | transpose k v | each { $"($n)[(encode-path-segment $in.k)]=(encode-path-segment $in.v)" }) }
   if not $is_list { return [$"($n)=(encode-path-segment $value)"] }
   match $style {
@@ -54,22 +56,42 @@ def build-url [base: string, path: string, query?: string]: nothing -> string {
   if ($query != null) and ($query | is-not-empty) { $result | upsert query $query | url join } else { $result | url join }
 }
 
+# Build the dry-run record returned by --dry-run. Shape:
+#   {dry_run: true, method, url, query: <record>, headers, body, content_type, timeout,
+#    auth: {scheme, location}}
+# `meta` carries logical-form data (the query record by spec name, the pre-serialization
+# body) that do-request itself cannot reconstruct from its wire-format args.
+def build-dry-run-record [method: string, url: string, auth: record, content_type: string, timeout: duration, meta?: record]: nothing -> record {
+  let m = ($meta | default {})
+  {
+    dry_run: true
+    method: $method
+    url: $url
+    query: ($m | get -o query | default {})
+    headers: $auth.headers
+    body: ($m | get -o body)
+    content_type: $content_type
+    timeout: $timeout
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+}
+
 # Execute HTTP request with method dispatch
-def do-request [method: string, url: string, auth: record, insecure: bool, raw: bool, dry_run: bool, max_time?: duration, allow_errors?: bool, full?: bool, content_type?: string, body?: any]: nothing -> any {
+def do-request [method: string, url: string, auth: record, insecure: bool, raw: bool, dry_run: bool, max_time?: duration, allow_errors?: bool, full?: bool, content_type?: string, body?: any, dry_run_meta?: record]: nothing -> any {
   let req_url = if ($auth.query | is-not-empty) { if ($url | str contains "?") { $"($url)&($auth.query)" } else { $"($url)?($auth.query)" } } else { $url }
   let timeout = ($max_time | default 30min)
   let ct = ($content_type | default "application/json")
-  if $dry_run { return {method: $method, url: $req_url, headers: $auth.headers, query_string: $auth.query, content_type: $ct, timeout: $timeout, body: $body} }
+  if $dry_run { return (build-dry-run-record $method $req_url $auth $ct $timeout $dry_run_meta) }
   let resp = match $method {
     "get" => { http get --headers $auth.headers --full --allow-errors --max-time $timeout --insecure=$insecure --raw=$raw $req_url }
-    "head" => { http head --headers $auth.headers --max-time $timeout --insecure=$insecure $req_url }
-    "options" => { http options --headers $auth.headers --max-time $timeout --insecure=$insecure $req_url }
+    "head" => { http head --headers $auth.headers --full --allow-errors --max-time $timeout --insecure=$insecure $req_url }
+    "options" => { http options --headers $auth.headers --full --allow-errors --max-time $timeout --insecure=$insecure $req_url }
     "post" => { if ($body | is-empty) { http post --headers $auth.headers --full --allow-errors --max-time $timeout --insecure=$insecure --raw=$raw $req_url "" } else { http post --headers $auth.headers --content-type $ct --full --allow-errors --max-time $timeout --insecure=$insecure --raw=$raw $req_url $body } }
     "put" => { if ($body | is-empty) { http put --headers $auth.headers --full --allow-errors --max-time $timeout --insecure=$insecure --raw=$raw $req_url "" } else { http put --headers $auth.headers --content-type $ct --full --allow-errors --max-time $timeout --insecure=$insecure --raw=$raw $req_url $body } }
     "patch" => { if ($body | is-empty) { http patch --headers $auth.headers --full --allow-errors --max-time $timeout --insecure=$insecure --raw=$raw $req_url "" } else { http patch --headers $auth.headers --content-type $ct --full --allow-errors --max-time $timeout --insecure=$insecure --raw=$raw $req_url $body } }
     "delete" => { if ($body | is-empty) { http delete --headers $auth.headers --full --allow-errors --max-time $timeout --insecure=$insecure --raw=$raw $req_url } else { http delete --headers $auth.headers --content-type $ct --data $body --full --allow-errors --max-time $timeout --insecure=$insecure --raw=$raw $req_url } }
   }
-  if ($method in ["head" "options"]) { return $resp }
+  if ($method == "head") and (not $full) and (not $allow_errors) and $resp.status < 400 { return $resp.headers }
   if $allow_errors { $resp } else if $resp.status >= 400 { error make --unspanned { msg: $"HTTP ($resp.status): ($resp.body)" } } else if $full { {status: $resp.status, headers: $resp.headers, body: $resp.body} } else if $resp.status == 204 { null } else { $resp.body }
 }
 
@@ -139,6 +161,7 @@ export def "workloads-associate-lenses update" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($workload_id | is-empty) { error make --unspanned { msg: "path parameter 'WorkloadId' must be non-empty" } }
   let full_url = (build-url $base ({workload_id: (encode-path-segment $workload_id)} | format pattern "/workloads/{workload_id}/associateLenses"))
   let req_body = {"LensAliases": $lens_aliases} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
@@ -146,7 +169,7 @@ export def "workloads-associate-lenses update" [
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "patch" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body
+  do-request "patch" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: {}, body: $req_body}
 }
 
 # Create a lens share. The owner of a lens can share it with other Amazon Web Services accounts, users, an organization, and organizational units (OUs) in the same Amazon Web Services Region. Lenses provided by Amazon Web Services (Amazon Web Services Official Content) cannot be shared. Shared access to a lens is not removed until the lens invitation is deleted. If you share a lens with an organization or OU, all accounts in the organization or OU are granted access to the lens. For more information, see Sharing a custom lens (https://docs.aws.amazon.com/wellarchitected/latest/userguide/lenses-sharing.html) in the Well-Architected Tool User Guide. Disclaimer By sharing your custom lenses with other Amazon Web Services accounts, you acknowledge that Amazon Web Services will make your custom lenses available to those other accounts. Those other accounts may continue to access and use your shared custom lenses even if you delete the custom lenses from your own Amazon Web Services account or terminate your Amazon Web Services account.
@@ -177,6 +200,7 @@ export def "lenses-shares create-lens" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($lens_alias | is-empty) { error make --unspanned { msg: "path parameter 'LensAlias' must be non-empty" } }
   let full_url = (build-url $base ({lens_alias: (encode-path-segment $lens_alias)} | format pattern "/lenses/{lens_alias}/shares"))
   let req_body = {"SharedWith": $shared_with, "ClientRequestToken": $client_request_token} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
@@ -184,7 +208,7 @@ export def "lenses-shares create-lens" [
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: {}, body: $req_body}
 }
 
 # List the lens shares associated with the lens.
@@ -216,13 +240,14 @@ export def "lenses-shares list-lens" [
 ]: nothing -> record<LensShareSummaries: record, NextToken: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($lens_alias | is-empty) { error make --unspanned { msg: "path parameter 'LensAlias' must be non-empty" } }
   let qp = [(serialize-qp "SharedWithPrefix" $shared_with_prefix "scalar") (serialize-qp "NextToken" $next_token "scalar") (serialize-qp "MaxResults" $max_results "scalar") (serialize-qp "Status" $status "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({lens_alias: (encode-path-segment $lens_alias)} | format pattern "/lenses/{lens_alias}/shares") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"SharedWithPrefix": $shared_with_prefix, "NextToken": $next_token, "MaxResults": $max_results, "Status": $status} | compact), body: null}
 }
 
 # Create a new lens version. A lens can have up to 100 versions. Use this operation to publish a new lens version after you have imported a lens. The LensAlias is used to identify the lens to be published. The owner of a lens can share the lens with other Amazon Web Services accounts and users in the same Amazon Web Services Region. Only the owner of a lens can delete it.
@@ -254,6 +279,7 @@ export def "lenses-versions create-lens" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($lens_alias | is-empty) { error make --unspanned { msg: "path parameter 'LensAlias' must be non-empty" } }
   let full_url = (build-url $base ({lens_alias: (encode-path-segment $lens_alias)} | format pattern "/lenses/{lens_alias}/versions"))
   let req_body = {"LensVersion": $lens_version, "IsMajorVersion": $is_major_version, "ClientRequestToken": $client_request_token} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
@@ -261,7 +287,7 @@ export def "lenses-versions create-lens" [
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: {}, body: $req_body}
 }
 
 # Create a milestone for an existing workload.
@@ -292,6 +318,7 @@ export def "workloads-milestones create" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($workload_id | is-empty) { error make --unspanned { msg: "path parameter 'WorkloadId' must be non-empty" } }
   let full_url = (build-url $base ({workload_id: (encode-path-segment $workload_id)} | format pattern "/workloads/{workload_id}/milestones"))
   let req_body = {"MilestoneName": $milestone_name, "ClientRequestToken": $client_request_token} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
@@ -299,7 +326,7 @@ export def "workloads-milestones create" [
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: {}, body: $req_body}
 }
 
 # Create a new workload. The owner of a workload can share the workload with other Amazon Web Services accounts, users, an organization, and organizational units (OUs) in the same Amazon Web Services Region. Only the owner of a workload can delete it. For more information, see Defining a Workload (https://docs.aws.amazon.com/wellarchitected/latest/userguide/define-workload.html) in the Well-Architected Tool User Guide. Either AwsRegions, NonAwsRegions, or both must be specified when creating a workload. You also must specify ReviewOwner, even though the parameter is listed as not being required in the following section.
@@ -352,7 +379,7 @@ export def "workloads create" [
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: {}, body: $req_body}
 }
 
 # Create a workload share. The owner of a workload can share it with other Amazon Web Services accounts and users in the same Amazon Web Services Region. Shared access to a workload is not removed until the workload invitation is deleted. If you share a workload with an organization or OU, all accounts in the organization or OU are granted access to the workload. For more information, see Sharing a workload (https://docs.aws.amazon.com/wellarchitected/latest/userguide/workloads-sharing.html) in the Well-Architected Tool User Guide.
@@ -384,6 +411,7 @@ export def "workloads-shares create" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($workload_id | is-empty) { error make --unspanned { msg: "path parameter 'WorkloadId' must be non-empty" } }
   let full_url = (build-url $base ({workload_id: (encode-path-segment $workload_id)} | format pattern "/workloads/{workload_id}/shares"))
   let req_body = {"SharedWith": $shared_with, "PermissionType": $permission_type, "ClientRequestToken": $client_request_token} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
@@ -391,7 +419,7 @@ export def "workloads-shares create" [
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: {}, body: $req_body}
 }
 
 # List the workload shares associated with the workload.
@@ -423,18 +451,19 @@ export def "workloads-shares list" [
 ]: nothing -> record<WorkloadId: string, WorkloadShareSummaries: table<ShareId: string, SharedWith: string, PermissionType: string, Status: string, StatusMessage: record>, NextToken: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($workload_id | is-empty) { error make --unspanned { msg: "path parameter 'WorkloadId' must be non-empty" } }
   let qp = [(serialize-qp "SharedWithPrefix" $shared_with_prefix "scalar") (serialize-qp "NextToken" $next_token "scalar") (serialize-qp "MaxResults" $max_results "scalar") (serialize-qp "Status" $status "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({workload_id: (encode-path-segment $workload_id)} | format pattern "/workloads/{workload_id}/shares") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"SharedWithPrefix": $shared_with_prefix, "NextToken": $next_token, "MaxResults": $max_results, "Status": $status} | compact), body: null}
 }
 
 # Delete an existing lens. Only the owner of a lens can delete it. After the lens is deleted, Amazon Web Services accounts and users that you shared the lens with can continue to use it, but they will no longer be able to apply it to new workloads. Disclaimer By sharing your custom lenses with other Amazon Web Services accounts, you acknowledge that Amazon Web Services will make your custom lenses available to those other accounts. Those other accounts may continue to access and use your shared custom lenses even if you delete the custom lenses from your own Amazon Web Services account or terminate your Amazon Web Services account.
 #
-# DELETE /lenses/{LensAlias}#ClientRequestToken&LensStatus
+# DELETE /lenses/{LensAlias}
 # operationId: DeleteLens
 export def "lenses delete-lens" [
   lens_alias: string
@@ -459,18 +488,19 @@ export def "lenses delete-lens" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($lens_alias | is-empty) { error make --unspanned { msg: "path parameter 'LensAlias' must be non-empty" } }
   let qp = [(serialize-qp "ClientRequestToken" $client_request_token "scalar") (serialize-qp "LensStatus" $lens_status "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({lens_alias: (encode-path-segment $lens_alias)} | format pattern "/lenses/{lens_alias}#ClientRequestToken&LensStatus") $qp)
+  let full_url = (build-url $base ({lens_alias: (encode-path-segment $lens_alias)} | format pattern "/lenses/{lens_alias}") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"ClientRequestToken": $client_request_token, "LensStatus": $lens_status} | compact), body: null}
 }
 
 # Delete a lens share. After the lens share is deleted, Amazon Web Services accounts, users, organizations, and organizational units (OUs) that you shared the lens with can continue to use it, but they will no longer be able to apply it to new workloads. Disclaimer By sharing your custom lenses with other Amazon Web Services accounts, you acknowledge that Amazon Web Services will make your custom lenses available to those other accounts. Those other accounts may continue to access and use your shared custom lenses even if you delete the custom lenses from your own Amazon Web Services account or terminate your Amazon Web Services account.
 #
-# DELETE /lenses/{LensAlias}/shares/{ShareId}#ClientRequestToken
+# DELETE /lenses/{LensAlias}/shares/{ShareId}
 # operationId: DeleteLensShare
 export def "lenses-shares delete-lens" [
   lens_alias: string
@@ -495,18 +525,20 @@ export def "lenses-shares delete-lens" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($lens_alias | is-empty) { error make --unspanned { msg: "path parameter 'LensAlias' must be non-empty" } }
+  if ($share_id | is-empty) { error make --unspanned { msg: "path parameter 'ShareId' must be non-empty" } }
   let qp = [(serialize-qp "ClientRequestToken" $client_request_token "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({lens_alias: (encode-path-segment $lens_alias), share_id: (encode-path-segment $share_id)} | format pattern "/lenses/{lens_alias}/shares/{share_id}#ClientRequestToken") $qp)
+  let full_url = (build-url $base ({lens_alias: (encode-path-segment $lens_alias), share_id: (encode-path-segment $share_id)} | format pattern "/lenses/{lens_alias}/shares/{share_id}") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"ClientRequestToken": $client_request_token} | compact), body: null}
 }
 
 # Delete an existing workload.
 #
-# DELETE /workloads/{WorkloadId}#ClientRequestToken
+# DELETE /workloads/{WorkloadId}
 # operationId: DeleteWorkload
 export def "workloads delete" [
   workload_id: string
@@ -530,18 +562,19 @@ export def "workloads delete" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($workload_id | is-empty) { error make --unspanned { msg: "path parameter 'WorkloadId' must be non-empty" } }
   let qp = [(serialize-qp "ClientRequestToken" $client_request_token "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({workload_id: (encode-path-segment $workload_id)} | format pattern "/workloads/{workload_id}#ClientRequestToken") $qp)
+  let full_url = (build-url $base ({workload_id: (encode-path-segment $workload_id)} | format pattern "/workloads/{workload_id}") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"ClientRequestToken": $client_request_token} | compact), body: null}
 }
 
 # Delete a workload share.
 #
-# DELETE /workloads/{WorkloadId}/shares/{ShareId}#ClientRequestToken
+# DELETE /workloads/{WorkloadId}/shares/{ShareId}
 # operationId: DeleteWorkloadShare
 export def "workloads-shares delete" [
   workload_id: string
@@ -566,13 +599,15 @@ export def "workloads-shares delete" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($workload_id | is-empty) { error make --unspanned { msg: "path parameter 'WorkloadId' must be non-empty" } }
+  if ($share_id | is-empty) { error make --unspanned { msg: "path parameter 'ShareId' must be non-empty" } }
   let qp = [(serialize-qp "ClientRequestToken" $client_request_token "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({workload_id: (encode-path-segment $workload_id), share_id: (encode-path-segment $share_id)} | format pattern "/workloads/{workload_id}/shares/{share_id}#ClientRequestToken") $qp)
+  let full_url = (build-url $base ({workload_id: (encode-path-segment $workload_id), share_id: (encode-path-segment $share_id)} | format pattern "/workloads/{workload_id}/shares/{share_id}") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"ClientRequestToken": $client_request_token} | compact), body: null}
 }
 
 # Disassociate a lens from a workload. Up to 10 lenses can be disassociated from a workload in a single API operation. The Amazon Web Services Well-Architected Framework lens (wellarchitected) cannot be removed from a workload.
@@ -602,6 +637,7 @@ export def "workloads-disassociate-lenses update" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($workload_id | is-empty) { error make --unspanned { msg: "path parameter 'WorkloadId' must be non-empty" } }
   let full_url = (build-url $base ({workload_id: (encode-path-segment $workload_id)} | format pattern "/workloads/{workload_id}/disassociateLenses"))
   let req_body = {"LensAliases": $lens_aliases} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
@@ -609,7 +645,7 @@ export def "workloads-disassociate-lenses update" [
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "patch" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body
+  do-request "patch" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: {}, body: $req_body}
 }
 
 # Export an existing lens. Only the owner of a lens can export it. Lenses provided by Amazon Web Services (Amazon Web Services Official Content) cannot be exported. Lenses are defined in JSON. For more information, see JSON format specification (https://docs.aws.amazon.com/wellarchitected/latest/userguide/lenses-format-specification.html) in the Well-Architected Tool User Guide. Disclaimer Do not include or gather personal identifiable information (PII) of end users or other identifiable individuals in or via your custom lenses. If your custom lens or those shared with you and used in your account do include or collect PII you are responsible for: ensuring that the included PII is processed in accordance with applicable law, providing adequate privacy notices, and obtaining necessary consents for processing such data.
@@ -638,13 +674,14 @@ export def "lenses-export export-lens" [
 ]: nothing -> record<LensJSON: record> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($lens_alias | is-empty) { error make --unspanned { msg: "path parameter 'LensAlias' must be non-empty" } }
   let qp = [(serialize-qp "LensVersion" $lens_version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({lens_alias: (encode-path-segment $lens_alias)} | format pattern "/lenses/{lens_alias}/export") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"LensVersion": $lens_version} | compact), body: null}
 }
 
 # Get the answer to a specific question in a workload review.
@@ -675,13 +712,16 @@ export def "workloads-lens-reviews-answers get" [
 ]: nothing -> record<WorkloadId: string, MilestoneNumber: int, LensAlias: string, LensArn: record, Answer: record<QuestionId: string, PillarId: string, QuestionTitle: string, QuestionDescription: string, ImprovementPlanUrl: string, HelpfulResourceUrl: string, HelpfulResourceDisplayText: record, Choices: list<record>, SelectedChoices: list<string>, ChoiceAnswers: record, IsApplicable: bool, Risk: string, Notes: string, Reason: record>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($workload_id | is-empty) { error make --unspanned { msg: "path parameter 'WorkloadId' must be non-empty" } }
+  if ($lens_alias | is-empty) { error make --unspanned { msg: "path parameter 'LensAlias' must be non-empty" } }
+  if ($question_id | is-empty) { error make --unspanned { msg: "path parameter 'QuestionId' must be non-empty" } }
   let qp = [(serialize-qp "MilestoneNumber" $milestone_number "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({workload_id: (encode-path-segment $workload_id), lens_alias: (encode-path-segment $lens_alias), question_id: (encode-path-segment $question_id)} | format pattern "/workloads/{workload_id}/lensReviews/{lens_alias}/answers/{question_id}") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"MilestoneNumber": $milestone_number} | compact), body: null}
 }
 
 # Update the answer to a specific question in a workload review.
@@ -717,6 +757,9 @@ export def "workloads-lens-reviews-answers update" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($workload_id | is-empty) { error make --unspanned { msg: "path parameter 'WorkloadId' must be non-empty" } }
+  if ($lens_alias | is-empty) { error make --unspanned { msg: "path parameter 'LensAlias' must be non-empty" } }
+  if ($question_id | is-empty) { error make --unspanned { msg: "path parameter 'QuestionId' must be non-empty" } }
   let full_url = (build-url $base ({workload_id: (encode-path-segment $workload_id), lens_alias: (encode-path-segment $lens_alias), question_id: (encode-path-segment $question_id)} | format pattern "/workloads/{workload_id}/lensReviews/{lens_alias}/answers/{question_id}"))
   let req_body = {"SelectedChoices": $selected_choices, "ChoiceUpdates": $choice_updates, "Notes": $notes, "IsApplicable": $is_applicable, "Reason": $reason} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
@@ -724,14 +767,14 @@ export def "workloads-lens-reviews-answers update" [
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "patch" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body
+  do-request "patch" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: {}, body: $req_body}
 }
 
 # Get a consolidated report of your workloads. You can optionally choose to include workloads that have been shared with you.
 #
-# GET /consolidatedReport#Format
+# GET /consolidatedReport
 # operationId: GetConsolidatedReport
-export def "consolidated-report-format get-report" [
+export def "consolidated-report get" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -756,12 +799,12 @@ export def "consolidated-report-format get-report" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "Format" $format "scalar") (serialize-qp "IncludeSharedResources" $include_shared_resources "scalar") (serialize-qp "NextToken" $next_token "scalar") (serialize-qp "MaxResults" $max_results "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base "/consolidatedReport#Format" $qp)
+  let full_url = (build-url $base "/consolidatedReport" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"Format": $format, "IncludeSharedResources": $include_shared_resources, "NextToken": $next_token, "MaxResults": $max_results} | compact), body: null}
 }
 
 # Get an existing lens.
@@ -790,13 +833,14 @@ export def "lenses get-lens" [
 ]: nothing -> record<Lens: record<LensArn: record, LensVersion: record, Name: string, Description: string, Owner: record, ShareInvitationId: record, Tags: record>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($lens_alias | is-empty) { error make --unspanned { msg: "path parameter 'LensAlias' must be non-empty" } }
   let qp = [(serialize-qp "LensVersion" $lens_version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({lens_alias: (encode-path-segment $lens_alias)} | format pattern "/lenses/{lens_alias}") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"LensVersion": $lens_version} | compact), body: null}
 }
 
 # Get lens review.
@@ -826,13 +870,15 @@ export def "workloads-lens-reviews get" [
 ]: nothing -> record<WorkloadId: string, MilestoneNumber: int, LensReview: record<LensAlias: string, LensArn: record, LensVersion: record, LensName: string, LensStatus: record, PillarReviewSummaries: list<record>, UpdatedAt: string, Notes: string, RiskCounts: record, NextToken: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($workload_id | is-empty) { error make --unspanned { msg: "path parameter 'WorkloadId' must be non-empty" } }
+  if ($lens_alias | is-empty) { error make --unspanned { msg: "path parameter 'LensAlias' must be non-empty" } }
   let qp = [(serialize-qp "MilestoneNumber" $milestone_number "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({workload_id: (encode-path-segment $workload_id), lens_alias: (encode-path-segment $lens_alias)} | format pattern "/workloads/{workload_id}/lensReviews/{lens_alias}") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"MilestoneNumber": $milestone_number} | compact), body: null}
 }
 
 # Update lens review for a particular workload.
@@ -864,6 +910,8 @@ export def "workloads-lens-reviews update" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($workload_id | is-empty) { error make --unspanned { msg: "path parameter 'WorkloadId' must be non-empty" } }
+  if ($lens_alias | is-empty) { error make --unspanned { msg: "path parameter 'LensAlias' must be non-empty" } }
   let full_url = (build-url $base ({workload_id: (encode-path-segment $workload_id), lens_alias: (encode-path-segment $lens_alias)} | format pattern "/workloads/{workload_id}/lensReviews/{lens_alias}"))
   let req_body = {"LensNotes": $lens_notes, "PillarNotes": $pillar_notes} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
@@ -871,7 +919,7 @@ export def "workloads-lens-reviews update" [
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "patch" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body
+  do-request "patch" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: {}, body: $req_body}
 }
 
 # Get lens review report.
@@ -901,13 +949,15 @@ export def "workloads-lens-reviews-report get" [
 ]: nothing -> record<WorkloadId: string, MilestoneNumber: int, LensReviewReport: record<LensAlias: string, LensArn: record, Base64String: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($workload_id | is-empty) { error make --unspanned { msg: "path parameter 'WorkloadId' must be non-empty" } }
+  if ($lens_alias | is-empty) { error make --unspanned { msg: "path parameter 'LensAlias' must be non-empty" } }
   let qp = [(serialize-qp "MilestoneNumber" $milestone_number "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({workload_id: (encode-path-segment $workload_id), lens_alias: (encode-path-segment $lens_alias)} | format pattern "/workloads/{workload_id}/lensReviews/{lens_alias}/report") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"MilestoneNumber": $milestone_number} | compact), body: null}
 }
 
 # Get lens version differences.
@@ -937,13 +987,14 @@ export def "lenses-version-difference get-lens" [
 ]: nothing -> record<LensAlias: string, LensArn: record, BaseLensVersion: record, TargetLensVersion: record, LatestLensVersion: record, VersionDifferences: record<PillarDifferences: record>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($lens_alias | is-empty) { error make --unspanned { msg: "path parameter 'LensAlias' must be non-empty" } }
   let qp = [(serialize-qp "BaseLensVersion" $base_lens_version "scalar") (serialize-qp "TargetLensVersion" $target_lens_version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({lens_alias: (encode-path-segment $lens_alias)} | format pattern "/lenses/{lens_alias}/versionDifference") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"BaseLensVersion": $base_lens_version, "TargetLensVersion": $target_lens_version} | compact), body: null}
 }
 
 # Get a milestone for an existing workload.
@@ -972,12 +1023,14 @@ export def "workloads-milestones get" [
 ]: nothing -> record<WorkloadId: string, Milestone: record<MilestoneNumber: int, MilestoneName: string, RecordedAt: string, Workload: record<WorkloadId: string, WorkloadArn: string, WorkloadName: string, Description: string, Environment: string, UpdatedAt: string, AccountIds: list, AwsRegions: list, NonAwsRegions: list, ArchitecturalDesign: string, ReviewOwner: string, ReviewRestrictionDate: string, IsReviewOwnerUpdateAcknowledged: record, IndustryType: string, Industry: string, Notes: string, ImprovementStatus: string, RiskCounts: record, PillarPriorities: list, Lenses: list, Owner: string, ShareInvitationId: record, Tags: record, DiscoveryConfig: record, Applications: record>>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($workload_id | is-empty) { error make --unspanned { msg: "path parameter 'WorkloadId' must be non-empty" } }
+  if ($milestone_number | is-empty) { error make --unspanned { msg: "path parameter 'MilestoneNumber' must be non-empty" } }
   let full_url = (build-url $base ({workload_id: (encode-path-segment $workload_id), milestone_number: (encode-path-segment $milestone_number)} | format pattern "/workloads/{workload_id}/milestones/{milestone_number}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
 }
 
 # Get an existing workload.
@@ -1005,12 +1058,13 @@ export def "workloads get" [
 ]: nothing -> record<Workload: record<WorkloadId: string, WorkloadArn: string, WorkloadName: string, Description: string, Environment: string, UpdatedAt: string, AccountIds: list<string>, AwsRegions: list<string>, NonAwsRegions: list<string>, ArchitecturalDesign: string, ReviewOwner: string, ReviewRestrictionDate: string, IsReviewOwnerUpdateAcknowledged: record, IndustryType: string, Industry: string, Notes: string, ImprovementStatus: string, RiskCounts: record, PillarPriorities: list<string>, Lenses: list<string>, Owner: string, ShareInvitationId: record, Tags: record, DiscoveryConfig: record<TrustedAdvisorIntegrationStatus: record>, Applications: record>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($workload_id | is-empty) { error make --unspanned { msg: "path parameter 'WorkloadId' must be non-empty" } }
   let full_url = (build-url $base ({workload_id: (encode-path-segment $workload_id)} | format pattern "/workloads/{workload_id}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
 }
 
 # Update an existing workload.
@@ -1056,6 +1110,7 @@ export def "workloads update" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($workload_id | is-empty) { error make --unspanned { msg: "path parameter 'WorkloadId' must be non-empty" } }
   let full_url = (build-url $base ({workload_id: (encode-path-segment $workload_id)} | format pattern "/workloads/{workload_id}"))
   let req_body = {"WorkloadName": $workload_name, "Description": $description, "Environment": $environment, "AccountIds": $account_ids, "AwsRegions": $aws_regions, "NonAwsRegions": $non_aws_regions, "PillarPriorities": $pillar_priorities, "ArchitecturalDesign": $architectural_design, "ReviewOwner": $review_owner, "IsReviewOwnerUpdateAcknowledged": $is_review_owner_update_acknowledged, "IndustryType": $industry_type, "Industry": $industry, "Notes": $notes, "ImprovementStatus": $improvement_status, "DiscoveryConfig": $discovery_config, "Applications": $applications} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
@@ -1063,7 +1118,7 @@ export def "workloads update" [
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "patch" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body
+  do-request "patch" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: {}, body: $req_body}
 }
 
 # Import a new custom lens or update an existing custom lens. To update an existing custom lens, specify its ARN as the LensAlias. If no ARN is specified, a new custom lens is created. The new or updated lens will have a status of DRAFT. The lens cannot be applied to workloads or shared with other Amazon Web Services accounts until it's published with CreateLensVersion. Lenses are defined in JSON. For more information, see JSON format specification (https://docs.aws.amazon.com/wellarchitected/latest/userguide/lenses-format-specification.html) in the Well-Architected Tool User Guide. A custom lens cannot exceed 500 KB in size. Disclaimer Do not include or gather personal identifiable information (PII) of end users or other identifiable individuals in or via your custom lenses. If your custom lens or those shared with you and used in your account do include or collect PII you are responsible for: ensuring that the included PII is processed in accordance with applicable law, providing adequate privacy notices, and obtaining necessary consents for processing such data.
@@ -1102,7 +1157,7 @@ export def "import-lens import" [
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: {}, body: $req_body}
 }
 
 # List of answers for a particular workload and lens.
@@ -1135,13 +1190,15 @@ export def "workloads-lens-reviews-answers list" [
 ]: nothing -> record<WorkloadId: string, MilestoneNumber: int, LensAlias: string, LensArn: record, AnswerSummaries: table<QuestionId: string, PillarId: string, QuestionTitle: string, Choices: list, SelectedChoices: list, ChoiceAnswerSummaries: record, IsApplicable: bool, Risk: string, Reason: record>, NextToken: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($workload_id | is-empty) { error make --unspanned { msg: "path parameter 'WorkloadId' must be non-empty" } }
+  if ($lens_alias | is-empty) { error make --unspanned { msg: "path parameter 'LensAlias' must be non-empty" } }
   let qp = [(serialize-qp "PillarId" $pillar_id "scalar") (serialize-qp "MilestoneNumber" $milestone_number "scalar") (serialize-qp "NextToken" $next_token "scalar") (serialize-qp "MaxResults" $max_results "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({workload_id: (encode-path-segment $workload_id), lens_alias: (encode-path-segment $lens_alias)} | format pattern "/workloads/{workload_id}/lensReviews/{lens_alias}/answers") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"PillarId": $pillar_id, "MilestoneNumber": $milestone_number, "NextToken": $next_token, "MaxResults": $max_results} | compact), body: null}
 }
 
 # List of Trusted Advisor check details by account related to the workload.
@@ -1168,8 +1225,8 @@ export def "workloads-checks list-details" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-  --next-token: string # The token to use to retrieve the next set of results.
-  --max-results: int # The maximum number of results to return for this request.
+  --next-token-body: string # The token to use to retrieve the next set of results. (body field)
+  --max-results-body: int # The maximum number of results to return for this request. (body field)
   lens_arn: string # Well-Architected Lens ARN.
   pillar_id: string # The ID used to identify a pillar, for example, security. A pillar is identified by its PillarReviewSummary$PillarId.
   question_id: string # The ID of the question.
@@ -1178,15 +1235,16 @@ export def "workloads-checks list-details" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($workload_id | is-empty) { error make --unspanned { msg: "path parameter 'WorkloadId' must be non-empty" } }
   let qp = [(serialize-qp "MaxResults" $max_results "scalar") (serialize-qp "NextToken" $next_token "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({workload_id: (encode-path-segment $workload_id)} | format pattern "/workloads/{workload_id}/checks") $qp)
-  let req_body = {"NextToken": $next_token, "MaxResults": $max_results, "LensArn": $lens_arn, "PillarId": $pillar_id, "QuestionId": $question_id, "ChoiceId": $choice_id} | compact
+  let req_body = {"NextToken": $next_token_body, "MaxResults": $max_results_body, "LensArn": $lens_arn, "PillarId": $pillar_id, "QuestionId": $question_id, "ChoiceId": $choice_id} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: ({"MaxResults": $max_results, "NextToken": $next_token} | compact), body: $req_body}
 }
 
 # List of Trusted Advisor checks summarized for all accounts related to the workload.
@@ -1213,8 +1271,8 @@ export def "workloads-check-summaries list" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-  --next-token: string # The token to use to retrieve the next set of results.
-  --max-results: int # The maximum number of results to return for this request.
+  --next-token-body: string # The token to use to retrieve the next set of results. (body field)
+  --max-results-body: int # The maximum number of results to return for this request. (body field)
   lens_arn: string # Well-Architected Lens ARN.
   pillar_id: string # The ID used to identify a pillar, for example, security. A pillar is identified by its PillarReviewSummary$PillarId.
   question_id: string # The ID of the question.
@@ -1223,15 +1281,16 @@ export def "workloads-check-summaries list" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($workload_id | is-empty) { error make --unspanned { msg: "path parameter 'WorkloadId' must be non-empty" } }
   let qp = [(serialize-qp "MaxResults" $max_results "scalar") (serialize-qp "NextToken" $next_token "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({workload_id: (encode-path-segment $workload_id)} | format pattern "/workloads/{workload_id}/checkSummaries") $qp)
-  let req_body = {"NextToken": $next_token, "MaxResults": $max_results, "LensArn": $lens_arn, "PillarId": $pillar_id, "QuestionId": $question_id, "ChoiceId": $choice_id} | compact
+  let req_body = {"NextToken": $next_token_body, "MaxResults": $max_results_body, "LensArn": $lens_arn, "PillarId": $pillar_id, "QuestionId": $question_id, "ChoiceId": $choice_id} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: ({"MaxResults": $max_results, "NextToken": $next_token} | compact), body: $req_body}
 }
 
 # List lens review improvements.
@@ -1264,13 +1323,15 @@ export def "workloads-lens-reviews-improvements list" [
 ]: nothing -> record<WorkloadId: string, MilestoneNumber: int, LensAlias: string, LensArn: record, ImprovementSummaries: table<QuestionId: string, PillarId: string, QuestionTitle: string, Risk: string, ImprovementPlanUrl: string, ImprovementPlans: record>, NextToken: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($workload_id | is-empty) { error make --unspanned { msg: "path parameter 'WorkloadId' must be non-empty" } }
+  if ($lens_alias | is-empty) { error make --unspanned { msg: "path parameter 'LensAlias' must be non-empty" } }
   let qp = [(serialize-qp "PillarId" $pillar_id "scalar") (serialize-qp "MilestoneNumber" $milestone_number "scalar") (serialize-qp "NextToken" $next_token "scalar") (serialize-qp "MaxResults" $max_results "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({workload_id: (encode-path-segment $workload_id), lens_alias: (encode-path-segment $lens_alias)} | format pattern "/workloads/{workload_id}/lensReviews/{lens_alias}/improvements") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"PillarId": $pillar_id, "MilestoneNumber": $milestone_number, "NextToken": $next_token, "MaxResults": $max_results} | compact), body: null}
 }
 
 # List lens reviews for a particular workload.
@@ -1301,13 +1362,14 @@ export def "workloads-lens-reviews list" [
 ]: nothing -> record<WorkloadId: string, MilestoneNumber: int, LensReviewSummaries: table<LensAlias: string, LensArn: record, LensVersion: record, LensName: string, LensStatus: record, UpdatedAt: string, RiskCounts: record>, NextToken: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($workload_id | is-empty) { error make --unspanned { msg: "path parameter 'WorkloadId' must be non-empty" } }
   let qp = [(serialize-qp "MilestoneNumber" $milestone_number "scalar") (serialize-qp "NextToken" $next_token "scalar") (serialize-qp "MaxResults" $max_results "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({workload_id: (encode-path-segment $workload_id)} | format pattern "/workloads/{workload_id}/lensReviews") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"MilestoneNumber": $milestone_number, "NextToken": $next_token, "MaxResults": $max_results} | compact), body: null}
 }
 
 # List the available lenses.
@@ -1345,7 +1407,7 @@ export def "lenses list" [
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"NextToken": $next_token, "MaxResults": $max_results, "LensType": $lens_type, "LensStatus": $lens_status, "LensName": $lens_name} | compact), body: null}
 }
 
 # List all milestones for an existing workload.
@@ -1372,21 +1434,22 @@ export def "workloads-milestones-summaries list" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-  --next-token: string # The token to use to retrieve the next set of results.
-  --max-results: int # The maximum number of results to return for this request.
+  --next-token-body: string # The token to use to retrieve the next set of results. (body field)
+  --max-results-body: int # The maximum number of results to return for this request. (body field)
 ]: any -> record<WorkloadId: string, MilestoneSummaries: table<MilestoneNumber: int, MilestoneName: string, RecordedAt: string, WorkloadSummary: record>, NextToken: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($workload_id | is-empty) { error make --unspanned { msg: "path parameter 'WorkloadId' must be non-empty" } }
   let qp = [(serialize-qp "MaxResults" $max_results "scalar") (serialize-qp "NextToken" $next_token "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({workload_id: (encode-path-segment $workload_id)} | format pattern "/workloads/{workload_id}/milestonesSummaries") $qp)
-  let req_body = {"NextToken": $next_token, "MaxResults": $max_results} | compact
+  let req_body = {"NextToken": $next_token_body, "MaxResults": $max_results_body} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: ({"MaxResults": $max_results, "NextToken": $next_token} | compact), body: $req_body}
 }
 
 # List lens notifications.
@@ -1413,21 +1476,21 @@ export def "notifications list" [
   --x-amz-signature: string
   --x-amz-signed-headers: string
   --workload-id: string # The ID assigned to the workload. This ID is unique within an Amazon Web Services Region.
-  --next-token: string # The token to use to retrieve the next set of results.
-  --max-results: int # The maximum number of results to return for this request.
+  --next-token-body: string # The token to use to retrieve the next set of results. (body field)
+  --max-results-body: int # The maximum number of results to return for this request. (body field)
 ]: any -> record<NotificationSummaries: record, NextToken: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "MaxResults" $max_results "scalar") (serialize-qp "NextToken" $next_token "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/notifications" $qp)
-  let req_body = {"WorkloadId": $workload_id, "NextToken": $next_token, "MaxResults": $max_results} | compact
+  let req_body = {"WorkloadId": $workload_id, "NextToken": $next_token_body, "MaxResults": $max_results_body} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: ({"MaxResults": $max_results, "NextToken": $next_token} | compact), body: $req_body}
 }
 
 # List the workload invitations.
@@ -1465,7 +1528,7 @@ export def "share-invitations list" [
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"WorkloadNamePrefix": $workload_name_prefix, "LensNamePrefix": $lens_name_prefix, "ShareResourceType": $share_resource_type, "NextToken": $next_token, "MaxResults": $max_results} | compact), body: null}
 }
 
 # List the tags for a resource. The WorkloadArn parameter can be either a workload ARN or a custom lens ARN.
@@ -1493,12 +1556,13 @@ export def "tags list-for-resource" [
 ]: nothing -> record<Tags: record> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($workload_arn | is-empty) { error make --unspanned { msg: "path parameter 'WorkloadArn' must be non-empty" } }
   let full_url = (build-url $base ({workload_arn: (encode-path-segment $workload_arn)} | format pattern "/tags/{workload_arn}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
 }
 
 # Adds one or more tags to the specified resource. The WorkloadArn parameter can be either a workload ARN or a custom lens ARN.
@@ -1528,6 +1592,7 @@ export def "tags tag-resource" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($workload_arn | is-empty) { error make --unspanned { msg: "path parameter 'WorkloadArn' must be non-empty" } }
   let full_url = (build-url $base ({workload_arn: (encode-path-segment $workload_arn)} | format pattern "/tags/{workload_arn}"))
   let req_body = {"Tags": $tags} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
@@ -1535,7 +1600,7 @@ export def "tags tag-resource" [
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: {}, body: $req_body}
 }
 
 # Paginated list of workloads.
@@ -1562,26 +1627,26 @@ export def "workloads-summaries list" [
   --x-amz-signature: string
   --x-amz-signed-headers: string
   --workload-name-prefix: string # An optional string added to the beginning of each workload name returned in the results.
-  --next-token: string # The token to use to retrieve the next set of results.
-  --max-results: int # The maximum number of results to return for this request.
+  --next-token-body: string # The token to use to retrieve the next set of results. (body field)
+  --max-results-body: int # The maximum number of results to return for this request. (body field)
 ]: any -> record<WorkloadSummaries: table<WorkloadId: string, WorkloadArn: string, WorkloadName: string, Owner: string, UpdatedAt: string, Lenses: list, RiskCounts: record, ImprovementStatus: string>, NextToken: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "MaxResults" $max_results "scalar") (serialize-qp "NextToken" $next_token "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/workloadsSummaries" $qp)
-  let req_body = {"WorkloadNamePrefix": $workload_name_prefix, "NextToken": $next_token, "MaxResults": $max_results} | compact
+  let req_body = {"WorkloadNamePrefix": $workload_name_prefix, "NextToken": $next_token_body, "MaxResults": $max_results_body} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: ({"MaxResults": $max_results, "NextToken": $next_token} | compact), body: $req_body}
 }
 
 # Deletes specified tags from a resource. The WorkloadArn parameter can be either a workload ARN or a custom lens ARN. To specify multiple tags, use separate tagKeys parameters, for example: DELETE /tags/WorkloadArn?tagKeys=key1&tagKeys=key2
 #
-# DELETE /tags/{WorkloadArn}#tagKeys
+# DELETE /tags/{WorkloadArn}
 # operationId: UntagResource
 export def "tags untag-resource" [
   workload_arn: string
@@ -1605,13 +1670,14 @@ export def "tags untag-resource" [
 ]: nothing -> record {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($workload_arn | is-empty) { error make --unspanned { msg: "path parameter 'WorkloadArn' must be non-empty" } }
   let qp = [(serialize-qp "tagKeys" $tag_keys "multi")] | flatten | str join "&"
-  let full_url = (build-url $base ({workload_arn: (encode-path-segment $workload_arn)} | format pattern "/tags/{workload_arn}#tagKeys") $qp)
+  let full_url = (build-url $base ({workload_arn: (encode-path-segment $workload_arn)} | format pattern "/tags/{workload_arn}") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"tagKeys": $tag_keys} | compact), body: null}
 }
 
 # Updates whether the Amazon Web Services account is opted into organization sharing features.
@@ -1647,7 +1713,7 @@ export def "global-settings update" [
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "patch" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body
+  do-request "patch" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: {}, body: $req_body}
 }
 
 # Update a workload or custom lens share invitation. This API operation can be called independently of any resource. Previous documentation implied that a workload ARN must be specified.
@@ -1677,6 +1743,7 @@ export def "share-invitations update" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($share_invitation_id | is-empty) { error make --unspanned { msg: "path parameter 'ShareInvitationId' must be non-empty" } }
   let full_url = (build-url $base ({share_invitation_id: (encode-path-segment $share_invitation_id)} | format pattern "/shareInvitations/{share_invitation_id}"))
   let req_body = {"ShareInvitationAction": $share_invitation_action} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
@@ -1684,7 +1751,7 @@ export def "share-invitations update" [
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "patch" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body
+  do-request "patch" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: {}, body: $req_body}
 }
 
 # Update a workload share.
@@ -1715,6 +1782,8 @@ export def "workloads-shares update" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($workload_id | is-empty) { error make --unspanned { msg: "path parameter 'WorkloadId' must be non-empty" } }
+  if ($share_id | is-empty) { error make --unspanned { msg: "path parameter 'ShareId' must be non-empty" } }
   let full_url = (build-url $base ({workload_id: (encode-path-segment $workload_id), share_id: (encode-path-segment $share_id)} | format pattern "/workloads/{workload_id}/shares/{share_id}"))
   let req_body = {"PermissionType": $permission_type} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
@@ -1722,7 +1791,7 @@ export def "workloads-shares update" [
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "patch" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body
+  do-request "patch" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: {}, body: $req_body}
 }
 
 # Upgrade lens review for a particular workload.
@@ -1754,6 +1823,8 @@ export def "workloads-lens-reviews-upgrade update" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($workload_id | is-empty) { error make --unspanned { msg: "path parameter 'WorkloadId' must be non-empty" } }
+  if ($lens_alias | is-empty) { error make --unspanned { msg: "path parameter 'LensAlias' must be non-empty" } }
   let full_url = (build-url $base ({workload_id: (encode-path-segment $workload_id), lens_alias: (encode-path-segment $lens_alias)} | format pattern "/workloads/{workload_id}/lensReviews/{lens_alias}/upgrade"))
   let req_body = {"MilestoneName": $milestone_name, "ClientRequestToken": $client_request_token} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
@@ -1761,5 +1832,5 @@ export def "workloads-lens-reviews-upgrade update" [
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: {}, body: $req_body}
 }

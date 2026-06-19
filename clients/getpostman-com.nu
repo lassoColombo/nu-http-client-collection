@@ -3,16 +3,17 @@
 # Auth: --token flag or $env.POSTMAN_API_TOKEN
 
 const BASE_URL = "https://api.getpostman.com"
-const DEFAULT_AUTH = "bearer"
 
-# Build auth: returns {headers: record, query: string}
+# Build auth: returns {scheme: string, headers: record, query: string, location: string}.
+# `location` is "header" | "query" | "cookie" | "none" and tells dry-run callers
+# where the token went without inspecting headers/query themselves.
 def build-auth [token?: string, auth_scheme?: string]: nothing -> record {
   let token_val = if ($token != null) and ($token | is-not-empty) { $token } else { $env | get -o POSTMAN_API_TOKEN | default "" }
   let scheme = ($auth_scheme | default "bearer")
-  if ($scheme == "none") or ($token_val | is-empty) { return {headers: {}, query: ""} }
+  if ($scheme == "none") or ($token_val | is-empty) { return {scheme: $scheme, headers: {}, query: "", location: "none"} }
   match $scheme {
-    "none" => { {headers: {}, query: ""} }
-    _ => { {headers: {Authorization: $"Bearer ($token_val)"}, query: ""} }
+    "none" => { {scheme: $scheme, headers: {}, query: "", location: "none"} }
+    _ => { {scheme: $scheme, headers: {Authorization: $"Bearer ($token_val)"}, query: "", location: "header"} }
   }
 }
 
@@ -21,8 +22,9 @@ def build-auth [token?: string, auth_scheme?: string]: nothing -> record {
 # ([A-Za-z0-9-._~]) stay literal; everything else gets %XX.
 def serialize-qp [name: string, value: any, style: string]: nothing -> list<string> {
   if ($value == null) { return [] }
-  let n = (encode-path-segment $name)
   let is_list = ($value | describe | str starts-with "list")
+  if $is_list and ($value | is-empty) { return [] }
+  let n = (encode-path-segment $name)
   if ($value | describe | str starts-with "record") { return ($value | transpose k v | each { $"($n)[(encode-path-segment $in.k)]=(encode-path-segment $in.v)" }) }
   if not $is_list { return [$"($n)=(encode-path-segment $value)"] }
   match $style {
@@ -53,22 +55,42 @@ def build-url [base: string, path: string, query?: string]: nothing -> string {
   if ($query != null) and ($query | is-not-empty) { $result | upsert query $query | url join } else { $result | url join }
 }
 
+# Build the dry-run record returned by --dry-run. Shape:
+#   {dry_run: true, method, url, query: <record>, headers, body, content_type, timeout,
+#    auth: {scheme, location}}
+# `meta` carries logical-form data (the query record by spec name, the pre-serialization
+# body) that do-request itself cannot reconstruct from its wire-format args.
+def build-dry-run-record [method: string, url: string, auth: record, content_type: string, timeout: duration, meta?: record]: nothing -> record {
+  let m = ($meta | default {})
+  {
+    dry_run: true
+    method: $method
+    url: $url
+    query: ($m | get -o query | default {})
+    headers: $auth.headers
+    body: ($m | get -o body)
+    content_type: $content_type
+    timeout: $timeout
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+}
+
 # Execute HTTP request with method dispatch
-def do-request [method: string, url: string, auth: record, insecure: bool, raw: bool, dry_run: bool, max_time?: duration, allow_errors?: bool, full?: bool, content_type?: string, body?: any]: nothing -> any {
+def do-request [method: string, url: string, auth: record, insecure: bool, raw: bool, dry_run: bool, max_time?: duration, allow_errors?: bool, full?: bool, content_type?: string, body?: any, dry_run_meta?: record]: nothing -> any {
   let req_url = if ($auth.query | is-not-empty) { if ($url | str contains "?") { $"($url)&($auth.query)" } else { $"($url)?($auth.query)" } } else { $url }
   let timeout = ($max_time | default 30min)
   let ct = ($content_type | default "application/json")
-  if $dry_run { return {method: $method, url: $req_url, headers: $auth.headers, query_string: $auth.query, content_type: $ct, timeout: $timeout, body: $body} }
+  if $dry_run { return (build-dry-run-record $method $req_url $auth $ct $timeout $dry_run_meta) }
   let resp = match $method {
     "get" => { http get --headers $auth.headers --full --allow-errors --max-time $timeout --insecure=$insecure --raw=$raw $req_url }
-    "head" => { http head --headers $auth.headers --max-time $timeout --insecure=$insecure $req_url }
-    "options" => { http options --headers $auth.headers --max-time $timeout --insecure=$insecure $req_url }
+    "head" => { http head --headers $auth.headers --full --allow-errors --max-time $timeout --insecure=$insecure $req_url }
+    "options" => { http options --headers $auth.headers --full --allow-errors --max-time $timeout --insecure=$insecure $req_url }
     "post" => { if ($body | is-empty) { http post --headers $auth.headers --full --allow-errors --max-time $timeout --insecure=$insecure --raw=$raw $req_url "" } else { http post --headers $auth.headers --content-type $ct --full --allow-errors --max-time $timeout --insecure=$insecure --raw=$raw $req_url $body } }
     "put" => { if ($body | is-empty) { http put --headers $auth.headers --full --allow-errors --max-time $timeout --insecure=$insecure --raw=$raw $req_url "" } else { http put --headers $auth.headers --content-type $ct --full --allow-errors --max-time $timeout --insecure=$insecure --raw=$raw $req_url $body } }
     "patch" => { if ($body | is-empty) { http patch --headers $auth.headers --full --allow-errors --max-time $timeout --insecure=$insecure --raw=$raw $req_url "" } else { http patch --headers $auth.headers --content-type $ct --full --allow-errors --max-time $timeout --insecure=$insecure --raw=$raw $req_url $body } }
     "delete" => { if ($body | is-empty) { http delete --headers $auth.headers --full --allow-errors --max-time $timeout --insecure=$insecure --raw=$raw $req_url } else { http delete --headers $auth.headers --content-type $ct --data $body --full --allow-errors --max-time $timeout --insecure=$insecure --raw=$raw $req_url } }
   }
-  if ($method in ["head" "options"]) { return $resp }
+  if ($method == "head") and (not $full) and (not $allow_errors) and $resp.status < 400 { return $resp.headers }
   if $allow_errors { $resp } else if $resp.status >= 400 { error make --unspanned { msg: $"HTTP ($resp.status): ($resp.body)" } } else if $full { {status: $resp.status, headers: $resp.headers, body: $resp.body} } else if $resp.status == 204 { null } else { $resp.body }
 }
 
@@ -131,7 +153,7 @@ export def "apis get-list-ap-is" [
   let full_url = (build-url $base "/apis" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"workspace": $workspace, "since": $since, "until": $until, "createdBy": $created_by, "updatedBy": $updated_by, "isPublic": $is_public, "name": $name, "summary": $summary, "description": $description, "sort": $qp_sort, "direction": $direction} | compact), body: null}
 }
 
 # Create API
@@ -161,7 +183,7 @@ export def "apis create" [
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: ({"workspace": $workspace} | compact), body: $req_body}
 }
 
 # Delete an API
@@ -182,10 +204,11 @@ export def "apis delete" [
 ]: nothing -> record<api: record<id: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($api_id | is-empty) { error make --unspanned { msg: "path parameter 'apiId' must be non-empty" } }
   let full_url = (build-url $base ({api_id: (encode-path-segment $api_id)} | format pattern "/apis/{api_id}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
 }
 
 # Single API
@@ -206,10 +229,11 @@ export def "apis get-single" [
 ]: nothing -> record<api: record<createdAt: string, createdBy: string, description: string, id: string, name: string, summary: string, updatedAt: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($api_id | is-empty) { error make --unspanned { msg: "path parameter 'apiId' must be non-empty" } }
   let full_url = (build-url $base ({api_id: (encode-path-segment $api_id)} | format pattern "/apis/{api_id}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
 }
 
 # Update an API
@@ -233,12 +257,13 @@ export def "apis update" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($api_id | is-empty) { error make --unspanned { msg: "path parameter 'apiId' must be non-empty" } }
   let full_url = (build-url $base ({api_id: (encode-path-segment $api_id)} | format pattern "/apis/{api_id}"))
   let req_body = {"api": $api} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: {}, body: $req_body}
 }
 
 # Get All API Versions
@@ -259,10 +284,11 @@ export def "apis-versions get-list" [
 ]: nothing -> record<versions: table<createdAt: string, createdBy: string, description: string, id: string, name: string, summary: string, updatedAt: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($api_id | is-empty) { error make --unspanned { msg: "path parameter 'apiId' must be non-empty" } }
   let full_url = (build-url $base ({api_id: (encode-path-segment $api_id)} | format pattern "/apis/{api_id}/versions"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
 }
 
 # Create API Version
@@ -286,12 +312,13 @@ export def "apis-versions create" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($api_id | is-empty) { error make --unspanned { msg: "path parameter 'apiId' must be non-empty" } }
   let full_url = (build-url $base ({api_id: (encode-path-segment $api_id)} | format pattern "/apis/{api_id}/versions"))
   let req_body = {"version": $version} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: {}, body: $req_body}
 }
 
 # Delete an API Version
@@ -313,10 +340,12 @@ export def "apis-versions delete" [
 ]: nothing -> record<version: record<id: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($api_id | is-empty) { error make --unspanned { msg: "path parameter 'apiId' must be non-empty" } }
+  if ($api_version_id | is-empty) { error make --unspanned { msg: "path parameter 'apiVersionId' must be non-empty" } }
   let full_url = (build-url $base ({api_id: (encode-path-segment $api_id), api_version_id: (encode-path-segment $api_version_id)} | format pattern "/apis/{api_id}/versions/{api_version_id}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
 }
 
 # Get an API Version
@@ -338,10 +367,12 @@ export def "apis-versions get" [
 ]: nothing -> record<version: record<api: string, createdAt: string, createdBy: string, id: string, name: string, schema: list<string>, updatedAt: string, updatedBy: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($api_id | is-empty) { error make --unspanned { msg: "path parameter 'apiId' must be non-empty" } }
+  if ($api_version_id | is-empty) { error make --unspanned { msg: "path parameter 'apiVersionId' must be non-empty" } }
   let full_url = (build-url $base ({api_id: (encode-path-segment $api_id), api_version_id: (encode-path-segment $api_version_id)} | format pattern "/apis/{api_id}/versions/{api_version_id}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
 }
 
 # Update an API Version
@@ -366,12 +397,14 @@ export def "apis-versions update" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($api_id | is-empty) { error make --unspanned { msg: "path parameter 'apiId' must be non-empty" } }
+  if ($api_version_id | is-empty) { error make --unspanned { msg: "path parameter 'apiVersionId' must be non-empty" } }
   let full_url = (build-url $base ({api_id: (encode-path-segment $api_id), api_version_id: (encode-path-segment $api_version_id)} | format pattern "/apis/{api_id}/versions/{api_version_id}"))
   let req_body = {"version": $version} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: {}, body: $req_body}
 }
 
 # Get contract test relations
@@ -393,10 +426,12 @@ export def "apis-versions-contracttest get-contract-test-relations" [
 ]: nothing -> record<contracttest: table<collectionId: string, id: string, name: string, updatedAt: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($api_id | is-empty) { error make --unspanned { msg: "path parameter 'apiId' must be non-empty" } }
+  if ($api_version_id | is-empty) { error make --unspanned { msg: "path parameter 'apiVersionId' must be non-empty" } }
   let full_url = (build-url $base ({api_id: (encode-path-segment $api_id), api_version_id: (encode-path-segment $api_version_id)} | format pattern "/apis/{api_id}/versions/{api_version_id}/contracttest"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
 }
 
 # Get documentation relations
@@ -418,10 +453,12 @@ export def "apis-versions-documentation get-relations" [
 ]: nothing -> record<documentation: table<collectionId: string, id: string, name: string, updatedAt: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($api_id | is-empty) { error make --unspanned { msg: "path parameter 'apiId' must be non-empty" } }
+  if ($api_version_id | is-empty) { error make --unspanned { msg: "path parameter 'apiVersionId' must be non-empty" } }
   let full_url = (build-url $base ({api_id: (encode-path-segment $api_id), api_version_id: (encode-path-segment $api_version_id)} | format pattern "/apis/{api_id}/versions/{api_version_id}/documentation"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
 }
 
 # Get environment relations
@@ -443,10 +480,12 @@ export def "apis-versions-environment get-relations" [
 ]: nothing -> record<environment: table<id: string, name: string, updatedAt: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($api_id | is-empty) { error make --unspanned { msg: "path parameter 'apiId' must be non-empty" } }
+  if ($api_version_id | is-empty) { error make --unspanned { msg: "path parameter 'apiVersionId' must be non-empty" } }
   let full_url = (build-url $base ({api_id: (encode-path-segment $api_id), api_version_id: (encode-path-segment $api_version_id)} | format pattern "/apis/{api_id}/versions/{api_version_id}/environment"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
 }
 
 # Get integration test relations
@@ -468,10 +507,12 @@ export def "apis-versions-integrationtest get-integration-test-relations" [
 ]: nothing -> record<integrationtest: table<collectionId: string, id: string, name: string, updatedAt: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($api_id | is-empty) { error make --unspanned { msg: "path parameter 'apiId' must be non-empty" } }
+  if ($api_version_id | is-empty) { error make --unspanned { msg: "path parameter 'apiVersionId' must be non-empty" } }
   let full_url = (build-url $base ({api_id: (encode-path-segment $api_id), api_version_id: (encode-path-segment $api_version_id)} | format pattern "/apis/{api_id}/versions/{api_version_id}/integrationtest"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
 }
 
 # Get monitor relations
@@ -493,10 +534,12 @@ export def "apis-versions-monitor get-relations" [
 ]: nothing -> record<monitor: table<id: string, monitorId: string, name: string, updatedAt: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($api_id | is-empty) { error make --unspanned { msg: "path parameter 'apiId' must be non-empty" } }
+  if ($api_version_id | is-empty) { error make --unspanned { msg: "path parameter 'apiVersionId' must be non-empty" } }
   let full_url = (build-url $base ({api_id: (encode-path-segment $api_id), api_version_id: (encode-path-segment $api_version_id)} | format pattern "/apis/{api_id}/versions/{api_version_id}/monitor"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
 }
 
 # Get linked relations
@@ -518,10 +561,12 @@ export def "apis-versions-relations get-linked" [
 ]: nothing -> record<relations: record<contracttest: record<2a9b8fa8_88b7_4b86_8372_8e3f6f6e07f2: record>, integrationtest: record<521b0486_ab91_4d3a_9189_43c9380a0533: record, a236b715_e682_460b_97b6_c1db24f7612e: record>, mock: record<4ccd755f_2c80_481b_a262_49b55e12f5e1: record>>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($api_id | is-empty) { error make --unspanned { msg: "path parameter 'apiId' must be non-empty" } }
+  if ($api_version_id | is-empty) { error make --unspanned { msg: "path parameter 'apiVersionId' must be non-empty" } }
   let full_url = (build-url $base ({api_id: (encode-path-segment $api_id), api_version_id: (encode-path-segment $api_version_id)} | format pattern "/apis/{api_id}/versions/{api_version_id}/relations"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
 }
 
 # Create relations
@@ -548,12 +593,14 @@ export def "apis-versions-relations create" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($api_id | is-empty) { error make --unspanned { msg: "path parameter 'apiId' must be non-empty" } }
+  if ($api_version_id | is-empty) { error make --unspanned { msg: "path parameter 'apiVersionId' must be non-empty" } }
   let full_url = (build-url $base ({api_id: (encode-path-segment $api_id), api_version_id: (encode-path-segment $api_version_id)} | format pattern "/apis/{api_id}/versions/{api_version_id}/relations"))
   let req_body = {"contracttest": $contracttest, "documentation": $documentation, "mock": $mock, "testsuite": $testsuite} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: {}, body: $req_body}
 }
 
 # Create Schema
@@ -578,12 +625,14 @@ export def "apis-versions-schemas create" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($api_id | is-empty) { error make --unspanned { msg: "path parameter 'apiId' must be non-empty" } }
+  if ($api_version_id | is-empty) { error make --unspanned { msg: "path parameter 'apiVersionId' must be non-empty" } }
   let full_url = (build-url $base ({api_id: (encode-path-segment $api_id), api_version_id: (encode-path-segment $api_version_id)} | format pattern "/apis/{api_id}/versions/{api_version_id}/schemas"))
   let req_body = {"schema": $schema} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: {}, body: $req_body}
 }
 
 # Get Schema
@@ -606,10 +655,13 @@ export def "apis-versions-schemas get" [
 ]: nothing -> record<schema: record<apiVersion: string, createdAt: string, createdBy: string, id: string, language: string, type: string, updateBy: string, updatedAt: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($api_id | is-empty) { error make --unspanned { msg: "path parameter 'apiId' must be non-empty" } }
+  if ($api_version_id | is-empty) { error make --unspanned { msg: "path parameter 'apiVersionId' must be non-empty" } }
+  if ($schema_id | is-empty) { error make --unspanned { msg: "path parameter 'schemaId' must be non-empty" } }
   let full_url = (build-url $base ({api_id: (encode-path-segment $api_id), api_version_id: (encode-path-segment $api_version_id), schema_id: (encode-path-segment $schema_id)} | format pattern "/apis/{api_id}/versions/{api_version_id}/schemas/{schema_id}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
 }
 
 # Update Schema
@@ -635,12 +687,15 @@ export def "apis-versions-schemas update" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($api_id | is-empty) { error make --unspanned { msg: "path parameter 'apiId' must be non-empty" } }
+  if ($api_version_id | is-empty) { error make --unspanned { msg: "path parameter 'apiVersionId' must be non-empty" } }
+  if ($schema_id | is-empty) { error make --unspanned { msg: "path parameter 'schemaId' must be non-empty" } }
   let full_url = (build-url $base ({api_id: (encode-path-segment $api_id), api_version_id: (encode-path-segment $api_version_id), schema_id: (encode-path-segment $schema_id)} | format pattern "/apis/{api_id}/versions/{api_version_id}/schemas/{schema_id}"))
   let req_body = {"schema": $schema} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: {}, body: $req_body}
 }
 
 # Create collection from schema
@@ -668,13 +723,16 @@ export def "apis-versions-schemas-collections create" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($api_id | is-empty) { error make --unspanned { msg: "path parameter 'apiId' must be non-empty" } }
+  if ($api_version_id | is-empty) { error make --unspanned { msg: "path parameter 'apiVersionId' must be non-empty" } }
+  if ($schema_id | is-empty) { error make --unspanned { msg: "path parameter 'schemaId' must be non-empty" } }
   let qp = [(serialize-qp "workspace" $workspace "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({api_id: (encode-path-segment $api_id), api_version_id: (encode-path-segment $api_version_id), schema_id: (encode-path-segment $schema_id)} | format pattern "/apis/{api_id}/versions/{api_version_id}/schemas/{schema_id}/collections") $qp)
   let req_body = {"name": $name, "relations": $relations} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: ({"workspace": $workspace} | compact), body: $req_body}
 }
 
 # Get test suite relations
@@ -696,10 +754,12 @@ export def "apis-versions-testsuite get-test-suite-relations" [
 ]: nothing -> record<testsuite: table<collectionId: string, id: string, name: string, updatedAt: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($api_id | is-empty) { error make --unspanned { msg: "path parameter 'apiId' must be non-empty" } }
+  if ($api_version_id | is-empty) { error make --unspanned { msg: "path parameter 'apiVersionId' must be non-empty" } }
   let full_url = (build-url $base ({api_id: (encode-path-segment $api_id), api_version_id: (encode-path-segment $api_version_id)} | format pattern "/apis/{api_id}/versions/{api_version_id}/testsuite"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
 }
 
 # Sync relations with schema
@@ -723,10 +783,14 @@ export def "apis-versions-sync-with-schema sync-relations" [
 ]: nothing -> record<success: bool> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($api_id | is-empty) { error make --unspanned { msg: "path parameter 'apiId' must be non-empty" } }
+  if ($api_version_id | is-empty) { error make --unspanned { msg: "path parameter 'apiVersionId' must be non-empty" } }
+  if ($entity_type | is-empty) { error make --unspanned { msg: "path parameter 'entityType' must be non-empty" } }
+  if ($entity_id | is-empty) { error make --unspanned { msg: "path parameter 'entityId' must be non-empty" } }
   let full_url = (build-url $base ({api_id: (encode-path-segment $api_id), api_version_id: (encode-path-segment $api_version_id), entity_type: (encode-path-segment $entity_type), entity_id: (encode-path-segment $entity_id)} | format pattern "/apis/{api_id}/versions/{api_version_id}/{entity_type}/{entity_id}/syncWithSchema"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
 }
 
 # All Collections
@@ -749,7 +813,7 @@ export def "collections list" [
   let full_url = (build-url $base "/collections")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
 }
 
 # Create Collection
@@ -777,7 +841,7 @@ export def "collections create" [
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: {}, body: $req_body}
 }
 
 # Create a Fork
@@ -801,13 +865,14 @@ export def "collections-fork create" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($collection_uid | is-empty) { error make --unspanned { msg: "path parameter 'collection_uid' must be non-empty" } }
   let qp = [(serialize-qp "workspace" $workspace "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({collection_uid: (encode-path-segment $collection_uid)} | format pattern "/collections/fork/{collection_uid}") $qp)
   let req_body = {"name": $name} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: ({"workspace": $workspace} | compact), body: $req_body}
 }
 
 # Merge a Fork
@@ -836,7 +901,7 @@ export def "collections-merge create-fork" [
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: {}, body: $req_body}
 }
 
 # Delete Collection
@@ -857,10 +922,11 @@ export def "collections delete" [
 ]: nothing -> record<collection: record<id: string, uid: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($collection_uid | is-empty) { error make --unspanned { msg: "path parameter 'collection_uid' must be non-empty" } }
   let full_url = (build-url $base ({collection_uid: (encode-path-segment $collection_uid)} | format pattern "/collections/{collection_uid}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
 }
 
 # Single Collection
@@ -881,10 +947,11 @@ export def "collections get-single" [
 ]: nothing -> record<collection: record<info: record<_postman_id: string, description: string, name: string, schema: string>, item: list<record>, variables: list<any>>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($collection_uid | is-empty) { error make --unspanned { msg: "path parameter 'collection_uid' must be non-empty" } }
   let full_url = (build-url $base ({collection_uid: (encode-path-segment $collection_uid)} | format pattern "/collections/{collection_uid}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
 }
 
 # Update Collection
@@ -908,12 +975,13 @@ export def "collections update" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($collection_uid | is-empty) { error make --unspanned { msg: "path parameter 'collection_uid' must be non-empty" } }
   let full_url = (build-url $base ({collection_uid: (encode-path-segment $collection_uid)} | format pattern "/collections/{collection_uid}"))
   let req_body = {"collection": $collection} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: {}, body: $req_body}
 }
 
 # All Environments
@@ -936,7 +1004,7 @@ export def "environments list" [
   let full_url = (build-url $base "/environments")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
 }
 
 # Create Environment
@@ -964,7 +1032,7 @@ export def "environments create" [
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: {}, body: $req_body}
 }
 
 # Delete Environment
@@ -985,10 +1053,11 @@ export def "environments delete" [
 ]: nothing -> record<environment: record<id: string, uid: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($environment_uid | is-empty) { error make --unspanned { msg: "path parameter 'environment_uid' must be non-empty" } }
   let full_url = (build-url $base ({environment_uid: (encode-path-segment $environment_uid)} | format pattern "/environments/{environment_uid}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
 }
 
 # Single Environment
@@ -1009,10 +1078,11 @@ export def "environments get-single" [
 ]: nothing -> record<environment: record<id: string, name: string, values: list<record>>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($environment_uid | is-empty) { error make --unspanned { msg: "path parameter 'environment_uid' must be non-empty" } }
   let full_url = (build-url $base ({environment_uid: (encode-path-segment $environment_uid)} | format pattern "/environments/{environment_uid}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
 }
 
 # Update Environment
@@ -1036,12 +1106,13 @@ export def "environments update" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($environment_uid | is-empty) { error make --unspanned { msg: "path parameter 'environment_uid' must be non-empty" } }
   let full_url = (build-url $base ({environment_uid: (encode-path-segment $environment_uid)} | format pattern "/environments/{environment_uid}"))
   let req_body = {"environment": $environment} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: {}, body: $req_body}
 }
 
 # Import exported data
@@ -1068,7 +1139,7 @@ export def "import-exported import-data" [
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else if (($input | is-not-empty) and ($req_body | is-empty)) { $input } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/octet-stream" $req_body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/octet-stream" $req_body {query: {}, body: $req_body}
 }
 
 # Import external API specification
@@ -1097,7 +1168,7 @@ export def "import-openapi import-external-specification" [
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: {}, body: $req_body}
 }
 
 # API Key Owner
@@ -1120,7 +1191,7 @@ export def "me get-key-owner" [
   let full_url = (build-url $base "/me")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
 }
 
 # All Mocks
@@ -1143,7 +1214,7 @@ export def "mocks list" [
   let full_url = (build-url $base "/mocks")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
 }
 
 # Create Mock
@@ -1171,7 +1242,7 @@ export def "mocks create" [
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: {}, body: $req_body}
 }
 
 # Delete Mock
@@ -1192,10 +1263,11 @@ export def "mocks delete" [
 ]: nothing -> record<mock: record<id: string, uid: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($mock_uid | is-empty) { error make --unspanned { msg: "path parameter 'mock_uid' must be non-empty" } }
   let full_url = (build-url $base ({mock_uid: (encode-path-segment $mock_uid)} | format pattern "/mocks/{mock_uid}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
 }
 
 # Single Mock
@@ -1216,10 +1288,11 @@ export def "mocks get-single" [
 ]: nothing -> record<mock: record<collection: string, environment: string, id: string, mockUrl: string, owner: string, uid: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($mock_uid | is-empty) { error make --unspanned { msg: "path parameter 'mock_uid' must be non-empty" } }
   let full_url = (build-url $base ({mock_uid: (encode-path-segment $mock_uid)} | format pattern "/mocks/{mock_uid}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
 }
 
 # Update Mock
@@ -1243,12 +1316,13 @@ export def "mocks update" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($mock_uid | is-empty) { error make --unspanned { msg: "path parameter 'mock_uid' must be non-empty" } }
   let full_url = (build-url $base ({mock_uid: (encode-path-segment $mock_uid)} | format pattern "/mocks/{mock_uid}"))
   let req_body = {"mock": $mock} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: {}, body: $req_body}
 }
 
 # Publish Mock
@@ -1269,10 +1343,11 @@ export def "mocks-publish publish" [
 ]: nothing -> record<mock: record<id: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($mock_uid | is-empty) { error make --unspanned { msg: "path parameter 'mock_uid' must be non-empty" } }
   let full_url = (build-url $base ({mock_uid: (encode-path-segment $mock_uid)} | format pattern "/mocks/{mock_uid}/publish"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
 }
 
 # Unpublish Mock
@@ -1293,10 +1368,11 @@ export def "mocks-unpublish delete" [
 ]: nothing -> record<mock: record<id: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($mock_uid | is-empty) { error make --unspanned { msg: "path parameter 'mock_uid' must be non-empty" } }
   let full_url = (build-url $base ({mock_uid: (encode-path-segment $mock_uid)} | format pattern "/mocks/{mock_uid}/unpublish"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
 }
 
 # All Monitors
@@ -1319,7 +1395,7 @@ export def "monitors list" [
   let full_url = (build-url $base "/monitors")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
 }
 
 # Create Monitor
@@ -1347,7 +1423,7 @@ export def "monitors create" [
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: {}, body: $req_body}
 }
 
 # Delete Monitor
@@ -1368,10 +1444,11 @@ export def "monitors delete" [
 ]: nothing -> record<monitor: record<id: string, uid: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($monitor_uid | is-empty) { error make --unspanned { msg: "path parameter 'monitor_uid' must be non-empty" } }
   let full_url = (build-url $base ({monitor_uid: (encode-path-segment $monitor_uid)} | format pattern "/monitors/{monitor_uid}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
 }
 
 # Single Monitor
@@ -1392,10 +1469,11 @@ export def "monitors get-single" [
 ]: nothing -> record<monitor: record<collectionUid: string, distribution: list<any>, environmentUid: string, id: string, lastRun: record<finishedAt: string, startedAt: string, stats: record, status: string>, name: string, notifications: record<onError: list, onFailure: list>, options: record<followRedirects: bool, requestDelay: float, requestTimeout: float, strictSSL: bool>, owner: string, schedule: record<cron: string, nextRun: string, timezone: string>, uid: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($monitor_uid | is-empty) { error make --unspanned { msg: "path parameter 'monitor_uid' must be non-empty" } }
   let full_url = (build-url $base ({monitor_uid: (encode-path-segment $monitor_uid)} | format pattern "/monitors/{monitor_uid}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
 }
 
 # Update Monitor
@@ -1419,12 +1497,13 @@ export def "monitors update" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($monitor_uid | is-empty) { error make --unspanned { msg: "path parameter 'monitor_uid' must be non-empty" } }
   let full_url = (build-url $base ({monitor_uid: (encode-path-segment $monitor_uid)} | format pattern "/monitors/{monitor_uid}"))
   let req_body = {"monitor": $monitor} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: {}, body: $req_body}
 }
 
 # Run a Monitor
@@ -1445,10 +1524,11 @@ export def "monitors-run create" [
 ]: nothing -> record<run: record<executions: list<record>, failures: list<record>, info: record<collectionUid: string, finishedAt: string, jobId: string, monitorId: string, name: string, startedAt: string, status: string>, stats: record<assertions: record, requests: record>>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($monitor_uid | is-empty) { error make --unspanned { msg: "path parameter 'monitor_uid' must be non-empty" } }
   let full_url = (build-url $base ({monitor_uid: (encode-path-segment $monitor_uid)} | format pattern "/monitors/{monitor_uid}/run"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
 }
 
 # Create Webhook
@@ -1478,7 +1558,7 @@ export def "webhooks create" [
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: ({"workspace": $workspace} | compact), body: $req_body}
 }
 
 # All workspaces
@@ -1501,7 +1581,7 @@ export def "workspaces list" [
   let full_url = (build-url $base "/workspaces")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
 }
 
 # Create Workspace
@@ -1529,7 +1609,7 @@ export def "workspaces create" [
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: {}, body: $req_body}
 }
 
 # Delete Workspace
@@ -1550,10 +1630,11 @@ export def "workspaces delete" [
 ]: nothing -> record<workspace: record<id: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($workspace_id | is-empty) { error make --unspanned { msg: "path parameter 'workspace_id' must be non-empty" } }
   let full_url = (build-url $base ({workspace_id: (encode-path-segment $workspace_id)} | format pattern "/workspaces/{workspace_id}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
 }
 
 # Single workspace
@@ -1574,10 +1655,11 @@ export def "workspaces get-single" [
 ]: nothing -> record<workspace: record<collections: list<record>, description: string, environments: list<record>, id: string, name: string, type: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($workspace_id | is-empty) { error make --unspanned { msg: "path parameter 'workspace_id' must be non-empty" } }
   let full_url = (build-url $base ({workspace_id: (encode-path-segment $workspace_id)} | format pattern "/workspaces/{workspace_id}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
 }
 
 # Update Workspace
@@ -1601,10 +1683,11 @@ export def "workspaces update" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($workspace_id | is-empty) { error make --unspanned { msg: "path parameter 'workspace_id' must be non-empty" } }
   let full_url = (build-url $base ({workspace_id: (encode-path-segment $workspace_id)} | format pattern "/workspaces/{workspace_id}"))
   let req_body = {"workspace": $workspace} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: {}, body: $req_body}
 }

@@ -3,17 +3,18 @@
 # Auth: --token flag or $env._TOKEN
 
 const BASE_URL = "https://app.drchrono.com"
-const DEFAULT_AUTH = "bearer"
 
-# Build auth: returns {headers: record, query: string}
+# Build auth: returns {scheme: string, headers: record, query: string, location: string}.
+# `location` is "header" | "query" | "cookie" | "none" and tells dry-run callers
+# where the token went without inspecting headers/query themselves.
 def build-auth [token?: string, auth_scheme?: string]: nothing -> record {
   let token_val = if ($token != null) and ($token | is-not-empty) { $token } else { $env | get -o _TOKEN | default "" }
   let scheme = ($auth_scheme | default "bearer")
-  if ($scheme == "none") or ($token_val | is-empty) { return {headers: {}, query: ""} }
+  if ($scheme == "none") or ($token_val | is-empty) { return {scheme: $scheme, headers: {}, query: "", location: "none"} }
   match $scheme {
-    "bearer" => { {headers: {Authorization: $"Bearer ($token_val)"}, query: ""} }
-    "none" => { {headers: {}, query: ""} }
-    _ => { {headers: {Authorization: $"Bearer ($token_val)"}, query: ""} }
+    "bearer" => { {scheme: $scheme, headers: {Authorization: $"Bearer ($token_val)"}, query: "", location: "header"} }
+    "none" => { {scheme: $scheme, headers: {}, query: "", location: "none"} }
+    _ => { {scheme: $scheme, headers: {Authorization: $"Bearer ($token_val)"}, query: "", location: "header"} }
   }
 }
 
@@ -22,8 +23,9 @@ def build-auth [token?: string, auth_scheme?: string]: nothing -> record {
 # ([A-Za-z0-9-._~]) stay literal; everything else gets %XX.
 def serialize-qp [name: string, value: any, style: string]: nothing -> list<string> {
   if ($value == null) { return [] }
-  let n = (encode-path-segment $name)
   let is_list = ($value | describe | str starts-with "list")
+  if $is_list and ($value | is-empty) { return [] }
+  let n = (encode-path-segment $name)
   if ($value | describe | str starts-with "record") { return ($value | transpose k v | each { $"($n)[(encode-path-segment $in.k)]=(encode-path-segment $in.v)" }) }
   if not $is_list { return [$"($n)=(encode-path-segment $value)"] }
   match $style {
@@ -54,22 +56,42 @@ def build-url [base: string, path: string, query?: string]: nothing -> string {
   if ($query != null) and ($query | is-not-empty) { $result | upsert query $query | url join } else { $result | url join }
 }
 
+# Build the dry-run record returned by --dry-run. Shape:
+#   {dry_run: true, method, url, query: <record>, headers, body, content_type, timeout,
+#    auth: {scheme, location}}
+# `meta` carries logical-form data (the query record by spec name, the pre-serialization
+# body) that do-request itself cannot reconstruct from its wire-format args.
+def build-dry-run-record [method: string, url: string, auth: record, content_type: string, timeout: duration, meta?: record]: nothing -> record {
+  let m = ($meta | default {})
+  {
+    dry_run: true
+    method: $method
+    url: $url
+    query: ($m | get -o query | default {})
+    headers: $auth.headers
+    body: ($m | get -o body)
+    content_type: $content_type
+    timeout: $timeout
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+}
+
 # Execute HTTP request with method dispatch
-def do-request [method: string, url: string, auth: record, insecure: bool, raw: bool, dry_run: bool, max_time?: duration, allow_errors?: bool, full?: bool, content_type?: string, body?: any]: nothing -> any {
+def do-request [method: string, url: string, auth: record, insecure: bool, raw: bool, dry_run: bool, max_time?: duration, allow_errors?: bool, full?: bool, content_type?: string, body?: any, dry_run_meta?: record]: nothing -> any {
   let req_url = if ($auth.query | is-not-empty) { if ($url | str contains "?") { $"($url)&($auth.query)" } else { $"($url)?($auth.query)" } } else { $url }
   let timeout = ($max_time | default 30min)
   let ct = ($content_type | default "application/json")
-  if $dry_run { return {method: $method, url: $req_url, headers: $auth.headers, query_string: $auth.query, content_type: $ct, timeout: $timeout, body: $body} }
+  if $dry_run { return (build-dry-run-record $method $req_url $auth $ct $timeout $dry_run_meta) }
   let resp = match $method {
     "get" => { http get --headers $auth.headers --full --allow-errors --max-time $timeout --insecure=$insecure --raw=$raw $req_url }
-    "head" => { http head --headers $auth.headers --max-time $timeout --insecure=$insecure $req_url }
-    "options" => { http options --headers $auth.headers --max-time $timeout --insecure=$insecure $req_url }
+    "head" => { http head --headers $auth.headers --full --allow-errors --max-time $timeout --insecure=$insecure $req_url }
+    "options" => { http options --headers $auth.headers --full --allow-errors --max-time $timeout --insecure=$insecure $req_url }
     "post" => { if ($body | is-empty) { http post --headers $auth.headers --full --allow-errors --max-time $timeout --insecure=$insecure --raw=$raw $req_url "" } else { http post --headers $auth.headers --content-type $ct --full --allow-errors --max-time $timeout --insecure=$insecure --raw=$raw $req_url $body } }
     "put" => { if ($body | is-empty) { http put --headers $auth.headers --full --allow-errors --max-time $timeout --insecure=$insecure --raw=$raw $req_url "" } else { http put --headers $auth.headers --content-type $ct --full --allow-errors --max-time $timeout --insecure=$insecure --raw=$raw $req_url $body } }
     "patch" => { if ($body | is-empty) { http patch --headers $auth.headers --full --allow-errors --max-time $timeout --insecure=$insecure --raw=$raw $req_url "" } else { http patch --headers $auth.headers --content-type $ct --full --allow-errors --max-time $timeout --insecure=$insecure --raw=$raw $req_url $body } }
     "delete" => { if ($body | is-empty) { http delete --headers $auth.headers --full --allow-errors --max-time $timeout --insecure=$insecure --raw=$raw $req_url } else { http delete --headers $auth.headers --content-type $ct --data $body --full --allow-errors --max-time $timeout --insecure=$insecure --raw=$raw $req_url } }
   }
-  if ($method in ["head" "options"]) { return $resp }
+  if ($method == "head") and (not $full) and (not $allow_errors) and $resp.status < 400 { return $resp.headers }
   if $allow_errors { $resp } else if $resp.status >= 400 { error make --unspanned { msg: $"HTTP ($resp.status): ($resp.body)" } } else if $full { {status: $resp.status, headers: $resp.headers, body: $resp.body} } else if $resp.status == 204 { null } else { $resp.body }
 }
 
@@ -125,7 +147,7 @@ export def "allergies list" [
   let full_url = (build-url $base "/api/allergies" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"cursor": $cursor, "page_size": $page_size, "patient": $patient, "doctor": $doctor} | compact), body: null}
 }
 
 # Create patient allergy
@@ -151,7 +173,7 @@ export def "allergies create" [
   let full_url = (build-url $base "/api/allergies" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"patient": $patient, "doctor": $doctor} | compact), body: null}
 }
 
 # Retrieve an existing patient allergy
@@ -174,11 +196,12 @@ export def "allergies get" [
 ]: nothing -> record<description: string, doctor: int, id: int, notes: string, patient: int, reaction: string, rxnorm: string, snomed_reaction: string, status: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
   let qp = [(serialize-qp "patient" $patient "scalar") (serialize-qp "doctor" $doctor "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/api/allergies/{id}") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"patient": $patient, "doctor": $doctor} | compact), body: null}
 }
 
 # Update an existing patient allergy
@@ -201,11 +224,12 @@ export def "allergies update-by-id" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
   let qp = [(serialize-qp "patient" $patient "scalar") (serialize-qp "doctor" $doctor "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/api/allergies/{id}") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "patch" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "patch" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"patient": $patient, "doctor": $doctor} | compact), body: null}
 }
 
 # Update an existing patient allergy
@@ -228,11 +252,12 @@ export def "allergies update-by-id-1" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
   let qp = [(serialize-qp "patient" $patient "scalar") (serialize-qp "doctor" $doctor "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/api/allergies/{id}") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"patient": $patient, "doctor": $doctor} | compact), body: null}
 }
 
 # Retrieve or search patient amendments. You can only interact with amendments created by your API application
@@ -261,7 +286,7 @@ export def "amendments list" [
   let full_url = (build-url $base "/api/amendments" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"cursor": $cursor, "page_size": $page_size, "appointment": $appointment, "patient": $patient, "doctor": $doctor} | compact), body: null}
 }
 
 # Create patient amendments to a patient's clinical records
@@ -288,7 +313,7 @@ export def "amendments create" [
   let full_url = (build-url $base "/api/amendments" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"appointment": $appointment, "patient": $patient, "doctor": $doctor} | compact), body: null}
 }
 
 # Delete an existing patient amendment, you can only interact with amendments created by your API application
@@ -312,11 +337,12 @@ export def "amendments delete" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
   let qp = [(serialize-qp "appointment" $appointment "scalar") (serialize-qp "patient" $patient "scalar") (serialize-qp "doctor" $doctor "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/api/amendments/{id}") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"appointment": $appointment, "patient": $patient, "doctor": $doctor} | compact), body: null}
 }
 
 # Retrieve an existing patient amendment, you can only interact with amendments created by your API application
@@ -340,11 +366,12 @@ export def "amendments get" [
 ]: nothing -> record<amendment_file: string, amendment_name: string, appointment: int, comments: string, doctor: int, id: int, patient: int> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
   let qp = [(serialize-qp "appointment" $appointment "scalar") (serialize-qp "patient" $patient "scalar") (serialize-qp "doctor" $doctor "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/api/amendments/{id}") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"appointment": $appointment, "patient": $patient, "doctor": $doctor} | compact), body: null}
 }
 
 # Update an existing patient amendment, you can only interact with amendments created by your API application
@@ -368,11 +395,12 @@ export def "amendments update-by-id" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
   let qp = [(serialize-qp "appointment" $appointment "scalar") (serialize-qp "patient" $patient "scalar") (serialize-qp "doctor" $doctor "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/api/amendments/{id}") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "patch" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "patch" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"appointment": $appointment, "patient": $patient, "doctor": $doctor} | compact), body: null}
 }
 
 # Update an existing patient amendment, you can only interact with amendments created by your API application
@@ -396,11 +424,12 @@ export def "amendments update-by-id-1" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
   let qp = [(serialize-qp "appointment" $appointment "scalar") (serialize-qp "patient" $patient "scalar") (serialize-qp "doctor" $doctor "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/api/amendments/{id}") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"appointment": $appointment, "patient": $patient, "doctor": $doctor} | compact), body: null}
 }
 
 # Retrieve or search appointment profiles for a doctor's calendar
@@ -427,7 +456,7 @@ export def "appointment-profiles list" [
   let full_url = (build-url $base "/api/appointment_profiles" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"cursor": $cursor, "page_size": $page_size, "doctor": $doctor} | compact), body: null}
 }
 
 # Create appointment profiles for a doctor's calendar
@@ -452,7 +481,7 @@ export def "appointment-profiles create" [
   let full_url = (build-url $base "/api/appointment_profiles" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"doctor": $doctor} | compact), body: null}
 }
 
 # Delete an existing appointment profile
@@ -474,11 +503,12 @@ export def "appointment-profiles delete" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
   let qp = [(serialize-qp "doctor" $doctor "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/api/appointment_profiles/{id}") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"doctor": $doctor} | compact), body: null}
 }
 
 # Retrieve an existing appointment profile
@@ -500,11 +530,12 @@ export def "appointment-profiles get" [
 ]: nothing -> record<archived: bool, color: string, doctor: int, duration: int, id: int, name: string, online_scheduling: bool, reason: string, sort_order: int> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
   let qp = [(serialize-qp "doctor" $doctor "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/api/appointment_profiles/{id}") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"doctor": $doctor} | compact), body: null}
 }
 
 # Update an existing appointment profile
@@ -526,11 +557,12 @@ export def "appointment-profiles update-by-id" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
   let qp = [(serialize-qp "doctor" $doctor "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/api/appointment_profiles/{id}") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "patch" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "patch" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"doctor": $doctor} | compact), body: null}
 }
 
 # Update an existing appointment profile
@@ -552,11 +584,12 @@ export def "appointment-profiles update-by-id-1" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
   let qp = [(serialize-qp "doctor" $doctor "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/api/appointment_profiles/{id}") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"doctor": $doctor} | compact), body: null}
 }
 
 # Retrieve or search appointment templates for a doctor's calendar
@@ -585,7 +618,7 @@ export def "appointment-templates list" [
   let full_url = (build-url $base "/api/appointment_templates" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"cursor": $cursor, "page_size": $page_size, "profile": $profile, "office": $office, "doctor": $doctor} | compact), body: null}
 }
 
 # Create appointment templates for a doctor's calendar
@@ -612,7 +645,7 @@ export def "appointment-templates create" [
   let full_url = (build-url $base "/api/appointment_templates" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"profile": $profile, "office": $office, "doctor": $doctor} | compact), body: null}
 }
 
 # Delete an existing appointment template
@@ -636,11 +669,12 @@ export def "appointment-templates delete" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
   let qp = [(serialize-qp "profile" $profile "scalar") (serialize-qp "office" $office "scalar") (serialize-qp "doctor" $doctor "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/api/appointment_templates/{id}") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"profile": $profile, "office": $office, "doctor": $doctor} | compact), body: null}
 }
 
 # Retrieve an existing appointment template
@@ -664,11 +698,12 @@ export def "appointment-templates get" [
 ]: nothing -> record<archived: bool, date_end: string, date_start: string, duration: int, exam_room: int, id: int, office: int, open_slots: table<end: string, start: string>, profile: int, scheduled_time: string, week_days: list<int>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
   let qp = [(serialize-qp "profile" $profile "scalar") (serialize-qp "office" $office "scalar") (serialize-qp "doctor" $doctor "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/api/appointment_templates/{id}") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"profile": $profile, "office": $office, "doctor": $doctor} | compact), body: null}
 }
 
 # Update an existing appointment template
@@ -692,11 +727,12 @@ export def "appointment-templates update-by-id" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
   let qp = [(serialize-qp "profile" $profile "scalar") (serialize-qp "office" $office "scalar") (serialize-qp "doctor" $doctor "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/api/appointment_templates/{id}") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "patch" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "patch" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"profile": $profile, "office": $office, "doctor": $doctor} | compact), body: null}
 }
 
 # Update an existing appointment template
@@ -720,11 +756,12 @@ export def "appointment-templates update-by-id-1" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
   let qp = [(serialize-qp "profile" $profile "scalar") (serialize-qp "office" $office "scalar") (serialize-qp "doctor" $doctor "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/api/appointment_templates/{id}") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"profile": $profile, "office": $office, "doctor": $doctor} | compact), body: null}
 }
 
 # Retrieve or search appointment or breaks. Note: Either `since`, `date` or `date_range` parameter must be specified.
@@ -757,7 +794,7 @@ export def "appointments list" [
   let full_url = (build-url $base "/api/appointments" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"cursor": $cursor, "page_size": $page_size, "status": $status, "patient": $patient, "office": $office, "doctor": $doctor, "since": $since, "date_range": $date_range, "date": $date} | compact), body: null}
 }
 
 # Create a new appointment or break on doctor's calendar
@@ -788,7 +825,7 @@ export def "appointments create" [
   let full_url = (build-url $base "/api/appointments" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"status": $status, "patient": $patient, "office": $office, "doctor": $doctor, "since": $since, "date_range": $date_range, "date": $date} | compact), body: null}
 }
 
 # Delete an existing appointment or break
@@ -816,11 +853,12 @@ export def "appointments delete" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
   let qp = [(serialize-qp "status" $status "scalar") (serialize-qp "patient" $patient "scalar") (serialize-qp "office" $office "scalar") (serialize-qp "doctor" $doctor "scalar") (serialize-qp "since" $since "scalar") (serialize-qp "date_range" $date_range "scalar") (serialize-qp "date" $date "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/api/appointments/{id}") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"status": $status, "patient": $patient, "office": $office, "doctor": $doctor, "since": $since, "date_range": $date_range, "date": $date} | compact), body: null}
 }
 
 # Retrieve an existing appointment or break
@@ -848,11 +886,12 @@ export def "appointments get" [
 ]: nothing -> record<allow_overlapping: bool, appt_is_break: bool, base_recurring_appointment: string, billing_notes: table<appointment: int, created_at: string, created_by: string, id: int, text: string>, billing_provider: string, billing_status: string, clinical_note: record<locked: bool, pdf: string, updated_at: string>, cloned_from: int, color: string, created_at: string, custom_fields: table<created_at: string, field_type: int, field_value: string, updated_at: string>, custom_vitals: table<value: string, vital_type: int>, deleted_flag: bool, doctor: int, duration: int, exam_room: int, extended_updated_at: string, first_billed_date: string, icd10_codes: list<string>, icd9_codes: list<string>, id: string, ins1_status: string, ins2_status: string, is_virtual_base: bool, is_walk_in: bool, last_billed_date: string, notes: string, office: int, patient: int, primary_insurance_id_number: string, primary_insurer_name: string, primary_insurer_payer_id: string, profile: int, reason: string, recurring_appointment: bool, reminder_profile: string, reminders: table<id: int, scheduled_time: string, type: string>, scheduled_time: string, secondary_insurance_id_number: string, secondary_insurer_name: string, secondary_insurer_payer_id: string, status: string, status_transitions: table<appointment: string, datetime: string, from_status: string, to_status: string>, supervising_provider: string, updated_at: string, vitals: record<blood_pressure_1: int, blood_pressure_2: int, bmi: string, head_circumference: float, head_circumference_units: string, height: float, height_units: string, oxygen_saturation: float, pain: string, pulse: int, respiratory_rate: int, smoking_status: string, temperature: float, temperature_units: string, weight: float, weight_units: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
   let qp = [(serialize-qp "status" $status "scalar") (serialize-qp "patient" $patient "scalar") (serialize-qp "office" $office "scalar") (serialize-qp "doctor" $doctor "scalar") (serialize-qp "since" $since "scalar") (serialize-qp "date_range" $date_range "scalar") (serialize-qp "date" $date "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/api/appointments/{id}") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"status": $status, "patient": $patient, "office": $office, "doctor": $doctor, "since": $since, "date_range": $date_range, "date": $date} | compact), body: null}
 }
 
 # Update an existing appointment or break
@@ -880,11 +919,12 @@ export def "appointments update-by-id" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
   let qp = [(serialize-qp "status" $status "scalar") (serialize-qp "patient" $patient "scalar") (serialize-qp "office" $office "scalar") (serialize-qp "doctor" $doctor "scalar") (serialize-qp "since" $since "scalar") (serialize-qp "date_range" $date_range "scalar") (serialize-qp "date" $date "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/api/appointments/{id}") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "patch" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "patch" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"status": $status, "patient": $patient, "office": $office, "doctor": $doctor, "since": $since, "date_range": $date_range, "date": $date} | compact), body: null}
 }
 
 # Update an existing appointment or break
@@ -912,11 +952,12 @@ export def "appointments update-by-id-1" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
   let qp = [(serialize-qp "status" $status "scalar") (serialize-qp "patient" $patient "scalar") (serialize-qp "office" $office "scalar") (serialize-qp "doctor" $doctor "scalar") (serialize-qp "since" $since "scalar") (serialize-qp "date_range" $date_range "scalar") (serialize-qp "date" $date "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/api/appointments/{id}") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"status": $status, "patient": $patient, "office": $office, "doctor": $doctor, "since": $since, "date_range": $date_range, "date": $date} | compact), body: null}
 }
 
 # Retrieve or search billing profiles
@@ -943,7 +984,7 @@ export def "billing-profiles list" [
   let full_url = (build-url $base "/api/billing_profiles" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"cursor": $cursor, "page_size": $page_size, "doctor": $doctor} | compact), body: null}
 }
 
 # Retrieve an existing billing profiles
@@ -965,11 +1006,12 @@ export def "billing-profiles get" [
 ]: nothing -> record<archived: bool, cpt_codes: table<code: string, diagnosis_pointers_icd10: list, diagnosis_pointers_icd9: list, modifiers: list, ndc_code: list, price: string, quantity: string>, created_at: string, custom_procedure_codes: table<code: string, price: string, quantity: string>, doctor: string, hcpcs_codes: table<code: string, diagnosis_pointers_icd10: list, diagnosis_pointers_icd9: list, modifiers: list, ndc_code: list, price: string, quantity: string>, icd10_codes: list<string>, icd9_codes: list<string>, id: int, name: string, updated_at: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
   let qp = [(serialize-qp "doctor" $doctor "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/api/billing_profiles/{id}") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"doctor": $doctor} | compact), body: null}
 }
 
 # Retrieve or search care plans
@@ -998,7 +1040,7 @@ export def "care-plans list" [
   let full_url = (build-url $base "/api/care_plans" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"cursor": $cursor, "page_size": $page_size, "patient": $patient, "plan_type": $plan_type, "doctor": $doctor} | compact), body: null}
 }
 
 # Retrieve an existing care plan
@@ -1022,11 +1064,12 @@ export def "care-plans get" [
 ]: nothing -> record<appointment: string, code: string, code_system: string, created_at: string, description: string, id: int, instructions: string, patient: string, plan_type: string, scheduled_date: string, title: string, updated_at: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
   let qp = [(serialize-qp "patient" $patient "scalar") (serialize-qp "plan_type" $plan_type "scalar") (serialize-qp "doctor" $doctor "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/api/care_plans/{id}") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"patient": $patient, "plan_type": $plan_type, "doctor": $doctor} | compact), body: null}
 }
 
 # GET /api/care_team_members
@@ -1054,7 +1097,7 @@ export def "care-team-members list" [
   let full_url = (build-url $base "/api/care_team_members" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"cursor": $cursor, "page_size": $page_size, "patient": $patient, "appointment": $appointment, "doctor": $doctor} | compact), body: null}
 }
 
 # GET /api/care_team_members/{id}
@@ -1077,11 +1120,12 @@ export def "care-team-members get" [
 ]: nothing -> record<appointment: string, created_at: string, id: int, patient: string, user: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
   let qp = [(serialize-qp "patient" $patient "scalar") (serialize-qp "appointment" $appointment "scalar") (serialize-qp "doctor" $doctor "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/api/care_team_members/{id}") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"patient": $patient, "appointment": $appointment, "doctor": $doctor} | compact), body: null}
 }
 
 # Retrieve or search billing notes
@@ -1109,7 +1153,7 @@ export def "claim-billing-notes list" [
   let full_url = (build-url $base "/api/claim_billing_notes" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"cursor": $cursor, "page_size": $page_size, "appointment": $appointment, "doctor": $doctor} | compact), body: null}
 }
 
 # Create a new billing note
@@ -1135,7 +1179,7 @@ export def "claim-billing-notes create" [
   let full_url = (build-url $base "/api/claim_billing_notes" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"appointment": $appointment, "doctor": $doctor} | compact), body: null}
 }
 
 # Retrieve an existing billing note
@@ -1158,11 +1202,12 @@ export def "claim-billing-notes get" [
 ]: nothing -> record<appointment: int, created_at: string, created_by: string, id: int, text: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
   let qp = [(serialize-qp "appointment" $appointment "scalar") (serialize-qp "doctor" $doctor "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/api/claim_billing_notes/{id}") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"appointment": $appointment, "doctor": $doctor} | compact), body: null}
 }
 
 # Retrieve or search clinical note field types
@@ -1190,7 +1235,7 @@ export def "clinical-note-field-types list" [
   let full_url = (build-url $base "/api/clinical_note_field_types" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"cursor": $cursor, "page_size": $page_size, "clinical_note_template": $clinical_note_template, "doctor": $doctor} | compact), body: null}
 }
 
 # Retrieve an existing clinial note field type
@@ -1213,11 +1258,12 @@ export def "clinical-note-field-types get" [
 ]: nothing -> record<allowed_values: list<string>, archived: bool, clinical_note_template: string, comment: string, data_type: string, id: int, name: string, required: bool> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
   let qp = [(serialize-qp "clinical_note_template" $clinical_note_template "scalar") (serialize-qp "doctor" $doctor "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/api/clinical_note_field_types/{id}") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"clinical_note_template": $clinical_note_template, "doctor": $doctor} | compact), body: null}
 }
 
 # Retrieve or search clinical note field values
@@ -1248,7 +1294,7 @@ export def "clinical-note-field-values list" [
   let full_url = (build-url $base "/api/clinical_note_field_values" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"cursor": $cursor, "page_size": $page_size, "clinical_note_field": $clinical_note_field, "since": $since, "appointment": $appointment, "clinical_note_template": $clinical_note_template, "doctor": $doctor} | compact), body: null}
 }
 
 # Create clinical note field value
@@ -1277,7 +1323,7 @@ export def "clinical-note-field-values create" [
   let full_url = (build-url $base "/api/clinical_note_field_values" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"clinical_note_field": $clinical_note_field, "since": $since, "appointment": $appointment, "clinical_note_template": $clinical_note_template, "doctor": $doctor} | compact), body: null}
 }
 
 # Retrieve an existing clinical note field value
@@ -1303,11 +1349,12 @@ export def "clinical-note-field-values get" [
 ]: nothing -> record<appointment: int, clinical_note_field: int, created_at: string, id: int, updated_at: string, value: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
   let qp = [(serialize-qp "clinical_note_field" $clinical_note_field "scalar") (serialize-qp "since" $since "scalar") (serialize-qp "appointment" $appointment "scalar") (serialize-qp "clinical_note_template" $clinical_note_template "scalar") (serialize-qp "doctor" $doctor "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/api/clinical_note_field_values/{id}") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"clinical_note_field": $clinical_note_field, "since": $since, "appointment": $appointment, "clinical_note_template": $clinical_note_template, "doctor": $doctor} | compact), body: null}
 }
 
 # Update an existing clinical note field value
@@ -1333,11 +1380,12 @@ export def "clinical-note-field-values update-by-id" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
   let qp = [(serialize-qp "clinical_note_field" $clinical_note_field "scalar") (serialize-qp "since" $since "scalar") (serialize-qp "appointment" $appointment "scalar") (serialize-qp "clinical_note_template" $clinical_note_template "scalar") (serialize-qp "doctor" $doctor "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/api/clinical_note_field_values/{id}") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "patch" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "patch" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"clinical_note_field": $clinical_note_field, "since": $since, "appointment": $appointment, "clinical_note_template": $clinical_note_template, "doctor": $doctor} | compact), body: null}
 }
 
 # Update an existing clinical note field value
@@ -1363,11 +1411,12 @@ export def "clinical-note-field-values update-by-id-1" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
   let qp = [(serialize-qp "clinical_note_field" $clinical_note_field "scalar") (serialize-qp "since" $since "scalar") (serialize-qp "appointment" $appointment "scalar") (serialize-qp "clinical_note_template" $clinical_note_template "scalar") (serialize-qp "doctor" $doctor "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/api/clinical_note_field_values/{id}") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"clinical_note_field": $clinical_note_field, "since": $since, "appointment": $appointment, "clinical_note_template": $clinical_note_template, "doctor": $doctor} | compact), body: null}
 }
 
 # Retrieve or search clinical note templates
@@ -1394,7 +1443,7 @@ export def "clinical-note-templates list" [
   let full_url = (build-url $base "/api/clinical_note_templates" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"cursor": $cursor, "page_size": $page_size, "doctor": $doctor} | compact), body: null}
 }
 
 # Retrieve an existing clinical note tempalte
@@ -1416,11 +1465,12 @@ export def "clinical-note-templates get" [
 ]: nothing -> record<archived: bool, clinical_note_fields: table<allowed_values: list, archived: bool, clinical_note_template: int, data_type: string, name: string, required: bool>, doctor: string, id: int, is_onpatient: bool, is_persistent: bool, name: string, order: record<on_complete_note: int, on_ipad: int>, updated_at: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
   let qp = [(serialize-qp "doctor" $doctor "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/api/clinical_note_templates/{id}") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"doctor": $doctor} | compact), body: null}
 }
 
 # GET /api/clinical_notes
@@ -1451,7 +1501,7 @@ export def "clinical-notes list" [
   let full_url = (build-url $base "/api/clinical_notes" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"cursor": $cursor, "page_size": $page_size, "patient": $patient, "office": $office, "doctor": $doctor, "since": $since, "date_range": $date_range, "date": $date} | compact), body: null}
 }
 
 # GET /api/clinical_notes/{id}
@@ -1477,11 +1527,12 @@ export def "clinical-notes get" [
 ]: nothing -> record<appointment: string, archived: bool, clinical_note_sections: table<clinical_note_template: int, name: string, values: list>, patient: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
   let qp = [(serialize-qp "patient" $patient "scalar") (serialize-qp "office" $office "scalar") (serialize-qp "doctor" $doctor "scalar") (serialize-qp "since" $since "scalar") (serialize-qp "date_range" $date_range "scalar") (serialize-qp "date" $date "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/api/clinical_notes/{id}") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"patient": $patient, "office": $office, "doctor": $doctor, "since": $since, "date_range": $date_range, "date": $date} | compact), body: null}
 }
 
 # Retrieve or search communicatioin (phone call) logs
@@ -1510,7 +1561,7 @@ export def "comm-logs list" [
   let full_url = (build-url $base "/api/comm_logs" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"cursor": $cursor, "page_size": $page_size, "since": $since, "patient": $patient, "doctor": $doctor} | compact), body: null}
 }
 
 # Create communication (phone call) logs
@@ -1537,7 +1588,7 @@ export def "comm-logs create" [
   let full_url = (build-url $base "/api/comm_logs" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"since": $since, "patient": $patient, "doctor": $doctor} | compact), body: null}
 }
 
 # Retrieve an existing communication (phone call) logs
@@ -1561,11 +1612,12 @@ export def "comm-logs get" [
 ]: nothing -> record<appointment: int, archived: bool, author: string, cash_charged: float, created_at: string, doctor: int, duration: int, id: int, message: string, patient: int, scheduled_time: string, title: string, type: string, updated_at: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
   let qp = [(serialize-qp "since" $since "scalar") (serialize-qp "patient" $patient "scalar") (serialize-qp "doctor" $doctor "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/api/comm_logs/{id}") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"since": $since, "patient": $patient, "doctor": $doctor} | compact), body: null}
 }
 
 # Update an existing communication (phone call) logs
@@ -1589,11 +1641,12 @@ export def "comm-logs update-by-id" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
   let qp = [(serialize-qp "since" $since "scalar") (serialize-qp "patient" $patient "scalar") (serialize-qp "doctor" $doctor "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/api/comm_logs/{id}") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "patch" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "patch" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"since": $since, "patient": $patient, "doctor": $doctor} | compact), body: null}
 }
 
 # Update an existing communication (phone call) logs
@@ -1617,11 +1670,12 @@ export def "comm-logs update-by-id-1" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
   let qp = [(serialize-qp "since" $since "scalar") (serialize-qp "patient" $patient "scalar") (serialize-qp "doctor" $doctor "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/api/comm_logs/{id}") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"since": $since, "patient": $patient, "doctor": $doctor} | compact), body: null}
 }
 
 # Retrieve or search patient consent forms
@@ -1648,7 +1702,7 @@ export def "consent-forms list" [
   let full_url = (build-url $base "/api/consent_forms" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"cursor": $cursor, "page_size": $page_size, "doctor": $doctor} | compact), body: null}
 }
 
 # Create a patient consent form
@@ -1673,7 +1727,7 @@ export def "consent-forms create" [
   let full_url = (build-url $base "/api/consent_forms" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"doctor": $doctor} | compact), body: null}
 }
 
 # Retrieve an existing patient consent form
@@ -1695,11 +1749,12 @@ export def "consent-forms get" [
 ]: nothing -> record<archived: bool, assign_by_default: bool, created_at: string, doctor: int, id: int, is_mandatory: bool, order: int, title: string, updated_at: string, uri: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
   let qp = [(serialize-qp "doctor" $doctor "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/api/consent_forms/{id}") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"doctor": $doctor} | compact), body: null}
 }
 
 # Update an existing patient consent form
@@ -1721,11 +1776,12 @@ export def "consent-forms update-by-id" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
   let qp = [(serialize-qp "doctor" $doctor "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/api/consent_forms/{id}") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "patch" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "patch" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"doctor": $doctor} | compact), body: null}
 }
 
 # Update an existing patient consent form
@@ -1747,11 +1803,12 @@ export def "consent-forms update-by-id-1" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
   let qp = [(serialize-qp "doctor" $doctor "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/api/consent_forms/{id}") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"doctor": $doctor} | compact), body: null}
 }
 
 # Assign (apply) a consent form to appointment
@@ -1773,11 +1830,12 @@ export def "consent-forms-apply-to-appointment create" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
   let qp = [(serialize-qp "doctor" $doctor "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/api/consent_forms/{id}/apply_to_appointment") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"doctor": $doctor} | compact), body: null}
 }
 
 # Unassign (unapply) a consent form from appointment
@@ -1799,11 +1857,12 @@ export def "consent-forms-unapply-from-appointment create" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
   let qp = [(serialize-qp "doctor" $doctor "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/api/consent_forms/{id}/unapply_from_appointment") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"doctor": $doctor} | compact), body: null}
 }
 
 # Retrieve or search custom appointment fields
@@ -1830,7 +1889,7 @@ export def "custom-appointment-fields list" [
   let full_url = (build-url $base "/api/custom_appointment_fields" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"cursor": $cursor, "page_size": $page_size, "doctor": $doctor} | compact), body: null}
 }
 
 # Create custom appointment fields
@@ -1855,7 +1914,7 @@ export def "custom-appointment-fields create" [
   let full_url = (build-url $base "/api/custom_appointment_fields" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"doctor": $doctor} | compact), body: null}
 }
 
 # Retrieve an existing custom appointment field
@@ -1877,11 +1936,12 @@ export def "custom-appointment-fields get" [
 ]: nothing -> record<archived: bool, created_at: string, doctor: string, field_desc: string, field_name: string, id: int, order: int, updated_at: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
   let qp = [(serialize-qp "doctor" $doctor "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/api/custom_appointment_fields/{id}") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"doctor": $doctor} | compact), body: null}
 }
 
 # Update an existing custom appointment field
@@ -1903,11 +1963,12 @@ export def "custom-appointment-fields update-by-id" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
   let qp = [(serialize-qp "doctor" $doctor "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/api/custom_appointment_fields/{id}") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "patch" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "patch" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"doctor": $doctor} | compact), body: null}
 }
 
 # Update an existing custom appointment field
@@ -1929,11 +1990,12 @@ export def "custom-appointment-fields update-by-id-1" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
   let qp = [(serialize-qp "doctor" $doctor "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/api/custom_appointment_fields/{id}") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"doctor": $doctor} | compact), body: null}
 }
 
 # Retrieve or search custom demographics fields
@@ -1960,7 +2022,7 @@ export def "custom-demographics list" [
   let full_url = (build-url $base "/api/custom_demographics" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"cursor": $cursor, "page_size": $page_size, "doctor": $doctor} | compact), body: null}
 }
 
 # Create custom demographics fields
@@ -1985,7 +2047,7 @@ export def "custom-demographics create" [
   let full_url = (build-url $base "/api/custom_demographics" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"doctor": $doctor} | compact), body: null}
 }
 
 # Retrieve an existing custom demographics field
@@ -2007,11 +2069,12 @@ export def "custom-demographics get" [
 ]: nothing -> record<allowed_values: string, archived: bool, description: string, doctor: int, id: int, name: string, template_name: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
   let qp = [(serialize-qp "doctor" $doctor "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/api/custom_demographics/{id}") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"doctor": $doctor} | compact), body: null}
 }
 
 # Update an existing custom demographics field
@@ -2033,11 +2096,12 @@ export def "custom-demographics update-by-id" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
   let qp = [(serialize-qp "doctor" $doctor "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/api/custom_demographics/{id}") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "patch" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "patch" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"doctor": $doctor} | compact), body: null}
 }
 
 # Update an existing custom demographics field
@@ -2059,11 +2123,12 @@ export def "custom-demographics update-by-id-1" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
   let qp = [(serialize-qp "doctor" $doctor "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/api/custom_demographics/{id}") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"doctor": $doctor} | compact), body: null}
 }
 
 # Retrieve or search custom insurance plan names
@@ -2093,7 +2158,7 @@ export def "custom-insurance-plan-names list" [
   let full_url = (build-url $base "/api/custom_insurance_plan_names" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"cursor": $cursor, "page_size": $page_size, "since": $since, "user": $user, "name": $name, "doctor": $doctor} | compact), body: null}
 }
 
 # Retrieve an existing custom insurance plan name
@@ -2118,11 +2183,12 @@ export def "custom-insurance-plan-names get" [
 ]: nothing -> record<archived: bool, created_at: string, doctor: string, id: int, insurance_plan_name: string, updated_at: string, user: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
   let qp = [(serialize-qp "since" $since "scalar") (serialize-qp "user" $user "scalar") (serialize-qp "name" $name "scalar") (serialize-qp "doctor" $doctor "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/api/custom_insurance_plan_names/{id}") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"since": $since, "user": $user, "name": $name, "doctor": $doctor} | compact), body: null}
 }
 
 # Retrieve or search custom vital types
@@ -2149,7 +2215,7 @@ export def "custom-vitals list" [
   let full_url = (build-url $base "/api/custom_vitals" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"cursor": $cursor, "page_size": $page_size, "doctor": $doctor} | compact), body: null}
 }
 
 # Retrieve an existing custom vital type
@@ -2171,11 +2237,12 @@ export def "custom-vitals get" [
 ]: nothing -> record<allowed_values: list<string>, archived: bool, data_type: string, description: string, doctor: string, fraction_delimiter: string, id: int, is_fraction_field: bool, name: string, unit: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
   let qp = [(serialize-qp "doctor" $doctor "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/api/custom_vitals/{id}") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"doctor": $doctor} | compact), body: null}
 }
 
 # Retrieve or search doctors within practice group
@@ -2202,7 +2269,7 @@ export def "doctors list" [
   let full_url = (build-url $base "/api/doctors" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"cursor": $cursor, "page_size": $page_size, "doctor": $doctor} | compact), body: null}
 }
 
 # Retrieve an existing dcotor
@@ -2224,11 +2291,12 @@ export def "doctors get" [
 ]: nothing -> record<cell_phone: string, country: string, email: string, first_name: string, group_npi_number: string, home_phone: string, id: int, is_account_suspended: bool, job_title: string, last_name: string, npi_number: string, office_phone: string, practice_group: string, practice_group_name: string, profile_picture: string, specialty: string, suffix: string, timezone: string, website: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
   let qp = [(serialize-qp "doctor" $doctor "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/api/doctors/{id}") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"doctor": $doctor} | compact), body: null}
 }
 
 # Retrieve or search documents
@@ -2257,7 +2325,7 @@ export def "documents list" [
   let full_url = (build-url $base "/api/documents" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"cursor": $cursor, "page_size": $page_size, "since": $since, "patient": $patient, "doctor": $doctor} | compact), body: null}
 }
 
 # Create documents
@@ -2284,7 +2352,7 @@ export def "documents create" [
   let full_url = (build-url $base "/api/documents" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"since": $since, "patient": $patient, "doctor": $doctor} | compact), body: null}
 }
 
 # Delete an existing appointment template
@@ -2308,11 +2376,12 @@ export def "documents delete" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
   let qp = [(serialize-qp "since" $since "scalar") (serialize-qp "patient" $patient "scalar") (serialize-qp "doctor" $doctor "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/api/documents/{id}") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"since": $since, "patient": $patient, "doctor": $doctor} | compact), body: null}
 }
 
 # Retrieve an existing appointment template
@@ -2336,11 +2405,12 @@ export def "documents get" [
 ]: nothing -> record<archived: bool, date: string, description: string, doctor: int, document: string, id: int, metatags: string, patient: int, updated_at: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
   let qp = [(serialize-qp "since" $since "scalar") (serialize-qp "patient" $patient "scalar") (serialize-qp "doctor" $doctor "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/api/documents/{id}") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"since": $since, "patient": $patient, "doctor": $doctor} | compact), body: null}
 }
 
 # Update an existing appointment template
@@ -2364,11 +2434,12 @@ export def "documents update-by-id" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
   let qp = [(serialize-qp "since" $since "scalar") (serialize-qp "patient" $patient "scalar") (serialize-qp "doctor" $doctor "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/api/documents/{id}") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "patch" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "patch" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"since": $since, "patient": $patient, "doctor": $doctor} | compact), body: null}
 }
 
 # Update an existing appointment template
@@ -2392,11 +2463,12 @@ export def "documents update-by-id-1" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
   let qp = [(serialize-qp "since" $since "scalar") (serialize-qp "patient" $patient "scalar") (serialize-qp "doctor" $doctor "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/api/documents/{id}") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"since": $since, "patient": $patient, "doctor": $doctor} | compact), body: null}
 }
 
 # Retrieve or search past eligibility checks for patient
@@ -2429,7 +2501,7 @@ export def "eligibility-checks list" [
   let full_url = (build-url $base "/api/eligibility_checks" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"cursor": $cursor, "page_size": $page_size, "appointment": $appointment, "appointment_date": $appointment_date, "doctor": $doctor, "query_date_range": $query_date_range, "appointment_date_range": $appointment_date_range, "query_date": $query_date, "patient": $patient} | compact), body: null}
 }
 
 # Retrieve an existing past eligibility check
@@ -2457,11 +2529,12 @@ export def "eligibility-checks get" [
 ]: nothing -> record<appointment: string, cob_level: string, coverage_details: string, coverage_subscriber: string, eligibility: string, patient: string, payer_name: string, query_date: string, request_service_type: string, service_type_description: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
   let qp = [(serialize-qp "appointment" $appointment "scalar") (serialize-qp "appointment_date" $appointment_date "scalar") (serialize-qp "doctor" $doctor "scalar") (serialize-qp "query_date_range" $query_date_range "scalar") (serialize-qp "appointment_date_range" $appointment_date_range "scalar") (serialize-qp "query_date" $query_date "scalar") (serialize-qp "patient" $patient "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/api/eligibility_checks/{id}") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"appointment": $appointment, "appointment_date": $appointment_date, "doctor": $doctor, "query_date_range": $query_date_range, "appointment_date_range": $appointment_date_range, "query_date": $query_date, "patient": $patient} | compact), body: null}
 }
 
 # Retrieve or search EOB objects
@@ -2488,7 +2561,7 @@ export def "eobs list" [
   let full_url = (build-url $base "/api/eobs" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"cursor": $cursor, "page_size": $page_size, "doctor": $doctor} | compact), body: null}
 }
 
 # Create EOB object
@@ -2513,7 +2586,7 @@ export def "eobs create" [
   let full_url = (build-url $base "/api/eobs" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"doctor": $doctor} | compact), body: null}
 }
 
 # Retrieve an existing EOB object
@@ -2535,11 +2608,12 @@ export def "eobs get" [
 ]: nothing -> record<check_date: string, deposit_date: string, doctor: int, id: int, insurance_payer_id: string, insurance_payer_name: string, insurance_payer_trace_number: string, payment_method: string, posted_date: string, scanned_eob: string, total_paid: float, updated_at: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
   let qp = [(serialize-qp "doctor" $doctor "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/api/eobs/{id}") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"doctor": $doctor} | compact), body: null}
 }
 
 # GET /api/fee_schedules
@@ -2569,7 +2643,7 @@ export def "fee-schedules list" [
   let full_url = (build-url $base "/api/fee_schedules" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"cursor": $cursor, "page_size": $page_size, "code": $code, "code_type": $code_type, "since": $since, "payer_id": $payer_id, "doctor": $doctor} | compact), body: null}
 }
 
 # GET /api/fee_schedules/{id}
@@ -2594,11 +2668,12 @@ export def "fee-schedules get" [
 ]: nothing -> record<allowed_amount: float, base_price: float, billing_description: string, cash_price: float, code: string, code_type: string, cpt_hcpcs_modifier1: string, cpt_hcpcs_modifier2: string, cpt_hcpcs_modifier3: string, cpt_hcpcs_modifier4: string, created_at: string, description: string, doctor: int, id: int, insured_out_of_network_price: float, insured_price: float, ndc_code: string, ndc_quantity: float, ndc_units: string, office: int, payer_id: string, picklist_category: string, plan_name: string, updated_at: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
   let qp = [(serialize-qp "code" $code "scalar") (serialize-qp "code_type" $code_type "scalar") (serialize-qp "since" $since "scalar") (serialize-qp "payer_id" $payer_id "scalar") (serialize-qp "doctor" $doctor "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/api/fee_schedules/{id}") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"code": $code, "code_type": $code_type, "since": $since, "payer_id": $payer_id, "doctor": $doctor} | compact), body: null}
 }
 
 # Retrieve or search implantable devices
@@ -2628,7 +2703,7 @@ export def "implantable-devices list" [
   let full_url = (build-url $base "/api/implantable_devices" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"cursor": $cursor, "page_size": $page_size, "mu_date": $mu_date, "patient": $patient, "mu_date_range": $mu_date_range, "doctor": $doctor} | compact), body: null}
 }
 
 # Retrieve an existing implantable device
@@ -2653,11 +2728,12 @@ export def "implantable-devices get" [
 ]: nothing -> record<archived: bool, brand_name: string, company_name: string, created_at: string, expiration_date: string, gmdn_pt_name: string, id: int, manufacturing_date: string, patient: string, procedure: string, serial_number: string, status: string, udi: string, updated_at: string, version_or_model: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
   let qp = [(serialize-qp "mu_date" $mu_date "scalar") (serialize-qp "patient" $patient "scalar") (serialize-qp "mu_date_range" $mu_date_range "scalar") (serialize-qp "doctor" $doctor "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/api/implantable_devices/{id}") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"mu_date": $mu_date, "patient": $patient, "mu_date_range": $mu_date_range, "doctor": $doctor} | compact), body: null}
 }
 
 # GET /api/insurances
@@ -2684,7 +2760,7 @@ export def "insurances list" [
   let full_url = (build-url $base "/api/insurances" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"cursor": $cursor, "page_size": $page_size, "payer_type": $payer_type, "term": $term} | compact), body: null}
 }
 
 # GET /api/insurances/{id}
@@ -2706,11 +2782,12 @@ export def "insurances get" [
 ]: nothing -> record<payer_id: string, payer_name: string, state: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
   let qp = [(serialize-qp "payer_type" $payer_type "scalar") (serialize-qp "term" $term "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/api/insurances/{id}") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"payer_type": $payer_type, "term": $term} | compact), body: null}
 }
 
 # Retrieve or search inventory categories
@@ -2738,7 +2815,7 @@ export def "inventory-categories list" [
   let full_url = (build-url $base "/api/inventory_categories" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"cursor": $cursor, "page_size": $page_size, "since": $since, "doctor": $doctor} | compact), body: null}
 }
 
 # Retrieve an existing inventory category
@@ -2761,11 +2838,12 @@ export def "inventory-categories get" [
 ]: nothing -> record<archived: bool, category_type: string, created_at: string, doctor: string, id: int, name: string, updated_at: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
   let qp = [(serialize-qp "since" $since "scalar") (serialize-qp "doctor" $doctor "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/api/inventory_categories/{id}") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"since": $since, "doctor": $doctor} | compact), body: null}
 }
 
 # Retrieve or search vaccine inventories
@@ -2795,7 +2873,7 @@ export def "inventory-vaccines list" [
   let full_url = (build-url $base "/api/inventory_vaccines" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"cursor": $cursor, "page_size": $page_size, "status": $status, "cvx_code": $cvx_code, "since": $since, "doctor": $doctor} | compact), body: null}
 }
 
 # Create vaccine inventory
@@ -2823,7 +2901,7 @@ export def "inventory-vaccines create" [
   let full_url = (build-url $base "/api/inventory_vaccines" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"status": $status, "cvx_code": $cvx_code, "since": $since, "doctor": $doctor} | compact), body: null}
 }
 
 # Retrieve an existing vaccine inventory
@@ -2848,11 +2926,12 @@ export def "inventory-vaccines get" [
 ]: nothing -> record<category: int, cost: float, created_at: string, current_quantity: int, cvx_code: string, doctor: int, expiry: string, id: int, lot_number: string, manufacturer: string, manufacturer_code: string, name: string, note: string, original_quantity: int, price: float, price_with_tax: float, sales_tax_applicable: bool, status: string, updated_at: string, vaccination_type: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
   let qp = [(serialize-qp "status" $status "scalar") (serialize-qp "cvx_code" $cvx_code "scalar") (serialize-qp "since" $since "scalar") (serialize-qp "doctor" $doctor "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/api/inventory_vaccines/{id}") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"status": $status, "cvx_code": $cvx_code, "since": $since, "doctor": $doctor} | compact), body: null}
 }
 
 # Retrieve or search lab order documents
@@ -2880,7 +2959,7 @@ export def "lab-documents list" [
   let full_url = (build-url $base "/api/lab_documents" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"cursor": $cursor, "page_size": $page_size, "since": $since, "doctor": $doctor} | compact), body: null}
 }
 
 # Create lab order documents. An example lab workflow is as following: - When you get orders, submit them via `/api/lab_orders`, such that doctors can see them in drchrono. - When results come in, submit the result document PDF via `/api/lab_documents` and submit the results data via `/api/lab_results` - Update `/api/lab_orders` status
@@ -2906,7 +2985,7 @@ export def "lab-documents create" [
   let full_url = (build-url $base "/api/lab_documents" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"since": $since, "doctor": $doctor} | compact), body: null}
 }
 
 # Delete an existing lab order document
@@ -2929,11 +3008,12 @@ export def "lab-documents delete" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
   let qp = [(serialize-qp "since" $since "scalar") (serialize-qp "doctor" $doctor "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/api/lab_documents/{id}") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"since": $since, "doctor": $doctor} | compact), body: null}
 }
 
 # Retrieve an existing lab order document
@@ -2956,11 +3036,12 @@ export def "lab-documents get" [
 ]: nothing -> record<document: string, id: int, lab_order: int, timestamp: string, type: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
   let qp = [(serialize-qp "since" $since "scalar") (serialize-qp "doctor" $doctor "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/api/lab_documents/{id}") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"since": $since, "doctor": $doctor} | compact), body: null}
 }
 
 # Update an existing lab order document
@@ -2983,11 +3064,12 @@ export def "lab-documents update-by-id" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
   let qp = [(serialize-qp "since" $since "scalar") (serialize-qp "doctor" $doctor "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/api/lab_documents/{id}") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "patch" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "patch" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"since": $since, "doctor": $doctor} | compact), body: null}
 }
 
 # Update an existing lab order document
@@ -3010,11 +3092,12 @@ export def "lab-documents update-by-id-1" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
   let qp = [(serialize-qp "since" $since "scalar") (serialize-qp "doctor" $doctor "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/api/lab_documents/{id}") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"since": $since, "doctor": $doctor} | compact), body: null}
 }
 
 # Retrieve or search lab orders
@@ -3042,7 +3125,7 @@ export def "lab-orders list" [
   let full_url = (build-url $base "/api/lab_orders" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"cursor": $cursor, "page_size": $page_size, "since": $since, "doctor": $doctor} | compact), body: null}
 }
 
 # Create lab orders. An example lab workflow is as following: - When you get orders, submit them via `/api/lab_orders`, such that doctors can see them in drchrono. - When results come in, submit the result document PDF via `/api/lab_documents` and submit the results data via `/api/lab_results` - Update `/api/lab_orders` status
@@ -3068,7 +3151,7 @@ export def "lab-orders create" [
   let full_url = (build-url $base "/api/lab_orders" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"since": $since, "doctor": $doctor} | compact), body: null}
 }
 
 # Delete an existing lab order
@@ -3091,11 +3174,12 @@ export def "lab-orders delete" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
   let qp = [(serialize-qp "since" $since "scalar") (serialize-qp "doctor" $doctor "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/api/lab_orders/{id}") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"since": $since, "doctor": $doctor} | compact), body: null}
 }
 
 # Retrieve an existing lab order
@@ -3118,11 +3202,12 @@ export def "lab-orders get" [
 ]: nothing -> record<accession_number: string, doctor: int, documents: list<string>, icd10_codes: table<code: string, description: string>, id: int, notes: string, patient: int, priority: string, requisition_id: string, status: string, sublab: int, timestamp: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
   let qp = [(serialize-qp "since" $since "scalar") (serialize-qp "doctor" $doctor "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/api/lab_orders/{id}") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"since": $since, "doctor": $doctor} | compact), body: null}
 }
 
 # Update an existing lab order
@@ -3145,11 +3230,12 @@ export def "lab-orders update-by-id" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
   let qp = [(serialize-qp "since" $since "scalar") (serialize-qp "doctor" $doctor "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/api/lab_orders/{id}") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "patch" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "patch" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"since": $since, "doctor": $doctor} | compact), body: null}
 }
 
 # Update an existing lab order
@@ -3172,11 +3258,12 @@ export def "lab-orders update-by-id-1" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
   let qp = [(serialize-qp "since" $since "scalar") (serialize-qp "doctor" $doctor "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/api/lab_orders/{id}") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"since": $since, "doctor": $doctor} | compact), body: null}
 }
 
 # GET /api/lab_orders_summary
@@ -3204,7 +3291,7 @@ export def "lab-orders-summary list" [
   let full_url = (build-url $base "/api/lab_orders_summary" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"cursor": $cursor, "page_size": $page_size, "since": $since, "patient": $patient, "doctor": $doctor} | compact), body: null}
 }
 
 # GET /api/lab_orders_summary/{id}
@@ -3227,11 +3314,12 @@ export def "lab-orders-summary get" [
 ]: nothing -> record<accession_number: string, doctor: int, documents: list<string>, icd10_codes: table<code: string, description: string>, id: int, notes: string, patient: int, priority: string, requisition_id: string, status: string, sublab: int, timestamp: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
   let qp = [(serialize-qp "since" $since "scalar") (serialize-qp "patient" $patient "scalar") (serialize-qp "doctor" $doctor "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/api/lab_orders_summary/{id}") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"since": $since, "patient": $patient, "doctor": $doctor} | compact), body: null}
 }
 
 # Retrieve or search lab results
@@ -3259,7 +3347,7 @@ export def "lab-results list" [
   let full_url = (build-url $base "/api/lab_results" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"cursor": $cursor, "page_size": $page_size, "order": $order, "doctor": $doctor} | compact), body: null}
 }
 
 # Create lab results. An example lab workflow is as following: - When you get orders, submit them via `/api/lab_orders`, such that doctors can see them in drchrono. - When results come in, submit the result document PDF via `/api/lab_documents` and submit the results data via `/api/lab_results` - Update `/api/lab_orders` status
@@ -3285,7 +3373,7 @@ export def "lab-results create" [
   let full_url = (build-url $base "/api/lab_results" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"order": $order, "doctor": $doctor} | compact), body: null}
 }
 
 # Delete an existing lab result
@@ -3308,11 +3396,12 @@ export def "lab-results delete" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
   let qp = [(serialize-qp "order" $order "scalar") (serialize-qp "doctor" $doctor "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/api/lab_results/{id}") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"order": $order, "doctor": $doctor} | compact), body: null}
 }
 
 # Retrieve an existing lab result
@@ -3335,11 +3424,12 @@ export def "lab-results get" [
 ]: nothing -> record<abnormal_status: string, comments: string, document: int, group_code: string, id: int, is_abnormal: string, lab_order: string, lab_test: int, normal_range: string, observation_code: string, observation_description: string, specimen_received: string, status: string, test_performed: string, unit: string, value: string, value_is_numeric: bool> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
   let qp = [(serialize-qp "order" $order "scalar") (serialize-qp "doctor" $doctor "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/api/lab_results/{id}") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"order": $order, "doctor": $doctor} | compact), body: null}
 }
 
 # Update an existing lab result
@@ -3362,11 +3452,12 @@ export def "lab-results update-by-id" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
   let qp = [(serialize-qp "order" $order "scalar") (serialize-qp "doctor" $doctor "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/api/lab_results/{id}") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "patch" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "patch" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"order": $order, "doctor": $doctor} | compact), body: null}
 }
 
 # Update an existing lab result
@@ -3389,11 +3480,12 @@ export def "lab-results update-by-id-1" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
   let qp = [(serialize-qp "order" $order "scalar") (serialize-qp "doctor" $doctor "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/api/lab_results/{id}") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"order": $order, "doctor": $doctor} | compact), body: null}
 }
 
 # Retrieve or search lab tests
@@ -3421,7 +3513,7 @@ export def "lab-tests list" [
   let full_url = (build-url $base "/api/lab_tests" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"cursor": $cursor, "page_size": $page_size, "order": $order, "doctor": $doctor} | compact), body: null}
 }
 
 # Create lab tests. An example lab workflow is as following: - When you get orders, submit them via `/api/lab_orders`, such that doctors can see them in drchrono. - When results come in, submit the result document PDF via `/api/lab_documents` and submit the results data via `/api/lab_results` - Update `/api/lab_orders` status
@@ -3447,7 +3539,7 @@ export def "lab-tests create" [
   let full_url = (build-url $base "/api/lab_tests" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"order": $order, "doctor": $doctor} | compact), body: null}
 }
 
 # Delete an existing lab test
@@ -3470,11 +3562,12 @@ export def "lab-tests delete" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
   let qp = [(serialize-qp "order" $order "scalar") (serialize-qp "doctor" $doctor "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/api/lab_tests/{id}") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"order": $order, "doctor": $doctor} | compact), body: null}
 }
 
 # Retrieve an existing lab test
@@ -3497,11 +3590,12 @@ export def "lab-tests get" [
 ]: nothing -> record<code: string, collection_date: string, description: string, id: int, internal_notes: string, lab_order: int, name: string, report_notes: string, specimen_condition: string, specimen_source: string, specimen_total_volume: float, status: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
   let qp = [(serialize-qp "order" $order "scalar") (serialize-qp "doctor" $doctor "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/api/lab_tests/{id}") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"order": $order, "doctor": $doctor} | compact), body: null}
 }
 
 # Update an existing lab test
@@ -3524,11 +3618,12 @@ export def "lab-tests update-by-id" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
   let qp = [(serialize-qp "order" $order "scalar") (serialize-qp "doctor" $doctor "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/api/lab_tests/{id}") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "patch" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "patch" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"order": $order, "doctor": $doctor} | compact), body: null}
 }
 
 # Update an existing lab test
@@ -3551,11 +3646,12 @@ export def "lab-tests update-by-id-1" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
   let qp = [(serialize-qp "order" $order "scalar") (serialize-qp "doctor" $doctor "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/api/lab_tests/{id}") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"order": $order, "doctor": $doctor} | compact), body: null}
 }
 
 # Retrieve or search billing line items
@@ -3588,7 +3684,7 @@ export def "line-items list" [
   let full_url = (build-url $base "/api/line_items" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"cursor": $cursor, "page_size": $page_size, "posted_date": $posted_date, "patient": $patient, "office": $office, "doctor": $doctor, "since": $since, "appointment": $appointment, "service_date": $service_date} | compact), body: null}
 }
 
 # Create billing line item for appointments
@@ -3619,7 +3715,7 @@ export def "line-items create" [
   let full_url = (build-url $base "/api/line_items" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"posted_date": $posted_date, "patient": $patient, "office": $office, "doctor": $doctor, "since": $since, "appointment": $appointment, "service_date": $service_date} | compact), body: null}
 }
 
 # DELETE /api/line_items/{id}
@@ -3646,11 +3742,12 @@ export def "line-items delete" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
   let qp = [(serialize-qp "posted_date" $posted_date "scalar") (serialize-qp "patient" $patient "scalar") (serialize-qp "office" $office "scalar") (serialize-qp "doctor" $doctor "scalar") (serialize-qp "since" $since "scalar") (serialize-qp "appointment" $appointment "scalar") (serialize-qp "service_date" $service_date "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/api/line_items/{id}") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"posted_date": $posted_date, "patient": $patient, "office": $office, "doctor": $doctor, "since": $since, "appointment": $appointment, "service_date": $service_date} | compact), body: null}
 }
 
 # Retrieve an existing billing line item
@@ -3678,11 +3775,12 @@ export def "line-items get" [
 ]: nothing -> record<adjustment: float, allowed: float, appointment: int, balance_ins: float, balance_pt: float, balance_total: string, billed: float, billing_status: string, code: string, denied_flag: bool, description: string, diagnosis_pointers: list<string>, doctor: string, expected_reimbursement: float, id: int, ins1_paid: float, ins2_paid: float, ins3_paid: float, ins_total: string, insurance_status: string, modifiers: list<string>, paid_total: string, patient: string, posted_date: string, price: float, procedure_type: string, pt_paid: float, quantity: float, service_date: string, units: string, updated_at: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
   let qp = [(serialize-qp "posted_date" $posted_date "scalar") (serialize-qp "patient" $patient "scalar") (serialize-qp "office" $office "scalar") (serialize-qp "doctor" $doctor "scalar") (serialize-qp "since" $since "scalar") (serialize-qp "appointment" $appointment "scalar") (serialize-qp "service_date" $service_date "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/api/line_items/{id}") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"posted_date": $posted_date, "patient": $patient, "office": $office, "doctor": $doctor, "since": $since, "appointment": $appointment, "service_date": $service_date} | compact), body: null}
 }
 
 # PATCH /api/line_items/{id}
@@ -3709,11 +3807,12 @@ export def "line-items update-by-id" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
   let qp = [(serialize-qp "posted_date" $posted_date "scalar") (serialize-qp "patient" $patient "scalar") (serialize-qp "office" $office "scalar") (serialize-qp "doctor" $doctor "scalar") (serialize-qp "since" $since "scalar") (serialize-qp "appointment" $appointment "scalar") (serialize-qp "service_date" $service_date "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/api/line_items/{id}") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "patch" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "patch" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"posted_date": $posted_date, "patient": $patient, "office": $office, "doctor": $doctor, "since": $since, "appointment": $appointment, "service_date": $service_date} | compact), body: null}
 }
 
 # PUT /api/line_items/{id}
@@ -3740,11 +3839,12 @@ export def "line-items update-by-id-1" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
   let qp = [(serialize-qp "posted_date" $posted_date "scalar") (serialize-qp "patient" $patient "scalar") (serialize-qp "office" $office "scalar") (serialize-qp "doctor" $doctor "scalar") (serialize-qp "since" $since "scalar") (serialize-qp "appointment" $appointment "scalar") (serialize-qp "service_date" $service_date "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/api/line_items/{id}") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"posted_date": $posted_date, "patient": $patient, "office": $office, "doctor": $doctor, "since": $since, "appointment": $appointment, "service_date": $service_date} | compact), body: null}
 }
 
 # Retrieve or search patient medications
@@ -3772,7 +3872,7 @@ export def "medications list" [
   let full_url = (build-url $base "/api/medications" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"cursor": $cursor, "page_size": $page_size, "patient": $patient, "doctor": $doctor} | compact), body: null}
 }
 
 # Create patient medications
@@ -3798,7 +3898,7 @@ export def "medications create" [
   let full_url = (build-url $base "/api/medications" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"patient": $patient, "doctor": $doctor} | compact), body: null}
 }
 
 # Retrieve an existing patient medications
@@ -3821,11 +3921,12 @@ export def "medications get" [
 ]: nothing -> record<appointment: int, date_prescribed: string, date_started_taking: string, date_stopped_taking: string, daw: bool, dispense_quantity: float, doctor: int, dosage_quantity: string, dosage_units: string, frequency: string, id: int, indication: string, name: string, ndc: string, notes: string, number_refills: int, order_status: string, patient: int, pharmacy_note: string, prn: bool, route: string, rxnorm: string, signature_note: string, status: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
   let qp = [(serialize-qp "patient" $patient "scalar") (serialize-qp "doctor" $doctor "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/api/medications/{id}") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"patient": $patient, "doctor": $doctor} | compact), body: null}
 }
 
 # Update an existing patient medications
@@ -3848,11 +3949,12 @@ export def "medications update-by-id" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
   let qp = [(serialize-qp "patient" $patient "scalar") (serialize-qp "doctor" $doctor "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/api/medications/{id}") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "patch" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "patch" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"patient": $patient, "doctor": $doctor} | compact), body: null}
 }
 
 # Update an existing patient medications
@@ -3875,11 +3977,12 @@ export def "medications update-by-id-1" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
   let qp = [(serialize-qp "patient" $patient "scalar") (serialize-qp "doctor" $doctor "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/api/medications/{id}") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"patient": $patient, "doctor": $doctor} | compact), body: null}
 }
 
 # Append a message to the "pharmacy_note" section of the prescription, in a new paragraph
@@ -3902,11 +4005,12 @@ export def "medications-append-to-pharmacy-note create" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
   let qp = [(serialize-qp "patient" $patient "scalar") (serialize-qp "doctor" $doctor "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/api/medications/{id}/append_to_pharmacy_note") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "patch" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "patch" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"patient": $patient, "doctor": $doctor} | compact), body: null}
 }
 
 # Retrieve or search messages in doctor's message center
@@ -3939,7 +4043,7 @@ export def "messages list" [
   let full_url = (build-url $base "/api/messages" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"cursor": $cursor, "page_size": $page_size, "patient": $patient, "doctor": $doctor, "responsible_user": $responsible_user, "updated_since": $updated_since, "received_since": $received_since, "owner": $owner, "type": $type} | compact), body: null}
 }
 
 # Create messages in doctor's message center
@@ -3970,7 +4074,7 @@ export def "messages create" [
   let full_url = (build-url $base "/api/messages" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"patient": $patient, "doctor": $doctor, "responsible_user": $responsible_user, "updated_since": $updated_since, "received_since": $received_since, "owner": $owner, "type": $type} | compact), body: null}
 }
 
 # Delete an existing message in doctor's message center
@@ -3998,11 +4102,12 @@ export def "messages delete" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
   let qp = [(serialize-qp "patient" $patient "scalar") (serialize-qp "doctor" $doctor "scalar") (serialize-qp "responsible_user" $responsible_user "scalar") (serialize-qp "updated_since" $updated_since "scalar") (serialize-qp "received_since" $received_since "scalar") (serialize-qp "owner" $owner "scalar") (serialize-qp "type" $type "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/api/messages/{id}") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"patient": $patient, "doctor": $doctor, "responsible_user": $responsible_user, "updated_since": $updated_since, "received_since": $received_since, "owner": $owner, "type": $type} | compact), body: null}
 }
 
 # Retrieve an existing message in doctor's message center
@@ -4030,11 +4135,12 @@ export def "messages get" [
 ]: nothing -> record<archived: bool, attachment: string, doctor: int, id: int, message_notes: table<created_at: string, created_by: string, text: string>, owner: string, patient: int, read: bool, received_at: string, responsible_user: string, starred: bool, title: string, type: string, updated_at: string, workflow_step: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
   let qp = [(serialize-qp "patient" $patient "scalar") (serialize-qp "doctor" $doctor "scalar") (serialize-qp "responsible_user" $responsible_user "scalar") (serialize-qp "updated_since" $updated_since "scalar") (serialize-qp "received_since" $received_since "scalar") (serialize-qp "owner" $owner "scalar") (serialize-qp "type" $type "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/api/messages/{id}") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"patient": $patient, "doctor": $doctor, "responsible_user": $responsible_user, "updated_since": $updated_since, "received_since": $received_since, "owner": $owner, "type": $type} | compact), body: null}
 }
 
 # Update an existing message in doctor's message center
@@ -4062,11 +4168,12 @@ export def "messages update-by-id" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
   let qp = [(serialize-qp "patient" $patient "scalar") (serialize-qp "doctor" $doctor "scalar") (serialize-qp "responsible_user" $responsible_user "scalar") (serialize-qp "updated_since" $updated_since "scalar") (serialize-qp "received_since" $received_since "scalar") (serialize-qp "owner" $owner "scalar") (serialize-qp "type" $type "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/api/messages/{id}") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "patch" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "patch" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"patient": $patient, "doctor": $doctor, "responsible_user": $responsible_user, "updated_since": $updated_since, "received_since": $received_since, "owner": $owner, "type": $type} | compact), body: null}
 }
 
 # Update an existing message in doctor's message center
@@ -4094,11 +4201,12 @@ export def "messages update-by-id-1" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
   let qp = [(serialize-qp "patient" $patient "scalar") (serialize-qp "doctor" $doctor "scalar") (serialize-qp "responsible_user" $responsible_user "scalar") (serialize-qp "updated_since" $updated_since "scalar") (serialize-qp "received_since" $received_since "scalar") (serialize-qp "owner" $owner "scalar") (serialize-qp "type" $type "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/api/messages/{id}") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"patient": $patient, "doctor": $doctor, "responsible_user": $responsible_user, "updated_since": $updated_since, "received_since": $received_since, "owner": $owner, "type": $type} | compact), body: null}
 }
 
 # Retrieve or search offices
@@ -4125,7 +4233,7 @@ export def "offices list" [
   let full_url = (build-url $base "/api/offices" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"cursor": $cursor, "page_size": $page_size, "doctor": $doctor} | compact), body: null}
 }
 
 # Retrieve an existing office
@@ -4147,11 +4255,12 @@ export def "offices get" [
 ]: nothing -> record<address: string, archived: bool, city: string, country: string, doctor: string, end_time: string, exam_rooms: string, fax_number: string, id: int, name: string, online_scheduling: bool, online_timeslots: table<day: int, hour: int, minute: int>, phone_number: string, start_time: string, state: string, tax_id_number_professional: string, zip_code: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
   let qp = [(serialize-qp "doctor" $doctor "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/api/offices/{id}") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"doctor": $doctor} | compact), body: null}
 }
 
 # Update an existing office
@@ -4173,11 +4282,12 @@ export def "offices update-by-id" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
   let qp = [(serialize-qp "doctor" $doctor "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/api/offices/{id}") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "patch" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "patch" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"doctor": $doctor} | compact), body: null}
 }
 
 # Update an existing office
@@ -4199,11 +4309,12 @@ export def "offices update-by-id-1" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
   let qp = [(serialize-qp "doctor" $doctor "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/api/offices/{id}") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"doctor": $doctor} | compact), body: null}
 }
 
 # Add an exam room to the office
@@ -4225,11 +4336,12 @@ export def "offices-add-exam-room create" [
 ]: nothing -> record<address: string, archived: bool, city: string, country: string, doctor: string, end_time: string, exam_rooms: string, fax_number: string, id: int, name: string, online_scheduling: bool, online_timeslots: table<day: int, hour: int, minute: int>, phone_number: string, start_time: string, state: string, tax_id_number_professional: string, zip_code: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
   let qp = [(serialize-qp "doctor" $doctor "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/api/offices/{id}/add_exam_room") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"doctor": $doctor} | compact), body: null}
 }
 
 # Retrieve or search patient communications for CQM
@@ -4257,7 +4369,7 @@ export def "patient-communications list" [
   let full_url = (build-url $base "/api/patient_communications" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"cursor": $cursor, "page_size": $page_size, "patient": $patient, "doctor": $doctor} | compact), body: null}
 }
 
 # Create patient communication for CQM
@@ -4283,7 +4395,7 @@ export def "patient-communications create" [
   let full_url = (build-url $base "/api/patient_communications" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"patient": $patient, "doctor": $doctor} | compact), body: null}
 }
 
 # Retrieve an existing patient communication for CQM
@@ -4306,11 +4418,12 @@ export def "patient-communications get" [
 ]: nothing -> record<code: string, code_system: string, created_at: string, doctor: int, effective_time: string, id: int, name: string, patient: int, value_code: string, value_code_system: string, value_name: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
   let qp = [(serialize-qp "patient" $patient "scalar") (serialize-qp "doctor" $doctor "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/api/patient_communications/{id}") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"patient": $patient, "doctor": $doctor} | compact), body: null}
 }
 
 # Update an existing patient communication for CQM
@@ -4333,11 +4446,12 @@ export def "patient-communications update-by-id" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
   let qp = [(serialize-qp "patient" $patient "scalar") (serialize-qp "doctor" $doctor "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/api/patient_communications/{id}") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "patch" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "patch" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"patient": $patient, "doctor": $doctor} | compact), body: null}
 }
 
 # Update an existing patient communication for CQM
@@ -4360,11 +4474,12 @@ export def "patient-communications update-by-id-1" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
   let qp = [(serialize-qp "patient" $patient "scalar") (serialize-qp "doctor" $doctor "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/api/patient_communications/{id}") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"patient": $patient, "doctor": $doctor} | compact), body: null}
 }
 
 # Retrieve or search patient flag types
@@ -4391,7 +4506,7 @@ export def "patient-flag-types list" [
   let full_url = (build-url $base "/api/patient_flag_types" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"cursor": $cursor, "page_size": $page_size, "doctor": $doctor} | compact), body: null}
 }
 
 # Create patient flag types
@@ -4416,7 +4531,7 @@ export def "patient-flag-types create" [
   let full_url = (build-url $base "/api/patient_flag_types" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"doctor": $doctor} | compact), body: null}
 }
 
 # Retrieve an existing patient flag type
@@ -4438,11 +4553,12 @@ export def "patient-flag-types get" [
 ]: nothing -> record<archived: bool, color: string, created_at: string, doctor: int, id: int, name: string, priority: int, updated_at: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
   let qp = [(serialize-qp "doctor" $doctor "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/api/patient_flag_types/{id}") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"doctor": $doctor} | compact), body: null}
 }
 
 # Update an existing patient flag type
@@ -4464,11 +4580,12 @@ export def "patient-flag-types update-by-id" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
   let qp = [(serialize-qp "doctor" $doctor "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/api/patient_flag_types/{id}") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "patch" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "patch" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"doctor": $doctor} | compact), body: null}
 }
 
 # Update an existing patient flag type
@@ -4490,11 +4607,12 @@ export def "patient-flag-types update-by-id-1" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
   let qp = [(serialize-qp "doctor" $doctor "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/api/patient_flag_types/{id}") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"doctor": $doctor} | compact), body: null}
 }
 
 # Retrieve or search patient interventions for CQM
@@ -4522,7 +4640,7 @@ export def "patient-interventions list" [
   let full_url = (build-url $base "/api/patient_interventions" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"cursor": $cursor, "page_size": $page_size, "patient": $patient, "doctor": $doctor} | compact), body: null}
 }
 
 # Create patient intervention for CQM
@@ -4548,7 +4666,7 @@ export def "patient-interventions create" [
   let full_url = (build-url $base "/api/patient_interventions" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"patient": $patient, "doctor": $doctor} | compact), body: null}
 }
 
 # Retrieve an existing patient intervention for CQM
@@ -4571,11 +4689,12 @@ export def "patient-interventions get" [
 ]: nothing -> record<code: string, code_system: string, created_at: string, doctor: int, effective_time: string, id: int, name: string, patient: int, value_code: string, value_code_system: string, value_name: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
   let qp = [(serialize-qp "patient" $patient "scalar") (serialize-qp "doctor" $doctor "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/api/patient_interventions/{id}") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"patient": $patient, "doctor": $doctor} | compact), body: null}
 }
 
 # Update an existing patient intervention for CQM
@@ -4598,11 +4717,12 @@ export def "patient-interventions update-by-id" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
   let qp = [(serialize-qp "patient" $patient "scalar") (serialize-qp "doctor" $doctor "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/api/patient_interventions/{id}") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "patch" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "patch" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"patient": $patient, "doctor": $doctor} | compact), body: null}
 }
 
 # Update an existing patient intervention for CQM
@@ -4625,11 +4745,12 @@ export def "patient-interventions update-by-id-1" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
   let qp = [(serialize-qp "patient" $patient "scalar") (serialize-qp "doctor" $doctor "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/api/patient_interventions/{id}") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"patient": $patient, "doctor": $doctor} | compact), body: null}
 }
 
 # GET /api/patient_lab_results
@@ -4658,7 +4779,7 @@ export def "patient-lab-results list" [
   let full_url = (build-url $base "/api/patient_lab_results" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"cursor": $cursor, "page_size": $page_size, "ordering_doctor": $ordering_doctor, "since": $since, "patient": $patient, "doctor": $doctor} | compact), body: null}
 }
 
 # POST /api/patient_lab_results
@@ -4685,7 +4806,7 @@ export def "patient-lab-results create" [
   let full_url = (build-url $base "/api/patient_lab_results" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"ordering_doctor": $ordering_doctor, "since": $since, "patient": $patient, "doctor": $doctor} | compact), body: null}
 }
 
 # DELETE /api/patient_lab_results/{id}
@@ -4709,11 +4830,12 @@ export def "patient-lab-results delete" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
   let qp = [(serialize-qp "ordering_doctor" $ordering_doctor "scalar") (serialize-qp "since" $since "scalar") (serialize-qp "patient" $patient "scalar") (serialize-qp "doctor" $doctor "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/api/patient_lab_results/{id}") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"ordering_doctor": $ordering_doctor, "since": $since, "patient": $patient, "doctor": $doctor} | compact), body: null}
 }
 
 # GET /api/patient_lab_results/{id}
@@ -4737,11 +4859,12 @@ export def "patient-lab-results get" [
 ]: nothing -> record<created_at: string, date_test_performed: string, doctor_comments: string, doctor_signoff: bool, id: int, lab_abnormal_flag: string, lab_imported_from_ccr: string, lab_normal_range: string, lab_normal_range_units: string, lab_order_status: string, lab_result_value: string, lab_result_value_as_float: float, lab_result_value_units: string, loinc_code: string, ordering_doctor: int, patient: int, scanned_in_result: string, title: string, updated_at: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
   let qp = [(serialize-qp "ordering_doctor" $ordering_doctor "scalar") (serialize-qp "since" $since "scalar") (serialize-qp "patient" $patient "scalar") (serialize-qp "doctor" $doctor "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/api/patient_lab_results/{id}") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"ordering_doctor": $ordering_doctor, "since": $since, "patient": $patient, "doctor": $doctor} | compact), body: null}
 }
 
 # PATCH /api/patient_lab_results/{id}
@@ -4765,11 +4888,12 @@ export def "patient-lab-results update-by-id" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
   let qp = [(serialize-qp "ordering_doctor" $ordering_doctor "scalar") (serialize-qp "since" $since "scalar") (serialize-qp "patient" $patient "scalar") (serialize-qp "doctor" $doctor "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/api/patient_lab_results/{id}") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "patch" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "patch" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"ordering_doctor": $ordering_doctor, "since": $since, "patient": $patient, "doctor": $doctor} | compact), body: null}
 }
 
 # PUT /api/patient_lab_results/{id}
@@ -4793,11 +4917,12 @@ export def "patient-lab-results update-by-id-1" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
   let qp = [(serialize-qp "ordering_doctor" $ordering_doctor "scalar") (serialize-qp "since" $since "scalar") (serialize-qp "patient" $patient "scalar") (serialize-qp "doctor" $doctor "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/api/patient_lab_results/{id}") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"ordering_doctor": $ordering_doctor, "since": $since, "patient": $patient, "doctor": $doctor} | compact), body: null}
 }
 
 # GET /api/patient_messages
@@ -4825,7 +4950,7 @@ export def "patient-messages list" [
   let full_url = (build-url $base "/api/patient_messages" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"cursor": $cursor, "page_size": $page_size, "since": $since, "patient": $patient, "doctor": $doctor} | compact), body: null}
 }
 
 # POST /api/patient_messages
@@ -4851,7 +4976,7 @@ export def "patient-messages create" [
   let full_url = (build-url $base "/api/patient_messages" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"since": $since, "patient": $patient, "doctor": $doctor} | compact), body: null}
 }
 
 # GET /api/patient_messages/{id}
@@ -4874,11 +4999,12 @@ export def "patient-messages get" [
 ]: nothing -> record<attachments: table<attachment: string, created_at: string, doctor: int, updated_at: string>, body: string, created_at: string, doctor: int, id: int, message: string, patient: int, subject: string, updated_at: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
   let qp = [(serialize-qp "since" $since "scalar") (serialize-qp "patient" $patient "scalar") (serialize-qp "doctor" $doctor "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/api/patient_messages/{id}") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"since": $since, "patient": $patient, "doctor": $doctor} | compact), body: null}
 }
 
 # PATCH /api/patient_messages/{id}
@@ -4901,11 +5027,12 @@ export def "patient-messages update-by-id" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
   let qp = [(serialize-qp "since" $since "scalar") (serialize-qp "patient" $patient "scalar") (serialize-qp "doctor" $doctor "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/api/patient_messages/{id}") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "patch" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "patch" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"since": $since, "patient": $patient, "doctor": $doctor} | compact), body: null}
 }
 
 # PUT /api/patient_messages/{id}
@@ -4928,11 +5055,12 @@ export def "patient-messages update-by-id-1" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
   let qp = [(serialize-qp "since" $since "scalar") (serialize-qp "patient" $patient "scalar") (serialize-qp "doctor" $doctor "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/api/patient_messages/{id}") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"since": $since, "patient": $patient, "doctor": $doctor} | compact), body: null}
 }
 
 # Retrieve or search patient payment logs
@@ -4961,7 +5089,7 @@ export def "patient-payment-log list" [
   let full_url = (build-url $base "/api/patient_payment_log" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"cursor": $cursor, "page_size": $page_size, "since": $since, "office": $office, "doctor": $doctor} | compact), body: null}
 }
 
 # Retrieve an existing patient payment log
@@ -4985,11 +5113,12 @@ export def "patient-payment-log get" [
 ]: nothing -> record<action: string, amount: float, appointment: string, created_by: string, doctor: string, id: int, patient: string, payment_method: string, source: string, updated_at: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
   let qp = [(serialize-qp "since" $since "scalar") (serialize-qp "office" $office "scalar") (serialize-qp "doctor" $doctor "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/api/patient_payment_log/{id}") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"since": $since, "office": $office, "doctor": $doctor} | compact), body: null}
 }
 
 # Retrieve or search patient payments
@@ -5018,7 +5147,7 @@ export def "patient-payments list" [
   let full_url = (build-url $base "/api/patient_payments" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"cursor": $cursor, "page_size": $page_size, "since": $since, "patient": $patient, "doctor": $doctor} | compact), body: null}
 }
 
 # Create patient payment
@@ -5045,7 +5174,7 @@ export def "patient-payments create" [
   let full_url = (build-url $base "/api/patient_payments" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"since": $since, "patient": $patient, "doctor": $doctor} | compact), body: null}
 }
 
 # Retrieve an existing patient payment
@@ -5069,11 +5198,12 @@ export def "patient-payments get" [
 ]: nothing -> record<amount: float, appointment: int, created_at: string, created_by: string, doctor: int, id: int, line_item: int, notes: string, patient: int, payment_method: string, payment_transaction_type: string, posted_date: string, received_date: string, trace_number: string, updated_at: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
   let qp = [(serialize-qp "since" $since "scalar") (serialize-qp "patient" $patient "scalar") (serialize-qp "doctor" $doctor "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/api/patient_payments/{id}") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"since": $since, "patient": $patient, "doctor": $doctor} | compact), body: null}
 }
 
 # Retrieve or search patient physical exams for CQM
@@ -5101,7 +5231,7 @@ export def "patient-physical-exams list" [
   let full_url = (build-url $base "/api/patient_physical_exams" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"cursor": $cursor, "page_size": $page_size, "patient": $patient, "doctor": $doctor} | compact), body: null}
 }
 
 # Create patient physical exam for CQM
@@ -5127,7 +5257,7 @@ export def "patient-physical-exams create" [
   let full_url = (build-url $base "/api/patient_physical_exams" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"patient": $patient, "doctor": $doctor} | compact), body: null}
 }
 
 # Retrieve an existing patient physical exam for CQM
@@ -5150,11 +5280,12 @@ export def "patient-physical-exams get" [
 ]: nothing -> record<code: string, code_system: string, created_at: string, doctor: int, effective_time: string, id: int, name: string, patient: int, value_code: string, value_code_system: string, value_name: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
   let qp = [(serialize-qp "patient" $patient "scalar") (serialize-qp "doctor" $doctor "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/api/patient_physical_exams/{id}") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"patient": $patient, "doctor": $doctor} | compact), body: null}
 }
 
 # Update an existing patient physical exam for CQM
@@ -5177,11 +5308,12 @@ export def "patient-physical-exams update-by-id" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
   let qp = [(serialize-qp "patient" $patient "scalar") (serialize-qp "doctor" $doctor "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/api/patient_physical_exams/{id}") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "patch" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "patch" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"patient": $patient, "doctor": $doctor} | compact), body: null}
 }
 
 # Update an existing patient physical exam for CQM
@@ -5204,11 +5336,12 @@ export def "patient-physical-exams update-by-id-1" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
   let qp = [(serialize-qp "patient" $patient "scalar") (serialize-qp "doctor" $doctor "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/api/patient_physical_exams/{id}") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"patient": $patient, "doctor": $doctor} | compact), body: null}
 }
 
 # GET /api/patient_risk_assessments
@@ -5235,7 +5368,7 @@ export def "patient-risk-assessments list" [
   let full_url = (build-url $base "/api/patient_risk_assessments" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"cursor": $cursor, "page_size": $page_size, "patient": $patient, "doctor": $doctor} | compact), body: null}
 }
 
 # POST /api/patient_risk_assessments
@@ -5260,7 +5393,7 @@ export def "patient-risk-assessments create" [
   let full_url = (build-url $base "/api/patient_risk_assessments" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"patient": $patient, "doctor": $doctor} | compact), body: null}
 }
 
 # GET /api/patient_risk_assessments/{id}
@@ -5282,11 +5415,12 @@ export def "patient-risk-assessments get" [
 ]: nothing -> record<code: string, code_system: string, created_at: string, doctor: int, effective_time: string, id: int, name: string, patient: int, value_code: string, value_code_system: string, value_name: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
   let qp = [(serialize-qp "patient" $patient "scalar") (serialize-qp "doctor" $doctor "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/api/patient_risk_assessments/{id}") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"patient": $patient, "doctor": $doctor} | compact), body: null}
 }
 
 # PATCH /api/patient_risk_assessments/{id}
@@ -5308,11 +5442,12 @@ export def "patient-risk-assessments update-by-id" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
   let qp = [(serialize-qp "patient" $patient "scalar") (serialize-qp "doctor" $doctor "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/api/patient_risk_assessments/{id}") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "patch" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "patch" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"patient": $patient, "doctor": $doctor} | compact), body: null}
 }
 
 # PUT /api/patient_risk_assessments/{id}
@@ -5334,11 +5469,12 @@ export def "patient-risk-assessments update-by-id-1" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
   let qp = [(serialize-qp "patient" $patient "scalar") (serialize-qp "doctor" $doctor "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/api/patient_risk_assessments/{id}") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"patient": $patient, "doctor": $doctor} | compact), body: null}
 }
 
 # Retrieve or search patient vaccine records
@@ -5368,7 +5504,7 @@ export def "patient-vaccine-records list" [
   let full_url = (build-url $base "/api/patient_vaccine_records" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"cursor": $cursor, "page_size": $page_size, "cvx_code": $cvx_code, "patient": $patient, "since": $since, "doctor": $doctor} | compact), body: null}
 }
 
 # Create patient vaccine records
@@ -5396,7 +5532,7 @@ export def "patient-vaccine-records create" [
   let full_url = (build-url $base "/api/patient_vaccine_records" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"cvx_code": $cvx_code, "patient": $patient, "since": $since, "doctor": $doctor} | compact), body: null}
 }
 
 # Retrieve an existing patient vaccine records
@@ -5421,11 +5557,12 @@ export def "patient-vaccine-records get" [
 ]: nothing -> record<administered_at: int, administered_by: string, administration_start: string, amount: float, comments: string, completion_status: string, consent_form: int, cpt_code: string, created_at: string, cvx_code: string, doses: table<id: int, max_age_months: int, min_age_months: int, title: string>, entered_by: string, funding_eligibility: string, id: int, name: string, next_dose_date: string, observed_immunity: string, ordering_doctor: int, patient: int, record_source: string, route: string, site: string, units: string, updated_at: string, vaccine_inventory: int, vis: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
   let qp = [(serialize-qp "cvx_code" $cvx_code "scalar") (serialize-qp "patient" $patient "scalar") (serialize-qp "since" $since "scalar") (serialize-qp "doctor" $doctor "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/api/patient_vaccine_records/{id}") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"cvx_code": $cvx_code, "patient": $patient, "since": $since, "doctor": $doctor} | compact), body: null}
 }
 
 # Update an existing patient vaccine records
@@ -5450,11 +5587,12 @@ export def "patient-vaccine-records update-by-id" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
   let qp = [(serialize-qp "cvx_code" $cvx_code "scalar") (serialize-qp "patient" $patient "scalar") (serialize-qp "since" $since "scalar") (serialize-qp "doctor" $doctor "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/api/patient_vaccine_records/{id}") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "patch" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "patch" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"cvx_code": $cvx_code, "patient": $patient, "since": $since, "doctor": $doctor} | compact), body: null}
 }
 
 # Update an existing patient vaccine records
@@ -5479,11 +5617,12 @@ export def "patient-vaccine-records update-by-id-1" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
   let qp = [(serialize-qp "cvx_code" $cvx_code "scalar") (serialize-qp "patient" $patient "scalar") (serialize-qp "since" $since "scalar") (serialize-qp "doctor" $doctor "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/api/patient_vaccine_records/{id}") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"cvx_code": $cvx_code, "patient": $patient, "since": $since, "doctor": $doctor} | compact), body: null}
 }
 
 # Retrieve or search patients
@@ -5520,7 +5659,7 @@ export def "patients list" [
   let full_url = (build-url $base "/api/patients" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"cursor": $cursor, "page_size": $page_size, "first_name": $first_name, "last_name": $last_name, "preferred_language": $preferred_language, "doctor": $doctor, "gender": $gender, "since": $since, "date_of_birth": $date_of_birth, "race": $race, "chart_id": $chart_id, "email": $email, "ethnicity": $ethnicity} | compact), body: null}
 }
 
 # Create patient
@@ -5555,7 +5694,7 @@ export def "patients create" [
   let full_url = (build-url $base "/api/patients" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"first_name": $first_name, "last_name": $last_name, "preferred_language": $preferred_language, "doctor": $doctor, "gender": $gender, "since": $since, "date_of_birth": $date_of_birth, "race": $race, "chart_id": $chart_id, "email": $email, "ethnicity": $ethnicity} | compact), body: null}
 }
 
 # Delete an existing patient
@@ -5587,11 +5726,12 @@ export def "patients delete" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
   let qp = [(serialize-qp "first_name" $first_name "scalar") (serialize-qp "last_name" $last_name "scalar") (serialize-qp "preferred_language" $preferred_language "scalar") (serialize-qp "doctor" $doctor "scalar") (serialize-qp "gender" $gender "scalar") (serialize-qp "since" $since "scalar") (serialize-qp "date_of_birth" $date_of_birth "scalar") (serialize-qp "race" $race "scalar") (serialize-qp "chart_id" $chart_id "scalar") (serialize-qp "email" $email "scalar") (serialize-qp "ethnicity" $ethnicity "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/api/patients/{id}") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"first_name": $first_name, "last_name": $last_name, "preferred_language": $preferred_language, "doctor": $doctor, "gender": $gender, "since": $since, "date_of_birth": $date_of_birth, "race": $race, "chart_id": $chart_id, "email": $email, "ethnicity": $ethnicity} | compact), body: null}
 }
 
 # Retrieve an existing patient
@@ -5623,11 +5763,12 @@ export def "patients get" [
 ]: nothing -> record<address: string, auto_accident_insurance: record<auto_accident_case_number: string, auto_accident_claim_rep_address: string, auto_accident_claim_rep_city: string, auto_accident_claim_rep_is_insurer: bool, auto_accident_claim_rep_name: string, auto_accident_claim_rep_state: string, auto_accident_claim_rep_zip: string, auto_accident_company: string, auto_accident_date_of_accident: string, auto_accident_disabled_from_date: string, auto_accident_disabled_to_date: string, auto_accident_had_similar_condition: bool, auto_accident_is_subscriber_the_patient: bool, auto_accident_notes: string, auto_accident_patient_relationship_to_subscriber: string, auto_accident_payer_address: string, auto_accident_payer_city: string, auto_accident_payer_id: string, auto_accident_payer_state: string, auto_accident_payer_zip: string, auto_accident_policy_number: string, auto_accident_return_to_work_date: string, auto_accident_significant_injury: string, auto_accident_significant_injury_notes: string, auto_accident_similar_condition_date: string, auto_accident_similar_condition_notes: string, auto_accident_state_of_occurrence: string, auto_accident_still_under_care: bool, auto_accident_subscriber_address: string, auto_accident_subscriber_city: string, auto_accident_subscriber_date_of_birth: string, auto_accident_subscriber_first_name: string, auto_accident_subscriber_last_name: string, auto_accident_subscriber_middle_name: string, auto_accident_subscriber_phone_number: string, auto_accident_subscriber_social_security: string, auto_accident_subscriber_state: string, auto_accident_subscriber_suffix: string, auto_accident_subscriber_zip_code: string, auto_accident_treatment_duration: string, auto_accident_will_require_therapy: bool, auto_accident_will_require_therapy_rec: string>, cell_phone: string, chart_id: string, city: string, copay: string, custom_demographics: table<field_type: int, updated_at: string, value: string>, date_of_birth: string, date_of_first_appointment: string, date_of_last_appointment: string, default_pharmacy: string, disable_sms_messages: bool, doctor: int, email: string, emergency_contact_name: string, emergency_contact_phone: string, emergency_contact_relation: string, employer: string, employer_address: string, employer_city: string, employer_state: string, employer_zip_code: string, ethnicity: string, first_name: string, gender: string, home_phone: string, id: int, last_name: string, middle_name: string, nick_name: string, office_phone: string, offices: list<int>, patient_flags: table<archived: bool, color: string, created_at: string, doctor: int, id: int, name: string, priority: int, updated_at: string>, patient_flags_attached: table<archived: bool, created_at: string, flag_text: string, flag_type: int, id: int, updated_at: string>, patient_payment_profile: string, patient_photo: string, patient_photo_date: string, patient_status: string, preferred_language: string, primary_care_physician: string, primary_insurance: record<insurance_claim_office_number: string, insurance_company: string, insurance_group_name: string, insurance_group_number: string, insurance_id_number: string, insurance_payer_id: string, insurance_plan_name: string, insurance_plan_type: string, is_subscriber_the_patient: bool, patient_relationship_to_subscriber: string, photo_back: string, photo_front: string, subscriber_address: string, subscriber_city: string, subscriber_country: string, subscriber_date_of_birth: string, subscriber_first_name: string, subscriber_gender: string, subscriber_last_name: string, subscriber_middle_name: string, subscriber_social_security: string, subscriber_state: string, subscriber_suffix: string, subscriber_zip_code: string>, race: string, referring_doctor: record<address: string, email: string, fax: string, first_name: string, last_name: string, middle_name: string, npi: string, phone: string, provider_number: string, provider_qualifier: string, specialty: string, suffix: string>, referring_source: string, responsible_party_email: string, responsible_party_name: string, responsible_party_phone: string, responsible_party_relation: string, secondary_insurance: record<insurance_claim_office_number: string, insurance_company: string, insurance_group_name: string, insurance_group_number: string, insurance_id_number: string, insurance_payer_id: string, insurance_plan_name: string, insurance_plan_type: string, is_subscriber_the_patient: bool, patient_relationship_to_subscriber: string, photo_back: string, photo_front: string, subscriber_address: string, subscriber_city: string, subscriber_country: string, subscriber_date_of_birth: string, subscriber_first_name: string, subscriber_gender: string, subscriber_last_name: string, subscriber_middle_name: string, subscriber_social_security: string, subscriber_state: string, subscriber_suffix: string, subscriber_zip_code: string>, social_security_number: string, state: string, tertiary_insurance: record<insurance_claim_office_number: string, insurance_company: string, insurance_group_name: string, insurance_group_number: string, insurance_id_number: string, insurance_payer_id: string, insurance_plan_name: string, insurance_plan_type: string, is_subscriber_the_patient: bool, patient_relationship_to_subscriber: string, photo_back: string, photo_front: string, subscriber_address: string, subscriber_city: string, subscriber_country: string, subscriber_date_of_birth: string, subscriber_first_name: string, subscriber_gender: string, subscriber_last_name: string, subscriber_middle_name: string, subscriber_social_security: string, subscriber_state: string, subscriber_suffix: string, subscriber_zip_code: string>, updated_at: string, workers_comp_insurance: record<property_and_casualty_agency_claim_number: string, workers_comp_carrier_code: string, workers_comp_case_number: string, workers_comp_company: string, workers_comp_date_of_accident: string, workers_comp_group_name: string, workers_comp_group_number: string, workers_comp_notes: string, workers_comp_payer_address: string, workers_comp_payer_city: string, workers_comp_payer_id: string, workers_comp_payer_state: string, workers_comp_payer_zip: string, workers_comp_state_of_occurrence: string, workers_comp_wcb: string, workers_comp_wcb_rating_code: string>, zip_code: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
   let qp = [(serialize-qp "first_name" $first_name "scalar") (serialize-qp "last_name" $last_name "scalar") (serialize-qp "preferred_language" $preferred_language "scalar") (serialize-qp "doctor" $doctor "scalar") (serialize-qp "gender" $gender "scalar") (serialize-qp "since" $since "scalar") (serialize-qp "date_of_birth" $date_of_birth "scalar") (serialize-qp "race" $race "scalar") (serialize-qp "chart_id" $chart_id "scalar") (serialize-qp "email" $email "scalar") (serialize-qp "ethnicity" $ethnicity "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/api/patients/{id}") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"first_name": $first_name, "last_name": $last_name, "preferred_language": $preferred_language, "doctor": $doctor, "gender": $gender, "since": $since, "date_of_birth": $date_of_birth, "race": $race, "chart_id": $chart_id, "email": $email, "ethnicity": $ethnicity} | compact), body: null}
 }
 
 # Update an existing patient
@@ -5659,11 +5800,12 @@ export def "patients update-by-id" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
   let qp = [(serialize-qp "first_name" $first_name "scalar") (serialize-qp "last_name" $last_name "scalar") (serialize-qp "preferred_language" $preferred_language "scalar") (serialize-qp "doctor" $doctor "scalar") (serialize-qp "gender" $gender "scalar") (serialize-qp "since" $since "scalar") (serialize-qp "date_of_birth" $date_of_birth "scalar") (serialize-qp "race" $race "scalar") (serialize-qp "chart_id" $chart_id "scalar") (serialize-qp "email" $email "scalar") (serialize-qp "ethnicity" $ethnicity "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/api/patients/{id}") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "patch" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "patch" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"first_name": $first_name, "last_name": $last_name, "preferred_language": $preferred_language, "doctor": $doctor, "gender": $gender, "since": $since, "date_of_birth": $date_of_birth, "race": $race, "chart_id": $chart_id, "email": $email, "ethnicity": $ethnicity} | compact), body: null}
 }
 
 # Update an existing patient
@@ -5695,11 +5837,12 @@ export def "patients update-by-id-1" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
   let qp = [(serialize-qp "first_name" $first_name "scalar") (serialize-qp "last_name" $last_name "scalar") (serialize-qp "preferred_language" $preferred_language "scalar") (serialize-qp "doctor" $doctor "scalar") (serialize-qp "gender" $gender "scalar") (serialize-qp "since" $since "scalar") (serialize-qp "date_of_birth" $date_of_birth "scalar") (serialize-qp "race" $race "scalar") (serialize-qp "chart_id" $chart_id "scalar") (serialize-qp "email" $email "scalar") (serialize-qp "ethnicity" $ethnicity "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/api/patients/{id}") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"first_name": $first_name, "last_name": $last_name, "preferred_language": $preferred_language, "doctor": $doctor, "gender": $gender, "since": $since, "date_of_birth": $date_of_birth, "race": $race, "chart_id": $chart_id, "email": $email, "ethnicity": $ethnicity} | compact), body: null}
 }
 
 # Retrieve patient CCDA
@@ -5731,11 +5874,12 @@ export def "patients-ccda get" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
   let qp = [(serialize-qp "first_name" $first_name "scalar") (serialize-qp "last_name" $last_name "scalar") (serialize-qp "preferred_language" $preferred_language "scalar") (serialize-qp "doctor" $doctor "scalar") (serialize-qp "gender" $gender "scalar") (serialize-qp "since" $since "scalar") (serialize-qp "date_of_birth" $date_of_birth "scalar") (serialize-qp "race" $race "scalar") (serialize-qp "chart_id" $chart_id "scalar") (serialize-qp "email" $email "scalar") (serialize-qp "ethnicity" $ethnicity "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/api/patients/{id}/ccda") $qp)
   let accept_val = "application/xml"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"first_name": $first_name, "last_name": $last_name, "preferred_language": $preferred_language, "doctor": $doctor, "gender": $gender, "since": $since, "date_of_birth": $date_of_birth, "race": $race, "chart_id": $chart_id, "email": $email, "ethnicity": $ethnicity} | compact), body: null}
 }
 
 # Revoke sent onpatient invites
@@ -5767,11 +5911,12 @@ export def "patients-onpatient-access delete" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
   let qp = [(serialize-qp "first_name" $first_name "scalar") (serialize-qp "last_name" $last_name "scalar") (serialize-qp "preferred_language" $preferred_language "scalar") (serialize-qp "doctor" $doctor "scalar") (serialize-qp "gender" $gender "scalar") (serialize-qp "since" $since "scalar") (serialize-qp "date_of_birth" $date_of_birth "scalar") (serialize-qp "race" $race "scalar") (serialize-qp "chart_id" $chart_id "scalar") (serialize-qp "email" $email "scalar") (serialize-qp "ethnicity" $ethnicity "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/api/patients/{id}/onpatient_access") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"first_name": $first_name, "last_name": $last_name, "preferred_language": $preferred_language, "doctor": $doctor, "gender": $gender, "since": $since, "date_of_birth": $date_of_birth, "race": $race, "chart_id": $chart_id, "email": $email, "ethnicity": $ethnicity} | compact), body: null}
 }
 
 # Retrieve or search existing onpatient access invites
@@ -5803,11 +5948,12 @@ export def "patients-onpatient-access get" [
 ]: nothing -> record<address: string, auto_accident_insurance: record<auto_accident_case_number: string, auto_accident_claim_rep_address: string, auto_accident_claim_rep_city: string, auto_accident_claim_rep_is_insurer: bool, auto_accident_claim_rep_name: string, auto_accident_claim_rep_state: string, auto_accident_claim_rep_zip: string, auto_accident_company: string, auto_accident_date_of_accident: string, auto_accident_disabled_from_date: string, auto_accident_disabled_to_date: string, auto_accident_had_similar_condition: bool, auto_accident_is_subscriber_the_patient: bool, auto_accident_notes: string, auto_accident_patient_relationship_to_subscriber: string, auto_accident_payer_address: string, auto_accident_payer_city: string, auto_accident_payer_id: string, auto_accident_payer_state: string, auto_accident_payer_zip: string, auto_accident_policy_number: string, auto_accident_return_to_work_date: string, auto_accident_significant_injury: string, auto_accident_significant_injury_notes: string, auto_accident_similar_condition_date: string, auto_accident_similar_condition_notes: string, auto_accident_state_of_occurrence: string, auto_accident_still_under_care: bool, auto_accident_subscriber_address: string, auto_accident_subscriber_city: string, auto_accident_subscriber_date_of_birth: string, auto_accident_subscriber_first_name: string, auto_accident_subscriber_last_name: string, auto_accident_subscriber_middle_name: string, auto_accident_subscriber_phone_number: string, auto_accident_subscriber_social_security: string, auto_accident_subscriber_state: string, auto_accident_subscriber_suffix: string, auto_accident_subscriber_zip_code: string, auto_accident_treatment_duration: string, auto_accident_will_require_therapy: bool, auto_accident_will_require_therapy_rec: string>, cell_phone: string, chart_id: string, city: string, copay: string, custom_demographics: table<field_type: int, updated_at: string, value: string>, date_of_birth: string, date_of_first_appointment: string, date_of_last_appointment: string, default_pharmacy: string, disable_sms_messages: bool, doctor: int, email: string, emergency_contact_name: string, emergency_contact_phone: string, emergency_contact_relation: string, employer: string, employer_address: string, employer_city: string, employer_state: string, employer_zip_code: string, ethnicity: string, first_name: string, gender: string, home_phone: string, id: int, last_name: string, middle_name: string, nick_name: string, office_phone: string, offices: list<int>, patient_flags: table<archived: bool, color: string, created_at: string, doctor: int, id: int, name: string, priority: int, updated_at: string>, patient_flags_attached: table<archived: bool, created_at: string, flag_text: string, flag_type: int, id: int, updated_at: string>, patient_payment_profile: string, patient_photo: string, patient_photo_date: string, patient_status: string, preferred_language: string, primary_care_physician: string, primary_insurance: record<insurance_claim_office_number: string, insurance_company: string, insurance_group_name: string, insurance_group_number: string, insurance_id_number: string, insurance_payer_id: string, insurance_plan_name: string, insurance_plan_type: string, is_subscriber_the_patient: bool, patient_relationship_to_subscriber: string, photo_back: string, photo_front: string, subscriber_address: string, subscriber_city: string, subscriber_country: string, subscriber_date_of_birth: string, subscriber_first_name: string, subscriber_gender: string, subscriber_last_name: string, subscriber_middle_name: string, subscriber_social_security: string, subscriber_state: string, subscriber_suffix: string, subscriber_zip_code: string>, race: string, referring_doctor: record<address: string, email: string, fax: string, first_name: string, last_name: string, middle_name: string, npi: string, phone: string, provider_number: string, provider_qualifier: string, specialty: string, suffix: string>, referring_source: string, responsible_party_email: string, responsible_party_name: string, responsible_party_phone: string, responsible_party_relation: string, secondary_insurance: record<insurance_claim_office_number: string, insurance_company: string, insurance_group_name: string, insurance_group_number: string, insurance_id_number: string, insurance_payer_id: string, insurance_plan_name: string, insurance_plan_type: string, is_subscriber_the_patient: bool, patient_relationship_to_subscriber: string, photo_back: string, photo_front: string, subscriber_address: string, subscriber_city: string, subscriber_country: string, subscriber_date_of_birth: string, subscriber_first_name: string, subscriber_gender: string, subscriber_last_name: string, subscriber_middle_name: string, subscriber_social_security: string, subscriber_state: string, subscriber_suffix: string, subscriber_zip_code: string>, social_security_number: string, state: string, tertiary_insurance: record<insurance_claim_office_number: string, insurance_company: string, insurance_group_name: string, insurance_group_number: string, insurance_id_number: string, insurance_payer_id: string, insurance_plan_name: string, insurance_plan_type: string, is_subscriber_the_patient: bool, patient_relationship_to_subscriber: string, photo_back: string, photo_front: string, subscriber_address: string, subscriber_city: string, subscriber_country: string, subscriber_date_of_birth: string, subscriber_first_name: string, subscriber_gender: string, subscriber_last_name: string, subscriber_middle_name: string, subscriber_social_security: string, subscriber_state: string, subscriber_suffix: string, subscriber_zip_code: string>, updated_at: string, workers_comp_insurance: record<property_and_casualty_agency_claim_number: string, workers_comp_carrier_code: string, workers_comp_case_number: string, workers_comp_company: string, workers_comp_date_of_accident: string, workers_comp_group_name: string, workers_comp_group_number: string, workers_comp_notes: string, workers_comp_payer_address: string, workers_comp_payer_city: string, workers_comp_payer_id: string, workers_comp_payer_state: string, workers_comp_payer_zip: string, workers_comp_state_of_occurrence: string, workers_comp_wcb: string, workers_comp_wcb_rating_code: string>, zip_code: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
   let qp = [(serialize-qp "first_name" $first_name "scalar") (serialize-qp "last_name" $last_name "scalar") (serialize-qp "preferred_language" $preferred_language "scalar") (serialize-qp "doctor" $doctor "scalar") (serialize-qp "gender" $gender "scalar") (serialize-qp "since" $since "scalar") (serialize-qp "date_of_birth" $date_of_birth "scalar") (serialize-qp "race" $race "scalar") (serialize-qp "chart_id" $chart_id "scalar") (serialize-qp "email" $email "scalar") (serialize-qp "ethnicity" $ethnicity "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/api/patients/{id}/onpatient_access") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"first_name": $first_name, "last_name": $last_name, "preferred_language": $preferred_language, "doctor": $doctor, "gender": $gender, "since": $since, "date_of_birth": $date_of_birth, "race": $race, "chart_id": $chart_id, "email": $email, "ethnicity": $ethnicity} | compact), body: null}
 }
 
 # Send new onpatient invite to patient
@@ -5839,11 +5985,12 @@ export def "patients-onpatient-access create" [
 ]: nothing -> record<address: string, auto_accident_insurance: record<auto_accident_case_number: string, auto_accident_claim_rep_address: string, auto_accident_claim_rep_city: string, auto_accident_claim_rep_is_insurer: bool, auto_accident_claim_rep_name: string, auto_accident_claim_rep_state: string, auto_accident_claim_rep_zip: string, auto_accident_company: string, auto_accident_date_of_accident: string, auto_accident_disabled_from_date: string, auto_accident_disabled_to_date: string, auto_accident_had_similar_condition: bool, auto_accident_is_subscriber_the_patient: bool, auto_accident_notes: string, auto_accident_patient_relationship_to_subscriber: string, auto_accident_payer_address: string, auto_accident_payer_city: string, auto_accident_payer_id: string, auto_accident_payer_state: string, auto_accident_payer_zip: string, auto_accident_policy_number: string, auto_accident_return_to_work_date: string, auto_accident_significant_injury: string, auto_accident_significant_injury_notes: string, auto_accident_similar_condition_date: string, auto_accident_similar_condition_notes: string, auto_accident_state_of_occurrence: string, auto_accident_still_under_care: bool, auto_accident_subscriber_address: string, auto_accident_subscriber_city: string, auto_accident_subscriber_date_of_birth: string, auto_accident_subscriber_first_name: string, auto_accident_subscriber_last_name: string, auto_accident_subscriber_middle_name: string, auto_accident_subscriber_phone_number: string, auto_accident_subscriber_social_security: string, auto_accident_subscriber_state: string, auto_accident_subscriber_suffix: string, auto_accident_subscriber_zip_code: string, auto_accident_treatment_duration: string, auto_accident_will_require_therapy: bool, auto_accident_will_require_therapy_rec: string>, cell_phone: string, chart_id: string, city: string, copay: string, custom_demographics: table<field_type: int, updated_at: string, value: string>, date_of_birth: string, date_of_first_appointment: string, date_of_last_appointment: string, default_pharmacy: string, disable_sms_messages: bool, doctor: int, email: string, emergency_contact_name: string, emergency_contact_phone: string, emergency_contact_relation: string, employer: string, employer_address: string, employer_city: string, employer_state: string, employer_zip_code: string, ethnicity: string, first_name: string, gender: string, home_phone: string, id: int, last_name: string, middle_name: string, nick_name: string, office_phone: string, offices: list<int>, patient_flags: table<archived: bool, color: string, created_at: string, doctor: int, id: int, name: string, priority: int, updated_at: string>, patient_flags_attached: table<archived: bool, created_at: string, flag_text: string, flag_type: int, id: int, updated_at: string>, patient_payment_profile: string, patient_photo: string, patient_photo_date: string, patient_status: string, preferred_language: string, primary_care_physician: string, primary_insurance: record<insurance_claim_office_number: string, insurance_company: string, insurance_group_name: string, insurance_group_number: string, insurance_id_number: string, insurance_payer_id: string, insurance_plan_name: string, insurance_plan_type: string, is_subscriber_the_patient: bool, patient_relationship_to_subscriber: string, photo_back: string, photo_front: string, subscriber_address: string, subscriber_city: string, subscriber_country: string, subscriber_date_of_birth: string, subscriber_first_name: string, subscriber_gender: string, subscriber_last_name: string, subscriber_middle_name: string, subscriber_social_security: string, subscriber_state: string, subscriber_suffix: string, subscriber_zip_code: string>, race: string, referring_doctor: record<address: string, email: string, fax: string, first_name: string, last_name: string, middle_name: string, npi: string, phone: string, provider_number: string, provider_qualifier: string, specialty: string, suffix: string>, referring_source: string, responsible_party_email: string, responsible_party_name: string, responsible_party_phone: string, responsible_party_relation: string, secondary_insurance: record<insurance_claim_office_number: string, insurance_company: string, insurance_group_name: string, insurance_group_number: string, insurance_id_number: string, insurance_payer_id: string, insurance_plan_name: string, insurance_plan_type: string, is_subscriber_the_patient: bool, patient_relationship_to_subscriber: string, photo_back: string, photo_front: string, subscriber_address: string, subscriber_city: string, subscriber_country: string, subscriber_date_of_birth: string, subscriber_first_name: string, subscriber_gender: string, subscriber_last_name: string, subscriber_middle_name: string, subscriber_social_security: string, subscriber_state: string, subscriber_suffix: string, subscriber_zip_code: string>, social_security_number: string, state: string, tertiary_insurance: record<insurance_claim_office_number: string, insurance_company: string, insurance_group_name: string, insurance_group_number: string, insurance_id_number: string, insurance_payer_id: string, insurance_plan_name: string, insurance_plan_type: string, is_subscriber_the_patient: bool, patient_relationship_to_subscriber: string, photo_back: string, photo_front: string, subscriber_address: string, subscriber_city: string, subscriber_country: string, subscriber_date_of_birth: string, subscriber_first_name: string, subscriber_gender: string, subscriber_last_name: string, subscriber_middle_name: string, subscriber_social_security: string, subscriber_state: string, subscriber_suffix: string, subscriber_zip_code: string>, updated_at: string, workers_comp_insurance: record<property_and_casualty_agency_claim_number: string, workers_comp_carrier_code: string, workers_comp_case_number: string, workers_comp_company: string, workers_comp_date_of_accident: string, workers_comp_group_name: string, workers_comp_group_number: string, workers_comp_notes: string, workers_comp_payer_address: string, workers_comp_payer_city: string, workers_comp_payer_id: string, workers_comp_payer_state: string, workers_comp_payer_zip: string, workers_comp_state_of_occurrence: string, workers_comp_wcb: string, workers_comp_wcb_rating_code: string>, zip_code: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
   let qp = [(serialize-qp "first_name" $first_name "scalar") (serialize-qp "last_name" $last_name "scalar") (serialize-qp "preferred_language" $preferred_language "scalar") (serialize-qp "doctor" $doctor "scalar") (serialize-qp "gender" $gender "scalar") (serialize-qp "since" $since "scalar") (serialize-qp "date_of_birth" $date_of_birth "scalar") (serialize-qp "race" $race "scalar") (serialize-qp "chart_id" $chart_id "scalar") (serialize-qp "email" $email "scalar") (serialize-qp "ethnicity" $ethnicity "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/api/patients/{id}/onpatient_access") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"first_name": $first_name, "last_name": $last_name, "preferred_language": $preferred_language, "doctor": $doctor, "gender": $gender, "since": $since, "date_of_birth": $date_of_birth, "race": $race, "chart_id": $chart_id, "email": $email, "ethnicity": $ethnicity} | compact), body: null}
 }
 
 # Retrieve patient QRDA1
@@ -5875,11 +6022,12 @@ export def "patients-qrda1 get" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
   let qp = [(serialize-qp "first_name" $first_name "scalar") (serialize-qp "last_name" $last_name "scalar") (serialize-qp "preferred_language" $preferred_language "scalar") (serialize-qp "doctor" $doctor "scalar") (serialize-qp "gender" $gender "scalar") (serialize-qp "since" $since "scalar") (serialize-qp "date_of_birth" $date_of_birth "scalar") (serialize-qp "race" $race "scalar") (serialize-qp "chart_id" $chart_id "scalar") (serialize-qp "email" $email "scalar") (serialize-qp "ethnicity" $ethnicity "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/api/patients/{id}/qrda1") $qp)
   let accept_val = "application/xml"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"first_name": $first_name, "last_name": $last_name, "preferred_language": $preferred_language, "doctor": $doctor, "gender": $gender, "since": $since, "date_of_birth": $date_of_birth, "race": $race, "chart_id": $chart_id, "email": $email, "ethnicity": $ethnicity} | compact), body: null}
 }
 
 # GET /api/patients_summary
@@ -5910,7 +6058,7 @@ export def "patients-summary list" [
   let full_url = (build-url $base "/api/patients_summary" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"cursor": $cursor, "page_size": $page_size, "first_name": $first_name, "last_name": $last_name, "doctor": $doctor, "gender": $gender, "since": $since, "date_of_birth": $date_of_birth} | compact), body: null}
 }
 
 # POST /api/patients_summary
@@ -5939,7 +6087,7 @@ export def "patients-summary create" [
   let full_url = (build-url $base "/api/patients_summary" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"first_name": $first_name, "last_name": $last_name, "doctor": $doctor, "gender": $gender, "since": $since, "date_of_birth": $date_of_birth} | compact), body: null}
 }
 
 # DELETE /api/patients_summary/{id}
@@ -5965,11 +6113,12 @@ export def "patients-summary delete" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
   let qp = [(serialize-qp "first_name" $first_name "scalar") (serialize-qp "last_name" $last_name "scalar") (serialize-qp "doctor" $doctor "scalar") (serialize-qp "gender" $gender "scalar") (serialize-qp "since" $since "scalar") (serialize-qp "date_of_birth" $date_of_birth "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/api/patients_summary/{id}") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"first_name": $first_name, "last_name": $last_name, "doctor": $doctor, "gender": $gender, "since": $since, "date_of_birth": $date_of_birth} | compact), body: null}
 }
 
 # GET /api/patients_summary/{id}
@@ -5995,11 +6144,12 @@ export def "patients-summary get" [
 ]: nothing -> record<address: string, auto_accident_insurance: record<auto_accident_case_number: string, auto_accident_claim_rep_address: string, auto_accident_claim_rep_city: string, auto_accident_claim_rep_is_insurer: bool, auto_accident_claim_rep_name: string, auto_accident_claim_rep_state: string, auto_accident_claim_rep_zip: string, auto_accident_company: string, auto_accident_date_of_accident: string, auto_accident_disabled_from_date: string, auto_accident_disabled_to_date: string, auto_accident_had_similar_condition: bool, auto_accident_is_subscriber_the_patient: bool, auto_accident_notes: string, auto_accident_patient_relationship_to_subscriber: string, auto_accident_payer_address: string, auto_accident_payer_city: string, auto_accident_payer_id: string, auto_accident_payer_state: string, auto_accident_payer_zip: string, auto_accident_policy_number: string, auto_accident_return_to_work_date: string, auto_accident_significant_injury: string, auto_accident_significant_injury_notes: string, auto_accident_similar_condition_date: string, auto_accident_similar_condition_notes: string, auto_accident_state_of_occurrence: string, auto_accident_still_under_care: bool, auto_accident_subscriber_address: string, auto_accident_subscriber_city: string, auto_accident_subscriber_date_of_birth: string, auto_accident_subscriber_first_name: string, auto_accident_subscriber_last_name: string, auto_accident_subscriber_middle_name: string, auto_accident_subscriber_phone_number: string, auto_accident_subscriber_social_security: string, auto_accident_subscriber_state: string, auto_accident_subscriber_suffix: string, auto_accident_subscriber_zip_code: string, auto_accident_treatment_duration: string, auto_accident_will_require_therapy: bool, auto_accident_will_require_therapy_rec: string>, cell_phone: string, chart_id: string, city: string, copay: string, custom_demographics: table<field_type: int, updated_at: string, value: string>, date_of_birth: string, date_of_first_appointment: string, date_of_last_appointment: string, default_pharmacy: string, disable_sms_messages: bool, doctor: int, email: string, emergency_contact_name: string, emergency_contact_phone: string, emergency_contact_relation: string, employer: string, employer_address: string, employer_city: string, employer_state: string, employer_zip_code: string, ethnicity: string, first_name: string, gender: string, home_phone: string, id: int, last_name: string, middle_name: string, nick_name: string, office_phone: string, offices: list<int>, patient_flags: table<archived: bool, color: string, created_at: string, doctor: int, id: int, name: string, priority: int, updated_at: string>, patient_flags_attached: table<archived: bool, created_at: string, flag_text: string, flag_type: int, id: int, updated_at: string>, patient_payment_profile: string, patient_photo: string, patient_photo_date: string, patient_status: string, preferred_language: string, primary_care_physician: string, primary_insurance: record<insurance_claim_office_number: string, insurance_company: string, insurance_group_name: string, insurance_group_number: string, insurance_id_number: string, insurance_payer_id: string, insurance_plan_name: string, insurance_plan_type: string, is_subscriber_the_patient: bool, patient_relationship_to_subscriber: string, photo_back: string, photo_front: string, subscriber_address: string, subscriber_city: string, subscriber_country: string, subscriber_date_of_birth: string, subscriber_first_name: string, subscriber_gender: string, subscriber_last_name: string, subscriber_middle_name: string, subscriber_social_security: string, subscriber_state: string, subscriber_suffix: string, subscriber_zip_code: string>, race: string, referring_doctor: record<address: string, email: string, fax: string, first_name: string, last_name: string, middle_name: string, npi: string, phone: string, provider_number: string, provider_qualifier: string, specialty: string, suffix: string>, referring_source: string, responsible_party_email: string, responsible_party_name: string, responsible_party_phone: string, responsible_party_relation: string, secondary_insurance: record<insurance_claim_office_number: string, insurance_company: string, insurance_group_name: string, insurance_group_number: string, insurance_id_number: string, insurance_payer_id: string, insurance_plan_name: string, insurance_plan_type: string, is_subscriber_the_patient: bool, patient_relationship_to_subscriber: string, photo_back: string, photo_front: string, subscriber_address: string, subscriber_city: string, subscriber_country: string, subscriber_date_of_birth: string, subscriber_first_name: string, subscriber_gender: string, subscriber_last_name: string, subscriber_middle_name: string, subscriber_social_security: string, subscriber_state: string, subscriber_suffix: string, subscriber_zip_code: string>, social_security_number: string, state: string, tertiary_insurance: record<insurance_claim_office_number: string, insurance_company: string, insurance_group_name: string, insurance_group_number: string, insurance_id_number: string, insurance_payer_id: string, insurance_plan_name: string, insurance_plan_type: string, is_subscriber_the_patient: bool, patient_relationship_to_subscriber: string, photo_back: string, photo_front: string, subscriber_address: string, subscriber_city: string, subscriber_country: string, subscriber_date_of_birth: string, subscriber_first_name: string, subscriber_gender: string, subscriber_last_name: string, subscriber_middle_name: string, subscriber_social_security: string, subscriber_state: string, subscriber_suffix: string, subscriber_zip_code: string>, updated_at: string, workers_comp_insurance: record<property_and_casualty_agency_claim_number: string, workers_comp_carrier_code: string, workers_comp_case_number: string, workers_comp_company: string, workers_comp_date_of_accident: string, workers_comp_group_name: string, workers_comp_group_number: string, workers_comp_notes: string, workers_comp_payer_address: string, workers_comp_payer_city: string, workers_comp_payer_id: string, workers_comp_payer_state: string, workers_comp_payer_zip: string, workers_comp_state_of_occurrence: string, workers_comp_wcb: string, workers_comp_wcb_rating_code: string>, zip_code: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
   let qp = [(serialize-qp "first_name" $first_name "scalar") (serialize-qp "last_name" $last_name "scalar") (serialize-qp "doctor" $doctor "scalar") (serialize-qp "gender" $gender "scalar") (serialize-qp "since" $since "scalar") (serialize-qp "date_of_birth" $date_of_birth "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/api/patients_summary/{id}") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"first_name": $first_name, "last_name": $last_name, "doctor": $doctor, "gender": $gender, "since": $since, "date_of_birth": $date_of_birth} | compact), body: null}
 }
 
 # PATCH /api/patients_summary/{id}
@@ -6025,11 +6175,12 @@ export def "patients-summary update-by-id" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
   let qp = [(serialize-qp "first_name" $first_name "scalar") (serialize-qp "last_name" $last_name "scalar") (serialize-qp "doctor" $doctor "scalar") (serialize-qp "gender" $gender "scalar") (serialize-qp "since" $since "scalar") (serialize-qp "date_of_birth" $date_of_birth "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/api/patients_summary/{id}") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "patch" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "patch" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"first_name": $first_name, "last_name": $last_name, "doctor": $doctor, "gender": $gender, "since": $since, "date_of_birth": $date_of_birth} | compact), body: null}
 }
 
 # PUT /api/patients_summary/{id}
@@ -6055,11 +6206,12 @@ export def "patients-summary update-by-id-1" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
   let qp = [(serialize-qp "first_name" $first_name "scalar") (serialize-qp "last_name" $last_name "scalar") (serialize-qp "doctor" $doctor "scalar") (serialize-qp "gender" $gender "scalar") (serialize-qp "since" $since "scalar") (serialize-qp "date_of_birth" $date_of_birth "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/api/patients_summary/{id}") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"first_name": $first_name, "last_name": $last_name, "doctor": $doctor, "gender": $gender, "since": $since, "date_of_birth": $date_of_birth} | compact), body: null}
 }
 
 # Retrieve or search prescription messages
@@ -6089,7 +6241,7 @@ export def "prescription-messages list" [
   let full_url = (build-url $base "/api/prescription_messages" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"cursor": $cursor, "page_size": $page_size, "parent_message": $parent_message, "since": $since, "patient": $patient, "doctor": $doctor} | compact), body: null}
 }
 
 # Retrieve an existing prescription message
@@ -6114,11 +6266,12 @@ export def "prescription-messages get" [
 ]: nothing -> record<created_at: string, doctor: int, id: int, json_data: string, message_direction: string, message_status: string, message_type: string, parent_message: string, patient: int, pharmacy: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
   let qp = [(serialize-qp "parent_message" $parent_message "scalar") (serialize-qp "since" $since "scalar") (serialize-qp "patient" $patient "scalar") (serialize-qp "doctor" $doctor "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/api/prescription_messages/{id}") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"parent_message": $parent_message, "since": $since, "patient": $patient, "doctor": $doctor} | compact), body: null}
 }
 
 # Retrieve or search patient problems
@@ -6146,7 +6299,7 @@ export def "problems list" [
   let full_url = (build-url $base "/api/problems" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"cursor": $cursor, "page_size": $page_size, "patient": $patient, "doctor": $doctor} | compact), body: null}
 }
 
 # Create patient problems
@@ -6172,7 +6325,7 @@ export def "problems create" [
   let full_url = (build-url $base "/api/problems" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"patient": $patient, "doctor": $doctor} | compact), body: null}
 }
 
 # Retrieve an existing patient problems
@@ -6195,11 +6348,12 @@ export def "problems get" [
 ]: nothing -> record<date_changed: string, date_diagnosis: string, date_onset: string, description: string, doctor: int, icd_code: string, icd_version: string, id: int, info_url: string, name: string, notes: string, patient: int, snomed_ct_code: string, status: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
   let qp = [(serialize-qp "patient" $patient "scalar") (serialize-qp "doctor" $doctor "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/api/problems/{id}") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"patient": $patient, "doctor": $doctor} | compact), body: null}
 }
 
 # Update an existing patient problems
@@ -6222,11 +6376,12 @@ export def "problems update-by-id" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
   let qp = [(serialize-qp "patient" $patient "scalar") (serialize-qp "doctor" $doctor "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/api/problems/{id}") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "patch" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "patch" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"patient": $patient, "doctor": $doctor} | compact), body: null}
 }
 
 # Update an existing patient problems
@@ -6249,11 +6404,12 @@ export def "problems update-by-id-1" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
   let qp = [(serialize-qp "patient" $patient "scalar") (serialize-qp "doctor" $doctor "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/api/problems/{id}") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"patient": $patient, "doctor": $doctor} | compact), body: null}
 }
 
 # GET /api/procedures
@@ -6284,7 +6440,7 @@ export def "procedures list" [
   let full_url = (build-url $base "/api/procedures" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"cursor": $cursor, "page_size": $page_size, "mu_date": $mu_date, "patient": $patient, "doctor": $doctor, "mu_date_range": $mu_date_range, "appointment": $appointment, "service_date": $service_date} | compact), body: null}
 }
 
 # GET /api/procedures/{id}
@@ -6310,11 +6466,12 @@ export def "procedures get" [
 ]: nothing -> record<adjustment: float, allowed: float, appointment: int, balance_ins: float, balance_pt: float, balance_total: string, billed: float, billing_status: string, code: string, denied_flag: bool, description: string, diagnosis_pointers: list<string>, doctor: string, expected_reimbursement: float, id: int, ins1_paid: float, ins2_paid: float, ins3_paid: float, ins_total: string, insurance_status: string, modifiers: list<string>, paid_total: string, patient: string, posted_date: string, price: float, procedure_type: string, pt_paid: float, quantity: float, service_date: string, units: string, updated_at: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
   let qp = [(serialize-qp "mu_date" $mu_date "scalar") (serialize-qp "patient" $patient "scalar") (serialize-qp "doctor" $doctor "scalar") (serialize-qp "mu_date_range" $mu_date_range "scalar") (serialize-qp "appointment" $appointment "scalar") (serialize-qp "service_date" $service_date "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/api/procedures/{id}") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"mu_date": $mu_date, "patient": $patient, "doctor": $doctor, "mu_date_range": $mu_date_range, "appointment": $appointment, "service_date": $service_date} | compact), body: null}
 }
 
 # Retrieve or search reminder profiles
@@ -6341,7 +6498,7 @@ export def "reminder-profiles list" [
   let full_url = (build-url $base "/api/reminder_profiles" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"cursor": $cursor, "page_size": $page_size, "doctor": $doctor} | compact), body: null}
 }
 
 # Create reminder profile
@@ -6366,7 +6523,7 @@ export def "reminder-profiles create" [
   let full_url = (build-url $base "/api/reminder_profiles" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"doctor": $doctor} | compact), body: null}
 }
 
 # Delete an existing reminder profile
@@ -6388,11 +6545,12 @@ export def "reminder-profiles delete" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
   let qp = [(serialize-qp "doctor" $doctor "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/api/reminder_profiles/{id}") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"doctor": $doctor} | compact), body: null}
 }
 
 # Retrieve an existing reminder profile
@@ -6414,11 +6572,12 @@ export def "reminder-profiles get" [
 ]: nothing -> record<doctor: int, id: int, name: string, reminders: table<amount: int, type: string, unit: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
   let qp = [(serialize-qp "doctor" $doctor "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/api/reminder_profiles/{id}") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"doctor": $doctor} | compact), body: null}
 }
 
 # Update an existing reminder profile
@@ -6440,11 +6599,12 @@ export def "reminder-profiles update-by-id" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
   let qp = [(serialize-qp "doctor" $doctor "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/api/reminder_profiles/{id}") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "patch" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "patch" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"doctor": $doctor} | compact), body: null}
 }
 
 # Update an existing reminder profile
@@ -6466,11 +6626,12 @@ export def "reminder-profiles update-by-id-1" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
   let qp = [(serialize-qp "doctor" $doctor "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/api/reminder_profiles/{id}") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"doctor": $doctor} | compact), body: null}
 }
 
 # Retrieve or search sub vendors
@@ -6496,7 +6657,7 @@ export def "sublabs list" [
   let full_url = (build-url $base "/api/sublabs" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"cursor": $cursor, "page_size": $page_size} | compact), body: null}
 }
 
 # Create sub-vendors - When you get orders, submit them via `/api/lab_orders`, such that doctors can see them in drchrono. - When results come in, submit the result document PDF via `/api/lab_documents` and submit the results data via `/api/lab_results` - Update `/api/lab_orders` status
@@ -6519,7 +6680,7 @@ export def "sublabs create" [
   let full_url = (build-url $base "/api/sublabs")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
 }
 
 # Delete an existing sub vendor
@@ -6540,10 +6701,11 @@ export def "sublabs delete" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
   let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/api/sublabs/{id}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
 }
 
 # Retrieve an existing sub vendor
@@ -6564,10 +6726,11 @@ export def "sublabs get" [
 ]: nothing -> record<facility_code: string, id: int, name: string, vendor_name: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
   let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/api/sublabs/{id}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
 }
 
 # Update an existing sub vendor
@@ -6588,10 +6751,11 @@ export def "sublabs update-by-id" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
   let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/api/sublabs/{id}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "patch" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "patch" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
 }
 
 # Update an existing sub vendor
@@ -6612,10 +6776,11 @@ export def "sublabs update-by-id-1" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
   let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/api/sublabs/{id}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
 }
 
 # Retrieve or search task categories
@@ -6642,7 +6807,7 @@ export def "task-categories list" [
   let full_url = (build-url $base "/api/task_categories" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"cursor": $cursor, "page_size": $page_size, "since": $since} | compact), body: null}
 }
 
 # Create a task category
@@ -6667,7 +6832,7 @@ export def "task-categories create" [
   let full_url = (build-url $base "/api/task_categories" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"since": $since} | compact), body: null}
 }
 
 # Retrieve an existing task category
@@ -6689,11 +6854,12 @@ export def "task-categories get" [
 ]: nothing -> record<archived: bool, created_at: string, id: int, is_global: string, name: string, practice_group: int, updated_at: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
   let qp = [(serialize-qp "since" $since "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/api/task_categories/{id}") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"since": $since} | compact), body: null}
 }
 
 # Update an existing task category
@@ -6715,11 +6881,12 @@ export def "task-categories update-by-id" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
   let qp = [(serialize-qp "since" $since "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/api/task_categories/{id}") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "patch" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "patch" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"since": $since} | compact), body: null}
 }
 
 # Update an existing task category
@@ -6741,11 +6908,12 @@ export def "task-categories update-by-id-1" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
   let qp = [(serialize-qp "since" $since "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/api/task_categories/{id}") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"since": $since} | compact), body: null}
 }
 
 # Retrieve or search task notes
@@ -6773,7 +6941,7 @@ export def "task-notes list" [
   let full_url = (build-url $base "/api/task_notes" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"cursor": $cursor, "page_size": $page_size, "task": $task, "since": $since} | compact), body: null}
 }
 
 # Create a task note
@@ -6799,7 +6967,7 @@ export def "task-notes create" [
   let full_url = (build-url $base "/api/task_notes" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"task": $task, "since": $since} | compact), body: null}
 }
 
 # Retrieve an existing task note
@@ -6822,11 +6990,12 @@ export def "task-notes get" [
 ]: nothing -> record<archived: bool, created_at: string, created_by: string, id: int, task: int, text: string, updated_at: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
   let qp = [(serialize-qp "task" $task "scalar") (serialize-qp "since" $since "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/api/task_notes/{id}") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"task": $task, "since": $since} | compact), body: null}
 }
 
 # Update an existing task note
@@ -6849,11 +7018,12 @@ export def "task-notes update-by-id" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
   let qp = [(serialize-qp "task" $task "scalar") (serialize-qp "since" $since "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/api/task_notes/{id}") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "patch" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "patch" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"task": $task, "since": $since} | compact), body: null}
 }
 
 # Update an existing task note
@@ -6876,11 +7046,12 @@ export def "task-notes update-by-id-1" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
   let qp = [(serialize-qp "task" $task "scalar") (serialize-qp "since" $since "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/api/task_notes/{id}") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"task": $task, "since": $since} | compact), body: null}
 }
 
 # Retrieve or search task statuses
@@ -6907,7 +7078,7 @@ export def "task-statuses list" [
   let full_url = (build-url $base "/api/task_statuses" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"cursor": $cursor, "page_size": $page_size, "since": $since} | compact), body: null}
 }
 
 # Create a task status
@@ -6932,7 +7103,7 @@ export def "task-statuses create" [
   let full_url = (build-url $base "/api/task_statuses" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"since": $since} | compact), body: null}
 }
 
 # Retrieve an existing task status
@@ -6954,11 +7125,12 @@ export def "task-statuses get" [
 ]: nothing -> record<archived: bool, created_at: string, id: int, name: string, practice_group: int, status_category: string, task_category: int, updated_at: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
   let qp = [(serialize-qp "since" $since "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/api/task_statuses/{id}") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"since": $since} | compact), body: null}
 }
 
 # Update an existing task status
@@ -6980,11 +7152,12 @@ export def "task-statuses update-by-id" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
   let qp = [(serialize-qp "since" $since "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/api/task_statuses/{id}") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "patch" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "patch" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"since": $since} | compact), body: null}
 }
 
 # Update an existing task status
@@ -7006,11 +7179,12 @@ export def "task-statuses update-by-id-1" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
   let qp = [(serialize-qp "since" $since "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/api/task_statuses/{id}") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"since": $since} | compact), body: null}
 }
 
 # Retrieve or search task templates
@@ -7041,7 +7215,7 @@ export def "task-templates list" [
   let full_url = (build-url $base "/api/task_templates" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"cursor": $cursor, "page_size": $page_size, "assignee_user": $assignee_user, "status": $status, "assignee_group": $assignee_group, "since": $since, "category": $category} | compact), body: null}
 }
 
 # Create a task template
@@ -7070,7 +7244,7 @@ export def "task-templates create" [
   let full_url = (build-url $base "/api/task_templates" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"assignee_user": $assignee_user, "status": $status, "assignee_group": $assignee_group, "since": $since, "category": $category} | compact), body: null}
 }
 
 # Retrieve an existing task template
@@ -7096,11 +7270,12 @@ export def "task-templates get" [
 ]: nothing -> record<archived: bool, created_at: string, default_assignee_group: int, default_assignee_user: string, default_category: int, default_due_date_offset: string, default_note: string, default_priority: string, default_status: int, default_title: string, id: int, name: string, practice_group: string, updated_at: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
   let qp = [(serialize-qp "assignee_user" $assignee_user "scalar") (serialize-qp "status" $status "scalar") (serialize-qp "assignee_group" $assignee_group "scalar") (serialize-qp "since" $since "scalar") (serialize-qp "category" $category "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/api/task_templates/{id}") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"assignee_user": $assignee_user, "status": $status, "assignee_group": $assignee_group, "since": $since, "category": $category} | compact), body: null}
 }
 
 # Update an existing task template
@@ -7126,11 +7301,12 @@ export def "task-templates update-by-id" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
   let qp = [(serialize-qp "assignee_user" $assignee_user "scalar") (serialize-qp "status" $status "scalar") (serialize-qp "assignee_group" $assignee_group "scalar") (serialize-qp "since" $since "scalar") (serialize-qp "category" $category "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/api/task_templates/{id}") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "patch" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "patch" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"assignee_user": $assignee_user, "status": $status, "assignee_group": $assignee_group, "since": $since, "category": $category} | compact), body: null}
 }
 
 # Update an existing task template
@@ -7156,11 +7332,12 @@ export def "task-templates update-by-id-1" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
   let qp = [(serialize-qp "assignee_user" $assignee_user "scalar") (serialize-qp "status" $status "scalar") (serialize-qp "assignee_group" $assignee_group "scalar") (serialize-qp "since" $since "scalar") (serialize-qp "category" $category "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/api/task_templates/{id}") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"assignee_user": $assignee_user, "status": $status, "assignee_group": $assignee_group, "since": $since, "category": $category} | compact), body: null}
 }
 
 # Retrieve or search tasks
@@ -7195,7 +7372,7 @@ export def "tasks list" [
   let full_url = (build-url $base "/api/tasks" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"cursor": $cursor, "page_size": $page_size, "status": $status, "category": $category, "due_at_date": $due_at_date, "due_at_unknown": $due_at_unknown, "since": $since, "due_at_since": $due_at_since, "assignee_user": $assignee_user, "assignee_group": $assignee_group, "due_at_range": $due_at_range} | compact), body: null}
 }
 
 # Create a task
@@ -7228,7 +7405,7 @@ export def "tasks create" [
   let full_url = (build-url $base "/api/tasks" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"status": $status, "category": $category, "due_at_date": $due_at_date, "due_at_unknown": $due_at_unknown, "since": $since, "due_at_since": $due_at_since, "assignee_user": $assignee_user, "assignee_group": $assignee_group, "due_at_range": $due_at_range} | compact), body: null}
 }
 
 # Retrieve an existing task
@@ -7258,11 +7435,12 @@ export def "tasks get" [
 ]: nothing -> record<archived: bool, assigned_by: string, assignee_group: int, assignee_user: string, associated_items: table<task: int, type: string, value: int>, category: int, created_at: string, created_by: string, due_date: record<time: string>, id: int, notes: table<archived: bool, created_at: string, created_by: string, id: int, task: int, text: string, updated_at: string>, priority: string, status: int, title: string, updated_at: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
   let qp = [(serialize-qp "status" $status "scalar") (serialize-qp "category" $category "scalar") (serialize-qp "due_at_date" $due_at_date "scalar") (serialize-qp "due_at_unknown" $due_at_unknown "scalar") (serialize-qp "since" $since "scalar") (serialize-qp "due_at_since" $due_at_since "scalar") (serialize-qp "assignee_user" $assignee_user "scalar") (serialize-qp "assignee_group" $assignee_group "scalar") (serialize-qp "due_at_range" $due_at_range "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/api/tasks/{id}") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"status": $status, "category": $category, "due_at_date": $due_at_date, "due_at_unknown": $due_at_unknown, "since": $since, "due_at_since": $due_at_since, "assignee_user": $assignee_user, "assignee_group": $assignee_group, "due_at_range": $due_at_range} | compact), body: null}
 }
 
 # Update an existing task
@@ -7292,11 +7470,12 @@ export def "tasks update-by-id" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
   let qp = [(serialize-qp "status" $status "scalar") (serialize-qp "category" $category "scalar") (serialize-qp "due_at_date" $due_at_date "scalar") (serialize-qp "due_at_unknown" $due_at_unknown "scalar") (serialize-qp "since" $since "scalar") (serialize-qp "due_at_since" $due_at_since "scalar") (serialize-qp "assignee_user" $assignee_user "scalar") (serialize-qp "assignee_group" $assignee_group "scalar") (serialize-qp "due_at_range" $due_at_range "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/api/tasks/{id}") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "patch" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "patch" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"status": $status, "category": $category, "due_at_date": $due_at_date, "due_at_unknown": $due_at_unknown, "since": $since, "due_at_since": $due_at_since, "assignee_user": $assignee_user, "assignee_group": $assignee_group, "due_at_range": $due_at_range} | compact), body: null}
 }
 
 # Update an existing task
@@ -7326,11 +7505,12 @@ export def "tasks update-by-id-1" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
   let qp = [(serialize-qp "status" $status "scalar") (serialize-qp "category" $category "scalar") (serialize-qp "due_at_date" $due_at_date "scalar") (serialize-qp "due_at_unknown" $due_at_unknown "scalar") (serialize-qp "since" $since "scalar") (serialize-qp "due_at_since" $due_at_since "scalar") (serialize-qp "assignee_user" $assignee_user "scalar") (serialize-qp "assignee_group" $assignee_group "scalar") (serialize-qp "due_at_range" $due_at_range "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/api/tasks/{id}") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"status": $status, "category": $category, "due_at_date": $due_at_date, "due_at_unknown": $due_at_unknown, "since": $since, "due_at_since": $due_at_since, "assignee_user": $assignee_user, "assignee_group": $assignee_group, "due_at_range": $due_at_range} | compact), body: null}
 }
 
 # Retrieve or search insurance transactions associated with billing line items
@@ -7361,7 +7541,7 @@ export def "transactions list" [
   let full_url = (build-url $base "/api/transactions" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"cursor": $cursor, "page_size": $page_size, "line_item": $line_item, "posted_date": $posted_date, "appointment": $appointment, "since": $since, "doctor": $doctor} | compact), body: null}
 }
 
 # Retrieve an existing insurance transaction
@@ -7387,11 +7567,12 @@ export def "transactions get" [
 ]: nothing -> record<adjustment: float, adjustment_group_code: string, adjustment_reason: string, appointment: int, check_date: string, claim_status: string, created_at: string, doctor: int, id: int, ins_name: int, ins_paid: float, line_item: int, patient: int, posted_date: string, trace_number: string, updated_at: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
   let qp = [(serialize-qp "line_item" $line_item "scalar") (serialize-qp "posted_date" $posted_date "scalar") (serialize-qp "appointment" $appointment "scalar") (serialize-qp "since" $since "scalar") (serialize-qp "doctor" $doctor "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/api/transactions/{id}") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"line_item": $line_item, "posted_date": $posted_date, "appointment": $appointment, "since": $since, "doctor": $doctor} | compact), body: null}
 }
 
 # Retrieve or search user groups
@@ -7418,7 +7599,7 @@ export def "user-groups list" [
   let full_url = (build-url $base "/api/user_groups" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"cursor": $cursor, "page_size": $page_size, "doctor": $doctor} | compact), body: null}
 }
 
 # Retrieve an existing user group
@@ -7440,11 +7621,12 @@ export def "user-groups get" [
 ]: nothing -> record<archived: bool, created_at: string, id: int, members: list<string>, name: string, practice_group: string, updated_at: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
   let qp = [(serialize-qp "doctor" $doctor "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/api/user_groups/{id}") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"doctor": $doctor} | compact), body: null}
 }
 
 # Retrieve or search users, `/api/users/current` can be used to identify logged in user, it will redirect to `/api/users/{current_user_id}`
@@ -7471,7 +7653,7 @@ export def "users list" [
   let full_url = (build-url $base "/api/users" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"cursor": $cursor, "page_size": $page_size, "doctor": $doctor} | compact), body: null}
 }
 
 # Retrieve an existing user, `/api/users/current` can be used to identify logged in user, it will redirect to `/api/users/{current_user_id}`
@@ -7493,9 +7675,10 @@ export def "users get" [
 ]: nothing -> record<doctor: string, id: string, is_doctor: string, is_staff: string, permissions: string, practice_group: string, username: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
   let qp = [(serialize-qp "doctor" $doctor "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/api/users/{id}") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"doctor": $doctor} | compact), body: null}
 }

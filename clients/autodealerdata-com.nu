@@ -3,16 +3,17 @@
 # Auth: --token flag or $env.CIS_AUTOMOTIVE_API_TOKEN
 
 const BASE_URL = "http://localhost"
-const DEFAULT_AUTH = "bearer"
 
-# Build auth: returns {headers: record, query: string}
+# Build auth: returns {scheme: string, headers: record, query: string, location: string}.
+# `location` is "header" | "query" | "cookie" | "none" and tells dry-run callers
+# where the token went without inspecting headers/query themselves.
 def build-auth [token?: string, auth_scheme?: string]: nothing -> record {
   let token_val = if ($token != null) and ($token | is-not-empty) { $token } else { $env | get -o CIS_AUTOMOTIVE_API_TOKEN | default "" }
   let scheme = ($auth_scheme | default "bearer")
-  if ($scheme == "none") or ($token_val | is-empty) { return {headers: {}, query: ""} }
+  if ($scheme == "none") or ($token_val | is-empty) { return {scheme: $scheme, headers: {}, query: "", location: "none"} }
   match $scheme {
-    "none" => { {headers: {}, query: ""} }
-    _ => { {headers: {Authorization: $"Bearer ($token_val)"}, query: ""} }
+    "none" => { {scheme: $scheme, headers: {}, query: "", location: "none"} }
+    _ => { {scheme: $scheme, headers: {Authorization: $"Bearer ($token_val)"}, query: "", location: "header"} }
   }
 }
 
@@ -21,8 +22,9 @@ def build-auth [token?: string, auth_scheme?: string]: nothing -> record {
 # ([A-Za-z0-9-._~]) stay literal; everything else gets %XX.
 def serialize-qp [name: string, value: any, style: string]: nothing -> list<string> {
   if ($value == null) { return [] }
-  let n = (encode-path-segment $name)
   let is_list = ($value | describe | str starts-with "list")
+  if $is_list and ($value | is-empty) { return [] }
+  let n = (encode-path-segment $name)
   if ($value | describe | str starts-with "record") { return ($value | transpose k v | each { $"($n)[(encode-path-segment $in.k)]=(encode-path-segment $in.v)" }) }
   if not $is_list { return [$"($n)=(encode-path-segment $value)"] }
   match $style {
@@ -53,22 +55,42 @@ def build-url [base: string, path: string, query?: string]: nothing -> string {
   if ($query != null) and ($query | is-not-empty) { $result | upsert query $query | url join } else { $result | url join }
 }
 
+# Build the dry-run record returned by --dry-run. Shape:
+#   {dry_run: true, method, url, query: <record>, headers, body, content_type, timeout,
+#    auth: {scheme, location}}
+# `meta` carries logical-form data (the query record by spec name, the pre-serialization
+# body) that do-request itself cannot reconstruct from its wire-format args.
+def build-dry-run-record [method: string, url: string, auth: record, content_type: string, timeout: duration, meta?: record]: nothing -> record {
+  let m = ($meta | default {})
+  {
+    dry_run: true
+    method: $method
+    url: $url
+    query: ($m | get -o query | default {})
+    headers: $auth.headers
+    body: ($m | get -o body)
+    content_type: $content_type
+    timeout: $timeout
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+}
+
 # Execute HTTP request with method dispatch
-def do-request [method: string, url: string, auth: record, insecure: bool, raw: bool, dry_run: bool, max_time?: duration, allow_errors?: bool, full?: bool, content_type?: string, body?: any]: nothing -> any {
+def do-request [method: string, url: string, auth: record, insecure: bool, raw: bool, dry_run: bool, max_time?: duration, allow_errors?: bool, full?: bool, content_type?: string, body?: any, dry_run_meta?: record]: nothing -> any {
   let req_url = if ($auth.query | is-not-empty) { if ($url | str contains "?") { $"($url)&($auth.query)" } else { $"($url)?($auth.query)" } } else { $url }
   let timeout = ($max_time | default 30min)
   let ct = ($content_type | default "application/json")
-  if $dry_run { return {method: $method, url: $req_url, headers: $auth.headers, query_string: $auth.query, content_type: $ct, timeout: $timeout, body: $body} }
+  if $dry_run { return (build-dry-run-record $method $req_url $auth $ct $timeout $dry_run_meta) }
   let resp = match $method {
     "get" => { http get --headers $auth.headers --full --allow-errors --max-time $timeout --insecure=$insecure --raw=$raw $req_url }
-    "head" => { http head --headers $auth.headers --max-time $timeout --insecure=$insecure $req_url }
-    "options" => { http options --headers $auth.headers --max-time $timeout --insecure=$insecure $req_url }
+    "head" => { http head --headers $auth.headers --full --allow-errors --max-time $timeout --insecure=$insecure $req_url }
+    "options" => { http options --headers $auth.headers --full --allow-errors --max-time $timeout --insecure=$insecure $req_url }
     "post" => { if ($body | is-empty) { http post --headers $auth.headers --full --allow-errors --max-time $timeout --insecure=$insecure --raw=$raw $req_url "" } else { http post --headers $auth.headers --content-type $ct --full --allow-errors --max-time $timeout --insecure=$insecure --raw=$raw $req_url $body } }
     "put" => { if ($body | is-empty) { http put --headers $auth.headers --full --allow-errors --max-time $timeout --insecure=$insecure --raw=$raw $req_url "" } else { http put --headers $auth.headers --content-type $ct --full --allow-errors --max-time $timeout --insecure=$insecure --raw=$raw $req_url $body } }
     "patch" => { if ($body | is-empty) { http patch --headers $auth.headers --full --allow-errors --max-time $timeout --insecure=$insecure --raw=$raw $req_url "" } else { http patch --headers $auth.headers --content-type $ct --full --allow-errors --max-time $timeout --insecure=$insecure --raw=$raw $req_url $body } }
     "delete" => { if ($body | is-empty) { http delete --headers $auth.headers --full --allow-errors --max-time $timeout --insecure=$insecure --raw=$raw $req_url } else { http delete --headers $auth.headers --content-type $ct --data $body --full --allow-errors --max-time $timeout --insecure=$insecure --raw=$raw $req_url } }
   }
-  if ($method in ["head" "options"]) { return $resp }
+  if ($method == "head") and (not $full) and (not $allow_errors) and $resp.status < 400 { return $resp.headers }
   if $allow_errors { $resp } else if $resp.status >= 400 { error make --unspanned { msg: $"HTTP ($resp.status): ($resp.body)" } } else if $full { {status: $resp.status, headers: $resp.headers, body: $resp.body} } else if $resp.status == 204 { null } else { $resp.body }
 }
 
@@ -123,7 +145,7 @@ export def "days-supply get" [
   let full_url = (build-url $base "/daysSupply" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"jwt": $jwt, "brandName": $brand_name, "regionName": $region_name} | compact), body: null}
 }
 
 # Days a vehicle takes to sell
@@ -150,7 +172,7 @@ export def "days-to-sell get" [
   let full_url = (build-url $base "/daysToSell" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"jwt": $jwt, "brandName": $brand_name, "regionName": $region_name} | compact), body: null}
 }
 
 # Get a list of brand names
@@ -175,7 +197,7 @@ export def "get-brands get-names" [
   let full_url = (build-url $base "/getBrands" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"jwt": $jwt} | compact), body: null}
 }
 
 # Premium. Dealers in a zip code.
@@ -201,7 +223,7 @@ export def "get-dealers get" [
   let full_url = (build-url $base "/getDealers" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"jwt": $jwt, "zipCode": $zip_code} | compact), body: null}
 }
 
 # Premium. Dealers by ID
@@ -227,7 +249,7 @@ export def "get-dealers-by-id get" [
   let full_url = (build-url $base "/getDealersByID" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"jwt": $jwt, "dealerID": $dealer_id} | compact), body: null}
 }
 
 # Premium. Dealers in a region.
@@ -254,7 +276,7 @@ export def "get-dealers-by-region get" [
   let full_url = (build-url $base "/getDealersByRegion" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"jwt": $jwt, "regionName": $region_name, "page": $page} | compact), body: null}
 }
 
 # Get a list of model names including discontinued models
@@ -280,7 +302,7 @@ export def "get-inactive-models list-names" [
   let full_url = (build-url $base "/getInactiveModels" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"jwt": $jwt, "brandName": $brand_name} | compact), body: null}
 }
 
 # Get a list of model names
@@ -306,7 +328,7 @@ export def "get-models get-names" [
   let full_url = (build-url $base "/getModels" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"jwt": $jwt, "brandName": $brand_name} | compact), body: null}
 }
 
 # Market share of a brand in region
@@ -333,7 +355,7 @@ export def "get-region-brand-market-share get" [
   let full_url = (build-url $base "/getRegionBrandMarketShare" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"jwt": $jwt, "brandName": $brand_name, "regionName": $region_name} | compact), body: null}
 }
 
 # Market share of all brands in region
@@ -359,7 +381,7 @@ export def "get-region-market-share get" [
   let full_url = (build-url $base "/getRegionMarketShare" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"jwt": $jwt, "regionName": $region_name} | compact), body: null}
 }
 
 # Get a list of region names
@@ -384,7 +406,7 @@ export def "get-regions get" [
   let full_url = (build-url $base "/getRegions" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"jwt": $jwt} | compact), body: null}
 }
 
 # Get all Sub User Keys associated with your account.
@@ -410,7 +432,7 @@ export def "get-sub-user-keys get" [
   let full_url = (build-url $base "/getSubUserKeys" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"apiID": $api_id, "apiKey": $api_key} | compact), body: null}
 }
 
 # Get a JWT from your API credentials
@@ -436,7 +458,7 @@ export def "get-token get-make" [
   let full_url = (build-url $base "/getToken" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"apiID": $api_id, "apiKey": $api_key} | compact), body: null}
 }
 
 # Get a JWT from your API credentials
@@ -462,14 +484,14 @@ export def "get-token create-make" [
   let full_url = (build-url $base "/getToken" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"apiID": $api_id, "apiKey": $api_key} | compact), body: null}
 }
 
 # Stats on ask price of new vehicles
 #
 # GET /listPrice
 # operationId: getAvgListPrice_listPrice_get
-export def "list-price get-avg-get" [
+export def "list-price get-avg" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -489,14 +511,14 @@ export def "list-price get-avg-get" [
   let full_url = (build-url $base "/listPrice" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"jwt": $jwt, "brandName": $brand_name, "regionName": $region_name} | compact), body: null}
 }
 
 # Listings by Dealer ID
 #
 # GET /listings
 # operationId: getListingsByDealer_listings_get
-export def "listings get-by-dealer-get" [
+export def "listings get-by-dealer" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -517,14 +539,14 @@ export def "listings get-by-dealer-get" [
   let full_url = (build-url $base "/listings" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"jwt": $jwt, "dealerID": $dealer_id, "page": $page, "newCars": $new_cars} | compact), body: null}
 }
 
 # Flexible Listing Search
 #
 # GET /listings2
 # operationId: getListings2_listings2_get
-export def "listings2 get-get" [
+export def "listings2 get" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -559,14 +581,14 @@ export def "listings2 get-get" [
   let full_url = (build-url $base "/listings2" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"jwt": $jwt, "dealerID": $dealer_id, "zipCode": $zip_code, "latitude": $latitude, "longitude": $longitude, "radius": $radius, "regionName": $region_name, "brandName": $brand_name, "modelName": $model_name, "modelYear": $model_year, "mileageLow": $mileage_low, "mileageHigh": $mileage_high, "startDate": $start_date, "endDate": $end_date, "daysBack": $days_back, "page": $page, "newCars": $new_cars, "extendedSearch": $extended_search} | compact), body: null}
 }
 
 # Listings by Dealer ID and Date
 #
 # GET /listingsByDate
 # operationId: getListingsByDealer_listingsByDate_get
-export def "listings-by-date get-dealer-get" [
+export def "listings-by-date get-dealer" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -589,14 +611,14 @@ export def "listings-by-date get-dealer-get" [
   let full_url = (build-url $base "/listingsByDate" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"jwt": $jwt, "dealerID": $dealer_id, "startDate": $start_date, "endDate": $end_date, "page": $page, "newCars": $new_cars} | compact), body: null}
 }
 
 # Listings by Region
 #
 # GET /listingsByRegion
 # operationId: getListingsByRegion_listingsByRegion_get
-export def "listings-by-region get-get" [
+export def "listings-by-region get" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -619,14 +641,14 @@ export def "listings-by-region get-get" [
   let full_url = (build-url $base "/listingsByRegion" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"jwt": $jwt, "regionName": $region_name, "modelName": $model_name, "daysBack": $days_back, "page": $page, "newCars": $new_cars} | compact), body: null}
 }
 
 # Listings by Region and Date
 #
 # GET /listingsByRegionAndDate
 # operationId: getListingsByRegionAndDate_listingsByRegionAndDate_get
-export def "listings-by-region-and-date get-get" [
+export def "listings-by-region-and-date get" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -650,7 +672,7 @@ export def "listings-by-region-and-date get-get" [
   let full_url = (build-url $base "/listingsByRegionAndDate" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"jwt": $jwt, "regionName": $region_name, "modelName": $model_name, "startDate": $start_date, "endDate": $end_date, "page": $page, "newCars": $new_cars} | compact), body: null}
 }
 
 # Listings by ZipCode
@@ -679,7 +701,7 @@ export def "listings-by-zip-code get" [
   let full_url = (build-url $base "/listingsByZipCode" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"jwt": $jwt, "zipCode": $zip_code, "page": $page, "newCars": $new_cars, "modelName": $model_name} | compact), body: null}
 }
 
 # Listings by ZipCode and Date
@@ -710,7 +732,7 @@ export def "listings-by-zip-code-and-date get" [
   let full_url = (build-url $base "/listingsByZipCodeAndDate" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"jwt": $jwt, "zipCode": $zip_code, "startDate": $start_date, "endDate": $end_date, "page": $page, "newCars": $new_cars, "modelName": $model_name} | compact), body: null}
 }
 
 # Generate a Sub User Key that can be used by your users to make API calls in frontend applications.
@@ -741,14 +763,14 @@ export def "make-sub-user-key create" [
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: ({"apiID": $api_id, "apiKey": $api_key, "siteName": $site_name} | compact), body: $req_body}
 }
 
 # Used market share of model year by model
 #
 # GET /modelYearDist
 # operationId: getModelUsedDist_modelYearDist_get
-export def "model-year-dist get-used-get" [
+export def "model-year-dist get-used" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -769,14 +791,14 @@ export def "model-year-dist get-used-get" [
   let full_url = (build-url $base "/modelYearDist" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"jwt": $jwt, "modelName": $model_name, "brandName": $brand_name, "regionName": $region_name} | compact), body: null}
 }
 
 # Brand sales by region and Day
 #
 # GET /regionDailySales
 # operationId: getDealerSales_regionDailySales_get
-export def "region-daily-sales get-dealer-get" [
+export def "region-daily-sales get-dealer" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -797,14 +819,14 @@ export def "region-daily-sales get-dealer-get" [
   let full_url = (build-url $base "/regionDailySales" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"jwt": $jwt, "brandName": $brand_name, "regionName": $region_name, "day": $day} | compact), body: null}
 }
 
 # Premium. Brand sales by region and month
 #
 # GET /regionSales
 # operationId: getDealerSales_regionSales_get
-export def "region-sales get-dealer-get" [
+export def "region-sales get-dealer" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -825,7 +847,7 @@ export def "region-sales get-dealer-get" [
   let full_url = (build-url $base "/regionSales" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"jwt": $jwt, "brandName": $brand_name, "regionName": $region_name, "month": $month} | compact), body: null}
 }
 
 # Revoke a Sub User Key associated with your account.
@@ -852,14 +874,14 @@ export def "revoke-sub-user-key update" [
   let full_url = (build-url $base "/revokeSubUserKey" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"apiID": $api_id, "apiKey": $api_key, "subUserKeyUUID": $sub_user_key_uuid} | compact), body: null}
 }
 
 # Stats on sale price of new vehicles
 #
 # GET /salePrice
 # operationId: getAvgSalePrice_salePrice_get
-export def "sale-price get-avg-get" [
+export def "sale-price get-avg" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -879,14 +901,14 @@ export def "sale-price get-avg-get" [
   let full_url = (build-url $base "/salePrice" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"jwt": $jwt, "brandName": $brand_name, "regionName": $region_name} | compact), body: null}
 }
 
 # Histogram of sales price of new vehicles by model
 #
 # GET /salePriceHistogram
 # operationId: getModelSaleBuckets_salePriceHistogram_get
-export def "sale-price-histogram get-model-buckets-get" [
+export def "sale-price-histogram get-model-buckets" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -907,14 +929,14 @@ export def "sale-price-histogram get-model-buckets-get" [
   let full_url = (build-url $base "/salePriceHistogram" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"jwt": $jwt, "modelName": $model_name, "brandName": $brand_name, "regionName": $region_name} | compact), body: null}
 }
 
 # Premium. Simple Vehicle Market Report
 #
 # GET /similarSalePrice
 # operationId: getMarket3_similarSalePrice_get
-export def "similar-sale-price get-market3-get" [
+export def "similar-sale-price get-market3" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -936,14 +958,14 @@ export def "similar-sale-price get-market3-get" [
   let full_url = (build-url $base "/similarSalePrice" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"jwt": $jwt, "vin": $vin, "regionName": $region_name, "daysBack": $days_back, "sameYear": $same_year} | compact), body: null}
 }
 
 # Top models in a given region
 #
 # GET /topModels
 # operationId: getTopModels_topModels_get
-export def "top-models get-get" [
+export def "top-models get" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -962,14 +984,14 @@ export def "top-models get-get" [
   let full_url = (build-url $base "/topModels" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"jwt": $jwt, "regionName": $region_name} | compact), body: null}
 }
 
 # Premium. Simple Vehicle Market Report Over Arbitrary Locations and Vehicles.
 #
 # GET /valuation
 # operationId: getMarket4_valuation_get
-export def "valuation get-market4-get" [
+export def "valuation get-market4" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1002,14 +1024,14 @@ export def "valuation get-market4-get" [
   let full_url = (build-url $base "/valuation" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"jwt": $jwt, "vin": $vin, "dealerID": $dealer_id, "zipCode": $zip_code, "latitude": $latitude, "longitude": $longitude, "radius": $radius, "regionName": $region_name, "mileageLow": $mileage_low, "mileageHigh": $mileage_high, "startDate": $start_date, "endDate": $end_date, "daysBack": $days_back, "newCars": $new_cars, "extendedSearch": $extended_search, "sameYear": $same_year} | compact), body: null}
 }
 
 # Premium. Simple Vehicle History Report
 #
 # GET /vehicleHistory
 # operationId: getHistory2_vehicleHistory_get
-export def "vehicle-history get-history2-get" [
+export def "vehicle-history get-history2" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1028,14 +1050,14 @@ export def "vehicle-history get-history2-get" [
   let full_url = (build-url $base "/vehicleHistory" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"jwt": $jwt, "vin": $vin} | compact), body: null}
 }
 
 # Checks if a VIN appeared on the market on or after a given date.
 #
 # GET /vehicleSeen
 # operationId: getVehicleSeen_vehicleSeen_get
-export def "vehicle-seen get-get" [
+export def "vehicle-seen get" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1055,7 +1077,7 @@ export def "vehicle-seen get-get" [
   let full_url = (build-url $base "/vehicleSeen" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"jwt": $jwt, "vin": $vin, "afterDate": $after_date} | compact), body: null}
 }
 
 # Vin decoder and Recall Info
@@ -1083,5 +1105,5 @@ export def "vin-decode get" [
   let full_url = (build-url $base "/vinDecode" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"jwt": $jwt, "vin": $vin, "passEmpty": $pass_empty, "includeRecall": $include_recall} | compact), body: null}
 }

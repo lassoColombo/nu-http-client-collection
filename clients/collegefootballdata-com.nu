@@ -3,17 +3,18 @@
 # Auth: --token flag or $env.COLLEGE_FOOTBALL_DATA_API_TOKEN
 
 const BASE_URL = "https://api.collegefootballdata.com"
-const DEFAULT_AUTH = "bearer"
 
-# Build auth: returns {headers: record, query: string}
+# Build auth: returns {scheme: string, headers: record, query: string, location: string}.
+# `location` is "header" | "query" | "cookie" | "none" and tells dry-run callers
+# where the token went without inspecting headers/query themselves.
 def build-auth [token?: string, auth_scheme?: string]: nothing -> record {
   let token_val = if ($token != null) and ($token | is-not-empty) { $token } else { $env | get -o COLLEGE_FOOTBALL_DATA_API_TOKEN | default "" }
   let scheme = ($auth_scheme | default "bearer")
-  if ($scheme == "none") or ($token_val | is-empty) { return {headers: {}, query: ""} }
+  if ($scheme == "none") or ($token_val | is-empty) { return {scheme: $scheme, headers: {}, query: "", location: "none"} }
   match $scheme {
-    "bearer" => { {headers: {Authorization: $"Bearer ($token_val)"}, query: ""} }
-    "none" => { {headers: {}, query: ""} }
-    _ => { {headers: {Authorization: $"Bearer ($token_val)"}, query: ""} }
+    "bearer" => { {scheme: $scheme, headers: {Authorization: $"Bearer ($token_val)"}, query: "", location: "header"} }
+    "none" => { {scheme: $scheme, headers: {}, query: "", location: "none"} }
+    _ => { {scheme: $scheme, headers: {Authorization: $"Bearer ($token_val)"}, query: "", location: "header"} }
   }
 }
 
@@ -22,8 +23,9 @@ def build-auth [token?: string, auth_scheme?: string]: nothing -> record {
 # ([A-Za-z0-9-._~]) stay literal; everything else gets %XX.
 def serialize-qp [name: string, value: any, style: string]: nothing -> list<string> {
   if ($value == null) { return [] }
-  let n = (encode-path-segment $name)
   let is_list = ($value | describe | str starts-with "list")
+  if $is_list and ($value | is-empty) { return [] }
+  let n = (encode-path-segment $name)
   if ($value | describe | str starts-with "record") { return ($value | transpose k v | each { $"($n)[(encode-path-segment $in.k)]=(encode-path-segment $in.v)" }) }
   if not $is_list { return [$"($n)=(encode-path-segment $value)"] }
   match $style {
@@ -54,22 +56,42 @@ def build-url [base: string, path: string, query?: string]: nothing -> string {
   if ($query != null) and ($query | is-not-empty) { $result | upsert query $query | url join } else { $result | url join }
 }
 
+# Build the dry-run record returned by --dry-run. Shape:
+#   {dry_run: true, method, url, query: <record>, headers, body, content_type, timeout,
+#    auth: {scheme, location}}
+# `meta` carries logical-form data (the query record by spec name, the pre-serialization
+# body) that do-request itself cannot reconstruct from its wire-format args.
+def build-dry-run-record [method: string, url: string, auth: record, content_type: string, timeout: duration, meta?: record]: nothing -> record {
+  let m = ($meta | default {})
+  {
+    dry_run: true
+    method: $method
+    url: $url
+    query: ($m | get -o query | default {})
+    headers: $auth.headers
+    body: ($m | get -o body)
+    content_type: $content_type
+    timeout: $timeout
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+}
+
 # Execute HTTP request with method dispatch
-def do-request [method: string, url: string, auth: record, insecure: bool, raw: bool, dry_run: bool, max_time?: duration, allow_errors?: bool, full?: bool, content_type?: string, body?: any]: nothing -> any {
+def do-request [method: string, url: string, auth: record, insecure: bool, raw: bool, dry_run: bool, max_time?: duration, allow_errors?: bool, full?: bool, content_type?: string, body?: any, dry_run_meta?: record]: nothing -> any {
   let req_url = if ($auth.query | is-not-empty) { if ($url | str contains "?") { $"($url)&($auth.query)" } else { $"($url)?($auth.query)" } } else { $url }
   let timeout = ($max_time | default 30min)
   let ct = ($content_type | default "application/json")
-  if $dry_run { return {method: $method, url: $req_url, headers: $auth.headers, query_string: $auth.query, content_type: $ct, timeout: $timeout, body: $body} }
+  if $dry_run { return (build-dry-run-record $method $req_url $auth $ct $timeout $dry_run_meta) }
   let resp = match $method {
     "get" => { http get --headers $auth.headers --full --allow-errors --max-time $timeout --insecure=$insecure --raw=$raw $req_url }
-    "head" => { http head --headers $auth.headers --max-time $timeout --insecure=$insecure $req_url }
-    "options" => { http options --headers $auth.headers --max-time $timeout --insecure=$insecure $req_url }
+    "head" => { http head --headers $auth.headers --full --allow-errors --max-time $timeout --insecure=$insecure $req_url }
+    "options" => { http options --headers $auth.headers --full --allow-errors --max-time $timeout --insecure=$insecure $req_url }
     "post" => { if ($body | is-empty) { http post --headers $auth.headers --full --allow-errors --max-time $timeout --insecure=$insecure --raw=$raw $req_url "" } else { http post --headers $auth.headers --content-type $ct --full --allow-errors --max-time $timeout --insecure=$insecure --raw=$raw $req_url $body } }
     "put" => { if ($body | is-empty) { http put --headers $auth.headers --full --allow-errors --max-time $timeout --insecure=$insecure --raw=$raw $req_url "" } else { http put --headers $auth.headers --content-type $ct --full --allow-errors --max-time $timeout --insecure=$insecure --raw=$raw $req_url $body } }
     "patch" => { if ($body | is-empty) { http patch --headers $auth.headers --full --allow-errors --max-time $timeout --insecure=$insecure --raw=$raw $req_url "" } else { http patch --headers $auth.headers --content-type $ct --full --allow-errors --max-time $timeout --insecure=$insecure --raw=$raw $req_url $body } }
     "delete" => { if ($body | is-empty) { http delete --headers $auth.headers --full --allow-errors --max-time $timeout --insecure=$insecure --raw=$raw $req_url } else { http delete --headers $auth.headers --content-type $ct --data $body --full --allow-errors --max-time $timeout --insecure=$insecure --raw=$raw $req_url } }
   }
-  if ($method in ["head" "options"]) { return $resp }
+  if ($method == "head") and (not $full) and (not $allow_errors) and $resp.status < 400 { return $resp.headers }
   if $allow_errors { $resp } else if $resp.status >= 400 { error make --unspanned { msg: $"HTTP ($resp.status): ($resp.body)" } } else if $full { {status: $resp.status, headers: $resp.headers, body: $resp.body} } else if $resp.status == 204 { null } else { $resp.body }
 }
 
@@ -122,7 +144,7 @@ export def "calendar get" [
   let full_url = (build-url $base "/calendar" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"year": $year} | compact), body: null}
 }
 
 # Coaching records and history
@@ -152,7 +174,7 @@ export def "coaches get" [
   let full_url = (build-url $base "/coaches" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"firstName": $first_name, "lastName": $last_name, "team": $team, "year": $year, "minYear": $min_year, "maxYear": $max_year} | compact), body: null}
 }
 
 # Conferences
@@ -175,7 +197,7 @@ export def "conferences get" [
   let full_url = (build-url $base "/conferences")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
 }
 
 # List of NFL Draft picks
@@ -204,7 +226,7 @@ export def "draft-picks get" [
   let full_url = (build-url $base "/draft/picks" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"year": $year, "nflTeam": $nfl_team, "college": $college, "conference": $conference, "position": $position} | compact), body: null}
 }
 
 # List of NFL positions
@@ -227,7 +249,7 @@ export def "draft-positions get-nfl" [
   let full_url = (build-url $base "/draft/positions")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
 }
 
 # List of NFL teams
@@ -250,7 +272,7 @@ export def "draft-teams get-nfl" [
   let full_url = (build-url $base "/draft/teams")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
 }
 
 # Drive data and results
@@ -284,7 +306,7 @@ export def "drives get" [
   let full_url = (build-url $base "/drives" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"seasonType": $season_type, "year": $year, "week": $week, "team": $team, "offense": $offense, "defense": $defense, "conference": $conference, "offenseConference": $offense_conference, "defenseConference": $defense_conference, "classification": $classification} | compact), body: null}
 }
 
 # Advanced box scores
@@ -309,7 +331,7 @@ export def "game-box-advanced get-score" [
   let full_url = (build-url $base "/game/box/advanced" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"gameId": $game_id} | compact), body: null}
 }
 
 # Games and results
@@ -342,7 +364,7 @@ export def "games get" [
   let full_url = (build-url $base "/games" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"year": $year, "week": $week, "seasonType": $season_type, "team": $team, "home": $home, "away": $away, "conference": $conference, "division": $division, "id": $id} | compact), body: null}
 }
 
 # Game media information and schedules
@@ -373,7 +395,7 @@ export def "games-media get" [
   let full_url = (build-url $base "/games/media" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"year": $year, "week": $week, "seasonType": $season_type, "team": $team, "conference": $conference, "mediaType": $media_type, "classification": $classification} | compact), body: null}
 }
 
 # Player game stats
@@ -404,7 +426,7 @@ export def "games-players get-stats" [
   let full_url = (build-url $base "/games/players" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"year": $year, "week": $week, "seasonType": $season_type, "team": $team, "conference": $conference, "category": $category, "gameId": $game_id} | compact), body: null}
 }
 
 # Team game stats
@@ -435,7 +457,7 @@ export def "games-teams get-stats" [
   let full_url = (build-url $base "/games/teams" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"year": $year, "week": $week, "seasonType": $season_type, "team": $team, "conference": $conference, "gameId": $game_id, "classification": $classification} | compact), body: null}
 }
 
 # Game weather information (Patreon only)
@@ -466,7 +488,7 @@ export def "games-weather get" [
   let full_url = (build-url $base "/games/weather" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"gameId": $game_id, "year": $year, "week": $week, "seasonType": $season_type, "team": $team, "conference": $conference, "classification": $classification} | compact), body: null}
 }
 
 # Betting lines
@@ -498,7 +520,7 @@ export def "lines get" [
   let full_url = (build-url $base "/lines" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"gameId": $game_id, "year": $year, "week": $week, "seasonType": $season_type, "team": $team, "home": $home, "away": $away, "conference": $conference} | compact), body: null}
 }
 
 # Live metrics and PBP (Patreon only)
@@ -523,7 +545,7 @@ export def "live-plays get" [
   let full_url = (build-url $base "/live/plays" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"id": $id} | compact), body: null}
 }
 
 # Win probability chart data
@@ -548,7 +570,7 @@ export def "metrics-wp get-win-probability-data" [
   let full_url = (build-url $base "/metrics/wp" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"gameId": $game_id} | compact), body: null}
 }
 
 # Pregame win probability data
@@ -576,7 +598,7 @@ export def "metrics-wp-pregame get-win-probabilities" [
   let full_url = (build-url $base "/metrics/wp/pregame" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"year": $year, "week": $week, "team": $team, "seasonType": $season_type} | compact), body: null}
 }
 
 # Types of player play stats
@@ -599,7 +621,7 @@ export def "play-stat-types get" [
   let full_url = (build-url $base "/play/stat/types")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
 }
 
 # Play stats by play
@@ -631,7 +653,7 @@ export def "play-stats get" [
   let full_url = (build-url $base "/play/stats" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"year": $year, "week": $week, "team": $team, "gameId": $game_id, "athleteId": $athlete_id, "statTypeId": $stat_type_id, "seasonType": $season_type, "conference": $conference} | compact), body: null}
 }
 
 # Play types
@@ -654,7 +676,7 @@ export def "play-types get" [
   let full_url = (build-url $base "/play/types")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
 }
 
 # Transfer portal by season
@@ -679,7 +701,7 @@ export def "player-portal get-transfer" [
   let full_url = (build-url $base "/player/portal" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"year": $year} | compact), body: null}
 }
 
 # Team returning production metrics
@@ -706,7 +728,7 @@ export def "player-returning get-production" [
   let full_url = (build-url $base "/player/returning" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"year": $year, "team": $team, "conference": $conference} | compact), body: null}
 }
 
 # Search for player information
@@ -734,7 +756,7 @@ export def "player-search list" [
   let full_url = (build-url $base "/player/search" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"searchTerm": $search_term, "position": $position, "team": $team, "year": $year} | compact), body: null}
 }
 
 # Player usage metrics broken down by season
@@ -764,7 +786,7 @@ export def "player-usage get" [
   let full_url = (build-url $base "/player/usage" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"year": $year, "team": $team, "conference": $conference, "position": $position, "playerId": $player_id, "excludeGarbageTime": $exclude_garbage_time} | compact), body: null}
 }
 
 # Play by play data
@@ -799,7 +821,7 @@ export def "plays get" [
   let full_url = (build-url $base "/plays" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"seasonType": $season_type, "year": $year, "week": $week, "team": $team, "offense": $offense, "defense": $defense, "conference": $conference, "offenseConference": $offense_conference, "defenseConference": $defense_conference, "playType": $play_type, "classification": $classification} | compact), body: null}
 }
 
 # Team Predicated Points Added (PPA/EPA) by game
@@ -829,7 +851,7 @@ export def "ppa-games get" [
   let full_url = (build-url $base "/ppa/games" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"year": $year, "week": $week, "team": $team, "conference": $conference, "excludeGarbageTime": $exclude_garbage_time, "seasonType": $season_type} | compact), body: null}
 }
 
 # Player Predicated Points Added (PPA/EPA) broken down by game
@@ -861,7 +883,7 @@ export def "ppa-players-games get" [
   let full_url = (build-url $base "/ppa/players/games" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"year": $year, "week": $week, "team": $team, "position": $position, "playerId": $player_id, "threshold": $threshold, "excludeGarbageTime": $exclude_garbage_time, "seasonType": $season_type} | compact), body: null}
 }
 
 # Player Predicated Points Added (PPA/EPA) broken down by season
@@ -892,7 +914,7 @@ export def "ppa-players-season get" [
   let full_url = (build-url $base "/ppa/players/season" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"year": $year, "team": $team, "conference": $conference, "position": $position, "playerId": $player_id, "threshold": $threshold, "excludeGarbageTime": $exclude_garbage_time} | compact), body: null}
 }
 
 # Predicted Points (i.e. Expected Points or EP)
@@ -918,7 +940,7 @@ export def "ppa-predicted get-points" [
   let full_url = (build-url $base "/ppa/predicted" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"down": $down, "distance": $distance} | compact), body: null}
 }
 
 # Predicted Points Added (PPA/EPA) data by team
@@ -946,7 +968,7 @@ export def "ppa-teams get" [
   let full_url = (build-url $base "/ppa/teams" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"year": $year, "team": $team, "conference": $conference, "excludeGarbageTime": $exclude_garbage_time} | compact), body: null}
 }
 
 # Historical polls and rankings
@@ -973,7 +995,7 @@ export def "rankings get" [
   let full_url = (build-url $base "/rankings" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"year": $year, "week": $week, "seasonType": $season_type} | compact), body: null}
 }
 
 # Historical Elo ratings
@@ -1001,7 +1023,7 @@ export def "ratings-elo get" [
   let full_url = (build-url $base "/ratings/elo" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"year": $year, "week": $week, "team": $team, "conference": $conference} | compact), body: null}
 }
 
 # Historical SP+ ratings
@@ -1027,7 +1049,7 @@ export def "ratings-sp get" [
   let full_url = (build-url $base "/ratings/sp" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"year": $year, "team": $team} | compact), body: null}
 }
 
 # Historical SP+ ratings by conference
@@ -1053,7 +1075,7 @@ export def "ratings-sp-conferences get" [
   let full_url = (build-url $base "/ratings/sp/conferences" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"year": $year, "conference": $conference} | compact), body: null}
 }
 
 # Historical SRS ratings
@@ -1080,7 +1102,7 @@ export def "ratings-srs get" [
   let full_url = (build-url $base "/ratings/srs" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"year": $year, "team": $team, "conference": $conference} | compact), body: null}
 }
 
 # Team records
@@ -1107,7 +1129,7 @@ export def "records get-team" [
   let full_url = (build-url $base "/records" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"year": $year, "team": $team, "conference": $conference} | compact), body: null}
 }
 
 # Recruit position group ratings
@@ -1135,7 +1157,7 @@ export def "recruiting-groups get" [
   let full_url = (build-url $base "/recruiting/groups" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"startYear": $start_year, "endYear": $end_year, "team": $team, "conference": $conference} | compact), body: null}
 }
 
 # Player recruiting ratings and rankings
@@ -1164,7 +1186,7 @@ export def "recruiting-players get" [
   let full_url = (build-url $base "/recruiting/players" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"year": $year, "classification": $classification, "position": $position, "state": $state, "team": $team} | compact), body: null}
 }
 
 # Team recruiting rankings and ratings
@@ -1190,7 +1212,7 @@ export def "recruiting-teams get" [
   let full_url = (build-url $base "/recruiting/teams" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"year": $year, "team": $team} | compact), body: null}
 }
 
 # Team rosters
@@ -1216,7 +1238,7 @@ export def "roster get" [
   let full_url = (build-url $base "/roster" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"team": $team, "year": $year} | compact), body: null}
 }
 
 # Live game results (Patreon only)
@@ -1242,7 +1264,7 @@ export def "scoreboard get" [
   let full_url = (build-url $base "/scoreboard" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"classification": $classification, "conference": $conference} | compact), body: null}
 }
 
 # Team stat categories
@@ -1265,7 +1287,7 @@ export def "stats-categories get" [
   let full_url = (build-url $base "/stats/categories")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
 }
 
 # Advanced team metrics by game
@@ -1295,7 +1317,7 @@ export def "stats-game-advanced get-team" [
   let full_url = (build-url $base "/stats/game/advanced" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"year": $year, "week": $week, "team": $team, "opponent": $opponent, "excludeGarbageTime": $exclude_garbage_time, "seasonType": $season_type} | compact), body: null}
 }
 
 # Player stats by season
@@ -1326,7 +1348,7 @@ export def "stats-player-season get" [
   let full_url = (build-url $base "/stats/player/season" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"year": $year, "team": $team, "conference": $conference, "startWeek": $start_week, "endWeek": $end_week, "seasonType": $season_type, "category": $category} | compact), body: null}
 }
 
 # Team statistics by season
@@ -1355,7 +1377,7 @@ export def "stats-season get-team" [
   let full_url = (build-url $base "/stats/season" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"year": $year, "team": $team, "conference": $conference, "startWeek": $start_week, "endWeek": $end_week} | compact), body: null}
 }
 
 # Advanced team metrics by season
@@ -1384,7 +1406,7 @@ export def "stats-season-advanced get-team" [
   let full_url = (build-url $base "/stats/season/advanced" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"year": $year, "team": $team, "excludeGarbageTime": $exclude_garbage_time, "startWeek": $start_week, "endWeek": $end_week} | compact), body: null}
 }
 
 # Team talent composite rankings
@@ -1409,7 +1431,7 @@ export def "talent get" [
   let full_url = (build-url $base "/talent" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"year": $year} | compact), body: null}
 }
 
 # Team information
@@ -1434,7 +1456,7 @@ export def "teams get" [
   let full_url = (build-url $base "/teams" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"conference": $conference} | compact), body: null}
 }
 
 # FBS team list
@@ -1459,7 +1481,7 @@ export def "teams-fbs get" [
   let full_url = (build-url $base "/teams/fbs" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"year": $year} | compact), body: null}
 }
 
 # Team matchup history
@@ -1487,7 +1509,7 @@ export def "teams-matchup get" [
   let full_url = (build-url $base "/teams/matchup" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"team1": $team1, "team2": $team2, "minYear": $min_year, "maxYear": $max_year} | compact), body: null}
 }
 
 # Arena and venue information
@@ -1510,5 +1532,5 @@ export def "venues get" [
   let full_url = (build-url $base "/venues")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
 }

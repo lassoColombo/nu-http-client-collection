@@ -3,17 +3,18 @@
 # Auth: --token flag or $env.CHANNEL_4_API_TOKEN
 
 const BASE_URL = "http://channel4.com/pmlsd"
-const DEFAULT_AUTH = "query-apikey"
 
-# Build auth: returns {headers: record, query: string}
+# Build auth: returns {scheme: string, headers: record, query: string, location: string}.
+# `location` is "header" | "query" | "cookie" | "none" and tells dry-run callers
+# where the token went without inspecting headers/query themselves.
 def build-auth [token?: string, auth_scheme?: string]: nothing -> record {
   let token_val = if ($token != null) and ($token | is-not-empty) { $token } else { $env | get -o CHANNEL_4_API_TOKEN | default "" }
   let scheme = ($auth_scheme | default "bearer")
-  if ($scheme == "none") or ($token_val | is-empty) { return {headers: {}, query: ""} }
+  if ($scheme == "none") or ($token_val | is-empty) { return {scheme: $scheme, headers: {}, query: "", location: "none"} }
   match $scheme {
-    "query-apikey" => { {headers: {}, query: $"(encode-path-segment "apikey")=(encode-path-segment $token_val)"} }
-    "none" => { {headers: {}, query: ""} }
-    _ => { {headers: {Authorization: $"Bearer ($token_val)"}, query: ""} }
+    "query-apikey" => { {scheme: $scheme, headers: {}, query: $"(encode-path-segment "apikey")=(encode-path-segment $token_val)", location: "query"} }
+    "none" => { {scheme: $scheme, headers: {}, query: "", location: "none"} }
+    _ => { {scheme: $scheme, headers: {Authorization: $"Bearer ($token_val)"}, query: "", location: "header"} }
   }
 }
 
@@ -22,8 +23,9 @@ def build-auth [token?: string, auth_scheme?: string]: nothing -> record {
 # ([A-Za-z0-9-._~]) stay literal; everything else gets %XX.
 def serialize-qp [name: string, value: any, style: string]: nothing -> list<string> {
   if ($value == null) { return [] }
-  let n = (encode-path-segment $name)
   let is_list = ($value | describe | str starts-with "list")
+  if $is_list and ($value | is-empty) { return [] }
+  let n = (encode-path-segment $name)
   if ($value | describe | str starts-with "record") { return ($value | transpose k v | each { $"($n)[(encode-path-segment $in.k)]=(encode-path-segment $in.v)" }) }
   if not $is_list { return [$"($n)=(encode-path-segment $value)"] }
   match $style {
@@ -54,22 +56,42 @@ def build-url [base: string, path: string, query?: string]: nothing -> string {
   if ($query != null) and ($query | is-not-empty) { $result | upsert query $query | url join } else { $result | url join }
 }
 
+# Build the dry-run record returned by --dry-run. Shape:
+#   {dry_run: true, method, url, query: <record>, headers, body, content_type, timeout,
+#    auth: {scheme, location}}
+# `meta` carries logical-form data (the query record by spec name, the pre-serialization
+# body) that do-request itself cannot reconstruct from its wire-format args.
+def build-dry-run-record [method: string, url: string, auth: record, content_type: string, timeout: duration, meta?: record]: nothing -> record {
+  let m = ($meta | default {})
+  {
+    dry_run: true
+    method: $method
+    url: $url
+    query: ($m | get -o query | default {})
+    headers: $auth.headers
+    body: ($m | get -o body)
+    content_type: $content_type
+    timeout: $timeout
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+}
+
 # Execute HTTP request with method dispatch
-def do-request [method: string, url: string, auth: record, insecure: bool, raw: bool, dry_run: bool, max_time?: duration, allow_errors?: bool, full?: bool, content_type?: string, body?: any]: nothing -> any {
+def do-request [method: string, url: string, auth: record, insecure: bool, raw: bool, dry_run: bool, max_time?: duration, allow_errors?: bool, full?: bool, content_type?: string, body?: any, dry_run_meta?: record]: nothing -> any {
   let req_url = if ($auth.query | is-not-empty) { if ($url | str contains "?") { $"($url)&($auth.query)" } else { $"($url)?($auth.query)" } } else { $url }
   let timeout = ($max_time | default 30min)
   let ct = ($content_type | default "application/json")
-  if $dry_run { return {method: $method, url: $req_url, headers: $auth.headers, query_string: $auth.query, content_type: $ct, timeout: $timeout, body: $body} }
+  if $dry_run { return (build-dry-run-record $method $req_url $auth $ct $timeout $dry_run_meta) }
   let resp = match $method {
     "get" => { http get --headers $auth.headers --full --allow-errors --max-time $timeout --insecure=$insecure --raw=$raw $req_url }
-    "head" => { http head --headers $auth.headers --max-time $timeout --insecure=$insecure $req_url }
-    "options" => { http options --headers $auth.headers --max-time $timeout --insecure=$insecure $req_url }
+    "head" => { http head --headers $auth.headers --full --allow-errors --max-time $timeout --insecure=$insecure $req_url }
+    "options" => { http options --headers $auth.headers --full --allow-errors --max-time $timeout --insecure=$insecure $req_url }
     "post" => { if ($body | is-empty) { http post --headers $auth.headers --full --allow-errors --max-time $timeout --insecure=$insecure --raw=$raw $req_url "" } else { http post --headers $auth.headers --content-type $ct --full --allow-errors --max-time $timeout --insecure=$insecure --raw=$raw $req_url $body } }
     "put" => { if ($body | is-empty) { http put --headers $auth.headers --full --allow-errors --max-time $timeout --insecure=$insecure --raw=$raw $req_url "" } else { http put --headers $auth.headers --content-type $ct --full --allow-errors --max-time $timeout --insecure=$insecure --raw=$raw $req_url $body } }
     "patch" => { if ($body | is-empty) { http patch --headers $auth.headers --full --allow-errors --max-time $timeout --insecure=$insecure --raw=$raw $req_url "" } else { http patch --headers $auth.headers --content-type $ct --full --allow-errors --max-time $timeout --insecure=$insecure --raw=$raw $req_url $body } }
     "delete" => { if ($body | is-empty) { http delete --headers $auth.headers --full --allow-errors --max-time $timeout --insecure=$insecure --raw=$raw $req_url } else { http delete --headers $auth.headers --content-type $ct --data $body --full --allow-errors --max-time $timeout --insecure=$insecure --raw=$raw $req_url } }
   }
-  if ($method in ["head" "options"]) { return $resp }
+  if ($method == "head") and (not $full) and (not $allow_errors) and $resp.status < 400 { return $resp.headers }
   if $allow_errors { $resp } else if $resp.status >= 400 { error make --unspanned { msg: $"HTTP ($resp.status): ($resp.body)" } } else if $full { {status: $resp.status, headers: $resp.headers, body: $resp.body} } else if $resp.status == 204 { null } else { $resp.body }
 }
 
@@ -123,11 +145,14 @@ export def "4od-episode-list-date get-4o-d-browse-by-feed" [
 ]: nothing -> record<feed: record> {
   let auth = (build-auth $token ($auth_scheme | default "query-apikey"))
   let base = ($base_url | default $BASE_URL)
+  if ($yyyy | is-empty) { error make --unspanned { msg: "path parameter 'yyyy' must be non-empty" } }
+  if ($mm | is-empty) { error make --unspanned { msg: "path parameter 'mm' must be non-empty" } }
+  if ($dd | is-empty) { error make --unspanned { msg: "path parameter 'dd' must be non-empty" } }
   let qp = [(serialize-qp "platform" $platform "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({yyyy: (encode-path-segment $yyyy), mm: (encode-path-segment $mm), dd: (encode-path-segment $dd)} | format pattern "/4od/episode-list/date/{yyyy}/{mm}/{dd}.atom") $qp)
   let accept_val = "application/xml"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"platform": $platform} | compact), body: null}
 }
 
 # 4oD Most Popular Episodes Feed
@@ -152,7 +177,7 @@ export def "4od-episode-list-popular-atom get-4o-d-most-feed" [
   let full_url = (build-url $base "/4od/episode-list/popular.atom" $qp)
   let accept_val = "application/xml"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"platform": $platform} | compact), body: null}
 }
 
 # 4oD Clips Catch Up Feed
@@ -177,7 +202,7 @@ export def "4od-recently-added-videos-atom get-4o-d-clips-catch-up-feed" [
   let full_url = (build-url $base "/4od/recently-added/videos.atom" $qp)
   let accept_val = "application/xml"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"platform": $platform} | compact), body: null}
 }
 
 # A to Z Landing Feed
@@ -202,7 +227,7 @@ export def "atoz-atom get-to-z-landing-feed" [
   let full_url = (build-url $base "/atoz.atom" $qp)
   let accept_val = "application/xml"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"platform": $platform} | compact), body: null}
 }
 
 # A to Z Letter Feed
@@ -224,11 +249,12 @@ export def "atoz get-to-z-feed" [
 ]: nothing -> record<feed: record> {
   let auth = (build-auth $token ($auth_scheme | default "query-apikey"))
   let base = ($base_url | default $BASE_URL)
+  if ($start_letter | is-empty) { error make --unspanned { msg: "path parameter 'start_letter' must be non-empty" } }
   let qp = [(serialize-qp "platform" $platform "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({start_letter: (encode-path-segment $start_letter)} | format pattern "/atoz/{start_letter}.atom") $qp)
   let accept_val = "application/xml"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"platform": $platform} | compact), body: null}
 }
 
 # A to Z Letter Feed(2)
@@ -251,11 +277,13 @@ export def "atoz-page-pageno-atom get-to-z-feed2" [
 ]: nothing -> record<feed: record> {
   let auth = (build-auth $token ($auth_scheme | default "query-apikey"))
   let base = ($base_url | default $BASE_URL)
+  if ($start_letter | is-empty) { error make --unspanned { msg: "path parameter 'start_letter' must be non-empty" } }
+  if ($pageno | is-empty) { error make --unspanned { msg: "path parameter 'pageno' must be non-empty" } }
   let qp = [(serialize-qp "platform" $platform "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({start_letter: (encode-path-segment $start_letter), pageno: (encode-path-segment $pageno)} | format pattern "/atoz/{start_letter}/page-{pageno}.atom") $qp)
   let accept_val = "application/xml"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"platform": $platform} | compact), body: null}
 }
 
 # 4oD Title All Brands Feed
@@ -280,7 +308,7 @@ export def "brands-4od-atom list-4o-d-title-feed" [
   let full_url = (build-url $base "/brands/4od.atom" $qp)
   let accept_val = "application/xml"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"platform": $platform} | compact), body: null}
 }
 
 # 4oD Title All Brands Feed(2)
@@ -302,11 +330,12 @@ export def "brands-4od-page-pageno-atom list-4o-d-title-feed2" [
 ]: nothing -> record<feed: record> {
   let auth = (build-auth $token ($auth_scheme | default "query-apikey"))
   let base = ($base_url | default $BASE_URL)
+  if ($pageno | is-empty) { error make --unspanned { msg: "path parameter 'pageno' must be non-empty" } }
   let qp = [(serialize-qp "platform" $platform "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({pageno: (encode-path-segment $pageno)} | format pattern "/brands/4od/page-{pageno}.atom") $qp)
   let accept_val = "application/xml"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"platform": $platform} | compact), body: null}
 }
 
 # 4oD Popular All Brands Feed
@@ -331,7 +360,7 @@ export def "brands-4od-popular-atom list-4o-d-feed" [
   let full_url = (build-url $base "/brands/4od/popular.atom" $qp)
   let accept_val = "application/xml"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"platform": $platform} | compact), body: null}
 }
 
 # 4oD Popular All Brands Feed(2)
@@ -353,11 +382,12 @@ export def "brands-4od-popular-page-pageno-atom list-4o-d-feed2" [
 ]: nothing -> record<feed: record> {
   let auth = (build-auth $token ($auth_scheme | default "query-apikey"))
   let base = ($base_url | default $BASE_URL)
+  if ($pageno | is-empty) { error make --unspanned { msg: "path parameter 'pageno' must be non-empty" } }
   let qp = [(serialize-qp "platform" $platform "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({pageno: (encode-path-segment $pageno)} | format pattern "/brands/4od/popular/page-{pageno}.atom") $qp)
   let accept_val = "application/xml"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"platform": $platform} | compact), body: null}
 }
 
 # Popular Brands Feed
@@ -382,7 +412,7 @@ export def "brands-popular-atom get-feed" [
   let full_url = (build-url $base "/brands/popular.atom" $qp)
   let accept_val = "application/xml"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"platform": $platform} | compact), body: null}
 }
 
 # Popular Brands Feed(2)
@@ -404,11 +434,12 @@ export def "brands-popular-page-pageno-atom get-feed2" [
 ]: nothing -> record<feed: record> {
   let auth = (build-auth $token ($auth_scheme | default "query-apikey"))
   let base = ($base_url | default $BASE_URL)
+  if ($pageno | is-empty) { error make --unspanned { msg: "path parameter 'pageno' must be non-empty" } }
   let qp = [(serialize-qp "platform" $platform "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({pageno: (encode-path-segment $pageno)} | format pattern "/brands/popular/page-{pageno}.atom") $qp)
   let accept_val = "application/xml"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"platform": $platform} | compact), body: null}
 }
 
 # Categories Landing Feed
@@ -433,7 +464,7 @@ export def "categories-atom get-landing-feed" [
   let full_url = (build-url $base "/categories.atom" $qp)
   let accept_val = "application/xml"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"platform": $platform} | compact), body: null}
 }
 
 # All Programmes by TX Date
@@ -455,11 +486,12 @@ export def "categories list-programmes-by-tx-date" [
 ]: nothing -> record<feed: record> {
   let auth = (build-auth $token ($auth_scheme | default "query-apikey"))
   let base = ($base_url | default $BASE_URL)
+  if ($category | is-empty) { error make --unspanned { msg: "path parameter 'category' must be non-empty" } }
   let qp = [(serialize-qp "platform" $platform "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({category: (encode-path-segment $category)} | format pattern "/categories/{category}.atom") $qp)
   let accept_val = "application/xml"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"platform": $platform} | compact), body: null}
 }
 
 # 4oD Programmes by TX Date
@@ -481,11 +513,12 @@ export def "categories-4od-atom get-4o-d-programmes-by-tx-date" [
 ]: nothing -> record<feed: record> {
   let auth = (build-auth $token ($auth_scheme | default "query-apikey"))
   let base = ($base_url | default $BASE_URL)
+  if ($category | is-empty) { error make --unspanned { msg: "path parameter 'category' must be non-empty" } }
   let qp = [(serialize-qp "platform" $platform "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({category: (encode-path-segment $category)} | format pattern "/categories/{category}/4od.atom") $qp)
   let accept_val = "application/xml"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"platform": $platform} | compact), body: null}
 }
 
 # 4oD Programmes by TX Date(4)
@@ -508,11 +541,13 @@ export def "categories-4od-page-pageno-atom get-4o-d-programmes-by-tx-date4" [
 ]: nothing -> record<feed: record> {
   let auth = (build-auth $token ($auth_scheme | default "query-apikey"))
   let base = ($base_url | default $BASE_URL)
+  if ($category | is-empty) { error make --unspanned { msg: "path parameter 'category' must be non-empty" } }
+  if ($pageno | is-empty) { error make --unspanned { msg: "path parameter 'pageno' must be non-empty" } }
   let qp = [(serialize-qp "platform" $platform "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({category: (encode-path-segment $category), pageno: (encode-path-segment $pageno)} | format pattern "/categories/{category}/4od/page-{pageno}.atom") $qp)
   let accept_val = "application/xml"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"platform": $platform} | compact), body: null}
 }
 
 # Most Popular Brands Feed
@@ -534,11 +569,12 @@ export def "categories-4od-popular-atom get-most-brands-feed" [
 ]: nothing -> record<feed: record> {
   let auth = (build-auth $token ($auth_scheme | default "query-apikey"))
   let base = ($base_url | default $BASE_URL)
+  if ($category | is-empty) { error make --unspanned { msg: "path parameter 'category' must be non-empty" } }
   let qp = [(serialize-qp "platform" $platform "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({category: (encode-path-segment $category)} | format pattern "/categories/{category}/4od/popular.atom") $qp)
   let accept_val = "application/xml"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"platform": $platform} | compact), body: null}
 }
 
 # Most Popular Brands Feed(5)
@@ -561,11 +597,13 @@ export def "categories-4od-popular-page-pageno-atom get-most-brands-feed5" [
 ]: nothing -> record<feed: record> {
   let auth = (build-auth $token ($auth_scheme | default "query-apikey"))
   let base = ($base_url | default $BASE_URL)
+  if ($category | is-empty) { error make --unspanned { msg: "path parameter 'category' must be non-empty" } }
+  if ($pageno | is-empty) { error make --unspanned { msg: "path parameter 'pageno' must be non-empty" } }
   let qp = [(serialize-qp "platform" $platform "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({category: (encode-path-segment $category), pageno: (encode-path-segment $pageno)} | format pattern "/categories/{category}/4od/popular/page-{pageno}.atom") $qp)
   let accept_val = "application/xml"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"platform": $platform} | compact), body: null}
 }
 
 # 4oD Programmes by Title
@@ -587,11 +625,12 @@ export def "categories-4od-title-atom get-4o-d-programmes" [
 ]: nothing -> record<feed: record> {
   let auth = (build-auth $token ($auth_scheme | default "query-apikey"))
   let base = ($base_url | default $BASE_URL)
+  if ($category | is-empty) { error make --unspanned { msg: "path parameter 'category' must be non-empty" } }
   let qp = [(serialize-qp "platform" $platform "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({category: (encode-path-segment $category)} | format pattern "/categories/{category}/4od/title.atom") $qp)
   let accept_val = "application/xml"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"platform": $platform} | compact), body: null}
 }
 
 # 4oD Programmes by Title(4)
@@ -614,11 +653,13 @@ export def "categories-4od-title-page-pageno-atom get-4o-d-programmes-by-title4"
 ]: nothing -> record<feed: record> {
   let auth = (build-auth $token ($auth_scheme | default "query-apikey"))
   let base = ($base_url | default $BASE_URL)
+  if ($category | is-empty) { error make --unspanned { msg: "path parameter 'category' must be non-empty" } }
+  if ($pageno | is-empty) { error make --unspanned { msg: "path parameter 'pageno' must be non-empty" } }
   let qp = [(serialize-qp "platform" $platform "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({category: (encode-path-segment $category), pageno: (encode-path-segment $pageno)} | format pattern "/categories/{category}/4od/title/page-{pageno}.atom") $qp)
   let accept_val = "application/xml"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"platform": $platform} | compact), body: null}
 }
 
 # All Programmes by TX Date(2)
@@ -641,11 +682,13 @@ export def "categories-channel list-programmes-by-tx-date2" [
 ]: nothing -> record<feed: record> {
   let auth = (build-auth $token ($auth_scheme | default "query-apikey"))
   let base = ($base_url | default $BASE_URL)
+  if ($category | is-empty) { error make --unspanned { msg: "path parameter 'category' must be non-empty" } }
+  if ($channel | is-empty) { error make --unspanned { msg: "path parameter 'channel' must be non-empty" } }
   let qp = [(serialize-qp "platform" $platform "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({category: (encode-path-segment $category), channel: (encode-path-segment $channel)} | format pattern "/categories/{category}/channel/{channel}.atom") $qp)
   let accept_val = "application/xml"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"platform": $platform} | compact), body: null}
 }
 
 # 4oD Programmes by TX Date(2)
@@ -668,11 +711,13 @@ export def "categories-channel-4od-atom get-4o-d-programmes-by-tx-date2" [
 ]: nothing -> record<feed: record> {
   let auth = (build-auth $token ($auth_scheme | default "query-apikey"))
   let base = ($base_url | default $BASE_URL)
+  if ($category | is-empty) { error make --unspanned { msg: "path parameter 'category' must be non-empty" } }
+  if ($channel | is-empty) { error make --unspanned { msg: "path parameter 'channel' must be non-empty" } }
   let qp = [(serialize-qp "platform" $platform "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({category: (encode-path-segment $category), channel: (encode-path-segment $channel)} | format pattern "/categories/{category}/channel/{channel}/4od.atom") $qp)
   let accept_val = "application/xml"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"platform": $platform} | compact), body: null}
 }
 
 # 4oD Programmes by TX Date(5)
@@ -696,11 +741,14 @@ export def "categories-channel-4od-page-pageno-atom get-4o-d-programmes-by-tx-da
 ]: nothing -> record<feed: record> {
   let auth = (build-auth $token ($auth_scheme | default "query-apikey"))
   let base = ($base_url | default $BASE_URL)
+  if ($category | is-empty) { error make --unspanned { msg: "path parameter 'category' must be non-empty" } }
+  if ($channel | is-empty) { error make --unspanned { msg: "path parameter 'channel' must be non-empty" } }
+  if ($pageno | is-empty) { error make --unspanned { msg: "path parameter 'pageno' must be non-empty" } }
   let qp = [(serialize-qp "platform" $platform "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({category: (encode-path-segment $category), channel: (encode-path-segment $channel), pageno: (encode-path-segment $pageno)} | format pattern "/categories/{category}/channel/{channel}/4od/page-{pageno}.atom") $qp)
   let accept_val = "application/xml"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"platform": $platform} | compact), body: null}
 }
 
 # Most Popular Brands Feed(3)
@@ -723,11 +771,13 @@ export def "categories-channel-4od-popular-atom get-most-brands-feed3" [
 ]: nothing -> record<feed: record> {
   let auth = (build-auth $token ($auth_scheme | default "query-apikey"))
   let base = ($base_url | default $BASE_URL)
+  if ($category | is-empty) { error make --unspanned { msg: "path parameter 'category' must be non-empty" } }
+  if ($channel | is-empty) { error make --unspanned { msg: "path parameter 'channel' must be non-empty" } }
   let qp = [(serialize-qp "platform" $platform "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({category: (encode-path-segment $category), channel: (encode-path-segment $channel)} | format pattern "/categories/{category}/channel/{channel}/4od/popular.atom") $qp)
   let accept_val = "application/xml"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"platform": $platform} | compact), body: null}
 }
 
 # Most Popular Brands Feed(7)
@@ -751,11 +801,14 @@ export def "categories-channel-4od-popular-page-pageno-atom get-most-brands-feed
 ]: nothing -> record<feed: record> {
   let auth = (build-auth $token ($auth_scheme | default "query-apikey"))
   let base = ($base_url | default $BASE_URL)
+  if ($category | is-empty) { error make --unspanned { msg: "path parameter 'category' must be non-empty" } }
+  if ($channel | is-empty) { error make --unspanned { msg: "path parameter 'channel' must be non-empty" } }
+  if ($pageno | is-empty) { error make --unspanned { msg: "path parameter 'pageno' must be non-empty" } }
   let qp = [(serialize-qp "platform" $platform "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({category: (encode-path-segment $category), channel: (encode-path-segment $channel), pageno: (encode-path-segment $pageno)} | format pattern "/categories/{category}/channel/{channel}/4od/popular/page-{pageno}.atom") $qp)
   let accept_val = "application/xml"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"platform": $platform} | compact), body: null}
 }
 
 # 4oD Programmes by Title(2)
@@ -778,11 +831,13 @@ export def "categories-channel-4od-title-atom get-4o-d-programmes-by-title2" [
 ]: nothing -> record<feed: record> {
   let auth = (build-auth $token ($auth_scheme | default "query-apikey"))
   let base = ($base_url | default $BASE_URL)
+  if ($category | is-empty) { error make --unspanned { msg: "path parameter 'category' must be non-empty" } }
+  if ($channel | is-empty) { error make --unspanned { msg: "path parameter 'channel' must be non-empty" } }
   let qp = [(serialize-qp "platform" $platform "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({category: (encode-path-segment $category), channel: (encode-path-segment $channel)} | format pattern "/categories/{category}/channel/{channel}/4od/title.atom") $qp)
   let accept_val = "application/xml"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"platform": $platform} | compact), body: null}
 }
 
 # 4oD Programmes by Title(5)
@@ -806,11 +861,14 @@ export def "categories-channel-4od-title-page-pageno-atom get-4o-d-programmes-by
 ]: nothing -> record<feed: record> {
   let auth = (build-auth $token ($auth_scheme | default "query-apikey"))
   let base = ($base_url | default $BASE_URL)
+  if ($category | is-empty) { error make --unspanned { msg: "path parameter 'category' must be non-empty" } }
+  if ($channel | is-empty) { error make --unspanned { msg: "path parameter 'channel' must be non-empty" } }
+  if ($pageno | is-empty) { error make --unspanned { msg: "path parameter 'pageno' must be non-empty" } }
   let qp = [(serialize-qp "platform" $platform "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({category: (encode-path-segment $category), channel: (encode-path-segment $channel), pageno: (encode-path-segment $pageno)} | format pattern "/categories/{category}/channel/{channel}/4od/title/page-{pageno}.atom") $qp)
   let accept_val = "application/xml"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"platform": $platform} | compact), body: null}
 }
 
 # All Programmes by TX Date(5)
@@ -834,11 +892,14 @@ export def "categories-channel-page-pageno-atom list-programmes-by-tx-date5" [
 ]: nothing -> record<feed: record> {
   let auth = (build-auth $token ($auth_scheme | default "query-apikey"))
   let base = ($base_url | default $BASE_URL)
+  if ($category | is-empty) { error make --unspanned { msg: "path parameter 'category' must be non-empty" } }
+  if ($channel | is-empty) { error make --unspanned { msg: "path parameter 'channel' must be non-empty" } }
+  if ($pageno | is-empty) { error make --unspanned { msg: "path parameter 'pageno' must be non-empty" } }
   let qp = [(serialize-qp "platform" $platform "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({category: (encode-path-segment $category), channel: (encode-path-segment $channel), pageno: (encode-path-segment $pageno)} | format pattern "/categories/{category}/channel/{channel}/page-{pageno}.atom") $qp)
   let accept_val = "application/xml"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"platform": $platform} | compact), body: null}
 }
 
 # All Programmes by Title(2)
@@ -861,11 +922,13 @@ export def "categories-channel-title-atom list-programmes-by-title2" [
 ]: nothing -> record<feed: record> {
   let auth = (build-auth $token ($auth_scheme | default "query-apikey"))
   let base = ($base_url | default $BASE_URL)
+  if ($category | is-empty) { error make --unspanned { msg: "path parameter 'category' must be non-empty" } }
+  if ($channel | is-empty) { error make --unspanned { msg: "path parameter 'channel' must be non-empty" } }
   let qp = [(serialize-qp "platform" $platform "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({category: (encode-path-segment $category), channel: (encode-path-segment $channel)} | format pattern "/categories/{category}/channel/{channel}/title.atom") $qp)
   let accept_val = "application/xml"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"platform": $platform} | compact), body: null}
 }
 
 # All Programmes by Title(5)
@@ -889,11 +952,14 @@ export def "categories-channel-title-page-pageno-atom list-programmes-by-title5"
 ]: nothing -> record<feed: record> {
   let auth = (build-auth $token ($auth_scheme | default "query-apikey"))
   let base = ($base_url | default $BASE_URL)
+  if ($category | is-empty) { error make --unspanned { msg: "path parameter 'category' must be non-empty" } }
+  if ($channel | is-empty) { error make --unspanned { msg: "path parameter 'channel' must be non-empty" } }
+  if ($pageno | is-empty) { error make --unspanned { msg: "path parameter 'pageno' must be non-empty" } }
   let qp = [(serialize-qp "platform" $platform "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({category: (encode-path-segment $category), channel: (encode-path-segment $channel), pageno: (encode-path-segment $pageno)} | format pattern "/categories/{category}/channel/{channel}/title/page-{pageno}.atom") $qp)
   let accept_val = "application/xml"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"platform": $platform} | compact), body: null}
 }
 
 # All Programmes by TX Date(3)
@@ -915,11 +981,12 @@ export def "categories-derived-ad-atom list-programmes-by-tx-date3" [
 ]: nothing -> record<feed: record> {
   let auth = (build-auth $token ($auth_scheme | default "query-apikey"))
   let base = ($base_url | default $BASE_URL)
+  if ($category | is-empty) { error make --unspanned { msg: "path parameter 'category' must be non-empty" } }
   let qp = [(serialize-qp "platform" $platform "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({category: (encode-path-segment $category)} | format pattern "/categories/{category}/derived/ad.atom") $qp)
   let accept_val = "application/xml"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"platform": $platform} | compact), body: null}
 }
 
 # 4oD Programmes by TX Date(3)
@@ -941,11 +1008,12 @@ export def "categories-derived-ad-4od-atom get-4o-d-programmes-by-tx-date3" [
 ]: nothing -> record<feed: record> {
   let auth = (build-auth $token ($auth_scheme | default "query-apikey"))
   let base = ($base_url | default $BASE_URL)
+  if ($category | is-empty) { error make --unspanned { msg: "path parameter 'category' must be non-empty" } }
   let qp = [(serialize-qp "platform" $platform "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({category: (encode-path-segment $category)} | format pattern "/categories/{category}/derived/ad/4od.atom") $qp)
   let accept_val = "application/xml"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"platform": $platform} | compact), body: null}
 }
 
 # 4oD Programmes by TX Date(6)
@@ -968,11 +1036,13 @@ export def "categories-derived-ad-4od-page-pageno-atom get-4o-d-programmes-by-tx
 ]: nothing -> record<feed: record> {
   let auth = (build-auth $token ($auth_scheme | default "query-apikey"))
   let base = ($base_url | default $BASE_URL)
+  if ($category | is-empty) { error make --unspanned { msg: "path parameter 'category' must be non-empty" } }
+  if ($pageno | is-empty) { error make --unspanned { msg: "path parameter 'pageno' must be non-empty" } }
   let qp = [(serialize-qp "platform" $platform "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({category: (encode-path-segment $category), pageno: (encode-path-segment $pageno)} | format pattern "/categories/{category}/derived/ad/4od/page-{pageno}.atom") $qp)
   let accept_val = "application/xml"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"platform": $platform} | compact), body: null}
 }
 
 # Most Popular Brands Feed(4)
@@ -994,11 +1064,12 @@ export def "categories-derived-ad-4od-popular-atom get-most-brands-feed4" [
 ]: nothing -> record<feed: record> {
   let auth = (build-auth $token ($auth_scheme | default "query-apikey"))
   let base = ($base_url | default $BASE_URL)
+  if ($category | is-empty) { error make --unspanned { msg: "path parameter 'category' must be non-empty" } }
   let qp = [(serialize-qp "platform" $platform "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({category: (encode-path-segment $category)} | format pattern "/categories/{category}/derived/ad/4od/popular.atom") $qp)
   let accept_val = "application/xml"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"platform": $platform} | compact), body: null}
 }
 
 # Most Popular Brands Feed(8)
@@ -1021,11 +1092,13 @@ export def "categories-derived-ad-4od-popular-page-pageno-atom get-most-brands-f
 ]: nothing -> record<feed: record> {
   let auth = (build-auth $token ($auth_scheme | default "query-apikey"))
   let base = ($base_url | default $BASE_URL)
+  if ($category | is-empty) { error make --unspanned { msg: "path parameter 'category' must be non-empty" } }
+  if ($pageno | is-empty) { error make --unspanned { msg: "path parameter 'pageno' must be non-empty" } }
   let qp = [(serialize-qp "platform" $platform "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({category: (encode-path-segment $category), pageno: (encode-path-segment $pageno)} | format pattern "/categories/{category}/derived/ad/4od/popular/page-{pageno}.atom") $qp)
   let accept_val = "application/xml"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"platform": $platform} | compact), body: null}
 }
 
 # 4oD Programmes by Title(3)
@@ -1047,11 +1120,12 @@ export def "categories-derived-ad-4od-title-atom get-4o-d-programmes-by-title3" 
 ]: nothing -> record<feed: record> {
   let auth = (build-auth $token ($auth_scheme | default "query-apikey"))
   let base = ($base_url | default $BASE_URL)
+  if ($category | is-empty) { error make --unspanned { msg: "path parameter 'category' must be non-empty" } }
   let qp = [(serialize-qp "platform" $platform "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({category: (encode-path-segment $category)} | format pattern "/categories/{category}/derived/ad/4od/title.atom") $qp)
   let accept_val = "application/xml"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"platform": $platform} | compact), body: null}
 }
 
 # 4oD Programmes by Title(6)
@@ -1074,11 +1148,13 @@ export def "categories-derived-ad-4od-title-page-pageno-atom get-4o-d-programmes
 ]: nothing -> record<feed: record> {
   let auth = (build-auth $token ($auth_scheme | default "query-apikey"))
   let base = ($base_url | default $BASE_URL)
+  if ($category | is-empty) { error make --unspanned { msg: "path parameter 'category' must be non-empty" } }
+  if ($pageno | is-empty) { error make --unspanned { msg: "path parameter 'pageno' must be non-empty" } }
   let qp = [(serialize-qp "platform" $platform "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({category: (encode-path-segment $category), pageno: (encode-path-segment $pageno)} | format pattern "/categories/{category}/derived/ad/4od/title/page-{pageno}.atom") $qp)
   let accept_val = "application/xml"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"platform": $platform} | compact), body: null}
 }
 
 # All Programmes by TX Date(6)
@@ -1101,11 +1177,13 @@ export def "categories-derived-ad-page-pageno-atom list-programmes-by-tx-date6" 
 ]: nothing -> record<feed: record> {
   let auth = (build-auth $token ($auth_scheme | default "query-apikey"))
   let base = ($base_url | default $BASE_URL)
+  if ($category | is-empty) { error make --unspanned { msg: "path parameter 'category' must be non-empty" } }
+  if ($pageno | is-empty) { error make --unspanned { msg: "path parameter 'pageno' must be non-empty" } }
   let qp = [(serialize-qp "platform" $platform "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({category: (encode-path-segment $category), pageno: (encode-path-segment $pageno)} | format pattern "/categories/{category}/derived/ad/page-{pageno}.atom") $qp)
   let accept_val = "application/xml"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"platform": $platform} | compact), body: null}
 }
 
 # All Programmes by Title(3)
@@ -1127,11 +1205,12 @@ export def "categories-derived-ad-title-atom list-programmes-by-title3" [
 ]: nothing -> record<feed: record> {
   let auth = (build-auth $token ($auth_scheme | default "query-apikey"))
   let base = ($base_url | default $BASE_URL)
+  if ($category | is-empty) { error make --unspanned { msg: "path parameter 'category' must be non-empty" } }
   let qp = [(serialize-qp "platform" $platform "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({category: (encode-path-segment $category)} | format pattern "/categories/{category}/derived/ad/title.atom") $qp)
   let accept_val = "application/xml"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"platform": $platform} | compact), body: null}
 }
 
 # All Programmes by Title(6)
@@ -1154,11 +1233,13 @@ export def "categories-derived-ad-title-page-pageno-atom list-programmes-by-titl
 ]: nothing -> record<feed: record> {
   let auth = (build-auth $token ($auth_scheme | default "query-apikey"))
   let base = ($base_url | default $BASE_URL)
+  if ($category | is-empty) { error make --unspanned { msg: "path parameter 'category' must be non-empty" } }
+  if ($pageno | is-empty) { error make --unspanned { msg: "path parameter 'pageno' must be non-empty" } }
   let qp = [(serialize-qp "platform" $platform "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({category: (encode-path-segment $category), pageno: (encode-path-segment $pageno)} | format pattern "/categories/{category}/derived/ad/title/page-{pageno}.atom") $qp)
   let accept_val = "application/xml"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"platform": $platform} | compact), body: null}
 }
 
 # All Programmes by TX Date(4)
@@ -1181,11 +1262,13 @@ export def "categories-page-pageno-atom list-programmes-by-tx-date4" [
 ]: nothing -> record<feed: record> {
   let auth = (build-auth $token ($auth_scheme | default "query-apikey"))
   let base = ($base_url | default $BASE_URL)
+  if ($category | is-empty) { error make --unspanned { msg: "path parameter 'category' must be non-empty" } }
+  if ($pageno | is-empty) { error make --unspanned { msg: "path parameter 'pageno' must be non-empty" } }
   let qp = [(serialize-qp "platform" $platform "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({category: (encode-path-segment $category), pageno: (encode-path-segment $pageno)} | format pattern "/categories/{category}/page-{pageno}.atom") $qp)
   let accept_val = "application/xml"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"platform": $platform} | compact), body: null}
 }
 
 # Most Popular Brands Feed(2)
@@ -1207,11 +1290,12 @@ export def "categories-popular-atom get-most-brands-feed2" [
 ]: nothing -> record<feed: record> {
   let auth = (build-auth $token ($auth_scheme | default "query-apikey"))
   let base = ($base_url | default $BASE_URL)
+  if ($category | is-empty) { error make --unspanned { msg: "path parameter 'category' must be non-empty" } }
   let qp = [(serialize-qp "platform" $platform "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({category: (encode-path-segment $category)} | format pattern "/categories/{category}/popular.atom") $qp)
   let accept_val = "application/xml"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"platform": $platform} | compact), body: null}
 }
 
 # Most Popular Brands Feed(6)
@@ -1234,11 +1318,13 @@ export def "categories-popular-page-pageno-atom get-most-brands-feed6" [
 ]: nothing -> record<feed: record> {
   let auth = (build-auth $token ($auth_scheme | default "query-apikey"))
   let base = ($base_url | default $BASE_URL)
+  if ($category | is-empty) { error make --unspanned { msg: "path parameter 'category' must be non-empty" } }
+  if ($pageno | is-empty) { error make --unspanned { msg: "path parameter 'pageno' must be non-empty" } }
   let qp = [(serialize-qp "platform" $platform "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({category: (encode-path-segment $category), pageno: (encode-path-segment $pageno)} | format pattern "/categories/{category}/popular/page-{pageno}.atom") $qp)
   let accept_val = "application/xml"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"platform": $platform} | compact), body: null}
 }
 
 # All Programmes by Title
@@ -1260,11 +1346,12 @@ export def "categories-title-atom list-programmes" [
 ]: nothing -> record<feed: record> {
   let auth = (build-auth $token ($auth_scheme | default "query-apikey"))
   let base = ($base_url | default $BASE_URL)
+  if ($category | is-empty) { error make --unspanned { msg: "path parameter 'category' must be non-empty" } }
   let qp = [(serialize-qp "platform" $platform "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({category: (encode-path-segment $category)} | format pattern "/categories/{category}/title.atom") $qp)
   let accept_val = "application/xml"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"platform": $platform} | compact), body: null}
 }
 
 # All Programmes by Title(4)
@@ -1287,11 +1374,13 @@ export def "categories-title-page-pageno-atom list-programmes-by-title4" [
 ]: nothing -> record<feed: record> {
   let auth = (build-auth $token ($auth_scheme | default "query-apikey"))
   let base = ($base_url | default $BASE_URL)
+  if ($category | is-empty) { error make --unspanned { msg: "path parameter 'category' must be non-empty" } }
+  if ($pageno | is-empty) { error make --unspanned { msg: "path parameter 'pageno' must be non-empty" } }
   let qp = [(serialize-qp "platform" $platform "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({category: (encode-path-segment $category), pageno: (encode-path-segment $pageno)} | format pattern "/categories/{category}/title/page-{pageno}.atom") $qp)
   let accept_val = "application/xml"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"platform": $platform} | compact), body: null}
 }
 
 # Collections Feed(2)
@@ -1313,11 +1402,12 @@ export def "collections get-feed2" [
 ]: nothing -> record<feed: record> {
   let auth = (build-auth $token ($auth_scheme | default "query-apikey"))
   let base = ($base_url | default $BASE_URL)
+  if ($collection_name | is-empty) { error make --unspanned { msg: "path parameter 'collection_name' must be non-empty" } }
   let qp = [(serialize-qp "platform" $platform "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({collection_name: (encode-path-segment $collection_name)} | format pattern "/collections/{collection_name}.atom") $qp)
   let accept_val = "application/xml"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"platform": $platform} | compact), body: null}
 }
 
 # Collections Feed
@@ -1339,11 +1429,12 @@ export def "collections-4od-atom get-feed" [
 ]: nothing -> record<feed: record> {
   let auth = (build-auth $token ($auth_scheme | default "query-apikey"))
   let base = ($base_url | default $BASE_URL)
+  if ($collection_name | is-empty) { error make --unspanned { msg: "path parameter 'collection_name' must be non-empty" } }
   let qp = [(serialize-qp "platform" $platform "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({collection_name: (encode-path-segment $collection_name)} | format pattern "/collections/{collection_name}/4od.atom") $qp)
   let accept_val = "application/xml"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"platform": $platform} | compact), body: null}
 }
 
 # Flattened Collection Feed(2)
@@ -1365,11 +1456,12 @@ export def "collections-flattened-atom get-feed2" [
 ]: nothing -> record<feed: record> {
   let auth = (build-auth $token ($auth_scheme | default "query-apikey"))
   let base = ($base_url | default $BASE_URL)
+  if ($collection_name | is-empty) { error make --unspanned { msg: "path parameter 'collection_name' must be non-empty" } }
   let qp = [(serialize-qp "platform" $platform "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({collection_name: (encode-path-segment $collection_name)} | format pattern "/collections/{collection_name}/flattened.atom") $qp)
   let accept_val = "application/xml"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"platform": $platform} | compact), body: null}
 }
 
 # Flattened Collection Feed
@@ -1391,11 +1483,12 @@ export def "collections-flattened-4od-atom get-feed" [
 ]: nothing -> record<feed: record> {
   let auth = (build-auth $token ($auth_scheme | default "query-apikey"))
   let base = ($base_url | default $BASE_URL)
+  if ($collection_name | is-empty) { error make --unspanned { msg: "path parameter 'collection_name' must be non-empty" } }
   let qp = [(serialize-qp "platform" $platform "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({collection_name: (encode-path-segment $collection_name)} | format pattern "/collections/{collection_name}/flattened/4od.atom") $qp)
   let accept_val = "application/xml"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"platform": $platform} | compact), body: null}
 }
 
 # Coming Soon feed
@@ -1420,7 +1513,7 @@ export def "coming-soon-atom get-feed" [
   let full_url = (build-url $base "/coming-soon.atom" $qp)
   let accept_val = "application/xml"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"platform": $platform} | compact), body: null}
 }
 
 # Coming Soon feed(2)
@@ -1442,11 +1535,12 @@ export def "coming-soon get-feed2" [
 ]: nothing -> record<feed: record> {
   let auth = (build-auth $token ($auth_scheme | default "query-apikey"))
   let base = ($base_url | default $BASE_URL)
+  if ($category | is-empty) { error make --unspanned { msg: "path parameter 'category' must be non-empty" } }
   let qp = [(serialize-qp "platform" $platform "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({category: (encode-path-segment $category)} | format pattern "/coming-soon/{category}.atom") $qp)
   let accept_val = "application/xml"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"platform": $platform} | compact), body: null}
 }
 
 # Programme Feed
@@ -1468,11 +1562,12 @@ export def "programme get-feed" [
 ]: nothing -> record<feed: record> {
   let auth = (build-auth $token ($auth_scheme | default "query-apikey"))
   let base = ($base_url | default $BASE_URL)
+  if ($programme_id | is-empty) { error make --unspanned { msg: "path parameter 'programme-id' must be non-empty" } }
   let qp = [(serialize-qp "platform" $platform "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({programme_id: (encode-path-segment $programme_id)} | format pattern "/programme/{programme_id}.atom") $qp)
   let accept_val = "application/xml"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"platform": $platform} | compact), body: null}
 }
 
 # Search Feed
@@ -1498,7 +1593,7 @@ export def "search-atom list-feed" [
   let full_url = (build-url $base "/search.atom" $qp)
   let accept_val = "application/xml"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"platform": $platform, "q": $q} | compact), body: null}
 }
 
 # Search Feed(3)
@@ -1521,11 +1616,12 @@ export def "search-page-pageno-atom list-feed3" [
 ]: nothing -> record<feed: record> {
   let auth = (build-auth $token ($auth_scheme | default "query-apikey"))
   let base = ($base_url | default $BASE_URL)
+  if ($pageno | is-empty) { error make --unspanned { msg: "path parameter 'pageno' must be non-empty" } }
   let qp = [(serialize-qp "platform" $platform "scalar") (serialize-qp "q" $q "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({pageno: (encode-path-segment $pageno)} | format pattern "/search/page-{pageno}.atom") $qp)
   let accept_val = "application/xml"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"platform": $platform, "q": $q} | compact), body: null}
 }
 
 # Search Feed(2)
@@ -1547,11 +1643,12 @@ export def "search list-feed2" [
 ]: nothing -> record<feed: record> {
   let auth = (build-auth $token ($auth_scheme | default "query-apikey"))
   let base = ($base_url | default $BASE_URL)
+  if ($q | is-empty) { error make --unspanned { msg: "path parameter 'q' must be non-empty" } }
   let qp = [(serialize-qp "platform" $platform "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({q: (encode-path-segment $q)} | format pattern "/search/{q}.atom") $qp)
   let accept_val = "application/xml"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"platform": $platform} | compact), body: null}
 }
 
 # Search Feed(4)
@@ -1574,11 +1671,13 @@ export def "search-page-pageno-atom list-feed4" [
 ]: nothing -> record<feed: record> {
   let auth = (build-auth $token ($auth_scheme | default "query-apikey"))
   let base = ($base_url | default $BASE_URL)
+  if ($q | is-empty) { error make --unspanned { msg: "path parameter 'q' must be non-empty" } }
+  if ($pageno | is-empty) { error make --unspanned { msg: "path parameter 'pageno' must be non-empty" } }
   let qp = [(serialize-qp "platform" $platform "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({q: (encode-path-segment $q), pageno: (encode-path-segment $pageno)} | format pattern "/search/{q}/page-{pageno}.atom") $qp)
   let accept_val = "application/xml"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"platform": $platform} | compact), body: null}
 }
 
 # TV Listings Feed
@@ -1602,11 +1701,14 @@ export def "tv-listings-daily get-feed" [
 ]: nothing -> record<feed: record> {
   let auth = (build-auth $token ($auth_scheme | default "query-apikey"))
   let base = ($base_url | default $BASE_URL)
+  if ($yyyy | is-empty) { error make --unspanned { msg: "path parameter 'yyyy' must be non-empty" } }
+  if ($mm | is-empty) { error make --unspanned { msg: "path parameter 'mm' must be non-empty" } }
+  if ($dd | is-empty) { error make --unspanned { msg: "path parameter 'dd' must be non-empty" } }
   let qp = [(serialize-qp "platform" $platform "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({yyyy: (encode-path-segment $yyyy), mm: (encode-path-segment $mm), dd: (encode-path-segment $dd)} | format pattern "/tv-listings/daily/{yyyy}/{mm}/{dd}.atom") $qp)
   let accept_val = "application/xml"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"platform": $platform} | compact), body: null}
 }
 
 # TV Listings Feed(2)
@@ -1631,11 +1733,15 @@ export def "tv-listings-daily get-feed2" [
 ]: nothing -> record<feed: record> {
   let auth = (build-auth $token ($auth_scheme | default "query-apikey"))
   let base = ($base_url | default $BASE_URL)
+  if ($yyyy | is-empty) { error make --unspanned { msg: "path parameter 'yyyy' must be non-empty" } }
+  if ($mm | is-empty) { error make --unspanned { msg: "path parameter 'mm' must be non-empty" } }
+  if ($dd | is-empty) { error make --unspanned { msg: "path parameter 'dd' must be non-empty" } }
+  if ($channel | is-empty) { error make --unspanned { msg: "path parameter 'channel' must be non-empty" } }
   let qp = [(serialize-qp "platform" $platform "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({yyyy: (encode-path-segment $yyyy), mm: (encode-path-segment $mm), dd: (encode-path-segment $dd), channel: (encode-path-segment $channel)} | format pattern "/tv-listings/daily/{yyyy}/{mm}/{dd}/{channel}.atom") $qp)
   let accept_val = "application/xml"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"platform": $platform} | compact), body: null}
 }
 
 # Hub Feed
@@ -1657,11 +1763,12 @@ export def "metadataresources get-hub-feed" [
 ]: nothing -> record<feed: record> {
   let auth = (build-auth $token ($auth_scheme | default "query-apikey"))
   let base = ($base_url | default $BASE_URL)
+  if ($brand_web_safe_title | is-empty) { error make --unspanned { msg: "path parameter 'brand-web-safe-title' must be non-empty" } }
   let qp = [(serialize-qp "platform" $platform "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({brand_web_safe_title: (encode-path-segment $brand_web_safe_title)} | format pattern "/{brand_web_safe_title}.atom") $qp)
   let accept_val = "application/xml"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"platform": $platform} | compact), body: null}
 }
 
 # 4oD Feed
@@ -1683,11 +1790,12 @@ export def "4od-atom get-4o-d-feed" [
 ]: nothing -> record<feed: record> {
   let auth = (build-auth $token ($auth_scheme | default "query-apikey"))
   let base = ($base_url | default $BASE_URL)
+  if ($brand_web_safe_title | is-empty) { error make --unspanned { msg: "path parameter 'brand-web-safe-title' must be non-empty" } }
   let qp = [(serialize-qp "platform" $platform "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({brand_web_safe_title: (encode-path-segment $brand_web_safe_title)} | format pattern "/{brand_web_safe_title}/4od.atom") $qp)
   let accept_val = "application/xml"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"platform": $platform} | compact), body: null}
 }
 
 # Brand EPG Atom Feed
@@ -1709,11 +1817,12 @@ export def "epg-atom get-feed" [
 ]: nothing -> record<feed: record> {
   let auth = (build-auth $token ($auth_scheme | default "query-apikey"))
   let base = ($base_url | default $BASE_URL)
+  if ($brand_web_safe_title | is-empty) { error make --unspanned { msg: "path parameter 'brand-web-safe-title' must be non-empty" } }
   let qp = [(serialize-qp "platform" $platform "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({brand_web_safe_title: (encode-path-segment $brand_web_safe_title)} | format pattern "/{brand_web_safe_title}/epg.atom") $qp)
   let accept_val = "application/xml"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"platform": $platform} | compact), body: null}
 }
 
 # Episode Guide Feed Series Landing
@@ -1735,11 +1844,12 @@ export def "episode-guide-atom get-feed-series-landing" [
 ]: nothing -> record<feed: record> {
   let auth = (build-auth $token ($auth_scheme | default "query-apikey"))
   let base = ($base_url | default $BASE_URL)
+  if ($brand_web_safe_title | is-empty) { error make --unspanned { msg: "path parameter 'brand-web-safe-title' must be non-empty" } }
   let qp = [(serialize-qp "platform" $platform "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({brand_web_safe_title: (encode-path-segment $brand_web_safe_title)} | format pattern "/{brand_web_safe_title}/episode-guide.atom") $qp)
   let accept_val = "application/xml"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"platform": $platform} | compact), body: null}
 }
 
 # Episode Guide Feed Series Detail
@@ -1762,11 +1872,13 @@ export def "episode-guide-series-series-number-atom get-feed-detail" [
 ]: nothing -> record<feed: record> {
   let auth = (build-auth $token ($auth_scheme | default "query-apikey"))
   let base = ($base_url | default $BASE_URL)
+  if ($brand_web_safe_title | is-empty) { error make --unspanned { msg: "path parameter 'brand-web-safe-title' must be non-empty" } }
+  if ($series_number | is-empty) { error make --unspanned { msg: "path parameter 'series_number' must be non-empty" } }
   let qp = [(serialize-qp "platform" $platform "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({brand_web_safe_title: (encode-path-segment $brand_web_safe_title), series_number: (encode-path-segment $series_number)} | format pattern "/{brand_web_safe_title}/episode-guide/series-{series_number}.atom") $qp)
   let accept_val = "application/xml"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"platform": $platform} | compact), body: null}
 }
 
 # Episode Guide Feed Episode Detail
@@ -1790,11 +1902,14 @@ export def "episode-guide-series-series-number-episode-episode-number-atom get-f
 ]: nothing -> record<feed: record> {
   let auth = (build-auth $token ($auth_scheme | default "query-apikey"))
   let base = ($base_url | default $BASE_URL)
+  if ($brand_web_safe_title | is-empty) { error make --unspanned { msg: "path parameter 'brand-web-safe-title' must be non-empty" } }
+  if ($series_number | is-empty) { error make --unspanned { msg: "path parameter 'series_number' must be non-empty" } }
+  if ($episode_number | is-empty) { error make --unspanned { msg: "path parameter 'episode_number' must be non-empty" } }
   let qp = [(serialize-qp "platform" $platform "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({brand_web_safe_title: (encode-path-segment $brand_web_safe_title), series_number: (encode-path-segment $series_number), episode_number: (encode-path-segment $episode_number)} | format pattern "/{brand_web_safe_title}/episode-guide/series-{series_number}/episode-{episode_number}.atom") $qp)
   let accept_val = "application/xml"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"platform": $platform} | compact), body: null}
 }
 
 # Clips Landing Feed Brand Series and Episode Levels
@@ -1816,11 +1931,12 @@ export def "videos-all-atom get-clips-landing-feed-series-and-episode-levels" [
 ]: nothing -> record<feed: record> {
   let auth = (build-auth $token ($auth_scheme | default "query-apikey"))
   let base = ($base_url | default $BASE_URL)
+  if ($brand_web_safe_title | is-empty) { error make --unspanned { msg: "path parameter 'brand-web-safe-title' must be non-empty" } }
   let qp = [(serialize-qp "platform" $platform "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({brand_web_safe_title: (encode-path-segment $brand_web_safe_title)} | format pattern "/{brand_web_safe_title}/videos/all.atom") $qp)
   let accept_val = "application/xml"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"platform": $platform} | compact), body: null}
 }
 
 # Clips Landing Feed Brand Series and Episode Levels(2)
@@ -1843,11 +1959,13 @@ export def "videos-series-series-number-atom get-clips-landing-feed-and-episode-
 ]: nothing -> record<feed: record> {
   let auth = (build-auth $token ($auth_scheme | default "query-apikey"))
   let base = ($base_url | default $BASE_URL)
+  if ($brand_web_safe_title | is-empty) { error make --unspanned { msg: "path parameter 'brand-web-safe-title' must be non-empty" } }
+  if ($series_number | is-empty) { error make --unspanned { msg: "path parameter 'series_number' must be non-empty" } }
   let qp = [(serialize-qp "platform" $platform "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({brand_web_safe_title: (encode-path-segment $brand_web_safe_title), series_number: (encode-path-segment $series_number)} | format pattern "/{brand_web_safe_title}/videos/series-{series_number}.atom") $qp)
   let accept_val = "application/xml"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"platform": $platform} | compact), body: null}
 }
 
 # Clips Landing Feed Brand Series and Episode Levels(3)
@@ -1871,11 +1989,14 @@ export def "videos-series-series-number-episode-episode-number-atom get-clips-la
 ]: nothing -> record<feed: record> {
   let auth = (build-auth $token ($auth_scheme | default "query-apikey"))
   let base = ($base_url | default $BASE_URL)
+  if ($brand_web_safe_title | is-empty) { error make --unspanned { msg: "path parameter 'brand-web-safe-title' must be non-empty" } }
+  if ($series_number | is-empty) { error make --unspanned { msg: "path parameter 'series_number' must be non-empty" } }
+  if ($episode_number | is-empty) { error make --unspanned { msg: "path parameter 'episode_number' must be non-empty" } }
   let qp = [(serialize-qp "platform" $platform "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({brand_web_safe_title: (encode-path-segment $brand_web_safe_title), series_number: (encode-path-segment $series_number), episode_number: (encode-path-segment $episode_number)} | format pattern "/{brand_web_safe_title}/videos/series-{series_number}/episode-{episode_number}.atom") $qp)
   let accept_val = "application/xml"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"platform": $platform} | compact), body: null}
 }
 
 # Clip Detail Atom Feed
@@ -1898,9 +2019,11 @@ export def "videos get-detail-atom-feed" [
 ]: nothing -> record<feed: record> {
   let auth = (build-auth $token ($auth_scheme | default "query-apikey"))
   let base = ($base_url | default $BASE_URL)
+  if ($brand_web_safe_title | is-empty) { error make --unspanned { msg: "path parameter 'brand-web-safe-title' must be non-empty" } }
+  if ($clip_asset_id | is-empty) { error make --unspanned { msg: "path parameter 'clip-asset-id' must be non-empty" } }
   let qp = [(serialize-qp "platform" $platform "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({brand_web_safe_title: (encode-path-segment $brand_web_safe_title), clip_asset_id: (encode-path-segment $clip_asset_id)} | format pattern "/{brand_web_safe_title}/videos/{clip_asset_id}.atom") $qp)
   let accept_val = "application/xml"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"platform": $platform} | compact), body: null}
 }

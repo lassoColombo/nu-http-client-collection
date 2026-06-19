@@ -3,17 +3,18 @@
 # Auth: --token flag or $env.VIMEO_TOKEN
 
 const BASE_URL = "https://api.vimeo.com"
-const DEFAULT_AUTH = "bearer"
 
-# Build auth: returns {headers: record, query: string}
+# Build auth: returns {scheme: string, headers: record, query: string, location: string}.
+# `location` is "header" | "query" | "cookie" | "none" and tells dry-run callers
+# where the token went without inspecting headers/query themselves.
 def build-auth [token?: string, auth_scheme?: string]: nothing -> record {
   let token_val = if ($token != null) and ($token | is-not-empty) { $token } else { $env | get -o VIMEO_TOKEN | default "" }
   let scheme = ($auth_scheme | default "bearer")
-  if ($scheme == "none") or ($token_val | is-empty) { return {headers: {}, query: ""} }
+  if ($scheme == "none") or ($token_val | is-empty) { return {scheme: $scheme, headers: {}, query: "", location: "none"} }
   match $scheme {
-    "bearer" => { {headers: {Authorization: $"Bearer ($token_val)"}, query: ""} }
-    "none" => { {headers: {}, query: ""} }
-    _ => { {headers: {Authorization: $"Bearer ($token_val)"}, query: ""} }
+    "bearer" => { {scheme: $scheme, headers: {Authorization: $"Bearer ($token_val)"}, query: "", location: "header"} }
+    "none" => { {scheme: $scheme, headers: {}, query: "", location: "none"} }
+    _ => { {scheme: $scheme, headers: {Authorization: $"Bearer ($token_val)"}, query: "", location: "header"} }
   }
 }
 
@@ -22,8 +23,9 @@ def build-auth [token?: string, auth_scheme?: string]: nothing -> record {
 # ([A-Za-z0-9-._~]) stay literal; everything else gets %XX.
 def serialize-qp [name: string, value: any, style: string]: nothing -> list<string> {
   if ($value == null) { return [] }
-  let n = (encode-path-segment $name)
   let is_list = ($value | describe | str starts-with "list")
+  if $is_list and ($value | is-empty) { return [] }
+  let n = (encode-path-segment $name)
   if ($value | describe | str starts-with "record") { return ($value | transpose k v | each { $"($n)[(encode-path-segment $in.k)]=(encode-path-segment $in.v)" }) }
   if not $is_list { return [$"($n)=(encode-path-segment $value)"] }
   match $style {
@@ -54,22 +56,42 @@ def build-url [base: string, path: string, query?: string]: nothing -> string {
   if ($query != null) and ($query | is-not-empty) { $result | upsert query $query | url join } else { $result | url join }
 }
 
+# Build the dry-run record returned by --dry-run. Shape:
+#   {dry_run: true, method, url, query: <record>, headers, body, content_type, timeout,
+#    auth: {scheme, location}}
+# `meta` carries logical-form data (the query record by spec name, the pre-serialization
+# body) that do-request itself cannot reconstruct from its wire-format args.
+def build-dry-run-record [method: string, url: string, auth: record, content_type: string, timeout: duration, meta?: record]: nothing -> record {
+  let m = ($meta | default {})
+  {
+    dry_run: true
+    method: $method
+    url: $url
+    query: ($m | get -o query | default {})
+    headers: $auth.headers
+    body: ($m | get -o body)
+    content_type: $content_type
+    timeout: $timeout
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+}
+
 # Execute HTTP request with method dispatch
-def do-request [method: string, url: string, auth: record, insecure: bool, raw: bool, dry_run: bool, max_time?: duration, allow_errors?: bool, full?: bool, content_type?: string, body?: any]: nothing -> any {
+def do-request [method: string, url: string, auth: record, insecure: bool, raw: bool, dry_run: bool, max_time?: duration, allow_errors?: bool, full?: bool, content_type?: string, body?: any, dry_run_meta?: record]: nothing -> any {
   let req_url = if ($auth.query | is-not-empty) { if ($url | str contains "?") { $"($url)&($auth.query)" } else { $"($url)?($auth.query)" } } else { $url }
   let timeout = ($max_time | default 30min)
   let ct = ($content_type | default "application/json")
-  if $dry_run { return {method: $method, url: $req_url, headers: $auth.headers, query_string: $auth.query, content_type: $ct, timeout: $timeout, body: $body} }
+  if $dry_run { return (build-dry-run-record $method $req_url $auth $ct $timeout $dry_run_meta) }
   let resp = match $method {
     "get" => { http get --headers $auth.headers --full --allow-errors --max-time $timeout --insecure=$insecure --raw=$raw $req_url }
-    "head" => { http head --headers $auth.headers --max-time $timeout --insecure=$insecure $req_url }
-    "options" => { http options --headers $auth.headers --max-time $timeout --insecure=$insecure $req_url }
+    "head" => { http head --headers $auth.headers --full --allow-errors --max-time $timeout --insecure=$insecure $req_url }
+    "options" => { http options --headers $auth.headers --full --allow-errors --max-time $timeout --insecure=$insecure $req_url }
     "post" => { if ($body | is-empty) { http post --headers $auth.headers --full --allow-errors --max-time $timeout --insecure=$insecure --raw=$raw $req_url "" } else { http post --headers $auth.headers --content-type $ct --full --allow-errors --max-time $timeout --insecure=$insecure --raw=$raw $req_url $body } }
     "put" => { if ($body | is-empty) { http put --headers $auth.headers --full --allow-errors --max-time $timeout --insecure=$insecure --raw=$raw $req_url "" } else { http put --headers $auth.headers --content-type $ct --full --allow-errors --max-time $timeout --insecure=$insecure --raw=$raw $req_url $body } }
     "patch" => { if ($body | is-empty) { http patch --headers $auth.headers --full --allow-errors --max-time $timeout --insecure=$insecure --raw=$raw $req_url "" } else { http patch --headers $auth.headers --content-type $ct --full --allow-errors --max-time $timeout --insecure=$insecure --raw=$raw $req_url $body } }
     "delete" => { if ($body | is-empty) { http delete --headers $auth.headers --full --allow-errors --max-time $timeout --insecure=$insecure --raw=$raw $req_url } else { http delete --headers $auth.headers --content-type $ct --data $body --full --allow-errors --max-time $timeout --insecure=$insecure --raw=$raw $req_url } }
   }
-  if ($method in ["head" "options"]) { return $resp }
+  if ($method == "head") and (not $full) and (not $allow_errors) and $resp.status < 400 { return $resp.headers }
   if $allow_errors { $resp } else if $resp.status >= 400 { error make --unspanned { msg: $"HTTP ($resp.status): ($resp.body)" } } else if $full { {status: $resp.status, headers: $resp.headers, body: $resp.body} } else if $resp.status == 204 { null } else { $resp.body }
 }
 
@@ -168,7 +190,7 @@ export def "api-information get-endpoints" [
   let full_url = (build-url $base "/" $qp)
   let accept_val = "application/vnd.vimeo.endpoint+json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"openapi": $openapi} | compact), body: null}
 }
 
 # Get all categories
@@ -196,7 +218,7 @@ export def "categories list" [
   let full_url = (build-url $base "/categories" $qp)
   let accept_val = "application/vnd.vimeo.category+json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"direction": $direction, "page": $page, "per_page": $per_page, "sort": $qp_sort} | compact), body: null}
 }
 
 # Get a specific category
@@ -217,10 +239,11 @@ export def "categories get" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($category | is-empty) { error make --unspanned { msg: "path parameter 'category' must be non-empty" } }
   let full_url = (build-url $base ({category: (encode-path-segment $category)} | format pattern "/categories/{category}"))
   let accept_val = "application/vnd.vimeo.category+json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
 }
 
 # Get all the channels in a category
@@ -246,11 +269,12 @@ export def "categories-channels get" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($category | is-empty) { error make --unspanned { msg: "path parameter 'category' must be non-empty" } }
   let qp = [(serialize-qp "direction" $direction "scalar") (serialize-qp "page" $page "scalar") (serialize-qp "per_page" $per_page "scalar") (serialize-qp "query" $query "scalar") (serialize-qp "sort" $qp_sort "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({category: (encode-path-segment $category)} | format pattern "/categories/{category}/channels") $qp)
   let accept_val = "application/vnd.vimeo.channel+json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"direction": $direction, "page": $page, "per_page": $per_page, "query": $query, "sort": $qp_sort} | compact), body: null}
 }
 
 # Get all the groups in a category
@@ -276,11 +300,12 @@ export def "categories-groups get" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($category | is-empty) { error make --unspanned { msg: "path parameter 'category' must be non-empty" } }
   let qp = [(serialize-qp "direction" $direction "scalar") (serialize-qp "page" $page "scalar") (serialize-qp "per_page" $per_page "scalar") (serialize-qp "query" $query "scalar") (serialize-qp "sort" $qp_sort "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({category: (encode-path-segment $category)} | format pattern "/categories/{category}/groups") $qp)
   let accept_val = "application/vnd.vimeo.group+json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"direction": $direction, "page": $page, "per_page": $per_page, "query": $query, "sort": $qp_sort} | compact), body: null}
 }
 
 # Get all the videos in a category
@@ -308,11 +333,12 @@ export def "categories-videos get" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($category | is-empty) { error make --unspanned { msg: "path parameter 'category' must be non-empty" } }
   let qp = [(serialize-qp "direction" $direction "scalar") (serialize-qp "filter" $filter "scalar") (serialize-qp "filter_embeddable" $filter_embeddable "scalar") (serialize-qp "page" $page "scalar") (serialize-qp "per_page" $per_page "scalar") (serialize-qp "query" $query "scalar") (serialize-qp "sort" $qp_sort "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({category: (encode-path-segment $category)} | format pattern "/categories/{category}/videos") $qp)
   let accept_val = "application/vnd.vimeo.video+json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"direction": $direction, "filter": $filter, "filter_embeddable": $filter_embeddable, "page": $page, "per_page": $per_page, "query": $query, "sort": $qp_sort} | compact), body: null}
 }
 
 # Check for a video in a category
@@ -334,10 +360,12 @@ export def "categories-videos check" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($category | is-empty) { error make --unspanned { msg: "path parameter 'category' must be non-empty" } }
+  if ($video_id | is-empty) { error make --unspanned { msg: "path parameter 'video_id' must be non-empty" } }
   let full_url = (build-url $base ({category: (encode-path-segment $category), video_id: (encode-path-segment $video_id)} | format pattern "/categories/{category}/videos/{video_id}"))
   let accept_val = "application/vnd.vimeo.video+json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
 }
 
 # Get all channels
@@ -367,7 +395,7 @@ export def "channels list" [
   let full_url = (build-url $base "/channels" $qp)
   let accept_val = "application/vnd.vimeo.channel+json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"direction": $direction, "filter": $filter, "page": $page, "per_page": $per_page, "query": $query, "sort": $qp_sort} | compact), body: null}
 }
 
 # Create a channel
@@ -394,7 +422,7 @@ export def "channels create" [
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else if (($input | is-not-empty) and ($req_body | is-empty)) { $input } else { $req_body }
   let accept_val = "application/vnd.vimeo.channel+json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/vnd.vimeo.channel+json" $req_body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/vnd.vimeo.channel+json" $req_body {query: {}, body: $req_body}
 }
 
 # Delete a channel
@@ -415,10 +443,11 @@ export def "channels delete" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($channel_id | is-empty) { error make --unspanned { msg: "path parameter 'channel_id' must be non-empty" } }
   let full_url = (build-url $base ({channel_id: (encode-path-segment $channel_id)} | format pattern "/channels/{channel_id}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
 }
 
 # Get a specific channel
@@ -439,10 +468,11 @@ export def "channels get" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($channel_id | is-empty) { error make --unspanned { msg: "path parameter 'channel_id' must be non-empty" } }
   let full_url = (build-url $base ({channel_id: (encode-path-segment $channel_id)} | format pattern "/channels/{channel_id}"))
   let accept_val = "application/vnd.vimeo.channel+json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
 }
 
 # Edit a channel
@@ -465,12 +495,13 @@ export def "channels update-edit" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($channel_id | is-empty) { error make --unspanned { msg: "path parameter 'channel_id' must be non-empty" } }
   let full_url = (build-url $base ({channel_id: (encode-path-segment $channel_id)} | format pattern "/channels/{channel_id}"))
   let req_body = $body
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else if (($input | is-not-empty) and ($req_body | is-empty)) { $input } else { $req_body }
   let accept_val = "application/vnd.vimeo.channel+json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "patch" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/vnd.vimeo.channel+json" $req_body
+  do-request "patch" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/vnd.vimeo.channel+json" $req_body {query: {}, body: $req_body}
 }
 
 # Get all the categories in a channel
@@ -491,10 +522,11 @@ export def "channels-categories get" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($channel_id | is-empty) { error make --unspanned { msg: "path parameter 'channel_id' must be non-empty" } }
   let full_url = (build-url $base ({channel_id: (encode-path-segment $channel_id)} | format pattern "/channels/{channel_id}/categories"))
   let accept_val = "application/vnd.vimeo.category+json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
 }
 
 # Add a list of categories to a channel
@@ -517,12 +549,13 @@ export def "channels-categories create" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($channel_id | is-empty) { error make --unspanned { msg: "path parameter 'channel_id' must be non-empty" } }
   let full_url = (build-url $base ({channel_id: (encode-path-segment $channel_id)} | format pattern "/channels/{channel_id}/categories"))
   let req_body = {"channels": $channels} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: {}, body: $req_body}
 }
 
 # Remove a category from a channel
@@ -544,10 +577,12 @@ export def "channels-categories delete" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($channel_id | is-empty) { error make --unspanned { msg: "path parameter 'channel_id' must be non-empty" } }
+  if ($category | is-empty) { error make --unspanned { msg: "path parameter 'category' must be non-empty" } }
   let full_url = (build-url $base ({channel_id: (encode-path-segment $channel_id), category: (encode-path-segment $category)} | format pattern "/channels/{channel_id}/categories/{category}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
 }
 
 # Categorize a channel
@@ -569,17 +604,19 @@ export def "channels-categories update-categorize" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($channel_id | is-empty) { error make --unspanned { msg: "path parameter 'channel_id' must be non-empty" } }
+  if ($category | is-empty) { error make --unspanned { msg: "path parameter 'category' must be non-empty" } }
   let full_url = (build-url $base ({channel_id: (encode-path-segment $channel_id), category: (encode-path-segment $category)} | format pattern "/channels/{channel_id}/categories/{category}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
 }
 
 # Remove a list of channel moderators
 #
 # DELETE /channels/{channel_id}/moderators
 # operationId: remove_channel_moderators
-export def "channels-moderators delete-by-channel_id" [
+export def "channels-moderators delete-by-channel-id" [
   channel_id: float
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -595,12 +632,13 @@ export def "channels-moderators delete-by-channel_id" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($channel_id | is-empty) { error make --unspanned { msg: "path parameter 'channel_id' must be non-empty" } }
   let full_url = (build-url $base ({channel_id: (encode-path-segment $channel_id)} | format pattern "/channels/{channel_id}/moderators"))
   let req_body = $body
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else if (($input | is-not-empty) and ($req_body | is-empty)) { $input } else { $req_body }
   let accept_val = "application/vnd.vimeo.user+json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/vnd.vimeo.user+json" $req_body
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/vnd.vimeo.user+json" $req_body {query: {}, body: $req_body}
 }
 
 # Get all the moderators in a channel
@@ -626,11 +664,12 @@ export def "channels-moderators list" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($channel_id | is-empty) { error make --unspanned { msg: "path parameter 'channel_id' must be non-empty" } }
   let qp = [(serialize-qp "direction" $direction "scalar") (serialize-qp "page" $page "scalar") (serialize-qp "per_page" $per_page "scalar") (serialize-qp "query" $query "scalar") (serialize-qp "sort" $qp_sort "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({channel_id: (encode-path-segment $channel_id)} | format pattern "/channels/{channel_id}/moderators") $qp)
   let accept_val = "application/vnd.vimeo.user+json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"direction": $direction, "page": $page, "per_page": $per_page, "query": $query, "sort": $qp_sort} | compact), body: null}
 }
 
 # Replace the moderators of a channel
@@ -653,19 +692,20 @@ export def "channels-moderators update" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($channel_id | is-empty) { error make --unspanned { msg: "path parameter 'channel_id' must be non-empty" } }
   let full_url = (build-url $base ({channel_id: (encode-path-segment $channel_id)} | format pattern "/channels/{channel_id}/moderators"))
   let req_body = {"user_uri": $user_uri} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "patch" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body
+  do-request "patch" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: {}, body: $req_body}
 }
 
 # Add a list of channel moderators
 #
 # PUT /channels/{channel_id}/moderators
 # operationId: add_channel_moderators
-export def "channels-moderators create-by-channel_id" [
+export def "channels-moderators create-by-channel-id" [
   channel_id: float
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -681,19 +721,20 @@ export def "channels-moderators create-by-channel_id" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($channel_id | is-empty) { error make --unspanned { msg: "path parameter 'channel_id' must be non-empty" } }
   let full_url = (build-url $base ({channel_id: (encode-path-segment $channel_id)} | format pattern "/channels/{channel_id}/moderators"))
   let req_body = {"user_uri": $user_uri} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: {}, body: $req_body}
 }
 
 # Remove a specific channel moderator
 #
 # DELETE /channels/{channel_id}/moderators/{user_id}
 # operationId: remove_channel_moderator
-export def "channels-moderators delete-by-channel_id-user_id" [
+export def "channels-moderators delete-by-channel-id-user-id" [
   channel_id: float
   user_id: float
   --base-url(-b): string@base-url-completer # API base URL
@@ -708,10 +749,12 @@ export def "channels-moderators delete-by-channel_id-user_id" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($channel_id | is-empty) { error make --unspanned { msg: "path parameter 'channel_id' must be non-empty" } }
+  if ($user_id | is-empty) { error make --unspanned { msg: "path parameter 'user_id' must be non-empty" } }
   let full_url = (build-url $base ({channel_id: (encode-path-segment $channel_id), user_id: (encode-path-segment $user_id)} | format pattern "/channels/{channel_id}/moderators/{user_id}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
 }
 
 # Get a specific channel moderator
@@ -733,17 +776,19 @@ export def "channels-moderators get" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($channel_id | is-empty) { error make --unspanned { msg: "path parameter 'channel_id' must be non-empty" } }
+  if ($user_id | is-empty) { error make --unspanned { msg: "path parameter 'user_id' must be non-empty" } }
   let full_url = (build-url $base ({channel_id: (encode-path-segment $channel_id), user_id: (encode-path-segment $user_id)} | format pattern "/channels/{channel_id}/moderators/{user_id}"))
   let accept_val = "application/vnd.vimeo.user+json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
 }
 
 # Add a specific channel moderator
 #
 # PUT /channels/{channel_id}/moderators/{user_id}
 # operationId: add_channel_moderator
-export def "channels-moderators create-by-channel_id-user_id" [
+export def "channels-moderators create-by-channel-id-user-id" [
   channel_id: float
   user_id: float
   --base-url(-b): string@base-url-completer # API base URL
@@ -758,10 +803,12 @@ export def "channels-moderators create-by-channel_id-user_id" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($channel_id | is-empty) { error make --unspanned { msg: "path parameter 'channel_id' must be non-empty" } }
+  if ($user_id | is-empty) { error make --unspanned { msg: "path parameter 'user_id' must be non-empty" } }
   let full_url = (build-url $base ({channel_id: (encode-path-segment $channel_id), user_id: (encode-path-segment $user_id)} | format pattern "/channels/{channel_id}/moderators/{user_id}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
 }
 
 # Get all the users who can view a private channel
@@ -785,18 +832,19 @@ export def "channels-privacy-users get" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($channel_id | is-empty) { error make --unspanned { msg: "path parameter 'channel_id' must be non-empty" } }
   let qp = [(serialize-qp "direction" $direction "scalar") (serialize-qp "page" $page "scalar") (serialize-qp "per_page" $per_page "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({channel_id: (encode-path-segment $channel_id)} | format pattern "/channels/{channel_id}/privacy/users") $qp)
   let accept_val = "application/vnd.vimeo.user+json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"direction": $direction, "page": $page, "per_page": $per_page} | compact), body: null}
 }
 
 # Permit a list of users to view a private channel
 #
 # PUT /channels/{channel_id}/privacy/users
 # operationId: set_channel_privacy_users
-export def "channels-privacy-users update-by-channel_id" [
+export def "channels-privacy-users update-by-channel-id" [
   channel_id: float
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -812,12 +860,13 @@ export def "channels-privacy-users update-by-channel_id" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($channel_id | is-empty) { error make --unspanned { msg: "path parameter 'channel_id' must be non-empty" } }
   let full_url = (build-url $base ({channel_id: (encode-path-segment $channel_id)} | format pattern "/channels/{channel_id}/privacy/users"))
   let req_body = $body
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else if (($input | is-not-empty) and ($req_body | is-empty)) { $input } else { $req_body }
   let accept_val = "application/vnd.vimeo.user+json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/vnd.vimeo.user+json" $req_body
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/vnd.vimeo.user+json" $req_body {query: {}, body: $req_body}
 }
 
 # Restrict a user from viewing a private channel
@@ -839,17 +888,19 @@ export def "channels-privacy-users delete" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($channel_id | is-empty) { error make --unspanned { msg: "path parameter 'channel_id' must be non-empty" } }
+  if ($user_id | is-empty) { error make --unspanned { msg: "path parameter 'user_id' must be non-empty" } }
   let full_url = (build-url $base ({channel_id: (encode-path-segment $channel_id), user_id: (encode-path-segment $user_id)} | format pattern "/channels/{channel_id}/privacy/users/{user_id}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
 }
 
 # Permit a specific user to view a private channel
 #
 # PUT /channels/{channel_id}/privacy/users/{user_id}
 # operationId: set_channel_privacy_user
-export def "channels-privacy-users update-by-channel_id-user_id" [
+export def "channels-privacy-users update-by-channel-id-user-id" [
   channel_id: float
   user_id: float
   --base-url(-b): string@base-url-completer # API base URL
@@ -864,10 +915,12 @@ export def "channels-privacy-users update-by-channel_id-user_id" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($channel_id | is-empty) { error make --unspanned { msg: "path parameter 'channel_id' must be non-empty" } }
+  if ($user_id | is-empty) { error make --unspanned { msg: "path parameter 'user_id' must be non-empty" } }
   let full_url = (build-url $base ({channel_id: (encode-path-segment $channel_id), user_id: (encode-path-segment $user_id)} | format pattern "/channels/{channel_id}/privacy/users/{user_id}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
 }
 
 # Get all the tags that have been added to a channel
@@ -888,17 +941,18 @@ export def "channels-tags get" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($channel_id | is-empty) { error make --unspanned { msg: "path parameter 'channel_id' must be non-empty" } }
   let full_url = (build-url $base ({channel_id: (encode-path-segment $channel_id)} | format pattern "/channels/{channel_id}/tags"))
   let accept_val = "application/vnd.vimeo.tag+json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
 }
 
 # Add a list of tags to a channel
 #
 # PUT /channels/{channel_id}/tags
 # operationId: add_tags_to_channel
-export def "channels-tags create-by-channel_id" [
+export def "channels-tags create-by-channel-id" [
   channel_id: float
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -914,12 +968,13 @@ export def "channels-tags create-by-channel_id" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($channel_id | is-empty) { error make --unspanned { msg: "path parameter 'channel_id' must be non-empty" } }
   let full_url = (build-url $base ({channel_id: (encode-path-segment $channel_id)} | format pattern "/channels/{channel_id}/tags"))
   let req_body = $body
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else if (($input | is-not-empty) and ($req_body | is-empty)) { $input } else { $req_body }
   let accept_val = "application/vnd.vimeo.tag+json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/vnd.vimeo.tag+json" $req_body
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/vnd.vimeo.tag+json" $req_body {query: {}, body: $req_body}
 }
 
 # Remove a tag from a channel
@@ -941,10 +996,12 @@ export def "channels-tags delete" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($channel_id | is-empty) { error make --unspanned { msg: "path parameter 'channel_id' must be non-empty" } }
+  if ($word | is-empty) { error make --unspanned { msg: "path parameter 'word' must be non-empty" } }
   let full_url = (build-url $base ({channel_id: (encode-path-segment $channel_id), word: (encode-path-segment $word)} | format pattern "/channels/{channel_id}/tags/{word}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
 }
 
 # Check if a tag has been added to a channel
@@ -966,17 +1023,19 @@ export def "channels-tags check-if-has" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($channel_id | is-empty) { error make --unspanned { msg: "path parameter 'channel_id' must be non-empty" } }
+  if ($word | is-empty) { error make --unspanned { msg: "path parameter 'word' must be non-empty" } }
   let full_url = (build-url $base ({channel_id: (encode-path-segment $channel_id), word: (encode-path-segment $word)} | format pattern "/channels/{channel_id}/tags/{word}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
 }
 
 # Add a specific tag to a channel
 #
 # PUT /channels/{channel_id}/tags/{word}
 # operationId: add_channel_tag
-export def "channels-tags create-by-channel_id-word" [
+export def "channels-tags create-by-channel-id-word" [
   channel_id: float
   word: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -991,10 +1050,12 @@ export def "channels-tags create-by-channel_id-word" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($channel_id | is-empty) { error make --unspanned { msg: "path parameter 'channel_id' must be non-empty" } }
+  if ($word | is-empty) { error make --unspanned { msg: "path parameter 'word' must be non-empty" } }
   let full_url = (build-url $base ({channel_id: (encode-path-segment $channel_id), word: (encode-path-segment $word)} | format pattern "/channels/{channel_id}/tags/{word}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
 }
 
 # Get all the followers of a channel
@@ -1021,18 +1082,19 @@ export def "channels-users get-subscribers" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($channel_id | is-empty) { error make --unspanned { msg: "path parameter 'channel_id' must be non-empty" } }
   let qp = [(serialize-qp "direction" $direction "scalar") (serialize-qp "filter" $filter "scalar") (serialize-qp "page" $page "scalar") (serialize-qp "per_page" $per_page "scalar") (serialize-qp "query" $query "scalar") (serialize-qp "sort" $qp_sort "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({channel_id: (encode-path-segment $channel_id)} | format pattern "/channels/{channel_id}/users") $qp)
   let accept_val = "application/vnd.vimeo.user+json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"direction": $direction, "filter": $filter, "page": $page, "per_page": $per_page, "query": $query, "sort": $qp_sort} | compact), body: null}
 }
 
 # Remove a list of videos from a channel
 #
 # DELETE /channels/{channel_id}/videos
 # operationId: remove_videos_from_channel
-export def "channels-videos delete-by-channel_id" [
+export def "channels-videos delete-by-channel-id" [
   channel_id: float
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1048,12 +1110,13 @@ export def "channels-videos delete-by-channel_id" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($channel_id | is-empty) { error make --unspanned { msg: "path parameter 'channel_id' must be non-empty" } }
   let full_url = (build-url $base ({channel_id: (encode-path-segment $channel_id)} | format pattern "/channels/{channel_id}/videos"))
   let req_body = {"video_uri": $video_uri} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: {}, body: $req_body}
 }
 
 # Get all the videos in a channel
@@ -1082,18 +1145,19 @@ export def "channels-videos list" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($channel_id | is-empty) { error make --unspanned { msg: "path parameter 'channel_id' must be non-empty" } }
   let qp = [(serialize-qp "containing_uri" $containing_uri "scalar") (serialize-qp "direction" $direction "scalar") (serialize-qp "filter" $filter "scalar") (serialize-qp "filter_embeddable" $filter_embeddable "scalar") (serialize-qp "page" $page "scalar") (serialize-qp "per_page" $per_page "scalar") (serialize-qp "query" $query "scalar") (serialize-qp "sort" $qp_sort "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({channel_id: (encode-path-segment $channel_id)} | format pattern "/channels/{channel_id}/videos") $qp)
   let accept_val = "application/vnd.vimeo.video+json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"containing_uri": $containing_uri, "direction": $direction, "filter": $filter, "filter_embeddable": $filter_embeddable, "page": $page, "per_page": $per_page, "query": $query, "sort": $qp_sort} | compact), body: null}
 }
 
 # Add a list of videos to a channel
 #
 # PUT /channels/{channel_id}/videos
 # operationId: add_videos_to_channel
-export def "channels-videos create-by-channel_id" [
+export def "channels-videos create-by-channel-id" [
   channel_id: float
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1109,19 +1173,20 @@ export def "channels-videos create-by-channel_id" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($channel_id | is-empty) { error make --unspanned { msg: "path parameter 'channel_id' must be non-empty" } }
   let full_url = (build-url $base ({channel_id: (encode-path-segment $channel_id)} | format pattern "/channels/{channel_id}/videos"))
   let req_body = {"video_uri": $video_uri} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: {}, body: $req_body}
 }
 
 # Remove a specific video from a channel
 #
 # DELETE /channels/{channel_id}/videos/{video_id}
 # operationId: delete_video_from_channel
-export def "channels-videos delete-by-channel_id-video_id" [
+export def "channels-videos delete-by-channel-id-video-id" [
   channel_id: float
   video_id: float
   --base-url(-b): string@base-url-completer # API base URL
@@ -1136,10 +1201,12 @@ export def "channels-videos delete-by-channel_id-video_id" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($channel_id | is-empty) { error make --unspanned { msg: "path parameter 'channel_id' must be non-empty" } }
+  if ($video_id | is-empty) { error make --unspanned { msg: "path parameter 'video_id' must be non-empty" } }
   let full_url = (build-url $base ({channel_id: (encode-path-segment $channel_id), video_id: (encode-path-segment $video_id)} | format pattern "/channels/{channel_id}/videos/{video_id}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
 }
 
 # Get a specific video in a channel
@@ -1161,17 +1228,19 @@ export def "channels-videos get" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($channel_id | is-empty) { error make --unspanned { msg: "path parameter 'channel_id' must be non-empty" } }
+  if ($video_id | is-empty) { error make --unspanned { msg: "path parameter 'video_id' must be non-empty" } }
   let full_url = (build-url $base ({channel_id: (encode-path-segment $channel_id), video_id: (encode-path-segment $video_id)} | format pattern "/channels/{channel_id}/videos/{video_id}"))
   let accept_val = "application/vnd.vimeo.video+json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
 }
 
 # Add a specific video to a channel
 #
 # PUT /channels/{channel_id}/videos/{video_id}
 # operationId: add_video_to_channel
-export def "channels-videos create-by-channel_id-video_id" [
+export def "channels-videos create-by-channel-id-video-id" [
   channel_id: float
   video_id: float
   --base-url(-b): string@base-url-completer # API base URL
@@ -1186,10 +1255,12 @@ export def "channels-videos create-by-channel_id-video_id" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($channel_id | is-empty) { error make --unspanned { msg: "path parameter 'channel_id' must be non-empty" } }
+  if ($video_id | is-empty) { error make --unspanned { msg: "path parameter 'video_id' must be non-empty" } }
   let full_url = (build-url $base ({channel_id: (encode-path-segment $channel_id), video_id: (encode-path-segment $video_id)} | format pattern "/channels/{channel_id}/videos/{video_id}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
 }
 
 # Get all the comments on a video
@@ -1214,11 +1285,13 @@ export def "channels-videos-comments get-alt1" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($channel_id | is-empty) { error make --unspanned { msg: "path parameter 'channel_id' must be non-empty" } }
+  if ($video_id | is-empty) { error make --unspanned { msg: "path parameter 'video_id' must be non-empty" } }
   let qp = [(serialize-qp "direction" $direction "scalar") (serialize-qp "page" $page "scalar") (serialize-qp "per_page" $per_page "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({channel_id: (encode-path-segment $channel_id), video_id: (encode-path-segment $video_id)} | format pattern "/channels/{channel_id}/videos/{video_id}/comments") $qp)
   let accept_val = "application/vnd.vimeo.comment+json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"direction": $direction, "page": $page, "per_page": $per_page} | compact), body: null}
 }
 
 # Add a comment to a video
@@ -1242,12 +1315,14 @@ export def "channels-videos-comments create-alt1" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($channel_id | is-empty) { error make --unspanned { msg: "path parameter 'channel_id' must be non-empty" } }
+  if ($video_id | is-empty) { error make --unspanned { msg: "path parameter 'video_id' must be non-empty" } }
   let full_url = (build-url $base ({channel_id: (encode-path-segment $channel_id), video_id: (encode-path-segment $video_id)} | format pattern "/channels/{channel_id}/videos/{video_id}/comments"))
   let req_body = $body
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else if (($input | is-not-empty) and ($req_body | is-empty)) { $input } else { $req_body }
   let accept_val = "application/vnd.vimeo.comment+json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/vnd.vimeo.comment+json" $req_body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/vnd.vimeo.comment+json" $req_body {query: {}, body: $req_body}
 }
 
 # Get all the credited users in a video
@@ -1274,11 +1349,13 @@ export def "channels-videos-credits get-alt1" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($channel_id | is-empty) { error make --unspanned { msg: "path parameter 'channel_id' must be non-empty" } }
+  if ($video_id | is-empty) { error make --unspanned { msg: "path parameter 'video_id' must be non-empty" } }
   let qp = [(serialize-qp "direction" $direction "scalar") (serialize-qp "page" $page "scalar") (serialize-qp "per_page" $per_page "scalar") (serialize-qp "query" $query "scalar") (serialize-qp "sort" $qp_sort "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({channel_id: (encode-path-segment $channel_id), video_id: (encode-path-segment $video_id)} | format pattern "/channels/{channel_id}/videos/{video_id}/credits") $qp)
   let accept_val = "application/vnd.vimeo.credit+json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"direction": $direction, "page": $page, "per_page": $per_page, "query": $query, "sort": $qp_sort} | compact), body: null}
 }
 
 # Credit a user in a video
@@ -1302,12 +1379,14 @@ export def "channels-videos-credits create-alt1" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($channel_id | is-empty) { error make --unspanned { msg: "path parameter 'channel_id' must be non-empty" } }
+  if ($video_id | is-empty) { error make --unspanned { msg: "path parameter 'video_id' must be non-empty" } }
   let full_url = (build-url $base ({channel_id: (encode-path-segment $channel_id), video_id: (encode-path-segment $video_id)} | format pattern "/channels/{channel_id}/videos/{video_id}/credits"))
   let req_body = $body
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else if (($input | is-not-empty) and ($req_body | is-empty)) { $input } else { $req_body }
   let accept_val = "application/vnd.vimeo.credit+json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/vnd.vimeo.credit+json" $req_body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/vnd.vimeo.credit+json" $req_body {query: {}, body: $req_body}
 }
 
 # Get all the users who have liked a video
@@ -1333,11 +1412,13 @@ export def "channels-videos-likes get-alt1" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($channel_id | is-empty) { error make --unspanned { msg: "path parameter 'channel_id' must be non-empty" } }
+  if ($video_id | is-empty) { error make --unspanned { msg: "path parameter 'video_id' must be non-empty" } }
   let qp = [(serialize-qp "direction" $direction "scalar") (serialize-qp "page" $page "scalar") (serialize-qp "per_page" $per_page "scalar") (serialize-qp "sort" $qp_sort "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({channel_id: (encode-path-segment $channel_id), video_id: (encode-path-segment $video_id)} | format pattern "/channels/{channel_id}/videos/{video_id}/likes") $qp)
   let accept_val = "application/vnd.vimeo.user+json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"direction": $direction, "page": $page, "per_page": $per_page, "sort": $qp_sort} | compact), body: null}
 }
 
 # Get all the thumbnails of a video
@@ -1361,11 +1442,13 @@ export def "channels-videos-pictures get-thumbnails-alt1" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($channel_id | is-empty) { error make --unspanned { msg: "path parameter 'channel_id' must be non-empty" } }
+  if ($video_id | is-empty) { error make --unspanned { msg: "path parameter 'video_id' must be non-empty" } }
   let qp = [(serialize-qp "page" $page "scalar") (serialize-qp "per_page" $per_page "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({channel_id: (encode-path-segment $channel_id), video_id: (encode-path-segment $video_id)} | format pattern "/channels/{channel_id}/videos/{video_id}/pictures") $qp)
   let accept_val = "application/vnd.vimeo.picture+json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"page": $page, "per_page": $per_page} | compact), body: null}
 }
 
 # Add a video thumbnail
@@ -1389,12 +1472,14 @@ export def "channels-videos-pictures create-thumbnail-alt1" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($channel_id | is-empty) { error make --unspanned { msg: "path parameter 'channel_id' must be non-empty" } }
+  if ($video_id | is-empty) { error make --unspanned { msg: "path parameter 'video_id' must be non-empty" } }
   let full_url = (build-url $base ({channel_id: (encode-path-segment $channel_id), video_id: (encode-path-segment $video_id)} | format pattern "/channels/{channel_id}/videos/{video_id}/pictures"))
   let req_body = $body
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else if (($input | is-not-empty) and ($req_body | is-empty)) { $input } else { $req_body }
   let accept_val = "application/vnd.vimeo.picture+json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/vnd.vimeo.picture+json" $req_body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/vnd.vimeo.picture+json" $req_body {query: {}, body: $req_body}
 }
 
 # Get all the users who can view a user's private videos by default
@@ -1418,11 +1503,13 @@ export def "channels-videos-privacy-users get-alt1" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($channel_id | is-empty) { error make --unspanned { msg: "path parameter 'channel_id' must be non-empty" } }
+  if ($video_id | is-empty) { error make --unspanned { msg: "path parameter 'video_id' must be non-empty" } }
   let qp = [(serialize-qp "page" $page "scalar") (serialize-qp "per_page" $per_page "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({channel_id: (encode-path-segment $channel_id), video_id: (encode-path-segment $video_id)} | format pattern "/channels/{channel_id}/videos/{video_id}/privacy/users") $qp)
   let accept_val = "application/vnd.vimeo.user+json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"page": $page, "per_page": $per_page} | compact), body: null}
 }
 
 # Permit a list of users to view a private video
@@ -1444,10 +1531,12 @@ export def "channels-videos-privacy-users create-alt1" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($channel_id | is-empty) { error make --unspanned { msg: "path parameter 'channel_id' must be non-empty" } }
+  if ($video_id | is-empty) { error make --unspanned { msg: "path parameter 'video_id' must be non-empty" } }
   let full_url = (build-url $base ({channel_id: (encode-path-segment $channel_id), video_id: (encode-path-segment $video_id)} | format pattern "/channels/{channel_id}/videos/{video_id}/privacy/users"))
   let accept_val = "application/vnd.vimeo.user+json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
 }
 
 # Get all the text tracks of a video
@@ -1469,10 +1558,12 @@ export def "channels-videos-texttracks get-text-tracks-alt1" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($channel_id | is-empty) { error make --unspanned { msg: "path parameter 'channel_id' must be non-empty" } }
+  if ($video_id | is-empty) { error make --unspanned { msg: "path parameter 'video_id' must be non-empty" } }
   let full_url = (build-url $base ({channel_id: (encode-path-segment $channel_id), video_id: (encode-path-segment $video_id)} | format pattern "/channels/{channel_id}/videos/{video_id}/texttracks"))
   let accept_val = "application/vnd.vimeo.video.texttrack+json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
 }
 
 # Add a text track to a video
@@ -1496,12 +1587,14 @@ export def "channels-videos-texttracks create-text-track-alt1" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($channel_id | is-empty) { error make --unspanned { msg: "path parameter 'channel_id' must be non-empty" } }
+  if ($video_id | is-empty) { error make --unspanned { msg: "path parameter 'video_id' must be non-empty" } }
   let full_url = (build-url $base ({channel_id: (encode-path-segment $channel_id), video_id: (encode-path-segment $video_id)} | format pattern "/channels/{channel_id}/videos/{video_id}/texttracks"))
   let req_body = $body
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else if (($input | is-not-empty) and ($req_body | is-empty)) { $input } else { $req_body }
   let accept_val = "application/vnd.vimeo.video.texttrack+json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/vnd.vimeo.video.texttrack+json" $req_body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/vnd.vimeo.video.texttrack+json" $req_body {query: {}, body: $req_body}
 }
 
 # Get all content ratings
@@ -1524,7 +1617,7 @@ export def "contentratings get-content-ratings" [
   let full_url = (build-url $base "/contentratings")
   let accept_val = "application/vnd.vimeo.contentrating+json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
 }
 
 # Get all Creative Commons licenses
@@ -1547,7 +1640,7 @@ export def "creativecommons get-cc-licenses" [
   let full_url = (build-url $base "/creativecommons")
   let accept_val = "application/vnd.vimeo.creativecommons+json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
 }
 
 # Get all groups
@@ -1577,7 +1670,7 @@ export def "groups list" [
   let full_url = (build-url $base "/groups" $qp)
   let accept_val = "application/vnd.vimeo.group+json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"direction": $direction, "filter": $filter, "page": $page, "per_page": $per_page, "query": $query, "sort": $qp_sort} | compact), body: null}
 }
 
 # Create a group
@@ -1604,7 +1697,7 @@ export def "groups create" [
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else if (($input | is-not-empty) and ($req_body | is-empty)) { $input } else { $req_body }
   let accept_val = "application/vnd.vimeo.group+json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/vnd.vimeo.group+json" $req_body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/vnd.vimeo.group+json" $req_body {query: {}, body: $req_body}
 }
 
 # Delete a group
@@ -1625,10 +1718,11 @@ export def "groups delete" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($group_id | is-empty) { error make --unspanned { msg: "path parameter 'group_id' must be non-empty" } }
   let full_url = (build-url $base ({group_id: (encode-path-segment $group_id)} | format pattern "/groups/{group_id}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
 }
 
 # Get a specific group
@@ -1649,10 +1743,11 @@ export def "groups get" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($group_id | is-empty) { error make --unspanned { msg: "path parameter 'group_id' must be non-empty" } }
   let full_url = (build-url $base ({group_id: (encode-path-segment $group_id)} | format pattern "/groups/{group_id}"))
   let accept_val = "application/vnd.vimeo.group+json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
 }
 
 # Get all the members of a group
@@ -1679,11 +1774,12 @@ export def "groups-users get-members" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($group_id | is-empty) { error make --unspanned { msg: "path parameter 'group_id' must be non-empty" } }
   let qp = [(serialize-qp "direction" $direction "scalar") (serialize-qp "filter" $filter "scalar") (serialize-qp "page" $page "scalar") (serialize-qp "per_page" $per_page "scalar") (serialize-qp "query" $query "scalar") (serialize-qp "sort" $qp_sort "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({group_id: (encode-path-segment $group_id)} | format pattern "/groups/{group_id}/users") $qp)
   let accept_val = "application/vnd.vimeo.user+json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"direction": $direction, "filter": $filter, "page": $page, "per_page": $per_page, "query": $query, "sort": $qp_sort} | compact), body: null}
 }
 
 # Get all the videos in a group
@@ -1711,11 +1807,12 @@ export def "groups-videos list" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($group_id | is-empty) { error make --unspanned { msg: "path parameter 'group_id' must be non-empty" } }
   let qp = [(serialize-qp "direction" $direction "scalar") (serialize-qp "filter" $filter "scalar") (serialize-qp "filter_embeddable" $filter_embeddable "scalar") (serialize-qp "page" $page "scalar") (serialize-qp "per_page" $per_page "scalar") (serialize-qp "query" $query "scalar") (serialize-qp "sort" $qp_sort "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({group_id: (encode-path-segment $group_id)} | format pattern "/groups/{group_id}/videos") $qp)
   let accept_val = "application/vnd.vimeo.video+json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"direction": $direction, "filter": $filter, "filter_embeddable": $filter_embeddable, "page": $page, "per_page": $per_page, "query": $query, "sort": $qp_sort} | compact), body: null}
 }
 
 # Remove a video from a group
@@ -1737,10 +1834,12 @@ export def "groups-videos delete" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($group_id | is-empty) { error make --unspanned { msg: "path parameter 'group_id' must be non-empty" } }
+  if ($video_id | is-empty) { error make --unspanned { msg: "path parameter 'video_id' must be non-empty" } }
   let full_url = (build-url $base ({group_id: (encode-path-segment $group_id), video_id: (encode-path-segment $video_id)} | format pattern "/groups/{group_id}/videos/{video_id}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
 }
 
 # Get a specific video in a group
@@ -1762,10 +1861,12 @@ export def "groups-videos get" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($group_id | is-empty) { error make --unspanned { msg: "path parameter 'group_id' must be non-empty" } }
+  if ($video_id | is-empty) { error make --unspanned { msg: "path parameter 'video_id' must be non-empty" } }
   let full_url = (build-url $base ({group_id: (encode-path-segment $group_id), video_id: (encode-path-segment $video_id)} | format pattern "/groups/{group_id}/videos/{video_id}"))
   let accept_val = "application/vnd.vimeo.video+json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
 }
 
 # Add a video to a group
@@ -1787,10 +1888,12 @@ export def "groups-videos create" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($group_id | is-empty) { error make --unspanned { msg: "path parameter 'group_id' must be non-empty" } }
+  if ($video_id | is-empty) { error make --unspanned { msg: "path parameter 'video_id' must be non-empty" } }
   let full_url = (build-url $base ({group_id: (encode-path-segment $group_id), video_id: (encode-path-segment $video_id)} | format pattern "/groups/{group_id}/videos/{video_id}"))
   let accept_val = "application/vnd.vimeo.video+json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
 }
 
 # Get all languages
@@ -1815,7 +1918,7 @@ export def "languages get" [
   let full_url = (build-url $base "/languages" $qp)
   let accept_val = "application/vnd.vimeo.language+json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"filter": $filter} | compact), body: null}
 }
 
 # Get a user
@@ -1838,7 +1941,7 @@ export def "me get-user-alt1" [
   let full_url = (build-url $base "/me")
   let accept_val = "application/vnd.vimeo.user+json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
 }
 
 # Edit a user
@@ -1865,7 +1968,7 @@ export def "me update-edit-user-alt1" [
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else if (($input | is-not-empty) and ($req_body | is-empty)) { $input } else { $req_body }
   let accept_val = "application/vnd.vimeo.user+json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "patch" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/vnd.vimeo.user+json" $req_body
+  do-request "patch" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/vnd.vimeo.user+json" $req_body {query: {}, body: $req_body}
 }
 
 # Get all the albums that belong to a user
@@ -1894,7 +1997,7 @@ export def "me-albums list" [
   let full_url = (build-url $base "/me/albums" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"direction": $direction, "page": $page, "per_page": $per_page, "query": $query, "sort": $qp_sort} | compact), body: null}
 }
 
 # Create an album
@@ -1921,7 +2024,7 @@ export def "me-albums create-alt1" [
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else if (($input | is-not-empty) and ($req_body | is-empty)) { $input } else { $req_body }
   let accept_val = "application/vnd.vimeo.album+json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/vnd.vimeo.album+json" $req_body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/vnd.vimeo.album+json" $req_body {query: {}, body: $req_body}
 }
 
 # Delete an album
@@ -1942,10 +2045,11 @@ export def "me-albums delete-alt1" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($album_id | is-empty) { error make --unspanned { msg: "path parameter 'album_id' must be non-empty" } }
   let full_url = (build-url $base ({album_id: (encode-path-segment $album_id)} | format pattern "/me/albums/{album_id}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
 }
 
 # Get a specific album
@@ -1966,10 +2070,11 @@ export def "me-albums get-alt1" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($album_id | is-empty) { error make --unspanned { msg: "path parameter 'album_id' must be non-empty" } }
   let full_url = (build-url $base ({album_id: (encode-path-segment $album_id)} | format pattern "/me/albums/{album_id}"))
   let accept_val = "application/vnd.vimeo.album+json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
 }
 
 # Edit an album
@@ -1992,12 +2097,13 @@ export def "me-albums update-edit-alt1" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($album_id | is-empty) { error make --unspanned { msg: "path parameter 'album_id' must be non-empty" } }
   let full_url = (build-url $base ({album_id: (encode-path-segment $album_id)} | format pattern "/me/albums/{album_id}"))
   let req_body = $body
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else if (($input | is-not-empty) and ($req_body | is-empty)) { $input } else { $req_body }
   let accept_val = "application/vnd.vimeo.album+json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "patch" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/vnd.vimeo.album+json" $req_body
+  do-request "patch" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/vnd.vimeo.album+json" $req_body {query: {}, body: $req_body}
 }
 
 # Get all the videos in an album
@@ -2028,11 +2134,12 @@ export def "me-albums-videos list" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($album_id | is-empty) { error make --unspanned { msg: "path parameter 'album_id' must be non-empty" } }
   let qp = [(serialize-qp "containing_uri" $containing_uri "scalar") (serialize-qp "direction" $direction "scalar") (serialize-qp "filter" $filter "scalar") (serialize-qp "filter_embeddable" $filter_embeddable "scalar") (serialize-qp "page" $page "scalar") (serialize-qp "password" $password "scalar") (serialize-qp "per_page" $per_page "scalar") (serialize-qp "query" $query "scalar") (serialize-qp "sort" $qp_sort "scalar") (serialize-qp "weak_search" $weak_search "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({album_id: (encode-path-segment $album_id)} | format pattern "/me/albums/{album_id}/videos") $qp)
   let accept_val = "application/vnd.vimeo.video+json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"containing_uri": $containing_uri, "direction": $direction, "filter": $filter, "filter_embeddable": $filter_embeddable, "page": $page, "password": $password, "per_page": $per_page, "query": $query, "sort": $qp_sort, "weak_search": $weak_search} | compact), body: null}
 }
 
 # Replace all the videos in an album
@@ -2055,12 +2162,13 @@ export def "me-albums-videos update-in-alt1" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($album_id | is-empty) { error make --unspanned { msg: "path parameter 'album_id' must be non-empty" } }
   let full_url = (build-url $base ({album_id: (encode-path-segment $album_id)} | format pattern "/me/albums/{album_id}/videos"))
   let req_body = {"videos": $videos} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: {}, body: $req_body}
 }
 
 # Remove a video from an album
@@ -2082,10 +2190,12 @@ export def "me-albums-videos delete-from-alt1" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($album_id | is-empty) { error make --unspanned { msg: "path parameter 'album_id' must be non-empty" } }
+  if ($video_id | is-empty) { error make --unspanned { msg: "path parameter 'video_id' must be non-empty" } }
   let full_url = (build-url $base ({album_id: (encode-path-segment $album_id), video_id: (encode-path-segment $video_id)} | format pattern "/me/albums/{album_id}/videos/{video_id}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
 }
 
 # Get a specific video in an album
@@ -2108,11 +2218,13 @@ export def "me-albums-videos get-alt1" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($album_id | is-empty) { error make --unspanned { msg: "path parameter 'album_id' must be non-empty" } }
+  if ($video_id | is-empty) { error make --unspanned { msg: "path parameter 'video_id' must be non-empty" } }
   let qp = [(serialize-qp "password" $password "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({album_id: (encode-path-segment $album_id), video_id: (encode-path-segment $video_id)} | format pattern "/me/albums/{album_id}/videos/{video_id}") $qp)
   let accept_val = "application/vnd.vimeo.video+json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"password": $password} | compact), body: null}
 }
 
 # Add a specific video to an album
@@ -2134,10 +2246,12 @@ export def "me-albums-videos create-to-alt1" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($album_id | is-empty) { error make --unspanned { msg: "path parameter 'album_id' must be non-empty" } }
+  if ($video_id | is-empty) { error make --unspanned { msg: "path parameter 'video_id' must be non-empty" } }
   let full_url = (build-url $base ({album_id: (encode-path-segment $album_id), video_id: (encode-path-segment $video_id)} | format pattern "/me/albums/{album_id}/videos/{video_id}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
 }
 
 # Set a video as the album thumbnail
@@ -2161,12 +2275,14 @@ export def "me-albums-videos-set-album-thumbnail update-as-alt1" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($album_id | is-empty) { error make --unspanned { msg: "path parameter 'album_id' must be non-empty" } }
+  if ($video_id | is-empty) { error make --unspanned { msg: "path parameter 'video_id' must be non-empty" } }
   let full_url = (build-url $base ({album_id: (encode-path-segment $album_id), video_id: (encode-path-segment $video_id)} | format pattern "/me/albums/{album_id}/videos/{video_id}/set_album_thumbnail"))
   let req_body = {"time_code": $time_code} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: {}, body: $req_body}
 }
 
 # Get all the videos in which a user appears
@@ -2197,7 +2313,7 @@ export def "me-appearances get-alt1" [
   let full_url = (build-url $base "/me/appearances" $qp)
   let accept_val = "application/vnd.vimeo.video+json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"direction": $direction, "filter": $filter, "filter_embeddable": $filter_embeddable, "page": $page, "per_page": $per_page, "query": $query, "sort": $qp_sort} | compact), body: null}
 }
 
 # Get all the categories that a user follows
@@ -2225,7 +2341,7 @@ export def "me-categories get-category-subscriptions-alt1" [
   let full_url = (build-url $base "/me/categories" $qp)
   let accept_val = "application/vnd.vimeo.category+json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"direction": $direction, "page": $page, "per_page": $per_page, "sort": $qp_sort} | compact), body: null}
 }
 
 # Unsubscribe a user from a category
@@ -2246,10 +2362,11 @@ export def "me-categories unsubscribe-from-alt1" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($category | is-empty) { error make --unspanned { msg: "path parameter 'category' must be non-empty" } }
   let full_url = (build-url $base ({category: (encode-path-segment $category)} | format pattern "/me/categories/{category}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
 }
 
 # Check if a user follows a category
@@ -2270,10 +2387,11 @@ export def "me-categories check-if-user-subscribed-to-alt1" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($category | is-empty) { error make --unspanned { msg: "path parameter 'category' must be non-empty" } }
   let full_url = (build-url $base ({category: (encode-path-segment $category)} | format pattern "/me/categories/{category}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
 }
 
 # Subscribe a user to a single category
@@ -2294,10 +2412,11 @@ export def "me-categories subscribe-to-alt1" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($category | is-empty) { error make --unspanned { msg: "path parameter 'category' must be non-empty" } }
   let full_url = (build-url $base ({category: (encode-path-segment $category)} | format pattern "/me/categories/{category}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
 }
 
 # Get all the channels to which a user subscribes
@@ -2327,7 +2446,7 @@ export def "me-channels get-subscriptions-alt1" [
   let full_url = (build-url $base "/me/channels" $qp)
   let accept_val = "application/vnd.vimeo.channel+json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"direction": $direction, "filter": $filter, "page": $page, "per_page": $per_page, "query": $query, "sort": $qp_sort} | compact), body: null}
 }
 
 # Unsubscribe a user from a specific channel
@@ -2348,10 +2467,11 @@ export def "me-channels unsubscribe-from-alt1" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($channel_id | is-empty) { error make --unspanned { msg: "path parameter 'channel_id' must be non-empty" } }
   let full_url = (build-url $base ({channel_id: (encode-path-segment $channel_id)} | format pattern "/me/channels/{channel_id}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
 }
 
 # Check if a user follows a channel
@@ -2372,10 +2492,11 @@ export def "me-channels check-if-user-subscribed-to-alt1" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($channel_id | is-empty) { error make --unspanned { msg: "path parameter 'channel_id' must be non-empty" } }
   let full_url = (build-url $base ({channel_id: (encode-path-segment $channel_id)} | format pattern "/me/channels/{channel_id}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
 }
 
 # Subscribe a user to a specific channel
@@ -2396,10 +2517,11 @@ export def "me-channels subscribe-to-alt1" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($channel_id | is-empty) { error make --unspanned { msg: "path parameter 'channel_id' must be non-empty" } }
   let full_url = (build-url $base ({channel_id: (encode-path-segment $channel_id)} | format pattern "/me/channels/{channel_id}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
 }
 
 # Get all the custom logos that belong to a user
@@ -2422,7 +2544,7 @@ export def "me-customlogos get-custom-logos-alt1" [
   let full_url = (build-url $base "/me/customlogos")
   let accept_val = "application/vnd.vimeo.picture+json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
 }
 
 # Add a custom logo
@@ -2445,7 +2567,7 @@ export def "me-customlogos create-custom-logo-alt1" [
   let full_url = (build-url $base "/me/customlogos")
   let accept_val = "application/vnd.vimeo.picture+json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
 }
 
 # Get a specific custom logo
@@ -2466,10 +2588,11 @@ export def "me-customlogos get-custom-alt1" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($logo_id | is-empty) { error make --unspanned { msg: "path parameter 'logo_id' must be non-empty" } }
   let full_url = (build-url $base ({logo_id: (encode-path-segment $logo_id)} | format pattern "/me/customlogos/{logo_id}"))
   let accept_val = "application/vnd.vimeo.picture+json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
 }
 
 # Get all videos in a user's feed
@@ -2497,7 +2620,7 @@ export def "me-feed get-alt1" [
   let full_url = (build-url $base "/me/feed" $qp)
   let accept_val = "application/vnd.vimeo.activity+json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"offset": $offset, "page": $page, "per_page": $per_page, "type": $type} | compact), body: null}
 }
 
 # Get all the followers of a user
@@ -2526,7 +2649,7 @@ export def "me-followers get-alt1" [
   let full_url = (build-url $base "/me/followers" $qp)
   let accept_val = "application/vnd.vimeo.user+json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"direction": $direction, "page": $page, "per_page": $per_page, "query": $query, "sort": $qp_sort} | compact), body: null}
 }
 
 # Get all the users that a user is following
@@ -2556,7 +2679,7 @@ export def "me-following get-user-alt1" [
   let full_url = (build-url $base "/me/following" $qp)
   let accept_val = "application/vnd.vimeo.user+json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"direction": $direction, "filter": $filter, "page": $page, "per_page": $per_page, "query": $query, "sort": $qp_sort} | compact), body: null}
 }
 
 # Follow a list of users
@@ -2583,7 +2706,7 @@ export def "me-following create-follow-users-alt1" [
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: {}, body: $req_body}
 }
 
 # Unfollow a user
@@ -2604,10 +2727,11 @@ export def "me-following delete-unfollow-alt1" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($follow_user_id | is-empty) { error make --unspanned { msg: "path parameter 'follow_user_id' must be non-empty" } }
   let full_url = (build-url $base ({follow_user_id: (encode-path-segment $follow_user_id)} | format pattern "/me/following/{follow_user_id}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
 }
 
 # Check if a user is following another user
@@ -2628,10 +2752,11 @@ export def "me-following check-if-is-alt1" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($follow_user_id | is-empty) { error make --unspanned { msg: "path parameter 'follow_user_id' must be non-empty" } }
   let full_url = (build-url $base ({follow_user_id: (encode-path-segment $follow_user_id)} | format pattern "/me/following/{follow_user_id}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
 }
 
 # Follow a specific user
@@ -2652,10 +2777,11 @@ export def "me-following update-alt1" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($follow_user_id | is-empty) { error make --unspanned { msg: "path parameter 'follow_user_id' must be non-empty" } }
   let full_url = (build-url $base ({follow_user_id: (encode-path-segment $follow_user_id)} | format pattern "/me/following/{follow_user_id}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
 }
 
 # Get all the groups that a user has joined
@@ -2685,7 +2811,7 @@ export def "me-groups get-user-alt1" [
   let full_url = (build-url $base "/me/groups" $qp)
   let accept_val = "application/vnd.vimeo.group+json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"direction": $direction, "filter": $filter, "page": $page, "per_page": $per_page, "query": $query, "sort": $qp_sort} | compact), body: null}
 }
 
 # Remove a user from a group
@@ -2706,10 +2832,11 @@ export def "me-groups delete-leave-alt1" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($group_id | is-empty) { error make --unspanned { msg: "path parameter 'group_id' must be non-empty" } }
   let full_url = (build-url $base ({group_id: (encode-path-segment $group_id)} | format pattern "/me/groups/{group_id}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
 }
 
 # Check if a user has joined a group
@@ -2730,10 +2857,11 @@ export def "me-groups check-if-user-joined-alt1" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($group_id | is-empty) { error make --unspanned { msg: "path parameter 'group_id' must be non-empty" } }
   let full_url = (build-url $base ({group_id: (encode-path-segment $group_id)} | format pattern "/me/groups/{group_id}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
 }
 
 # Add a user to a group
@@ -2754,10 +2882,11 @@ export def "me-groups update-join-alt1" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($group_id | is-empty) { error make --unspanned { msg: "path parameter 'group_id' must be non-empty" } }
   let full_url = (build-url $base ({group_id: (encode-path-segment $group_id)} | format pattern "/me/groups/{group_id}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
 }
 
 # Get all the videos that a user has liked
@@ -2787,7 +2916,7 @@ export def "me-likes get-alt1" [
   let full_url = (build-url $base "/me/likes" $qp)
   let accept_val = "application/vnd.vimeo.video+json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"filter": $filter, "filter_embeddable": $filter_embeddable, "page": $page, "per_page": $per_page, "query": $query, "sort": $qp_sort} | compact), body: null}
 }
 
 # Cause a user to unlike a video
@@ -2808,10 +2937,11 @@ export def "me-likes delete-unlike-alt1" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($video_id | is-empty) { error make --unspanned { msg: "path parameter 'video_id' must be non-empty" } }
   let full_url = (build-url $base ({video_id: (encode-path-segment $video_id)} | format pattern "/me/likes/{video_id}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
 }
 
 # Check if a user has liked a video
@@ -2832,10 +2962,11 @@ export def "me-likes check-if-user-liked-alt1" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($video_id | is-empty) { error make --unspanned { msg: "path parameter 'video_id' must be non-empty" } }
   let full_url = (build-url $base ({video_id: (encode-path-segment $video_id)} | format pattern "/me/likes/{video_id}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
 }
 
 # Cause a user to like a video
@@ -2856,10 +2987,11 @@ export def "me-likes update-alt1" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($video_id | is-empty) { error make --unspanned { msg: "path parameter 'video_id' must be non-empty" } }
   let full_url = (build-url $base ({video_id: (encode-path-segment $video_id)} | format pattern "/me/likes/{video_id}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
 }
 
 # Get all the On Demand pages of a user
@@ -2888,7 +3020,7 @@ export def "me-ondemand-pages get-user-vods-alt1" [
   let full_url = (build-url $base "/me/ondemand/pages" $qp)
   let accept_val = "application/vnd.vimeo.ondemand.page+json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"direction": $direction, "filter": $filter, "page": $page, "per_page": $per_page, "sort": $qp_sort} | compact), body: null}
 }
 
 # Create an On Demand page
@@ -2929,7 +3061,7 @@ export def "me-ondemand-pages create-vod-alt1" [
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: {}, body: $req_body}
 }
 
 # Get all the On Demand purchases and rentals that a user has made
@@ -2958,7 +3090,7 @@ export def "me-ondemand-purchases get-vod" [
   let full_url = (build-url $base "/me/ondemand/purchases" $qp)
   let accept_val = "application/vnd.vimeo.ondemand.page+json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"direction": $direction, "filter": $filter, "page": $page, "per_page": $per_page, "sort": $qp_sort} | compact), body: null}
 }
 
 # Check if a user has made a purchase or rental from an On Demand page
@@ -2979,10 +3111,11 @@ export def "me-ondemand-purchases check-if-vod-was-purchased-alt1" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($ondemand_id | is-empty) { error make --unspanned { msg: "path parameter 'ondemand_id' must be non-empty" } }
   let full_url = (build-url $base ({ondemand_id: (encode-path-segment $ondemand_id)} | format pattern "/me/ondemand/purchases/{ondemand_id}"))
   let accept_val = "application/vnd.vimeo.ondemand.page+json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
 }
 
 # Get all the pictures that belong to a user
@@ -3008,7 +3141,7 @@ export def "me-pictures list" [
   let full_url = (build-url $base "/me/pictures" $qp)
   let accept_val = "application/vnd.vimeo.picture+json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"page": $page, "per_page": $per_page} | compact), body: null}
 }
 
 # Add a user picture
@@ -3031,7 +3164,7 @@ export def "me-pictures create-alt1" [
   let full_url = (build-url $base "/me/pictures")
   let accept_val = "application/vnd.vimeo.picture+json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
 }
 
 # Delete a user picture
@@ -3052,10 +3185,11 @@ export def "me-pictures delete-alt1" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($portraitset_id | is-empty) { error make --unspanned { msg: "path parameter 'portraitset_id' must be non-empty" } }
   let full_url = (build-url $base ({portraitset_id: (encode-path-segment $portraitset_id)} | format pattern "/me/pictures/{portraitset_id}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
 }
 
 # Get a specific user picture
@@ -3076,10 +3210,11 @@ export def "me-pictures get-alt1" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($portraitset_id | is-empty) { error make --unspanned { msg: "path parameter 'portraitset_id' must be non-empty" } }
   let full_url = (build-url $base ({portraitset_id: (encode-path-segment $portraitset_id)} | format pattern "/me/pictures/{portraitset_id}"))
   let accept_val = "application/vnd.vimeo.picture+json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
 }
 
 # Edit a user picture
@@ -3102,12 +3237,13 @@ export def "me-pictures update-edit-alt1" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($portraitset_id | is-empty) { error make --unspanned { msg: "path parameter 'portraitset_id' must be non-empty" } }
   let full_url = (build-url $base ({portraitset_id: (encode-path-segment $portraitset_id)} | format pattern "/me/pictures/{portraitset_id}"))
   let req_body = $body
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else if (($input | is-not-empty) and ($req_body | is-empty)) { $input } else { $req_body }
   let accept_val = "application/vnd.vimeo.picture+json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "patch" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/vnd.vimeo.picture+json" $req_body
+  do-request "patch" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/vnd.vimeo.picture+json" $req_body {query: {}, body: $req_body}
 }
 
 # Get all the portfolios that belong to a user
@@ -3136,7 +3272,7 @@ export def "me-portfolios list" [
   let full_url = (build-url $base "/me/portfolios" $qp)
   let accept_val = "application/vnd.vimeo.portfolio+json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"direction": $direction, "page": $page, "per_page": $per_page, "query": $query, "sort": $qp_sort} | compact), body: null}
 }
 
 # Get a specific portfolio
@@ -3157,10 +3293,11 @@ export def "me-portfolios get-alt1" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($portfolio_id | is-empty) { error make --unspanned { msg: "path parameter 'portfolio_id' must be non-empty" } }
   let full_url = (build-url $base ({portfolio_id: (encode-path-segment $portfolio_id)} | format pattern "/me/portfolios/{portfolio_id}"))
   let accept_val = "application/vnd.vimeo.portfolio+json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
 }
 
 # Get all the videos in a portfolio
@@ -3187,11 +3324,12 @@ export def "me-portfolios-videos list" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($portfolio_id | is-empty) { error make --unspanned { msg: "path parameter 'portfolio_id' must be non-empty" } }
   let qp = [(serialize-qp "containing_uri" $containing_uri "scalar") (serialize-qp "filter" $filter "scalar") (serialize-qp "filter_embeddable" $filter_embeddable "scalar") (serialize-qp "page" $page "scalar") (serialize-qp "per_page" $per_page "scalar") (serialize-qp "sort" $qp_sort "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({portfolio_id: (encode-path-segment $portfolio_id)} | format pattern "/me/portfolios/{portfolio_id}/videos") $qp)
   let accept_val = "application/vnd.vimeo.video+json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"containing_uri": $containing_uri, "filter": $filter, "filter_embeddable": $filter_embeddable, "page": $page, "per_page": $per_page, "sort": $qp_sort} | compact), body: null}
 }
 
 # Remove a video from a portfolio
@@ -3213,10 +3351,12 @@ export def "me-portfolios-videos delete-from-alt1" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($portfolio_id | is-empty) { error make --unspanned { msg: "path parameter 'portfolio_id' must be non-empty" } }
+  if ($video_id | is-empty) { error make --unspanned { msg: "path parameter 'video_id' must be non-empty" } }
   let full_url = (build-url $base ({portfolio_id: (encode-path-segment $portfolio_id), video_id: (encode-path-segment $video_id)} | format pattern "/me/portfolios/{portfolio_id}/videos/{video_id}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
 }
 
 # Get a specific video in a portfolio
@@ -3238,10 +3378,12 @@ export def "me-portfolios-videos get-alt1" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($portfolio_id | is-empty) { error make --unspanned { msg: "path parameter 'portfolio_id' must be non-empty" } }
+  if ($video_id | is-empty) { error make --unspanned { msg: "path parameter 'video_id' must be non-empty" } }
   let full_url = (build-url $base ({portfolio_id: (encode-path-segment $portfolio_id), video_id: (encode-path-segment $video_id)} | format pattern "/me/portfolios/{portfolio_id}/videos/{video_id}"))
   let accept_val = "application/vnd.vimeo.video+json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
 }
 
 # Add a video to a portfolio
@@ -3263,10 +3405,12 @@ export def "me-portfolios-videos create-to-alt1" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($portfolio_id | is-empty) { error make --unspanned { msg: "path parameter 'portfolio_id' must be non-empty" } }
+  if ($video_id | is-empty) { error make --unspanned { msg: "path parameter 'video_id' must be non-empty" } }
   let full_url = (build-url $base ({portfolio_id: (encode-path-segment $portfolio_id), video_id: (encode-path-segment $video_id)} | format pattern "/me/portfolios/{portfolio_id}/videos/{video_id}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
 }
 
 # Get all the embed presets that a user has created
@@ -3292,7 +3436,7 @@ export def "me-presets list" [
   let full_url = (build-url $base "/me/presets" $qp)
   let accept_val = "application/vnd.vimeo.preset+json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"page": $page, "per_page": $per_page} | compact), body: null}
 }
 
 # Get a specific embed preset
@@ -3313,10 +3457,11 @@ export def "me-presets get-embed-alt1" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($preset_id | is-empty) { error make --unspanned { msg: "path parameter 'preset_id' must be non-empty" } }
   let full_url = (build-url $base ({preset_id: (encode-path-segment $preset_id)} | format pattern "/me/presets/{preset_id}"))
   let accept_val = "application/vnd.vimeo.preset+json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
 }
 
 # Edit an embed preset
@@ -3339,12 +3484,13 @@ export def "me-presets update-edit-embed-alt1" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($preset_id | is-empty) { error make --unspanned { msg: "path parameter 'preset_id' must be non-empty" } }
   let full_url = (build-url $base ({preset_id: (encode-path-segment $preset_id)} | format pattern "/me/presets/{preset_id}"))
   let req_body = $body
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else if (($input | is-not-empty) and ($req_body | is-empty)) { $input } else { $req_body }
   let accept_val = "application/vnd.vimeo.preset+json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "patch" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/vnd.vimeo.preset+json" $req_body
+  do-request "patch" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/vnd.vimeo.preset+json" $req_body {query: {}, body: $req_body}
 }
 
 # Get all the videos that have been added to an embed preset
@@ -3367,11 +3513,12 @@ export def "me-presets-videos get-embed-alt1" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($preset_id | is-empty) { error make --unspanned { msg: "path parameter 'preset_id' must be non-empty" } }
   let qp = [(serialize-qp "page" $page "scalar") (serialize-qp "per_page" $per_page "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({preset_id: (encode-path-segment $preset_id)} | format pattern "/me/presets/{preset_id}/videos") $qp)
   let accept_val = "application/vnd.vimeo.video+json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"page": $page, "per_page": $per_page} | compact), body: null}
 }
 
 # Get all the projects that belong to a user
@@ -3399,7 +3546,7 @@ export def "me-projects list" [
   let full_url = (build-url $base "/me/projects" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"direction": $direction, "page": $page, "per_page": $per_page, "sort": $qp_sort} | compact), body: null}
 }
 
 # Create a project
@@ -3426,7 +3573,7 @@ export def "me-projects create-alt1" [
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: {}, body: $req_body}
 }
 
 # Delete a project
@@ -3448,11 +3595,12 @@ export def "me-projects delete-alt1" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($project_id | is-empty) { error make --unspanned { msg: "path parameter 'project_id' must be non-empty" } }
   let qp = [(serialize-qp "should_delete_clips" $should_delete_clips "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({project_id: (encode-path-segment $project_id)} | format pattern "/me/projects/{project_id}") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"should_delete_clips": $should_delete_clips} | compact), body: null}
 }
 
 # Get a specific project
@@ -3473,10 +3621,11 @@ export def "me-projects get-alt1" [
 ]: nothing -> record<created_time: string, metadata: record<connections: record<videos: record>>, modified_time: string, name: string, resource_key: string, uri: string, user: record<account: string, bio: string, content_filter: list<string>, created_time: string, email: string, link: string, location: string, metadata: record<connections: record, interactions: record>, name: string, pictures: record<active: bool, link: string, resource_key: string, sizes: list, type: string, uri: string>, preferences: record<videos: record>, resource_key: string, upload_quota: record<lifetime: record, periodic: record, space: record>, uri: string, websites: list<record>>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($project_id | is-empty) { error make --unspanned { msg: "path parameter 'project_id' must be non-empty" } }
   let full_url = (build-url $base ({project_id: (encode-path-segment $project_id)} | format pattern "/me/projects/{project_id}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
 }
 
 # Edit a project
@@ -3499,19 +3648,20 @@ export def "me-projects update-edit-alt1" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($project_id | is-empty) { error make --unspanned { msg: "path parameter 'project_id' must be non-empty" } }
   let full_url = (build-url $base ({project_id: (encode-path-segment $project_id)} | format pattern "/me/projects/{project_id}"))
   let req_body = {"name": $name} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "patch" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body
+  do-request "patch" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: {}, body: $req_body}
 }
 
 # Remove a list of videos from a project
 #
 # DELETE /me/projects/{project_id}/videos
 # operationId: remove_videos_from_project_alt1
-export def "me-projects-videos delete-from-alt1-by-project_id" [
+export def "me-projects-videos delete-from-alt1-by-project-id" [
   project_id: float
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -3527,11 +3677,12 @@ export def "me-projects-videos delete-from-alt1-by-project_id" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($project_id | is-empty) { error make --unspanned { msg: "path parameter 'project_id' must be non-empty" } }
   let qp = [(serialize-qp "should_delete_clips" $should_delete_clips "scalar") (serialize-qp "uris" $uris "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({project_id: (encode-path-segment $project_id)} | format pattern "/me/projects/{project_id}/videos") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"should_delete_clips": $should_delete_clips, "uris": $uris} | compact), body: null}
 }
 
 # Get all the videos in a project
@@ -3556,18 +3707,19 @@ export def "me-projects-videos get-alt1" [
 ]: nothing -> table<categories: list<record>, content_rating: list<string>, context: record<action: string, resource: record, resource_type: string>, created_time: string, description: string, duration: float, embed: record<buttons: record, color: string, logos: record, playbar: bool, speed: bool, title: record, uri: string, volume: bool>, height: float, language: string, last_user_action_event_date: string, license: string, link: string, metadata: record<connections: record, interactions: record>, modified_time: string, name: string, parent_folder: record<created_time: string, metadata: record, modified_time: string, name: string, resource_key: string, uri: string, user: record>, password: string, pictures: record<active: bool, link: string, resource_key: string, sizes: list, type: string, uri: string>, privacy: record<add: bool, comments: string, download: bool, embed: string, view: string>, release_time: string, resource_key: string, spatial: record<director_timeline: list, field_of_view: float, projection: string, stereo_format: string>, stats: record<plays: float>, status: string, tags: list<record>, transcode: record<status: string>, upload: record<approach: string, complete_uri: string, form: string, link: string, redirect_url: string, size: float, status: string, upload_link: string>, uri: string, user: record<account: string, bio: string, content_filter: list, created_time: string, email: string, link: string, location: string, metadata: record, name: string, pictures: record, preferences: record, resource_key: string, upload_quota: record, uri: string, websites: list>, width: float> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($project_id | is-empty) { error make --unspanned { msg: "path parameter 'project_id' must be non-empty" } }
   let qp = [(serialize-qp "direction" $direction "scalar") (serialize-qp "page" $page "scalar") (serialize-qp "per_page" $per_page "scalar") (serialize-qp "sort" $qp_sort "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({project_id: (encode-path-segment $project_id)} | format pattern "/me/projects/{project_id}/videos") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"direction": $direction, "page": $page, "per_page": $per_page, "sort": $qp_sort} | compact), body: null}
 }
 
 # Add a list of videos to a project
 #
 # PUT /me/projects/{project_id}/videos
 # operationId: add_videos_to_project_alt1
-export def "me-projects-videos create-to-alt1-by-project_id" [
+export def "me-projects-videos create-to-alt1-by-project-id" [
   project_id: float
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -3582,18 +3734,19 @@ export def "me-projects-videos create-to-alt1-by-project_id" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($project_id | is-empty) { error make --unspanned { msg: "path parameter 'project_id' must be non-empty" } }
   let qp = [(serialize-qp "uris" $uris "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({project_id: (encode-path-segment $project_id)} | format pattern "/me/projects/{project_id}/videos") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"uris": $uris} | compact), body: null}
 }
 
 # Remove a specific video from a project
 #
 # DELETE /me/projects/{project_id}/videos/{video_id}
 # operationId: remove_video_from_project_alt1
-export def "me-projects-videos delete-from-alt1-by-project_id-video_id" [
+export def "me-projects-videos delete-from-alt1-by-project-id-video-id" [
   project_id: float
   video_id: float
   --base-url(-b): string@base-url-completer # API base URL
@@ -3608,17 +3761,19 @@ export def "me-projects-videos delete-from-alt1-by-project_id-video_id" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($project_id | is-empty) { error make --unspanned { msg: "path parameter 'project_id' must be non-empty" } }
+  if ($video_id | is-empty) { error make --unspanned { msg: "path parameter 'video_id' must be non-empty" } }
   let full_url = (build-url $base ({project_id: (encode-path-segment $project_id), video_id: (encode-path-segment $video_id)} | format pattern "/me/projects/{project_id}/videos/{video_id}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
 }
 
 # Add a specific video to a project
 #
 # PUT /me/projects/{project_id}/videos/{video_id}
 # operationId: add_video_to_project_alt1
-export def "me-projects-videos create-to-alt1-by-project_id-video_id" [
+export def "me-projects-videos create-to-alt1-by-project-id-video-id" [
   project_id: float
   video_id: float
   --base-url(-b): string@base-url-completer # API base URL
@@ -3633,10 +3788,12 @@ export def "me-projects-videos create-to-alt1-by-project_id-video_id" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($project_id | is-empty) { error make --unspanned { msg: "path parameter 'project_id' must be non-empty" } }
+  if ($video_id | is-empty) { error make --unspanned { msg: "path parameter 'video_id' must be non-empty" } }
   let full_url = (build-url $base ({project_id: (encode-path-segment $project_id), video_id: (encode-path-segment $video_id)} | format pattern "/me/projects/{project_id}/videos/{video_id}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
 }
 
 # Get all the videos that a user has uploaded
@@ -3669,7 +3826,7 @@ export def "me-videos get-alt1" [
   let full_url = (build-url $base "/me/videos" $qp)
   let accept_val = "application/vnd.vimeo.video+json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"containing_uri": $containing_uri, "direction": $direction, "filter": $filter, "filter_embeddable": $filter_embeddable, "filter_playable": $filter_playable, "page": $page, "per_page": $per_page, "query": $query, "sort": $qp_sort} | compact), body: null}
 }
 
 # Upload a video
@@ -3696,7 +3853,7 @@ export def "me-videos upload-alt1" [
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else if (($input | is-not-empty) and ($req_body | is-empty)) { $input } else { $req_body }
   let accept_val = "application/vnd.vimeo.video+json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/vnd.vimeo.video+json" $req_body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/vnd.vimeo.video+json" $req_body {query: {}, body: $req_body}
 }
 
 # Check if a user owns a video
@@ -3717,10 +3874,11 @@ export def "me-videos check-if-user-owns-alt1" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($video_id | is-empty) { error make --unspanned { msg: "path parameter 'video_id' must be non-empty" } }
   let full_url = (build-url $base ({video_id: (encode-path-segment $video_id)} | format pattern "/me/videos/{video_id}"))
   let accept_val = "application/vnd.vimeo.video+json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
 }
 
 # Delete a user's watch history
@@ -3743,7 +3901,7 @@ export def "me-watched-videos delete-watch-history" [
   let full_url = (build-url $base "/me/watched/videos")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
 }
 
 # Get all the videos that a user has watched
@@ -3769,7 +3927,7 @@ export def "me-watched-videos get-watch-history" [
   let full_url = (build-url $base "/me/watched/videos" $qp)
   let accept_val = "application/vnd.vimeo.video+json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"page": $page, "per_page": $per_page} | compact), body: null}
 }
 
 # Delete a specific video from a user's watch history
@@ -3790,10 +3948,11 @@ export def "me-watched-videos delete-from-watch-history" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($video_id | is-empty) { error make --unspanned { msg: "path parameter 'video_id' must be non-empty" } }
   let full_url = (build-url $base ({video_id: (encode-path-segment $video_id)} | format pattern "/me/watched/videos/{video_id}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
 }
 
 # Get all the videos in a user's Watch Later queue
@@ -3824,7 +3983,7 @@ export def "me-watchlater get-watch-later-queue-alt1" [
   let full_url = (build-url $base "/me/watchlater" $qp)
   let accept_val = "application/vnd.vimeo.video+json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"direction": $direction, "filter": $filter, "filter_embeddable": $filter_embeddable, "page": $page, "per_page": $per_page, "query": $query, "sort": $qp_sort} | compact), body: null}
 }
 
 # Remove a video from a user's Watch Later queue
@@ -3845,10 +4004,11 @@ export def "me-watchlater delete-from-watch-later-alt1" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($video_id | is-empty) { error make --unspanned { msg: "path parameter 'video_id' must be non-empty" } }
   let full_url = (build-url $base ({video_id: (encode-path-segment $video_id)} | format pattern "/me/watchlater/{video_id}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
 }
 
 # Check if a user has added a specific video to their Watch Later queue
@@ -3869,10 +4029,11 @@ export def "me-watchlater check-watch-later-queue-alt1" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($video_id | is-empty) { error make --unspanned { msg: "path parameter 'video_id' must be non-empty" } }
   let full_url = (build-url $base ({video_id: (encode-path-segment $video_id)} | format pattern "/me/watchlater/{video_id}"))
   let accept_val = "application/vnd.vimeo.video+json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
 }
 
 # Add a video to a user's Watch Later queue
@@ -3893,10 +4054,11 @@ export def "me-watchlater create-to-watch-later-alt1" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($video_id | is-empty) { error make --unspanned { msg: "path parameter 'video_id' must be non-empty" } }
   let full_url = (build-url $base ({video_id: (encode-path-segment $video_id)} | format pattern "/me/watchlater/{video_id}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
 }
 
 # Exchange an authorization code for an access token
@@ -3923,7 +4085,7 @@ export def "oauth-access-token create-exchange-auth-code" [
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else if (($input | is-not-empty) and ($req_body | is-empty)) { $input } else { $req_body }
   let accept_val = "application/vnd.vimeo.auth+json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/vnd.vimeo.auth+json" $req_body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/vnd.vimeo.auth+json" $req_body {query: {}, body: $req_body}
 }
 
 # Authorize a client with OAuth
@@ -3950,7 +4112,7 @@ export def "oauth-authorize-client create-auth" [
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else if (($input | is-not-empty) and ($req_body | is-empty)) { $input } else { $req_body }
   let accept_val = "application/vnd.vimeo.auth+json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/vnd.vimeo.auth+json" $req_body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/vnd.vimeo.auth+json" $req_body {query: {}, body: $req_body}
 }
 
 # Convert OAuth 1 access tokens to OAuth 2 access tokens
@@ -3977,7 +4139,7 @@ export def "oauth-authorize-vimeo-oauth1 create-convert-access-token" [
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else if (($input | is-not-empty) and ($req_body | is-empty)) { $input } else { $req_body }
   let accept_val = "application/vnd.vimeo.auth+json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/vnd.vimeo.auth+json" $req_body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/vnd.vimeo.auth+json" $req_body {query: {}, body: $req_body}
 }
 
 # Verify an OAuth 2 token
@@ -4000,7 +4162,7 @@ export def "oauth-verify verify-token" [
   let full_url = (build-url $base "/oauth/verify")
   let accept_val = "application/vnd.vimeo.auth+json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
 }
 
 # Get all On Demand genres
@@ -4023,7 +4185,7 @@ export def "ondemand-genres list" [
   let full_url = (build-url $base "/ondemand/genres")
   let accept_val = "application/vnd.vimeo.ondemand.genre+json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
 }
 
 # Get a specific On Demand genre
@@ -4044,10 +4206,11 @@ export def "ondemand-genres get-vod" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($genre_id | is-empty) { error make --unspanned { msg: "path parameter 'genre_id' must be non-empty" } }
   let full_url = (build-url $base ({genre_id: (encode-path-segment $genre_id)} | format pattern "/ondemand/genres/{genre_id}"))
   let accept_val = "application/vnd.vimeo.ondemand.genre+json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
 }
 
 # Get all the On Demand pages in a genre
@@ -4074,11 +4237,12 @@ export def "ondemand-genres-pages get-vods" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($genre_id | is-empty) { error make --unspanned { msg: "path parameter 'genre_id' must be non-empty" } }
   let qp = [(serialize-qp "direction" $direction "scalar") (serialize-qp "filter" $filter "scalar") (serialize-qp "page" $page "scalar") (serialize-qp "per_page" $per_page "scalar") (serialize-qp "query" $query "scalar") (serialize-qp "sort" $qp_sort "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({genre_id: (encode-path-segment $genre_id)} | format pattern "/ondemand/genres/{genre_id}/pages") $qp)
   let accept_val = "application/vnd.vimeo.ondemand.page+json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"direction": $direction, "filter": $filter, "page": $page, "per_page": $per_page, "query": $query, "sort": $qp_sort} | compact), body: null}
 }
 
 # Get a specific On Demand page in a genre
@@ -4100,10 +4264,12 @@ export def "ondemand-genres-pages get-vod" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($genre_id | is-empty) { error make --unspanned { msg: "path parameter 'genre_id' must be non-empty" } }
+  if ($ondemand_id | is-empty) { error make --unspanned { msg: "path parameter 'ondemand_id' must be non-empty" } }
   let full_url = (build-url $base ({genre_id: (encode-path-segment $genre_id), ondemand_id: (encode-path-segment $ondemand_id)} | format pattern "/ondemand/genres/{genre_id}/pages/{ondemand_id}"))
   let accept_val = "application/vnd.vimeo.ondemand.page+json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
 }
 
 # Delete a draft of an On Demand page
@@ -4124,10 +4290,11 @@ export def "ondemand-pages delete-vod-draft" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($ondemand_id | is-empty) { error make --unspanned { msg: "path parameter 'ondemand_id' must be non-empty" } }
   let full_url = (build-url $base ({ondemand_id: (encode-path-segment $ondemand_id)} | format pattern "/ondemand/pages/{ondemand_id}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
 }
 
 # Get a specific On Demand page
@@ -4148,10 +4315,11 @@ export def "ondemand-pages get-vod" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($ondemand_id | is-empty) { error make --unspanned { msg: "path parameter 'ondemand_id' must be non-empty" } }
   let full_url = (build-url $base ({ondemand_id: (encode-path-segment $ondemand_id)} | format pattern "/ondemand/pages/{ondemand_id}"))
   let accept_val = "application/vnd.vimeo.ondemand.page+json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
 }
 
 # Edit an On Demand page
@@ -4174,12 +4342,13 @@ export def "ondemand-pages update-edit-vod" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($ondemand_id | is-empty) { error make --unspanned { msg: "path parameter 'ondemand_id' must be non-empty" } }
   let full_url = (build-url $base ({ondemand_id: (encode-path-segment $ondemand_id)} | format pattern "/ondemand/pages/{ondemand_id}"))
   let req_body = $body
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else if (($input | is-not-empty) and ($req_body | is-empty)) { $input } else { $req_body }
   let accept_val = "application/vnd.vimeo.ondemand.page+json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "patch" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/vnd.vimeo.ondemand.page+json" $req_body
+  do-request "patch" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/vnd.vimeo.ondemand.page+json" $req_body {query: {}, body: $req_body}
 }
 
 # Get all the backgrounds of an On Demand page
@@ -4202,11 +4371,12 @@ export def "ondemand-pages-backgrounds list" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($ondemand_id | is-empty) { error make --unspanned { msg: "path parameter 'ondemand_id' must be non-empty" } }
   let qp = [(serialize-qp "page" $page "scalar") (serialize-qp "per_page" $per_page "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({ondemand_id: (encode-path-segment $ondemand_id)} | format pattern "/ondemand/pages/{ondemand_id}/backgrounds") $qp)
   let accept_val = "application/vnd.vimeo.picture+json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"page": $page, "per_page": $per_page} | compact), body: null}
 }
 
 # Add a background to an On Demand page
@@ -4227,10 +4397,11 @@ export def "ondemand-pages-backgrounds create-vod" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($ondemand_id | is-empty) { error make --unspanned { msg: "path parameter 'ondemand_id' must be non-empty" } }
   let full_url = (build-url $base ({ondemand_id: (encode-path-segment $ondemand_id)} | format pattern "/ondemand/pages/{ondemand_id}/backgrounds"))
   let accept_val = "application/vnd.vimeo.picture+json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
 }
 
 # Remove a background from an On Demand page
@@ -4252,10 +4423,12 @@ export def "ondemand-pages-backgrounds delete-vod" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($ondemand_id | is-empty) { error make --unspanned { msg: "path parameter 'ondemand_id' must be non-empty" } }
+  if ($background_id | is-empty) { error make --unspanned { msg: "path parameter 'background_id' must be non-empty" } }
   let full_url = (build-url $base ({ondemand_id: (encode-path-segment $ondemand_id), background_id: (encode-path-segment $background_id)} | format pattern "/ondemand/pages/{ondemand_id}/backgrounds/{background_id}"))
   let accept_val = "application/vnd.vimeo.picture+json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
 }
 
 # Get a specific background of an On Demand page
@@ -4277,10 +4450,12 @@ export def "ondemand-pages-backgrounds get-vod" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($ondemand_id | is-empty) { error make --unspanned { msg: "path parameter 'ondemand_id' must be non-empty" } }
+  if ($background_id | is-empty) { error make --unspanned { msg: "path parameter 'background_id' must be non-empty" } }
   let full_url = (build-url $base ({ondemand_id: (encode-path-segment $ondemand_id), background_id: (encode-path-segment $background_id)} | format pattern "/ondemand/pages/{ondemand_id}/backgrounds/{background_id}"))
   let accept_val = "application/vnd.vimeo.picture+json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
 }
 
 # Edit a background of an On Demand page
@@ -4304,12 +4479,14 @@ export def "ondemand-pages-backgrounds update-edit-vod" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($ondemand_id | is-empty) { error make --unspanned { msg: "path parameter 'ondemand_id' must be non-empty" } }
+  if ($background_id | is-empty) { error make --unspanned { msg: "path parameter 'background_id' must be non-empty" } }
   let full_url = (build-url $base ({ondemand_id: (encode-path-segment $ondemand_id), background_id: (encode-path-segment $background_id)} | format pattern "/ondemand/pages/{ondemand_id}/backgrounds/{background_id}"))
   let req_body = $body
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else if (($input | is-not-empty) and ($req_body | is-empty)) { $input } else { $req_body }
   let accept_val = "application/vnd.vimeo.picture+json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "patch" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/vnd.vimeo.picture+json" $req_body
+  do-request "patch" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/vnd.vimeo.picture+json" $req_body {query: {}, body: $req_body}
 }
 
 # Get all the genres of an On Demand page
@@ -4330,10 +4507,11 @@ export def "ondemand-pages-genres list" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($ondemand_id | is-empty) { error make --unspanned { msg: "path parameter 'ondemand_id' must be non-empty" } }
   let full_url = (build-url $base ({ondemand_id: (encode-path-segment $ondemand_id)} | format pattern "/ondemand/pages/{ondemand_id}/genres"))
   let accept_val = "application/vnd.vimeo.ondemand.genre+json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
 }
 
 # Remove a genre from an On Demand page
@@ -4355,10 +4533,12 @@ export def "ondemand-pages-genres delete-vod" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($ondemand_id | is-empty) { error make --unspanned { msg: "path parameter 'ondemand_id' must be non-empty" } }
+  if ($genre_id | is-empty) { error make --unspanned { msg: "path parameter 'genre_id' must be non-empty" } }
   let full_url = (build-url $base ({ondemand_id: (encode-path-segment $ondemand_id), genre_id: (encode-path-segment $genre_id)} | format pattern "/ondemand/pages/{ondemand_id}/genres/{genre_id}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
 }
 
 # Check whether an On Demand page belongs to a genre
@@ -4380,10 +4560,12 @@ export def "ondemand-pages-genres get-vod" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($ondemand_id | is-empty) { error make --unspanned { msg: "path parameter 'ondemand_id' must be non-empty" } }
+  if ($genre_id | is-empty) { error make --unspanned { msg: "path parameter 'genre_id' must be non-empty" } }
   let full_url = (build-url $base ({ondemand_id: (encode-path-segment $ondemand_id), genre_id: (encode-path-segment $genre_id)} | format pattern "/ondemand/pages/{ondemand_id}/genres/{genre_id}"))
   let accept_val = "application/vnd.vimeo.ondemand.genre+json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
 }
 
 # Add a genre to an On Demand page
@@ -4405,10 +4587,12 @@ export def "ondemand-pages-genres create-vod" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($ondemand_id | is-empty) { error make --unspanned { msg: "path parameter 'ondemand_id' must be non-empty" } }
+  if ($genre_id | is-empty) { error make --unspanned { msg: "path parameter 'genre_id' must be non-empty" } }
   let full_url = (build-url $base ({ondemand_id: (encode-path-segment $ondemand_id), genre_id: (encode-path-segment $genre_id)} | format pattern "/ondemand/pages/{ondemand_id}/genres/{genre_id}"))
   let accept_val = "application/vnd.vimeo.ondemand.genre+json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
 }
 
 # Get all the users who have liked a video on an On Demand page
@@ -4434,11 +4618,12 @@ export def "ondemand-pages-likes get-vod" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($ondemand_id | is-empty) { error make --unspanned { msg: "path parameter 'ondemand_id' must be non-empty" } }
   let qp = [(serialize-qp "direction" $direction "scalar") (serialize-qp "filter" $filter "scalar") (serialize-qp "page" $page "scalar") (serialize-qp "per_page" $per_page "scalar") (serialize-qp "sort" $qp_sort "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({ondemand_id: (encode-path-segment $ondemand_id)} | format pattern "/ondemand/pages/{ondemand_id}/likes") $qp)
   let accept_val = "application/vnd.vimeo.user+json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"direction": $direction, "filter": $filter, "page": $page, "per_page": $per_page, "sort": $qp_sort} | compact), body: null}
 }
 
 # Get all the posters of an On Demand page
@@ -4461,11 +4646,12 @@ export def "ondemand-pages-pictures get-vod-posters" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($ondemand_id | is-empty) { error make --unspanned { msg: "path parameter 'ondemand_id' must be non-empty" } }
   let qp = [(serialize-qp "page" $page "scalar") (serialize-qp "per_page" $per_page "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({ondemand_id: (encode-path-segment $ondemand_id)} | format pattern "/ondemand/pages/{ondemand_id}/pictures") $qp)
   let accept_val = "application/vnd.vimeo.picture+json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"page": $page, "per_page": $per_page} | compact), body: null}
 }
 
 # Add a poster to an On Demand page
@@ -4486,10 +4672,11 @@ export def "ondemand-pages-pictures create-vod-poster" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($ondemand_id | is-empty) { error make --unspanned { msg: "path parameter 'ondemand_id' must be non-empty" } }
   let full_url = (build-url $base ({ondemand_id: (encode-path-segment $ondemand_id)} | format pattern "/ondemand/pages/{ondemand_id}/pictures"))
   let accept_val = "application/vnd.vimeo.picture+json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
 }
 
 # Get a specific poster of an On Demand page
@@ -4511,10 +4698,12 @@ export def "ondemand-pages-pictures get-vod" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($ondemand_id | is-empty) { error make --unspanned { msg: "path parameter 'ondemand_id' must be non-empty" } }
+  if ($poster_id | is-empty) { error make --unspanned { msg: "path parameter 'poster_id' must be non-empty" } }
   let full_url = (build-url $base ({ondemand_id: (encode-path-segment $ondemand_id), poster_id: (encode-path-segment $poster_id)} | format pattern "/ondemand/pages/{ondemand_id}/pictures/{poster_id}"))
   let accept_val = "application/vnd.vimeo.picture+json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
 }
 
 # Edit a poster of an On Demand page
@@ -4538,12 +4727,14 @@ export def "ondemand-pages-pictures update-edit-vod" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($ondemand_id | is-empty) { error make --unspanned { msg: "path parameter 'ondemand_id' must be non-empty" } }
+  if ($poster_id | is-empty) { error make --unspanned { msg: "path parameter 'poster_id' must be non-empty" } }
   let full_url = (build-url $base ({ondemand_id: (encode-path-segment $ondemand_id), poster_id: (encode-path-segment $poster_id)} | format pattern "/ondemand/pages/{ondemand_id}/pictures/{poster_id}"))
   let req_body = $body
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else if (($input | is-not-empty) and ($req_body | is-empty)) { $input } else { $req_body }
   let accept_val = "application/vnd.vimeo.picture+json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "patch" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/vnd.vimeo.picture+json" $req_body
+  do-request "patch" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/vnd.vimeo.picture+json" $req_body {query: {}, body: $req_body}
 }
 
 # Get all the promotions on an On Demand page
@@ -4567,11 +4758,12 @@ export def "ondemand-pages-promotions list" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($ondemand_id | is-empty) { error make --unspanned { msg: "path parameter 'ondemand_id' must be non-empty" } }
   let qp = [(serialize-qp "filter" $filter "scalar") (serialize-qp "page" $page "scalar") (serialize-qp "per_page" $per_page "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({ondemand_id: (encode-path-segment $ondemand_id)} | format pattern "/ondemand/pages/{ondemand_id}/promotions") $qp)
   let accept_val = "application/vnd.vimeo.ondemand.promotion+json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"filter": $filter, "page": $page, "per_page": $per_page} | compact), body: null}
 }
 
 # Add a promotion to an On Demand page
@@ -4594,12 +4786,13 @@ export def "ondemand-pages-promotions create-vod" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($ondemand_id | is-empty) { error make --unspanned { msg: "path parameter 'ondemand_id' must be non-empty" } }
   let full_url = (build-url $base ({ondemand_id: (encode-path-segment $ondemand_id)} | format pattern "/ondemand/pages/{ondemand_id}/promotions"))
   let req_body = $body
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else if (($input | is-not-empty) and ($req_body | is-empty)) { $input } else { $req_body }
   let accept_val = "application/vnd.vimeo.ondemand.promotion+json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/vnd.vimeo.ondemand.promotion+json" $req_body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/vnd.vimeo.ondemand.promotion+json" $req_body {query: {}, body: $req_body}
 }
 
 # Remove a promotion from an On Demand page
@@ -4621,10 +4814,12 @@ export def "ondemand-pages-promotions delete-vod" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($ondemand_id | is-empty) { error make --unspanned { msg: "path parameter 'ondemand_id' must be non-empty" } }
+  if ($promotion_id | is-empty) { error make --unspanned { msg: "path parameter 'promotion_id' must be non-empty" } }
   let full_url = (build-url $base ({ondemand_id: (encode-path-segment $ondemand_id), promotion_id: (encode-path-segment $promotion_id)} | format pattern "/ondemand/pages/{ondemand_id}/promotions/{promotion_id}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
 }
 
 # Get a specific promotion on an On Demand page
@@ -4646,10 +4841,12 @@ export def "ondemand-pages-promotions get-vod" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($ondemand_id | is-empty) { error make --unspanned { msg: "path parameter 'ondemand_id' must be non-empty" } }
+  if ($promotion_id | is-empty) { error make --unspanned { msg: "path parameter 'promotion_id' must be non-empty" } }
   let full_url = (build-url $base ({ondemand_id: (encode-path-segment $ondemand_id), promotion_id: (encode-path-segment $promotion_id)} | format pattern "/ondemand/pages/{ondemand_id}/promotions/{promotion_id}"))
   let accept_val = "application/vnd.vimeo.ondemand.promotion+json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
 }
 
 # Get all the codes of a promotion on an On Demand page
@@ -4673,18 +4870,20 @@ export def "ondemand-pages-promotions-codes get-vod" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($ondemand_id | is-empty) { error make --unspanned { msg: "path parameter 'ondemand_id' must be non-empty" } }
+  if ($promotion_id | is-empty) { error make --unspanned { msg: "path parameter 'promotion_id' must be non-empty" } }
   let qp = [(serialize-qp "page" $page "scalar") (serialize-qp "per_page" $per_page "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({ondemand_id: (encode-path-segment $ondemand_id), promotion_id: (encode-path-segment $promotion_id)} | format pattern "/ondemand/pages/{ondemand_id}/promotions/{promotion_id}/codes") $qp)
   let accept_val = "application/vnd.vimeo.ondemand.promocode+json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"page": $page, "per_page": $per_page} | compact), body: null}
 }
 
 # Remove a list of regions from an On Demand page
 #
 # DELETE /ondemand/pages/{ondemand_id}/regions
 # operationId: delete_vod_regions
-export def "ondemand-pages-regions delete-vod-by-ondemand_id" [
+export def "ondemand-pages-regions delete-vod-by-ondemand-id" [
   ondemand_id: float
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -4700,12 +4899,13 @@ export def "ondemand-pages-regions delete-vod-by-ondemand_id" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($ondemand_id | is-empty) { error make --unspanned { msg: "path parameter 'ondemand_id' must be non-empty" } }
   let full_url = (build-url $base ({ondemand_id: (encode-path-segment $ondemand_id)} | format pattern "/ondemand/pages/{ondemand_id}/regions"))
   let req_body = $body
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else if (($input | is-not-empty) and ($req_body | is-empty)) { $input } else { $req_body }
   let accept_val = "application/vnd.vimeo.ondemand.region+json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/vnd.vimeo.ondemand.region+json" $req_body
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/vnd.vimeo.ondemand.region+json" $req_body {query: {}, body: $req_body}
 }
 
 # Get all the regions of an On Demand page
@@ -4726,10 +4926,11 @@ export def "ondemand-pages-regions list" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($ondemand_id | is-empty) { error make --unspanned { msg: "path parameter 'ondemand_id' must be non-empty" } }
   let full_url = (build-url $base ({ondemand_id: (encode-path-segment $ondemand_id)} | format pattern "/ondemand/pages/{ondemand_id}/regions"))
   let accept_val = "application/vnd.vimeo.ondemand.region+json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
 }
 
 # Add a list of regions to an On Demand page
@@ -4752,19 +4953,20 @@ export def "ondemand-pages-regions update-vod" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($ondemand_id | is-empty) { error make --unspanned { msg: "path parameter 'ondemand_id' must be non-empty" } }
   let full_url = (build-url $base ({ondemand_id: (encode-path-segment $ondemand_id)} | format pattern "/ondemand/pages/{ondemand_id}/regions"))
   let req_body = $body
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else if (($input | is-not-empty) and ($req_body | is-empty)) { $input } else { $req_body }
   let accept_val = "application/vnd.vimeo.ondemand.region+json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/vnd.vimeo.ondemand.region+json" $req_body
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/vnd.vimeo.ondemand.region+json" $req_body {query: {}, body: $req_body}
 }
 
 # Remove a specific region from an On Demand page
 #
 # DELETE /ondemand/pages/{ondemand_id}/regions/{country}
 # operationId: delete_vod_region
-export def "ondemand-pages-regions delete-vod-by-ondemand_id-country" [
+export def "ondemand-pages-regions delete-vod-by-ondemand-id-country" [
   ondemand_id: float
   country: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -4779,10 +4981,12 @@ export def "ondemand-pages-regions delete-vod-by-ondemand_id-country" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($ondemand_id | is-empty) { error make --unspanned { msg: "path parameter 'ondemand_id' must be non-empty" } }
+  if ($country | is-empty) { error make --unspanned { msg: "path parameter 'country' must be non-empty" } }
   let full_url = (build-url $base ({ondemand_id: (encode-path-segment $ondemand_id), country: (encode-path-segment $country)} | format pattern "/ondemand/pages/{ondemand_id}/regions/{country}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
 }
 
 # Get a specific region of an On Demand page
@@ -4804,10 +5008,12 @@ export def "ondemand-pages-regions get-vod" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($ondemand_id | is-empty) { error make --unspanned { msg: "path parameter 'ondemand_id' must be non-empty" } }
+  if ($country | is-empty) { error make --unspanned { msg: "path parameter 'country' must be non-empty" } }
   let full_url = (build-url $base ({ondemand_id: (encode-path-segment $ondemand_id), country: (encode-path-segment $country)} | format pattern "/ondemand/pages/{ondemand_id}/regions/{country}"))
   let accept_val = "application/vnd.vimeo.ondemand.region+json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
 }
 
 # Add a specific region to an On Demand page
@@ -4829,10 +5035,12 @@ export def "ondemand-pages-regions create-vod" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($ondemand_id | is-empty) { error make --unspanned { msg: "path parameter 'ondemand_id' must be non-empty" } }
+  if ($country | is-empty) { error make --unspanned { msg: "path parameter 'country' must be non-empty" } }
   let full_url = (build-url $base ({ondemand_id: (encode-path-segment $ondemand_id), country: (encode-path-segment $country)} | format pattern "/ondemand/pages/{ondemand_id}/regions/{country}"))
   let accept_val = "application/vnd.vimeo.ondemand.region+json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
 }
 
 # Get all the seasons on an On Demand page
@@ -4858,11 +5066,12 @@ export def "ondemand-pages-seasons list" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($ondemand_id | is-empty) { error make --unspanned { msg: "path parameter 'ondemand_id' must be non-empty" } }
   let qp = [(serialize-qp "direction" $direction "scalar") (serialize-qp "filter" $filter "scalar") (serialize-qp "page" $page "scalar") (serialize-qp "per_page" $per_page "scalar") (serialize-qp "sort" $qp_sort "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({ondemand_id: (encode-path-segment $ondemand_id)} | format pattern "/ondemand/pages/{ondemand_id}/seasons") $qp)
   let accept_val = "application/vnd.vimeo.ondemand.season+json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"direction": $direction, "filter": $filter, "page": $page, "per_page": $per_page, "sort": $qp_sort} | compact), body: null}
 }
 
 # Get a specific season on an On Demand page
@@ -4884,10 +5093,12 @@ export def "ondemand-pages-seasons get-vod" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($ondemand_id | is-empty) { error make --unspanned { msg: "path parameter 'ondemand_id' must be non-empty" } }
+  if ($season_id | is-empty) { error make --unspanned { msg: "path parameter 'season_id' must be non-empty" } }
   let full_url = (build-url $base ({ondemand_id: (encode-path-segment $ondemand_id), season_id: (encode-path-segment $season_id)} | format pattern "/ondemand/pages/{ondemand_id}/seasons/{season_id}"))
   let accept_val = "application/vnd.vimeo.ondemand.season+json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
 }
 
 # Get all the videos in a season on an On Demand page
@@ -4913,11 +5124,13 @@ export def "ondemand-pages-seasons-videos get-vod" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($ondemand_id | is-empty) { error make --unspanned { msg: "path parameter 'ondemand_id' must be non-empty" } }
+  if ($season_id | is-empty) { error make --unspanned { msg: "path parameter 'season_id' must be non-empty" } }
   let qp = [(serialize-qp "filter" $filter "scalar") (serialize-qp "page" $page "scalar") (serialize-qp "per_page" $per_page "scalar") (serialize-qp "sort" $qp_sort "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({ondemand_id: (encode-path-segment $ondemand_id), season_id: (encode-path-segment $season_id)} | format pattern "/ondemand/pages/{ondemand_id}/seasons/{season_id}/videos") $qp)
   let accept_val = "application/vnd.vimeo.video+json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"filter": $filter, "page": $page, "per_page": $per_page, "sort": $qp_sort} | compact), body: null}
 }
 
 # Get all the videos on an On Demand page
@@ -4943,11 +5156,12 @@ export def "ondemand-pages-videos list" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($ondemand_id | is-empty) { error make --unspanned { msg: "path parameter 'ondemand_id' must be non-empty" } }
   let qp = [(serialize-qp "direction" $direction "scalar") (serialize-qp "filter" $filter "scalar") (serialize-qp "page" $page "scalar") (serialize-qp "per_page" $per_page "scalar") (serialize-qp "sort" $qp_sort "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({ondemand_id: (encode-path-segment $ondemand_id)} | format pattern "/ondemand/pages/{ondemand_id}/videos") $qp)
   let accept_val = "application/vnd.vimeo.ondemand.video+json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"direction": $direction, "filter": $filter, "page": $page, "per_page": $per_page, "sort": $qp_sort} | compact), body: null}
 }
 
 # Remove a video from an On Demand page
@@ -4969,10 +5183,12 @@ export def "ondemand-pages-videos delete-from-vod" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($ondemand_id | is-empty) { error make --unspanned { msg: "path parameter 'ondemand_id' must be non-empty" } }
+  if ($video_id | is-empty) { error make --unspanned { msg: "path parameter 'video_id' must be non-empty" } }
   let full_url = (build-url $base ({ondemand_id: (encode-path-segment $ondemand_id), video_id: (encode-path-segment $video_id)} | format pattern "/ondemand/pages/{ondemand_id}/videos/{video_id}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
 }
 
 # Get a specific video on an On Demand page
@@ -4994,10 +5210,12 @@ export def "ondemand-pages-videos get-vod" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($ondemand_id | is-empty) { error make --unspanned { msg: "path parameter 'ondemand_id' must be non-empty" } }
+  if ($video_id | is-empty) { error make --unspanned { msg: "path parameter 'video_id' must be non-empty" } }
   let full_url = (build-url $base ({ondemand_id: (encode-path-segment $ondemand_id), video_id: (encode-path-segment $video_id)} | format pattern "/ondemand/pages/{ondemand_id}/videos/{video_id}"))
   let accept_val = "application/vnd.vimeo.ondemand.video+json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
 }
 
 # Add a video to an On Demand page
@@ -5021,12 +5239,14 @@ export def "ondemand-pages-videos create-to-vod" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($ondemand_id | is-empty) { error make --unspanned { msg: "path parameter 'ondemand_id' must be non-empty" } }
+  if ($video_id | is-empty) { error make --unspanned { msg: "path parameter 'video_id' must be non-empty" } }
   let full_url = (build-url $base ({ondemand_id: (encode-path-segment $ondemand_id), video_id: (encode-path-segment $video_id)} | format pattern "/ondemand/pages/{ondemand_id}/videos/{video_id}"))
   let req_body = $body
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else if (($input | is-not-empty) and ($req_body | is-empty)) { $input } else { $req_body }
   let accept_val = "application/vnd.vimeo.ondemand.video+json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/vnd.vimeo.ondemand.video+json" $req_body
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/vnd.vimeo.ondemand.video+json" $req_body {query: {}, body: $req_body}
 }
 
 # Get all the On Demand regions
@@ -5049,7 +5269,7 @@ export def "ondemand-regions list" [
   let full_url = (build-url $base "/ondemand/regions")
   let accept_val = "application/vnd.vimeo.ondemand.region+json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
 }
 
 # Get a specific On Demand region
@@ -5070,10 +5290,11 @@ export def "ondemand-regions get" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($country | is-empty) { error make --unspanned { msg: "path parameter 'country' must be non-empty" } }
   let full_url = (build-url $base ({country: (encode-path-segment $country)} | format pattern "/ondemand/regions/{country}"))
   let accept_val = "application/vnd.vimeo.ondemand.region+json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
 }
 
 # Get a specific tag
@@ -5094,10 +5315,11 @@ export def "tags get" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($word | is-empty) { error make --unspanned { msg: "path parameter 'word' must be non-empty" } }
   let full_url = (build-url $base ({word: (encode-path-segment $word)} | format pattern "/tags/{word}"))
   let accept_val = "application/vnd.vimeo.tag+json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
 }
 
 # Get all the videos with a specific tag
@@ -5122,11 +5344,12 @@ export def "tags-videos get" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($word | is-empty) { error make --unspanned { msg: "path parameter 'word' must be non-empty" } }
   let qp = [(serialize-qp "direction" $direction "scalar") (serialize-qp "page" $page "scalar") (serialize-qp "per_page" $per_page "scalar") (serialize-qp "sort" $qp_sort "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({word: (encode-path-segment $word)} | format pattern "/tags/{word}/videos") $qp)
   let accept_val = "application/vnd.vimeo.video+json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"direction": $direction, "page": $page, "per_page": $per_page, "sort": $qp_sort} | compact), body: null}
 }
 
 # Revoke the current access token
@@ -5149,7 +5372,7 @@ export def "tokens delete" [
   let full_url = (build-url $base "/tokens")
   let accept_val = "application/vnd.vimeo.auth+json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
 }
 
 # Search for users
@@ -5178,7 +5401,7 @@ export def "users list" [
   let full_url = (build-url $base "/users" $qp)
   let accept_val = "application/vnd.vimeo.user+json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"direction": $direction, "page": $page, "per_page": $per_page, "query": $query, "sort": $qp_sort} | compact), body: null}
 }
 
 # Get a user
@@ -5199,10 +5422,11 @@ export def "users get" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($user_id | is-empty) { error make --unspanned { msg: "path parameter 'user_id' must be non-empty" } }
   let full_url = (build-url $base ({user_id: (encode-path-segment $user_id)} | format pattern "/users/{user_id}"))
   let accept_val = "application/vnd.vimeo.user+json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
 }
 
 # Edit a user
@@ -5225,12 +5449,13 @@ export def "users update-edit" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($user_id | is-empty) { error make --unspanned { msg: "path parameter 'user_id' must be non-empty" } }
   let full_url = (build-url $base ({user_id: (encode-path-segment $user_id)} | format pattern "/users/{user_id}"))
   let req_body = $body
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else if (($input | is-not-empty) and ($req_body | is-empty)) { $input } else { $req_body }
   let accept_val = "application/vnd.vimeo.user+json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "patch" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/vnd.vimeo.user+json" $req_body
+  do-request "patch" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/vnd.vimeo.user+json" $req_body {query: {}, body: $req_body}
 }
 
 # Get all the albums that belong to a user
@@ -5256,11 +5481,12 @@ export def "users-albums list" [
 ]: nothing -> table<allow_continuous_play: bool, allow_downloads: bool, allow_share: bool, brand_color: string, created_time: string, custom_logo: record<active: bool, link: string, resource_key: string, sizes: list, type: string, uri: string>, description: string, domain: string, duration: float, embed: record<html: string>, embed_brand_color: bool, embed_custom_logo: bool, hide_nav: bool, hide_vimeo_logo: bool, layout: string, link: string, metadata: record<connections: record, interactions: record>, modified_time: string, name: string, pictures: record<active: bool, link: string, resource_key: string, sizes: list, type: string, uri: string>, privacy: record<password: string, view: string>, resource_key: string, review_mode: bool, sort: string, theme: string, uri: string, url: string, use_custom_domain: bool, user: record<account: string, bio: string, content_filter: list, created_time: string, email: string, link: string, location: string, metadata: record, name: string, pictures: record, preferences: record, resource_key: string, upload_quota: record, uri: string, websites: list>, web_brand_color: bool, web_custom_logo: bool> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($user_id | is-empty) { error make --unspanned { msg: "path parameter 'user_id' must be non-empty" } }
   let qp = [(serialize-qp "direction" $direction "scalar") (serialize-qp "page" $page "scalar") (serialize-qp "per_page" $per_page "scalar") (serialize-qp "query" $query "scalar") (serialize-qp "sort" $qp_sort "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({user_id: (encode-path-segment $user_id)} | format pattern "/users/{user_id}/albums") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"direction": $direction, "page": $page, "per_page": $per_page, "query": $query, "sort": $qp_sort} | compact), body: null}
 }
 
 # Create an album
@@ -5283,12 +5509,13 @@ export def "users-albums create" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($user_id | is-empty) { error make --unspanned { msg: "path parameter 'user_id' must be non-empty" } }
   let full_url = (build-url $base ({user_id: (encode-path-segment $user_id)} | format pattern "/users/{user_id}/albums"))
   let req_body = $body
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else if (($input | is-not-empty) and ($req_body | is-empty)) { $input } else { $req_body }
   let accept_val = "application/vnd.vimeo.album+json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/vnd.vimeo.album+json" $req_body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/vnd.vimeo.album+json" $req_body {query: {}, body: $req_body}
 }
 
 # Delete an album
@@ -5310,10 +5537,12 @@ export def "users-albums delete" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($user_id | is-empty) { error make --unspanned { msg: "path parameter 'user_id' must be non-empty" } }
+  if ($album_id | is-empty) { error make --unspanned { msg: "path parameter 'album_id' must be non-empty" } }
   let full_url = (build-url $base ({user_id: (encode-path-segment $user_id), album_id: (encode-path-segment $album_id)} | format pattern "/users/{user_id}/albums/{album_id}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
 }
 
 # Get a specific album
@@ -5335,10 +5564,12 @@ export def "users-albums get" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($user_id | is-empty) { error make --unspanned { msg: "path parameter 'user_id' must be non-empty" } }
+  if ($album_id | is-empty) { error make --unspanned { msg: "path parameter 'album_id' must be non-empty" } }
   let full_url = (build-url $base ({user_id: (encode-path-segment $user_id), album_id: (encode-path-segment $album_id)} | format pattern "/users/{user_id}/albums/{album_id}"))
   let accept_val = "application/vnd.vimeo.album+json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
 }
 
 # Edit an album
@@ -5362,12 +5593,14 @@ export def "users-albums update-edit" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($user_id | is-empty) { error make --unspanned { msg: "path parameter 'user_id' must be non-empty" } }
+  if ($album_id | is-empty) { error make --unspanned { msg: "path parameter 'album_id' must be non-empty" } }
   let full_url = (build-url $base ({user_id: (encode-path-segment $user_id), album_id: (encode-path-segment $album_id)} | format pattern "/users/{user_id}/albums/{album_id}"))
   let req_body = $body
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else if (($input | is-not-empty) and ($req_body | is-empty)) { $input } else { $req_body }
   let accept_val = "application/vnd.vimeo.album+json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "patch" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/vnd.vimeo.album+json" $req_body
+  do-request "patch" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/vnd.vimeo.album+json" $req_body {query: {}, body: $req_body}
 }
 
 # Get all the custom upload thumbnails of an album
@@ -5391,11 +5624,13 @@ export def "users-albums-custom-thumbnails get-thumbs" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($user_id | is-empty) { error make --unspanned { msg: "path parameter 'user_id' must be non-empty" } }
+  if ($album_id | is-empty) { error make --unspanned { msg: "path parameter 'album_id' must be non-empty" } }
   let qp = [(serialize-qp "page" $page "scalar") (serialize-qp "per_page" $per_page "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({user_id: (encode-path-segment $user_id), album_id: (encode-path-segment $album_id)} | format pattern "/users/{user_id}/albums/{album_id}/custom_thumbnails") $qp)
   let accept_val = "application/vnd.vimeo.picture+json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"page": $page, "per_page": $per_page} | compact), body: null}
 }
 
 # Add a custom uploaded thumbnail
@@ -5417,10 +5652,12 @@ export def "users-albums-custom-thumbnails create-thumb" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($user_id | is-empty) { error make --unspanned { msg: "path parameter 'user_id' must be non-empty" } }
+  if ($album_id | is-empty) { error make --unspanned { msg: "path parameter 'album_id' must be non-empty" } }
   let full_url = (build-url $base ({user_id: (encode-path-segment $user_id), album_id: (encode-path-segment $album_id)} | format pattern "/users/{user_id}/albums/{album_id}/custom_thumbnails"))
   let accept_val = "application/vnd.vimeo.picture+json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
 }
 
 # Remove a custom uploaded album thumbnail
@@ -5443,10 +5680,13 @@ export def "users-albums-custom-thumbnails delete" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($user_id | is-empty) { error make --unspanned { msg: "path parameter 'user_id' must be non-empty" } }
+  if ($album_id | is-empty) { error make --unspanned { msg: "path parameter 'album_id' must be non-empty" } }
+  if ($thumbnail_id | is-empty) { error make --unspanned { msg: "path parameter 'thumbnail_id' must be non-empty" } }
   let full_url = (build-url $base ({user_id: (encode-path-segment $user_id), album_id: (encode-path-segment $album_id), thumbnail_id: (encode-path-segment $thumbnail_id)} | format pattern "/users/{user_id}/albums/{album_id}/custom_thumbnails/{thumbnail_id}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
 }
 
 # Get a specific custom uploaded album thumbnail
@@ -5469,10 +5709,13 @@ export def "users-albums-custom-thumbnails get" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($user_id | is-empty) { error make --unspanned { msg: "path parameter 'user_id' must be non-empty" } }
+  if ($album_id | is-empty) { error make --unspanned { msg: "path parameter 'album_id' must be non-empty" } }
+  if ($thumbnail_id | is-empty) { error make --unspanned { msg: "path parameter 'thumbnail_id' must be non-empty" } }
   let full_url = (build-url $base ({user_id: (encode-path-segment $user_id), album_id: (encode-path-segment $album_id), thumbnail_id: (encode-path-segment $thumbnail_id)} | format pattern "/users/{user_id}/albums/{album_id}/custom_thumbnails/{thumbnail_id}"))
   let accept_val = "application/vnd.vimeo.picture+json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
 }
 
 # Replace a custom uploaded album thumbnail
@@ -5497,12 +5740,15 @@ export def "users-albums-custom-thumbnails update-thumb" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($user_id | is-empty) { error make --unspanned { msg: "path parameter 'user_id' must be non-empty" } }
+  if ($album_id | is-empty) { error make --unspanned { msg: "path parameter 'album_id' must be non-empty" } }
+  if ($thumbnail_id | is-empty) { error make --unspanned { msg: "path parameter 'thumbnail_id' must be non-empty" } }
   let full_url = (build-url $base ({user_id: (encode-path-segment $user_id), album_id: (encode-path-segment $album_id), thumbnail_id: (encode-path-segment $thumbnail_id)} | format pattern "/users/{user_id}/albums/{album_id}/custom_thumbnails/{thumbnail_id}"))
   let req_body = $body
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else if (($input | is-not-empty) and ($req_body | is-empty)) { $input } else { $req_body }
   let accept_val = "application/vnd.vimeo.picture+json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "patch" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/vnd.vimeo.picture+json" $req_body
+  do-request "patch" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/vnd.vimeo.picture+json" $req_body {query: {}, body: $req_body}
 }
 
 # Get all the custom logos of an album
@@ -5526,11 +5772,13 @@ export def "users-albums-logos list" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($user_id | is-empty) { error make --unspanned { msg: "path parameter 'user_id' must be non-empty" } }
+  if ($album_id | is-empty) { error make --unspanned { msg: "path parameter 'album_id' must be non-empty" } }
   let qp = [(serialize-qp "page" $page "scalar") (serialize-qp "per_page" $per_page "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({user_id: (encode-path-segment $user_id), album_id: (encode-path-segment $album_id)} | format pattern "/users/{user_id}/albums/{album_id}/logos") $qp)
   let accept_val = "application/vnd.vimeo.picture+json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"page": $page, "per_page": $per_page} | compact), body: null}
 }
 
 # Add a custom album logo
@@ -5552,10 +5800,12 @@ export def "users-albums-logos create" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($user_id | is-empty) { error make --unspanned { msg: "path parameter 'user_id' must be non-empty" } }
+  if ($album_id | is-empty) { error make --unspanned { msg: "path parameter 'album_id' must be non-empty" } }
   let full_url = (build-url $base ({user_id: (encode-path-segment $user_id), album_id: (encode-path-segment $album_id)} | format pattern "/users/{user_id}/albums/{album_id}/logos"))
   let accept_val = "application/vnd.vimeo.picture+json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
 }
 
 # Remove a custom album logo
@@ -5578,10 +5828,13 @@ export def "users-albums-logos delete" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($user_id | is-empty) { error make --unspanned { msg: "path parameter 'user_id' must be non-empty" } }
+  if ($album_id | is-empty) { error make --unspanned { msg: "path parameter 'album_id' must be non-empty" } }
+  if ($logo_id | is-empty) { error make --unspanned { msg: "path parameter 'logo_id' must be non-empty" } }
   let full_url = (build-url $base ({user_id: (encode-path-segment $user_id), album_id: (encode-path-segment $album_id), logo_id: (encode-path-segment $logo_id)} | format pattern "/users/{user_id}/albums/{album_id}/logos/{logo_id}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
 }
 
 # Get a specific custom album logo
@@ -5604,10 +5857,13 @@ export def "users-albums-logos get" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($user_id | is-empty) { error make --unspanned { msg: "path parameter 'user_id' must be non-empty" } }
+  if ($album_id | is-empty) { error make --unspanned { msg: "path parameter 'album_id' must be non-empty" } }
+  if ($logo_id | is-empty) { error make --unspanned { msg: "path parameter 'logo_id' must be non-empty" } }
   let full_url = (build-url $base ({user_id: (encode-path-segment $user_id), album_id: (encode-path-segment $album_id), logo_id: (encode-path-segment $logo_id)} | format pattern "/users/{user_id}/albums/{album_id}/logos/{logo_id}"))
   let accept_val = "application/vnd.vimeo.picture+json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
 }
 
 # Replace a custom album logo
@@ -5632,12 +5888,15 @@ export def "users-albums-logos update" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($user_id | is-empty) { error make --unspanned { msg: "path parameter 'user_id' must be non-empty" } }
+  if ($album_id | is-empty) { error make --unspanned { msg: "path parameter 'album_id' must be non-empty" } }
+  if ($logo_id | is-empty) { error make --unspanned { msg: "path parameter 'logo_id' must be non-empty" } }
   let full_url = (build-url $base ({user_id: (encode-path-segment $user_id), album_id: (encode-path-segment $album_id), logo_id: (encode-path-segment $logo_id)} | format pattern "/users/{user_id}/albums/{album_id}/logos/{logo_id}"))
   let req_body = $body
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else if (($input | is-not-empty) and ($req_body | is-empty)) { $input } else { $req_body }
   let accept_val = "application/vnd.vimeo.picture+json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "patch" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/vnd.vimeo.picture+json" $req_body
+  do-request "patch" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/vnd.vimeo.picture+json" $req_body {query: {}, body: $req_body}
 }
 
 # Get all the videos in an album
@@ -5669,11 +5928,13 @@ export def "users-albums-videos list" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($user_id | is-empty) { error make --unspanned { msg: "path parameter 'user_id' must be non-empty" } }
+  if ($album_id | is-empty) { error make --unspanned { msg: "path parameter 'album_id' must be non-empty" } }
   let qp = [(serialize-qp "containing_uri" $containing_uri "scalar") (serialize-qp "direction" $direction "scalar") (serialize-qp "filter" $filter "scalar") (serialize-qp "filter_embeddable" $filter_embeddable "scalar") (serialize-qp "page" $page "scalar") (serialize-qp "password" $password "scalar") (serialize-qp "per_page" $per_page "scalar") (serialize-qp "query" $query "scalar") (serialize-qp "sort" $qp_sort "scalar") (serialize-qp "weak_search" $weak_search "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({user_id: (encode-path-segment $user_id), album_id: (encode-path-segment $album_id)} | format pattern "/users/{user_id}/albums/{album_id}/videos") $qp)
   let accept_val = "application/vnd.vimeo.video+json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"containing_uri": $containing_uri, "direction": $direction, "filter": $filter, "filter_embeddable": $filter_embeddable, "page": $page, "password": $password, "per_page": $per_page, "query": $query, "sort": $qp_sort, "weak_search": $weak_search} | compact), body: null}
 }
 
 # Replace all the videos in an album
@@ -5697,12 +5958,14 @@ export def "users-albums-videos update" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($user_id | is-empty) { error make --unspanned { msg: "path parameter 'user_id' must be non-empty" } }
+  if ($album_id | is-empty) { error make --unspanned { msg: "path parameter 'album_id' must be non-empty" } }
   let full_url = (build-url $base ({user_id: (encode-path-segment $user_id), album_id: (encode-path-segment $album_id)} | format pattern "/users/{user_id}/albums/{album_id}/videos"))
   let req_body = {"videos": $videos} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: {}, body: $req_body}
 }
 
 # Remove a video from an album
@@ -5725,10 +5988,13 @@ export def "users-albums-videos delete" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($user_id | is-empty) { error make --unspanned { msg: "path parameter 'user_id' must be non-empty" } }
+  if ($album_id | is-empty) { error make --unspanned { msg: "path parameter 'album_id' must be non-empty" } }
+  if ($video_id | is-empty) { error make --unspanned { msg: "path parameter 'video_id' must be non-empty" } }
   let full_url = (build-url $base ({user_id: (encode-path-segment $user_id), album_id: (encode-path-segment $album_id), video_id: (encode-path-segment $video_id)} | format pattern "/users/{user_id}/albums/{album_id}/videos/{video_id}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
 }
 
 # Get a specific video in an album
@@ -5752,11 +6018,14 @@ export def "users-albums-videos get" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($user_id | is-empty) { error make --unspanned { msg: "path parameter 'user_id' must be non-empty" } }
+  if ($album_id | is-empty) { error make --unspanned { msg: "path parameter 'album_id' must be non-empty" } }
+  if ($video_id | is-empty) { error make --unspanned { msg: "path parameter 'video_id' must be non-empty" } }
   let qp = [(serialize-qp "password" $password "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({user_id: (encode-path-segment $user_id), album_id: (encode-path-segment $album_id), video_id: (encode-path-segment $video_id)} | format pattern "/users/{user_id}/albums/{album_id}/videos/{video_id}") $qp)
   let accept_val = "application/vnd.vimeo.video+json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"password": $password} | compact), body: null}
 }
 
 # Add a specific video to an album
@@ -5779,10 +6048,13 @@ export def "users-albums-videos create" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($user_id | is-empty) { error make --unspanned { msg: "path parameter 'user_id' must be non-empty" } }
+  if ($album_id | is-empty) { error make --unspanned { msg: "path parameter 'album_id' must be non-empty" } }
+  if ($video_id | is-empty) { error make --unspanned { msg: "path parameter 'video_id' must be non-empty" } }
   let full_url = (build-url $base ({user_id: (encode-path-segment $user_id), album_id: (encode-path-segment $album_id), video_id: (encode-path-segment $video_id)} | format pattern "/users/{user_id}/albums/{album_id}/videos/{video_id}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
 }
 
 # Set a video as the album thumbnail
@@ -5807,12 +6079,15 @@ export def "users-albums-videos-set-album-thumbnail update" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($user_id | is-empty) { error make --unspanned { msg: "path parameter 'user_id' must be non-empty" } }
+  if ($album_id | is-empty) { error make --unspanned { msg: "path parameter 'album_id' must be non-empty" } }
+  if ($video_id | is-empty) { error make --unspanned { msg: "path parameter 'video_id' must be non-empty" } }
   let full_url = (build-url $base ({user_id: (encode-path-segment $user_id), album_id: (encode-path-segment $album_id), video_id: (encode-path-segment $video_id)} | format pattern "/users/{user_id}/albums/{album_id}/videos/{video_id}/set_album_thumbnail"))
   let req_body = {"time_code": $time_code} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: {}, body: $req_body}
 }
 
 # Get all the videos in which a user appears
@@ -5840,11 +6115,12 @@ export def "users-appearances get" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($user_id | is-empty) { error make --unspanned { msg: "path parameter 'user_id' must be non-empty" } }
   let qp = [(serialize-qp "direction" $direction "scalar") (serialize-qp "filter" $filter "scalar") (serialize-qp "filter_embeddable" $filter_embeddable "scalar") (serialize-qp "page" $page "scalar") (serialize-qp "per_page" $per_page "scalar") (serialize-qp "query" $query "scalar") (serialize-qp "sort" $qp_sort "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({user_id: (encode-path-segment $user_id)} | format pattern "/users/{user_id}/appearances") $qp)
   let accept_val = "application/vnd.vimeo.video+json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"direction": $direction, "filter": $filter, "filter_embeddable": $filter_embeddable, "page": $page, "per_page": $per_page, "query": $query, "sort": $qp_sort} | compact), body: null}
 }
 
 # Get all the categories that a user follows
@@ -5869,11 +6145,12 @@ export def "users-categories get-category-subscriptions" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($user_id | is-empty) { error make --unspanned { msg: "path parameter 'user_id' must be non-empty" } }
   let qp = [(serialize-qp "direction" $direction "scalar") (serialize-qp "page" $page "scalar") (serialize-qp "per_page" $per_page "scalar") (serialize-qp "sort" $qp_sort "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({user_id: (encode-path-segment $user_id)} | format pattern "/users/{user_id}/categories") $qp)
   let accept_val = "application/vnd.vimeo.category+json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"direction": $direction, "page": $page, "per_page": $per_page, "sort": $qp_sort} | compact), body: null}
 }
 
 # Unsubscribe a user from a category
@@ -5895,10 +6172,12 @@ export def "users-categories unsubscribe" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($user_id | is-empty) { error make --unspanned { msg: "path parameter 'user_id' must be non-empty" } }
+  if ($category | is-empty) { error make --unspanned { msg: "path parameter 'category' must be non-empty" } }
   let full_url = (build-url $base ({user_id: (encode-path-segment $user_id), category: (encode-path-segment $category)} | format pattern "/users/{user_id}/categories/{category}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
 }
 
 # Check if a user follows a category
@@ -5920,10 +6199,12 @@ export def "users-categories check-if-subscribed" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($user_id | is-empty) { error make --unspanned { msg: "path parameter 'user_id' must be non-empty" } }
+  if ($category | is-empty) { error make --unspanned { msg: "path parameter 'category' must be non-empty" } }
   let full_url = (build-url $base ({user_id: (encode-path-segment $user_id), category: (encode-path-segment $category)} | format pattern "/users/{user_id}/categories/{category}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
 }
 
 # Subscribe a user to a single category
@@ -5945,10 +6226,12 @@ export def "users-categories subscribe" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($user_id | is-empty) { error make --unspanned { msg: "path parameter 'user_id' must be non-empty" } }
+  if ($category | is-empty) { error make --unspanned { msg: "path parameter 'category' must be non-empty" } }
   let full_url = (build-url $base ({user_id: (encode-path-segment $user_id), category: (encode-path-segment $category)} | format pattern "/users/{user_id}/categories/{category}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
 }
 
 # Get all the channels to which a user subscribes
@@ -5975,11 +6258,12 @@ export def "users-channels get-subscriptions" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($user_id | is-empty) { error make --unspanned { msg: "path parameter 'user_id' must be non-empty" } }
   let qp = [(serialize-qp "direction" $direction "scalar") (serialize-qp "filter" $filter "scalar") (serialize-qp "page" $page "scalar") (serialize-qp "per_page" $per_page "scalar") (serialize-qp "query" $query "scalar") (serialize-qp "sort" $qp_sort "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({user_id: (encode-path-segment $user_id)} | format pattern "/users/{user_id}/channels") $qp)
   let accept_val = "application/vnd.vimeo.channel+json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"direction": $direction, "filter": $filter, "page": $page, "per_page": $per_page, "query": $query, "sort": $qp_sort} | compact), body: null}
 }
 
 # Unsubscribe a user from a specific channel
@@ -6001,10 +6285,12 @@ export def "users-channels unsubscribe" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($user_id | is-empty) { error make --unspanned { msg: "path parameter 'user_id' must be non-empty" } }
+  if ($channel_id | is-empty) { error make --unspanned { msg: "path parameter 'channel_id' must be non-empty" } }
   let full_url = (build-url $base ({user_id: (encode-path-segment $user_id), channel_id: (encode-path-segment $channel_id)} | format pattern "/users/{user_id}/channels/{channel_id}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
 }
 
 # Check if a user follows a channel
@@ -6026,10 +6312,12 @@ export def "users-channels check-if-subscribed" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($user_id | is-empty) { error make --unspanned { msg: "path parameter 'user_id' must be non-empty" } }
+  if ($channel_id | is-empty) { error make --unspanned { msg: "path parameter 'channel_id' must be non-empty" } }
   let full_url = (build-url $base ({user_id: (encode-path-segment $user_id), channel_id: (encode-path-segment $channel_id)} | format pattern "/users/{user_id}/channels/{channel_id}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
 }
 
 # Subscribe a user to a specific channel
@@ -6051,10 +6339,12 @@ export def "users-channels subscribe" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($user_id | is-empty) { error make --unspanned { msg: "path parameter 'user_id' must be non-empty" } }
+  if ($channel_id | is-empty) { error make --unspanned { msg: "path parameter 'channel_id' must be non-empty" } }
   let full_url = (build-url $base ({user_id: (encode-path-segment $user_id), channel_id: (encode-path-segment $channel_id)} | format pattern "/users/{user_id}/channels/{channel_id}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
 }
 
 # Get all the custom logos that belong to a user
@@ -6075,10 +6365,11 @@ export def "users-customlogos get-custom-logos" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($user_id | is-empty) { error make --unspanned { msg: "path parameter 'user_id' must be non-empty" } }
   let full_url = (build-url $base ({user_id: (encode-path-segment $user_id)} | format pattern "/users/{user_id}/customlogos"))
   let accept_val = "application/vnd.vimeo.picture+json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
 }
 
 # Add a custom logo
@@ -6099,10 +6390,11 @@ export def "users-customlogos create-custom-logo" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($user_id | is-empty) { error make --unspanned { msg: "path parameter 'user_id' must be non-empty" } }
   let full_url = (build-url $base ({user_id: (encode-path-segment $user_id)} | format pattern "/users/{user_id}/customlogos"))
   let accept_val = "application/vnd.vimeo.picture+json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
 }
 
 # Get a specific custom logo
@@ -6124,10 +6416,12 @@ export def "users-customlogos get-custom" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($user_id | is-empty) { error make --unspanned { msg: "path parameter 'user_id' must be non-empty" } }
+  if ($logo_id | is-empty) { error make --unspanned { msg: "path parameter 'logo_id' must be non-empty" } }
   let full_url = (build-url $base ({user_id: (encode-path-segment $user_id), logo_id: (encode-path-segment $logo_id)} | format pattern "/users/{user_id}/customlogos/{logo_id}"))
   let accept_val = "application/vnd.vimeo.picture+json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
 }
 
 # Get all videos in a user's feed
@@ -6152,11 +6446,12 @@ export def "users-feed get" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($user_id | is-empty) { error make --unspanned { msg: "path parameter 'user_id' must be non-empty" } }
   let qp = [(serialize-qp "offset" $offset "scalar") (serialize-qp "page" $page "scalar") (serialize-qp "per_page" $per_page "scalar") (serialize-qp "type" $type "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({user_id: (encode-path-segment $user_id)} | format pattern "/users/{user_id}/feed") $qp)
   let accept_val = "application/vnd.vimeo.activity+json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"offset": $offset, "page": $page, "per_page": $per_page, "type": $type} | compact), body: null}
 }
 
 # Get all the followers of a user
@@ -6182,11 +6477,12 @@ export def "users-followers get" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($user_id | is-empty) { error make --unspanned { msg: "path parameter 'user_id' must be non-empty" } }
   let qp = [(serialize-qp "direction" $direction "scalar") (serialize-qp "page" $page "scalar") (serialize-qp "per_page" $per_page "scalar") (serialize-qp "query" $query "scalar") (serialize-qp "sort" $qp_sort "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({user_id: (encode-path-segment $user_id)} | format pattern "/users/{user_id}/followers") $qp)
   let accept_val = "application/vnd.vimeo.user+json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"direction": $direction, "page": $page, "per_page": $per_page, "query": $query, "sort": $qp_sort} | compact), body: null}
 }
 
 # Get all the users that a user is following
@@ -6213,11 +6509,12 @@ export def "users-following get" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($user_id | is-empty) { error make --unspanned { msg: "path parameter 'user_id' must be non-empty" } }
   let qp = [(serialize-qp "direction" $direction "scalar") (serialize-qp "filter" $filter "scalar") (serialize-qp "page" $page "scalar") (serialize-qp "per_page" $per_page "scalar") (serialize-qp "query" $query "scalar") (serialize-qp "sort" $qp_sort "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({user_id: (encode-path-segment $user_id)} | format pattern "/users/{user_id}/following") $qp)
   let accept_val = "application/vnd.vimeo.user+json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"direction": $direction, "filter": $filter, "page": $page, "per_page": $per_page, "query": $query, "sort": $qp_sort} | compact), body: null}
 }
 
 # Follow a list of users
@@ -6240,12 +6537,13 @@ export def "users-following create-follow" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($user_id | is-empty) { error make --unspanned { msg: "path parameter 'user_id' must be non-empty" } }
   let full_url = (build-url $base ({user_id: (encode-path-segment $user_id)} | format pattern "/users/{user_id}/following"))
   let req_body = {"users": $users} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: {}, body: $req_body}
 }
 
 # Unfollow a user
@@ -6267,10 +6565,12 @@ export def "users-following delete-unfollow" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($user_id | is-empty) { error make --unspanned { msg: "path parameter 'user_id' must be non-empty" } }
+  if ($follow_user_id | is-empty) { error make --unspanned { msg: "path parameter 'follow_user_id' must be non-empty" } }
   let full_url = (build-url $base ({user_id: (encode-path-segment $user_id), follow_user_id: (encode-path-segment $follow_user_id)} | format pattern "/users/{user_id}/following/{follow_user_id}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
 }
 
 # Check if a user is following another user
@@ -6292,10 +6592,12 @@ export def "users-following check-if-is" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($user_id | is-empty) { error make --unspanned { msg: "path parameter 'user_id' must be non-empty" } }
+  if ($follow_user_id | is-empty) { error make --unspanned { msg: "path parameter 'follow_user_id' must be non-empty" } }
   let full_url = (build-url $base ({user_id: (encode-path-segment $user_id), follow_user_id: (encode-path-segment $follow_user_id)} | format pattern "/users/{user_id}/following/{follow_user_id}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
 }
 
 # Follow a specific user
@@ -6317,10 +6619,12 @@ export def "users-following update" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($user_id | is-empty) { error make --unspanned { msg: "path parameter 'user_id' must be non-empty" } }
+  if ($follow_user_id | is-empty) { error make --unspanned { msg: "path parameter 'follow_user_id' must be non-empty" } }
   let full_url = (build-url $base ({user_id: (encode-path-segment $user_id), follow_user_id: (encode-path-segment $follow_user_id)} | format pattern "/users/{user_id}/following/{follow_user_id}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
 }
 
 # Get all the groups that a user has joined
@@ -6347,11 +6651,12 @@ export def "users-groups get" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($user_id | is-empty) { error make --unspanned { msg: "path parameter 'user_id' must be non-empty" } }
   let qp = [(serialize-qp "direction" $direction "scalar") (serialize-qp "filter" $filter "scalar") (serialize-qp "page" $page "scalar") (serialize-qp "per_page" $per_page "scalar") (serialize-qp "query" $query "scalar") (serialize-qp "sort" $qp_sort "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({user_id: (encode-path-segment $user_id)} | format pattern "/users/{user_id}/groups") $qp)
   let accept_val = "application/vnd.vimeo.group+json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"direction": $direction, "filter": $filter, "page": $page, "per_page": $per_page, "query": $query, "sort": $qp_sort} | compact), body: null}
 }
 
 # Remove a user from a group
@@ -6373,10 +6678,12 @@ export def "users-groups delete-leave" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($user_id | is-empty) { error make --unspanned { msg: "path parameter 'user_id' must be non-empty" } }
+  if ($group_id | is-empty) { error make --unspanned { msg: "path parameter 'group_id' must be non-empty" } }
   let full_url = (build-url $base ({user_id: (encode-path-segment $user_id), group_id: (encode-path-segment $group_id)} | format pattern "/users/{user_id}/groups/{group_id}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
 }
 
 # Check if a user has joined a group
@@ -6398,10 +6705,12 @@ export def "users-groups check-if-joined" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($user_id | is-empty) { error make --unspanned { msg: "path parameter 'user_id' must be non-empty" } }
+  if ($group_id | is-empty) { error make --unspanned { msg: "path parameter 'group_id' must be non-empty" } }
   let full_url = (build-url $base ({user_id: (encode-path-segment $user_id), group_id: (encode-path-segment $group_id)} | format pattern "/users/{user_id}/groups/{group_id}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
 }
 
 # Add a user to a group
@@ -6423,10 +6732,12 @@ export def "users-groups update-join" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($user_id | is-empty) { error make --unspanned { msg: "path parameter 'user_id' must be non-empty" } }
+  if ($group_id | is-empty) { error make --unspanned { msg: "path parameter 'group_id' must be non-empty" } }
   let full_url = (build-url $base ({user_id: (encode-path-segment $user_id), group_id: (encode-path-segment $group_id)} | format pattern "/users/{user_id}/groups/{group_id}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
 }
 
 # Get all the videos that a user has liked
@@ -6453,11 +6764,12 @@ export def "users-likes get" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($user_id | is-empty) { error make --unspanned { msg: "path parameter 'user_id' must be non-empty" } }
   let qp = [(serialize-qp "filter" $filter "scalar") (serialize-qp "filter_embeddable" $filter_embeddable "scalar") (serialize-qp "page" $page "scalar") (serialize-qp "per_page" $per_page "scalar") (serialize-qp "query" $query "scalar") (serialize-qp "sort" $qp_sort "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({user_id: (encode-path-segment $user_id)} | format pattern "/users/{user_id}/likes") $qp)
   let accept_val = "application/vnd.vimeo.video+json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"filter": $filter, "filter_embeddable": $filter_embeddable, "page": $page, "per_page": $per_page, "query": $query, "sort": $qp_sort} | compact), body: null}
 }
 
 # Cause a user to unlike a video
@@ -6479,10 +6791,12 @@ export def "users-likes delete-unlike" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($user_id | is-empty) { error make --unspanned { msg: "path parameter 'user_id' must be non-empty" } }
+  if ($video_id | is-empty) { error make --unspanned { msg: "path parameter 'video_id' must be non-empty" } }
   let full_url = (build-url $base ({user_id: (encode-path-segment $user_id), video_id: (encode-path-segment $video_id)} | format pattern "/users/{user_id}/likes/{video_id}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
 }
 
 # Check if a user has liked a video
@@ -6504,10 +6818,12 @@ export def "users-likes check-if-liked" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($user_id | is-empty) { error make --unspanned { msg: "path parameter 'user_id' must be non-empty" } }
+  if ($video_id | is-empty) { error make --unspanned { msg: "path parameter 'video_id' must be non-empty" } }
   let full_url = (build-url $base ({user_id: (encode-path-segment $user_id), video_id: (encode-path-segment $video_id)} | format pattern "/users/{user_id}/likes/{video_id}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
 }
 
 # Cause a user to like a video
@@ -6529,10 +6845,12 @@ export def "users-likes update" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($user_id | is-empty) { error make --unspanned { msg: "path parameter 'user_id' must be non-empty" } }
+  if ($video_id | is-empty) { error make --unspanned { msg: "path parameter 'video_id' must be non-empty" } }
   let full_url = (build-url $base ({user_id: (encode-path-segment $user_id), video_id: (encode-path-segment $video_id)} | format pattern "/users/{user_id}/likes/{video_id}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
 }
 
 # Get all the On Demand pages of a user
@@ -6558,11 +6876,12 @@ export def "users-ondemand-pages get-vods" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($user_id | is-empty) { error make --unspanned { msg: "path parameter 'user_id' must be non-empty" } }
   let qp = [(serialize-qp "direction" $direction "scalar") (serialize-qp "filter" $filter "scalar") (serialize-qp "page" $page "scalar") (serialize-qp "per_page" $per_page "scalar") (serialize-qp "sort" $qp_sort "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({user_id: (encode-path-segment $user_id)} | format pattern "/users/{user_id}/ondemand/pages") $qp)
   let accept_val = "application/vnd.vimeo.ondemand.page+json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"direction": $direction, "filter": $filter, "page": $page, "per_page": $per_page, "sort": $qp_sort} | compact), body: null}
 }
 
 # Create an On Demand page
@@ -6599,12 +6918,13 @@ export def "users-ondemand-pages create-vod" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($user_id | is-empty) { error make --unspanned { msg: "path parameter 'user_id' must be non-empty" } }
   let full_url = (build-url $base ({user_id: (encode-path-segment $user_id)} | format pattern "/users/{user_id}/ondemand/pages"))
   let req_body = {"accepted_currencies": $accepted_currencies, "buy": $buy, "content_rating": $content_rating, "description": $description, "domain_link": $domain_link, "episodes": $episodes, "link": $link, "name": $name, "rent": $rent, "subscription": $subscription, "type": $type} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: {}, body: $req_body}
 }
 
 # Check if a user has made a purchase or rental from an On Demand page
@@ -6625,10 +6945,11 @@ export def "users-ondemand-purchases check-if-vod-was-purchased" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($user_id | is-empty) { error make --unspanned { msg: "path parameter 'user_id' must be non-empty" } }
   let full_url = (build-url $base ({user_id: (encode-path-segment $user_id)} | format pattern "/users/{user_id}/ondemand/purchases"))
   let accept_val = "application/vnd.vimeo.ondemand.page+json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
 }
 
 # Get all the pictures that belong to a user
@@ -6651,11 +6972,12 @@ export def "users-pictures list" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($user_id | is-empty) { error make --unspanned { msg: "path parameter 'user_id' must be non-empty" } }
   let qp = [(serialize-qp "page" $page "scalar") (serialize-qp "per_page" $per_page "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({user_id: (encode-path-segment $user_id)} | format pattern "/users/{user_id}/pictures") $qp)
   let accept_val = "application/vnd.vimeo.picture+json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"page": $page, "per_page": $per_page} | compact), body: null}
 }
 
 # Add a user picture
@@ -6676,10 +6998,11 @@ export def "users-pictures create" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($user_id | is-empty) { error make --unspanned { msg: "path parameter 'user_id' must be non-empty" } }
   let full_url = (build-url $base ({user_id: (encode-path-segment $user_id)} | format pattern "/users/{user_id}/pictures"))
   let accept_val = "application/vnd.vimeo.picture+json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
 }
 
 # Delete a user picture
@@ -6701,10 +7024,12 @@ export def "users-pictures delete" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($user_id | is-empty) { error make --unspanned { msg: "path parameter 'user_id' must be non-empty" } }
+  if ($portraitset_id | is-empty) { error make --unspanned { msg: "path parameter 'portraitset_id' must be non-empty" } }
   let full_url = (build-url $base ({user_id: (encode-path-segment $user_id), portraitset_id: (encode-path-segment $portraitset_id)} | format pattern "/users/{user_id}/pictures/{portraitset_id}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
 }
 
 # Get a specific user picture
@@ -6726,10 +7051,12 @@ export def "users-pictures get" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($user_id | is-empty) { error make --unspanned { msg: "path parameter 'user_id' must be non-empty" } }
+  if ($portraitset_id | is-empty) { error make --unspanned { msg: "path parameter 'portraitset_id' must be non-empty" } }
   let full_url = (build-url $base ({user_id: (encode-path-segment $user_id), portraitset_id: (encode-path-segment $portraitset_id)} | format pattern "/users/{user_id}/pictures/{portraitset_id}"))
   let accept_val = "application/vnd.vimeo.picture+json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
 }
 
 # Edit a user picture
@@ -6753,12 +7080,14 @@ export def "users-pictures update-edit" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($user_id | is-empty) { error make --unspanned { msg: "path parameter 'user_id' must be non-empty" } }
+  if ($portraitset_id | is-empty) { error make --unspanned { msg: "path parameter 'portraitset_id' must be non-empty" } }
   let full_url = (build-url $base ({user_id: (encode-path-segment $user_id), portraitset_id: (encode-path-segment $portraitset_id)} | format pattern "/users/{user_id}/pictures/{portraitset_id}"))
   let req_body = $body
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else if (($input | is-not-empty) and ($req_body | is-empty)) { $input } else { $req_body }
   let accept_val = "application/vnd.vimeo.picture+json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "patch" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/vnd.vimeo.picture+json" $req_body
+  do-request "patch" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/vnd.vimeo.picture+json" $req_body {query: {}, body: $req_body}
 }
 
 # Get all the portfolios that belong to a user
@@ -6784,11 +7113,12 @@ export def "users-portfolios list" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($user_id | is-empty) { error make --unspanned { msg: "path parameter 'user_id' must be non-empty" } }
   let qp = [(serialize-qp "direction" $direction "scalar") (serialize-qp "page" $page "scalar") (serialize-qp "per_page" $per_page "scalar") (serialize-qp "query" $query "scalar") (serialize-qp "sort" $qp_sort "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({user_id: (encode-path-segment $user_id)} | format pattern "/users/{user_id}/portfolios") $qp)
   let accept_val = "application/vnd.vimeo.portfolio+json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"direction": $direction, "page": $page, "per_page": $per_page, "query": $query, "sort": $qp_sort} | compact), body: null}
 }
 
 # Get a specific portfolio
@@ -6810,10 +7140,12 @@ export def "users-portfolios get" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($user_id | is-empty) { error make --unspanned { msg: "path parameter 'user_id' must be non-empty" } }
+  if ($portfolio_id | is-empty) { error make --unspanned { msg: "path parameter 'portfolio_id' must be non-empty" } }
   let full_url = (build-url $base ({user_id: (encode-path-segment $user_id), portfolio_id: (encode-path-segment $portfolio_id)} | format pattern "/users/{user_id}/portfolios/{portfolio_id}"))
   let accept_val = "application/vnd.vimeo.portfolio+json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
 }
 
 # Get all the videos in a portfolio
@@ -6841,11 +7173,13 @@ export def "users-portfolios-videos list" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($user_id | is-empty) { error make --unspanned { msg: "path parameter 'user_id' must be non-empty" } }
+  if ($portfolio_id | is-empty) { error make --unspanned { msg: "path parameter 'portfolio_id' must be non-empty" } }
   let qp = [(serialize-qp "containing_uri" $containing_uri "scalar") (serialize-qp "filter" $filter "scalar") (serialize-qp "filter_embeddable" $filter_embeddable "scalar") (serialize-qp "page" $page "scalar") (serialize-qp "per_page" $per_page "scalar") (serialize-qp "sort" $qp_sort "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({user_id: (encode-path-segment $user_id), portfolio_id: (encode-path-segment $portfolio_id)} | format pattern "/users/{user_id}/portfolios/{portfolio_id}/videos") $qp)
   let accept_val = "application/vnd.vimeo.video+json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"containing_uri": $containing_uri, "filter": $filter, "filter_embeddable": $filter_embeddable, "page": $page, "per_page": $per_page, "sort": $qp_sort} | compact), body: null}
 }
 
 # Remove a video from a portfolio
@@ -6868,10 +7202,13 @@ export def "users-portfolios-videos delete" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($user_id | is-empty) { error make --unspanned { msg: "path parameter 'user_id' must be non-empty" } }
+  if ($portfolio_id | is-empty) { error make --unspanned { msg: "path parameter 'portfolio_id' must be non-empty" } }
+  if ($video_id | is-empty) { error make --unspanned { msg: "path parameter 'video_id' must be non-empty" } }
   let full_url = (build-url $base ({user_id: (encode-path-segment $user_id), portfolio_id: (encode-path-segment $portfolio_id), video_id: (encode-path-segment $video_id)} | format pattern "/users/{user_id}/portfolios/{portfolio_id}/videos/{video_id}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
 }
 
 # Get a specific video in a portfolio
@@ -6894,10 +7231,13 @@ export def "users-portfolios-videos get" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($user_id | is-empty) { error make --unspanned { msg: "path parameter 'user_id' must be non-empty" } }
+  if ($portfolio_id | is-empty) { error make --unspanned { msg: "path parameter 'portfolio_id' must be non-empty" } }
+  if ($video_id | is-empty) { error make --unspanned { msg: "path parameter 'video_id' must be non-empty" } }
   let full_url = (build-url $base ({user_id: (encode-path-segment $user_id), portfolio_id: (encode-path-segment $portfolio_id), video_id: (encode-path-segment $video_id)} | format pattern "/users/{user_id}/portfolios/{portfolio_id}/videos/{video_id}"))
   let accept_val = "application/vnd.vimeo.video+json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
 }
 
 # Add a video to a portfolio
@@ -6920,10 +7260,13 @@ export def "users-portfolios-videos create" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($user_id | is-empty) { error make --unspanned { msg: "path parameter 'user_id' must be non-empty" } }
+  if ($portfolio_id | is-empty) { error make --unspanned { msg: "path parameter 'portfolio_id' must be non-empty" } }
+  if ($video_id | is-empty) { error make --unspanned { msg: "path parameter 'video_id' must be non-empty" } }
   let full_url = (build-url $base ({user_id: (encode-path-segment $user_id), portfolio_id: (encode-path-segment $portfolio_id), video_id: (encode-path-segment $video_id)} | format pattern "/users/{user_id}/portfolios/{portfolio_id}/videos/{video_id}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
 }
 
 # Get all the embed presets that a user has created
@@ -6946,11 +7289,12 @@ export def "users-presets list" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($user_id | is-empty) { error make --unspanned { msg: "path parameter 'user_id' must be non-empty" } }
   let qp = [(serialize-qp "page" $page "scalar") (serialize-qp "per_page" $per_page "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({user_id: (encode-path-segment $user_id)} | format pattern "/users/{user_id}/presets") $qp)
   let accept_val = "application/vnd.vimeo.preset+json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"page": $page, "per_page": $per_page} | compact), body: null}
 }
 
 # Get a specific embed preset
@@ -6972,10 +7316,12 @@ export def "users-presets get-embed" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($user_id | is-empty) { error make --unspanned { msg: "path parameter 'user_id' must be non-empty" } }
+  if ($preset_id | is-empty) { error make --unspanned { msg: "path parameter 'preset_id' must be non-empty" } }
   let full_url = (build-url $base ({user_id: (encode-path-segment $user_id), preset_id: (encode-path-segment $preset_id)} | format pattern "/users/{user_id}/presets/{preset_id}"))
   let accept_val = "application/vnd.vimeo.preset+json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
 }
 
 # Edit an embed preset
@@ -6999,12 +7345,14 @@ export def "users-presets update-edit-embed" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($user_id | is-empty) { error make --unspanned { msg: "path parameter 'user_id' must be non-empty" } }
+  if ($preset_id | is-empty) { error make --unspanned { msg: "path parameter 'preset_id' must be non-empty" } }
   let full_url = (build-url $base ({user_id: (encode-path-segment $user_id), preset_id: (encode-path-segment $preset_id)} | format pattern "/users/{user_id}/presets/{preset_id}"))
   let req_body = $body
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else if (($input | is-not-empty) and ($req_body | is-empty)) { $input } else { $req_body }
   let accept_val = "application/vnd.vimeo.preset+json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "patch" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/vnd.vimeo.preset+json" $req_body
+  do-request "patch" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/vnd.vimeo.preset+json" $req_body {query: {}, body: $req_body}
 }
 
 # Get all the videos that have been added to an embed preset
@@ -7028,11 +7376,13 @@ export def "users-presets-videos get-embed" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($user_id | is-empty) { error make --unspanned { msg: "path parameter 'user_id' must be non-empty" } }
+  if ($preset_id | is-empty) { error make --unspanned { msg: "path parameter 'preset_id' must be non-empty" } }
   let qp = [(serialize-qp "page" $page "scalar") (serialize-qp "per_page" $per_page "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({user_id: (encode-path-segment $user_id), preset_id: (encode-path-segment $preset_id)} | format pattern "/users/{user_id}/presets/{preset_id}/videos") $qp)
   let accept_val = "application/vnd.vimeo.video+json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"page": $page, "per_page": $per_page} | compact), body: null}
 }
 
 # Get all the projects that belong to a user
@@ -7057,11 +7407,12 @@ export def "users-projects list" [
 ]: nothing -> table<created_time: string, metadata: record<connections: record>, modified_time: string, name: string, resource_key: string, uri: string, user: record<account: string, bio: string, content_filter: list, created_time: string, email: string, link: string, location: string, metadata: record, name: string, pictures: record, preferences: record, resource_key: string, upload_quota: record, uri: string, websites: list>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($user_id | is-empty) { error make --unspanned { msg: "path parameter 'user_id' must be non-empty" } }
   let qp = [(serialize-qp "direction" $direction "scalar") (serialize-qp "page" $page "scalar") (serialize-qp "per_page" $per_page "scalar") (serialize-qp "sort" $qp_sort "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({user_id: (encode-path-segment $user_id)} | format pattern "/users/{user_id}/projects") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"direction": $direction, "page": $page, "per_page": $per_page, "sort": $qp_sort} | compact), body: null}
 }
 
 # Create a project
@@ -7084,12 +7435,13 @@ export def "users-projects create" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($user_id | is-empty) { error make --unspanned { msg: "path parameter 'user_id' must be non-empty" } }
   let full_url = (build-url $base ({user_id: (encode-path-segment $user_id)} | format pattern "/users/{user_id}/projects"))
   let req_body = {"name": $name} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: {}, body: $req_body}
 }
 
 # Delete a project
@@ -7112,11 +7464,13 @@ export def "users-projects delete" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($user_id | is-empty) { error make --unspanned { msg: "path parameter 'user_id' must be non-empty" } }
+  if ($project_id | is-empty) { error make --unspanned { msg: "path parameter 'project_id' must be non-empty" } }
   let qp = [(serialize-qp "should_delete_clips" $should_delete_clips "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({user_id: (encode-path-segment $user_id), project_id: (encode-path-segment $project_id)} | format pattern "/users/{user_id}/projects/{project_id}") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"should_delete_clips": $should_delete_clips} | compact), body: null}
 }
 
 # Get a specific project
@@ -7138,10 +7492,12 @@ export def "users-projects get" [
 ]: nothing -> record<created_time: string, metadata: record<connections: record<videos: record>>, modified_time: string, name: string, resource_key: string, uri: string, user: record<account: string, bio: string, content_filter: list<string>, created_time: string, email: string, link: string, location: string, metadata: record<connections: record, interactions: record>, name: string, pictures: record<active: bool, link: string, resource_key: string, sizes: list, type: string, uri: string>, preferences: record<videos: record>, resource_key: string, upload_quota: record<lifetime: record, periodic: record, space: record>, uri: string, websites: list<record>>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($user_id | is-empty) { error make --unspanned { msg: "path parameter 'user_id' must be non-empty" } }
+  if ($project_id | is-empty) { error make --unspanned { msg: "path parameter 'project_id' must be non-empty" } }
   let full_url = (build-url $base ({user_id: (encode-path-segment $user_id), project_id: (encode-path-segment $project_id)} | format pattern "/users/{user_id}/projects/{project_id}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
 }
 
 # Edit a project
@@ -7165,19 +7521,21 @@ export def "users-projects update-edit" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($user_id | is-empty) { error make --unspanned { msg: "path parameter 'user_id' must be non-empty" } }
+  if ($project_id | is-empty) { error make --unspanned { msg: "path parameter 'project_id' must be non-empty" } }
   let full_url = (build-url $base ({user_id: (encode-path-segment $user_id), project_id: (encode-path-segment $project_id)} | format pattern "/users/{user_id}/projects/{project_id}"))
   let req_body = {"name": $name} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "patch" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body
+  do-request "patch" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: {}, body: $req_body}
 }
 
 # Remove a list of videos from a project
 #
 # DELETE /users/{user_id}/projects/{project_id}/videos
 # operationId: remove_videos_from_project
-export def "users-projects-videos delete-by-user_id-project_id" [
+export def "users-projects-videos delete-by-user-id-project-id" [
   user_id: float
   project_id: float
   --base-url(-b): string@base-url-completer # API base URL
@@ -7194,11 +7552,13 @@ export def "users-projects-videos delete-by-user_id-project_id" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($user_id | is-empty) { error make --unspanned { msg: "path parameter 'user_id' must be non-empty" } }
+  if ($project_id | is-empty) { error make --unspanned { msg: "path parameter 'project_id' must be non-empty" } }
   let qp = [(serialize-qp "should_delete_clips" $should_delete_clips "scalar") (serialize-qp "uris" $uris "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({user_id: (encode-path-segment $user_id), project_id: (encode-path-segment $project_id)} | format pattern "/users/{user_id}/projects/{project_id}/videos") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"should_delete_clips": $should_delete_clips, "uris": $uris} | compact), body: null}
 }
 
 # Get all the videos in a project
@@ -7224,18 +7584,20 @@ export def "users-projects-videos get" [
 ]: nothing -> table<categories: list<record>, content_rating: list<string>, context: record<action: string, resource: record, resource_type: string>, created_time: string, description: string, duration: float, embed: record<buttons: record, color: string, logos: record, playbar: bool, speed: bool, title: record, uri: string, volume: bool>, height: float, language: string, last_user_action_event_date: string, license: string, link: string, metadata: record<connections: record, interactions: record>, modified_time: string, name: string, parent_folder: record<created_time: string, metadata: record, modified_time: string, name: string, resource_key: string, uri: string, user: record>, password: string, pictures: record<active: bool, link: string, resource_key: string, sizes: list, type: string, uri: string>, privacy: record<add: bool, comments: string, download: bool, embed: string, view: string>, release_time: string, resource_key: string, spatial: record<director_timeline: list, field_of_view: float, projection: string, stereo_format: string>, stats: record<plays: float>, status: string, tags: list<record>, transcode: record<status: string>, upload: record<approach: string, complete_uri: string, form: string, link: string, redirect_url: string, size: float, status: string, upload_link: string>, uri: string, user: record<account: string, bio: string, content_filter: list, created_time: string, email: string, link: string, location: string, metadata: record, name: string, pictures: record, preferences: record, resource_key: string, upload_quota: record, uri: string, websites: list>, width: float> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($user_id | is-empty) { error make --unspanned { msg: "path parameter 'user_id' must be non-empty" } }
+  if ($project_id | is-empty) { error make --unspanned { msg: "path parameter 'project_id' must be non-empty" } }
   let qp = [(serialize-qp "direction" $direction "scalar") (serialize-qp "page" $page "scalar") (serialize-qp "per_page" $per_page "scalar") (serialize-qp "sort" $qp_sort "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({user_id: (encode-path-segment $user_id), project_id: (encode-path-segment $project_id)} | format pattern "/users/{user_id}/projects/{project_id}/videos") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"direction": $direction, "page": $page, "per_page": $per_page, "sort": $qp_sort} | compact), body: null}
 }
 
 # Add a list of videos to a project
 #
 # PUT /users/{user_id}/projects/{project_id}/videos
 # operationId: add_videos_to_project
-export def "users-projects-videos create-by-user_id-project_id" [
+export def "users-projects-videos create-by-user-id-project-id" [
   user_id: float
   project_id: float
   --base-url(-b): string@base-url-completer # API base URL
@@ -7251,18 +7613,20 @@ export def "users-projects-videos create-by-user_id-project_id" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($user_id | is-empty) { error make --unspanned { msg: "path parameter 'user_id' must be non-empty" } }
+  if ($project_id | is-empty) { error make --unspanned { msg: "path parameter 'project_id' must be non-empty" } }
   let qp = [(serialize-qp "uris" $uris "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({user_id: (encode-path-segment $user_id), project_id: (encode-path-segment $project_id)} | format pattern "/users/{user_id}/projects/{project_id}/videos") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"uris": $uris} | compact), body: null}
 }
 
 # Remove a specific video from a project
 #
 # DELETE /users/{user_id}/projects/{project_id}/videos/{video_id}
 # operationId: remove_video_from_project
-export def "users-projects-videos delete-by-user_id-project_id-video_id" [
+export def "users-projects-videos delete-by-user-id-project-id-video-id" [
   user_id: float
   project_id: float
   video_id: float
@@ -7278,17 +7642,20 @@ export def "users-projects-videos delete-by-user_id-project_id-video_id" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($user_id | is-empty) { error make --unspanned { msg: "path parameter 'user_id' must be non-empty" } }
+  if ($project_id | is-empty) { error make --unspanned { msg: "path parameter 'project_id' must be non-empty" } }
+  if ($video_id | is-empty) { error make --unspanned { msg: "path parameter 'video_id' must be non-empty" } }
   let full_url = (build-url $base ({user_id: (encode-path-segment $user_id), project_id: (encode-path-segment $project_id), video_id: (encode-path-segment $video_id)} | format pattern "/users/{user_id}/projects/{project_id}/videos/{video_id}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
 }
 
 # Add a specific video to a project
 #
 # PUT /users/{user_id}/projects/{project_id}/videos/{video_id}
 # operationId: add_video_to_project
-export def "users-projects-videos create-by-user_id-project_id-video_id" [
+export def "users-projects-videos create-by-user-id-project-id-video-id" [
   user_id: float
   project_id: float
   video_id: float
@@ -7304,10 +7671,13 @@ export def "users-projects-videos create-by-user_id-project_id-video_id" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($user_id | is-empty) { error make --unspanned { msg: "path parameter 'user_id' must be non-empty" } }
+  if ($project_id | is-empty) { error make --unspanned { msg: "path parameter 'project_id' must be non-empty" } }
+  if ($video_id | is-empty) { error make --unspanned { msg: "path parameter 'video_id' must be non-empty" } }
   let full_url = (build-url $base ({user_id: (encode-path-segment $user_id), project_id: (encode-path-segment $project_id), video_id: (encode-path-segment $video_id)} | format pattern "/users/{user_id}/projects/{project_id}/videos/{video_id}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
 }
 
 # Complete a user's streaming upload
@@ -7331,11 +7701,13 @@ export def "users-uploads complete-streaming" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($user_id | is-empty) { error make --unspanned { msg: "path parameter 'user_id' must be non-empty" } }
+  if ($upload | is-empty) { error make --unspanned { msg: "path parameter 'upload' must be non-empty" } }
   let qp = [(serialize-qp "signature" $signature "scalar") (serialize-qp "video_file_id" $video_file_id "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({user_id: (encode-path-segment $user_id), upload: (encode-path-segment $upload)} | format pattern "/users/{user_id}/uploads/{upload}") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"signature": $signature, "video_file_id": $video_file_id} | compact), body: null}
 }
 
 # Get a user's upload attempt
@@ -7357,10 +7729,12 @@ export def "users-uploads get-attempt" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($user_id | is-empty) { error make --unspanned { msg: "path parameter 'user_id' must be non-empty" } }
+  if ($upload | is-empty) { error make --unspanned { msg: "path parameter 'upload' must be non-empty" } }
   let full_url = (build-url $base ({user_id: (encode-path-segment $user_id), upload: (encode-path-segment $upload)} | format pattern "/users/{user_id}/uploads/{upload}"))
   let accept_val = "application/vnd.vimeo.uploadattempt+json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
 }
 
 # Get all the videos that a user has uploaded
@@ -7390,11 +7764,12 @@ export def "users-videos get" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($user_id | is-empty) { error make --unspanned { msg: "path parameter 'user_id' must be non-empty" } }
   let qp = [(serialize-qp "containing_uri" $containing_uri "scalar") (serialize-qp "direction" $direction "scalar") (serialize-qp "filter" $filter "scalar") (serialize-qp "filter_embeddable" $filter_embeddable "scalar") (serialize-qp "filter_playable" $filter_playable "scalar") (serialize-qp "page" $page "scalar") (serialize-qp "per_page" $per_page "scalar") (serialize-qp "query" $query "scalar") (serialize-qp "sort" $qp_sort "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({user_id: (encode-path-segment $user_id)} | format pattern "/users/{user_id}/videos") $qp)
   let accept_val = "application/vnd.vimeo.video+json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"containing_uri": $containing_uri, "direction": $direction, "filter": $filter, "filter_embeddable": $filter_embeddable, "filter_playable": $filter_playable, "page": $page, "per_page": $per_page, "query": $query, "sort": $qp_sort} | compact), body: null}
 }
 
 # Upload a video
@@ -7417,12 +7792,13 @@ export def "users-videos upload" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($user_id | is-empty) { error make --unspanned { msg: "path parameter 'user_id' must be non-empty" } }
   let full_url = (build-url $base ({user_id: (encode-path-segment $user_id)} | format pattern "/users/{user_id}/videos"))
   let req_body = $body
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else if (($input | is-not-empty) and ($req_body | is-empty)) { $input } else { $req_body }
   let accept_val = "application/vnd.vimeo.video+json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/vnd.vimeo.video+json" $req_body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/vnd.vimeo.video+json" $req_body {query: {}, body: $req_body}
 }
 
 # Check if a user owns a video
@@ -7444,10 +7820,12 @@ export def "users-videos check-if-owns" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($user_id | is-empty) { error make --unspanned { msg: "path parameter 'user_id' must be non-empty" } }
+  if ($video_id | is-empty) { error make --unspanned { msg: "path parameter 'video_id' must be non-empty" } }
   let full_url = (build-url $base ({user_id: (encode-path-segment $user_id), video_id: (encode-path-segment $video_id)} | format pattern "/users/{user_id}/videos/{video_id}"))
   let accept_val = "application/vnd.vimeo.video+json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
 }
 
 # Get all the videos in a user's Watch Later queue
@@ -7475,11 +7853,12 @@ export def "users-watchlater get-watch-later-queue" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($user_id | is-empty) { error make --unspanned { msg: "path parameter 'user_id' must be non-empty" } }
   let qp = [(serialize-qp "direction" $direction "scalar") (serialize-qp "filter" $filter "scalar") (serialize-qp "filter_embeddable" $filter_embeddable "scalar") (serialize-qp "page" $page "scalar") (serialize-qp "per_page" $per_page "scalar") (serialize-qp "query" $query "scalar") (serialize-qp "sort" $qp_sort "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({user_id: (encode-path-segment $user_id)} | format pattern "/users/{user_id}/watchlater") $qp)
   let accept_val = "application/vnd.vimeo.video+json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"direction": $direction, "filter": $filter, "filter_embeddable": $filter_embeddable, "page": $page, "per_page": $per_page, "query": $query, "sort": $qp_sort} | compact), body: null}
 }
 
 # Remove a video from a user's Watch Later queue
@@ -7501,10 +7880,12 @@ export def "users-watchlater delete-from-watch-later" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($user_id | is-empty) { error make --unspanned { msg: "path parameter 'user_id' must be non-empty" } }
+  if ($video_id | is-empty) { error make --unspanned { msg: "path parameter 'video_id' must be non-empty" } }
   let full_url = (build-url $base ({user_id: (encode-path-segment $user_id), video_id: (encode-path-segment $video_id)} | format pattern "/users/{user_id}/watchlater/{video_id}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
 }
 
 # Check if a user has added a specific video to their Watch Later queue
@@ -7526,10 +7907,12 @@ export def "users-watchlater check-watch-later-queue" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($user_id | is-empty) { error make --unspanned { msg: "path parameter 'user_id' must be non-empty" } }
+  if ($video_id | is-empty) { error make --unspanned { msg: "path parameter 'video_id' must be non-empty" } }
   let full_url = (build-url $base ({user_id: (encode-path-segment $user_id), video_id: (encode-path-segment $video_id)} | format pattern "/users/{user_id}/watchlater/{video_id}"))
   let accept_val = "application/vnd.vimeo.video+json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
 }
 
 # Add a video to a user's Watch Later queue
@@ -7551,10 +7934,12 @@ export def "users-watchlater create-to-watch-later" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($user_id | is-empty) { error make --unspanned { msg: "path parameter 'user_id' must be non-empty" } }
+  if ($video_id | is-empty) { error make --unspanned { msg: "path parameter 'video_id' must be non-empty" } }
   let full_url = (build-url $base ({user_id: (encode-path-segment $user_id), video_id: (encode-path-segment $video_id)} | format pattern "/users/{user_id}/watchlater/{video_id}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
 }
 
 # Search for videos
@@ -7586,7 +7971,7 @@ export def "videos list" [
   let full_url = (build-url $base "/videos" $qp)
   let accept_val = "application/vnd.vimeo.video+json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"direction": $direction, "filter": $filter, "links": $links, "page": $page, "per_page": $per_page, "query": $query, "sort": $qp_sort, "uris": $uris} | compact), body: null}
 }
 
 # Delete a video
@@ -7607,10 +7992,11 @@ export def "videos delete" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($video_id | is-empty) { error make --unspanned { msg: "path parameter 'video_id' must be non-empty" } }
   let full_url = (build-url $base ({video_id: (encode-path-segment $video_id)} | format pattern "/videos/{video_id}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
 }
 
 # Get a specific video
@@ -7631,10 +8017,11 @@ export def "videos get" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($video_id | is-empty) { error make --unspanned { msg: "path parameter 'video_id' must be non-empty" } }
   let full_url = (build-url $base ({video_id: (encode-path-segment $video_id)} | format pattern "/videos/{video_id}"))
   let accept_val = "application/vnd.vimeo.video+json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
 }
 
 # Edit a video
@@ -7657,12 +8044,13 @@ export def "videos update-edit" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($video_id | is-empty) { error make --unspanned { msg: "path parameter 'video_id' must be non-empty" } }
   let full_url = (build-url $base ({video_id: (encode-path-segment $video_id)} | format pattern "/videos/{video_id}"))
   let req_body = $body
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else if (($input | is-not-empty) and ($req_body | is-empty)) { $input } else { $req_body }
   let accept_val = "application/vnd.vimeo.video+json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "patch" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/vnd.vimeo.video+json" $req_body
+  do-request "patch" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/vnd.vimeo.video+json" $req_body {query: {}, body: $req_body}
 }
 
 # Get all the channels to which a user can add or remove a specific video
@@ -7683,10 +8071,11 @@ export def "videos-available-channels get" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($video_id | is-empty) { error make --unspanned { msg: "path parameter 'video_id' must be non-empty" } }
   let full_url = (build-url $base ({video_id: (encode-path-segment $video_id)} | format pattern "/videos/{video_id}/available_channels"))
   let accept_val = "application/vnd.vimeo.channel+json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
 }
 
 # Get all the categories to which a video belongs
@@ -7707,10 +8096,11 @@ export def "videos-categories get" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($video_id | is-empty) { error make --unspanned { msg: "path parameter 'video_id' must be non-empty" } }
   let full_url = (build-url $base ({video_id: (encode-path-segment $video_id)} | format pattern "/videos/{video_id}/categories"))
   let accept_val = "application/vnd.vimeo.category+json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
 }
 
 # Suggest categories for a video
@@ -7733,12 +8123,13 @@ export def "videos-categories update-suggest-category" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($video_id | is-empty) { error make --unspanned { msg: "path parameter 'video_id' must be non-empty" } }
   let full_url = (build-url $base ({video_id: (encode-path-segment $video_id)} | format pattern "/videos/{video_id}/categories"))
   let req_body = $body
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else if (($input | is-not-empty) and ($req_body | is-empty)) { $input } else { $req_body }
   let accept_val = "application/vnd.vimeo.category+json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/vnd.vimeo.category+json" $req_body
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/vnd.vimeo.category+json" $req_body {query: {}, body: $req_body}
 }
 
 # Get all the comments on a video
@@ -7762,11 +8153,12 @@ export def "videos-comments list" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($video_id | is-empty) { error make --unspanned { msg: "path parameter 'video_id' must be non-empty" } }
   let qp = [(serialize-qp "direction" $direction "scalar") (serialize-qp "page" $page "scalar") (serialize-qp "per_page" $per_page "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({video_id: (encode-path-segment $video_id)} | format pattern "/videos/{video_id}/comments") $qp)
   let accept_val = "application/vnd.vimeo.comment+json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"direction": $direction, "page": $page, "per_page": $per_page} | compact), body: null}
 }
 
 # Add a comment to a video
@@ -7789,12 +8181,13 @@ export def "videos-comments create" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($video_id | is-empty) { error make --unspanned { msg: "path parameter 'video_id' must be non-empty" } }
   let full_url = (build-url $base ({video_id: (encode-path-segment $video_id)} | format pattern "/videos/{video_id}/comments"))
   let req_body = $body
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else if (($input | is-not-empty) and ($req_body | is-empty)) { $input } else { $req_body }
   let accept_val = "application/vnd.vimeo.comment+json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/vnd.vimeo.comment+json" $req_body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/vnd.vimeo.comment+json" $req_body {query: {}, body: $req_body}
 }
 
 # Delete a video comment
@@ -7816,10 +8209,12 @@ export def "videos-comments delete" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($video_id | is-empty) { error make --unspanned { msg: "path parameter 'video_id' must be non-empty" } }
+  if ($comment_id | is-empty) { error make --unspanned { msg: "path parameter 'comment_id' must be non-empty" } }
   let full_url = (build-url $base ({video_id: (encode-path-segment $video_id), comment_id: (encode-path-segment $comment_id)} | format pattern "/videos/{video_id}/comments/{comment_id}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
 }
 
 # Get a specific video comment
@@ -7841,10 +8236,12 @@ export def "videos-comments get" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($video_id | is-empty) { error make --unspanned { msg: "path parameter 'video_id' must be non-empty" } }
+  if ($comment_id | is-empty) { error make --unspanned { msg: "path parameter 'comment_id' must be non-empty" } }
   let full_url = (build-url $base ({video_id: (encode-path-segment $video_id), comment_id: (encode-path-segment $comment_id)} | format pattern "/videos/{video_id}/comments/{comment_id}"))
   let accept_val = "application/vnd.vimeo.comment+json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
 }
 
 # Edit a video comment
@@ -7868,12 +8265,14 @@ export def "videos-comments update-edit" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($video_id | is-empty) { error make --unspanned { msg: "path parameter 'video_id' must be non-empty" } }
+  if ($comment_id | is-empty) { error make --unspanned { msg: "path parameter 'comment_id' must be non-empty" } }
   let full_url = (build-url $base ({video_id: (encode-path-segment $video_id), comment_id: (encode-path-segment $comment_id)} | format pattern "/videos/{video_id}/comments/{comment_id}"))
   let req_body = $body
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else if (($input | is-not-empty) and ($req_body | is-empty)) { $input } else { $req_body }
   let accept_val = "application/vnd.vimeo.comment+json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "patch" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/vnd.vimeo.comment+json" $req_body
+  do-request "patch" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/vnd.vimeo.comment+json" $req_body {query: {}, body: $req_body}
 }
 
 # Get all the replies to a video comment
@@ -7897,11 +8296,13 @@ export def "videos-comments-replies get" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($video_id | is-empty) { error make --unspanned { msg: "path parameter 'video_id' must be non-empty" } }
+  if ($comment_id | is-empty) { error make --unspanned { msg: "path parameter 'comment_id' must be non-empty" } }
   let qp = [(serialize-qp "page" $page "scalar") (serialize-qp "per_page" $per_page "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({video_id: (encode-path-segment $video_id), comment_id: (encode-path-segment $comment_id)} | format pattern "/videos/{video_id}/comments/{comment_id}/replies") $qp)
   let accept_val = "application/vnd.vimeo.comment+json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"page": $page, "per_page": $per_page} | compact), body: null}
 }
 
 # Add a reply to a video comment
@@ -7925,12 +8326,14 @@ export def "videos-comments-replies create-reply" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($video_id | is-empty) { error make --unspanned { msg: "path parameter 'video_id' must be non-empty" } }
+  if ($comment_id | is-empty) { error make --unspanned { msg: "path parameter 'comment_id' must be non-empty" } }
   let full_url = (build-url $base ({video_id: (encode-path-segment $video_id), comment_id: (encode-path-segment $comment_id)} | format pattern "/videos/{video_id}/comments/{comment_id}/replies"))
   let req_body = $body
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else if (($input | is-not-empty) and ($req_body | is-empty)) { $input } else { $req_body }
   let accept_val = "application/vnd.vimeo.comment+json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/vnd.vimeo.comment+json" $req_body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/vnd.vimeo.comment+json" $req_body {query: {}, body: $req_body}
 }
 
 # Get all the credited users in a video
@@ -7956,11 +8359,12 @@ export def "videos-credits list" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($video_id | is-empty) { error make --unspanned { msg: "path parameter 'video_id' must be non-empty" } }
   let qp = [(serialize-qp "direction" $direction "scalar") (serialize-qp "page" $page "scalar") (serialize-qp "per_page" $per_page "scalar") (serialize-qp "query" $query "scalar") (serialize-qp "sort" $qp_sort "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({video_id: (encode-path-segment $video_id)} | format pattern "/videos/{video_id}/credits") $qp)
   let accept_val = "application/vnd.vimeo.credit+json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"direction": $direction, "page": $page, "per_page": $per_page, "query": $query, "sort": $qp_sort} | compact), body: null}
 }
 
 # Credit a user in a video
@@ -7983,12 +8387,13 @@ export def "videos-credits create" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($video_id | is-empty) { error make --unspanned { msg: "path parameter 'video_id' must be non-empty" } }
   let full_url = (build-url $base ({video_id: (encode-path-segment $video_id)} | format pattern "/videos/{video_id}/credits"))
   let req_body = $body
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else if (($input | is-not-empty) and ($req_body | is-empty)) { $input } else { $req_body }
   let accept_val = "application/vnd.vimeo.credit+json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/vnd.vimeo.credit+json" $req_body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/vnd.vimeo.credit+json" $req_body {query: {}, body: $req_body}
 }
 
 # Delete a credit for a user in a video
@@ -8010,10 +8415,12 @@ export def "videos-credits delete" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($video_id | is-empty) { error make --unspanned { msg: "path parameter 'video_id' must be non-empty" } }
+  if ($credit_id | is-empty) { error make --unspanned { msg: "path parameter 'credit_id' must be non-empty" } }
   let full_url = (build-url $base ({video_id: (encode-path-segment $video_id), credit_id: (encode-path-segment $credit_id)} | format pattern "/videos/{video_id}/credits/{credit_id}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
 }
 
 # Get a specific credited user in a video
@@ -8035,10 +8442,12 @@ export def "videos-credits get" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($video_id | is-empty) { error make --unspanned { msg: "path parameter 'video_id' must be non-empty" } }
+  if ($credit_id | is-empty) { error make --unspanned { msg: "path parameter 'credit_id' must be non-empty" } }
   let full_url = (build-url $base ({video_id: (encode-path-segment $video_id), credit_id: (encode-path-segment $credit_id)} | format pattern "/videos/{video_id}/credits/{credit_id}"))
   let accept_val = "application/vnd.vimeo.credit+json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
 }
 
 # Edit a credit for a user in a video
@@ -8062,12 +8471,14 @@ export def "videos-credits update-edit" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($video_id | is-empty) { error make --unspanned { msg: "path parameter 'video_id' must be non-empty" } }
+  if ($credit_id | is-empty) { error make --unspanned { msg: "path parameter 'credit_id' must be non-empty" } }
   let full_url = (build-url $base ({video_id: (encode-path-segment $video_id), credit_id: (encode-path-segment $credit_id)} | format pattern "/videos/{video_id}/credits/{credit_id}"))
   let req_body = $body
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else if (($input | is-not-empty) and ($req_body | is-empty)) { $input } else { $req_body }
   let accept_val = "application/vnd.vimeo.credit+json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "patch" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/vnd.vimeo.credit+json" $req_body
+  do-request "patch" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/vnd.vimeo.credit+json" $req_body {query: {}, body: $req_body}
 }
 
 # Get all the users who have liked a video
@@ -8092,11 +8503,12 @@ export def "videos-likes get" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($video_id | is-empty) { error make --unspanned { msg: "path parameter 'video_id' must be non-empty" } }
   let qp = [(serialize-qp "direction" $direction "scalar") (serialize-qp "page" $page "scalar") (serialize-qp "per_page" $per_page "scalar") (serialize-qp "sort" $qp_sort "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({video_id: (encode-path-segment $video_id)} | format pattern "/videos/{video_id}/likes") $qp)
   let accept_val = "application/vnd.vimeo.user+json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"direction": $direction, "page": $page, "per_page": $per_page, "sort": $qp_sort} | compact), body: null}
 }
 
 # Get all the thumbnails of a video
@@ -8119,11 +8531,12 @@ export def "videos-pictures get-thumbnails" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($video_id | is-empty) { error make --unspanned { msg: "path parameter 'video_id' must be non-empty" } }
   let qp = [(serialize-qp "page" $page "scalar") (serialize-qp "per_page" $per_page "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({video_id: (encode-path-segment $video_id)} | format pattern "/videos/{video_id}/pictures") $qp)
   let accept_val = "application/vnd.vimeo.picture+json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"page": $page, "per_page": $per_page} | compact), body: null}
 }
 
 # Add a video thumbnail
@@ -8146,12 +8559,13 @@ export def "videos-pictures create-thumbnail" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($video_id | is-empty) { error make --unspanned { msg: "path parameter 'video_id' must be non-empty" } }
   let full_url = (build-url $base ({video_id: (encode-path-segment $video_id)} | format pattern "/videos/{video_id}/pictures"))
   let req_body = $body
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else if (($input | is-not-empty) and ($req_body | is-empty)) { $input } else { $req_body }
   let accept_val = "application/vnd.vimeo.picture+json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/vnd.vimeo.picture+json" $req_body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/vnd.vimeo.picture+json" $req_body {query: {}, body: $req_body}
 }
 
 # Delete a video thumbnail
@@ -8173,10 +8587,12 @@ export def "videos-pictures delete-thumbnail" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($video_id | is-empty) { error make --unspanned { msg: "path parameter 'video_id' must be non-empty" } }
+  if ($picture_id | is-empty) { error make --unspanned { msg: "path parameter 'picture_id' must be non-empty" } }
   let full_url = (build-url $base ({video_id: (encode-path-segment $video_id), picture_id: (encode-path-segment $picture_id)} | format pattern "/videos/{video_id}/pictures/{picture_id}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
 }
 
 # Get a video thumbnail
@@ -8198,10 +8614,12 @@ export def "videos-pictures get-thumbnail" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($video_id | is-empty) { error make --unspanned { msg: "path parameter 'video_id' must be non-empty" } }
+  if ($picture_id | is-empty) { error make --unspanned { msg: "path parameter 'picture_id' must be non-empty" } }
   let full_url = (build-url $base ({video_id: (encode-path-segment $video_id), picture_id: (encode-path-segment $picture_id)} | format pattern "/videos/{video_id}/pictures/{picture_id}"))
   let accept_val = "application/vnd.vimeo.picture+json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
 }
 
 # Edit a video thumbnail
@@ -8225,12 +8643,14 @@ export def "videos-pictures update-edit-thumbnail" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($video_id | is-empty) { error make --unspanned { msg: "path parameter 'video_id' must be non-empty" } }
+  if ($picture_id | is-empty) { error make --unspanned { msg: "path parameter 'picture_id' must be non-empty" } }
   let full_url = (build-url $base ({video_id: (encode-path-segment $video_id), picture_id: (encode-path-segment $picture_id)} | format pattern "/videos/{video_id}/pictures/{picture_id}"))
   let req_body = $body
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else if (($input | is-not-empty) and ($req_body | is-empty)) { $input } else { $req_body }
   let accept_val = "application/vnd.vimeo.picture+json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "patch" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/vnd.vimeo.picture+json" $req_body
+  do-request "patch" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/vnd.vimeo.picture+json" $req_body {query: {}, body: $req_body}
 }
 
 # Remove an embed preset from a video
@@ -8252,10 +8672,12 @@ export def "videos-presets delete-embed" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($video_id | is-empty) { error make --unspanned { msg: "path parameter 'video_id' must be non-empty" } }
+  if ($preset_id | is-empty) { error make --unspanned { msg: "path parameter 'preset_id' must be non-empty" } }
   let full_url = (build-url $base ({video_id: (encode-path-segment $video_id), preset_id: (encode-path-segment $preset_id)} | format pattern "/videos/{video_id}/presets/{preset_id}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
 }
 
 # Check if an embed preset has been added to a video
@@ -8277,10 +8699,12 @@ export def "videos-presets get-embed" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($video_id | is-empty) { error make --unspanned { msg: "path parameter 'video_id' must be non-empty" } }
+  if ($preset_id | is-empty) { error make --unspanned { msg: "path parameter 'preset_id' must be non-empty" } }
   let full_url = (build-url $base ({video_id: (encode-path-segment $video_id), preset_id: (encode-path-segment $preset_id)} | format pattern "/videos/{video_id}/presets/{preset_id}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
 }
 
 # Add an embed preset to a video
@@ -8302,10 +8726,12 @@ export def "videos-presets create-embed" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($video_id | is-empty) { error make --unspanned { msg: "path parameter 'video_id' must be non-empty" } }
+  if ($preset_id | is-empty) { error make --unspanned { msg: "path parameter 'preset_id' must be non-empty" } }
   let full_url = (build-url $base ({video_id: (encode-path-segment $video_id), preset_id: (encode-path-segment $preset_id)} | format pattern "/videos/{video_id}/presets/{preset_id}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
 }
 
 # Get all the domains on which a video can be embedded
@@ -8328,11 +8754,12 @@ export def "videos-privacy-domains get" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($video_id | is-empty) { error make --unspanned { msg: "path parameter 'video_id' must be non-empty" } }
   let qp = [(serialize-qp "page" $page "scalar") (serialize-qp "per_page" $per_page "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({video_id: (encode-path-segment $video_id)} | format pattern "/videos/{video_id}/privacy/domains") $qp)
   let accept_val = "application/vnd.vimeo.domain+json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"page": $page, "per_page": $per_page} | compact), body: null}
 }
 
 # Restrict a video from being embedded on a domain
@@ -8354,10 +8781,12 @@ export def "videos-privacy-domains delete" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($video_id | is-empty) { error make --unspanned { msg: "path parameter 'video_id' must be non-empty" } }
+  if ($domain | is-empty) { error make --unspanned { msg: "path parameter 'domain' must be non-empty" } }
   let full_url = (build-url $base ({video_id: (encode-path-segment $video_id), domain: (encode-path-segment $domain)} | format pattern "/videos/{video_id}/privacy/domains/{domain}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
 }
 
 # Permit a video to be embedded on a domain
@@ -8379,10 +8808,12 @@ export def "videos-privacy-domains create" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($video_id | is-empty) { error make --unspanned { msg: "path parameter 'video_id' must be non-empty" } }
+  if ($domain | is-empty) { error make --unspanned { msg: "path parameter 'domain' must be non-empty" } }
   let full_url = (build-url $base ({video_id: (encode-path-segment $video_id), domain: (encode-path-segment $domain)} | format pattern "/videos/{video_id}/privacy/domains/{domain}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
 }
 
 # Get all the users who can view a user's private videos by default
@@ -8405,18 +8836,19 @@ export def "videos-privacy-users get" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($video_id | is-empty) { error make --unspanned { msg: "path parameter 'video_id' must be non-empty" } }
   let qp = [(serialize-qp "page" $page "scalar") (serialize-qp "per_page" $per_page "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({video_id: (encode-path-segment $video_id)} | format pattern "/videos/{video_id}/privacy/users") $qp)
   let accept_val = "application/vnd.vimeo.user+json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"page": $page, "per_page": $per_page} | compact), body: null}
 }
 
 # Permit a list of users to view a private video
 #
 # PUT /videos/{video_id}/privacy/users
 # operationId: add_video_privacy_users
-export def "videos-privacy-users create-by-video_id" [
+export def "videos-privacy-users create-by-video-id" [
   video_id: float
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -8430,10 +8862,11 @@ export def "videos-privacy-users create-by-video_id" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($video_id | is-empty) { error make --unspanned { msg: "path parameter 'video_id' must be non-empty" } }
   let full_url = (build-url $base ({video_id: (encode-path-segment $video_id)} | format pattern "/videos/{video_id}/privacy/users"))
   let accept_val = "application/vnd.vimeo.user+json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
 }
 
 # Restrict a user from viewing a private video
@@ -8455,17 +8888,19 @@ export def "videos-privacy-users delete" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($video_id | is-empty) { error make --unspanned { msg: "path parameter 'video_id' must be non-empty" } }
+  if ($user_id | is-empty) { error make --unspanned { msg: "path parameter 'user_id' must be non-empty" } }
   let full_url = (build-url $base ({video_id: (encode-path-segment $video_id), user_id: (encode-path-segment $user_id)} | format pattern "/videos/{video_id}/privacy/users/{user_id}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
 }
 
 # Permit a specific user to view a private video
 #
 # PUT /videos/{video_id}/privacy/users/{user_id}
 # operationId: add_video_privacy_user
-export def "videos-privacy-users create-by-video_id-user_id" [
+export def "videos-privacy-users create-by-video-id-user-id" [
   video_id: float
   user_id: float
   --base-url(-b): string@base-url-completer # API base URL
@@ -8480,10 +8915,12 @@ export def "videos-privacy-users create-by-video_id-user_id" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($video_id | is-empty) { error make --unspanned { msg: "path parameter 'video_id' must be non-empty" } }
+  if ($user_id | is-empty) { error make --unspanned { msg: "path parameter 'user_id' must be non-empty" } }
   let full_url = (build-url $base ({video_id: (encode-path-segment $video_id), user_id: (encode-path-segment $user_id)} | format pattern "/videos/{video_id}/privacy/users/{user_id}"))
   let accept_val = "application/vnd.vimeo.user+json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
 }
 
 # Get all the tags of a video
@@ -8504,17 +8941,18 @@ export def "videos-tags get" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($video_id | is-empty) { error make --unspanned { msg: "path parameter 'video_id' must be non-empty" } }
   let full_url = (build-url $base ({video_id: (encode-path-segment $video_id)} | format pattern "/videos/{video_id}/tags"))
   let accept_val = "application/vnd.vimeo.tag+json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
 }
 
 # Add a list of tags to a video
 #
 # PUT /videos/{video_id}/tags
 # operationId: add_video_tags
-export def "videos-tags create-by-video_id" [
+export def "videos-tags create-by-video-id" [
   video_id: float
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -8530,12 +8968,13 @@ export def "videos-tags create-by-video_id" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($video_id | is-empty) { error make --unspanned { msg: "path parameter 'video_id' must be non-empty" } }
   let full_url = (build-url $base ({video_id: (encode-path-segment $video_id)} | format pattern "/videos/{video_id}/tags"))
   let req_body = $body
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else if (($input | is-not-empty) and ($req_body | is-empty)) { $input } else { $req_body }
   let accept_val = "application/vnd.vimeo.tag+json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/vnd.vimeo.tag+json" $req_body
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/vnd.vimeo.tag+json" $req_body {query: {}, body: $req_body}
 }
 
 # Remove a tag from a video
@@ -8557,10 +8996,12 @@ export def "videos-tags delete" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($video_id | is-empty) { error make --unspanned { msg: "path parameter 'video_id' must be non-empty" } }
+  if ($word | is-empty) { error make --unspanned { msg: "path parameter 'word' must be non-empty" } }
   let full_url = (build-url $base ({video_id: (encode-path-segment $video_id), word: (encode-path-segment $word)} | format pattern "/videos/{video_id}/tags/{word}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
 }
 
 # Check if a tag has been added to a video
@@ -8582,17 +9023,19 @@ export def "videos-tags check" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($video_id | is-empty) { error make --unspanned { msg: "path parameter 'video_id' must be non-empty" } }
+  if ($word | is-empty) { error make --unspanned { msg: "path parameter 'word' must be non-empty" } }
   let full_url = (build-url $base ({video_id: (encode-path-segment $video_id), word: (encode-path-segment $word)} | format pattern "/videos/{video_id}/tags/{word}"))
   let accept_val = "application/vnd.vimeo.tag+json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
 }
 
 # Add a specific tag to a video
 #
 # PUT /videos/{video_id}/tags/{word}
 # operationId: add_video_tag
-export def "videos-tags create-by-video_id-word" [
+export def "videos-tags create-by-video-id-word" [
   video_id: float
   word: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -8607,10 +9050,12 @@ export def "videos-tags create-by-video_id-word" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($video_id | is-empty) { error make --unspanned { msg: "path parameter 'video_id' must be non-empty" } }
+  if ($word | is-empty) { error make --unspanned { msg: "path parameter 'word' must be non-empty" } }
   let full_url = (build-url $base ({video_id: (encode-path-segment $video_id), word: (encode-path-segment $word)} | format pattern "/videos/{video_id}/tags/{word}"))
   let accept_val = "application/vnd.vimeo.tag+json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
 }
 
 # Get all the text tracks of a video
@@ -8631,10 +9076,11 @@ export def "videos-texttracks get-text-tracks" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($video_id | is-empty) { error make --unspanned { msg: "path parameter 'video_id' must be non-empty" } }
   let full_url = (build-url $base ({video_id: (encode-path-segment $video_id)} | format pattern "/videos/{video_id}/texttracks"))
   let accept_val = "application/vnd.vimeo.video.texttrack+json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
 }
 
 # Add a text track to a video
@@ -8657,12 +9103,13 @@ export def "videos-texttracks create-text-track" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($video_id | is-empty) { error make --unspanned { msg: "path parameter 'video_id' must be non-empty" } }
   let full_url = (build-url $base ({video_id: (encode-path-segment $video_id)} | format pattern "/videos/{video_id}/texttracks"))
   let req_body = $body
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else if (($input | is-not-empty) and ($req_body | is-empty)) { $input } else { $req_body }
   let accept_val = "application/vnd.vimeo.video.texttrack+json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/vnd.vimeo.video.texttrack+json" $req_body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/vnd.vimeo.video.texttrack+json" $req_body {query: {}, body: $req_body}
 }
 
 # Delete a text track
@@ -8684,10 +9131,12 @@ export def "videos-texttracks delete-text-track" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($video_id | is-empty) { error make --unspanned { msg: "path parameter 'video_id' must be non-empty" } }
+  if ($texttrack_id | is-empty) { error make --unspanned { msg: "path parameter 'texttrack_id' must be non-empty" } }
   let full_url = (build-url $base ({video_id: (encode-path-segment $video_id), texttrack_id: (encode-path-segment $texttrack_id)} | format pattern "/videos/{video_id}/texttracks/{texttrack_id}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
 }
 
 # Get a specific text track
@@ -8709,10 +9158,12 @@ export def "videos-texttracks get-text-track" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($video_id | is-empty) { error make --unspanned { msg: "path parameter 'video_id' must be non-empty" } }
+  if ($texttrack_id | is-empty) { error make --unspanned { msg: "path parameter 'texttrack_id' must be non-empty" } }
   let full_url = (build-url $base ({video_id: (encode-path-segment $video_id), texttrack_id: (encode-path-segment $texttrack_id)} | format pattern "/videos/{video_id}/texttracks/{texttrack_id}"))
   let accept_val = "application/vnd.vimeo.video.texttrack+json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
 }
 
 # Edit a text track
@@ -8736,12 +9187,14 @@ export def "videos-texttracks update-edit-text-track" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($video_id | is-empty) { error make --unspanned { msg: "path parameter 'video_id' must be non-empty" } }
+  if ($texttrack_id | is-empty) { error make --unspanned { msg: "path parameter 'texttrack_id' must be non-empty" } }
   let full_url = (build-url $base ({video_id: (encode-path-segment $video_id), texttrack_id: (encode-path-segment $texttrack_id)} | format pattern "/videos/{video_id}/texttracks/{texttrack_id}"))
   let req_body = $body
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else if (($input | is-not-empty) and ($req_body | is-empty)) { $input } else { $req_body }
   let accept_val = "application/vnd.vimeo.video.texttrack+json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "patch" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/vnd.vimeo.video.texttrack+json" $req_body
+  do-request "patch" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/vnd.vimeo.video.texttrack+json" $req_body {query: {}, body: $req_body}
 }
 
 # Add a new custom logo to a video
@@ -8762,10 +9215,11 @@ export def "videos-timelinethumbnails create-custom-logo" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($video_id | is-empty) { error make --unspanned { msg: "path parameter 'video_id' must be non-empty" } }
   let full_url = (build-url $base ({video_id: (encode-path-segment $video_id)} | format pattern "/videos/{video_id}/timelinethumbnails"))
   let accept_val = "application/vnd.vimeo.picture+json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
 }
 
 # Get a custom video logo
@@ -8787,10 +9241,12 @@ export def "videos-timelinethumbnails get-custom-logo" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($video_id | is-empty) { error make --unspanned { msg: "path parameter 'video_id' must be non-empty" } }
+  if ($thumbnail_id | is-empty) { error make --unspanned { msg: "path parameter 'thumbnail_id' must be non-empty" } }
   let full_url = (build-url $base ({video_id: (encode-path-segment $video_id), thumbnail_id: (encode-path-segment $thumbnail_id)} | format pattern "/videos/{video_id}/timelinethumbnails/{thumbnail_id}"))
   let accept_val = "application/vnd.vimeo.picture+json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
 }
 
 # Add a version to a video
@@ -8813,12 +9269,13 @@ export def "videos-versions create" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($video_id | is-empty) { error make --unspanned { msg: "path parameter 'video_id' must be non-empty" } }
   let full_url = (build-url $base ({video_id: (encode-path-segment $video_id)} | format pattern "/videos/{video_id}/versions"))
   let req_body = $body
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else if (($input | is-not-empty) and ($req_body | is-empty)) { $input } else { $req_body }
   let accept_val = "application/vnd.vimeo.video.version+json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/vnd.vimeo.video.version+json" $req_body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/vnd.vimeo.video.version+json" $req_body {query: {}, body: $req_body}
 }
 
 # Get all the related videos of a video
@@ -8842,9 +9299,10 @@ export def "videos-videos get-related" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($video_id | is-empty) { error make --unspanned { msg: "path parameter 'video_id' must be non-empty" } }
   let qp = [(serialize-qp "filter" $filter "scalar") (serialize-qp "page" $page "scalar") (serialize-qp "per_page" $per_page "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({video_id: (encode-path-segment $video_id)} | format pattern "/videos/{video_id}/videos") $qp)
   let accept_val = "application/vnd.vimeo.video+json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"filter": $filter, "page": $page, "per_page": $per_page} | compact), body: null}
 }
